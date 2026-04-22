@@ -1,0 +1,194 @@
+# Roadmap Workflow
+
+Strategic pipeline that decomposes a multi-quarter product direction into
+shippable work.
+Use this to expand or revise a product pipeline over time, not to bootstrap
+the first pipeline.
+Initial pipeline creation belongs to the implementation pipeline, not here.
+
+Model assignments follow `~/ai/models/roles.md`.
+This doc cites layer-specific routing but does not restate the model matrix.
+
+Agent invocation: `~/ai/workflows/agents-cli.md`
+Market-research rules: `~/ai/workflows/research.md`
+Ticket handoff: `~/ai/workflows/implementation-pipeline.md`
+
+## When to use
+
+- The current ticket backlog is empty or will be within one cycle.
+- Strategy has shifted and existing tickets need to be re-scoped.
+- A new product surface is opening that the current roadmap does not cover.
+- You need to revise a downstream layer after a higher-layer change.
+
+Do not use this workflow for:
+
+- Small features inside an existing product area.
+- Exploratory investigation without a commitment to ship.
+- Initial pipeline creation for a product with no first roadmap yet.
+
+## Principles
+
+- **Separate agents for separate concerns.** Research, proposal, risk, and
+  synthesis are distinct invocations.
+- **Synthesis stays with `gpt-high`.** `claude-opus` judges; it does not
+  integrate.
+- **The risk gate is the review.** Do not add a redundant human proposal review
+  on top of model risk gates.
+- **All risks must return `LOW`.** If any report returns `MEDIUM` or `HIGH`,
+  revise and re-run the full gate.
+- **No cherry-picking risk feedback.** A revised proposal invalidates earlier
+  `LOW` reports for that layer.
+- **Fresh risk agents only.** If a proposer claims it re-ran risk checks, still
+  dispatch new risk agents.
+- **Start at the right layer.** Revision begins where misalignment surfaced and
+  then propagates downward.
+- **Reset upstream when framing changed.** If the problem framing changed, leave
+  this workflow and re-enter product-strategy alignment first.
+
+## Layers
+
+### Layer 0 - Market research
+
+- **Orchestrator** (`gpt-high`): identifies which research questions need
+  answering for the planned expansion or revision.
+- **Web research execution**: `gpt-high` researchers in parallel via Firecrawl
+  MCP or equivalent.
+- **Research rule**: primary-source citations required. Follow
+  `~/ai/workflows/research.md`.
+- **Synthesis** (`gpt-high`): market-research summary with evidence,
+  assumptions, tradeoffs, and open risks.
+- **Surface check**: if research reveals a product-strategy shift that changes
+  the framing of the problem, re-enter the product-strategy alignment loop
+  instead of continuing downward here.
+- **Gate**: human approves the market framing before roadmap work begins.
+
+### Layer 1 - Executive roadmap
+
+- **Proposer** (`gpt-high`): strategic ordering of product moves with rationale,
+  dependencies, anti-goals, and intended outcomes.
+- **Risk gates** (parallel, 3x):
+  - Market misread (`claude-opus`): does the ordering still hold if the market
+    reads differ from the current assumptions?
+  - Dependency trap (`claude-opus`): are we sequencing moves that hide a
+    downstream blocker or unscheduled prerequisite?
+  - Completeness (`gpt-high`): is every promised outcome traceable to a planned
+    item in the ordering?
+- **Revision rule**: all three must return `LOW`; otherwise revise and re-run
+  the full Layer 1 gate.
+- **Gate**: human approves the strategic ordering before engineering-layer
+  decomposition begins.
+
+### Layer 2 - Engineering roadmap
+
+- **Engineering codebase research** (`gpt-high`): map the executive ordering
+  onto the current system.
+- **Research focus**: prerequisite infrastructure, existing patterns, migration
+  paths, coupling constraints, and major technical unknowns.
+- **Proposer** (`gpt-high`): engineering roadmap with ordered milestones,
+  dependencies on the existing system, and estimated magnitude.
+- **Risk gates** (parallel, 3x):
+  - Feasibility (`gpt-high`): does the ordering match what the codebase can
+    actually support without hidden rewrites not on the plan?
+  - Integration (`claude-opus`): do the milestones fit together coherently, or
+    does each milestone assume a different system?
+  - Drift (`claude-opus`): does the engineering roadmap still implement the
+    executive roadmap it claims to serve?
+- **Revision rule**: all three must return `LOW`; otherwise revise and re-run
+  the full Layer 2 gate.
+- **Gate**: human resolves engineering-vs-executive ordering disagreements.
+
+### Layer 3 - AI-optimized roadmap
+
+- **Proposer** (`gpt-high`): decomposes the engineering roadmap into slices
+  small enough for the implementation pipeline to execute reliably.
+- **Output shape**: slices should be coherent, schedulable, and explicit about
+  prior-slice dependencies.
+- **Risk gates** (parallel, 3x):
+  - Decomposition (`claude-opus`): is each slice cohesive and self-contained,
+    or does it require mid-slice context handoff?
+  - Coverage (`gpt-high`): does every engineering-roadmap item map to at least
+    one AI slice? Require a crosswalk.
+  - Dependency (`claude-opus`): do the slices linearize cleanly, or do they
+    depend on parallel-agent coordination the pipeline cannot model well?
+- **Revision rule**: all three must return `LOW`; otherwise revise and re-run
+  the full Layer 3 gate.
+- **Gate**: model. The orchestrator validates completeness against Layer 2.
+  Human review is required only if the orchestrator flags divergence.
+
+### Layer 4 - Ticket generation
+
+- **Generator** (`gpt-high`): writes one ticket per AI slice.
+- **Each ticket includes**: scope, acceptance criteria, dependencies on earlier
+  slices, and revision rationale from the roadmap stage above it.
+- **Constraint**: tickets are handoff artifacts, not mini-roadmaps. Keep them
+  implementation-ready.
+- **Gate**: human reviews tickets before they enter the implementation
+  pipeline.
+
+## Risk-Type Reference
+
+Risk-type routing in this workflow is layer-specific.
+Presence and checklist-style risks go to `gpt-high`.
+Intent and direction-style risks go to `claude-opus`.
+See `~/ai/models/roles.md`.
+
+| Layer | Risk type | Model | What it checks |
+|---|---|---|---|
+| Executive | Market misread | `claude-opus` | Does the ordering hold if the market signals differ from our read? |
+| Executive | Dependency trap | `claude-opus` | Does a later item secretly depend on something not scheduled? |
+| Executive | Completeness | `gpt-high` | Is every promised outcome traceable to a scheduled item? |
+| Engineering | Feasibility | `gpt-high` | Does the ordering match what the codebase can support? |
+| Engineering | Integration | `claude-opus` | Do the milestones fit coherently, or does each assume a different system? |
+| Engineering | Drift | `claude-opus` | Does this roadmap still implement the executive roadmap it claims to? |
+| AI | Decomposition | `claude-opus` | Is each slice cohesive and self-contained? |
+| AI | Coverage | `gpt-high` | Does every engineering item map to at least one AI slice? |
+| AI | Dependency | `claude-opus` | Do the slices linearize cleanly? |
+
+## Rules
+
+- **Do not default all risks to `claude-opus`.** Follow the layer-specific
+  presence-vs-intent split above.
+- **Proposers do not write their own risk reports.** They propose and revise.
+  Separate agents judge.
+- **Opus never synthesizes.** This applies to market-research synthesis,
+  roadmap coordination, and ticket integration.
+- **Human checkpoints exist at each strategic boundary.** Use them to approve
+  framing, ordering, and ticket handoff.
+- **Layer 4 feeds the implementation pipeline.** Once tickets are approved,
+  execution moves to `~/ai/workflows/implementation-pipeline.md`.
+- **Roadmap work is strategic, not exploratory.** If the goal is only to learn,
+  use `~/ai/workflows/research.md`.
+- **This workflow expands or revises over time.** It is not the bootstrap path
+  for a product with no initial roadmap.
+
+## Expansion vs Revision
+
+Use the same pipeline for both, but start at the right layer.
+
+- **Expansion**: adding a new product surface or extending the strategic
+  horizon. Usually runs Layer 0 through Layer 4 in order.
+- **Revision**: existing roadmap is stale or misaligned. Start at the layer
+  where the misalignment surfaced, then propagate downward.
+
+Examples:
+
+- Market assumption changed: start at Layer 0 or exit to product-strategy
+  alignment if the framing itself changed.
+- Executive ordering changed but product framing did not: start at Layer 1.
+- Codebase constraints invalidate the plan: start at Layer 2.
+- Milestones are valid but too coarse for implementation: start at Layer 3.
+
+If strategy itself shifted, the roadmap workflow cannot recover from that
+upstream framing error.
+Reset to product-strategy alignment first, then return here only after the
+framing is stable again.
+
+## References
+
+- Canonical layered roadmap loop:
+  `/home/nes/projects/server-manager/AGENTS.md`
+- Per-layer risk-type split and expansion caveat:
+  `/home/nes/projects/videos/AGENTS.md`
+- Model-role authority: `~/ai/models/roles.md`
+- Research rules: `~/ai/workflows/research.md`
+- Ticket handoff target: `~/ai/workflows/implementation-pipeline.md`
