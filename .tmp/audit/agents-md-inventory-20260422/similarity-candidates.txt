@@ -1,0 +1,323 @@
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L288-291 Running Sub-Agents
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L29-32 Running Sub-Agents
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L292-309 CLI Syntax
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L33-50 CLI Syntax
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L313-315 Model + prompt file (pipeline standard)
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L54-56 Model + prompt file (pipeline standard)
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L319-321 Pipe prompt from stdin
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L63-65 Pipe prompt from stdin
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L338-364 Input Schema
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L112-138 Input Schema
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L365-369 Multimodal Models
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L139-143 Multimodal Models
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L370-372 Generate an image (raw bytes on stdout, pipe to file)
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L144-146 Generate an image (raw bytes on stdout, pipe to file)
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L373-375 Generate a video
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L147-149 Generate a video
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L376-378 Image-to-video with source image
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L150-152 Image-to-video with source image
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L379-381 Image editing with reference images
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L153-155 Image editing with reference images
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L382-386 Chain: generate an image then animate it
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L156-160 Chain: generate an image then animate it
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L407-410 Available Models
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L161-166 Available Models
+
+[1.000 | title 1.000]
+- /home/nes/work/AGENTS.md L422-423 Infrastructure Reference
+- /home/nes/projects/server-manager/AGENTS.md L515-516 Infrastructure Reference
+
+[0.974 | title 1.000]
+- /home/nes/work/AGENTS.md L316-318 Agent file + model override
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L57-59 Agent file + model override
+
+[0.885 | title 1.000]
+- /home/nes/work/AGENTS.md L165-167 Run from a prompt file:
+- /home/nes/projects/server-manager/AGENTS.md L425-427 Run from a prompt file:
+
+[0.863 | title 0.689]
+- /home/nes/work/AGENTS.md L322-325 Set working directory
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L66-69 Set working directory for the subprocess
+
+[0.826 | title 0.778]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L3-28 Project Structure
+- /home/nes/projects/visual-code-editor/AGENTS.md L51-61 Directory Structure
+
+[0.791 | title 0.727]
+- /home/nes/work/AGENTS.md L101-126 Folder Structure
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L3-28 Project Structure
+
+[0.786 | title 0.537]
+- /home/nes/work/AGENTS.md L156-160 Running External Models
+- /home/nes/projects/server-manager/AGENTS.md L417-421 Running Sub-Agents
+
+[0.784 | title 0.732]
+- /home/nes/work/AGENTS.md L310-312 Common Patterns
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L51-53 Common Invocation Patterns
+
+[0.756 | title 0.686]
+- /home/nes/work/AGENTS.md L101-126 Folder Structure
+- /home/nes/projects/visual-code-editor/AGENTS.md L51-61 Directory Structure
+
+[0.714 | title 0.690]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L286-290 Running Evals
+- /home/nes/projects/visual-code-editor/AGENTS.md L209-211 Running Captures
+
+[0.683 | title 0.456]
+- /home/nes/work/AGENTS.md L165-167 Run from a prompt file:
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L54-56 Model + prompt file (pipeline standard)
+
+[0.682 | title 0.286]
+- /home/nes/work/AGENTS.md L322-325 Set working directory
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L54-56 Model + prompt file (pipeline standard)
+
+[0.680 | title 0.600]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L3-28 Project Structure
+- /home/nes/projects/agent-runner/AGENTS.md L269-287 Tauri Backend Structure
+
+[0.672 | title 0.596]
+- /home/nes/work/AGENTS.md L165-167 Run from a prompt file:
+- /home/nes/projects/server-manager/AGENTS.md L422-424 Run a model with a prompt:
+
+[0.667 | title 0.522]
+- /home/nes/work/AGENTS.md L310-312 Common Patterns
+- /home/nes/projects/agent-runner/AGENTS.md L249-251 Commands
+
+[0.654 | title 0.571]
+- /home/nes/projects/agent-runner/AGENTS.md L269-287 Tauri Backend Structure
+- /home/nes/projects/visual-code-editor/AGENTS.md L51-61 Directory Structure
+
+[0.653 | title 0.564]
+- /home/nes/work/AGENTS.md L101-126 Folder Structure
+- /home/nes/projects/agent-runner/AGENTS.md L269-287 Tauri Backend Structure
+
+[0.647 | title 0.355]
+- /home/nes/work/AGENTS.md L165-167 Run from a prompt file:
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L66-69 Set working directory for the subprocess
+
+[0.622 | title 0.550]
+- /home/nes/work/AGENTS.md L101-126 Folder Structure
+- /home/nes/projects/server-manager/AGENTS.md L515-516 Infrastructure Reference
+
+[0.614 | title 0.456]
+- /home/nes/work/AGENTS.md L313-315 Model + prompt file (pipeline standard)
+- /home/nes/projects/server-manager/AGENTS.md L425-427 Run from a prompt file:
+
+[0.614 | title 0.456]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L54-56 Model + prompt file (pipeline standard)
+- /home/nes/projects/server-manager/AGENTS.md L425-427 Run from a prompt file:
+
+[0.609 | title 0.815]
+- /home/nes/work/AGENTS.md L168-170 Run a named agent (from agents/ directory):
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L60-62 Named agent (resolved from agents directory)
+
+[0.609 | title 0.687]
+- /home/nes/work/AGENTS.md L376-378 Image-to-video with source image
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L153-155 Image editing with reference images
+
+[0.609 | title 0.240]
+- /home/nes/work/AGENTS.md L313-315 Model + prompt file (pipeline standard)
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L66-69 Set working directory for the subprocess
+
+[0.600 | title 0.500]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L3-28 Project Structure
+- /home/nes/projects/agent-runner/AGENTS.md L65-88 Current UI Architecture
+
+[0.599 | title 0.657]
+- /home/nes/work/AGENTS.md L379-381 Image editing with reference images
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L150-152 Image-to-video with source image
+
+[0.593 | title 0.515]
+- /home/nes/work/AGENTS.md L161-164 Run a model directly (no agent file needed):
+- /home/nes/projects/server-manager/AGENTS.md L422-424 Run a model with a prompt:
+
+[0.586 | title 0.346]
+- /home/nes/work/AGENTS.md L322-325 Set working directory
+- /home/nes/projects/server-manager/AGENTS.md L441-443 Point the agent at the worktree:
+
+[0.585 | title 0.355]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L66-69 Set working directory for the subprocess
+- /home/nes/projects/server-manager/AGENTS.md L425-427 Run from a prompt file:
+
+[0.582 | title 0.264]
+- /home/nes/work/AGENTS.md L165-167 Run from a prompt file:
+- /home/nes/projects/server-manager/AGENTS.md L441-443 Point the agent at the worktree:
+
+[0.581 | title 0.433]
+- /home/nes/work/AGENTS.md L316-318 Agent file + model override
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L54-56 Model + prompt file (pipeline standard)
+
+[0.577 | title 0.476]
+- /home/nes/projects/agent-runner/AGENTS.md L65-88 Current UI Architecture
+- /home/nes/projects/visual-code-editor/AGENTS.md L51-61 Directory Structure
+
+[0.571 | title 0.571]
+- /home/nes/projects/agent-runner/AGENTS.md L152-153 Design Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L1-2 Visual Code Editor — Agent Workflows
+
+[0.567 | title 0.480]
+- /home/nes/projects/agent-runner/AGENTS.md L65-88 Current UI Architecture
+- /home/nes/projects/server-manager/AGENTS.md L452-482 Architecture (Three Services)
+
+[0.565 | title 0.488]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L3-28 Project Structure
+- /home/nes/projects/server-manager/AGENTS.md L515-516 Infrastructure Reference
+
+[0.562 | title 0.186]
+- /home/nes/work/AGENTS.md L322-325 Set working directory
+- /home/nes/projects/server-manager/AGENTS.md L425-427 Run from a prompt file:
+
+[0.553 | title 0.400]
+- /home/nes/work/AGENTS.md L313-315 Model + prompt file (pipeline standard)
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L57-59 Agent file + model override
+
+[0.442 | title 1.000]
+- /home/nes/work/AGENTS.md L288-291 Running Sub-Agents
+- /home/nes/projects/server-manager/AGENTS.md L417-421 Running Sub-Agents
+
+[0.442 | title 1.000]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L29-32 Running Sub-Agents
+- /home/nes/projects/server-manager/AGENTS.md L417-421 Running Sub-Agents
+
+[0.374 | title 1.000]
+- /home/nes/projects/agent-runner/AGENTS.md L261-264 Build
+- /home/nes/projects/visual-code-editor/AGENTS.md L272-274 Build
+
+[0.277 | title 1.000]
+- /home/nes/projects/ai-workflow/AGENTS.md L147-151 No Backwards Compatibility
+- /home/nes/projects/server-manager/AGENTS.md L564-578 No Backwards Compatibility
+
+[0.272 | title 1.000]
+- /home/nes/work/AGENTS.md L326-337 Agent File Format
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L70-85 Agent File Format
+
+[0.267 | title 0.750]
+- /home/nes/projects/videos/AGENTS.md L170-186 Generation workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L199-202 Animation QA Workflow
+
+[0.215 | title 1.000]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L389-393 Implementation & Bug-Fix Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L255-268 Implementation & Bug-Fix Workflow
+
+[0.188 | title 0.756]
+- /home/nes/projects/server-manager/AGENTS.md L232-244 Mutation Safety Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L199-202 Animation QA Workflow
+
+[0.178 | title 0.774]
+- /home/nes/work/AGENTS.md L338-364 Input Schema
+- /home/nes/projects/agent-runner/AGENTS.md L95-117 Input Schema System
+
+[0.178 | title 0.774]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L112-138 Input Schema
+- /home/nes/projects/agent-runner/AGENTS.md L95-117 Input Schema System
+
+[0.172 | title 1.000]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L410-425 Principles
+- /home/nes/projects/server-manager/AGENTS.md L68-81 Principles
+
+[0.157 | title 1.000]
+- /home/nes/work/AGENTS.md L213-218 CodeRabbit Review Loop
+- /home/nes/projects/server-manager/AGENTS.md L155-162 CodeRabbit Review Loop
+
+[0.130 | title 0.765]
+- /home/nes/projects/server-manager/AGENTS.md L294-329 Writing Pipeline
+- /home/nes/projects/visual-code-editor/AGENTS.md L119-122 Animation Pipeline
+
+[0.122 | title 1.000]
+- /home/nes/projects/server-manager/AGENTS.md L51-67 Implementation & Bug-Fix Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L255-268 Implementation & Bug-Fix Workflow
+
+[0.117 | title 0.783]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L227-235 Step 4: Run Tests
+- /home/nes/projects/server-manager/AGENTS.md L165-175 2. Run tests
+
+[0.110 | title 1.000]
+- /home/nes/projects/server-manager/AGENTS.md L245-256 Research Workflow
+- /home/nes/projects/videos/AGENTS.md L207-241 Research workflow
+
+[0.106 | title 1.000]
+- /home/nes/projects/server-manager/AGENTS.md L245-256 Research Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L160-170 Research Workflow
+
+[0.094 | title 0.760]
+- /home/nes/projects/server-manager/AGENTS.md L206-215 Server Inspection Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L104-118 Self-correction workflow
+
+[0.092 | title 1.000]
+- /home/nes/projects/server-manager/AGENTS.md L379-387 Model Roles
+- /home/nes/projects/videos/AGENTS.md L277-294 Model roles
+
+[0.087 | title 1.000]
+- /home/nes/work/AGENTS.md L180-212 Implementation & Bug-Fix Workflow
+- /home/nes/projects/server-manager/AGENTS.md L51-67 Implementation & Bug-Fix Workflow
+
+[0.086 | title 1.000]
+- /home/nes/work/AGENTS.md L180-212 Implementation & Bug-Fix Workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L255-268 Implementation & Bug-Fix Workflow
+
+[0.077 | title 1.000]
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L389-393 Implementation & Bug-Fix Workflow
+- /home/nes/projects/server-manager/AGENTS.md L51-67 Implementation & Bug-Fix Workflow
+
+[0.070 | title 1.000]
+- /home/nes/work/AGENTS.md L253-281 PR Review Workflow
+- /home/nes/projects/server-manager/AGENTS.md L176-196 PR Review Workflow
+
+[0.065 | title 0.731]
+- /home/nes/projects/agent-runner/AGENTS.md L1-2 Oulipoly Plane — Agent Entry Point
+- /home/nes/projects/ai-workflow/AGENTS.md L1-16 AI Agent Entry Point
+
+[0.063 | title 1.000]
+- /home/nes/work/AGENTS.md L546-552 Global Constraints
+- /home/nes/projects/videos/AGENTS.md L352-372 Global constraints
+
+[0.050 | title 1.000]
+- /home/nes/projects/server-manager/AGENTS.md L379-387 Model Roles
+- /home/nes/projects/visual-code-editor/AGENTS.md L73-86 Model Roles
+
+[0.047 | title 1.000]
+- /home/nes/projects/videos/AGENTS.md L277-294 Model roles
+- /home/nes/projects/visual-code-editor/AGENTS.md L73-86 Model Roles
+
+[0.044 | title 1.000]
+- /home/nes/projects/videos/AGENTS.md L207-241 Research workflow
+- /home/nes/projects/visual-code-editor/AGENTS.md L160-170 Research Workflow
+
+[0.036 | title 1.000]
+- /home/nes/work/AGENTS.md L180-212 Implementation & Bug-Fix Workflow
+- /home/nes/projects/agent-implementation-skill/AGENTS.md L389-393 Implementation & Bug-Fix Workflow
+
+[0.031 | title 0.739]
+- /home/nes/projects/server-manager/AGENTS.md L216-231 Integration Triage Workflow
+- /home/nes/projects/videos/AGENTS.md L170-186 Generation workflow
+
+[0.026 | title 0.737]
+- /home/nes/projects/server-manager/AGENTS.md L82-110 Gate ownership per phase
+- /home/nes/projects/videos/AGENTS.md L260-276 Gate ownership
+
+[0.023 | title 0.769]
+- /home/nes/projects/agent-runner/AGENTS.md L14-25 Tech Stack
+- /home/nes/projects/visual-code-editor/AGENTS.md L12-19 Technology Stack

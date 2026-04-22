@@ -1,0 +1,883 @@
+===== agentsmd-curator.md =====
+9: You audit and (in `edit` mode) maintain the AGENTS.md file and the `~/work/agents/` operator ecosystem against the architecture rules below. You do NOT design new workflows or operators (that's an orchestration concern); you keep the existing structure clean, consistent, and discoverable.
+21: - Infrastructure reference (JIRA, AWS, Tailscale, etc.)
+31: **Operator files (`~/work/agents/*.md`) contain:**
+43: - Every operator file in `~/work/agents/` is reachable from AGENTS.md routing OR called explicitly by another operator
+66: | `audit` | Read-only. Walk AGENTS.md and `~/work/agents/`. Output a findings report with severity (`PASS`, `MINOR`, `MAJOR`, `BLOCKING`). Do not modify any file. |
+75: - `agentsmd_path`: usually `/home/nes/work/AGENTS.md`
+76: - `agents_dir`: usually `/home/nes/work/agents/`
+94:    ls ~/work/agents/*.md
+96:    grep -nE "^## |^### " /home/nes/work/AGENTS.md
+104: 3. **Operator discoverability check.** For each `~/work/agents/*.md`:
+171: | Cross-reference uses absolute path (`/home/nes/work/agents/foo.md`) | MINOR | Change to relative `agents/foo.md` |
+
+===== agentsmd-maintenance-orchestrator.md =====
+28: - `agentsmd_path`: usually `/home/nes/work/AGENTS.md`
+29: - `agents_dir`: usually `/home/nes/work/agents/`
+36: - **All sub-agents via `agents` CLI.** Use `~/.local/bin/agents --agent-file <path> ...`. Never substitute with Claude Code's internal Agent tool.
+40: - **Process review is the final step.** Dispatch `agents/workflow-reviewer.md` on the workflow output to verify you followed your own procedure. Optional only if the workflow ran trivially clean (no edits applied).
+49: ~/.local/bin/agents \
+50:   --agent-file ~/work/agents/agentsmd-curator.md \
+51:   -p /home/nes/work \
+87: ~/.local/bin/agents --model claude-opus -p /home/nes/work -f <audit-risk-prompt> &
+89: ~/.local/bin/agents --model claude-opus -p /home/nes/work -f <scope-risk-prompt> &
+91: ~/.local/bin/agents --model claude-opus -p /home/nes/work -f <shortcut-risk-prompt> &
+102: ~/.local/bin/agents \
+103:   --agent-file ~/work/agents/agentsmd-curator.md \
+104:   -p /home/nes/work \
+120: Dispatch `agents/workflow-reviewer.md` on this workflow's step log. Confirm the orchestrator followed its own non-negotiables. Pass `operator_file=/home/nes/work/agents/agentsmd-maintenance-orchestrator.md`, `step_log=<your written step log>`, and `expected_outputs=<list of artifact paths produced this run>`.
+122: If workflow-reviewer flags violations, address them in a follow-up cycle.
+
+===== behavior-investigator.md =====
+17: - A risk-assessor flagged a high-priority area and we need to understand what it should do before writing tests
+19: - A trace-recorder captured a workflow and we need to research whether the recorded behavior is correct
+24: - Writing tests (use test-writer after this agent produces a spec)
+25: - Measuring coverage (use coverage-analyzer)
+40: - `context` (optional): What triggered this investigation (risk-assessor output, suspicious trace, etc.)
+81: gh pr list --repo <repo> --state merged --search "<function_name>" --limit 10
+96: If JIRA tickets are referenced in commits:
+98: - Cross-reference with the JIRA board if accessible
+116: find ~/work/planning -name "*.md" | xargs grep -l "<feature_name>" 2>/dev/null
+135: - Recommendation: record a Playwright trace if it's user-facing
+143: #### 1. Product Report (`/tmp/behavior-investigation/<target_slug>-product.md`)
+163: #### 2. Engineering Report (`/tmp/behavior-investigation/<target_slug>-engineering.md`)
+181: #### 3. Investigative Report (`/tmp/behavior-investigation/<target_slug>-investigation.md`)
+206: 5. If possible, capture a Playwright screenshot of the affected UI area
+
+===== coderabbit-operator.md =====
+2: description: 'Run CodeRabbit review loop on a branch. Iterate until value drops to zero (typically 3-6 passes). Distinguish real findings from churn; track per-pass value; never push during the loop.'
+7: # CodeRabbit Operator
+9: You run the CodeRabbit review loop on a branch and iterate until the value-per-pass drops to zero. You do NOT push the branch during the loop — pushing happens after the post-CodeRabbit review gates. You amend a single commit so each CodeRabbit pass reviews a clean diff against `main`.
+13: - Implementation is complete and ready for CodeRabbit review (step 9 of the implementation pipeline)
+14: - A specific PR needs another CodeRabbit pass after fixes
+15: - Verification that CodeRabbit has converged before opening a PR
+19: - Running the post-CodeRabbit review gates (test-audit / multi-concern / justification — those are separate operators)
+27: - `worktree-path`: directory where `coderabbit review --cwd` runs (the PR's worktree)
+28: - `test-command` (optional): how to run tests after fixes (e.g., `pytest <path> -q`). If absent, skip test-after-fix step.
+33: - **Local `main` must be up to date with `origin/main` before the first pass.** Stale `main` makes CodeRabbit compare against the wrong base and review unrelated files. Always run:
+37: - **Amend the same commit during the loop, never create new commits per pass.** This keeps CodeRabbit reviewing one clean diff.
+38: - **Do NOT `git push` or `git push --force-with-lease` during the loop.** Push happens once, after post-CodeRabbit review gates approve. Pushing mid-loop blocks rebase and re-runs.
+41: - **Do not chase flip-flops.** When CodeRabbit oscillates between two recommendations across passes, pick the one consistent with the proposal and stop.
+47: coderabbit review --plain --base <base> --cwd <worktree-path> > CODERABBIT_pass<N>.md 2>&1
+61: | False positive (CodeRabbit misread the code) | Skip, document with code-line citation |
+80: CodeRabbit free-tier rate-limits with messages like `Rate limit exceeded, please try after 39 minutes and 49 seconds`. When this happens:
+85: until [ "$(date -u +%H%M)" -ge "$TARGET_HHMM" ]; do sleep 60; done
+97: 4. Run tests (`<test-command>` if provided) — confirm green before CodeRabbit sees them
+103: For each pass, write `CODERABBIT_pass<N>.md` to the worktree with:
+104: - Findings list (raw CodeRabbit output)
+110: After convergence, write `CODERABBIT_summary.md`:
+131: - Return `BLOCKED` if: tests fail after applying a real finding AND the failure can't be resolved without changing the finding's intent (e.g., test was wrong AND CodeRabbit's fix would break unrelated functionality)
+137: `CODERABBIT_pass<N>.md` per pass + `CODERABBIT_summary.md` on convergence. Final stdout: `CONVERGED:<reason>` | `BLOCKED:<reason>` | `NEEDS_INPUT:<reason>` | `MAX_PASSES_REACHED`.
+
+===== commit-hygiene-operator.md =====
+9: You audit and (in `reorganize` mode) rewrite the commit history of a single branch so a reviewer can step through commits and follow the change incrementally. You do NOT perform multi-branch rebases (that's `jj-operator`); you work on one branch at a time. You do NOT modify code semantics; the cumulative diff at the new branch tip MUST equal the cumulative diff at the old branch tip.
+22: - Multi-branch rebases / cascade across stack (use `jj-operator`)
+50: - **Always work in the PR's worktree**, not in `~/work/rfqautomation-linux/`. The worktree path is `~/work/worktrees/<branch-suffix>` or supplied via input.
+51: - **Stacked PRs require cascade rebase after this operator finishes.** Hand off the cascade to `jj-operator` (or document the dependency).
+59: - **CodeRabbit-fix commits are split per concern.** A "chore: address CR findings" commit that bundles 6 unrelated nitpicks → 6 commits, one per nitpick (or fold each into the relevant earlier commit).
+75: - "fix CodeRabbit findings" commits that bundle multiple unrelated nitpicks
+95: #    - test pass/fail at this commit (git checkout <sha> && pytest -q && git checkout <branch>)
+134: #    Or use jj split:
+135: #      jj new <BEFORE_SHA>                            # working copy at the original tip
+136: #      jj split <change-id>                           # interactive split UI
+141: diff <(echo "$BEFORE_DIFF") <(echo "$AFTER_DIFF")
+143: #   git reset --hard $BEFORE_SHA
+148: #   git reset --hard $BEFORE_SHA
+176: If the changes are interleaved at the LINE level inside one hunk, git add -p won't help. Use `git add -e` to manually edit the patch, OR split via `jj split`'s editor.
+186: git rebase --exec '/home/nes/work/rfqautomation-linux/venv/bin/python3 -m pytest test/unit/main/test_windows_update_manager.py --no-cov -q' <base>
+205:   removed=$(git show "$sha_n" | grep '^-' | grep -v '^---')
+206:   added=$(git show "$sha_n1" | grep '^+' | grep -v '^+++')
+222: - Return `BLOCKED` if: cumulative diff diverged after reorganization (and recovery via `git reset --hard $BEFORE_SHA`); per-commit tests can't be made green without changing semantics
+234: | Stacked PRs needing cascade after reorg | hand off to `jj-operator` | Operator finishes one branch; orchestrator dispatches jj-operator |
+
+===== coverage-analyzer.md =====
+9: You analyze test coverage across the RFQ Automation platform. You produce a
+22: - Writing new tests (use test-writer)
+23: - Investigating intended behavior of uncovered code (use behavior-investigator)
+24: - Assessing risk/value of uncovered branches (use risk-assessor)
+25: - Recording traces for ambiguous behavior (use trace-recorder)
+50:    cat pytest.ini 2>/dev/null
+51:    cat setup.cfg 2>/dev/null | grep -A 10 "\[tool:pytest\]"
+54: 2. Run pytest with branch coverage:
+57:    python3 -m pytest --cov=. --cov-branch --cov-report=json:/tmp/coverage-backend.json \
+58:      --cov-report=term-missing -v --no-header --tb=no 2>&1 | tee /tmp/coverage-backend-stdout.txt
+60:    If pytest-cov is not installed, note that as a gap.
+66:    with open('/tmp/coverage-backend.json') as f:
+82:      | sed 's|/[^/]*\.py$||' | sort -u > /tmp/src-dirs.txt
+85:      | sed 's|/[^/]*\.py$||' | sort -u > /tmp/test-dirs.txt
+99:    npx jest --coverage --coverageReporters=json --coverageDirectory=/tmp/coverage-frontend 2>&1 \
+100:      | tee /tmp/coverage-frontend-stdout.txt
+102:    npx vitest run --coverage --reporter=json 2>&1 | tee /tmp/coverage-frontend-stdout.txt
+108:    find <worktree_path>/frontend/src -name "*.tsx" -o -name "*.ts" | grep -v test | sort > /tmp/frontend-src.txt
+110:    find <worktree_path>/frontend -name "*.test.*" -o -name "*.spec.*" | sort > /tmp/frontend-tests.txt
+115: Produce a structured Markdown report at `/tmp/coverage-analysis/<datestamp>/baseline.md`:
+125: | E2E (Playwright) | — | — | — | — |
+187: - Return `BLOCKED` if: pytest-cov not installed and can't measure coverage, frontend test runner broken
+
+===== coverage-auditor.md =====
+18: - After coverage-analyzer identifies the test landscape — this agent assesses test QUALITY
+19: - After test-writer produces new tests — this agent validates they follow the rules
+25: - Measuring coverage numbers (use coverage-analyzer)
+26: - Writing new tests (use test-writer)
+27: - Investigating behavior (use behavior-investigator)
+75: cat <worktree_path>/.github/workflows/*.yml | grep -A 10 "pytest\|jest\|vitest\|playwright"
+141: | <path> | test_X | Expected values look implementation-derived | Run through behavior-investigator |
+159: For newly written tests (from test-writer), verify:
+
+===== e2e-operator.md =====
+9: You run, reproduce, fix, and verify E2E test failures for the RFQ Automation platform.
+21: - Creating worktrees (use worktree-operator)
+22: - Rebasing branches (use jj-operator)
+23: - Building releases (use release-operator)
+27: - **ALWAYS watch after triggering.** Every `gh workflow run` must be followed by `gh run list` + `gh run watch`. Never fire-and-forget.
+28: - **Shared concurrency group.** Docker and Windows E2E share `lama-server-e2e` — they queue if triggered together.
+30: - **Stop Docker stack when done** with local testing.
+34: - `worktree_path`: Path to the worktree (e.g., `/home/nes/work/worktrees/my-fix/`)
+36: - `task`: What to do — one of: `trigger-docker`, `trigger-windows`, `trigger-both`, `reproduce-local`, `fix-screenshots`, `fix-baselines`, `investigate-failure`
+37: - `scenario` (optional): Specific E2E scenario to target (e.g., `rfq-submission`, `update-manager`)
+44: | Docker (Linux) | `e2e-tests.yml` | 90 min | Full Docker stack (app + supervisor + updater) |
+46: | PAT Validation | `e2e-pat-validation.yml` | 30 min | Customer PAT resolves versions + pulls from GHCR |
+49: **All suites share the `lama-server-e2e` concurrency group** — they queue if triggered together.
+54: - **Seed image**: `ghcr.io/lama-ai-rfq/rfqautomation-rfq-app-e2e:v1.0.0-e2e` must exist in GHCR
+55: - **Customer PAT secret**: `E2E_CUSTOMER_GHCR_PAT` + `E2E_CUSTOMER_GHCR_USERNAME` must be configured
+62:   gh workflow run publish-e2e-seed.yml
+64:   gh workflow run publish-e2e-seed.yml -f source_tag=v3.4.660
+71:    # Docker
+72:    gh workflow run e2e-tests.yml --ref feat/<branch-name>
+74:    gh workflow run "E2E Tests (Windows EXE)" --ref feat/<branch-name>
+76:    gh workflow run e2e-tests.yml --ref feat/<branch-name> -f scenario=<scenario>
+78:    gh workflow run e2e-pat-validation.yml --ref feat/<branch-name>
+80:    gh workflow run e2e-upgrade-scenarios.yml --ref feat/<branch-name>
+85:    gh run list --branch feat/<branch-name> --limit 3
+90:    # Do NOT use `gh run watch` — it polls every few seconds and burns API quota.
+93:      status=$(gh run view <run-id> --json status,conclusion --jq '.status + " " + (.conclusion // "")')
+94:      echo "$(date +%H:%M:%S) $status"
+95:      case "$status" in
+104:    gh run view <run-id> --log-failed
+106:    JOB_ID=$(gh api repos/OWNER/REPO/actions/runs/<run-id>/jobs --jq '.jobs[0].id')
+107:    gh api repos/OWNER/REPO/actions/jobs/$JOB_ID/logs
+110: ## Procedure: Local Reproduction (Linux Docker)
+114:    unzip -o ~/work/e2e-local-settings.zip -d <worktree_path>/
+117: 2. Start the Docker stack (~5min for ML training):
+120:    E2E_WORKTREE=$(pwd) bash scripts/e2e/start-docker.sh
+126:    E2E_SCENARIO=<scenario> npx playwright test --project=e2e --reporter=list
+129: 4. Iterate: fix code, re-run. No need to restart Docker between runs.
+131: 5. Stop Docker when done:
+134:    bash scripts/e2e/stop-docker.sh
+139: The Windows RFQ application lives at `/mnt/c/Users/xteam/IdeaProjects/e2e-windows/`.
+157:    E2E_SCENARIO=<scenario> npx playwright test --project=e2e --reporter=list
+171:    aws s3 sync s3://rfq-e2e-screenshot-reports/{branch}/{run-id}/ ./screenshot-report/
+186: E2E_UPDATE_BASELINE=1 E2E_SCENARIO=<scenario> npx playwright test --project=e2e
+193: npx playwright test --project=e2e-setup --project=e2e --project=e2e-teardown --reporter=list
+202: http://rfq-e2e-screenshot-reports.s3-website-us-east-1.amazonaws.com/{branch}/{run-id}/index.html
+205: **Bucket:** `rfq-e2e-screenshot-reports` (private, us-east-1)
+209: aws s3 sync s3://rfq-e2e-screenshot-reports/{branch}/{run-id}/ ./screenshot-report/
+232: | Test timeout | Check Docker stack health, check ML training completed |
+244:    gh workflow run "E2E Tests (Docker)" --ref feat/<branch-name>
+245:    gh workflow run "E2E Tests (Windows EXE)" --ref feat/<branch-name>
+246:    gh run list --branch feat/<branch-name> --limit 4
+249: 5. Stop local Docker stack
+253: - Return `BLOCKED` if: Docker stack won't start, runner is occupied, secrets missing
+258: - `tests/e2e/scenarios/` — test scenarios (Playwright + TypeScript)
+259:   - `update-manager/` — smoke tests, download, GHCR fallback, upgrade cycle
+263: - `tests/e2e/infrastructure/docker-compose.test.yml` — test environment overrides
+264: - `tests/e2e/infrastructure/docker-compose.preseeded.yml` — pre-seeded Postgres
+265: - `scripts/e2e/start-docker.sh` — Docker infrastructure setup
+267: - `scripts/e2e/stop-docker.sh` — Docker teardown
+268: - `frontend/playwright.config.ts` — Playwright orchestration config
+274: Located at `~/work/e2e-local-settings.zip`. Contains gitignored secrets:
+282: unzip -o ~/work/e2e-local-settings.zip -d <worktree_path>/
+288: zip ~/work/e2e-local-settings.zip \
+
+===== fastapi-best-practices.md =====
+902: - Paths like `/tmp/foo` or `/var/lib/bar` are embedded in business code.
+
+===== fastapi-review-operator.md =====
+39:   (`/home/nes/work/agents/fastapi-best-practices.md`) plus the diff. Don't reinvent opinions.
+46: - `repo` (optional): Repository in `OWNER/REPO` format. Defaults to `lama-ai-RFQ/RFQautomation`.
+47: - `project_dir` (optional): Path to the repo checkout. Defaults to `~/work/rfqautomation-linux`.
+52: - `/home/nes/work/agents/fastapi-best-practices.md` — opinionated reference. Regenerate via
+60: REPO="lama-ai-RFQ/RFQautomation"
+62: PROJECT_DIR=~/work/rfqautomation-linux
+63: WORK_DIR=/tmp/pr${PR}-fastapi-review-$(date +%Y%m%d-%H%M%S)
+64: REFERENCE=/home/nes/work/agents/fastapi-best-practices.md
+66: mkdir -p "$WORK_DIR"
+69: test -f "$REFERENCE" || { echo "Reference missing — regenerate via agents -m gpt-high"; exit 1; }
+71: cd "$PROJECT_DIR"
+74: gh pr view "$PR" --repo "$REPO" \
+76:   > "$WORK_DIR/pr-meta.json"
+77: gh pr diff "$PR" --repo "$REPO" > "$WORK_DIR/diff.txt"
+78: gh pr diff "$PR" --repo "$REPO" --stat > "$WORK_DIR/diff-stat.txt"
+79: gh api "repos/$REPO/pulls/$PR/reviews" > "$WORK_DIR/pr-reviews.json"
+80: gh pr view "$PR" --repo "$REPO" --comments > "$WORK_DIR/pr-comments.txt"
+107: - App: RFQ automation platform, FastAPI backend (`backend/` in the repo), on-prem + cloud
+112: - Running on: `rfqautomation-linux/`
+116: Read `/home/nes/work/agents/fastapi-best-practices.md` before assessing. Cite section
+121: Read the file `$WORK_DIR/diff.txt` for the complete PR diff.
+133: File: `$WORK_DIR/facet-framework.md`
+177: agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" \
+178:   > "$WORK_DIR/result-framework.md" 2>&1 &
+183: File: `$WORK_DIR/facet-architecture.md`
+230: agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" \
+231:   > "$WORK_DIR/result-architecture.md" 2>&1 &
+236: File: `$WORK_DIR/facet-state.md`
+284: agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" \
+285:   > "$WORK_DIR/result-state.md" 2>&1 &
+290: File: `$WORK_DIR/facet-pydantic.md`
+339: agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" \
+340:   > "$WORK_DIR/result-pydantic.md" 2>&1 &
+345: File: `$WORK_DIR/facet-testing.md`
+361: 3. **Fixtures**: pytest fixtures for app, client, DB, user. `scope=` chosen
+393: agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" \
+394:   > "$WORK_DIR/result-testing.md" 2>&1 &
+400: ls -la "$WORK_DIR"/result-*.md
+422: `gh pr review --request-changes` if the gate fails, `--comment` if advisory.
+425: gh pr review "$PR" --repo "$REPO" --request-changes --body "$(cat <<'EOF'
+459: gh pr comment "$PR" --repo "$REPO" --body "$(cat <<'EOF'
+481: agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" \
+482:   > "$WORK_DIR/result-proposal.md" 2>&1
+491:    nothing about RFQ.
+493:    and `$WORK_DIR/diff.txt`.
+
+===== green-phase-gate.md =====
+2: description: 'Re-run the red-phase node IDs against the implementer''s HEAD and classify whether each turned green. Advisory — informs the implementer whether implementation drove the tests green without regressing previously-green tests. Pytest-only.'
+14: you report what pytest saw on HEAD for the red-phase node ID list.
+17: - After implement (step 7) and before CodeRabbit (step 9)
+19: - The project uses pytest (Python test suite)
+24: - Validating non-Python tests (Jest / Playwright deferred)
+25: - Replacing the test-audit gate — `test-audit-gate.md` covers spec-
+35: - Pytest only. If the red-phase node IDs are not pytest IDs, BLOCKED.
+38: - Per-test outcomes come from a structured pytest report (JSON primary,
+48: - Run pytest exactly once on the red-phase ID list. Do not patch,
+62: Read `$red_phase_report`. Extract:
+99: ### 2. Run pytest against HEAD with structured output
+103: `$scratch_dir/green_nodeids.txt`, one per line.
+105: Prefer `pytest-json-report`:
+107: cd "$project_dir"
+108: pytest --no-header --tb=short \
+109:        --json-report --json-report-file="$scratch_dir/green_report.json" \
+110:        $(cat "$scratch_dir/green_nodeids.txt") \
+111:   > "$scratch_dir/green_pytest.txt" 2>&1 || true
+114: If the plugin errors on `--json-report`, fall back to pytest ≥ 7's
+117: pytest --no-header --tb=short \
+118:        --report-log="$scratch_dir/green_report.jsonl" \
+119:        $(cat "$scratch_dir/green_nodeids.txt") \
+120:   > "$scratch_dir/green_pytest.txt" 2>&1 || true
+125: `GreenPhase: BLOCKED` with reason "structured pytest report
+126: unavailable; install pytest-json-report or upgrade to pytest ≥ 7."
+137: `$report_type`. `CollectReport` is a **distinct record type** from
+149:     t = r.get("$report_type")
+214:    test now fails; implementer must investigate before CodeRabbit.
+234: Write `$scratch_dir/GREEN_PHASE.md`. First line MUST be one of
+240: - **Heuristic Limitations** (boilerplate): single pytest run against
+261: - **Tally**: G, R, X, SG, B, pytest exit code.
+264:     among previously-green IDs. Proceed to CodeRabbit."
+266:     green. Review the Still Red section before CodeRabbit."
+268:     before CodeRabbit — implementation may have broken adjacent
+271: - **Pytest Transcript**: verbatim contents of `green_pytest.txt`.
+275: - BLOCKED if `RED_PHASE.md` cannot be parsed, the structured pytest
+
+===== jira-operator.md =====
+2: description: 'Read/comment/transition JIRA issues on lamaai.atlassian.net via REST API. Auth via $JIRA_API_KEY env var (set in ~/.bashrc). User: aaron.solomon@scint.ai.'
+7: # JIRA Operator
+9: You read, comment on, and transition JIRA issues on `lamaai.atlassian.net`. Auth uses HTTP Basic with the user's email + API token.
+13: - The user references a JIRA ticket key (e.g., INFA-34, KAN-12) and wants info posted/read
+36: curl -u "aaron.solomon@scint.ai:$JIRA_API_KEY" "https://lamaai.atlassian.net/rest/api/3/..."
+39: `$JIRA_API_KEY` is exported from `~/.bashrc`. Email is `aaron.solomon@scint.ai` (verified 2026-04-18 via `/myself`).
+41: If auth fails: check that `$JIRA_API_KEY` is in env (`env | grep JIRA_API_KEY`); the token rotates periodically. If rotated, the user regenerates at https://id.atlassian.com/manage-profile/security/api-tokens.
+46: curl -s -u "aaron.solomon@scint.ai:$JIRA_API_KEY" \
+47:   "https://lamaai.atlassian.net/rest/api/3/issue/INFA-34?fields=summary,status,description,assignee" \
+55: JIRA Cloud comments use **ADF (Atlassian Document Format)**, NOT markdown. ADF is JSON-structured.
+61: curl -s -u "aaron.solomon@scint.ai:$JIRA_API_KEY" \
+72:       'content': [{'type': 'text', 'text': '''$COMMENT_TEXT'''}]
+77:   "https://lamaai.atlassian.net/rest/api/3/issue/$ISSUE_KEY/comment"
+80: For rich content (tables, headings, links), build ADF in a JSON file and POST with `-d @file.json`. ADF reference: <https://developer.atlassian.com/cloud/jira/platform/apidocs/#api-rest-api-3-issue-issueIdOrKey-comment-post>.
+93: curl -s -u "aaron.solomon@scint.ai:$JIRA_API_KEY" \
+94:   "https://lamaai.atlassian.net/rest/api/3/issue/$ISSUE_KEY/transitions"
+97: curl -s -u "aaron.solomon@scint.ai:$JIRA_API_KEY" \
+101:   "https://lamaai.atlassian.net/rest/api/3/issue/$ISSUE_KEY/transitions"
+109: curl -s -u "aaron.solomon@scint.ai:$JIRA_API_KEY" \
+112:   "https://lamaai.atlassian.net/rest/api/3/search"
+125: - Return `BLOCKED` if `$JIRA_API_KEY` is unset or returns 401 (likely rotated; ask user to refresh)
+133: | INFA (Infrastructure / Platform) | `INFA-XX` | `https://lamaai.atlassian.net/browse/INFA-XX` |
+134: | KAN (Kanban / Product) | `KAN-XX` | `https://lamaai.atlassian.net/browse/KAN-XX` |
+
+===== jj-operator.md =====
+2: description: 'Manage branch dependencies, rebases, squashes, and integration branches using jj (Jujutsu).'
+9: You manage branch dependencies and rebases using jj in the RFQ Automation platform. jj is colocated with git in `~/work/rfqautomation-linux/` and manages the full branch DAG. Other devs are unaffected — `.jj/` is in `.git/info/exclude`.
+22: - Creating worktrees (use worktree-operator)
+28: - **All jj commands run in `~/work/rfqautomation-linux/`** — never in worktrees.
+32:   jj --config "$JJ_IMMUTABLE" <command>
+34: - **Squash child into parent, NEVER parent into child.** Squashing the parent rewrites all descendants including main. If you make this mistake, immediately `jj op restore`.
+35: - **After rebasing, sync affected worktrees** (or tell the user to run worktree-operator).
+48: cd ~/work/rfqautomation-linux
+52: jj git fetch
+55: jj --config "$JJ_IMMUTABLE" rebase -b feat/<name> -d main
+60: jj git push -b feat/<name>
+66: cd ~/work/rfqautomation-linux
+69: jj new feat/A
+71: jj bookmark set feat/B
+74: jj new feat/B feat/C
+76: jj bookmark set feat/A
+79: jj new feat/A feat/E
+81: jj bookmark set feat/D
+89: cd ~/work/rfqautomation-linux
+93: jj new feat/parent-a feat/parent-b
+94: jj bookmark set basis/<name>
+97: jj new basis/<name>
+99: jj bookmark set feat/<child-name>
+107: cd ~/work/rfqautomation-linux
+110: jj git fetch                                                    # picks up new main
+111: jj --config "$JJ_IMMUTABLE" rebase -b feat/A -d main           # A was on B, now on main
+112: jj bookmark forget feat/B                                       # clean up merged bookmark
+114: jj bookmark set feat/A -r <rebased-change-id>                  # resolve any bookmark conflict
+115: jj git push -b feat/A                                           # push rebased A
+123: jj --config "$JJ_IMMUTABLE" rebase -b basis/<name> -d main feat/parent-b
+125: jj --config "$JJ_IMMUTABLE" rebase -b basis/<name> -d main
+130: jj bookmark forget basis/<name>
+136: cd ~/work/rfqautomation-linux
+140: jj new feat/pr-a feat/pr-b feat/pr-c
+141: jj bookmark set integration/<project-name>
+142: jj git push -b integration/<project-name>
+145: gh workflow run "E2E Tests (Docker)" --ref integration/<project-name>
+150: jj bookmark forget integration/<project-name>
+159: cd ~/work/rfqautomation-linux
+163: jj --config "$JJ_IMMUTABLE" squash -r <tip-change-id> \
+167: jj --config "$JJ_IMMUTABLE" squash -r <C> -m "temp" --no-pager
+168: jj --config "$JJ_IMMUTABLE" squash -r <B> -m "final message" --no-pager
+173: jj bookmark set feat/<name> -r <surviving-change-id>
+174: jj git push -b feat/<name>
+179: After rebasing pushed commits, jj creates divergent revisions. Clean them up:
+182: cd ~/work/rfqautomation-linux
+185: jj log -r 'change_id(<change-id>)' --no-pager
+188: jj --config "$JJ_IMMUTABLE" abandon <change-id>/0 --no-pager
+191: Repeat for each divergent change ID until `jj log` shows no `(divergent)` markers.
+196: cd ~/work/rfqautomation-linux
+199: jj bookmark track feat/<name> --remote=origin
+202: jj bookmark set feat/<name> -r <rebased-change-id>
+205: jj git push -b feat/<name>
+211: cd ~/work/rfqautomation-linux
+212: jj log                           # full graph
+213: jj log -r 'ancestors(feat/A)'   # ancestry of a specific branch
+218: If jj is unavailable or a worktree needs manual rebase:
+222:    cd ~/work/rfqautomation-linux
+230:    cd ~/work/worktrees/<name>
+251: TREE=$(git rev-parse ${UNSQUASHED_TIP}^{tree})
+252: SQUASHED=$(git commit-tree "$TREE" -p "$BASE" -m "feat: squashed commit message")
+255: git diff "$UNSQUASHED_TIP" "$SQUASHED"
+264: git branch -f temp-rebase "$SQUASHED"
+275: #    - What did our branch change? (git show $UNSQUASHED_TIP -- <file>)
+301: git diff "$UNSQUASHED_TIP"..HEAD --stat
+313: cd ~/work/worktrees/<name>
+325: # Via jj (preferred)
+326: jj new feat/pr-a feat/pr-b feat/pr-c
+327: jj bookmark set integration/<project-name>
+328: jj git push -b integration/<project-name>
+330: # Via git (when jj unavailable)
+362: 2. Group by concern (e.g., Docker changes, E2E fixes, backend refactors)
+378: | `(divergent)` markers in jj log | Cleanup procedure |
+380: | jj unavailable | Legacy git rebase fallback |
+384: - Return `BLOCKED` if: merge conflicts that need human resolution, `jj op restore` needed
+
+===== pipeline-artifacts-operator.md =====
+2: description: 'Manage pipeline scratch artifact naming and gitignore in worktrees. Standard filenames inside ~/work/worktrees/<name>/ for prompts, responses, runner scripts, logs, and per-phase outputs. Prevents cross-session collisions on /tmp.'
+9: You enforce the pipeline-artifact naming convention in a worktree, and you ensure the worktree's `.gitignore` excludes those artifacts so they don't pollute commits or CodeRabbit reviews. You are the keeper of "where do prompts and responses for this task live" so that multiple Claude sessions (or pipeline runs) on the same machine don't collide on bare `/tmp` filenames.
+24: - Any work in `/tmp` outside a per-task subdirectory (use `mkdir /tmp/$(uuidgen)/` instead — no naming convention applies there)
+28: - `worktree-path`: absolute path to the worktree (e.g., `~/work/worktrees/fix-windows-orchestrator`)
+33: - **Pipeline artifacts live in the worktree, not `/tmp`.** A worktree is unique per task by design; using it as the namespace removes the collision class entirely. Bare `/tmp/<phase>.md` filenames collide across Claude sessions running on the same machine — this has actually shipped bad work to background agents.
+37: - **The wrapper script lives in the worktree, not `/tmp`.** When kicking off `agents` via `Bash run_in_background`, write the wrapper inside the worktree and pass worktree-relative paths to it.
+41: These filenames live inside `~/work/worktrees/<name>/`. The `.prompt.md` is the input; the same-stem `.md` (or `.report.md`) is the operator's authoritative output. The `.log` captures stdout (typically discarded or used only for debugging).
+59: | CodeRabbit | (n/a) | `CODERABBIT_pass<N>.md`, `CODERABBIT_summary.md` | `CODERABBIT_*.log`, `CODERABBIT_*.attempt` |
+83: CODERABBIT_*.md
+90: CODERABBIT_*.log
+91: CODERABBIT_*.attempt
+137: When kicking off `agents` via `Bash run_in_background`, the wrapper script also lives in the worktree, not `/tmp`:
+140: WT=~/work/worktrees/<name>
+141: cat > "$WT/.run-<phase>.sh" << 'EOF'
+143: ~/.local/bin/agents --model gpt-xhigh --file "$1" > "$2" 2>&1
+145: chmod +x "$WT/.run-<phase>.sh"
+146: "$WT/.run-<phase>.sh" "$WT/<PHASE>.prompt.md" "$WT/<PHASE>.md"
+149: Pass worktree-relative paths to the wrapper rather than embedding `/tmp` paths in the heredoc.
+164: SCRATCH=/tmp/$(uuidgen)
+165: # OR: SCRATCH=/tmp/<descriptive-prefix>-$(date +%Y%m%d-%H%M%S)
+166: mkdir -p "$SCRATCH"
+167: # All artifacts go inside $SCRATCH
+170: Never put a bare `<phase>.md` directly in `/tmp/`. The collision class is real.
+
+===== pr-justification-adjudicator.md =====
+20: - Invoked by `pr-justification-gauntlet.md` once per round, as the
+
+===== pr-justification-gauntlet.md =====
+55: - `work_dir`: scratch directory (the caller's `$WORK_DIR` from
+56:   `pr-review-operator.md`). The workflow creates `$work_dir/justification/`
+58: - `repo` (optional, default `lama-ai-RFQ/RFQautomation`)
+59: - `project_dir` (optional, default `~/work/rfqautomation-linux`)
+60: - `planning_dir` (optional, default `~/work/planning`): where initiative
+62: - `pr_meta_path` (optional, default `$work_dir/pr-meta.json`): already
+64: - `diff_path` (optional, default `$work_dir/diff.txt`): already fetched by
+70: $work_dir/justification/
+120: JG="$work_dir/justification"
+121: mkdir -p "$JG"
+122: echo '{"round": 0, "threads": []}' > "$JG/threads.json"
+125: Read `$pr_meta_path` and `$diff_path` — these are the sole inputs the
+130: Increment round, create `$JG/round-$N/`, run the four sub-agents in
+137: RD="$JG/round-$ROUND"
+138: mkdir -p "$RD"
+141: cat > "$RD/interrogator-prompt.md" <<EOF
+142: # Round $ROUND input
+145: $(cat $pr_meta_path)
+148: Read $diff_path.
+151: $(cat $JG/threads.json)
+155: agents -a /home/nes/work/agents/pr-justification-interrogator.md \
+156:   -m claude-opus -p "$project_dir" \
+157:   -f "$RD/interrogator-prompt.md" > "$RD/interrogator-result.md" 2>&1
+166: - New threads → appended with `status: open`, `opened_round: $ROUND`
+172: cat > "$RD/researcher-prompt.md" <<EOF
+173: # Round $ROUND — research open threads
+176: - Main repo: $project_dir
+177: - Planning / initiatives: $planning_dir
+178: - JIRA auth env: \$JIRA_API_KEY + \$AZURE_EMAIL
+179: - Dependent PRs on current PR #$pr_number: check \`gh pr list\` and linked issues
+182: $(cat $JG/threads.json | jq '.threads[] | select(.status=="open")')
+190: agents -a /home/nes/work/agents/pr-justification-researcher.md \
+191:   -m gpt-high -p "$project_dir" \
+192:   -f "$RD/researcher-prompt.md" > "$RD/researcher-result.md" 2>&1
+196: `history[$ROUND].researcher_evidence` in `threads.json`.
+201: cat > "$RD/value-assessor-prompt.md" <<EOF
+202: # Round $ROUND — assess value of each open thread
+205: $(cat $JG/threads.json | jq '.threads[] | select(.status=="open")')
+214: agents -a /home/nes/work/agents/pr-justification-value-assessor.md \
+215:   -m claude-opus -p "$project_dir" \
+216:   -f "$RD/value-assessor-prompt.md" > "$RD/value-assessor-result.md" 2>&1
+219: Merge per-thread value into `history[$ROUND].value` in `threads.json`.
+224: cat > "$RD/adjudicator-prompt.md" <<EOF
+225: # Round $ROUND — adjudicate
+228: $(cat $JG/threads.json)
+231: Round $ROUND of 5. If this is round 5, you must cull every remaining thread
+242: agents -a /home/nes/work/agents/pr-justification-adjudicator.md \
+243:   -m claude-opus -p "$project_dir" \
+244:   -f "$RD/adjudicator-prompt.md" > "$RD/adjudicator-result.md" 2>&1
+254: OPEN_COUNT=$(jq '[.threads[] | select(.status=="open")] | length' "$JG/threads.json")
+255: if [ "$OPEN_COUNT" -eq 0 ] || [ "$ROUND" -ge 5 ]; then
+267: `$JG/final-verdict.md`:
+303: - `JUSTIFICATION_CONVERGED` — final verdict at `$JG/final-verdict.md`
+
+===== pr-justification-interrogator.md =====
+17: - Invoked by `pr-justification-gauntlet.md` once per round
+
+===== pr-justification-researcher.md =====
+2: description: 'Evidence-only researcher for PR justification. Reads initiative docs, JIRA, dependent PRs, git history. Presents data; does not defend the PR. Absent evidence is a valid result.'
+11: project's planning artifacts, JIRA, dependent PRs, and git history for
+18: - Invoked by `pr-justification-gauntlet.md` once per round, after the
+33:   court reporter. Present quotations, file paths, JIRA excerpts, commit
+40: - **Cite sources precisely.** File path + line number, JIRA issue key +
+56:   - JIRA auth hints (env vars)
+65: 2. **JIRA via curl**:
+67:    curl -s -u "$AZURE_EMAIL:$JIRA_API_KEY" \
+68:      "https://lamaai.atlassian.net/rest/api/3/issue/INFA-<N>" \
+72: 3. **Dependent and predecessor PRs** via `gh pr view`:
+74:    gh pr view <N> --repo <repo> --json title,body,state,headRefName,baseRefName,files,additions,deletions
+75:    gh pr list --repo <repo> --state all --search "depends on #<N>"
+87: 6. **WORK_LOG.md** at `rfqautomation-linux/WORK_LOG.md` (gitignored,
+111: `history[$ROUND].researcher_evidence`.
+151: You always return a response. If a source is unreachable (JIRA down, grep
+
+===== pr-justification-value-assessor.md =====
+21: - Invoked by `pr-justification-gauntlet.md` once per round, after the
+97:    agents -m gpt-high -p "$project_dir" -f <prompt_file> > <result_file>
+
+===== pr-review-operator.md =====
+25: - Running CodeRabbit (that's a separate step before this one)
+26: - Managing branches or worktrees (use jj-operator / worktree-operator)
+39: - `repo` (optional): Repository in `OWNER/REPO` format. Defaults to `lama-ai-RFQ/RFQautomation`.
+40: - `project_dir` (optional): Path to the repo checkout. Defaults to `~/work/rfqautomation-linux`.
+47: REPO="lama-ai-RFQ/RFQautomation"
+49: PROJECT_DIR=~/work/rfqautomation-linux
+50: WORK_DIR=/tmp/pr${PR}-review
+52: mkdir -p "$WORK_DIR"
+55: cd "$PROJECT_DIR"
+56: gh pr view "$PR" --repo "$REPO" \
+58:   > "$WORK_DIR/pr-meta.json"
+61: gh pr diff "$PR" --repo "$REPO" > "$WORK_DIR/diff.txt"
+64: gh pr diff "$PR" --repo "$REPO" --stat > "$WORK_DIR/diff-stat.txt"
+92: File: `$WORK_DIR/risk-audit.md`
+126: Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-audit.md" > "$WORK_DIR/result-audit.md" 2>&1`
+130: File: `$WORK_DIR/risk-scope.md`
+173: Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-scope.md" > "$WORK_DIR/result-scope.md" 2>&1`
+177: File: `$WORK_DIR/risk-shortcut.md`
+210: Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
+220: File: `$WORK_DIR/research.md`
+252: Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/research.md" > "$WORK_DIR/result-research.md" 2>&1`
+258: Launch `test-audit-gate.md` once with the full diff and the `$WORK_DIR` path.
+266: cat > "$WORK_DIR/test-audit-kickoff.md" <<EOF
+271: - pr_number: $PR
+272: - project_dir: $PROJECT_DIR
+273: - scratch_dir: $WORK_DIR
+276: report to \`$WORK_DIR/TEST_AUDIT_GATE.md\` with the first line being
+280: agents -a /home/nes/work/agents/test-audit-gate.md -p "$PROJECT_DIR" \
+281:   -f "$WORK_DIR/test-audit-kickoff.md" \
+282:   > "$WORK_DIR/TEST_AUDIT_GATE.md" 2>&1 &
+286: The gate writes its own per-audit prompt/result files into `$WORK_DIR`
+302: File: `$WORK_DIR/pr-multiconcern.md`
+332: Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/pr-multiconcern.md" > "$WORK_DIR/result-multiconcern.md" 2>&1`
+334: #### 4b. Justification Gauntlet (`pr-justification-gauntlet.md`)
+346: cat > "$WORK_DIR/gauntlet-kickoff.md" <<EOF
+347: # Justification Gauntlet for PR #$PR
+350: - pr_number: $PR
+351: - repo: $REPO
+352: - work_dir: $WORK_DIR
+353: - project_dir: $PROJECT_DIR
+354: - planning_dir: $HOME/work/planning
+355: - pr_meta_path: $WORK_DIR/pr-meta.json
+356: - diff_path: $WORK_DIR/diff.txt
+358: Create the scratch layout at \`\$work_dir/justification/\` and run rounds 1..5
+361: \`\$work_dir/justification/final-verdict.md\`.
+364: agents -a /home/nes/work/agents/pr-justification-gauntlet.md \
+365:   -m claude-opus -p "$PROJECT_DIR" \
+366:   -f "$WORK_DIR/gauntlet-kickoff.md" \
+367:   > "$WORK_DIR/result-justification.md" 2>&1
+370: Output: final verdict at `$WORK_DIR/justification/final-verdict.md` with
+410: Use `gh pr review` with `--request-changes` if the risk gate or the test-audit
+414: gh pr review "$PR" --repo "$REPO" --request-changes --body "$(cat <<'EOF'
+436: <from $WORK_DIR/justification/final-verdict.md — per-thread drop/backlog/keep
+449: gh api "repos/$REPO/pulls/$PR/comments" -X POST \
+459: gh pr comment "$PR" --repo "$REPO" --body "$(cat <<'EOF'
+486: Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" > "$WORK_DIR/result-proposal.md" 2>&1`
+492: `$WORK_DIR/result-proposal.md`".
+505: gh pr comment "$PR" --repo "$REPO" --body "$(cat <<'EOF'
+533: agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/research-<domain>.md" \
+534:   > "$WORK_DIR/result-<domain>.md" 2>&1
+546: 2. **Reference the diff file** — always point to `$WORK_DIR/diff.txt`.
+569:   use `gh api repos/$REPO/issues/comments/<id> -X DELETE`.
+
+===== qa-operator.md =====
+2: description: 'Run QA: unit tests, CI artifact regeneration, Gemini visual QA (static + interactive), schema verification. Not E2E triggering.'
+9: You run quality assurance checks across the RFQ Automation platform: unit
+10: tests, local regeneration from CI artifacts, visual QA with Gemini, interactive
+27: - Rebasing or stacking branches (use jj-operator)
+32: - **HTTP for interactive report QA.** Playwright trace viewer, service workers, and CORS-restricted features do not work over `file://`. Start a local HTTP server (`python3 -m http.server`) and navigate via `http://localhost:PORT/`.
+35: - **Gemini-high for visual QA.** Claude Opus is text-first; Gemini-high handles multimodal screenshot analysis better.
+47:    - Python: `pytest <test-paths>` (project uses pytest)
+52:    python3 -m pytest <test-paths> -v --no-header --tb=short 2>&1 | tail -40
+67:    gh run download <run-id> --dir /tmp/qa-artifacts-<run-id>
+71:    find /tmp/qa-artifacts-<run-id> -name "playwright-results.json"
+72:    find /tmp/qa-artifacts-<run-id> -name "*.webm" | wc -l  # videos
+73:    find /tmp/qa-artifacts-<run-id> -name "*.png" | wc -l    # screenshots
+74:    find /tmp/qa-artifacts-<run-id> -name "*.zip" | wc -l    # traces
+80:      --test-results /tmp/qa-artifacts-<run-id>/e2e-docker-test-results/test-results \
+81:      --output /tmp/qa-report-<run-id> \
+86:    find /tmp/qa-report-<run-id>/assets -name "*.png" | wc -l
+87:    find /tmp/qa-report-<run-id>/assets -name "*.webm" | wc -l
+91:    cat /tmp/qa-report-<run-id>/report.json
+95: **Local report regen gotcha:** CI-generated reports have absolute paths that resolve on the runner but NOT after `gh run download`. The report path-resolution fix (PR #381) handles this, but check that screenshots made it in.
+101: 1. Write a QA prompt specifying what to verify — concrete checklist. Save to `/tmp/qa-<slug>/qa-prompt.md`.
+102: 2. Launch Gemini-high via `agents` CLI:
+105:    ~/.local/bin/agents --model gemini-high -p <worktree_path> \
+106:      --file /tmp/qa-<slug>/qa-prompt.md \
+107:      > /tmp/qa-<slug>/qa-results.md 2>&1
+123: [playwright script / headless chromium command]
+149: 2. Write the QA prompt telling Gemini to navigate `http://localhost:8765/`.
+150: 3. Launch Gemini-high (same as visual QA).
+153:    kill $SERVER_PID
+200: 3. **Static visual QA** via Gemini — all structural checks PASS
+201: 4. **Interactive visual QA** via HTTP server + Gemini — filters, lightbox, trace viewer all work
+207: For runtime patches (like the trace highlight preload at `tests/e2e/setup/playwright-trace-highlight-preload.cjs`):
+211:    gh run view <run-id> --log > /tmp/logs-<run-id>.txt
+215:    grep "playwright-trace-highlight" /tmp/logs-<run-id>.txt | head -20
+240: - **pytest coverage warnings** — ignore "No data was collected" unless running with `--cov`
+241: - **Gemini QA may spawn sub-agents** — don't be surprised by multi-step results
+243: - **`gh pr edit --body`** — GraphQL deprecation warnings can cause it to error; use `gh api repos/.../pulls/NN -X PATCH -f body=...` instead
+244: - **CI logs limit** — `gh run view --log` truncates; use `gh run download` and read artifacts directly
+248: - Worktrees: `~/work/worktrees/<name>/`
+249: - QA artifacts (ephemeral): `/tmp/qa-<slug>/`
+254: - Trace highlight verification: `tests/e2e/scripts/verify-playwright-trace-highlight.mjs`
+258: - Return `BLOCKED` if: test environment won't initialize, network error downloading artifacts, Gemini API unavailable
+
+===== red-phase-gate.md =====
+2: description: 'Run newly-authored tests against HEAD and classify the red-phase state. Advisory — informs the implementer whether tests target new behavior or mirror current behavior. Pytest-only.'
+13: test quality, design, or coverage — you report what pytest saw when it
+22: - Auditing test quality (`coverage-auditor.md`)
+23: - Non-pytest stack (Jest / Playwright deferred)
+30: - Pytest only. If no Python test functions are involved, BLOCKED.
+32: - Per-test outcomes from a structured pytest report (JSON or JSONL),
+40: - Run pytest exactly once on the derived IDs. Do not patch / stash /
+52: cd "$project_dir"
+53: base=$(git merge-base HEAD "$base_ref") || {
+54:   printf 'RedPhase: BLOCKED\n\nFailed merge-base against %s.\n' "$base_ref"
+69: List changed test files (pytest's `python_files` defaults;
+72: git diff --name-only --diff-filter=AM "$base"...HEAD \
+74:   | sort -u > "$scratch_dir/changed_tests.txt"
+80: `$scratch_dir/nodeids.txt`:
+141: - `@pytest.mark.parametrize`: passing the base node ID causes pytest to
+157: ### 3. Run pytest against HEAD with structured output
+159: Prefer `pytest-json-report`:
+161: pytest --no-header --tb=short \
+162:        --json-report --json-report-file="$scratch_dir/report.json" \
+163:        $(grep -v '^__SYNTAX_ERROR__' "$scratch_dir/nodeids.txt") \
+164:   > "$scratch_dir/pytest.txt" 2>&1 || true
+167: If the plugin errors on `--json-report`, fall back to pytest ≥ 7's
+170: pytest --no-header --tb=short \
+171:        --report-log="$scratch_dir/report.jsonl" \
+172:        $(grep -v '^__SYNTAX_ERROR__' "$scratch_dir/nodeids.txt") \
+173:   > "$scratch_dir/pytest.txt" 2>&1 || true
+178: pytest report unavailable; install pytest-json-report or upgrade to
+179: pytest ≥ 7."
+189: **report-log (JSONL) mode.** Records are union-typed by `$report_type`.
+199:     t = r.get("$report_type")
+248: Write `$scratch_dir/RED_PHASE.md`. First line MUST be one of
+252: - **Heuristic Limitations** (boilerplate): single pytest run against
+266: - **Tally**: F, P, S, E, pytest exit code.
+272: - **Pytest Transcript**: verbatim output.
+
+===== release-operator.md =====
+2: description: 'Manage releases: version bumps, Docker/Windows builds, promotions, and dry runs.'
+9: You manage the release process for the RFQ Automation platform — versioning, building, and promoting Docker and Windows artifacts.
+13: - A new version needs to be released (Docker or Windows)
+22: - Managing branches (use jj-operator)
+23: - Creating worktrees (use worktree-operator)
+28: - **ALWAYS watch after triggering.** Every `gh workflow run` must be followed by finding the run and watching it.
+34: - `task`: One of: `determine-version`, `release-docker-full`, `release-docker-updater`, `release-windows`, `promote-docker`, `promote-windows`, `dry-run`
+43: The script at `rfqautomation-linux/version_generator.py` derives versions automatically:
+69: cd ~/work/rfqautomation-linux
+84: ## Procedure: Docker Release — Full (app + supervisor + updater)
+88:    cd ~/work/rfqautomation-linux && git pull origin main
+103:    gh workflow run "Build Docker Release (Full)" --ref vX.Y.Z -f channel=internal -f runner_type=self-hosted
+108:    gh run list --limit 3
+109:    gh run watch <run-id> --exit-status
+114:    gh workflow run "Promote Docker Release" -f tag=X.Y.Z -f source_channel=internal -f target_channel=customer -f promote_supervisor=true -f promote_updater=true
+119:    gh run list --workflow=promote-docker-release.yml --limit 3
+120:    gh run watch <run-id>
+123: ## Procedure: Docker Release — Updater/Supervisor Only
+130: gh workflow run "Build and Push Updater Image Only" --ref vX.Y.Z -f release_type=internal
+133: gh workflow run "Build and Push Updater Image Only" --ref main -f release_type=internal
+136: gh workflow run "Build and Push Updater Image Only" --ref main -f release_type=internal -f tag=my-custom-tag
+139: **Use `docker-build-updater.yml`, NOT `docker-build-auto.yml`** — it's faster and doesn't rebuild the app image.
+145: gh workflow run "Build Windows Executable with PyInstaller" --ref vX.Y.Z -f release_type=internal -f runner_type=self-hosted
+148: gh run list --workflow=build-windows-exe.yml --limit 3
+150: # 3. Promote to customer (copies from internal GitHub repo → customer GitHub repo + S3/CloudFront)
+151: gh workflow run "Promote Windows Release" -f tag=X.Y.Z -f source_channel=internal -f target_channel=customer
+158: | `lama-ai-RFQ/RFQwindowspackages-internal` | Internal Windows releases (GitHub releases with component zips) |
+159: | `lama-ai-RFQ/RFQwindowspackages` | Customer Windows releases (promoted from internal) |
+160: | `lama-ai-RFQ/RFQinstallation` | Installer repo — contains `download_and_install.ps1`, `setup.iss`, and the built `RFQ_Application_Setup.exe` |
+161: | `lama-ai-RFQ/RFQreleases` | Customer-facing releases — the installer exe (`RFQ_Application_Setup.exe`) is distributed here |
+162: | `lama-ai-RFQ/RFQautomation` | Docker releases only (no Windows assets here) |
+164: ### Rebuilding the Windows Installer (RFQ_Application_Setup.exe)
+166: The setup exe is built with [Inno Setup](https://jrsoftware.org/isdownload.php) from `setup.iss` in the `RFQinstallation` repo. The exe bundles `download_and_install.ps1` and other files — it does NOT bundle the application itself. The actual application is downloaded at install time from CloudFront/GitHub.
+180:    mkdir -p /mnt/c/Users/xteam/rfqinstallation
+181:    cp -r ~/work/rfqinstallation-linux/* /mnt/c/Users/xteam/rfqinstallation/
+186:    powershell.exe -Command "& 'C:\Users\xteam\AppData\Local\Programs\Inno Setup 6\ISCC.exe' 'C:\Users\xteam\rfqinstallation\setup.iss'"
+188:    Output: `C:\Users\xteam\rfqinstallation\installer_output\RFQ_Application_Setup.exe`
+190: 4. Commit and push the rebuilt exe to the `RFQinstallation` repo.
+197: - PostgreSQL (with `psql.exe` in PATH) — or a Docker container: `docker run -d --name rfq-postgres -p 5432:5432 -e POSTGRES_PASSWORD=YourPass123! postgres:16`
+203: "C:\Users\xteam\rfqinstallation\installer_output\RFQ_Application_Setup.exe"
+207: - **AWS Key / Secret**: required for downloading from S3/CloudFront (check `~/.bashrc` for `AWS_KEY` / `AWS_SECRET`)
+209: - **RFQ user password**: any password meeting the same complexity rules (the setup script creates this user)
+213: 1. `%TEMP%\rfq_installer_*.log` — initial log before install dir exists
+218: 2. Services exist: `sc query RFQapplication` and `sc query RFQUpdaterService`
+234: After rebuilding and testing, upload to `RFQreleases` (where customers download it):
+236: gh release list --repo lama-ai-RFQ/RFQreleases --limit 1  # check current version
+237: gh release create vX.Y.Z --repo lama-ai-RFQ/RFQreleases \
+240:   installer_output/RFQ_Application_Setup.exe
+242: Note: requires write access to `lama-ai-RFQ/RFQreleases`.
+247: sc stop RFQapplication
+248: sc stop RFQUpdaterService
+249: sc delete RFQapplication
+250: sc delete RFQUpdaterService
+256: Invoke-WebRequest -Uri "https://raw.githubusercontent.com/lama-ai-RFQ/RFQinstallation/main/download_and_install.ps1" -OutFile "$env:TEMP\download_and_install.ps1"
+257: powershell -ExecutionPolicy Bypass -File "$env:TEMP\download_and_install.ps1" -OverwriteExisting -NonInteractive
+262: 1. Internal build publishes component zips to `RFQwindowspackages-internal` as a GitHub release
+265:    - Creates a release on `RFQwindowspackages` (customer GitHub repo)
+266:    - Mirrors to S3 via `promote_to_s3.py` for CloudFront discovery
+267: 3. Customer installer (`download_and_install.ps1`) downloads from CloudFront signed URLs → S3 direct → GitHub releases (fallback chain)
+291: - `windows/rfq_app.spec`
+295: gh workflow run "Build Windows Executable with PyInstaller" --ref vX.Y.Z -f release_type=internal -f force_core_dependencies=true
+301: - `_ensure_pyd_binaries()` in `rfq_app.spec` — patches `collect_all` results
+321: 1. **S3 latest.json** — check that `customer/docker/latest.json` and `customer/windows/latest.json` point to the new version
+322: 2. **GHCR tags** — verify customer image tags exist: `gh api orgs/lama-ai-RFQ/packages/container/rfqautomation-rfq-app/versions --jq '.[].metadata.container.tags'`
+323: 3. **GitHub releases** — verify assets exist on both `RFQwindowspackages` and `RFQautomation`
+331: gh workflow run "Build Docker Release (Full)" --ref vX.Y.Z -f channel=internal -f dry_run=true -f runner_type=self-hosted
+341: | App | `rfqautomation-rfq-app-internal:vX.Y.Z` | `rfqautomation-rfq-app:vX.Y.Z` | `rfqautomation-rfq-app-e2e:vX.Y.Z` |
+342: | Supervisor | `rfqautomation-supervisor-internal:vX.Y.Z` | `rfqautomation-supervisor:vX.Y.Z` | `rfqautomation-supervisor-e2e:vX.Y.Z` |
+343: | Updater | `rfqautomation-updater-internal:vX.Y.Z` | `rfqautomation-updater:vX.Y.Z` | `rfqautomation-updater-e2e:vX.Y.Z` |
+345: All images are prefixed with `ghcr.io/lama-ai-rfq/`. The channel suffix is in the image NAME, not the tag. Git tag and image tag are always `vX.Y.Z`.
+349: | Channel | GHCR | S3 | rfq_images tags | GitHub Releases |
+356: Non-internal/customer channels publish to S3 only. GitHub publishing (GHCR, rfq_images tags, GitHub Releases) is reserved for internal and customer. This is a stepping stone toward removing GitHub publishing entirely.
+362: | `docker-build-auto.yml` | Build Docker Release (Full) | Full Docker build (app + supervisor + updater) |
+363: | `docker-build-auto-minimal.yml` | Build Docker Release (App Only) | App-only Docker build |
+364: | `docker-build-railway.yml` | Build and Push Railway Docker Image | Railway-specific Docker build |
+365: | `docker-build-updater.yml` | Build and Push Updater Image Only | Updater-only Docker build |
+367: | `promote-docker-release.yml` | Promote Docker Release | Docker promotion (internal → customer) |
+372: - `docker-image.yml` — legacy, superseded by `docker-build-auto-minimal.yml`
+376: The full release build (`docker-build-auto.yml`) must gate on ALL E2E suites.
+381: | `e2e-tests.yml` | Core scenarios + update-manager (smoke, download, GHCR fallback, upgrade cycle) |
+383: | `e2e-pat-validation.yml` | Customer PAT can resolve versions + pull from GHCR |
+386: **Linux release gates** (docker-build-auto.yml, docker-build-auto-minimal.yml):
+392: **Updater release gate** (docker-build-updater.yml):
+404: | `scripts/build/push-submodule-tags.sh` | Idempotent tag push to rfq_images submodule |
+405: | `scripts/build/promote-image.sh` | Docker image promotion (pull/retag/push) |
+407: | `scripts/distribution/promote_to_s3.py` | Mirror artifacts to S3 for CloudFront discovery |
+408: | `promote-release.sh` | Local Docker promotion (interactive) |
+414: | Full release needed | Docker Release — Full procedure |
+415: | Only updater/supervisor changed | Docker Release — Updater Only procedure |
+418: | Need to promote internal → customer | Use promotion workflows (Docker or Windows) |
+
+===== risk-assessor.md =====
+24: - Measuring coverage (use coverage-analyzer)
+25: - Investigating what code should do (use behavior-investigator)
+26: - Writing tests (use test-writer)
+38: - `uncovered_areas`: List of uncovered code areas from coverage-analyzer (file paths, line ranges, branch info)
+163: Produce a structured report at `/tmp/risk-assessment/<datestamp>/risk-report.md`:
+
+===== task-packager.md =====
+2: description: 'Create self-contained task folders in /tmp/ with prompts, task definitions, and context for external AI models.'
+9: You create self-contained task folders under `/tmp/` that external AI models can consume. Each folder contains everything the model needs — prompt, task definition, and context files.
+25: - **Task folders go in `/tmp/<task-name>/`** — never in the repo.
+35: - `task_definition_path` (optional): Path to existing task definition (e.g., `~/work/planning/e2e/tasks/15-cost-estimation-regression.md`)
+44: /tmp/<task-name>/
+55:    mkdir -p /tmp/<task-name>
+60:    cp <task_definition_path> /tmp/<task-name>/task-definition.md
+74:    - **Worktree**: `/home/nes/work/worktrees/<name>/`
+77:    - **RFQ main repo**: `/home/nes/work/rfqautomation-linux/` (branch: `main`)
+91:    cp ~/work/planning/cloud/complete-stack-architecture.md /tmp/<task-name>/
+92:    cp ~/work/planning/cloud/executive-roadmap.md /tmp/<task-name>/
+97:    cp ~/work/planning/e2e/tasks/20-identity-provider-abstraction.md /tmp/<task-name>/
+107: - **Worktree**: `/home/nes/work/worktrees/<name>/`
+110: - **RFQ main repo**: `/home/nes/work/rfqautomation-linux/` (branch: `main`)
+121: ~/work/zip-worktree.sh <worktree> <output-dir> [base-branch]
+130: | E2E | `~/work/planning/e2e/tasks/NN-short-name.md` |
+131: | Cloud | `~/work/planning/cloud/` (no numbered tasks) |
+132: | Product enhancement | `~/work/planning/product/PRODUCT-enhancement-<name>.md` |
+133: | Product expansion | `~/work/planning/product/expansion/tasks/NN-short-name.md` |
+
+===== test-audit-gate.md =====
+15: - After CodeRabbit converges and before opening a PR
+23: - Replacing `coverage-auditor.md`, `coverage-analyzer.md`, or `behavior-investigator.md`
+43: - If a human attaches a prior `behavior-investigator.md` result for context, `OBVIOUSLY_BROKEN` maps to `FAIL`. There is no `OBVIOUSLY_BROKEN` pass path.
+65: - `spec_dir` (default `~/work/planning/coverage`): directory containing `spec-*.md`
+66: - `repo` (default `lama-ai-RFQ/RFQautomation`): GitHub repository slug
+70: Portability note: Defaults assume RFQ Automation layout. Override inputs for other repos/buckets/workflows.
+79: cd "$project_dir"
+85: git diff "$base_ref"...HEAD > "$scratch_dir/diff.txt" || {
+86:   printf 'Verdict: BLOCKED\n\nFailed to produce git diff against %s.\n' "$base_ref"
+90: git diff --name-only "$base_ref"...HEAD | sort > "$scratch_dir/changed-files.txt"
+91: git diff --name-only "$base_ref"...HEAD -- \
+93:   > "$scratch_dir/changed-tests.txt"
+121: git diff --name-only | grep "$spec_dir/spec-.*\\.md$"
+133:    `rg -l --fixed-strings "<relative path>" "$spec_dir"/spec-*.md`
+135:    `backend/main/foo.py -> "$spec_dir/spec-foo.md"`
+144: Write these prompt files into `$scratch_dir`:
+164: - Ask `coverage-auditor.md` to review only the changed test files plus whether those tests provide evidence for the changed behavior
+172: - In `implementation` mode, instruct `coverage-analyzer.md` to return `PARTIAL` immediately because no CI baseline exists
+183: PR_HEAD_SHA=$(gh pr view "$pr_number" --repo "$repo" --json headRefOid -q .headRefOid)
+184: PR_RUN_ID=$(gh api "repos/$repo/actions/workflows/$ci_workflow_name/runs?head_sha=$PR_HEAD_SHA&status=completed" -q '.workflow_runs[] | select(.conclusion=="success") | .id' | head -1)
+185: MAIN_RUN_ID=$(gh api "repos/$repo/actions/workflows/$ci_workflow_name/runs?branch=main&event=push&status=completed" -q '.workflow_runs[] | select(.conclusion=="success") | .id' | head -1)
+187: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${PR_RUN_ID}/backend/coverage.xml" "$scratch_dir/pr-backend-coverage.xml"
+188: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${MAIN_RUN_ID}/backend/coverage.xml" "$scratch_dir/main-backend-coverage.xml"
+189: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${PR_RUN_ID}/frontend/coverage-summary.json" "$scratch_dir/pr-frontend-coverage-summary.json"
+190: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${MAIN_RUN_ID}/frontend/coverage-summary.json" "$scratch_dir/main-frontend-coverage-summary.json"
+191: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${PR_RUN_ID}/frontend/lcov.info" "$scratch_dir/pr-frontend-lcov.info"
+192: aws s3 cp "s3://rfq-distribution-us/coverage-reports/${MAIN_RUN_ID}/frontend/lcov.info" "$scratch_dir/main-frontend-lcov.info"
+204: agents -m gpt-high -p "$project_dir" -f "$scratch_dir/TEST_AUDIT_SPEC.prompt.md" > "$scratch_dir/TEST_AUDIT_SPEC.md" 2>&1 &
+207: agents -a /home/nes/work/agents/coverage-auditor.md -p "$project_dir" -f "$scratch_dir/TEST_AUDIT_QUALITY.prompt.md" > "$scratch_dir/TEST_AUDIT_QUALITY.md" 2>&1 &
+210: agents -a /home/nes/work/agents/coverage-analyzer.md -p "$project_dir" -f "$scratch_dir/TEST_AUDIT_COVERAGE.prompt.md" > "$scratch_dir/TEST_AUDIT_COVERAGE.md" 2>&1 &
+213: wait "$SPEC_PID" "$QUALITY_PID" "$COVERAGE_PID"
+223: - `$scratch_dir/TEST_AUDIT_SPEC.md`
+224: - `$scratch_dir/TEST_AUDIT_QUALITY.md`
+225: - `$scratch_dir/TEST_AUDIT_COVERAGE.md`
+228: write `$scratch_dir/TEST_AUDIT_GATE.md` with the verdict at the top:
+
+===== test-discovery.md =====
+19: - Deciding whether tests are sufficient (use `coverage-auditor.md`)
+20: - Classifying test quality (use `coverage-auditor.md` taxonomy)
+21: - Producing a blocking gate verdict (use `test-audit-gate.md`)
+22: - Replacing coverage analysis (use `coverage-analyzer.md`)
+47: - `spec_dir` (default `~/work/planning/coverage`): spec directory (recorded, not consumed)
+55: cd "$project_dir"
+56: base=$(git merge-base HEAD "$base_ref") || {
+57:   printf 'Discovery: BLOCKED\n\nFailed to compute merge-base against %s.\n' "$base_ref"
+60: git diff --name-only "$base"...HEAD | sort > "$scratch_dir/changed.txt"
+81: **Rename-aware side selection.** Before reading `$base`, build the git
+83: "$base"...HEAD` → `$scratch_dir/renames.tsv`. Each
+87: `$base:<old_path>` (NOT `$base:<new_path>`, which would return empty
+89: entry read `$base:<new_path>` as before. Renames-with-edits are
+107: itself differs between `$base` and the working tree (added, removed,
+117: record per line to `$scratch_dir/surface_changes.jsonl`. The full
+119: to `$scratch_dir/surface_visitor.py`.
+122: python3 "$scratch_dir/surface_visitor.py" \
+123:     "$base" "$scratch_dir/renames.tsv" \
+124:     < "$scratch_dir/product_files.txt" \
+125:     > "$scratch_dir/surface_changes.jsonl"
+161: in `$scratch_dir/uncovered_symbols.txt` as one `path::symbol` per line,
+190: - `PARTIAL` (demoted from COMPLETE) iff `$scratch_dir/uncovered_symbols.txt`
+203: Write `$scratch_dir/TEST_DISCOVERY.md`:
+258: Save verbatim to `$scratch_dir/surface_visitor.py` and invoke per §2.5.
+
+===== test-writer.md =====
+10: specification from the behavior-investigator (or a human-verified spec)
+17: - A behavior-investigator returned VERIFIED with a behavior spec
+20: - Risk-assessor flagged P0/P1 areas and behavior specs are ready
+24: - No behavior spec exists yet (use behavior-investigator first)
+41: - `behavior_spec`: Path to the verified behavior specification (from behavior-investigator or human review)
+77: - Assert style (plain assert vs pytest.raises vs assertEqual)
+136: - Use Playwright with meaningful selectors (data-testid, role, text)
+153: python3 -m pytest <test_file> -v --no-header --tb=short 2>&1
+216: - Return `BLOCKED` if: test infrastructure is broken (pytest not installed, frontend build fails)
+
+===== trace-recorder.md =====
+2: description: 'Record Playwright traces for ambiguous behaviors, document frame-by-frame workflows, formulate human review questions'
+9: You record interactive Playwright traces of user-facing workflows where
+16: - A behavior-investigator returned AMBIGUOUS for a user-facing feature
+25: - Code is backend-only with no UI (use behavior-investigator instead)
+38: - `workflow`: Description of the user workflow to record (e.g., "create a new RFQ, add line items, submit for pricing")
+41: - `ambiguity`: What specifically is ambiguous — from behavior-investigator output
+52: mkdir -p /tmp/traces/<workflow_slug>
+54: # Write Playwright trace script
+55: cat > /tmp/traces/<workflow_slug>/record-trace.mjs << 'SCRIPT'
+56: import { chromium } from 'playwright';
+60:   recordVideo: { dir: '/tmp/traces/<workflow_slug>/videos/' },
+77: await page.screenshot({ path: '/tmp/traces/<workflow_slug>/screenshots/01-initial-state.png' });
+83:   path: '/tmp/traces/<workflow_slug>/trace.zip'
+89: npx playwright test /tmp/traces/<workflow_slug>/record-trace.mjs --config=/dev/null 2>&1
+104:   path: `/tmp/traces/${slug}/screenshots/${stepNum}-before-${action}.png`
+111:   path: `/tmp/traces/${slug}/screenshots/${stepNum}-after-${action}.png`
+136: Write a structured review document at `/tmp/traces/<workflow_slug>/review.md`:
+145: - **Ambiguity source:** <behavior-investigator report reference>
+151: - Trace file: `/tmp/traces/<slug>/trace.zip`
+152:   - View: `npx playwright show-trace /tmp/traces/<slug>/trace.zip`
+153: - Video: `/tmp/traces/<slug>/videos/*.webm`
+154: - Screenshots: `/tmp/traces/<slug>/screenshots/`
+193: - [ ] After verdicts: behavior-investigator updates specs
+194: - [ ] After specs: test-writer produces tests for verified behaviors
+217: - Return `BLOCKED` if: app is not running at the provided URL, Playwright not installed
+
+===== workflow-reviewer.md =====
+24: - Checking test outputs / coverage (use `test-audit-gate`)
+29: - `operator_file`: path to the `agents/<name>.md` whose procedure is being verified (e.g., `agents/jj-operator.md`)
+
+===== worktree-operator.md =====
+9: You manage git worktrees for the RFQ Automation platform. All development happens in worktrees under `~/work/worktrees/`, never on `rfqautomation-linux/` directly (which stays on `main`).
+15: - A worktree needs to be synced after jj rebase
+20: - Rebasing or managing branch dependencies (use jj-operator)
+22: - Building releases (use release-operator)
+26: - **`rfqautomation-linux/` stays on `main`** — never commit directly there.
+28: - **Worktree location:** `~/work/worktrees/<name>/`.
+42:    cd ~/work/rfqautomation-linux
+53:    unzip -o ~/work/e2e-local-settings.zip -d ~/work/worktrees/<name>/
+58:    cd ~/work/worktrees/<name> && git branch --show-current
+64: cd ~/work/rfqautomation-linux && git worktree list
+69: After jj updates branch refs in the shared `.git/`, each affected worktree needs to sync:
+72: cd ~/work/worktrees/<name>
+78: cd ~/work/rfqautomation-linux
+80:   branch=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null)
+81:   [ -n "$branch" ] && (cd "$wt" && git reset --hard "$branch" 2>/dev/null)
+88: cd ~/work/rfqautomation-linux
+100: cd ~/work/rfqautomation-linux
+102:   branch=$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null)
+103:   [ -z "$branch" ] && continue  # skip detached HEAD
+106:   pr_state=$(gh pr view "$branch" --json state --jq '.state' 2>/dev/null)
+107:   if [ "$pr_state" = "MERGED" ]; then
+108:     echo "Removing merged: $wt ($branch)"
+109:     git worktree remove --force "$wt"
+110:     git branch -D "$branch" 2>/dev/null
+123: cd ~/work/worktrees/<name>
+125: gh pr create --draft

@@ -1,0 +1,1210 @@
+{
+  "/home/nes/work/AGENTS.md": [
+    {
+      "title": "Work Folder \u2014 Agent Instructions",
+      "level": 1,
+      "range": "L1-7",
+      "line_count": 7
+    },
+    {
+      "title": "Cross-session work log \u2014 READ FIRST",
+      "level": 2,
+      "range": "L8-15",
+      "line_count": 8
+    },
+    {
+      "title": "Specialist Agents",
+      "level": 2,
+      "range": "L16-22",
+      "line_count": 7
+    },
+    {
+      "title": "Routing Table",
+      "level": 3,
+      "range": "L23-50",
+      "line_count": 28
+    },
+    {
+      "title": "How to Invoke",
+      "level": 3,
+      "range": "L51-57",
+      "line_count": 7
+    },
+    {
+      "title": "When NOT to Delegate",
+      "level": 3,
+      "range": "L58-63",
+      "line_count": 6
+    },
+    {
+      "title": "Active Projects",
+      "level": 2,
+      "range": "L64-90",
+      "line_count": 27
+    },
+    {
+      "title": "uv/pip packaging migration",
+      "level": 3,
+      "range": "L91-100",
+      "line_count": 10
+    },
+    {
+      "title": "Folder Structure",
+      "level": 2,
+      "range": "L101-126",
+      "line_count": 26
+    },
+    {
+      "title": "Branch Flow",
+      "level": 2,
+      "range": "L127-138",
+      "line_count": 12
+    },
+    {
+      "title": "Project branch documentation",
+      "level": 3,
+      "range": "L139-155",
+      "line_count": 17
+    },
+    {
+      "title": "Running External Models",
+      "level": 2,
+      "range": "L156-179",
+      "line_count": 24
+    },
+    {
+      "title": "Implementation & Bug-Fix Workflow",
+      "level": 2,
+      "range": "L180-212",
+      "line_count": 33
+    },
+    {
+      "title": "CodeRabbit Review Loop",
+      "level": 2,
+      "range": "L213-218",
+      "line_count": 6
+    },
+    {
+      "title": "Post-CodeRabbit Review Gates (steps 10 + 11 + 12)",
+      "level": 2,
+      "range": "L219-252",
+      "line_count": 34
+    },
+    {
+      "title": "PR Review Workflow",
+      "level": 2,
+      "range": "L253-281",
+      "line_count": 29
+    },
+    {
+      "title": "Workflow Step Reporting & Review",
+      "level": 2,
+      "range": "L282-287",
+      "line_count": 6
+    },
+    {
+      "title": "Running Sub-Agents",
+      "level": 2,
+      "range": "L288-291",
+      "line_count": 4
+    },
+    {
+      "title": "CLI Syntax",
+      "level": 3,
+      "range": "L292-309",
+      "line_count": 18
+    },
+    {
+      "title": "Common Patterns",
+      "level": 3,
+      "range": "L310-325",
+      "line_count": 16
+    },
+    {
+      "title": "Agent File Format",
+      "level": 3,
+      "range": "L326-337",
+      "line_count": 12
+    },
+    {
+      "title": "Input Schema",
+      "level": 3,
+      "range": "L338-364",
+      "line_count": 27
+    },
+    {
+      "title": "Multimodal Models",
+      "level": 3,
+      "range": "L365-386",
+      "line_count": 22
+    },
+    {
+      "title": "Running in Background",
+      "level": 3,
+      "range": "L387-400",
+      "line_count": 14
+    },
+    {
+      "title": "File naming for prompts, responses, and wrappers",
+      "level": 3,
+      "range": "L401-406",
+      "line_count": 6
+    },
+    {
+      "title": "Available Models",
+      "level": 3,
+      "range": "L407-410",
+      "line_count": 4
+    },
+    {
+      "title": "Adding Tasks",
+      "level": 2,
+      "range": "L411-421",
+      "line_count": 11
+    },
+    {
+      "title": "Infrastructure Reference",
+      "level": 2,
+      "range": "L422-423",
+      "line_count": 2
+    },
+    {
+      "title": "JIRA",
+      "level": 3,
+      "range": "L424-495",
+      "line_count": 72
+    },
+    {
+      "title": "Railway API",
+      "level": 3,
+      "range": "L496-515",
+      "line_count": 20
+    },
+    {
+      "title": "AWS Access",
+      "level": 3,
+      "range": "L516-530",
+      "line_count": 15
+    },
+    {
+      "title": "Tailscale Network & Self-Hosted Runners",
+      "level": 3,
+      "range": "L531-545",
+      "line_count": 15
+    },
+    {
+      "title": "Global Constraints",
+      "level": 2,
+      "range": "L546-552",
+      "line_count": 7
+    }
+  ],
+  "/home/nes/projects/agent-implementation-skill/AGENTS.md": [
+    {
+      "title": "Agent-Implementation-Skill",
+      "level": 1,
+      "range": "L1-2",
+      "line_count": 2
+    },
+    {
+      "title": "Project Structure",
+      "level": 2,
+      "range": "L3-28",
+      "line_count": 26
+    },
+    {
+      "title": "Running Sub-Agents",
+      "level": 2,
+      "range": "L29-32",
+      "line_count": 4
+    },
+    {
+      "title": "CLI Syntax",
+      "level": 3,
+      "range": "L33-50",
+      "line_count": 18
+    },
+    {
+      "title": "Common Invocation Patterns",
+      "level": 3,
+      "range": "L51-69",
+      "line_count": 19
+    },
+    {
+      "title": "Agent File Format",
+      "level": 3,
+      "range": "L70-85",
+      "line_count": 16
+    },
+    {
+      "title": "Model Configuration",
+      "level": 3,
+      "range": "L86-111",
+      "line_count": 26
+    },
+    {
+      "title": "Input Schema",
+      "level": 3,
+      "range": "L112-138",
+      "line_count": 27
+    },
+    {
+      "title": "Multimodal Models",
+      "level": 3,
+      "range": "L139-160",
+      "line_count": 22
+    },
+    {
+      "title": "Available Models",
+      "level": 3,
+      "range": "L161-166",
+      "line_count": 6
+    },
+    {
+      "title": "Cleanup Backlog",
+      "level": 2,
+      "range": "L167-172",
+      "line_count": 6
+    },
+    {
+      "title": "Governance Documents",
+      "level": 2,
+      "range": "L173-184",
+      "line_count": 12
+    },
+    {
+      "title": "Working with Governance Docs",
+      "level": 3,
+      "range": "L185-193",
+      "line_count": 9
+    },
+    {
+      "title": "Audit Cycle: Handling New Responses",
+      "level": 2,
+      "range": "L194-197",
+      "line_count": 4
+    },
+    {
+      "title": "Step 1: Read Inputs",
+      "level": 3,
+      "range": "L198-204",
+      "line_count": 7
+    },
+    {
+      "title": "Step 2: Assess Violations",
+      "level": 3,
+      "range": "L205-214",
+      "line_count": 10
+    },
+    {
+      "title": "Step 3: Implement",
+      "level": 3,
+      "range": "L215-226",
+      "line_count": 12
+    },
+    {
+      "title": "Step 4: Run Tests",
+      "level": 3,
+      "range": "L227-235",
+      "line_count": 9
+    },
+    {
+      "title": "Step 5: Commit and Push",
+      "level": 3,
+      "range": "L236-246",
+      "line_count": 11
+    },
+    {
+      "title": "Step 6: Update Audit History",
+      "level": 3,
+      "range": "L247-259",
+      "line_count": 13
+    },
+    {
+      "title": "Step 7: Update Governance Artifacts",
+      "level": 3,
+      "range": "L260-267",
+      "line_count": 8
+    },
+    {
+      "title": "Step 8: Rezip Codebase",
+      "level": 3,
+      "range": "L268-279",
+      "line_count": 12
+    },
+    {
+      "title": "Agentic Eval QA Process",
+      "level": 2,
+      "range": "L280-285",
+      "line_count": 6
+    },
+    {
+      "title": "Running Evals",
+      "level": 3,
+      "range": "L286-306",
+      "line_count": 21
+    },
+    {
+      "title": "Eval Flow",
+      "level": 3,
+      "range": "L307-317",
+      "line_count": 11
+    },
+    {
+      "title": "Investigating Failures",
+      "level": 3,
+      "range": "L318-332",
+      "line_count": 15
+    },
+    {
+      "title": "Important Rules",
+      "level": 3,
+      "range": "L333-343",
+      "line_count": 11
+    },
+    {
+      "title": "Current Wave 1 Results (7 scenarios)",
+      "level": 3,
+      "range": "L344-355",
+      "line_count": 12
+    },
+    {
+      "title": "Files",
+      "level": 3,
+      "range": "L356-367",
+      "line_count": 12
+    },
+    {
+      "title": "Cycle Detection Reference",
+      "level": 3,
+      "range": "L368-375",
+      "line_count": 8
+    },
+    {
+      "title": "Files",
+      "level": 3,
+      "range": "L376-388",
+      "line_count": 13
+    },
+    {
+      "title": "Implementation & Bug-Fix Workflow",
+      "level": 2,
+      "range": "L389-393",
+      "line_count": 5
+    },
+    {
+      "title": "Bug Fixes",
+      "level": 3,
+      "range": "L394-405",
+      "line_count": 12
+    },
+    {
+      "title": "Features / Refactors",
+      "level": 3,
+      "range": "L406-409",
+      "line_count": 4
+    },
+    {
+      "title": "Principles",
+      "level": 3,
+      "range": "L410-425",
+      "line_count": 16
+    },
+    {
+      "title": "Open Design: Blocker Resolution Phase",
+      "level": 2,
+      "range": "L426-433",
+      "line_count": 8
+    },
+    {
+      "title": "System Visualization",
+      "level": 2,
+      "range": "L434-437",
+      "line_count": 4
+    },
+    {
+      "title": "Diagrams",
+      "level": 3,
+      "range": "L438-453",
+      "line_count": 16
+    },
+    {
+      "title": "Visual Code Editor",
+      "level": 3,
+      "range": "L454-459",
+      "line_count": 6
+    },
+    {
+      "title": "Bug Triage: Where to Fix",
+      "level": 3,
+      "range": "L460-464",
+      "line_count": 5
+    }
+  ],
+  "/home/nes/projects/agent-runner/AGENTS.md": [
+    {
+      "title": "Oulipoly Plane \u2014 Agent Entry Point",
+      "level": 1,
+      "range": "L1-2",
+      "line_count": 2
+    },
+    {
+      "title": "What This Is",
+      "level": 2,
+      "range": "L3-13",
+      "line_count": 11
+    },
+    {
+      "title": "Tech Stack",
+      "level": 2,
+      "range": "L14-25",
+      "line_count": 12
+    },
+    {
+      "title": "Design System: Ollie",
+      "level": 2,
+      "range": "L26-31",
+      "line_count": 6
+    },
+    {
+      "title": "Brand Colors (from Ollie's body)",
+      "level": 3,
+      "range": "L32-40",
+      "line_count": 9
+    },
+    {
+      "title": "Integrated Components",
+      "level": 3,
+      "range": "L41-47",
+      "line_count": 7
+    },
+    {
+      "title": "CSS Animations (in `src/app.css`)",
+      "level": 3,
+      "range": "L48-57",
+      "line_count": 10
+    },
+    {
+      "title": "Color Token Migration: COMPLETE",
+      "level": 3,
+      "range": "L58-64",
+      "line_count": 7
+    },
+    {
+      "title": "Current UI Architecture",
+      "level": 2,
+      "range": "L65-88",
+      "line_count": 24
+    },
+    {
+      "title": "Model Naming Convention",
+      "level": 3,
+      "range": "L89-94",
+      "line_count": 6
+    },
+    {
+      "title": "Input Schema System",
+      "level": 3,
+      "range": "L95-117",
+      "line_count": 23
+    },
+    {
+      "title": "Model Command Syntax",
+      "level": 3,
+      "range": "L118-151",
+      "line_count": 34
+    },
+    {
+      "title": "Design Workflow",
+      "level": 2,
+      "range": "L152-153",
+      "line_count": 2
+    },
+    {
+      "title": "External Design Directory",
+      "level": 3,
+      "range": "L154-188",
+      "line_count": 35
+    },
+    {
+      "title": "How Design Packages Work",
+      "level": 3,
+      "range": "L189-200",
+      "line_count": 12
+    },
+    {
+      "title": "Designer Tendencies to Steer Away From",
+      "level": 3,
+      "range": "L201-207",
+      "line_count": 7
+    },
+    {
+      "title": "Design Deliverables Already Received",
+      "level": 3,
+      "range": "L208-219",
+      "line_count": 12
+    },
+    {
+      "title": "Remaining TODO(design) Comments",
+      "level": 2,
+      "range": "L220-234",
+      "line_count": 15
+    },
+    {
+      "title": "UX Direction: Task-Centric Home Screen",
+      "level": 2,
+      "range": "L235-248",
+      "line_count": 14
+    },
+    {
+      "title": "Commands",
+      "level": 2,
+      "range": "L249-268",
+      "line_count": 20
+    },
+    {
+      "title": "Tauri Backend Structure",
+      "level": 2,
+      "range": "L269-287",
+      "line_count": 19
+    },
+    {
+      "title": "E2E Test Infrastructure",
+      "level": 2,
+      "range": "L288-295",
+      "line_count": 8
+    }
+  ],
+  "/home/nes/projects/ai-workflow/AGENTS.md": [
+    {
+      "title": "AI Agent Entry Point",
+      "level": 1,
+      "range": "L1-16",
+      "line_count": 16
+    },
+    {
+      "title": "Documentation Modules",
+      "level": 2,
+      "range": "L17-31",
+      "line_count": 15
+    },
+    {
+      "title": "How To Run And Understand Python Tests Correctly",
+      "level": 2,
+      "range": "L32-35",
+      "line_count": 4
+    },
+    {
+      "title": "How To Generate OpenAPI Schema (app/)",
+      "level": 2,
+      "range": "L36-39",
+      "line_count": 4
+    },
+    {
+      "title": "How To Execute Python Tools Correctly",
+      "level": 2,
+      "range": "L40-47",
+      "line_count": 8
+    },
+    {
+      "title": "How To Write Documentation Correctly",
+      "level": 3,
+      "range": "L48-52",
+      "line_count": 5
+    },
+    {
+      "title": "How To Add Python Dependencies Correctly",
+      "level": 2,
+      "range": "L53-56",
+      "line_count": 4
+    },
+    {
+      "title": "How To Add Models Correctly",
+      "level": 2,
+      "range": "L57-60",
+      "line_count": 4
+    },
+    {
+      "title": "How To Write Agents Correctly",
+      "level": 2,
+      "range": "L61-64",
+      "line_count": 4
+    },
+    {
+      "title": "How To Execute Agents Correctly",
+      "level": 2,
+      "range": "L65-68",
+      "line_count": 4
+    },
+    {
+      "title": "Plan Execution Guidelines",
+      "level": 2,
+      "range": "L69-74",
+      "line_count": 6
+    },
+    {
+      "title": "No Deferred Stubs Without Plan Authorization",
+      "level": 3,
+      "range": "L75-107",
+      "line_count": 33
+    },
+    {
+      "title": "Task Decomposition for Complex Plans",
+      "level": 3,
+      "range": "L108-133",
+      "line_count": 26
+    },
+    {
+      "title": "Reporting Incomplete Implementation",
+      "level": 3,
+      "range": "L134-146",
+      "line_count": 13
+    },
+    {
+      "title": "No Backwards Compatibility",
+      "level": 2,
+      "range": "L147-151",
+      "line_count": 5
+    },
+    {
+      "title": "Forbidden Patterns",
+      "level": 3,
+      "range": "L152-167",
+      "line_count": 16
+    },
+    {
+      "title": "When Updating Code",
+      "level": 3,
+      "range": "L168-182",
+      "line_count": 15
+    },
+    {
+      "title": "External Repositories",
+      "level": 2,
+      "range": "L183-188",
+      "line_count": 6
+    },
+    {
+      "title": "External Resources",
+      "level": 2,
+      "range": "L189-207",
+      "line_count": 19
+    },
+    {
+      "title": "Git Commit Signing",
+      "level": 2,
+      "range": "L208-231",
+      "line_count": 24
+    },
+    {
+      "title": "Git Commit Authorship",
+      "level": 2,
+      "range": "L232-244",
+      "line_count": 13
+    },
+    {
+      "title": "Git Branch Naming for Linear Integration",
+      "level": 2,
+      "range": "L245-260",
+      "line_count": 16
+    }
+  ],
+  "/home/nes/projects/server-manager/AGENTS.md": [
+    {
+      "title": "AGENTS.md \u2014 Humility Discord Server Project",
+      "level": 1,
+      "range": "L1-8",
+      "line_count": 8
+    },
+    {
+      "title": "Project",
+      "level": 2,
+      "range": "L9-17",
+      "line_count": 9
+    },
+    {
+      "title": "The Live Server Principle",
+      "level": 2,
+      "range": "L18-34",
+      "line_count": 17
+    },
+    {
+      "title": "Workflows",
+      "level": 2,
+      "range": "L35-50",
+      "line_count": 16
+    },
+    {
+      "title": "Implementation & Bug-Fix Workflow",
+      "level": 2,
+      "range": "L51-67",
+      "line_count": 17
+    },
+    {
+      "title": "Principles",
+      "level": 3,
+      "range": "L68-81",
+      "line_count": 14
+    },
+    {
+      "title": "Gate ownership per phase",
+      "level": 3,
+      "range": "L82-110",
+      "line_count": 29
+    },
+    {
+      "title": "Implementation Workflow \u2014 Test/Code Agent Separation",
+      "level": 2,
+      "range": "L111-118",
+      "line_count": 8
+    },
+    {
+      "title": "Per-feature PR workflow",
+      "level": 3,
+      "range": "L119-143",
+      "line_count": 25
+    },
+    {
+      "title": "Optimistic locking in tests",
+      "level": 3,
+      "range": "L144-154",
+      "line_count": 11
+    },
+    {
+      "title": "CodeRabbit Review Loop",
+      "level": 2,
+      "range": "L155-175",
+      "line_count": 21
+    },
+    {
+      "title": "PR Review Workflow",
+      "level": 2,
+      "range": "L176-196",
+      "line_count": 21
+    },
+    {
+      "title": "Bug Investigation Workflow (RCA-First)",
+      "level": 2,
+      "range": "L197-205",
+      "line_count": 9
+    },
+    {
+      "title": "Server Inspection Workflow",
+      "level": 2,
+      "range": "L206-215",
+      "line_count": 10
+    },
+    {
+      "title": "Integration Triage Workflow",
+      "level": 2,
+      "range": "L216-231",
+      "line_count": 16
+    },
+    {
+      "title": "Mutation Safety Workflow",
+      "level": 2,
+      "range": "L232-244",
+      "line_count": 13
+    },
+    {
+      "title": "Research Workflow",
+      "level": 2,
+      "range": "L245-256",
+      "line_count": 12
+    },
+    {
+      "title": "Deployment Workflow",
+      "level": 2,
+      "range": "L257-269",
+      "line_count": 13
+    },
+    {
+      "title": "Prototyping Workflow",
+      "level": 2,
+      "range": "L270-293",
+      "line_count": 24
+    },
+    {
+      "title": "Writing Pipeline",
+      "level": 2,
+      "range": "L294-329",
+      "line_count": 36
+    },
+    {
+      "title": "Product Strategy Workflow",
+      "level": 2,
+      "range": "L330-378",
+      "line_count": 49
+    },
+    {
+      "title": "Model Roles",
+      "level": 2,
+      "range": "L379-387",
+      "line_count": 9
+    },
+    {
+      "title": "No Super Agents",
+      "level": 3,
+      "range": "L388-416",
+      "line_count": 29
+    },
+    {
+      "title": "Running Sub-Agents",
+      "level": 2,
+      "range": "L417-451",
+      "line_count": 35
+    },
+    {
+      "title": "Architecture (Three Services)",
+      "level": 2,
+      "range": "L452-482",
+      "line_count": 31
+    },
+    {
+      "title": "API-First Design Rule",
+      "level": 3,
+      "range": "L483-489",
+      "line_count": 7
+    },
+    {
+      "title": "Key Patterns from References",
+      "level": 3,
+      "range": "L490-514",
+      "line_count": 25
+    },
+    {
+      "title": "Infrastructure Reference",
+      "level": 2,
+      "range": "L515-516",
+      "line_count": 2
+    },
+    {
+      "title": "Discord",
+      "level": 3,
+      "range": "L517-523",
+      "line_count": 7
+    },
+    {
+      "title": "Hosting",
+      "level": 3,
+      "range": "L524-529",
+      "line_count": 6
+    },
+    {
+      "title": "When to Ask the User",
+      "level": 2,
+      "range": "L530-563",
+      "line_count": 34
+    },
+    {
+      "title": "No Backwards Compatibility",
+      "level": 2,
+      "range": "L564-578",
+      "line_count": 15
+    },
+    {
+      "title": "No Deferred Stubs",
+      "level": 2,
+      "range": "L579-586",
+      "line_count": 8
+    },
+    {
+      "title": "Git Conventions",
+      "level": 2,
+      "range": "L587-593",
+      "line_count": 7
+    }
+  ],
+  "/home/nes/projects/videos/AGENTS.md": [
+    {
+      "title": "AGENTS.md \u2014 visual motion pipeline",
+      "level": 1,
+      "range": "L1-33",
+      "line_count": 33
+    },
+    {
+      "title": "What this pipeline is NOT",
+      "level": 2,
+      "range": "L34-50",
+      "line_count": 17
+    },
+    {
+      "title": "Tier safety",
+      "level": 2,
+      "range": "L51-66",
+      "line_count": 16
+    },
+    {
+      "title": "Workflows (cue \u2192 workflow)",
+      "level": 2,
+      "range": "L67-84",
+      "line_count": 18
+    },
+    {
+      "title": "Motion Analysis workflow",
+      "level": 2,
+      "range": "L85-103",
+      "line_count": 19
+    },
+    {
+      "title": "Critique workflow",
+      "level": 2,
+      "range": "L104-120",
+      "line_count": 17
+    },
+    {
+      "title": "Planning workflow",
+      "level": 2,
+      "range": "L121-141",
+      "line_count": 21
+    },
+    {
+      "title": "3\u00d7 risk gate (applies at every gate in phases 3\u20138)",
+      "level": 3,
+      "range": "L142-169",
+      "line_count": 28
+    },
+    {
+      "title": "Generation workflow",
+      "level": 2,
+      "range": "L170-186",
+      "line_count": 17
+    },
+    {
+      "title": "HCI Review workflow (UI work only)",
+      "level": 2,
+      "range": "L187-206",
+      "line_count": 20
+    },
+    {
+      "title": "Research workflow",
+      "level": 2,
+      "range": "L207-241",
+      "line_count": 35
+    },
+    {
+      "title": "Roadmap workflow",
+      "level": 2,
+      "range": "L242-259",
+      "line_count": 18
+    },
+    {
+      "title": "Gate ownership",
+      "level": 2,
+      "range": "L260-276",
+      "line_count": 17
+    },
+    {
+      "title": "Model roles",
+      "level": 2,
+      "range": "L277-294",
+      "line_count": 18
+    },
+    {
+      "title": "Artifact naming",
+      "level": 2,
+      "range": "L295-351",
+      "line_count": 57
+    },
+    {
+      "title": "Global constraints",
+      "level": 2,
+      "range": "L352-372",
+      "line_count": 21
+    },
+    {
+      "title": "Sub-AGENTS.md documents `[PLANNED]`",
+      "level": 2,
+      "range": "L373-417",
+      "line_count": 45
+    },
+    {
+      "title": "Adding an agent file",
+      "level": 2,
+      "range": "L418-441",
+      "line_count": 24
+    },
+    {
+      "title": "Open items",
+      "level": 2,
+      "range": "L442-488",
+      "line_count": 47
+    }
+  ],
+  "/home/nes/projects/visual-code-editor/AGENTS.md": [
+    {
+      "title": "Visual Code Editor \u2014 Agent Workflows",
+      "level": 1,
+      "range": "L1-2",
+      "line_count": 2
+    },
+    {
+      "title": "Project Context",
+      "level": 2,
+      "range": "L3-11",
+      "line_count": 9
+    },
+    {
+      "title": "Technology Stack",
+      "level": 3,
+      "range": "L12-19",
+      "line_count": 8
+    },
+    {
+      "title": "Current Visual State (as of 2026-04-15)",
+      "level": 3,
+      "range": "L20-32",
+      "line_count": 13
+    },
+    {
+      "title": "Known remaining items",
+      "level": 3,
+      "range": "L33-36",
+      "line_count": 4
+    },
+    {
+      "title": "Dual-View Problem",
+      "level": 3,
+      "range": "L37-46",
+      "line_count": 10
+    },
+    {
+      "title": "Visual Asset Pipeline",
+      "level": 2,
+      "range": "L47-50",
+      "line_count": 4
+    },
+    {
+      "title": "Directory Structure",
+      "level": 3,
+      "range": "L51-61",
+      "line_count": 11
+    },
+    {
+      "title": "SVG Requirements",
+      "level": 3,
+      "range": "L62-72",
+      "line_count": 11
+    },
+    {
+      "title": "Model Roles",
+      "level": 2,
+      "range": "L73-86",
+      "line_count": 14
+    },
+    {
+      "title": "Model Boundary: Gemini vs GPT",
+      "level": 3,
+      "range": "L87-96",
+      "line_count": 10
+    },
+    {
+      "title": "SVG Self-Correcting Loop",
+      "level": 2,
+      "range": "L97-118",
+      "line_count": 22
+    },
+    {
+      "title": "Animation Pipeline",
+      "level": 2,
+      "range": "L119-122",
+      "line_count": 4
+    },
+    {
+      "title": "Animation Types",
+      "level": 3,
+      "range": "L123-130",
+      "line_count": 8
+    },
+    {
+      "title": "Animation Design Process",
+      "level": 3,
+      "range": "L131-159",
+      "line_count": 29
+    },
+    {
+      "title": "Research Workflow",
+      "level": 2,
+      "range": "L160-170",
+      "line_count": 11
+    },
+    {
+      "title": "Research Areas",
+      "level": 3,
+      "range": "L171-198",
+      "line_count": 28
+    },
+    {
+      "title": "Animation QA Workflow",
+      "level": 2,
+      "range": "L199-202",
+      "line_count": 4
+    },
+    {
+      "title": "How It Works",
+      "level": 3,
+      "range": "L203-208",
+      "line_count": 6
+    },
+    {
+      "title": "Running Captures",
+      "level": 3,
+      "range": "L209-222",
+      "line_count": 14
+    },
+    {
+      "title": "Sending to Gemini for QA",
+      "level": 3,
+      "range": "L223-237",
+      "line_count": 15
+    },
+    {
+      "title": "Capture Specs",
+      "level": 3,
+      "range": "L238-244",
+      "line_count": 7
+    },
+    {
+      "title": "When to Run",
+      "level": 3,
+      "range": "L245-254",
+      "line_count": 10
+    },
+    {
+      "title": "Implementation & Bug-Fix Workflow",
+      "level": 2,
+      "range": "L255-268",
+      "line_count": 14
+    },
+    {
+      "title": "Build & Verify",
+      "level": 3,
+      "range": "L269-292",
+      "line_count": 24
+    },
+    {
+      "title": "Cross-Project References",
+      "level": 2,
+      "range": "L293-301",
+      "line_count": 9
+    },
+    {
+      "title": "Visual Regression",
+      "level": 2,
+      "range": "L302-319",
+      "line_count": 18
+    },
+    {
+      "title": "CI (GitHub Actions)",
+      "level": 3,
+      "range": "L320-331",
+      "line_count": 12
+    },
+    {
+      "title": "Known limits",
+      "level": 3,
+      "range": "L332-335",
+      "line_count": 4
+    }
+  ]
+}

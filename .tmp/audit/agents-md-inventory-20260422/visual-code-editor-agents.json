@@ -1,0 +1,384 @@
+{
+  "line_count": 335,
+  "headings": [
+    {
+      "level": 1,
+      "title": "Visual Code Editor \u2014 Agent Workflows",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "Project Context",
+      "start": 3
+    },
+    {
+      "level": 3,
+      "title": "Technology Stack",
+      "start": 12
+    },
+    {
+      "level": 3,
+      "title": "Current Visual State (as of 2026-04-15)",
+      "start": 20
+    },
+    {
+      "level": 3,
+      "title": "Known remaining items",
+      "start": 33
+    },
+    {
+      "level": 3,
+      "title": "Dual-View Problem",
+      "start": 37
+    },
+    {
+      "level": 2,
+      "title": "Visual Asset Pipeline",
+      "start": 47
+    },
+    {
+      "level": 3,
+      "title": "Directory Structure",
+      "start": 51
+    },
+    {
+      "level": 3,
+      "title": "SVG Requirements",
+      "start": 62
+    },
+    {
+      "level": 2,
+      "title": "Model Roles",
+      "start": 73
+    },
+    {
+      "level": 3,
+      "title": "Model Boundary: Gemini vs GPT",
+      "start": 87
+    },
+    {
+      "level": 2,
+      "title": "SVG Self-Correcting Loop",
+      "start": 97
+    },
+    {
+      "level": 2,
+      "title": "Animation Pipeline",
+      "start": 119
+    },
+    {
+      "level": 3,
+      "title": "Animation Types",
+      "start": 123
+    },
+    {
+      "level": 3,
+      "title": "Animation Design Process",
+      "start": 131
+    },
+    {
+      "level": 2,
+      "title": "Research Workflow",
+      "start": 160
+    },
+    {
+      "level": 3,
+      "title": "Research Areas",
+      "start": 171
+    },
+    {
+      "level": 2,
+      "title": "Animation QA Workflow",
+      "start": 199
+    },
+    {
+      "level": 3,
+      "title": "How It Works",
+      "start": 203
+    },
+    {
+      "level": 3,
+      "title": "Running Captures",
+      "start": 209
+    },
+    {
+      "level": 3,
+      "title": "Sending to Gemini for QA",
+      "start": 223
+    },
+    {
+      "level": 3,
+      "title": "Capture Specs",
+      "start": 238
+    },
+    {
+      "level": 3,
+      "title": "When to Run",
+      "start": 245
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 255
+    },
+    {
+      "level": 3,
+      "title": "Build & Verify",
+      "start": 269
+    },
+    {
+      "level": 2,
+      "title": "Cross-Project References",
+      "start": 293
+    },
+    {
+      "level": 2,
+      "title": "Visual Regression",
+      "start": 302
+    },
+    {
+      "level": 3,
+      "title": "CI (GitHub Actions)",
+      "start": 320
+    },
+    {
+      "level": 3,
+      "title": "Known limits",
+      "start": 332
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "Visual Code Editor \u2014 Agent Workflows",
+      "start": 1,
+      "end": 2,
+      "line_count": 2,
+      "text": "# Visual Code Editor \u2014 Agent Workflows\n"
+    },
+    {
+      "level": 2,
+      "title": "Project Context",
+      "start": 3,
+      "end": 11,
+      "line_count": 9,
+      "text": "## Project Context\n\nInteractive system visualization tool. Renders organizational (clusters \u2192 systems \u2192 modules/files/agents) and behavioral (lifecycles \u2192 stages \u2192 steps) views of a software system as Cytoscape.js graph diagrams. Users navigate by clicking cards, which either drill into sub-diagrams or open detail panels.\n\n**This is an interpretation, control, and communication problem.** The visuals must help humans:\n1. **Interpret** \u2014 understand what a node/edge means at a glance (type, status, relationships)\n2. **Control** \u2014 know what's interactive, what will happen when they click, where they are in the hierarchy\n3. **Communicate** \u2014 convey structure, flow, and relationships without requiring the user to read labels\n"
+    },
+    {
+      "level": 3,
+      "title": "Technology Stack",
+      "start": 12,
+      "end": 19,
+      "line_count": 8,
+      "text": "### Technology Stack\n\n- **SolidJS** + **TanStack Solid Router** \u2014 reactive UI framework\n- **ELK.js** \u2014 graph layout engine (layered algorithm with orthogonal edge routing)\n- **Custom SVG/HTML rendering** \u2014 nodes as HTML cards, edges as SVG paths in layered composition\n- **Vite** \u2014 build tool\n- **CSS custom properties** \u2014 dark theme (GitHub-dark inspired), per-node-kind accent colors\n"
+    },
+    {
+      "level": 3,
+      "title": "Current Visual State (as of 2026-04-15)",
+      "start": 20,
+      "end": 32,
+      "line_count": 13,
+      "text": "### Current Visual State (as of 2026-04-15)\n\n35 bugs from animation QA have been fixed. Current state:\n- Node shapes differentiate by type (rounded, circle, pill, hexagon, octagon)\n- Hover: spring-based lift (-12px) + scale (1.08x) with accent-colored glow, 3-state settling FSM\n- Edges: layered SVG composition (base/highlighted/hit/transport), innerScale compensation keeps edges connected\n- Edge hover works inside compound nodes (priority refactor: non-compound > edge > compound)\n- Edge colors/dash patterns working per kind (cluster, store, behavioral, back-edge, agent, file-import)\n- Entry/exit animations working with stagger delays on all navigation paths\n- Detail panel strips duplicate headers from fetched HTML content\n- Shadowbox: playback with token animation, step progress, scenario preamble, node visit states\n- Float animation pauses smoothly via animation-play-state\n"
+    },
+    {
+      "level": 3,
+      "title": "Known remaining items",
+      "start": 33,
+      "end": 36,
+      "line_count": 4,
+      "text": "### Known remaining items\n- Token pulse in shadowbox \u2014 needs video verification (Gemini quota)\n- Edge labels only visible at zoom >= 0.8 (base) or >= 0.5 (highlighted)\n"
+    },
+    {
+      "level": 3,
+      "title": "Dual-View Problem",
+      "start": 37,
+      "end": 46,
+      "line_count": 10,
+      "text": "### Dual-View Problem\n\nCards that represent navigable containers (clusters, systems, lifecycles, stages) have BOTH:\n- A **drill-down diagram** (clicking navigates to a sub-diagram)\n- A **detail panel** (metadata, description, related entities)\n\nUsers need an intuitive way to access both. Currently, clicking always drills down; the panel is accessed via a side button that's hard to discover.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Visual Asset Pipeline",
+      "start": 47,
+      "end": 50,
+      "line_count": 4,
+      "text": "## Visual Asset Pipeline\n\nAll visual assets are SVGs. SVGs are version-controlled in `app/assets/` and imported into components.\n"
+    },
+    {
+      "level": 3,
+      "title": "Directory Structure",
+      "start": 51,
+      "end": 61,
+      "line_count": 11,
+      "text": "### Directory Structure\n\n```\napp/assets/\n  cards/           \u2014 SVG card frames per node type\n  icons/           \u2014 type-specific icons (cluster, system, file, agent, store, etc.)\n  panels/          \u2014 panel header/section decorations\n  animations/      \u2014 SVG animation definitions (SMIL or CSS-driven)\n  shared/          \u2014 reusable SVG fragments (gradients, filters, patterns)\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "SVG Requirements",
+      "start": 62,
+      "end": 72,
+      "line_count": 11,
+      "text": "### SVG Requirements\n\nAll SVGs must:\n- Use `currentColor` for text/icon fills (inherits from CSS)\n- Use CSS custom properties (`var(--border)`, `var(--accent)`, etc.) where possible\n- Be optimized (no editor metadata, no unnecessary groups)\n- Work at multiple sizes (card icons may render at 16px or 48px)\n- Be tested via PNG conversion before commit\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Model Roles",
+      "start": 73,
+      "end": 86,
+      "line_count": 14,
+      "text": "## Model Roles\n\n| Task | Model | Why |\n|------|-------|-----|\n| Research (best practices, patterns, prior art) | `gpt-high` | Best at systematic analysis and synthesis |\n| SVG generation + art direction | `gemini-high` | Best SVG output, visual reasoning, self-correcting loops |\n| SVG iteration / quick fixes | `gemini-low` | Speed over polish for tweaks |\n| Visual design RCA (shadows, colors, borders, card styling) | `gemini-high` | Visual interpretation \u2014 reads screenshots, determines shades/colors, proposes CSS values |\n| Animation design + parameterization | `gemini-high` | Visual reasoning for motion design |\n| Communication risk review | `claude-opus` | Evaluates clarity and discoverability |\n| Implementation (wiring into components \u2014 NOT visual design) | `gpt-high` | Code generation and integration |\n| Algorithmic research (layout, routing, data structures) | `gpt-high` | Best at systematic algorithm analysis |\n| Quick verification / builds | `glm` | Fast command execution |\n"
+    },
+    {
+      "level": 3,
+      "title": "Model Boundary: Gemini vs GPT",
+      "start": 87,
+      "end": 96,
+      "line_count": 10,
+      "text": "### Model Boundary: Gemini vs GPT\n\n**Gemini handles visual design** \u2014 anything involving interpreting images, determining shades/colors, proposing CSS shadow/border/gradient values, art direction, SVG creation, animation curves. Gemini reads screenshots and makes visual judgments.\n\n**GPT handles code and algorithms** \u2014 implementation, wiring components, data pipeline, layout algorithms, edge routing strategies, architectural decisions. GPT does NOT do visual design interpretation.\n\nThe boundary: if the task requires looking at a screenshot to decide what looks right, it's Gemini. If it requires reading code to decide what's correct, it's GPT.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "SVG Self-Correcting Loop",
+      "start": 97,
+      "end": 118,
+      "line_count": 22,
+      "text": "## SVG Self-Correcting Loop\n\nGemini generates SVGs with a built-in visual review loop. This eliminates the most common SVG failure modes without requiring human review of each iteration.\n\n**Every Gemini SVG prompt must include:**\n\n```markdown\n## Self-correction workflow\n1. Write the SVG to <target-path>\n2. Run: python3 ~/projects/agent-implementation-skill/execution-philosophy/diagrams/svg_to_png.py <target-path> /tmp/<name>-review.png --width 800\n3. Read /tmp/<name>-review.png and visually inspect\n4. If elements are misaligned, overlapping, wrong color, or visually broken \u2014 fix the SVG and repeat from step 2\n5. Keep iterating until the asset is clean\n```\n\n**Dispatch:**\n```bash\nagents --model gemini-high --file /tmp/svg-prompt.md --project ~/projects/visual-code-editor\n```\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Animation Pipeline",
+      "start": 119,
+      "end": 122,
+      "line_count": 4,
+      "text": "## Animation Pipeline\n\nGemini designs animations and figures out interpolation, selection, and parameterization.\n"
+    },
+    {
+      "level": 3,
+      "title": "Animation Types",
+      "start": 123,
+      "end": 130,
+      "line_count": 8,
+      "text": "### Animation Types\n\n1. **Card hover** \u2014 lift, float, settle (currently CSS transitions + JS spring physics)\n2. **Diagram transitions** \u2014 crossfade between diagrams when navigating\n3. **Edge flow** \u2014 animated dashes showing data/control flow direction\n4. **Panel slide** \u2014 detail panel entrance/exit\n5. **Card type indicators** \u2014 subtle ambient animations that signal card type (e.g., store nodes pulse, agent nodes shimmer)\n"
+    },
+    {
+      "level": 3,
+      "title": "Animation Design Process",
+      "start": 131,
+      "end": 159,
+      "line_count": 29,
+      "text": "### Animation Design Process\n\n1. **Design** (`gemini-high`): Describe the interaction context. Gemini proposes animation parameters:\n   - Easing curves (cubic-bezier values)\n   - Duration and delay\n   - Transform sequences\n   - SVG SMIL vs CSS animation vs JS RAF approach\n\n2. **Prototype** (`gemini-high`): Gemini creates a standalone HTML file with the animation for visual review. Self-correcting loop: render \u2192 screenshot \u2192 review \u2192 fix.\n\n3. **Parameterize**: Extract animation parameters into a config object so they can be tuned without code changes:\n   ```typescript\n   const cardHover = {\n     lift: { duration: 600, easing: [0.22, 1.2, 0.36, 1], scale: 1.10, yOffset: -8 },\n     float: { stiffness: 3, damping: 3.5, driftRange: { x: 3.5, y: 2.5, rotation: 0.7 } },\n     settle: { duration: 1200, easing: [0, 0, 0.2, 1] },\n   };\n   ```\n\n4. **Interpolation**: For transitions between animation states, define interpolation functions:\n   - Between easing curves\n   - Between transform targets\n   - Between shadow/glow intensities\n   - Between color states\n\n5. **Selection**: When multiple animations could apply (e.g., a card is both hovered and highlighted), define precedence and blending rules.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Research Workflow",
+      "start": 160,
+      "end": 170,
+      "line_count": 11,
+      "text": "## Research Workflow\n\nUse `gpt-high` for design research. Research prompts should:\n- Reference specific comparable products/sites\n- Ask for concrete patterns, not abstract principles\n- Request implementation approaches, not just ideas\n\n```bash\nagents --model gpt-high --file /tmp/research-prompt.md --project ~/projects/visual-code-editor\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Research Areas",
+      "start": 171,
+      "end": 198,
+      "line_count": 28,
+      "text": "### Research Areas\n\n1. **Interactive graph visualization UX** \u2014 How do tools like Figma, Miro, Lucidchart, GitHub dependency graphs handle:\n   - Node type differentiation (visual, not just color)\n   - Drill-down vs detail split (cards that are both containers and entities)\n   - Information density at different zoom levels\n   - Edge rendering and flow indication\n\n2. **Card design for graph nodes** \u2014 SVG-backed cards that:\n   - Signal type at a glance (icon + shape + border treatment)\n   - Show status/state without text\n   - Scale from 50px to 200px+ gracefully\n   - Work in a dark theme\n\n3. **Panel design for entity detail** \u2014 How to present:\n   - Entity metadata alongside navigable sub-diagrams\n   - Related entities with click-to-navigate\n   - Rich content (descriptions, code snippets, references)\n   - Cards-that-have-diagrams dual view\n\n4. **Animation and motion design** \u2014 Principles for:\n   - Meaningful motion (animation that communicates, not decorates)\n   - State transitions that orient the user\n   - Performance constraints (60fps on mid-range hardware)\n   - Accessibility (prefers-reduced-motion)\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Animation QA Workflow",
+      "start": 199,
+      "end": 202,
+      "line_count": 4,
+      "text": "## Animation QA Workflow\n\nSemantic animation QA using Playwright video capture + Gemini video understanding via the `agents` binary.\n"
+    },
+    {
+      "level": 3,
+      "title": "How It Works",
+      "start": 203,
+      "end": 208,
+      "line_count": 6,
+      "text": "### How It Works\n\n1. **Capture**: Playwright records short video clips of specific animations/interactions\n2. **Judge**: `agents --model gemini-video-high` analyzes the video against expected behavior described in the prompt\n3. **Human review**: Human reads Gemini's report and decides what to fix\n"
+    },
+    {
+      "level": 3,
+      "title": "Running Captures",
+      "start": 209,
+      "end": 222,
+      "line_count": 14,
+      "text": "### Running Captures\n\n```bash\n# Build and serve first\ncd ~/projects/visual-code-editor\nnpm run build && npm run serve &\n\n# Run all QA captures (records .webm videos to .tmp/animation-qa/captures/)\nnpx playwright test e2e/animation-qa-full.capture.spec.ts\n\n# Run a single capture\nnpx playwright test e2e/animation-hover-lift.capture.spec.ts\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Sending to Gemini for QA",
+      "start": 223,
+      "end": 237,
+      "line_count": 15,
+      "text": "### Sending to Gemini for QA\n\n```bash\n# Reference the video file in the prompt \u2014 gemini-video-high can read video files\nagents --model gemini-video-high -p ~/projects/visual-code-editor \\\n  \"Review the animation video at .tmp/animation-qa/captures/<dir>/<file>.webm\n   <describe expected behavior>\n   Report ALL visual bugs.\"\n```\n\n**Important model selection:**\n- `gemini-video-high/medium/low` \u2014 uses `gemini` CLI, CAN process video files. Severely rate-limited. Run ONE at a time.\n- `gemini-high/medium/low` \u2014 uses `droid` CLI, text/code only, CANNOT process video.\n- Never run multiple gemini-video agents in parallel.\n"
+    },
+    {
+      "level": 3,
+      "title": "Capture Specs",
+      "start": 238,
+      "end": 244,
+      "line_count": 7,
+      "text": "### Capture Specs\n\n| Spec | Captures |\n|------|----------|\n| `e2e/animation-hover-lift.capture.spec.ts` | Single hover-lift with DOM measurements |\n| `e2e/animation-qa-full.capture.spec.ts` | 10 scenarios: org overview, behavioral overview, hover lift, edge hover, drill-down, detail panel, shadowbox modal, view toggle, entry animations, floating idle |\n"
+    },
+    {
+      "level": 3,
+      "title": "When to Run",
+      "start": 245,
+      "end": 254,
+      "line_count": 10,
+      "text": "### When to Run\n\n- Before/after animation or interaction changes\n- When investigating visual bugs\n- For pre-review QA on motion-heavy PRs\n\nArtifacts go in `.tmp/animation-qa/` (gitignored).\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 255,
+      "end": 268,
+      "line_count": 14,
+      "text": "## Implementation & Bug-Fix Workflow\n\nAll code changes follow the pipeline from `~/work/AGENTS.md`:\n\n| Step | Model | Role |\n|------|-------|------|\n| 1. RCA (bugs only) | `gpt-high` | Investigate root cause. Do NOT propose fixes. |\n| 2. Proposal | `gpt-high` | Propose a fix/feature. Do NOT implement. |\n| 3. Risk assessment | 3x `claude-opus` | Audit risk + scope risk + shortcut risk in parallel. All must be LOW. |\n| 4. Research | `gpt-high` | Research hookpoints in the codebase. |\n| 5. Implement | `gpt-high` | Launch implementation. |\n\nRCA artifacts go in `.tmp/rca/` (gitignored).\n"
+    },
+    {
+      "level": 3,
+      "title": "Build & Verify",
+      "start": 269,
+      "end": 292,
+      "line_count": 24,
+      "text": "### Build & Verify\n\n```bash\n# Build\ncd ~/projects/visual-code-editor && npm run build\n\n# Regenerate diagram data (into public/ so vite build includes it)\nnpm run regenerate\n\n# Preview (user views on port 8742)\nnpm run serve\n\n# Screenshot verification via Playwright\nnpx playwright test\n\n# Animation QA verification\nnpx playwright test e2e/animation-qa-full.capture.spec.ts\n# Then send captures to gemini-high for analysis\n```\n\nAll visual changes MUST be verified on port 8742 (vite preview build), not port 3000 (dev server).\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Cross-Project References",
+      "start": 293,
+      "end": 301,
+      "line_count": 9,
+      "text": "## Cross-Project References\n\n- **Diagram data source**: `~/projects/agent-implementation-skill/execution-philosophy/diagrams/`\n- **SVG-to-PNG conversion**: `~/projects/agent-implementation-skill/execution-philosophy/diagrams/svg_to_png.py`\n- **Parent AGENTS.md** (visual creation workflows, model configs): `~/projects/agent-implementation-skill/execution-philosophy/AGENTS.md`\n- **Implementation workflow**: `~/work/AGENTS.md` (Implementation & Bug-Fix Workflow section)\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Visual Regression",
+      "start": 302,
+      "end": 319,
+      "line_count": 18,
+      "text": "## Visual Regression\n\nPixel baselines live under `e2e/visual-regression.spec.ts-snapshots/` (11 scenes A\u2013K). Both JetBrains Mono (monospace) and Inter (sans-serif, weights 400/500/600/700) are bundled under `app/assets/fonts/` and wired through `@font-face` in `app/styles/theme.css`, so the dominant text surfaces no longer depend on the host OS font stack. DPR/rasterization still depend on the host compositor, but in practice WSL and the GitHub Actions `ubuntu-24.04` runner produced identical bytes for all 11 scenes with the mono-only bundle.\n\nRun the harness locally:\n```bash\nnpm run serve &          # or keep a preview open on 8742\nnpx playwright test e2e/visual-regression.spec.ts\n```\n\nRegenerate an approved baseline for a specific scene:\n```bash\nnpx playwright test e2e/visual-regression.spec.ts \\\n  -g 'behavioral overview' --update-snapshots\n```\n\nAvoid blanket `--update-snapshots` \u2014 it silently overwrites baselines for scenes you did not mean to change. On a diff, inspect `test-results/*.png` first.\n"
+    },
+    {
+      "level": 3,
+      "title": "CI (GitHub Actions)",
+      "start": 320,
+      "end": 331,
+      "line_count": 12,
+      "text": "### CI (GitHub Actions)\n\n`.github/workflows/visual-regression.yml` runs only this spec on every `pull_request`, `push` to `main`, and on-demand via `workflow_dispatch`. The workflow pins `ubuntu-24.04`, Node 20, `timeout-minutes: 20`, and uploads `test-results/` as a 7-day artifact on failure.\n\n**If CI ever fails from rasterization drift** (e.g. after monthly Ubuntu library updates to cairo/pango/skia/freetype): refresh baselines from the runner.\n\n1. On the Actions tab, trigger `Visual Regression` via `Run workflow` on `main` with `update_snapshots: true`.\n2. When it finishes, download the `vr-baselines-ci-linux` artifact.\n3. Replace the PNGs under `e2e/visual-regression.spec.ts-snapshots/` with the artifact contents, open a PR, and let the normal `pull_request` run verify green.\n\nDo not cherry-pick a subset \u2014 if the Ubuntu runtime drifted, rebaseline all 11 scenes in one commit and visually inspect the diff for anything beyond anti-alias noise before landing.\n"
+    },
+    {
+      "level": 3,
+      "title": "Known limits",
+      "start": 332,
+      "end": 335,
+      "line_count": 4,
+      "text": "### Known limits\n\n- `--bg: #400000` perturbation ritual produces 10/11 RED, not 11/11 \u2014 scene K's shadowbox modal backdrop covers the body `--bg` layer. Regressions inside the modal are still caught via accent colors, text, and progress-bar treatments.\n- UI icons that fall outside Inter's coverage (`\u2715 \u2139 \u276f \u23f8 \u23ed \u23f9 \ud83c\udfac` and the in-coverage `\u25b6` kept for visual consistency) render via `app/components/ControlIcon.tsx` and inline `<svg>` paths rather than font glyphs. This decouples icon rendering from fontconfig substitution on the runner, so monthly `ubuntu-24.04` image rebuilds no longer threaten VR pixel stability for these controls."
+    }
+  ]
+}

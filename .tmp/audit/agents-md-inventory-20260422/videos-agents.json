@@ -1,0 +1,254 @@
+{
+  "line_count": 488,
+  "headings": [
+    {
+      "level": 1,
+      "title": "AGENTS.md \u2014 visual motion pipeline",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "What this pipeline is NOT",
+      "start": 34
+    },
+    {
+      "level": 2,
+      "title": "Tier safety",
+      "start": 51
+    },
+    {
+      "level": 2,
+      "title": "Workflows (cue \u2192 workflow)",
+      "start": 67
+    },
+    {
+      "level": 2,
+      "title": "Motion Analysis workflow",
+      "start": 85
+    },
+    {
+      "level": 2,
+      "title": "Critique workflow",
+      "start": 104
+    },
+    {
+      "level": 2,
+      "title": "Planning workflow",
+      "start": 121
+    },
+    {
+      "level": 3,
+      "title": "3\u00d7 risk gate (applies at every gate in phases 3\u20138)",
+      "start": 142
+    },
+    {
+      "level": 2,
+      "title": "Generation workflow",
+      "start": 170
+    },
+    {
+      "level": 2,
+      "title": "HCI Review workflow (UI work only)",
+      "start": 187
+    },
+    {
+      "level": 2,
+      "title": "Research workflow",
+      "start": 207
+    },
+    {
+      "level": 2,
+      "title": "Roadmap workflow",
+      "start": 242
+    },
+    {
+      "level": 2,
+      "title": "Gate ownership",
+      "start": 260
+    },
+    {
+      "level": 2,
+      "title": "Model roles",
+      "start": 277
+    },
+    {
+      "level": 2,
+      "title": "Artifact naming",
+      "start": 295
+    },
+    {
+      "level": 2,
+      "title": "Global constraints",
+      "start": 352
+    },
+    {
+      "level": 2,
+      "title": "Sub-AGENTS.md documents `[PLANNED]`",
+      "start": 373
+    },
+    {
+      "level": 2,
+      "title": "Adding an agent file",
+      "start": 418
+    },
+    {
+      "level": 2,
+      "title": "Open items",
+      "start": 442
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "AGENTS.md \u2014 visual motion pipeline",
+      "start": 1,
+      "end": 33,
+      "line_count": 33,
+      "text": "# AGENTS.md \u2014 visual motion pipeline\n\n**Status: draft (post-research synthesis).** Research from\n`planning/research/01`, `02`, `03` is landed and synthesized in\n`planning/20-research-synthesis.md`. Numeric commitments below cite\nprimary sources. Items still pending are marked `[TODO]`.\n\nModeled on `~/work/AGENTS.md` and `~/projects/server-manager/AGENTS.md`.\nAdapted for the visual-motion pipeline problem space documented in\n`planning/00-problem-space.md`.\n\nThe pipeline plans, reviews, and researches motion for six mediums\n(sprite, model, video, SVG/UI, transitions, presentations), across\nmultiple content types (fight / narrative / mechanical / ambient /\nmicrointeraction) and multiple UI subtypes (game / app / landing /\nemail / dashboard / onboarding). It does not replace animators or\ndesigners \u2014 it handles planning, review, and research around their\nwork.\n\n**First-class rule.** Motion is data, not screenshots. Every critique\ncites a numeric signal (px/s, jerk, contact distance, phase offset,\ncontrast, WCAG metric). The temple-brawl exercise (documented in\n`workspace/`; source video at `temple-brawl-v1.mp4` in the project\nroot) is the project's rolling regression test: any pipeline change\nmust still catch F1\u2013F10 in `planning/00-problem-space.md \u00a76`.\n\n**Second-class rule: numeric thresholds come from policy, never from\ninline code or agent procedures.** Every threshold is keyed to\n`projects/<project>/policy.md`, with a pipeline-default fallback in\n`projects/_template/policy.md`. Scripts and agents read via\n`tools.policy.load(...)`. A project that wants different thresholds\noverrides the keys; it does not edit agent procedures.\n"
+    },
+    {
+      "level": 2,
+      "title": "What this pipeline is NOT",
+      "start": 34,
+      "end": 50,
+      "line_count": 17,
+      "text": "## What this pipeline is NOT\n\n(Anti-scope, mirrored from `planning/00-problem-space.md \u00a78` so new\nsub-document authors see it before scope decisions.)\n\n- Not a replacement for animators or designers. This is planning,\n  review, and research tooling around human work.\n- Not a single super-pipeline. Multiple pipelines per medium/content,\n  sharing only what genuinely overlaps.\n- Not a Photoshop clone. Touch-up is Python image tooling, not a GUI.\n- No auto-approve of motion fidelity \u2014 every phase has a review gate.\n- No compatibility shims or transitional phases.\n- No automatic grading against rules that lack a citation or a\n  declared project policy. Unsourced rules are reported, not graded.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Tier safety",
+      "start": 51,
+      "end": 66,
+      "line_count": 16,
+      "text": "## Tier safety\n\nMotion work is authored locally, so most actions are Tier 2 (confined\nwrite). A small number are Tier 3:\n\n| Tier | Examples | Authorization |\n|---|---|---|\n| 1 \u2014 Read | Read video, read pose.npz, read project files | Always |\n| 2 \u2014 Confined write | Generate SVGs, render videos, write review docs | Always |\n| 3 \u2014 Visible write | Publish to a landing page, deploy to a web app, email-ready HTML, push a PR | Explicit per-action approval |\n\nTier-3 rule mirrors `~/projects/server-manager/AGENTS.md` \u2014 describe\nexactly what will happen, wait for explicit yes, no batching.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Workflows (cue \u2192 workflow)",
+      "start": 67,
+      "end": 84,
+      "line_count": 18,
+      "text": "## Workflows (cue \u2192 workflow)\n\n| Cue | Workflow |\n|---|---|\n| \"Analyse this reference video\" / \"What happens at t=X?\" | Motion Analysis |\n| \"Critique this motion\" / \"Is this choreography good?\" | Critique |\n| \"Are my critique's numbers actually right?\" | Review Audit (inside Critique) |\n| \"Plan a new scene\" / \"Storyboard X\" | Planning |\n| \"Make this look like that\" / \"Generate X in style Y\" | Generation |\n| \"Review this UI motion\" / \"Is this accessible?\" | HCI Review |\n| \"Research X\" / \"What are the options for Y?\" | Research |\n| \"How should we rank the backlog?\" | Roadmap |\n\nIf a user's request matches multiple cues, run them in the order above\n(analyse \u2192 critique \u2192 plan \u2192 generate \u2192 review).\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Motion Analysis workflow",
+      "start": 85,
+      "end": 103,
+      "line_count": 19,
+      "text": "## Motion Analysis workflow\n\nFor understanding a reference or a draft. Produces numeric timeline\nartefacts other workflows consume.\n\n| Phase | Agent | Artefact | Role |\n|---|---|---|---|\n| 1. Probe | Orchestrator | \u2014 | duration, FPS, resolution, frame count |\n| 2. Flow + pose | `motion-signal-extractor` | `analysis/flow.npz`, `analysis/pose.npz`, `attribution-caveats.md` | Per-frame motion mass + per-frame pose per character |\n| 3. Derive | `motion-deriver` | `analysis/summary.npz`, `analysis/smoothness.npz` | v / a / j per joint; LDLJ + SPARC per character |\n| 4. Events | `event-detector` | `analysis/events.json` | Strike / kick / dodge / travel / quiet windows with contact bands |\n| 5. Timeline | `timeline-writer` | `analysis/TIMELINE.md` | Human-readable beat-by-beat (describe only, no critique) |\n\nEach agent does one verb. Previously these were bundled in a single\n`motion-analyst` god agent; split per this AGENTS.md's \"no super-\nagents\" rule.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Critique workflow",
+      "start": 104,
+      "end": 120,
+      "line_count": 17,
+      "text": "## Critique workflow\n\n| Phase | Agent | Artefact | Role |\n|---|---|---|---|\n| 1. Motion analysis | `motion-analyst` | see above | prerequisite |\n| 2. Choreography review | `choreography-reviewer` | `reviews/choreography-<date>.md` | numeric critique against principles |\n| 3. Composition review | `composition-reviewer` | `reviews/composition-<date>.md` | framing, silhouette, value, eye-line |\n| 4. HCI review (UI only) | `hci-reviewer` | `reviews/hci-<date>.md` | Fitts / Hick / WCAG / platform |\n| 5. **Review audit** | `review-auditor` | `reviews/audit-<date>.md` | cross-check every numeric claim in phases 2\u20134 against the actual `.npz`. Catches reviewer factual errors (F4/F5/F6 class). |\n| 6. Synthesis | Orchestrator | `reviews/summary-<date>.md` | prioritised findings |\n\nReviewers **do not propose fixes**. Findings go to the planner for a\nrevise loop. The review-auditor ensures reviewers' numbers are right\nbefore their findings feed into the revise loop.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Planning workflow",
+      "start": 121,
+      "end": 141,
+      "line_count": 21,
+      "text": "## Planning workflow\n\nFor creating a new motion sequence.\n\n| Phase | Agent / Role | Artefact | Gate |\n|---|---|---|---|\n| 0. Brief | Human | `brief.md` | Human |\n| 1. Reference analysis (if reference) | Motion Analysis workflow | `analysis/TIMELINE.md` | Model |\n| 2. Beat sheet | `beat-planner` | `plan/beats.md` | Human \u2014 scope check |\n| 3. SVG plan (low-fi) | `svg-planner` | `plan/<shot>.svg` | 3\u00d7 risk |\n| 4. Plan review | choreography + composition reviewers | `reviews/*.md` | Human \u2014 confirm critiques addressed |\n| 5. Storyboard rasterisation | `storyboarder` (multimodal) | `storyboard/<shot>/panel-*.png` | 3\u00d7 risk |\n| 6. Keyframes | `keyframe-artist` | `keyframes/<shot>/k*.png` | 3\u00d7 risk + medium-specific risk |\n| 7. In-betweens | `inbetweener` | `inbetweens/<shot>/f*.png` | 3\u00d7 risk + smoothness check |\n| 8. Composite | `compositor` | `composite/<shot>.png\\|.mp4` | Medium-specific + HCI (if UI) |\n| 9. Touch-up | `retoucher` | `final/<shot>.*` | Quality gate (multimodal) |\n| 10. Final | Human | deliverable | Human approves |\n\nEach phase writes to a phase-specific sub-directory. See \u00a7\"Artifact\nnaming\" below.\n"
+    },
+    {
+      "level": 3,
+      "title": "3\u00d7 risk gate (applies at every gate in phases 3\u20138)",
+      "start": 142,
+      "end": 169,
+      "line_count": 28,
+      "text": "### 3\u00d7 risk gate (applies at every gate in phases 3\u20138)\n\nThree parallel assessors from `agents/risk/`:\n\n- `risk/motion-fidelity.md` \u2014 data-grounding, smoothness, timing,\n  contact accuracy, phase relationships, continuity\n- `risk/composition.md` \u2014 silhouette, value, eye-line, depth, density\n- `risk/story-beat.md` \u2014 phrase structure, rhythm, alignment, stakes\n\nMedium-specific (add one of the below, matched to the medium):\n\n- `risk/sprite.md` \u2014 pivot, frame count, loop-seam pop\n- `risk/rig.md` \u2014 weight paint, IK, bone constraints, foot-skate,\n  floor penetration, gimbal lock, bone-parented props\n- `risk/video-continuity.md` \u2014 identity drift, pop, judder, frame-rate\n  mismatch, generative drift\n- `risk/ui-motion.md` \u2014 RAIL, WCAG 2.2, CLS, platform tokens,\n  reduced-motion APIs, subtype-specific (game / landing / email /\n  dashboard / onboarding)\n\nAll numeric thresholds in the above read from `policy.*` keys; see\n`projects/_template/policy.md`.\n\nAll must return LOW. If any MEDIUM/HIGH: revise the highest-risk\ndimension, re-run the gate. No cherry-picking.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Generation workflow",
+      "start": 170,
+      "end": 186,
+      "line_count": 17,
+      "text": "## Generation workflow\n\nFor producing new visuals (rasterised images, generated video, SVG\nanimations) rather than planning or reviewing.\n\n| Phase | Tool / Agent | Artefact |\n|---|---|---|\n| 1. Prompt build | Orchestrator | `generation/<shot>.prompt.md` |\n| 2. Generate | `seedream-t2i` / `seedance-t2v` / `gemini-*` / custom SVG generator | raster/video |\n| 3. Self-review (multimodal) | `generation-reviewer` | `generation/<shot>.review.md` |\n| 4. Regenerate on fail (bounded) | same generator | next iteration |\n\nSee `~/.claude/projects/-home-nes-projects-videos/memory/visual_workflow.md`\nfor the multimodal CLI setup.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "HCI Review workflow (UI work only)",
+      "start": 187,
+      "end": 206,
+      "line_count": 20,
+      "text": "## HCI Review workflow (UI work only)\n\nUses `agents/hci-reviewer.md`. Cites `planning/research/03-hci-and-review.md`.\n\n| Phase | Agent | What's checked | Primary sources |\n|---|---|---|---|\n| 1. Subtype classify | Orchestrator | game / app / landing / email / dashboard / onboarding | \u2014 |\n| 2. Core heuristics | `hci-reviewer` A1\u2013A6 | Nielsen 10, Shneiderman 8, Fitts, Hick-Hyman, Doherty, RAIL | NN/g 2024; Shneiderman UMD HCIL; Fitts 1954; Hyman 1953; IBM; web.dev |\n| 3. WCAG 2.2 | `hci-reviewer` A7 | 2.2.2 Pause/Stop/Hide, 2.3.1 Flashing, 2.3.3 Animation from Interactions, 1.4.3 Contrast | W3C WCAG 2.2 |\n| 4. Subtype rules | `hci-reviewer` A8 | game: Desurvire HEP, Pinelle et al., Hodent; app: Apple HIG; landing: NN/g fold, Baymard; email: Can I Email, Litmus; dashboard: Heer & Robertson; onboarding: NN/g auto-forwarding | Research 03 |\n| 5. Platform tokens | `hci-reviewer` A9 | Material 3 physics springs (spatial/effects \u00d7 fast/default/slow), Windows 83/167/250/333 ms, Carbon 70/110/150/240/400/700 ms, Apple qualitative | Platform HIGs |\n| 6. Perf + CLS | `risk/ui-motion.md` | RAIL profile, CLS from motion, layout-triggering property detection | web.dev |\n\nNote: Material Design 3 (May 2025) replaced its older duration/easing\nladder with a physics-based system. Some third-party blog posts still\ncite the old tokens \u2014 this pipeline uses the current physics system\nper m3.material.io.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Research workflow",
+      "start": 207,
+      "end": 241,
+      "line_count": 35,
+      "text": "## Research workflow\n\nFor open questions the project doesn't already have answers to.\n\nBased on the `~/projects/server-manager/AGENTS.md` pattern:\n\n| Phase | Agent | Role |\n|---|---|---|\n| 1. Scope | Orchestrator | Split the question into focused sub-questions |\n| 2. Research (parallel) | `gpt-high` \u00d7 N researchers | Web search, cite primary sources, write to `planning/research/NN-topic.md` |\n| 3. Synthesis | Orchestrator | Integrate findings into project context |\n| 4. Decision | Human | User decides what to adopt |\n\n**No super-agents.** A researcher gets one focused question; the\norchestrator does the synthesis. Prompt structure in\n`planning/research/*.prompt.md` is the reference.\n\nCurrent outputs:\n- `planning/research/01-animation-fundamentals.md` \u2014 **landed**\n  (Disney 12 \u00d7 medium, SPARC/LDLJ, failure taxonomy, pose tools,\n  SAFD conventions, Bordwell HK measurements)\n- `planning/research/02-medium-pipelines.md` \u2014 **landed**\n  (Aseprite/Spine/DragonBones/Rive, Blender/Maya/Houdini/Rokoko,\n  AE/Nuke/AI video, Lottie/WAAPI/Motion Canvas, Material/HIG/Fluent/\n  Carbon/Radix, PowerPoint/Keynote/Figma, Mayer/Sweller)\n- `planning/research/03-hci-and-review.md` \u2014 **landed**\n  (Nielsen/Shneiderman/Fitts/Hick-Hyman/Doherty/RAIL/WCAG 2.2, game\n  UX heuristics, landing NN/g, email constraints, Apple/Material/\n  Fluent/Windows/Carbon tokens, Heer & Robertson, X-sheet, Pixar\n  dailies, Valve playtesting)\n\nSynthesis: `planning/20-research-synthesis.md`.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Roadmap workflow",
+      "start": 242,
+      "end": 259,
+      "line_count": 18,
+      "text": "## Roadmap workflow\n\nLayered, matching `~/projects/server-manager/AGENTS.md` roadmap loop:\n\n| Layer | Output | Risk types |\n|---|---|---|\n| 0. Market research | target-audience & competitor visual standards | market misread, dependency, completeness |\n| 1. Executive roadmap | strategic ordering of mediums / content / UI types | market misread, dependency, completeness |\n| 2. Engineering roadmap | pipeline + tooling ordering | feasibility, integration, drift |\n| 3. AI roadmap | which agents are worth building, in what order | decomposition, coverage, dependency |\n| 4. Tickets | individual agent / tool implementations | \u2014 |\n\nThe roadmap loop is not needed for the initial pipeline build \u2014 it\napplies to expanding the pipeline with new mediums / content types over\ntime.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Gate ownership",
+      "start": 260,
+      "end": 276,
+      "line_count": 17,
+      "text": "## Gate ownership\n\n| Phase | Gate owner | Why |\n|---|---|---|\n| Problem space | Human | Scope / framing |\n| Research | Human after each researcher report | Confirm findings are relevant |\n| Synthesis | Human | Needs mapping |\n| Proposal (pipeline design) | 3\u00d7 `claude-opus` parallel risk | Risk IS the review |\n| Hookpoint (what code/tools to reuse) | Human | Confirm pre-existing survives |\n| Per-artefact plan / review (during project work) | 3\u00d7 risk | Model |\n| Final deliverable | Human | User approves before ship |\n\nRule: phases that set **scope** belong to the user; phases that\n**validate design or output** belong to model gates.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Model roles",
+      "start": 277,
+      "end": 294,
+      "line_count": 18,
+      "text": "## Model roles\n\nMirrors `~/work/AGENTS.md` and `~/projects/server-manager/AGENTS.md`:\n\n| Model | Role |\n|---|---|\n| `gpt-high` | RCA, proposals, research, hookpoint analysis, implementation |\n| `gpt-xhigh` | Coordinator for large tasks |\n| `claude-opus` | Risk assessments, reviews, alignment, synthesis |\n| `claude-sonnet` | Quick checks, summaries |\n| `gemini-video-*` | Multimodal video analysis |\n| `seedream-*` / `seedance-*` | Image & video generation |\n\n**No super-agents** \u2014 coordinator/researcher split on anything larger\nthan a single focused question.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Artifact naming",
+      "start": 295,
+      "end": 351,
+      "line_count": 57,
+      "text": "## Artifact naming\n\nPer-project folder structure:\n\n```\nprojects/videos/projects/\n  _template/\n    policy.md           # pipeline-default thresholds (schema + fallbacks)\n  <project-name>/\n    policy.md           # project-specific overrides of _template/policy.md\n    brief.md\n    reference/\n      <ref-video>.mp4\n      analysis/\n        flow.npz\n        pose.npz\n        summary.npz\n        smoothness.npz\n        events.json\n        TIMELINE.md\n    plan/\n      beats.md\n      <shot>.svg\n      <shot>.mp4        # SVG rendered for review\n      reviews/\n        choreography-<YYYYMMDD>.md\n        composition-<YYYYMMDD>.md\n        hci-<YYYYMMDD>.md\n        audit-<YYYYMMDD>.md     # review-auditor output \u2014 cross-checks the above\n    storyboard/\n      <shot>/\n        panel-<n>.png\n    keyframes/\n      <shot>/\n        k<n>.png\n    inbetweens/\n      <shot>/\n        f<n>.png\n    composite/\n      <shot>.png|.mp4\n    final/\n      <shot>.mp4|.gif|.html|.pptx\n    risk/\n      motion-<YYYYMMDD>.md\n      composition-<YYYYMMDD>.md\n      story-<YYYYMMDD>.md\n      <medium-specific>-<YYYYMMDD>.md\n```\n\n**Every project has a `policy.md`.** It overrides `_template/policy.md`\nper-key. Scripts and agents load via `tools.policy.load(path)`.\nNo numeric threshold lives inline in an agent procedure.\n\nPrompts, intermediate `.prompt.md`, and reviews are gitignored.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Global constraints",
+      "start": 352,
+      "end": 372,
+      "line_count": 21,
+      "text": "## Global constraints\n\n- **Motion is data.** Numeric signals are authoritative; still frames\n  are supporting evidence only.\n- **No super-agents.** Coordinator / researcher split when a question\n  spans multiple topics.\n- **No compatibility shims.** Pipelines ship clean.\n- **Per-medium risk is additive.** UI work = base three risks + UI\n  motion risk. Sprite work = base three + sprite risk. Etc.\n- **Human at the endpoints.** Brief + final deliverable are human-gated.\n  Middle is model-gated by risk.\n- **Prefers-reduced-motion, always.** Any UI motion has a reduced-motion\n  fallback planned, not bolted on.\n- **Tier-3 rule.** Per-action explicit yes before publishing anything\n  user-visible.\n- **Regression test.** Pipeline changes run against\n  `temple-brawl-v1.mp4` (in the project root). Every risk must still catch its F1\u2013F10\n  failure.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Sub-AGENTS.md documents `[PLANNED]`",
+      "start": 373,
+      "end": 417,
+      "line_count": 45,
+      "text": "## Sub-AGENTS.md documents `[PLANNED]`\n\nFor depth without overwhelming the top-level file, medium- and\ncontent-specific rules live in sub-documents:\n\n```\nagents/\n  AGENTS.sprite.md          # per-medium\n  AGENTS.model.md\n  AGENTS.video.md\n  AGENTS.svg-ui.md\n  AGENTS.transition.md\n  AGENTS.presentation.md\n  AGENTS.content.fight.md   # per-content\n  AGENTS.content.narrative.md\n  AGENTS.content.mechanical.md\n  AGENTS.content.ambient.md\n  AGENTS.content.microinteraction.md\n  AGENTS.ui.game.md         # per-UI-subtype\n  AGENTS.ui.app.md\n  AGENTS.ui.landing.md\n  AGENTS.ui.email.md\n  AGENTS.ui.dashboard.md\n  AGENTS.ui.onboarding.md\n```\n\nAll five content types from the problem space now have a planned\nhome (previously `mechanical` and `ambient` were missing \u2014 corrected\nafter scope risk assessment).\n\n**`transition` and `presentation` mediums use `risk/ui-motion.md`\nwhen the target is a UI surface (web/app/email/dashboard) and\n`risk/composition.md` + `risk/story-beat.md` when they are\nnon-UI (film scene transition, rendered keynote). This is\ndeliberate \u2014 not a missing medium-specific risk \u2014 because UI-shaped\ntransitions share the RAIL / WCAG / CLS budget while non-UI\ntransitions share the composition-and-beat concerns. Sub-AGENTS.md\nper medium documents the split explicitly.**\n\nEach sub-document follows the same shape: scope, non-negotiables, risk\nclasses specific to it, reviewer checklist, references. Shared patterns\nstay in this top-level file.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Adding an agent file",
+      "start": 418,
+      "end": 441,
+      "line_count": 24,
+      "text": "## Adding an agent file\n\nNew agents go in `agents/*.md` following the `~/work/agents/*.md` format:\n\n```markdown\n---\ndescription: 'One-line description'\nmodel: <default-model>\noutput_format: ''\n---\n\n# Agent name\n\n## Use When\n## Do Not Use When\n## Non-Negotiables\n## Required Inputs\n## Procedure\n## Output Format\n## Stop Conditions\n```\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Open items",
+      "start": 442,
+      "end": 488,
+      "line_count": 47,
+      "text": "## Open items\n\nDone:\n- Research landed (01, 02, 03)\n- Synthesis doc (`planning/20-research-synthesis.md`)\n- **15 single-concern agents** in `agents/`:\n  - motion pipeline: `motion-signal-extractor`, `motion-deriver`,\n    `event-detector`, `timeline-writer` (split from the former\n    `motion-analyst` god agent)\n  - planning: `beat-planner`, `svg-planner`, `storyboarder`,\n    `keyframe-artist`, `inbetweener`, `compositor`, `retoucher`\n  - review: `choreography-reviewer` (narrowed to narrative/rhythm),\n    `composition-reviewer`, `hci-reviewer`, `review-auditor`\n- **7 risk assessors** in `agents/risk/`:\n  `motion-fidelity`, `composition`, `story-beat`, `ui-motion`,\n  `video-continuity`, `rig`, `sprite`\n- **17 sub-AGENTS.md craft-rules docs**:\n  - `agents/medium/` (6): sprite, model, video, svg-ui, transition,\n    presentation\n  - `agents/content/` (5): fight, narrative, mechanical, ambient,\n    microinteraction\n  - `agents/ui/` (6): game, app, landing, email, dashboard,\n    onboarding\n- Policy infrastructure: `projects/_template/policy.md`,\n  `tools/policy.py` loader, `projects/temple-brawl-regression/policy.md`\n- Self-test harness skeleton: `tools/run_regression.py`\n- Two rounds of 3\u00d7 risk assessment: round 2 scope LOW; audit +\n  shortcut MEDIUM with specific cleanup items, all subsequently\n  addressed in follow-up edits.\n\nTo do:\n- Run round-3 risk re-gate against the post-cleanup state (all\n  round-2 blockers visibly addressed by inspection; formal\n  verification is a 10-min re-run).\n- Wire agent invocations in `tools/run_regression.py` (currently\n  dry-run only).\n- Self-test: execute `run_regression.py` against the\n  `temple-brawl-regression` project and confirm F1\u2013F10 each trigger\n  the expected risk dimension.\n- Migrate `tools/extract_motion.py` FPS read to\n  `tools.policy.load()` (implementation detail; not gate-blocking).\n\nOrdering of the to-do: sub-AGENTS.md per medium + per UI subtype\nmatter most, since they're where medium-specific craft rules live.\nRemaining risk assessors (sprite, rig, video-continuity) come next.\nPlanning agents (svg-planner, storyboarder, etc.) last \u2014 they're\nauthored artefacts and can share one template."
+    }
+  ]
+}

@@ -1,0 +1,527 @@
+{
+  "line_count": 464,
+  "headings": [
+    {
+      "level": 1,
+      "title": "Agent-Implementation-Skill",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "Project Structure",
+      "start": 3
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 29
+    },
+    {
+      "level": 3,
+      "title": "CLI Syntax",
+      "start": 33
+    },
+    {
+      "level": 3,
+      "title": "Common Invocation Patterns",
+      "start": 51
+    },
+    {
+      "level": 3,
+      "title": "Agent File Format",
+      "start": 70
+    },
+    {
+      "level": 3,
+      "title": "Model Configuration",
+      "start": 86
+    },
+    {
+      "level": 3,
+      "title": "Input Schema",
+      "start": 112
+    },
+    {
+      "level": 3,
+      "title": "Multimodal Models",
+      "start": 139
+    },
+    {
+      "level": 3,
+      "title": "Available Models",
+      "start": 161
+    },
+    {
+      "level": 2,
+      "title": "Cleanup Backlog",
+      "start": 167
+    },
+    {
+      "level": 2,
+      "title": "Governance Documents",
+      "start": 173
+    },
+    {
+      "level": 3,
+      "title": "Working with Governance Docs",
+      "start": 185
+    },
+    {
+      "level": 2,
+      "title": "Audit Cycle: Handling New Responses",
+      "start": 194
+    },
+    {
+      "level": 3,
+      "title": "Step 1: Read Inputs",
+      "start": 198
+    },
+    {
+      "level": 3,
+      "title": "Step 2: Assess Violations",
+      "start": 205
+    },
+    {
+      "level": 3,
+      "title": "Step 3: Implement",
+      "start": 215
+    },
+    {
+      "level": 3,
+      "title": "Step 4: Run Tests",
+      "start": 227
+    },
+    {
+      "level": 3,
+      "title": "Step 5: Commit and Push",
+      "start": 236
+    },
+    {
+      "level": 3,
+      "title": "Step 6: Update Audit History",
+      "start": 247
+    },
+    {
+      "level": 3,
+      "title": "Step 7: Update Governance Artifacts",
+      "start": 260
+    },
+    {
+      "level": 3,
+      "title": "Step 8: Rezip Codebase",
+      "start": 268
+    },
+    {
+      "level": 2,
+      "title": "Agentic Eval QA Process",
+      "start": 280
+    },
+    {
+      "level": 3,
+      "title": "Running Evals",
+      "start": 286
+    },
+    {
+      "level": 3,
+      "title": "Eval Flow",
+      "start": 307
+    },
+    {
+      "level": 3,
+      "title": "Investigating Failures",
+      "start": 318
+    },
+    {
+      "level": 3,
+      "title": "Important Rules",
+      "start": 333
+    },
+    {
+      "level": 3,
+      "title": "Current Wave 1 Results (7 scenarios)",
+      "start": 344
+    },
+    {
+      "level": 3,
+      "title": "Files",
+      "start": 356
+    },
+    {
+      "level": 3,
+      "title": "Cycle Detection Reference",
+      "start": 368
+    },
+    {
+      "level": 3,
+      "title": "Files",
+      "start": 376
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 389
+    },
+    {
+      "level": 3,
+      "title": "Bug Fixes",
+      "start": 394
+    },
+    {
+      "level": 3,
+      "title": "Features / Refactors",
+      "start": 406
+    },
+    {
+      "level": 3,
+      "title": "Principles",
+      "start": 410
+    },
+    {
+      "level": 2,
+      "title": "Open Design: Blocker Resolution Phase",
+      "start": 426
+    },
+    {
+      "level": 2,
+      "title": "System Visualization",
+      "start": 434
+    },
+    {
+      "level": 3,
+      "title": "Diagrams",
+      "start": 438
+    },
+    {
+      "level": 3,
+      "title": "Visual Code Editor",
+      "start": 454
+    },
+    {
+      "level": 3,
+      "title": "Bug Triage: Where to Fix",
+      "start": 460
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "Agent-Implementation-Skill",
+      "start": 1,
+      "end": 2,
+      "line_count": 2,
+      "text": "# Agent-Implementation-Skill\n"
+    },
+    {
+      "level": 2,
+      "title": "Project Structure",
+      "start": 3,
+      "end": 28,
+      "line_count": 26,
+      "text": "## Project Structure\n\n```\n\u251c\u2500\u2500 governance/              # Project governance layer\n\u2502   \u251c\u2500\u2500 problems/index.md    # Why this code exists (PRB-XXXX)\n\u2502   \u251c\u2500\u2500 patterns/index.md    # How we solve recurring problems (PAT-XXXX)\n\u2502   \u251c\u2500\u2500 audit/prompt.md      # Audit process for external models\n\u2502   \u251c\u2500\u2500 audit/history.md     # Cumulative audit log (105 rounds)\n\u2502   \u251c\u2500\u2500 design/              # Design rationale documents\n\u2502   \u2514\u2500\u2500 risk-register.md     # Landed-code risks and debt\n\u251c\u2500\u2500 philosophy/              # Values and principles\n\u2502   \u251c\u2500\u2500 design-philosophy-analysis.md\n\u2502   \u251c\u2500\u2500 design-philosophy-notes.md\n\u2502   \u251c\u2500\u2500 profiles/PHI-global.md\n\u2502   \u2514\u2500\u2500 region-profile-map.md\n\u251c\u2500\u2500 system-synthesis.md      # Architecture + governance connections\n\u251c\u2500\u2500 src/                     # Deployed skill code\n\u2502   \u251c\u2500\u2500 <system>/agents/     # Agent definitions owned by each system (57 agents across 15 systems)\n\u2502   \u251c\u2500\u2500 scripts/             # Runtime orchestration scripts\n\u2502   \u251c\u2500\u2500 SKILL.md             # Skill entry point\n\u2502   \u251c\u2500\u2500 implement.md         # Implementation pipeline\n\u2502   \u2514\u2500\u2500 ...                  # Other skill docs\n\u251c\u2500\u2500 evals/                   # Evaluation scenarios\n\u2514\u2500\u2500 tests/                   # Test suite\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 29,
+      "end": 32,
+      "line_count": 4,
+      "text": "## Running Sub-Agents\n\nSub-agents are invoked via the `agents` binary (`~/.local/bin/agents`), not through Claude Code's built-in Agent tool. The binary is the CLI mode of [Oulipoly Agent Runner](https://github.com/nestharus/agent-runner).\n"
+    },
+    {
+      "level": 3,
+      "title": "CLI Syntax",
+      "start": 33,
+      "end": 50,
+      "line_count": 18,
+      "text": "### CLI Syntax\n\n```bash\nagents [OPTIONS] [AGENT] [PROMPT...]\n```\n\n| Option | Description |\n|--------|-------------|\n| `-m, --model <MODEL>` | Execute a model directly (no agent file) |\n| `-a, --agent-file <AGENT_FILE>` | Path to an agent `.md` file (any location) |\n| `-f, --file <FILE>` | Read prompt from file |\n| `-p, --project <PROJECT>` | Working directory for the subprocess |\n| `-i, --input <KEY=VALUE>` | Pass model inputs as key=value (repeatable) |\n| `--models-dir <MODELS_DIR>` | Override models directory |\n| `--agents-dir <AGENTS_DIR>` | Override agents directory |\n\n**Prompt resolution priority:** `--file` > positional arguments > stdin\n"
+    },
+    {
+      "level": 3,
+      "title": "Common Invocation Patterns",
+      "start": 51,
+      "end": 69,
+      "line_count": 19,
+      "text": "### Common Invocation Patterns\n\n```bash\n# Model + prompt file (pipeline standard)\nagents --model gpt-high --file prompt.md\n\n# Agent file + model override\nagents --agent-file src/staleness/agents/alignment-judge.md --model claude-opus --file prompt.md\n\n# Named agent (resolved from agents directory)\nagents code-reviewer \"Review this function\"\n\n# Pipe prompt from stdin\ncat spec.md | agents --model glm\n\n# Set working directory for the subprocess\nagents --model gpt-high -p /path/to/repo --file prompt.md\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Agent File Format",
+      "start": 70,
+      "end": 85,
+      "line_count": 16,
+      "text": "### Agent File Format\n\nAgent definitions live in `src/<system>/agents/*.md`. Each is a markdown file with YAML frontmatter:\n\n```markdown\n---\ndescription: 'One-line description of what this agent does'\nmodel: claude-opus\noutput_format: ''\n---\n\nSystem prompt / reasoning method goes here.\n```\n\nThe `model` field sets the default model. It can be overridden with `--model` at invocation time.\n"
+    },
+    {
+      "level": 3,
+      "title": "Model Configuration",
+      "start": 86,
+      "end": 111,
+      "line_count": 26,
+      "text": "### Model Configuration\n\nModel configs are TOML files in `~/.config/oulipoly-agent-runner/models/` (one per model). The filename minus `.toml` is the model name used with `--model`.\n\nSingle provider:\n```toml\ncommand = \"claude\"\nargs = [\"-p\", \"--model\", \"haiku\"]\nprompt_mode = \"stdin\"\n```\n\nMultiple providers (load balanced):\n```toml\nprompt_mode = \"arg\"\n\n[[providers]]\ncommand = \"codex\"\nargs = [\"exec\", \"-m\", \"gpt-5.3-codex\"]\n\n[[providers]]\ncommand = \"codex2\"\nargs = [\"exec\", \"-m\", \"gpt-5.3-codex\"]\n```\n\nLoad balancing is automatic: round-robin with error avoidance (providers with 3+ errors in the last 30 minutes are deprioritized). State is stored in SQLite at `~/.local/share/oulipoly-agent-runner/state.db`.\n"
+    },
+    {
+      "level": 3,
+      "title": "Input Schema",
+      "start": 112,
+      "end": 138,
+      "line_count": 27,
+      "text": "### Input Schema\n\nModels can declare typed input parameters via `[[inputs]]` in their TOML configs. The runner validates user-supplied `-i key=value` flags against the schema and maps them to CLI flags on the wrapped command.\n\n| Field | Required | Description |\n|-------|----------|-------------|\n| `name` | yes | Input identifier |\n| `type` | yes | `string`, `integer`, `number`, `boolean`, `enum`, `array` |\n| `flag` | no | CLI flag to pass to the command (e.g. `\"--size\"`) |\n| `required` | no | Fail if not provided and no default |\n| `default_input` | no | This is the unnamed positional input (the \"prompt\") |\n| `default` | no | Default value when not provided by user |\n| `description` | no | Human/AI-readable description |\n| `options` | enum only | List of valid values |\n| `min` / `max` | integer/number | Value range bounds |\n| `item_type` | array only | Type of array elements |\n| `min_items` / `max_items` | array only | Array length bounds |\n\n**How inputs flow:**\n- The `default_input` receives the positional prompt (args, `--file`, or stdin)\n- Named inputs (`-i key=value`) are validated against the schema, then passed as `--flag value` to the command\n- Repeated `-i` with the same key collects into an array (e.g. `-i images=a.png -i images=b.png`)\n- Inputs with defaults are passed automatically when not overridden\n- Unknown inputs pass through as `--key value`\n\n**Stdout is raw bytes** \u2014 commands can output binary data (images, videos) and it passes through unmodified. Pipe to a file to save: `agents -m seedream-t2i \"A cat\" > cat.jpeg`\n"
+    },
+    {
+      "level": 3,
+      "title": "Multimodal Models",
+      "start": 139,
+      "end": 160,
+      "line_count": 22,
+      "text": "### Multimodal Models\n\nImage/video generation models use wrapper scripts as their `command`. The scripts handle HTTP APIs, polling, downloading \u2014 the runner just validates inputs and passes flags through.\n\n```bash\n# Generate an image (raw bytes on stdout, pipe to file)\nagents -m seedream-t2i \"A sunset over mountains\" > sunset.jpeg\n\n# Generate a video\nagents -m seedance-t2v-low -i duration=5 -i resolution=480p \"A whale swimming\" > whale.mp4\n\n# Image-to-video with source image\nagents -m seedance-i2v-fast -i image=./photo.jpg \"Slow camera orbit\" > orbit.mp4\n\n# Image editing with reference images\nagents -m seedream-i2i -i image=input.png \"Make it warmer\" > edited.jpeg\n\n# Chain: generate an image then animate it\nagents -m seedream-t2i \"A cat painting\" > cat.jpeg\nagents -m seedance-i2v-low -i image=cat.jpeg \"The cat blinks slowly\" > cat.mp4\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Available Models",
+      "start": 161,
+      "end": 166,
+      "line_count": 6,
+      "text": "### Available Models\n\nSee `~/.config/oulipoly-agent-runner/models/` for the full list. Model selection guidance is in `src/models.md`.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Cleanup Backlog",
+      "start": 167,
+      "end": 172,
+      "line_count": 6,
+      "text": "## Cleanup Backlog\n\n**`docs/cleanup-backlog.md`** \u2014 Tracked structural issues discovered during reorganization. 153 items (most DONE). Methodology \u00a71-16 covers: dead code, naming, god functions, structural placement, type safety gaps, missing domain concepts, architectural layers, system health, coupling, cohesion, concern decomposition, contract surface, DI gaps, optional fields / discriminated unions, magic strings / enums, duplicate code. Check this file before starting any cleanup work.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Governance Documents",
+      "start": 173,
+      "end": 184,
+      "line_count": 12,
+      "text": "## Governance Documents\n\nThese are first-class project artifacts under source control:\n\n| Document | Purpose | Maintained by |\n|----------|---------|---------------|\n| `governance/problems/index.md` | Problem archive \u2014 why code exists | Audit process + manual |\n| `governance/patterns/index.md` | Pattern catalog \u2014 how we solve things | Audit process |\n| `governance/risk-register.md` | Landed-code risks | Post-impl assessment |\n| `philosophy/` | Design values and principles | User + audit process |\n| `system-synthesis.md` | Architecture + governance connections | Audit process + manual |\n"
+    },
+    {
+      "level": 3,
+      "title": "Working with Governance Docs",
+      "start": 185,
+      "end": 193,
+      "line_count": 9,
+      "text": "### Working with Governance Docs\n\n- **Before proposing code changes**: Check `governance/patterns/index.md` for applicable patterns\n- **Before creating new artifacts**: Check `governance/problems/index.md` for the problem being solved\n- **Pattern violations**: Must propose a pattern delta (Tier 1) before the code change (Tier 2)\n- **New problem surfaces**: Add to problem archive with provenance\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Audit Cycle: Handling New Responses",
+      "start": 194,
+      "end": 197,
+      "line_count": 4,
+      "text": "## Audit Cycle: Handling New Responses\n\nWhen the user says **\"New response up\"** or similar, execute the full Round N cycle below.\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 1: Read Inputs",
+      "start": 198,
+      "end": 204,
+      "line_count": 7,
+      "text": "### Step 1: Read Inputs\n\nRead in parallel:\n\n- `~/work/tmp/execution-philosophy/response.md` \u2014 the new audit response\n- `governance/audit/history.md` \u2014 full cycle history for cycle detection\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 2: Assess Violations",
+      "start": 205,
+      "end": 214,
+      "line_count": 10,
+      "text": "### Step 2: Assess Violations\n\nFor each violation in the response, check audit history:\n\n- **Cycle** \u2014 the exact fix was already tried in a prior round and reverted or dismissed. Do NOT reimplement. Note the round numbers.\n- **False positive** \u2014 the \"violation\" describes behavior that is intentional by design. Dismiss with rationale.\n- **New surface** \u2014 a real violation at a code location not previously addressed. **Implement it.**\n\nDocument your cycle/dismiss decisions clearly before writing any code.\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 3: Implement",
+      "start": 215,
+      "end": 226,
+      "line_count": 12,
+      "text": "### Step 3: Implement\n\nFor each non-dismissed violation, make the minimal code change that resolves it.\n\nConsult `governance/patterns/index.md` for applicable patterns. Key patterns:\n\n- **PAT-0001 (Corruption Preservation)**: malformed JSON \u2192 `rename_malformed()` + fail-closed\n- **PAT-0002 (Prompt Safety)**: all prompts through `write_validated_prompt()`\n- **PAT-0003 (Path Registry)**: all paths from `PathRegistry`\n- **PAT-0005 (Policy-Driven Models)**: no hardcoded model strings\n- **PAT-0008 (Fail-Closed)**: on uncertainty, default to conservative behavior\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 4: Run Tests",
+      "start": 227,
+      "end": 235,
+      "line_count": 9,
+      "text": "### Step 4: Run Tests\n\n```bash\ncd /home/nes/projects/agent-implementation-skill\nuv run python -m pytest -x -q\n```\n\nFix any failures before proceeding.\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 5: Commit and Push",
+      "start": 236,
+      "end": 246,
+      "line_count": 11,
+      "text": "### Step 5: Commit and Push\n\n```bash\ncd /home/nes/projects/agent-implementation-skill\ngit add -A\ngit commit -m \"feat(audit): Round N \u2014 <summary>\"\ngit push\n```\n\nNote the commit SHA for the audit history entry.\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 6: Update Audit History",
+      "start": 247,
+      "end": 259,
+      "line_count": 13,
+      "text": "### Step 6: Update Audit History\n\nEdit `governance/audit/history.md`:\n\n1. **Per-round index table** \u2014 add row: `| N | <sha7> | <test count> | <violation count> | <summary> |`\n2. **Active Concern Threads** \u2014 update threads this round progressed\n3. **Round Details** \u2014 append `#### Round N \u2014 Commit <sha>` section\n\nAlso sync a copy to the external working directory:\n```bash\ncp governance/audit/history.md ~/work/tmp/execution-philosophy/audit-history.md\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 7: Update Governance Artifacts",
+      "start": 260,
+      "end": 267,
+      "line_count": 8,
+      "text": "### Step 7: Update Governance Artifacts\n\nIf the round's changes affect governance:\n- **New patterns discovered** \u2192 update `governance/patterns/index.md`\n- **Problems resolved or evolved** \u2192 update `governance/problems/index.md`\n- **Risk register entries** \u2192 update `governance/risk-register.md`\n- **Synthesis changes** \u2192 update `system-synthesis.md`\n"
+    },
+    {
+      "level": 3,
+      "title": "Step 8: Rezip Codebase",
+      "start": 268,
+      "end": 279,
+      "line_count": 12,
+      "text": "### Step 8: Rezip Codebase\n\nDelete the old zip and recreate:\n\n```bash\ncd /home/nes/projects/agent-implementation-skill\nrm -f ~/work/tmp/execution-philosophy/codebase.zip\nzip -r ~/work/tmp/execution-philosophy/codebase.zip src/ evals/ tests/ governance/ philosophy/ system-synthesis.md -x '*__pycache__*' -x 'src/.venv/*' -x '*:Zone.Identifier'\n```\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Agentic Eval QA Process",
+      "start": 280,
+      "end": 285,
+      "line_count": 6,
+      "text": "## Agentic Eval QA Process\n\nEnd-to-end behavioral testing of the multi-agent workflow system. Evals pre-seed\nrealistic workspace state, trigger real workflows with QA interception, and validate\noutcomes with structural checks + an LLM judge.\n"
+    },
+    {
+      "level": 3,
+      "title": "Running Evals",
+      "start": 286,
+      "end": 306,
+      "line_count": 21,
+      "text": "### Running Evals\n\n```bash\ncd /home/nes/projects/agent-implementation-skill\n\n# List all scenarios\nuv run agentic-evals --list\n\n# Run one scenario (cheap \u2192 moderate \u2192 expensive)\nuv run agentic-evals --scenario <id> --keep-failed\n\n# Run by cost tier\nuv run agentic-evals --max-cost-tier cheap --keep-failed\n\n# Run all\nuv run agentic-evals --keep-all\n```\n\nScenarios live in `evals/agentic/fixtures/*/scenario.yaml`. Each has a cost tier\n(cheap=180s, moderate=600s, expensive=1500s timeout).\n"
+    },
+    {
+      "level": 3,
+      "title": "Eval Flow",
+      "start": 307,
+      "end": 317,
+      "line_count": 11,
+      "text": "### Eval Flow\n\n1. **Seed** \u2014 isolated temp planspace/codespace from fixture files, `parameters.json`\n   with `qa_mode: true` auto-injected\n2. **Trigger** \u2014 run real workflow entry points (readiness gate, dispatcher, scan,\n   philosophy bootstrap) via trigger adapters\n3. **Collect** \u2014 gather output files, JSON, DB rows\n4. **Structural checks** \u2014 file existence, JSON validity, DB row counts, heading checks\n5. **Semantic judge** \u2014 GLM judge via `agents --model glm --agent-file agents/eval-judge.md`\n   compares outputs against answer key\n"
+    },
+    {
+      "level": 3,
+      "title": "Investigating Failures",
+      "start": 318,
+      "end": 332,
+      "line_count": 15,
+      "text": "### Investigating Failures\n\nWhen evals expose behavioral gaps:\n\n1. **Observe and report** \u2014 document the exact failure from the eval report\n2. **Dispatch investigation agents** \u2014 use `agents --model gpt-high --file <prompt.md>`\n   to investigate root causes in the production code\n3. **Build design prompt** \u2014 combine investigation findings into a design request with\n   exact file paths, root causes, and constraints\n4. **Get design response** \u2014 pass the design prompt to an external model for solution design\n5. **Implement fixes** \u2014 apply the design to production code\n6. **Re-run eval** \u2014 verify the fix by re-running the specific scenario\n\nInvestigation prompts and findings go in `.tmp/agentic-evals/`.\n"
+    },
+    {
+      "level": 3,
+      "title": "Important Rules",
+      "start": 333,
+      "end": 343,
+      "line_count": 11,
+      "text": "### Important Rules\n\n- **QA mode is mandatory** \u2014 all eval runs use `qa_mode: true` so dispatched agents\n  are intercepted, not live\n- **Observe, report, stop** \u2014 when monitoring an eval: do NOT manually write artifacts\n  to unblock a stuck pipeline, do NOT send resume signals, do NOT pre-seed files that\n  agents should have produced\n- The ONLY thing that should be in the test is the spec. Nothing else.\n- **Real agent calls** \u2014 evals exercise real LLM calls via the `agents` binary; cost\n  and latency are real\n"
+    },
+    {
+      "level": 3,
+      "title": "Current Wave 1 Results (7 scenarios)",
+      "start": 344,
+      "end": 355,
+      "line_count": 12,
+      "text": "### Current Wave 1 Results (7 scenarios)\n\n| Scenario | Tier | Result | Notes |\n|----------|------|--------|-------|\n| readiness-triggers-research-planner | cheap | PASS | |\n| research-planner-routes-value-choice-upward | cheap | PASS | |\n| research-branch-stale-after-input-change | cheap | PASS | |\n| scan-quick-greenfield-related-files | moderate | PASS | |\n| scan-brownfield-related-files-revalidation | moderate | PASS | Fixed: fail-closed signal handling + deterministic stale detection |\n| philosophy-bootstrap-from-user-source | moderate | PASS | Fixed: principle extraction scoped to ## Principles headings |\n| research-flow-synthesizes-dossier | expensive | PENDING | Not yet run at full timeout |\n"
+    },
+    {
+      "level": 3,
+      "title": "Files",
+      "start": 356,
+      "end": 367,
+      "line_count": 12,
+      "text": "### Files\n\n| Path | Purpose |\n|------|---------|\n| `evals/agentic/` | Harness package (11 modules) |\n| `evals/agentic/fixtures/` | Scenario fixtures (YAML + seed files) |\n| `agents/eval-judge.md` | GLM judge agent definition |\n| `.tmp/agentic-evals/` | Investigation prompts and findings |\n| `~/work/tmp/execution-philosophy/combined-design-prompt.md` | Current design request for fixes |\n\n---\n"
+    },
+    {
+      "level": 3,
+      "title": "Cycle Detection Reference",
+      "start": 368,
+      "end": 375,
+      "line_count": 8,
+      "text": "### Cycle Detection Reference\n\nCommon dismissal patterns from history:\n\n- **Tests / pyproject.toml absent from zip** \u2014 tests/ included in bundle as of R118. pyproject.toml ships under src/.\n- **Model names in `models.md`** \u2014 `gpt-5.4-high` and `gpt-5.4-xhigh` are current names.\n- **Any violation in a \"Settled Concerns\" section** \u2014 already guarded by tests; re-raising is a cycle.\n"
+    },
+    {
+      "level": 3,
+      "title": "Files",
+      "start": 376,
+      "end": 388,
+      "line_count": 13,
+      "text": "### Files\n\n| Path | Purpose |\n|------|---------|\n| `~/work/tmp/execution-philosophy/response.md` | Current round's audit response |\n| `~/work/tmp/execution-philosophy/codebase.zip` | Audit bundle (single zip with everything) |\n| `governance/audit/prompt.md` | Audit prompt for external models (in repo) |\n| `governance/audit/history.md` | Authoritative audit history (in repo) |\n| `governance/patterns/index.md` | Pattern catalog (in repo) |\n| `governance/problems/index.md` | Problem archive (in repo) |\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 389,
+      "end": 393,
+      "line_count": 5,
+      "text": "## Implementation & Bug-Fix Workflow\n\nAll code changes \u2014 bug fixes, features, refactors \u2014 follow the same pipeline.\nThe only difference between a bug fix and a feature is that bugs start with RCA.\n"
+    },
+    {
+      "level": 3,
+      "title": "Bug Fixes",
+      "start": 394,
+      "end": 405,
+      "line_count": 12,
+      "text": "### Bug Fixes\n\n| Step | Model | Role |\n|------|-------|------|\n| 1. RCA | `gpt-high` | Investigate root cause. Read code, trace failure, produce report. Do NOT propose fixes. |\n| 2. Proposal | `gpt-high` | Propose a fix based on RCA findings. Write a design proposal. Do NOT implement. |\n| 3. Alignment | `claude-opus` | Check proposal against governance (patterns, philosophy, problems). Directional coherence, not coverage. Identify contradictions and gaps. Returns ALIGNED, MISALIGNED, or NEEDS_REVISION. |\n| 4. Iterate | \u2014 | If alignment returns NEEDS_REVISION or MISALIGNED: revise proposal, re-run alignment. **Loop until ALIGNED.** Do NOT proceed to risk assessment until alignment passes. |\n| 5. Risk assessment | 2x `claude-opus` | **Only after alignment passes.** Launch two sub-agents **in parallel**: audit risk + alignment risk. Can we reliably research this change? Can we reliably check direction? If either is too high, decompose into smaller pieces. |\n| 6. Research | `gpt-high` | **Only after risk assessment passes.** For each piece, research hookpoints in the codebase. Understand what exists. Avoid building parallel systems. |\n| 7. Implement | `gpt-high` | **Only after research completes.** Launch implementation sub-agents for each piece. |\n"
+    },
+    {
+      "level": 3,
+      "title": "Features / Refactors",
+      "start": 406,
+      "end": 409,
+      "line_count": 4,
+      "text": "### Features / Refactors\n\nSame pipeline, skip step 1 (RCA). Same model assignments apply.\n"
+    },
+    {
+      "level": 3,
+      "title": "Principles",
+      "start": 410,
+      "end": 425,
+      "line_count": 16,
+      "text": "### Principles\n\n- **Separate agents for separate concerns** \u2014 RCA agents don't propose. Proposal\n  agents don't implement. Alignment agents don't fix. Each agent has one job.\n- **Risk drives decomposition** \u2014 Don't decompose because \"it's complex.\" Decompose\n  because audit risk or alignment risk exceeds what one agent can handle reliably.\n- **Alignment is directional** \u2014 \"Is this going the right way?\" not \"Did we cover\n  everything?\" Alignment is sparse, checking concerns where there's risk of mismatch.\n- **Research before implementation** \u2014 Every piece gets codebase research to find\n  hookpoints and avoid building parallel systems. This is the most common failure mode.\n- **Iterate until it passes** \u2014 Don't implement a proposal that hasn't passed\n  alignment and risk assessment. The cost of iterating on a proposal is far less\n  than the cost of implementing the wrong thing.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Open Design: Blocker Resolution Phase",
+      "start": 426,
+      "end": 433,
+      "line_count": 8,
+      "text": "## Open Design: Blocker Resolution Phase\n\n**`~/work/tmp/execution-philosophy/blocker-resolution-design.md`** \u2014 Design document for the blocker resolution phase and post-implementation verification/testing system. QA runs 8-9 revealed that sections blocked at the readiness gate have no mechanism to create plans to resolve the missing items. The resolution phase extends coordination to run between reconciliation and implementation. Settled: resolution reuses coordination infrastructure, doesn't bypass the readiness gate, risk-assesses plans before implementation. Open problem: blockers are free-text with no stable identifiers, making cross-section cycle detection unreliable.\n\nThe same design doc specifies verification and testing as new task types woven into existing loops (PAT-0016). Four new agents across two new system namespaces: `src/verification/` (structural-verifier, integration-verifier) and `src/testing/` (behavioral-tester, test-rca). Findings feed back through existing channels (`impl_problems`, `BlockerProblem`, coordination). See `system-synthesis.md` Verification & Testing region for details.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "System Visualization",
+      "start": 434,
+      "end": 437,
+      "line_count": 4,
+      "text": "## System Visualization\n\nWe are currently building visual representations of the system so a human can review what was built and validate that the right thing exists. Two locations are involved:\n"
+    },
+    {
+      "level": 3,
+      "title": "Diagrams",
+      "start": 438,
+      "end": 453,
+      "line_count": 16,
+      "text": "### Diagrams\n\n**`execution-philosophy/diagrams/`** \u2014 Mermaid/diagram source files representing the system. Contains `generate.py` for rendering, `.map` files (codemap, lifemap), agent definitions, tools, and a `site/` output directory. These diagrams are the primary artifact for human review of the system's structure and flow.\n\n```bash\n# Regenerate site (uses cached LLM content, only re-renders HTML/JS/CSS)\ncd /home/nes/projects/agent-implementation-skill/execution-philosophy/diagrams\npython3 generate.py\n\n# Serve the site on port 8742 (run from site/ so index.html is at root)\ncd /home/nes/projects/agent-implementation-skill/execution-philosophy/diagrams/site\npython3 -m http.server 8742\n```\n\nDo NOT use `generate.py --serve` \u2014 it serves from the wrong directory (requires `/site/` in URL) and opens a browser window. Generate and serve separately as shown above. Site is at `http://localhost:8742/`.\n"
+    },
+    {
+      "level": 3,
+      "title": "Visual Code Editor",
+      "start": 454,
+      "end": 459,
+      "line_count": 6,
+      "text": "### Visual Code Editor\n\n**`~/projects/visual-code-editor`** \u2014 A separate project used to render and interact with the system diagrams. Currently under active development (bug fixing and feature work) to support the visualization effort. The editor is the tool through which humans inspect the diagrams and confirm the system matches intent.\n\nSee `~/projects/visual-code-editor/AGENTS.md` for visual design workflows, SVG asset pipeline, animation pipeline, and model roles specific to the editor.\n"
+    },
+    {
+      "level": 3,
+      "title": "Bug Triage: Where to Fix",
+      "start": 460,
+      "end": 464,
+      "line_count": 5,
+      "text": "### Bug Triage: Where to Fix\n\n- **Diagram content issues** (wrong labels, missing nodes, incorrect connections, data representing agent-implementation-skill) \u2192 fix in `execution-philosophy/diagrams/` (this repo)\n- **Visualization bugs** (edge rendering, card highlighting, animations, hover behavior, layout, missing features) \u2192 fix in `~/projects/visual-code-editor`\n"
+    }
+  ]
+}
