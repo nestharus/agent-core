@@ -1,6 +1,6 @@
 ---
 description: 'Manage pipeline scratch artifact naming and gitignore in worktrees. Standard filenames inside a configured worktree for prompts, responses, runner scripts, logs, and per-phase outputs. Prevents cross-session collisions on /tmp.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Secondary FastAPI review: framework idioms, service/controller/repository architecture, state+concurrency, Pydantic contracts, testing+observability.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

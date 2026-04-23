@@ -1,6 +1,6 @@
 ---
 description: 'Review PRs: risk assessment, research, test-audit, decomposition, and post comments.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

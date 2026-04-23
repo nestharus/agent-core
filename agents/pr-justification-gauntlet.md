@@ -1,6 +1,6 @@
 ---
 description: 'Multi-round adversarial justification workflow for PR review. Interrogator ↔ researcher exchange with value assessment and per-thread drop/backlog/keep adjudication.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

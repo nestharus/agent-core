@@ -1,6 +1,6 @@
 ---
 description: 'Audit and edit AGENTS.md + the agents/ ecosystem against architecture rules. Procedures live in operator files; AGENTS.md is routing + workflow topology only. Audit mode reports; edit mode applies changes.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Create, list, sync, and manage git worktrees for feature branches.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Run CodeRabbit review loop on a branch. Iterate until value drops to zero (typically 3-6 passes). Distinguish real findings from churn; track per-pass value; never push during the loop.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

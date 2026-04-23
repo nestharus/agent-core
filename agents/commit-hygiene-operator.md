@@ -1,6 +1,6 @@
 ---
 description: 'Reorganize PR commits for incremental review (split, reorder, rewrite messages) with per-commit test verification, then force-push. Audit-only mode posts findings without rewriting.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

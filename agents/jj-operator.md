@@ -1,6 +1,6 @@
 ---
 description: 'Manage branch dependencies, rebases, squashes, and integration branches using jj (Jujutsu).'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 
