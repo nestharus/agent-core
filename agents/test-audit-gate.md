@@ -63,12 +63,12 @@ spec alignment, test quality, and coverage delta.
 - `repo_root`: repo checkout to audit (the `agents -p` working directory)
 - `scratch_dir`: writable directory for prompt files and reports
 - `spec_dir` (default `${planning_root}/coverage`): directory containing `spec-*.md`
-- `repo` (default `lama-ai-RFQ/RFQautomation`): GitHub repository slug
-- `ci_workflow_name` (default `tests.yml`): workflow to query for existing coverage artifacts
+- `repo` (required in `pr-review` mode): GitHub repository slug
+- `ci_workflow_name` (required in `pr-review` mode): workflow to query for existing coverage artifacts
 - `coverage_reports_root` (required in `pr-review` mode): artifact root containing CI coverage baselines (for example `s3://<bucket>/coverage-reports`)
 - `pr_number` (required when `mode=pr-review`)
 
-Portability note: Defaults assume RFQ Automation layout. Override inputs for other repos/buckets/workflows.
+Portability note: Override inputs when your repo, workflow names, or coverage artifact layout differ from the defaults above.
 
 ## Inputs
 

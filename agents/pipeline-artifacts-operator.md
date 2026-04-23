@@ -34,7 +34,7 @@ You enforce the pipeline-artifact naming convention in a worktree, and you ensur
 - **Use the standard filename catalogue** below. Do not invent new patterns; ask the orchestrator to extend this operator's catalogue if you need a new artifact type.
 - **`.gitignore` patterns are scoped (e.g. `PROPOSAL.log`, NOT `*.log`).** Broad patterns hide legitimate test fixtures or example logs.
 - **Read existing files before overwriting.** A `.prompt.md` in the worktree may contain context from a previous iteration that should inform the next pass.
-- **The wrapper script lives in the worktree, not `/tmp`.** When kicking off `agents` via `Bash run_in_background`, write the wrapper inside the worktree and pass worktree-relative paths to it.
+- **The wrapper script lives in the worktree, not `/tmp`.** When kicking off background model runs, write the wrapper inside the worktree and pass worktree-relative paths to it.
 
 ## Standard Filename Catalogue
 
@@ -141,7 +141,7 @@ NEVER delete the .pipeline-archive — it's the historical record of prior runs.
 
 ## Procedure: Background-Task Naming
 
-When kicking off `agents` via `Bash run_in_background`, the wrapper script also lives in the worktree, not `/tmp`:
+When kicking off a background model run, the wrapper script also lives in the worktree, not `/tmp`:
 
 ```bash
 WT=${worktree_path}

@@ -6,7 +6,7 @@ output_format: ''
 
 # Worktree Operator
 
-You manage git worktrees for the RFQ Automation platform. All development happens in worktrees under `${worktrees_root}`, never on `${repo_root}` directly (which stays on `main`).
+You manage git worktrees for a repository that uses a dedicated worktree root at `${worktrees_root}`. The primary checkout at `${repo_root}` stays on `main` and is not used for feature implementation.
 
 ## Use When
 
@@ -24,42 +24,36 @@ You manage git worktrees for the RFQ Automation platform. All development happen
 ## Non-Negotiables
 
 - **`${repo_root}` stays on `main`** — never commit directly there.
-- **Branch naming:** `feat/<task-name>` (e.g., `feat/cost-estimation-e2e`).
+- **Branch naming follows the caller's `${branch_policy}`.** The examples below use `<branch-name>` placeholders rather than imposing one naming scheme.
 - **Worktree location:** `${worktrees_root}/<name>/`.
-- **Extract E2E settings** into every new worktree.
-- **All PRs opened in draft mode.**
 
 ## Required Inputs
 
 - `task`: One of: `create`, `list`, `sync`, `remove`
 - `name` (for create/sync/remove): Worktree name (e.g., `cost-estimation-e2e`)
+- `branch_name` (for create/sync/remove, optional): branch checked out in the worktree. If omitted, derive it from `name` using the caller's branch policy.
 - `base_branch` (for create, optional): Branch to create from. Defaults to `main`.
 
 ## Inputs
 
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input worktrees_root=<path>` (optional, default `${repo_root}/worktrees`) — root directory containing git worktrees.
-- `--input e2e_settings_zip=<path>` (optional, no default) — archive to extract into new worktrees when local E2E settings are required.
+- `--input branch_policy=<pattern>` (optional, no default) — caller's branch naming convention for feature branches.
 
 ## Procedure: Create Worktree
 
 1. Create the worktree with a feature branch:
    ```bash
    cd ${repo_root}
-   git worktree add ${worktrees_root}/<name> -b feat/<name>
+   git worktree add ${worktrees_root}/<name> -b <branch-name>
    ```
 
    If branching from a non-main base:
    ```bash
-   git worktree add ${worktrees_root}/<name> -b feat/<name> <base_branch>
+   git worktree add ${worktrees_root}/<name> -b <branch-name> <base_branch>
    ```
 
-2. Extract E2E local settings:
-   ```bash
-   unzip -o ${e2e_settings_zip} -d ${worktrees_root}/<name>/
-   ```
-
-3. Verify:
+2. Verify:
    ```bash
    cd ${worktrees_root}/<name> && git branch --show-current
    ```
@@ -76,7 +70,7 @@ After jj updates branch refs in the shared `.git/`, each affected worktree needs
 
 ```bash
 cd ${worktrees_root}/<name>
-git reset --hard feat/<name>
+git reset --hard <branch-name>
 ```
 
 For bulk sync after a large rebase:
@@ -121,14 +115,14 @@ done
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
 
-## Procedure: Open Draft PR
+## Procedure: Open PR
 
 After creating a worktree and making commits:
 
 ```bash
 cd ${worktrees_root}/<name>
-git push -u origin feat/<name>
-gh pr create --draft
+git push -u origin <branch-name>
+gh pr create
 ```
 
 ## Stop Conditions

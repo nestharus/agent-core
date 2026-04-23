@@ -55,7 +55,7 @@ Phase 4b) with an adversarial loop.
 - `work_dir`: scratch directory (the caller's `$WORK_DIR` from
   `pr-review-operator.md`). The workflow creates `$work_dir/justification/`
   underneath.
-- `repo` (optional, default `lama-ai-RFQ/RFQautomation`)
+- `repo` (optional): repository in `OWNER/REPO` format. If omitted, resolve it from the checkout's `origin` remote before running the workflow.
 - `repo_root` (required): target repository root.
 - `planning_root` (optional, default `${repo_root}/planning`): where initiative
   docs, risk registers, and handoffs live. Handed to the researcher.
@@ -181,7 +181,6 @@ cat > "$RD/researcher-prompt.md" <<EOF
 ## Project context
 - Main repo: $repo_root
 - Planning / initiatives: $planning_root
-- JIRA auth env: \$JIRA_API_KEY + \$AZURE_EMAIL
 - Dependent PRs on current PR #$pr_number: check \`gh pr list\` and linked issues
 
 ## Open threads

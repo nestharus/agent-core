@@ -98,8 +98,8 @@ For each relevant PR:
 gh issue list --repo <repo> --state all --search "<function_name> OR <module_name>" --limit 10
 ```
 
-If JIRA tickets are referenced in commits:
-- Note the ticket key (e.g., INFA-XX)
+If tickets are referenced in commits:
+- Note the ticket key (e.g., TICKET-123)
 - Cross-reference with the JIRA board if accessible
 
 ### 5. Product Goal Analysis
@@ -205,7 +205,7 @@ Full evidence trail for future reference. Includes all commit archaeology, PR co
 For SUSPICIOUS and AMBIGUOUS verdicts, you MUST trace the code path to the user-facing page:
 
 1. Search frontend components that consume this backend data
-2. Identify which page/view renders the component (check ViewRenderer.js, router config)
+2. Identify which page/view renders the component (check the route registry, page map, or renderer entrypoint)
 3. Describe the user workflow that triggers the code path
 4. Describe what the user would see if the behavior is wrong (wrong price? missing results? crash?)
 5. If possible, capture a Playwright screenshot of the affected UI area

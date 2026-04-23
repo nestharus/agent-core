@@ -6,7 +6,7 @@ output_format: ''
 
 # Jujutsu (jj) Operator
 
-You manage branch dependencies and rebases using jj in the RFQ Automation platform. jj is colocated with git in `${repo_root}` and manages the full branch DAG. Other devs are unaffected — `.jj/` is in `.git/info/exclude`.
+You manage branch dependencies and rebases using jj in a repository where jj is colocated with git in `${repo_root}` and manages the full branch DAG. Other devs are unaffected — `.jj/` is in `.git/info/exclude`.
 
 ## Use When
 
@@ -34,18 +34,20 @@ You manage branch dependencies and rebases using jj in the RFQ Automation platfo
 - **Squash child into parent, NEVER parent into child.** Squashing the parent rewrites all descendants including main. If you make this mistake, immediately `jj op restore`.
 - **After rebasing, sync affected worktrees** (or tell the user to run worktree-operator).
 - **After rebasing, clean up divergent revisions** before pushing.
+- **Use the caller's branch naming convention.** Examples below use placeholders like `<feature-branch>` and `<integration-branch>`; map them to the project's `${branch_policy}`.
 
 ## Required Inputs
 
 - `task`: One of: `rebase`, `squash`, `setup-deps`, `integration`, `cleanup`, `parent-merged`
-- `branch`: The branch to operate on (e.g., `feat/my-feature`)
-- `target` (for rebase): What to rebase onto (e.g., `main`, `feat/other-branch`)
+- `branch`: The branch to operate on (e.g., `<feature-branch>`)
+- `target` (for rebase): What to rebase onto (e.g., `main`, `<other-branch>`)
 - `parents` (for setup-deps/integration): List of parent branches
 
 ## Inputs
 
 - `--input repo_root=<path>` (required) — repository root where jj metadata and bookmarks are managed.
 - `--input worktrees_root=<path>` (optional, default `${repo_root}/worktrees`) — root directory containing synced git worktrees.
+- `--input branch_policy=<pattern>` (optional, no default) — caller's branch naming convention for feature, basis, and integration branches.
 
 ## Procedure: Rebase Branch onto Main
 
@@ -57,12 +59,12 @@ JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
 jj git fetch
 
 # 2. Rebase — all descendants auto-follow
-jj --config "$JJ_IMMUTABLE" rebase -b feat/<name> -d main
+jj --config "$JJ_IMMUTABLE" rebase -b <feature-branch> -d main
 
 # 3. Clean up divergent revisions (see Cleanup procedure below)
 
 # 4. Push
-jj git push -b feat/<name>
+jj git push -b <feature-branch>
 ```
 
 ## Procedure: Set Up Branch Dependencies
@@ -70,20 +72,20 @@ jj git push -b feat/<name>
 ```bash
 cd ${repo_root}
 
-# Simple: B depends on A (B sits on top of A)
-jj new feat/A
+# Simple: branch B depends on branch A (B sits on top of A)
+jj new <parent-branch-a>
 # ... make commits ...
-jj bookmark set feat/B
+jj bookmark set <child-branch-b>
 
-# Multi-parent: A depends on BOTH B and C
-jj new feat/B feat/C
+# Multi-parent: branch A depends on BOTH B and C
+jj new <parent-branch-b> <parent-branch-c>
 # ... make commits ...
-jj bookmark set feat/A
+jj bookmark set <child-branch-a>
 
-# Deep DAG: D depends on A and E
-jj new feat/A feat/E
+# Deep DAG: branch D depends on A and E
+jj new <parent-branch-a> <parent-branch-e>
 # ... make commits ...
-jj bookmark set feat/D
+jj bookmark set <child-branch-d>
 ```
 
 ## Procedure: Multi-Parent Basis Branches
@@ -94,17 +96,17 @@ When a PR requires changes from multiple unmerged PRs:
 cd ${repo_root}
 JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
 
-# Create basis branch from two parents
-jj new feat/parent-a feat/parent-b
-jj bookmark set basis/<name>
+# Create a basis branch from two parents
+jj new <parent-branch-a> <parent-branch-b>
+jj bookmark set <basis-branch>
 
 # Create feature branch on top of the basis
-jj new basis/<name>
+jj new <basis-branch>
 # ... make commits ...
-jj bookmark set feat/<child-name>
+jj bookmark set <feature-branch>
 ```
 
-The PR for `feat/<child-name>` targets `main` but won't be mergeable until parents land. The basis branch is never merged.
+The PR for `<feature-branch>` targets `main` but won't be mergeable until parents land. The basis branch is never merged.
 
 ## Procedure: When a Parent PR is Merged
 
@@ -113,26 +115,26 @@ cd ${repo_root}
 JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
 
 jj git fetch                                                    # picks up new main
-jj --config "$JJ_IMMUTABLE" rebase -b feat/A -d main           # A was on B, now on main
-jj bookmark forget feat/B                                       # clean up merged bookmark
+jj --config "$JJ_IMMUTABLE" rebase -b <child-branch> -d main    # child was on its parent, now on main
+jj bookmark forget <merged-parent-branch>                       # clean up merged bookmark
 # Clean up divergent revisions (see below)
-jj bookmark set feat/A -r <rebased-change-id>                  # resolve any bookmark conflict
-jj git push -b feat/A                                           # push rebased A
+jj bookmark set <child-branch> -r <rebased-change-id>          # resolve any bookmark conflict
+jj git push -b <child-branch>                                   # push the rebased branch
 ```
 
 Children of A rebase automatically.
 
 **Collapsing a basis branch when one parent merges:**
 ```bash
-# Parent A was merged — collapse basis to just parent B
-jj --config "$JJ_IMMUTABLE" rebase -b basis/<name> -d main feat/parent-b
+# One parent was merged — collapse the basis to the remaining parent
+jj --config "$JJ_IMMUTABLE" rebase -b <basis-branch> -d main <remaining-parent-branch>
 # Or if both parents merged:
-jj --config "$JJ_IMMUTABLE" rebase -b basis/<name> -d main
+jj --config "$JJ_IMMUTABLE" rebase -b <basis-branch> -d main
 ```
 
 Once all parents are merged, delete the basis:
 ```bash
-jj bookmark forget basis/<name>
+jj bookmark forget <basis-branch>
 ```
 
 ## Procedure: Integration Branches (Cross-PR Testing)
@@ -141,19 +143,18 @@ jj bookmark forget basis/<name>
 cd ${repo_root}
 JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
 
-# Create integration branch merging all PRs
-jj new feat/pr-a feat/pr-b feat/pr-c
-jj bookmark set integration/<project-name>
-jj git push -b integration/<project-name>
+# Create an integration branch that combines several PR branches
+jj new <feature-branch-a> <feature-branch-b> <feature-branch-c>
+jj bookmark set <integration-branch>
+jj git push -b <integration-branch>
 
-# Trigger E2E against it
-gh workflow run "E2E Tests (Docker)" --ref integration/<project-name>
+# Optionally trigger repo-specific validation workflows against it
 ```
 
 Integration branches are disposable. Recreate after any constituent branch changes. Delete after the project lands:
 ```bash
-jj bookmark forget integration/<project-name>
-git push origin --delete integration/<project-name>
+jj bookmark forget <integration-branch>
+git push origin --delete <integration-branch>
 ```
 
 ## Procedure: Squash Commits
@@ -175,8 +176,8 @@ jj --config "$JJ_IMMUTABLE" squash -r <B> -m "final message" --no-pager
 
 After squashing, resolve the bookmark and push:
 ```bash
-jj bookmark set feat/<name> -r <surviving-change-id>
-jj git push -b feat/<name>
+jj bookmark set <feature-branch> -r <surviving-change-id>
+jj git push -b <feature-branch>
 ```
 
 ## Procedure: Clean Up Divergent Revisions
@@ -201,13 +202,13 @@ Repeat for each divergent change ID until `jj log` shows no `(divergent)` marker
 cd ${repo_root}
 
 # Track the remote bookmark if needed
-jj bookmark track feat/<name> --remote=origin
+jj bookmark track <feature-branch> --remote=origin
 
 # If conflicted after tracking, resolve to the rebased commit
-jj bookmark set feat/<name> -r <rebased-change-id>
+jj bookmark set <feature-branch> -r <rebased-change-id>
 
 # Push
-jj git push -b feat/<name>
+jj git push -b <feature-branch>
 ```
 
 ## Procedure: View Dependency Graph
@@ -215,7 +216,7 @@ jj git push -b feat/<name>
 ```bash
 cd ${repo_root}
 jj log                           # full graph
-jj log -r 'ancestors(feat/A)'   # ancestry of a specific branch
+jj log -r 'ancestors(<branch-name>)'   # ancestry of a specific branch
 ```
 
 ## Fallback: Legacy Git Rebase
@@ -233,12 +234,12 @@ If jj is unavailable or a worktree needs manual rebase:
 3. Rebase only unique commits:
    ```bash
    cd ${worktrees_root}/<name>
-   git rebase --onto main <fork-point-commit> feat/<name>
+   git rebase --onto main <fork-point-commit> <branch-name>
    ```
 
 4. Force push:
    ```bash
-   git push --force-with-lease origin feat/<name>
+   git push --force-with-lease origin <branch-name>
    ```
 
 ## Procedure: Verified Squash + Rebase (Integration Branches)
@@ -310,14 +311,14 @@ git diff "$UNSQUASHED_TIP"..HEAD --stat
 grep -c "critical_pattern" path/to/file  # for each critical fix
 
 # 10. Update branch and push
-git branch -f integration/<name> HEAD
-git checkout integration/<name>
-git push --force-with-lease origin integration/<name>
+git branch -f <integration-branch> HEAD
+git checkout <integration-branch>
+git push --force-with-lease origin <integration-branch>
 
 # 11. Sync worktree
 cd ${worktrees_root}/<name>
-git fetch origin integration/<name> --quiet
-git reset --hard origin/integration/<name>
+git fetch origin <integration-branch> --quiet
+git reset --hard origin/<integration-branch>
 ```
 
 ## Procedure: Integration Branch Lifecycle
@@ -328,25 +329,19 @@ Integration branches go through: create → validate → fix → rebase → re-v
 
 ```bash
 # Via jj (preferred)
-jj new feat/pr-a feat/pr-b feat/pr-c
-jj bookmark set integration/<project-name>
-jj git push -b integration/<project-name>
+jj new <feature-branch-a> <feature-branch-b> <feature-branch-c>
+jj bookmark set <integration-branch>
+jj git push -b <integration-branch>
 
 # Via git (when jj unavailable)
-git checkout -b integration/<project-name> main
-git merge --no-ff feat/pr-a feat/pr-b feat/pr-c
-git push -u origin integration/<project-name>
+git checkout -b <integration-branch> main
+git merge --no-ff <feature-branch-a> <feature-branch-b> <feature-branch-c>
+git push -u origin <integration-branch>
 ```
 
 ### Validation Order
 
-Follow e2e-operator.md testing order strictly:
-
-1. **Linux E2E** (`e2e-tests.yml`) — must pass first
-2. **Windows E2E** (`e2e-windows.yml`) — after Linux passes
-3. **PAT validation** (`e2e-pat-validation.yml`) — can run after Linux
-4. **Upgrade scenarios** (`e2e-upgrade-scenarios.yml`) — can run after Linux
-5. **Compose smoke** (`e2e-compose-smoke.yml`) — can run after Linux
+Follow the project's required validation order strictly.
 
 Each failure requires RCA → fix → re-validate that suite before proceeding. Never skip ahead.
 
@@ -357,13 +352,13 @@ When main moves forward while validating:
 1. **Check what main added** — `git log $(git merge-base HEAD origin/main)..origin/main`
 2. **Identify conflict zones** — `comm -12 <(our changed files) <(main's changed files)`
 3. **Follow Verified Squash + Rebase** procedure above
-4. **Re-validate ALL suites** from step 1 (Linux E2E) — rebase can introduce regressions
+4. **Re-validate every required suite** from the start of the project's validation order — rebase can introduce regressions
 
 ### Decomposing into Mergeable PRs
 
 After all suites pass:
 
-1. `git diff main..integration/<name> --stat` — list all changed files
+1. `git diff main..<integration-branch> --stat` — list all changed files
 2. Group by concern (e.g., Docker changes, E2E fixes, backend refactors)
 3. For each group, create a feat branch with only those changes
 4. PRs merge in dependency order — infrastructure before tests, libraries before consumers

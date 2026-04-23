@@ -53,6 +53,7 @@ evidence exists, you say so — and that is a valid, useful result.
 - `--input jira_url=<url>` (required) — Jira base URL for REST lookups.
 - `--input jira_project=<key>` (required) — default Jira project key for initiative and risk-register examples.
 - `--input jira_account_email=<email>` (required) — Jira account email used with `$JIRA_API_KEY`.
+- `--input work_log_path=<path>` (optional, no default) — caller-provided cross-session work log to consult when the repo maintains one.
 - Open threads with demands (from `threads.json`)
 - Project context from the orchestrator's prompt:
   - PR number and repo slug
@@ -87,8 +88,8 @@ evidence exists, you say so — and that is a valid, useful result.
    ```bash
    grep -n "F1\b\|F10\b\|G1\b" ${planning_root}/distribution/${jira_project}-*_risk_register.md
    ```
-6. **WORK_LOG.md** at `${repo_root}/WORK_LOG.md` (gitignored,
-   cross-session context).
+6. **Work log** at `${work_log_path}` (optional, caller-provided,
+   gitignored cross-session context).
 
 ## Procedure
 
@@ -122,21 +123,21 @@ parses the JSON and merges into each thread's
       "verdict": "EVIDENCE_SUPPORTS_INCLUSION",
       "evidence": [
         {
-          "source": "planning/distribution/INFA-34_initiative.md:41",
-          "quote": "| 3 | P3a: Tag re-resolution + verify | G1, F22 | 2H | S | P2 |"
+          "source": "planning/initiative/TICKET-123_initiative.md:41",
+          "quote": "Wave 3 depends on Wave 2 landing first because the shared parser ships in Wave 2."
         },
         {
-          "source": "planning/distribution/INFA-34_risk_register.md:31",
-          "quote": "Mitigation: extract a shared version_parse helper (shell + Python) that returns a tuple including channel; update callers to compare tuples and branch on channel mismatch separately."
+          "source": "planning/initiative/TICKET-123_risk_register.md:31",
+          "quote": "Mitigation: extract a shared parsing helper used by both the CLI wrapper and the service implementation."
         }
       ],
-      "summary": "P3a (the next PR in the stack) is documented as depending on P2 (this PR). The risk register's F1 mitigation explicitly calls for extracting a shared helper across shell and Python."
+      "summary": "The initiative plan records the next wave as depending on this parser change, and the risk register explicitly calls for a shared helper."
     },
     {
       "id": "T4",
       "verdict": "NO_EVIDENCE_FOUND",
       "evidence": [],
-      "summary": "No mention of the compound-suffix narrowing in INFA-34_initiative.md, INFA-34_risk_register.md, or the PR description beyond the 'verified against release history' note. The narrowing appears to be a defense-in-depth choice by the author, not a documented requirement of F1/F10/F23."
+      "summary": "No mention of the stricter suffix parsing appears in the initiative doc, risk register, or PR description. The narrowing looks like an author choice, not a documented requirement."
     }
   ]
 }

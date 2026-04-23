@@ -43,7 +43,7 @@ to GitHub.
 ## Required Inputs
 
 - `pr_number`: The PR number to review (e.g., `405`)
-- `repo` (optional): Repository in `OWNER/REPO` format. Defaults to `lama-ai-RFQ/RFQautomation`.
+- `repo` (optional): Repository in `OWNER/REPO` format. If omitted, resolve it from the checkout's `origin` remote before running the review.
 - `repo_root` (required): Path to the repo checkout.
 
 ## Prerequisites
@@ -63,7 +63,7 @@ One-time (already produced and checked in):
 ### Phase 0: Verify primary pipeline and fetch the PR
 
 ```bash
-REPO="lama-ai-RFQ/RFQautomation"
+REPO="${repo:-$(git -C "$PROJECT_DIR" remote get-url origin | sed -E 's#(git@[^:]+:|https://[^/]+/)##; s/\\.git$//')}"
 PR=<pr_number>
 PROJECT_DIR=${repo_root}
 WORK_DIR=/tmp/pr${PR}-fastapi-review-$(date +%Y%m%d-%H%M%S)
@@ -110,12 +110,10 @@ Write 5 prompt files and launch them in parallel via `agents`. All five share th
 ```markdown
 ## Project Context
 
-- App: RFQ automation platform, FastAPI backend (`backend/` in the repo), on-prem + cloud
-  deployment model, auto-update pipeline
-- Stack: FastAPI, Pydantic, SQLAlchemy/psycopg2 (mixed), PyInstaller-packaged on-prem
-- Constraints: no required env vars for on-prem; auto-update means breaking changes must
-  stay inside the binary's upgrade path
-- Running on: `rfqautomation-linux/`
+- App / service purpose relevant to this PR
+- FastAPI-relevant layout (for example `backend/`, `app/`, `routers/`, `services/`)
+- Deployment or upgrade constraints that change the review bar
+- Data-store, async/sync, or dependency-injection conventions that reviewers should preserve
 
 ## Reference
 

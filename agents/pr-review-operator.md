@@ -36,7 +36,7 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 ## Required Inputs
 
 - `pr_number`: The PR number to review (e.g., `390`)
-- `repo` (optional): Repository in `OWNER/REPO` format. Defaults to `lama-ai-RFQ/RFQautomation`.
+- `repo` (optional): Repository in `OWNER/REPO` format. If omitted, resolve it from the checkout's `origin` remote before running the review.
 - `repo_root` (required): Path to the repo checkout.
 
 ## Inputs
@@ -50,7 +50,7 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 ### Phase 0: Fetch the PR
 
 ```bash
-REPO="lama-ai-RFQ/RFQautomation"
+REPO="${repo:-$(git -C "$PROJECT_DIR" remote get-url origin | sed -E 's#(git@[^:]+:|https://[^/]+/)##; s/\\.git$//')}"
 PR=<pr_number>
 PROJECT_DIR=${repo_root}
 WORK_DIR=/tmp/pr${PR}-review
