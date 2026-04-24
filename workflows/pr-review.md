@@ -91,7 +91,7 @@ Asks: do the tests encode intended behavior first, reduce named risks, and cover
 Audit rules:
 
 - Read the approved proposal package before judging the tests: `research/NN-problem-map.md`, the approved `proposals/NN-*.md`, `risk/NN-supported-surface.md`, and `risk/NN-test-residuals.md` if it exists.
-- When a test report bundle exists or is required, read `reports/report-index.md` first and record the canonical PDF path, uploaded artifact URL, screenshot paths, and non-UI evidence paths.
+- When a test report bundle exists or is required, read `reports/report-index.md` first and record the canonical PDF path, canonical S3 URL when present, Actions-artifact fallback URL otherwise, screenshot paths, and non-UI evidence paths.
 - Apply `~/ai/conventions/test-reports.md`: PDFs are canonical, PR comments are pointers, UI-touching tests need screenshots, non-UI tests need artifact evidence, and every code claim needs `file_path:line_number` plus an exact fenced code block.
 - Read the contract next: schemas, endpoint signatures, CLI definitions, public interfaces, explicit acceptance criteria, fixture application points, and test-intent handoff.
 - Check each acceptance criterion and each proposal test-intent item against a test, a deliberate residual entry, or a documented non-applicability reason.
@@ -170,7 +170,7 @@ One `gpt-high` agent collects the gate outputs and posts one synthesized PR comm
 Synthesis rules:
 
 - Process-tree review: before synthesis consumes or posts gate outputs, run `process-tree-auditor` on the PR-review gate fanout. The expected process includes test audit, multi-concern review, justification review, supported-surface verification, commit hygiene, and each gate output consumed by synthesis. A blocking process violation prevents synthesis/posting.
-- Include the canonical test-report PDF link or uploaded report artifact URL when Test Audit produced or consumed one. The PR comment remains a pointer; do not paste the full report.
+- Include the canonical test-report S3 PDF URL when Test Audit produced or consumed one. Fall back to the uploaded Actions-artifact URL only when the S3 URL is absent. The PR comment remains a pointer; do not paste the full report.
 - Include each gate verdict.
 - Include the specific findings needed for the next fix pass.
 - Group findings by file or concern, not by gate.

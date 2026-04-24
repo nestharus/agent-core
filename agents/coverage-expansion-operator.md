@@ -69,6 +69,8 @@ Required outputs:
 - `reports/investigative-report.md` and `reports/investigative-report.pdf`.
 - `reports/report-index.md`: artifact manifest with PDF paths, screenshot paths, non-UI evidence paths, spec path, test paths, and PR pointer URL if known.
 
+The canonical PDF URL surfaced in the PR pointer comment is the S3 URL defined by `~/ai/conventions/test-reports.md`; the Actions artifact URL is a secondary fallback.
+
 When the target touches UI behavior, include screenshot artifacts under:
 
 ```text
@@ -259,6 +261,8 @@ Write `reports/report-index.md` with:
 
 ## PR Pointer
 - Comment URL: `<url or pending>`
+- Canonical PDF URL: `<S3 URL, signed URL, presigned URL, or pending>`
+- Actions artifact fallback URL: `<url or n/a>`
 ````
 
 ## Stop Conditions
@@ -267,6 +271,7 @@ Write `reports/report-index.md` with:
 - Return `NEEDS_INPUT` if a strict xfail would lack a behavior-source commit hash.
 - Return `BLOCKED` if coverage, risk, behavior investigation, test writing, screenshot capture, non-UI evidence capture, or PDF generation cannot produce required artifacts.
 - Return `BLOCKED` if a required report PDF is missing.
+- Return `BLOCKED` if the canonical S3 PDF URL cannot be produced and no Actions-artifact fallback URL is available.
 - Return `BLOCKED` if a UI-touching behavior lacks a screenshot.
 - Return `BLOCKED` if a code claim lacks `file_path:line_number` and an exact fenced code block.
 

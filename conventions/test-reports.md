@@ -51,6 +51,18 @@ The comment should include:
 
 Do not paste the full Product, Engineering, or Investigative report into the PR comment.
 
+## Retention And Storage
+
+Canonical long-term storage is S3 using the project's GitHub-CI IAM. In RFQ, that means `$AWS_GITHUB_ACCESS_KEY_ID` and `$AWS_GITHUB_SECRET_ACCESS_KEY`; project wrappers define the bucket, signing or presign mechanism, and exact key format.
+
+The default key shape mirrors the RFQ E2E unified-report pattern: upload the report bundle under a project-defined prefix derived from the sanitized branch or PR ref plus the GitHub run id, then store each PDF under that prefix. In RFQ E2E, the prefix is `<sanitized-branch>/<github-run-id>/`; a PDF report key using that shape is `<sanitized-branch>/<github-run-id>/<report-slug>.pdf`.
+
+The PR pointer comment links to the S3-backed URL for the canonical PDF, or to a presigned or signed-front-door URL when the bucket is private. Project wrappers may use CloudFront signed URLs, S3 presigned URLs, or an equivalent project-approved access layer, but the target remains the S3-stored PDF.
+
+`actions/upload-artifact` remains useful as a redundant short-term store for CI-job debugging, with GitHub's default 90-day retention unless the workflow overrides it. It is not the canonical long-term report store once the S3 URL exists.
+
+S3 is the cross-project default. Alternative long-term stores such as GCS, Azure Blob, or an internal artifact service are project-wrapper overrides and must define their bucket/container, key format, IAM, URL shape, and retention policy.
+
 ## Screenshot Rule
 
 A screenshot is required when a test, bug, or report claim touches UI behavior.
@@ -146,11 +158,11 @@ Only include items that need attention. Do not add positives for behavior that a
 
 ## Upload Contract
 
-The default upload mechanism is a GitHub Actions workflow artifact uploaded with `actions/upload-artifact`.
+The default canonical upload mechanism is a project-wrapper S3 upload using the project's GitHub-CI IAM and key format from Retention And Storage.
 
-The PR pointer comment links to the artifact URL or workflow run artifact list. The artifact bundle must contain the PDFs and supporting screenshots/evidence.
+The PR pointer comment links to the S3 URL, signed URL, or presigned URL for the canonical PDF bundle. The artifact bundle must contain the PDFs and supporting screenshots/evidence.
 
-Retention horizon is not defined by this convention. Use the repository or organization default unless a project-specific workflow sets `retention-days`.
+GitHub Actions artifacts are secondary debug fallbacks. If S3 upload fails but an Actions artifact exists, the pointer may temporarily fall back to the Actions artifact URL or workflow run artifact list and must identify it as a fallback.
 
 ## Report-Emission Gaps
 
