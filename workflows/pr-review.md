@@ -79,6 +79,7 @@ Review rules:
 - Check what migration path, rollback path, and observability obligations the diff adds or changes.
 - Flag symbolic hardening: a diff that matches a finding label but leaves the supported surface materially unchanged.
 - Check any `risk/NN-test-residuals.md` artifact. If an unverified residual means the diff no longer clearly reduces risk on the approved supported surface, apply the existing supported-surface termination order: invalidated assumption -> return to research and resume at Phase 2.5; otherwise non-positive value -> stop the PR and close it.
+- Consume any `Supported-Surface Verification finding` sent by Test Audit for firstness or residual evidence that collapses the approved net-value case.
 - Keep the supported-surface termination signal separate from the LOW/MEDIUM/HIGH verdict in the review output.
 - Rule: supported-surface termination is an orthogonal dimension from the LOW/MEDIUM/HIGH verdict. Evaluate it first and in this order: invalidated assumption that breaks the current problem framing -> return to research and resume at Phase 2.5; otherwise non-positive value on the current supported surface -> stop the PR and close it rather than parking it for later. A `LOW` supported-surface verdict with a non-positive value signal still means stop the PR and close it rather than parking it for later. Only when no termination signal fires does the LOW/MEDIUM/HIGH verdict control the next step.
 - When no termination signal fires, record ordinary fix-pass findings from that verdict.
@@ -92,6 +93,49 @@ Audit rules:
 - Read the approved proposal package before judging the tests: `research/NN-problem-map.md`, the approved `proposals/NN-*.md`, `risk/NN-supported-surface.md`, and `risk/NN-test-residuals.md` if it exists.
 - Read the contract next: schemas, endpoint signatures, CLI definitions, public interfaces, explicit acceptance criteria, fixture application points, and test-intent handoff.
 - Check each acceptance criterion and each proposal test-intent item against a test, a deliberate residual entry, or a documented non-applicability reason.
+- Check Phase 6 firstness evidence before accepting tests as intent-first: the Phase 6 process-tree report, expected-process manifest, Step 6b prompt/log, Step 6c prompt/log, Step 6b output index, Step 6b output paths, and Step 6c consumption evidence.
+- Missing or contradicted required firstness evidence is `blocking`; surface `NEEDS_INPUT:<question_artifact>` only when the missing artifact can still be supplied before downstream consumption.
+- A commit marker, commit order, or risk annotation may support review, but none replaces the Phase 6 process-tree review plus companion artifacts.
+- Apply firstness per named risk, selected level, and test group, not at whole-suite or whole-PR level.
+- Route firstness gaps per risk, selected level, and test group. Complete cells continue to ordinary Test Audit checks. Missing, contradicted, stale, or post-code cells are `blocking`; repairable semantic test defects are `ordinary fix-pass findings`; invalidated framing routes to `return to research`; value collapse routes through a `Supported-Surface Verification finding`.
+- Do not treat process-provenance uncertainty as a new residual class. If the uncertainty is truly unverifiable and does not collapse the approved net-value case, it can only be recorded through Decision Recording as `accepted with a named unverifiable residual risk`.
+- Do not require retroactive firstness for pre-existing code without prior tests. Require mapping to existing-state risk or supported-surface context, and require current-work firstness for current-work behavior changes.
+- For test-infrastructure-only changes, apply fixture externality, assertion-weakening, captured-behavior, baseline-update, and documented-reason checks. If the same diff changes product behavior, firstness applies to the behavior tests for that product change.
+
+Firstness routing cases:
+
+| R2 case | Test Audit routing |
+|---|---|
+| Entirely absent tests | `blocking`; if the gap exposes wrong framing, `return to research`; if value collapses, `terminate the work` or `stop the PR and close it`. |
+| Existing coverage sufficient, documented | No firstness-gap route; any unrelated test issue is `ordinary fix-pass findings`. |
+| Existing coverage claimed but unmapped | `blocking`; repairable mapping issues become `ordinary fix-pass findings` only after required evidence exists. |
+| Structurally absent firstness, same commit | `blocking`. |
+| Temporally absent firstness, after implementation before PR | `blocking`. |
+| Artifact-present but process-after | `blocking`. |
+| Process-present but artifact-absent | `blocking` only if a required companion artifact is absent; otherwise no firstness-gap route. |
+| Both process and artifact absent | `blocking`. |
+| Partial by evidence form: marker only | `blocking`; a marker is not the companion artifact. |
+| Partial by evidence form: artifact only | `blocking`; artifact-only evidence does not replace process-tree verification. |
+| Partial by scope/risk area | Compose per named risk; missing cells are `blocking`, value-collapse cells are `terminate the work` or `stop the PR and close it`, and non-collapsing unverifiable cells may be `accepted with a named unverifiable residual risk`. |
+| Partial by level | Compose per selected level; same routing as partial scope/risk area. |
+| Partial by test group | `blocking` until the group is split or mapped; remaining semantic defects are `ordinary fix-pass findings`. |
+| Stale pre-existing tests edited during implementation | `blocking`; if the edit reflects changed intent or an invalidated assumption, `return to research`; if value collapses, `terminate the work` or `stop the PR and close it`. |
+| Stale fixture or baseline update | `blocking`; if fixture truth changed, `return to research`. |
+| Valid test correction/invalidation | `return to research` when framing or assumptions changed; otherwise `ordinary fix-pass findings` after the contract and affected tests are corrected. |
+| Contract revised because implementation failed | `blocking`; if the failure exposes invalidated framing, `return to research`. |
+| Same-agent authorship | `blocking`. |
+| Test writer saw implementation | `blocking`. |
+| Bug reproduction after defect, before fix | No firstness-gap route; any unrelated test issue is `ordinary fix-pass findings`. |
+| Bug reproduction after fix | `blocking`; if verified value cannot be recovered, `terminate the work` or `stop the PR and close it`. |
+| Refactor with no behavior change | No firstness-gap route when existing tests are mapped; missing mapping is `blocking`. |
+| Refactor coverage ritual | `ordinary fix-pass findings` when tests lack a named risk; if the broader change has `non-positive value`, `terminate the work` or `stop the PR and close it`. |
+| Fixture-first loophole | `blocking`; fixture order does not prove behavior-test firstness. |
+| Fixture-in-test-body loophole | `blocking` under fixture externality; if fixture truth is unclear, `return to research`. |
+| Residual-risk artifact absent when required | `blocking`; first check invalidated assumption -> `return to research`; otherwise if the unverified risk collapses value, `terminate the work` or `stop the PR and close it`. |
+| Residual-risk artifact present but stale | `blocking`; if invalidating inputs changed framing, `return to research`. |
+| Level selected after tests | `blocking`; if level selection is unclear, `return to research`. |
+| Non-applicability asserted after code | `blocking`; if applicability changed, `return to research`. |
+
 - Check that every test or test group names the risk it reduces, names the proposal or assumption-register source, and uses one explicit level: `unit`, `component`, `particular-integration`, or `end-to-end`.
 - Check that the selected level is the cheapest reliable validator for the named risk.
 - Check that fixtures are externally applied. Flag durable or shared fixture state, dependency substitutions, seed data, shared mocks, baselines, service setup, or environment setup edited into the test body or declared as same-file fixtures unless project convention names that file pattern as the dedicated fixture file pattern.

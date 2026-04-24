@@ -81,6 +81,10 @@ Default severity: `blocking` in a required multi-round loop; otherwise `needs_in
 
 An agent reports success, a trace node succeeds, or a workflow appears complete while required work, output, evidence, or verification is absent.
 
+For Phase 6 firstness, this class includes a workflow that reports Step 6b complete, Step 6c consumable, Phase 6 complete, or PR-review-ready while required firstness work, output, evidence, or verification is absent or contradicted.
+
+Examples include: missing Step 6b or Step 6c expected-process entries; the same invocation mapped to both Step 6b and Step 6c; Step 6c running before Step 6b outputs existed; missing, malformed, stale, or unmapped Step 6b output index; missing Step 6c consumption evidence; Step 6b prompt/log evidence that the test writer saw implementation context; or downstream advancement while required firstness evidence was absent without surfacing `NEEDS_INPUT:<question_artifact>`.
+
 Default severity: `blocking`.
 
 ### 10. Forbidden partial-work violation

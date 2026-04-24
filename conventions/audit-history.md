@@ -57,6 +57,8 @@ Each round summary must record:
 - `role_outputs`: role-tagged outputs and determinations that fed the round.
 - `next_handoff`: what the next writer, reviewer, or operator must read first.
 
+For repeated loops that include Phase 6 firstness review, include the Phase 6 process-tree report and `${scratch_dir}/phase6/step6b-output-index.md` as `round_artifacts` or `role_outputs` when those artifacts feed the next round's determination.
+
 Each finding must record:
 
 - `id`: collision-safe round finding ID.

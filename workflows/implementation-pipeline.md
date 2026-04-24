@@ -137,6 +137,8 @@ Implementation has three sub-steps.
 The test writer and the code writer must be different agent invocations.
 That rule is load-bearing: if the same agent writes both, the tests mirror the implementation instead of validating the contract.
 
+- Rule: Phase 6 firstness evidence is the Phase 6 process-tree review plus companion artifacts. The companion artifacts are the expected-process manifest, Step 6b prompt/log, Step 6c prompt/log, Step 6b output index, Step 6b output paths, and evidence that Step 6c consumed those outputs. A commit marker is optional supporting evidence only. A PR-diff test file is not required firstness evidence.
+- Convention: `${scratch_dir}/phase6/` resolves under the same per-run scratch directory supplied by the invoking workflow, matching the `scratch_dir` input pattern used by `agents/test-audit-gate.md` and `agents/red-phase-gate.md`.
 - Rule: Phase 6 consumes the approved `research/NN-problem-map.md`, approved `proposals/NN-*.md` including its test-intent track and assumption register, `risk/NN-supported-surface.md`, and `research/NN-hookpoints.md`.
 - Rule: if Step 6a, 6b, or 6c uncovers evidence that invalidates an approved assumption or shows the touched surface differs materially from the approved `problem map`, stop implementation and return to research; resume at Phase 2.5 before more code or tests are written.
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
@@ -156,12 +158,17 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Rule: tests encode intended behavior from the contract and proposal test-intent track before Step 6c writes product code.
 - Rule: fixtures are applied from outside the test body. Durable or shared fixture state belongs in dedicated fixture modules, dedicated fixture files, factories, builders, test inputs or test data files, or runner configuration; the test body keeps only behavior-specific arrange/act/assert. Same-file fixture declarations, including `@pytest.fixture` declarations in the same file or class as the test, violate this rule unless the project's convention names that file pattern as the dedicated fixture file pattern.
 - Rule: every test or test group carries a risk annotation naming the risk it reduces, the selected level, and the proposal or assumption-register source. If a test verifies an assumption, the annotation says so.
+- Rule: firstness applies per named risk, selected level, and test group from the approved test-intent track. Existing tests satisfy this rule only when the Step 6b output index maps them to the named risk, selected level, and proposal or assumption-register source.
+- Rule: pre-existing code without prior tests is not required to prove retroactive firstness. Current-work behavior changes and current-work risk reduction are not grandfathered.
 - Rule: when a named risk cannot be verified by the test set, produce `risk/NN-test-residuals.md` with the residual class (`combinatorial/path-state`, `bounded-model`, `integration-hidden`, `emergent-interaction`, `temporal/concurrency`, or `generator/search-budget`), technique attempted or considered (`property-based`, `fuzzing`, `mutation`, `symbolic`, `model-checking`, `chaos`, or `graph`), scope, budget or bound, result, remaining residual, invalidating inputs, and whether the residual changes the net-value case.
+- Output: test files in the project test roots, with risk annotations on every test or test group.
+- Output: `${scratch_dir}/phase6/step6b-output-index.md`, listing every proposal test-intent item, named risk, selected level, source, emitted test file or test group, residual entry, or documented non-applicability reason.
+- Output-index fields: approved proposal path, contract path, approved `problem map` path, `risk/NN-supported-surface.md` path, hookpoint research path, Step 6b prompt path, Step 6b log path, each test-intent item, named risk, selected level, proposal or assumption-register source, emitted test file path and test or test-group identifier, residual entry path when the item maps to `risk/NN-test-residuals.md`, documented non-applicability reason when no test is emitted, and declared fixture source or fixture application point.
 - Output: `risk/NN-test-residuals.md` when any named risk remains unverified.
 
 ### Step 6c - Write code
 
-- Inputs: contracts and the tests from Step 6b
+- Inputs: contracts, `${scratch_dir}/phase6/step6b-output-index.md`, and the tests from Step 6b.
 - Rule: the code writer is a separate agent invocation from Step 6b.
 - Rule: the job is to make the tests pass while respecting the approved design and architecture.
 - Rule: if tests fail after Step 6c, re-invoke the code agent with the test output.
@@ -169,7 +176,8 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Rule: if a test is wrong, that is the contract's fault, not the test's.
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
 - Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
-- Rule: Process-tree review: after Step 6c completes and before Phase 7, run `process-tree-auditor` on the Phase 6 subtree. The expected process must prove separate Step 6b and Step 6c invocations and verify the Step 6b outputs that Step 6c consumed. A blocking independence or silent-success violation prevents CodeRabbit.
+- Rule: Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes.
+- Rule: Process-tree review: after Step 6c completes and before Phase 7, run `process-tree-auditor` on the Phase 6 subtree. The expected process must prove separate Step 6b and Step 6c invocations, timing order, Step 6b output index presence, Step 6b output paths, and Step 6c consumption of those outputs. A `blocking` independence, output/artifact, or silent-success violation prevents CodeRabbit. Missing required evidence is `NEEDS_INPUT:<question_artifact>` when it can still be supplied, otherwise `blocking`; the affected subtree is `rerun or repaired` before downstream consumption.
 
 ## Phase 7 - CodeRabbit Loop
 
@@ -230,6 +238,8 @@ If a phase is skipped, narrowed, deferred, terminated for non-positive value, se
 - record why the change was accepted
 - record what risk is being accepted
 - record what evidence caused the termination or research re-entry
+
+For Phase 6 firstness, do not create a new residual class. If a named test-verification risk remains unverified, record it in `risk/NN-test-residuals.md`. If only historical or process-provenance evidence is unverifiable and the approved net-value case still holds, record the decision only as `accepted with a named unverifiable residual risk` in `DECISIONS.md` or the project equivalent.
 
 Without that record, the phase was not skipped correctly.
 

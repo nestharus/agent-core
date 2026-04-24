@@ -19,7 +19,7 @@ Order is stable: numbered prefixes do not get reused. A dropped initiative gets 
 | 01 | Risk and value axes — integration risk, existing-state risk profile, exposure, value computation | landed | — |
 | 02 | Tests encode intent — 6 constraints (ground truth, fixtures, levels, risk-driven, value, discovery bounded); firstness via workflow ordering | decomposed → 02a | 01 |
 | 02a | Tests encode intent (continuation of 02; firstness-evidence chain deferred to 02b) | landed (commit `3d7d9cc`) | 01 |
-| 02b | Tests firstness-evidence mechanism (Step 6b artifact, Test Audit cross-check, absence routing) | deferred — awaits partial-firstness disposition vocabulary | 01 + disposition settled |
+| 02b | Tests firstness-evidence mechanism (process-tree + Step 6b output index; Test Audit routing via landed tokens only) | landed | 01 + 02a |
 | 03 | Process-tree review — validate workflow execution via agents process tree + `process-tree-auditor` operator | landed | — |
 | 04 | Agent Q&A + session resumption — let sub-agents ask the user questions and resume cleanly (~/ai side); agent-runner work spawned as Init 06 | landed | 03 (soft) |
 | 05 | Audit history — per-role decision history passed to each LLM in a cycle; self-oscillation visibility; decision-encoder reviewer | landed | — |

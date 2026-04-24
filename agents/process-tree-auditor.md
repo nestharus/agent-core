@@ -46,7 +46,7 @@ The manifest must name the expected execution surface explicitly enough that the
 
 Use Markdown or JSON. Required fields per expected node or child group:
 
-- `id`: stable label such as `phase4-audit-risk` or `step6b-test-writer`.
+- `id`: stable label such as `phase4-audit-risk`, `step6b-test-writer`, or `step6c-code-writer`.
 - `required`: `true` or `false`.
 - `operator_or_role`: expected operator, role, or workflow phase.
 - `model`: expected model or `any` when the workflow does not specify one.
@@ -60,6 +60,8 @@ Use Markdown or JSON. Required fields per expected node or child group:
 - `continuation_evidence`: resume or fallback continuation artifact paths when an answer was required.
 - `blocking_if_missing`: `true` or `false`.
 - `notes`: documented skip or workflow-specific interpretation, if any.
+
+For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and the Step 6b output paths consumed by Step 6c. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
 
 If the manifest is absent or too vague to map expected work to tree nodes, return `NEEDS_INPUT`.
 
@@ -113,6 +115,8 @@ For each expected prompt, log, gate report, status, or output:
 - for each blocking question artifact, verify the root-surfaced answer artifact exists before downstream dependent nodes run;
 - verify continuation evidence names the same `question_id`, origin invocation UUID, session ID when known, and session-graph manifest;
 - flag `Question/answer handling violation` when a question was emitted but not surfaced, the workflow advanced while unanswered, an answer was received but not applied, or the continuation target does not match the question artifact.
+- for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c prompt/log evidence shows those paths were consumed by Step 6c;
+- classify missing Step 6b output index, missing Step 6c consumption evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
 
 ### Step 5: Classify Violations
 

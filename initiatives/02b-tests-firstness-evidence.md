@@ -1,7 +1,7 @@
 # Initiative 02b — Tests first-ness evidence mechanism
 
-**Status:** deferred (decompose spawn from Initiative 02)
-**Depends on:** Initiative 01 (landed) **plus** an explicit disposition vocabulary for "partial firstness evidence"
+**Status:** landed (this commit — firstness verified via process-tree + companion Step 6b output index; Test Audit routing uses only landed disposition tokens)
+**Depends on:** Initiative 01 (landed) + Initiative 02a (landed)
 **Blocks:** —
 **Spawned from:** Initiative 02 round-2 review (`L-01` two-generation oscillation in the firstness-artifact chain `J-05 → K-02 → L-01`). See `~/ai/.build/A18-tests-proposal-review-v3.md §6`.
 
@@ -54,3 +54,7 @@ This initiative resumes work from that baseline.
 ## Log
 
 - **2026-04-23** — Initiative spawned by decompose trigger on Initiative 02's round-2 review. Captured the disposition precondition. Blocked on disposition vocabulary being settled.
+- **2026-04-24** — Unblocked. Init 01 and Init 02a have now landed concrete precedence / step-separation text in `~/ai/workflows/`, so the disposition vocabulary exists in landed form. Opening research fan-out.
+- **2026-04-24** — Research fan-out: R1 landed-vocabulary extraction (hard constraint: no new tokens), R2 firstness-gap case catalog with landed-token mapping, R3 artifact shape + Test Audit routing (process-tree as primary verification mechanism).
+- **2026-04-24** — Proposal cycle: v0 (5 non-blocking T-findings; 0 vocabulary violations; 0 chain-structure replication) → v2 (1 cosmetic U1 typography finding). Convergence in one revision round. U1 folded at apply.
+- **2026-04-24** — Applied: Phase 6 gets Step 6b output index + `${scratch_dir}/phase6/` convention; Step 6c gets log-consumption evidence rule; `process-tree-auditor` verifies the Step 6b → Step 6c ordering via the manifest (not via a diff-time artifact — the decompose's original failure mode); `pr-review.md` Test Audit routes firstness cases using only landed tokens (`blocking`, `return to research`, `terminate the work`, `stop the PR and close it`, `rerun or repaired`, `accepted with a named unverifiable residual risk`); `workflow-execution-violations.md` silent-success class extended with firstness detection language; `audit-history.md` records process-tree reports + Step 6b output indexes.
