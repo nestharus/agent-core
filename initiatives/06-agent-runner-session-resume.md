@@ -1,8 +1,8 @@
 # Initiative 06 — Agent-runner session-id resumption
 
-**Status:** queued
-**Depends on:** 04 (for the `~/ai` question envelope, session-graph convention, and feature-detection contract)
-**Blocks:** Ideal Init 04 resume-by-session-id path; provider-cache-preserving continuation for answered sub-agent questions
+**Status:** committed on feature branch, awaiting push (`init-06/pr-a-resume-with-answer`, commit `5604451` in `~/projects/agent-runner`)
+**Depends on:** 04 (landed)
+**Blocks:** —
 
 ## Problem
 
