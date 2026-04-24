@@ -1,7 +1,7 @@
 # Initiative 07 — Test report richness + coverage-expansion workflow formalization
 
-**Status:** queued
-**Depends on:** 02a (tests-encode-intent — landed), 03 (process-tree auditor — landed), 05 (audit history — landed). No hard blocker.
+**Status:** landed (this commit — coverage-expansion-operator + test-reports convention + existing-operator updates + pr-review Test Audit + violation-taxonomy examples + audit-history artifact field)
+**Depends on:** 02a, 03, 05 (all landed)
 **Blocks:** —
 
 ## Problem (user framing, verbatim)
@@ -87,3 +87,7 @@ Adjacent `~/ai/` assets this initiative builds on:
 ## Log
 
 - **2026-04-24** — Initiative queued. Captured the user's verbatim framing + the coverage-expansion formalization gap from the prior session's notes + the 8 reference RFQ PRs.
+- **2026-04-24** — 4-track research fan-out: R1 operator audit, R2 RFQ PR report-format study (all 8 PRs), R3 tooling audit, R4 artifact-upload mechanics.
+- **2026-04-24** — Synthesis produced 14 RG-gaps + 10 options. All accepted except J (retention horizon) deferred.
+- **2026-04-24** — Proposal cycle: v0 (2 blocking + 5 non-blocking Y-findings) → v2 (1 non-blocking Z1, apply-phase fold-in). Convergence in one revision round. Blocking issues were a violation-class taxonomy break (tried to add class 12; collapsed to examples under existing classes 2/6/9) and a code-fence typo in a nested report-index block.
+- **2026-04-24** — Applied: new `~/ai/agents/coverage-expansion-operator.md` (codifies P0-pick + spec-first + VERIFIED/SUSPICIOUS/AMBIGUOUS + xfail-strict-with-commit-hash + 3-report output), new `~/ai/conventions/test-reports.md` (canonical PDF + screenshots + file:line + code-block rules, tool-neutral), updates to `test-writer` / `test-audit-gate` / `coverage-analyzer` / `coverage-auditor` for report emission, pr-review Test Audit consumes PDF artifact, workflow-execution-violations examples added under classes 2/6/9, audit-history gains artifact-path field, AGENTS.md routing entry. Z1 (behavior-investigation report mover) folded inline at apply.

@@ -39,6 +39,7 @@ just re-describing the implementation.
 - `worktree_path`: Path to the codebase
 - `test_files` (for validate-new): Paths to newly written test files
 - `behavior_specs` (for validate-new): Paths to the behavior specs the tests claim to verify
+- `report_bundle_dir` (optional): Report bundle to validate against `~/ai/conventions/test-reports.md`.
 
 ## Procedure: Audit Existing Tests
 
@@ -163,6 +164,7 @@ For newly written tests (from test-writer), verify:
 3. **Failure sensitivity:** Would this test fail if the behavior was wrong? (mentally mutate the code)
 4. **Completeness:** Are all behaviors in the spec covered? Any gaps?
 5. **No over-testing:** Are there tests for behaviors NOT in the spec? (scope creep)
+6. **Report artifact evidence:** When `report_bundle_dir` is supplied, verify canonical PDFs, UI screenshots, non-UI evidence, `file_path:line_number` citations, exact fenced code blocks, and strict-xfail bug stories per `~/ai/conventions/test-reports.md`.
 
 ```markdown
 ## New Test Validation: <test_file>
@@ -187,6 +189,15 @@ For newly written tests (from test-writer), verify:
 
 ### Verdict: PASS / FAIL
 <reasoning>
+
+### Report Artifact Validation
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| Canonical PDF present | PASS/PARTIAL/FAIL | <path or gap> |
+| UI screenshots present when required | PASS/PARTIAL/FAIL | <path or gap> |
+| Non-UI evidence present when required | PASS/PARTIAL/FAIL | <path or gap> |
+| Code claims cite file:line and code blocks | PASS/PARTIAL/FAIL | <examples> |
+| Bug stories include strict xfail and commit hash | PASS/PARTIAL/FAIL | <examples> |
 ```
 
 ## Stop Conditions

@@ -36,6 +36,7 @@ but provide no value. You do NOT write tests or fix code.
 - `task`: One of: `baseline`, `module-scan`, `dead-tests`, `regression-check`
 - `worktree_path`: Path to the codebase
 - `scope` (optional): Specific module/package/directory to focus on. Omit for full repo scan.
+- `report_bundle_dir` (optional): Directory where coverage inventory artifacts should be copied or referenced for test reports.
 
 ## Procedure: Baseline Coverage
 
@@ -144,6 +145,12 @@ Produce a structured Markdown report at `/tmp/coverage-analysis/<datestamp>/base
 ## Test-to-Source Mapping Gaps
 | Source Directory | Has Tests? | Test Location |
 |-----------------|-----------|---------------|
+
+## Report Artifact Handoff
+- Coverage JSON: `<path or unavailable>`
+- Coverage stdout: `<path or unavailable>`
+- Non-UI evidence artifacts: `<paths or n/a>`
+- Suggested report bundle directory: `<report_bundle_dir or n/a>`
 ```
 
 ## Procedure: Dead Test Detection

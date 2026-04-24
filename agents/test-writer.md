@@ -31,6 +31,8 @@ should FAIL — that's a feature, not a bug.
 - **NEVER read the current implementation to determine expected values.** Expected values come from the behavior spec, not the code.
 - **NEVER write `assert result == <value I got from running the code>`.** That's capturing current behavior. Expected values must be derived from the spec.
 - **Tests that pass against buggy code are worse than no tests.** A test must fail if the behavior is wrong, even if the current implementation happens to pass.
+- **Confirmed discovered bugs use strict xfail.** A test that correctly fails against a confirmed bug must use `@pytest.mark.xfail(strict=True)` with a reason that cites the behavior-source commit hash.
+- **Reports follow `~/ai/conventions/test-reports.md`.** UI-touching behavior needs screenshot evidence; non-UI behavior needs the relevant artifact evidence; every code claim needs `file_path:line_number` plus an exact fenced code block.
 - **One behavior per test.** Don't bundle multiple behaviors into one test function.
 - **Test names describe the behavior, not the implementation.** `test_markup_applies_percentage_to_base_price` not `test_calculate_markup_function`.
 - **Inline test data only.** Python dicts inline, no fixture files.
@@ -42,6 +44,8 @@ should FAIL — that's a feature, not a bug.
 - `worktree_path`: Path to the codebase
 - `test_type`: One of: `unit`, `integration`, `component`, `e2e`
 - `target`: The code being tested (file path + function/class)
+- `report_bundle_dir` (optional): Directory where report Markdown, PDFs, screenshots, and non-UI evidence should be written.
+- `report_slug` (optional): Stable slug for report artifact names.
 
 ## Procedure
 
@@ -162,6 +166,8 @@ If tests FAIL: check whether the failure indicates a BUG in the code (behavior d
 - Do NOT change the test to match current behavior
 - Note the failure as a confirmed bug
 - The test is CORRECT — the code is wrong
+- Mark the bug test with `@pytest.mark.xfail(strict=True)` and an xfail reason citing the behavior-source commit hash
+- Add a bug-discovery report entry with expected vs actual behavior, failing test code, production code, screenshot or non-UI evidence, and plain-English impact
 
 ### Output Format
 
@@ -190,23 +196,26 @@ If tests FAIL: check whether the failure indicates a BUG in the code (behavior d
 ### Bug Reporting
 
 When tests correctly fail (bugs found), produce three separate reports to post on the PR:
+The PDF report artifacts are canonical; the PR comment is only a pointer. Write Markdown and PDF reports under `report_bundle_dir` when supplied, following `~/ai/conventions/test-reports.md`.
 
 **Product Report** — for the product team, no engineering jargon:
 - Which page/feature is affected
 - What the user sees when the bug manifests (wrong price? missing results? crash?)
 - What decision is needed from product
-- Screenshots of the affected UI area if possible
+- Screenshots of the affected UI area when the behavior touches UI, or non-UI evidence when it does not
 
 **Engineering Report** — for engineers:
-- File, line, function
+- File, line, function, and exact fenced code block
 - Current behavior vs expected behavior
-- Evidence (commit hashes, PR references)
+- Evidence (commit hashes, PR references, spec anchors)
+- Strict-xfail marker and test location for confirmed discovered bugs
 - Risk if unfixed
 
 **Investigative Report** — full evidence trail:
 - Behavior specs for verified functions
 - Suspicious behaviors with commit archaeology
 - Ambiguous items with sources checked
+- Report artifact index: PDF paths, screenshot paths, non-UI evidence paths, and test paths
 
 Only include items that need attention. No "positives" or confirmations.
 

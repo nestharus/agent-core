@@ -57,26 +57,21 @@ spec alignment, test quality, and coverage delta.
 
 **HARMFUL** — Test actively prevents correct behavior by asserting wrong expectations, or mocks so heavily that it tests nothing real.
 
-## Required Inputs
-
-- `mode`: `implementation` or `pr-review`
-- `repo_root`: repo checkout to audit (the `agents -p` working directory)
-- `scratch_dir`: writable directory for prompt files and reports
-- `spec_dir` (default `${planning_root}/coverage`): directory containing `spec-*.md`
-- `repo` (required in `pr-review` mode): GitHub repository slug
-- `ci_workflow_name` (required in `pr-review` mode): workflow to query for existing coverage artifacts
-- `coverage_reports_root` (required in `pr-review` mode): artifact root containing CI coverage baselines (for example `s3://<bucket>/coverage-reports`)
-- `pr_number` (required when `mode=pr-review`)
-
-Portability note: Override inputs when your repo, workflow names, or coverage artifact layout differ from the defaults above.
-
 ## Inputs
 
+- `--input mode=implementation|pr-review` (required) — gate mode.
 - `--input repo_root=<path>` (required) — target repository root.
+- `--input scratch_dir=<path>` (required) — writable directory for prompt files and reports.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs root used to derive the default coverage spec directory.
 - `--input spec_dir=<path>` (optional, default `${planning_root}/coverage`) — directory containing `spec-*.md`.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated coverage audits.
-- `--input coverage_reports_root=<uri>` (optional, no default) — CI coverage artifact root used in `pr-review` mode.
+- `--input repo=<owner/name>` (required in `pr-review` mode) — GitHub repository slug.
+- `--input ci_workflow_name=<name>` (required in `pr-review` mode) — workflow to query for existing coverage artifacts.
+- `--input coverage_reports_root=<uri>` (required in `pr-review` mode) — artifact root containing CI coverage baselines.
+- `--input pr_number=<number>` (required when `mode=pr-review`) — PR number under audit.
+- `--input report_artifact_path=<path>` (optional) — local path to a generated report bundle or downloaded artifact bundle.
+- `--input report_pdf_path=<path>` (optional) — canonical PDF path for the test report when a report bundle is required.
+- `--input report_artifact_url=<url>` (optional) — uploaded artifact URL for PR-review synthesis.
 
 ## Procedure
 
@@ -171,6 +166,7 @@ Every prompt must require deterministic parsing:
 
 - List changed product files, changed test files, and discovered spec candidates
 - Ask `coverage-auditor.md` to review only the changed test files plus whether those tests provide evidence for the changed behavior
+- When report artifacts are present or required, ask `coverage-auditor.md` to verify `~/ai/conventions/test-reports.md`: canonical PDF, UI screenshots, non-UI evidence, `file_path:line_number` citations, and exact fenced code blocks for code claims
 - Require `PASS | PARTIAL | FAIL` using this mapping:
   - `PASS`: changed tests are `VERIFIED_BEHAVIOR` and cited against changed behavior
   - `PARTIAL`: missing changed tests, only `STRUCTURAL` / `DEAD`, or insufficient evidence
@@ -246,6 +242,11 @@ Verdict: PASS|PARTIAL|FAIL
 | Spec Alignment | ... | ... |
 | Test Quality | ... | ... |
 | Coverage Delta | ... | ... |
+
+## Report Artifacts
+- Canonical PDF: `<report_pdf_path or none>`
+- Bundle: `<report_artifact_path or none>`
+- Artifact URL: `<report_artifact_url or none>`
 
 ## Findings
 - <high-signal citations only>

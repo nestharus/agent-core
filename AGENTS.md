@@ -30,6 +30,9 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 - `coverage-auditor` - Judge test quality after coverage analysis or new test work, especially for captured behavior, dead tests, or low-value assertions.
   File: [~/ai/agents/coverage-auditor.md](agents/coverage-auditor.md) | Inputs: `task`, `worktree_path`, `test_files?`, `behavior_specs?` | Model: `claude-opus`
 
+- `coverage-expansion-operator` - Orchestrate coverage expansion from uncovered code through P0 selection, behavior investigation, test writing, strict xfails, and report artifacts.
+  File: [~/ai/agents/coverage-expansion-operator.md](agents/coverage-expansion-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_root?`, `spec_dir?`, `scope?`, `coverage_report?`, `agents_dir?`, `report_slug?` | Model: `gpt-high`
+
 - `risk-assessor` - Rank uncovered code by outage potential, blast radius, and business value before choosing what to test first.
   File: [~/ai/agents/risk-assessor.md](agents/risk-assessor.md) | Inputs: `uncovered_areas`, `worktree_path`, `coverage_data?` | Model: `claude-opus`
 
@@ -123,6 +126,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
 - Roadmap (4-layer strategic pipeline): [`~/ai/workflows/roadmap.md`](workflows/roadmap.md)
 - Tiered approval (3-tier action safety): [`~/ai/workflows/tiered-approval.md`](workflows/tiered-approval.md)
+- Verified rebase (deterministic residual bundle + rollback; single rebase path): [`~/ai/workflows/verified-rebase.md`](workflows/verified-rebase.md)
 
 ## Conventions
 

@@ -48,6 +48,7 @@ Each round summary must record:
 - `round`: round number.
 - `artifact_under_review`: path or identifier for the artifact reviewed in that round.
 - `round_artifacts`: paths to proposal/review/result files created in the round.
+- `report_artifacts`: report bundle paths created or consumed in the round, including canonical PDF paths, uploaded artifact URLs, screenshot paths, non-UI evidence paths, and report-index path when present.
 - `prior_finding_counters`: closure, regression, weakened, not-closed, and intact counts for prior findings.
 - `new_findings`: stable finding IDs for this round.
 - `oscillation`: classification and ancestor chain for same-label, same-family, fix-created, two-generation, or named three-generation recurrence.
@@ -58,6 +59,8 @@ Each round summary must record:
 - `next_handoff`: what the next writer, reviewer, or operator must read first.
 
 For repeated loops that include Phase 6 firstness review, include the Phase 6 process-tree report and `${scratch_dir}/phase6/step6b-output-index.md` as `round_artifacts` or `role_outputs` when those artifacts feed the next round's determination.
+
+When a round produces or consumes a test-report or coverage-expansion report bundle, include `reports/report-index.md`, canonical PDF paths, uploaded artifact URLs, screenshot paths, and non-UI evidence paths in `report_artifacts`. Keep `round_artifacts` for the broader proposal/review/gate outputs; `report_artifacts` is the first-class report bundle index for later rounds.
 
 Each finding must record:
 
@@ -77,6 +80,12 @@ Each finding must record:
 
 - Artifact under review: `<path>`
 - Round artifacts: `<path>`, `<path>`
+- Report artifacts:
+  - report index: `<path or none>`
+  - PDFs: `<path>`, `<path>`
+  - uploaded artifact URL: `<url or none>`
+  - screenshots: `<paths or none>`
+  - non-UI evidence: `<paths or none>`
 - Prior finding counters:
   - closed: <n>
   - intact: <n>

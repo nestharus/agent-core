@@ -41,6 +41,8 @@ Required artifact, status, verdict, or required section is missing, malformed, s
 
 Default severity: `blocking`.
 
+Report-emission examples include: canonical PDF missing when a report bundle is required; Product, Engineering, or Investigative report missing from a coverage-expansion run; screenshot artifact missing for a UI-touching test, bug, or report claim; non-UI evidence artifact missing for a backend-only behavior claim; or `reports/report-index.md` missing, malformed, stale, or not tied to the expected process node.
+
 ### 3. Gate/termination violation
 
 Workflow advanced after a non-passing model or human gate, ignored a required return-to-research signal, or ignored a terminate/close signal.
@@ -65,6 +67,8 @@ Required citations, primary-source evidence, evidence traces, grounding steps, i
 
 Default severity: `blocking` when the claim affects a recommendation, gate, design, or handoff; otherwise `advisory`.
 
+Report-emission grounding examples include: a code claim lacks `file_path:line_number`; a code claim lacks the exact fenced code block that supports it; a discovered-bug report lacks the strict-xfail marker, behavior-source commit hash, failing behavior, production-code excerpt, screenshot or non-UI evidence, or intended-versus-actual explanation required by `~/ai/conventions/test-reports.md`.
+
 ### 7. Parallelism/isolation violation
 
 Concurrent writers used the same worktree or project root when isolation was required.
@@ -84,6 +88,8 @@ An agent reports success, a trace node succeeds, or a workflow appears complete 
 For Phase 6 firstness, this class includes a workflow that reports Step 6b complete, Step 6c consumable, Phase 6 complete, or PR-review-ready while required firstness work, output, evidence, or verification is absent or contradicted.
 
 Examples include: missing Step 6b or Step 6c expected-process entries; the same invocation mapped to both Step 6b and Step 6c; Step 6c running before Step 6b outputs existed; missing, malformed, stale, or unmapped Step 6b output index; missing Step 6c consumption evidence; Step 6b prompt/log evidence that the test writer saw implementation context; or downstream advancement while required firstness evidence was absent without surfacing `NEEDS_INPUT:<question_artifact>`.
+
+Report-emission false-completion examples include: a PR comment presents itself as the canonical report instead of linking to the PDF bundle; an agent reports report generation complete while a required PDF, screenshot, non-UI evidence artifact, or report-index entry is absent; or workflow synthesis advances while required report artifacts are missing without surfacing `NEEDS_INPUT`.
 
 Default severity: `blocking`.
 
