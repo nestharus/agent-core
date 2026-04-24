@@ -23,4 +23,5 @@ Order is stable: numbered prefixes do not get reused. A dropped initiative gets 
 | 03 | Process-tree review — validate workflow execution via agents process tree + `process-tree-auditor` operator | landed | — |
 | 04 | Agent Q&A + session resumption — let sub-agents ask the user questions and resume cleanly (~/ai side); agent-runner work spawned as Init 06 | landed | 03 (soft) |
 | 05 | Audit history — per-role decision history passed to each LLM in a cycle; self-oscillation visibility; decision-encoder reviewer | landed | — |
-| 06 | Agent-runner session-id resumption — non-interactive resume-with-answer path + cache-hit observability | committed, awaiting push | 04 |
+| 06 | Agent-runner session-id resumption — non-interactive resume-with-answer path + session_id ingest + top-level --resume unification | landed (merged to main, v0.1.12 released, installed at `~/.local/bin/agents`) | 04 |
+| 07 | Test report richness (screenshots + PDFs + highlighted code refs) + coverage-expansion workflow formalization | queued | — |
