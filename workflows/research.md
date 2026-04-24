@@ -9,6 +9,8 @@ This doc cites phase-level choices but does not restate the matrix.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
+Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
+Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
 
 ## When to use
 
@@ -72,6 +74,8 @@ Each researcher:
 - Does not design solutions.
 
 Research produces evidence, not proposals.
+
+For parallel-fanout research, after Phase 2 returns and before Phase 3 synthesis, run `process-tree-auditor` on the fanout subtree. The expected process lists each researcher question, prompt, log, and raw finding artifact. A blocking process violation prevents synthesis from consuming incomplete fanout.
 
 ### Phase 3 - Synthesis
 

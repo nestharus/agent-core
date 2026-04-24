@@ -19,6 +19,9 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 - `workflow-reviewer` - Verify that a multi-step operator run actually followed its required procedure and produced the expected outputs.
   File: [~/ai/agents/workflow-reviewer.md](agents/workflow-reviewer.md) | Inputs: `operator_file`, `step_log`, `expected_outputs?`, `mode?` | Model: `claude-opus`
 
+- `process-tree-auditor` - Audit an `agents trace --json` process tree plus companion artifacts to verify root-delegated workflow execution.
+  File: [~/ai/agents/process-tree-auditor.md](agents/process-tree-auditor.md) | Inputs: `operator_file`, `process_tree_path`, `root_invocation_uuid`, `subtree_root_uuid?`, `expected_process`, `companion_artifacts`, `audit_history_path?`, `mode?`, `report_path?` | Model: `gpt-high`
+
 ### Coverage / behavior / test authoring
 
 - `coverage-analyzer` - Build a coverage inventory when you need covered vs. uncovered code, dead tests, or regression-baseline data.
@@ -130,6 +133,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence
 - [`~/ai/conventions/audit-history.md`](conventions/audit-history.md) - audit history schema, revise/review loop rules, decision-agent dispatch, and finding ID convention
+- [`~/ai/conventions/workflow-execution-violations.md`](conventions/workflow-execution-violations.md) - process-review violation taxonomy and blocking/advisory defaults
 
 ## Model Roles
 

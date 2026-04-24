@@ -8,6 +8,8 @@ Run on the **actual diff**, not the proposal. Proposals can look reasonable whil
 
 When PR review enters a repeated fix/gate loop, follow `~/ai/conventions/audit-history.md` for audit-history schema, oscillation classification, and decision-agent dispatch.
 
+Process-tree review uses `~/ai/agents/process-tree-auditor.md` and the violation taxonomy in `~/ai/conventions/workflow-execution-violations.md`.
+
 ## Gates
 
 | Gate | Model | Purpose |
@@ -119,6 +121,7 @@ One `gpt-high` agent collects the gate outputs and posts one synthesized PR comm
 
 Synthesis rules:
 
+- Process-tree review: before synthesis consumes or posts gate outputs, run `process-tree-auditor` on the PR-review gate fanout. The expected process includes test audit, multi-concern review, justification review, supported-surface verification, commit hygiene, and each gate output consumed by synthesis. A blocking process violation prevents synthesis/posting.
 - Include each gate verdict.
 - Include the specific findings needed for the next fix pass.
 - Group findings by file or concern, not by gate.
@@ -131,6 +134,8 @@ Synthesis rules:
 When fix passes repeat, maintain audit history under `~/ai/conventions/audit-history.md`. A recurring same-family finding, a prior finding that weakens or regresses, or a two-generation oscillation is not ordinary fix-pass work; classify it before continuing.
 
 If hard triggers do not decide the next action and the choice is `apply` versus another narrow fix pass, dispatch per-role decision agents under `~/ai/conventions/audit-history.md` before acting. Record the reconciled determination in the audit history.
+
+When a fix pass reruns gates, run `process-tree-auditor` on the rerun subtree before the next synthesis or loop decision. If the loop is using audit history, the process-tree audit report is a role output for `decision-encoder`.
 
 If any gate surfaces findings that require code changes:
 

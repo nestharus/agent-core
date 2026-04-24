@@ -1,7 +1,7 @@
 # Initiative 03 — Process-tree review of workflow execution
 
-**Status:** queued
-**Depends on:** — (orthogonal to 01/02; can run in parallel or after if bandwidth requires)
+**Status:** landed (this commit creates `process-tree-auditor` operator + `workflow-execution-violations.md` convention)
+**Depends on:** —
 **Blocks:** 04 (soft — Q&A resumption is cleaner to design once the process-tree + orchestrator split is explicit)
 
 ## Problem (user framing, verbatim)
@@ -48,3 +48,6 @@
 ## Log
 
 - **2026-04-23** — Initiative queued. Captured framing + firm constraints.
+- **2026-04-23** — Research fan-out: R1 agent-runner tree capability (with real `agents trace` sample), R2 workflow-reviewer audit, R3 placement analysis, R4 violation taxonomy. Synthesis produced 12 PG-gaps and 6 options (A-F).
+- **2026-04-23** — Proposal cycle: v0 (7 non-blocking P-findings) → v2 (1 cosmetic Q1 style mismatch) → apply with Q1 folded in. Convergence in one revision round. All 6 options resolved (no deferrals): new `process-tree-auditor` operator (not a workflow-reviewer mode), input contract includes `process_tree_path` + `expected_process` + optional `subtree_root_uuid`, violation taxonomy landed as new convention, tree-review emits report (not audit-history entries — Init 05 split preserved), per-site gate ownership mix of human/model/advisory.
+- **2026-04-23** — Applied: new `~/ai/agents/process-tree-auditor.md`, new `~/ai/conventions/workflow-execution-violations.md`, references added to implementation-pipeline / pr-review / research / coderabbit-loop / roadmap workflows, AGENTS.md routing updated, agentsmd-maintenance-orchestrator gets optional tree-review sub-step.

@@ -125,6 +125,8 @@ If no new findings and triaged ones are closed, proceed to Step 7.
 
 Dispatch `agents/workflow-reviewer.md` on this workflow's step log. Confirm the orchestrator followed its own non-negotiables. Pass `operator_file=${agents_dir}/agentsmd-maintenance-orchestrator.md`, `step_log=<your written step log>`, and `expected_outputs=<list of artifact paths produced this run>`.
 
+If this maintenance run delegated one or more sub-orchestrators, also dispatch `agents/process-tree-auditor.md` on each delegated subtree before Step 8. The expected process includes each sub-orchestrator prompt/log, produced artifacts, and verification outputs. A blocking process violation prevents reporting the maintenance run as clean.
+
 If workflow-reviewer flags violations, address them in a follow-up cycle.
 
 ### Step 8: Report

@@ -75,6 +75,7 @@ Do not use this workflow for:
     item in the ordering?
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 1 gate.
+- **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
 - **Gate**: human approves the strategic ordering before engineering-layer
   decomposition begins.
 
@@ -95,6 +96,7 @@ Do not use this workflow for:
     executive roadmap it claims to serve?
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 2 gate.
+- **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
 - **Gate**: human resolves engineering-vs-executive ordering disagreements.
 
 ### Layer 3 - AI-optimized roadmap
@@ -112,6 +114,7 @@ Do not use this workflow for:
     depend on parallel-agent coordination the pipeline cannot model well?
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 3 gate.
+- **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
 - **Gate**: model. The orchestrator validates completeness against Layer 2.
   Human review is required only if the orchestrator flags divergence.
 
@@ -122,6 +125,7 @@ Do not use this workflow for:
   slices, and revision rationale from the roadmap stage above it.
 - **Constraint**: tickets are handoff artifacts, not mini-roadmaps. Keep them
   implementation-ready.
+- **Process-tree review**: when ticket generation used delegated operators, run `process-tree-auditor` on the delegated ticket-generation subtree before implementation handoff. The expected process includes each delegated operator prompt/log, generated ticket output, and handoff status. A blocking process violation prevents tickets from entering the implementation pipeline.
 - **Gate**: human reviews tickets before they enter the implementation
   pipeline.
 

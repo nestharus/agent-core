@@ -11,6 +11,8 @@ Agent invocation: `~/ai/workflows/agents-cli.md`
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Git and PR conventions: `~/ai/conventions/git.md`
 Audit-history convention for revise/review loops: `~/ai/conventions/audit-history.md`
+Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
+Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
 
 ## Principles
 
@@ -103,6 +105,7 @@ The exact model assignments for these roles live in `~/ai/models/roles.md`.
 - Rule: if proposal revision and risk review enter a second round, create or update audit history under `~/ai/conventions/audit-history.md`. Track prior-finding closure/regression, new findings, oscillation classification, decompose-trigger status, watch signals, and the current `continue` / `apply` / `decompose` determination.
 - Rule: if hard revise/review triggers do not decide `continue`, `apply`, or `decompose`, use the decision-agent dispatch pattern in `~/ai/conventions/audit-history.md` before the orchestrator calls the loop.
 - Rule: if a proposer claims it "re-ran the risks itself," ignore that claim and re-dispatch the actual risk agents.
+- Rule: Process-tree review: after the Phase 4 risk fanout joins, run `process-tree-auditor` on the root-delegated risk-gate subtree before Phase 5 consumes the reports. The expected process includes the four risk reports, their required model/role assignments, their logs, and their verdict artifacts. A blocking process violation prevents Phase 5.
 - Gate: model. The risk gate is the proposal review.
 
 ## Phase 4.5 - Alignment (optional; governance layer only)
@@ -160,6 +163,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Rule: if a test is wrong, that is the contract's fault, not the test's.
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
 - Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
+- Rule: Process-tree review: after Step 6c completes and before Phase 7, run `process-tree-auditor` on the Phase 6 subtree. The expected process must prove separate Step 6b and Step 6c invocations and verify the Step 6b outputs that Step 6c consumed. A blocking independence or silent-success violation prevents CodeRabbit.
 
 ## Phase 7 - CodeRabbit Loop
 
@@ -175,6 +179,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - That workflow covers test-audit review, multi-concern PR review, justification PR review, and commit hygiene.
 - Rule: do not duplicate the full procedure here.
 - Rule: if those gates say the diff should be split, split it before opening PRs.
+- Rule: Process-tree review: after Phase 8 gates pass and before Phase 9, run `process-tree-auditor` on the delegated CodeRabbit and PR-review subtrees. A blocking process violation prevents draft PR creation until the affected subtree is rerun or repaired.
 
 ## Phase 9 - Draft PR
 

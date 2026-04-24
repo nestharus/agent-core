@@ -32,6 +32,8 @@ When pass findings are copied into audit history, assign collision-safe IDs as `
 
 Typical convergence: 3-6 passes.
 
+When an agent-driven `coderabbit-operator` runs this loop, run `process-tree-auditor` after convergence and before returning to Phase 8. The expected process includes the operator prompt/log, pass outputs, amend-only evidence, latest CodeRabbit output, and audit-history role output when the loop reached a second pass. A blocking process violation prevents handoff to PR review gates.
+
 ## Rules
 
 - **Never push during the loop.** The branch stays local. Pushing between passes breaks the amend-only pattern and creates force-push noise in review history.
