@@ -27,6 +27,7 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
 - `worktree-path`: directory where `coderabbit review --cwd` runs (the PR's worktree)
 - `test-command` (optional): how to run tests after fixes (e.g., `pytest <path> -q`). If absent, skip test-after-fix step.
 - `max-passes` (optional, default 8): hard cap on iterations to prevent infinite loops on flip-flop findings
+- `audit-history-path` (optional): canonical audit-history file for pass-loop findings, flip-flops, skipped rationales, and convergence determinations.
 
 ## Non-Negotiables
 
@@ -106,6 +107,10 @@ For each pass, write `CODERABBIT_pass<N>.md` to the worktree with:
 - Edits applied (file:line + summary)
 - Test result after amend (PASS/FAIL)
 - Decision: continue or converge
+
+If `audit-history-path` is supplied, update it after each pass with the pass finding count, real/skipped breakdown, flip-flop classifications, skipped rationales, watch signals, and the pass determination (`continue`, `apply`, or `decompose` if pass churn indicates the branch is no longer reviewable at this grain).
+
+When encoding pass findings into audit history, use `R<round>-F<NN>` IDs. Do not use bare letter prefixes such as `F`, `G`, `H`, or `I`.
 
 After convergence, write `CODERABBIT_summary.md`:
 - Total passes run

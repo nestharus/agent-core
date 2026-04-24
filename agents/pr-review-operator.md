@@ -38,12 +38,14 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 - `pr_number`: The PR number to review (e.g., `390`)
 - `repo` (optional): Repository in `OWNER/REPO` format. If omitted, resolve it from the checkout's `origin` remote before running the review.
 - `repo_root` (required): Path to the repo checkout.
+- `audit_history_path` (optional): canonical audit-history file for repeated review/fix/proposal loops. If omitted, create `$WORK_DIR/audit-history.md` when a gate enters a second round.
 
 ## Inputs
 
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs directory passed to downstream review workflows.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated review steps.
+- `--input audit_history_path=<path>` (optional) — canonical audit-history file passed to looped downstream operators.
 
 ## Procedure
 
@@ -360,6 +362,7 @@ Inputs:
 - planning_root: ${planning_root}
 - pr_meta_path: $WORK_DIR/pr-meta.json
 - diff_path: $WORK_DIR/diff.txt
+- audit_history_path: ${audit_history_path:-$WORK_DIR/audit-history.md}
 
 Create the scratch layout at \`\$work_dir/justification/\` and run rounds 1..5
 (interrogator → researcher → value assessor → adjudicator). Stop when all
@@ -502,6 +505,8 @@ If any risk is MEDIUM or HIGH:
 2. Run `gpt-high` to revise
 3. Re-run 3x risk gate on the revision
 4. Repeat until all three are LOW (max 3 iterations)
+
+For each proposal revision/re-risk round, update `audit_history_path` with prior-finding closure/regression counters, new findings, oscillation classification, decompose-trigger status, watch signals, and the current determination. If hard triggers do not decide whether to continue, apply, or decompose, dispatch per-role decision agents under `~/ai/conventions/audit-history.md`.
 
 #### 6c. Post Recommendation
 

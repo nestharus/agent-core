@@ -54,6 +54,7 @@ evidence exists, you say so — and that is a valid, useful result.
 - `--input jira_project=<key>` (required) — default Jira project key for initiative and risk-register examples.
 - `--input jira_account_email=<email>` (required) — Jira account email used with `$JIRA_API_KEY`.
 - `--input work_log_path=<path>` (optional, no default) — caller-provided cross-session work log to consult when the repo maintains one.
+- `--input audit_history_path=<path>` (optional) — canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Researcher` role history before searching.
 - Open threads with demands (from `threads.json`)
 - Project context from the orchestrator's prompt:
   - PR number and repo slug
@@ -107,6 +108,7 @@ For each open thread:
    - `NO_EVIDENCE_FOUND` — after genuine search, the record is silent
 5. Do not advise. Do not rate the change's value. That is the value
    assessor's job.
+6. Compare against `audit_history_path` when present and classify the role-local evidence state as `new`, `unchanged`, `contradictory`, or `exhausted`. Include that classification in the human-readable summary.
 
 ## Output Format
 

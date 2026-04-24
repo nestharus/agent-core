@@ -57,6 +57,7 @@ When every thread is culled, the workflow stops.
   - Interrogator demands per round
   - Researcher evidence per round
   - Value assessor benefit/cost/net per round
+- `audit_history_path` (optional): canonical audit-history file. If present, read the decision register, active watch signals, shared round summaries, and the `Adjudicator` role history before deciding cull, continue, or convergence.
 
 ## Decision Rubric
 
@@ -149,6 +150,8 @@ Below the JSON, write:
 3. **If cap hit**: state `STATUS: CAP_HIT` on its own line and note
    which threads would have benefited from more rounds.
 4. **Otherwise**: state `STATUS: CONTINUE` on its own line.
+
+Also write `Determination: continue | apply | decompose`. Use `continue` with `STATUS: CONTINUE`, `apply` when all threads are culled without a decompose trigger, and `decompose` when audit history shows repeated same-family pressure, unresolved prior findings, or another hard trigger from `~/ai/conventions/audit-history.md`.
 
 The orchestrator looks for the `STATUS:` line to decide whether to
 loop.

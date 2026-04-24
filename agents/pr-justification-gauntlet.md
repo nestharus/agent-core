@@ -63,12 +63,14 @@ Phase 4b) with an adversarial loop.
   fetched by the caller.
 - `diff_path` (optional, default `$work_dir/diff.txt`): already fetched by
   the caller.
+- `audit_history_path` (optional): canonical audit-history file for this multi-round gauntlet. If omitted, create `$work_dir/justification/audit-history.md` when the workflow enters round 2.
 
 ## Inputs
 
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning and initiative docs directory for researcher passes.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for gauntlet sub-agents.
+- `--input audit_history_path=<path>` (optional) — canonical audit-history file to read before each round and update after each adjudicator result.
 
 ## Scratch Layout
 
@@ -135,6 +137,8 @@ interrogator sees in round 1.
 
 Increment round, create `$JG/round-$N/`, run the four sub-agents in
 sequence, update `threads.json`, then decide whether to loop.
+
+If `audit_history_path` exists, read it before writing round prompts and include the role-relevant section in each sub-agent prompt. After the adjudicator result for each round, run `decision-encoder` to append the round summary, role histories, decision-register entry, watch signals, and summarization tail. `threads.json` remains the operational thread state; audit history is the cross-role revise/review history.
 
 #### 1a. Interrogator (`claude-opus`)
 

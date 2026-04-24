@@ -6,6 +6,8 @@ This phase is decomposition review plus supported-surface verification, test-cov
 
 Run on the **actual diff**, not the proposal. Proposals can look reasonable while the diff bundles too much.
 
+When PR review enters a repeated fix/gate loop, follow `~/ai/conventions/audit-history.md` for audit-history schema, oscillation classification, and decision-agent dispatch.
+
 ## Gates
 
 | Gate | Model | Purpose |
@@ -125,6 +127,10 @@ Synthesis rules:
 - Put any supported-surface mismatch, research re-entry trigger, or non-positive-value termination ahead of ordinary fix-pass findings.
 
 ## Fix Pass
+
+When fix passes repeat, maintain audit history under `~/ai/conventions/audit-history.md`. A recurring same-family finding, a prior finding that weakens or regresses, or a two-generation oscillation is not ordinary fix-pass work; classify it before continuing.
+
+If hard triggers do not decide the next action and the choice is `apply` versus another narrow fix pass, dispatch per-role decision agents under `~/ai/conventions/audit-history.md` before acting. Record the reconciled determination in the audit history.
 
 If any gate surfaces findings that require code changes:
 

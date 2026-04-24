@@ -28,6 +28,8 @@ coderabbit review --plain --base main --cwd <project-dir>
 5. Stop when per-pass value drops to zero.
 ```
 
+When pass findings are copied into audit history, assign collision-safe IDs as `R<round>-F<NN>`. Preserve CodeRabbit's original text in the finding summary, not as the canonical ID.
+
 Typical convergence: 3-6 passes.
 
 ## Rules
@@ -40,6 +42,7 @@ Typical convergence: 3-6 passes.
 - **Do not weaken tests to converge.** A CodeRabbit finding is not a reason to relax assertions, regenerate baselines, delete coverage, narrow input space, or remove risk annotations.
 - **Treat tests as ground truth.** If a review finding shows a test is wrong, route that through changed intent, corrected fixture truth, explicit invalidation, or documented test bug evidence; otherwise fix product code.
 - **Stale re-posts are ignorable.** CodeRabbit sometimes re-posts prior-pass findings against a new HEAD after the fix has landed. Verify against the current file; if the fix is present, move on.
+- **Track pass-loop oscillation.** When a CodeRabbit loop reaches a second pass, use the audit-history schema to distinguish progress from same-family churn, duplicate reposts, and flip-flops.
 - **Local branch hygiene matters.** Because the branch stays local, rebases and fixups stay cheap until the loop converges.
 - **Use the latest pass output.** Do not keep fixing against stale comments after a fresh amend and rerun.
 

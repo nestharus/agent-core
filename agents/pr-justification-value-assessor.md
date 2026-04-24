@@ -48,6 +48,7 @@ answer that is not in the current thread evidence, you dispatch a
 
 - Open threads with researcher evidence (from `threads.json`)
 - Prior-round history
+- `audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Value assessor` role history before scoring.
 
 ## Value Rubric
 
@@ -139,6 +140,8 @@ Below the JSON, write a 4–8 sentence summary: rank the threads by net
 value, flag any where sub-agent findings shifted your assessment, and
 flag any where benefit or cost hinges on a fact the record cannot
 confirm.
+
+End with `Value state: stable | shifted | oscillating | exhausted`. Use the prior value history and current benefit/cost scores to classify whether another assessment round is expected to change the adjudicator's inputs.
 
 ## Sub-agent Dispatch Template
 

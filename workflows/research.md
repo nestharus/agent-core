@@ -116,6 +116,7 @@ Human reads the synthesized report and decides next steps.
   write to `.tmp/` or `.build/`, shared project root is acceptable.
 - **Synthesis happens once.** Do not synthesize the synthesis. If the result is
   wrong, fix the bad research output and re-synthesize from source findings.
+- **Use audit history for repeated review loops.** When research synthesis is revised and re-reviewed across rounds, follow `~/ai/conventions/audit-history.md` so prior findings, watch signals, and determinations remain visible.
 
 ## Design Research Specialization
 

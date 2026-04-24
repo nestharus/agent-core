@@ -10,6 +10,7 @@ Use it exactly, including the synthesis/audit-vs-judgment split and the rule tha
 Agent invocation: `~/ai/workflows/agents-cli.md`
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Git and PR conventions: `~/ai/conventions/git.md`
+Audit-history convention for revise/review loops: `~/ai/conventions/audit-history.md`
 
 ## Principles
 
@@ -99,6 +100,8 @@ The exact model assignments for these roles live in `~/ai/models/roles.md`.
 - Rule: supported-surface termination is an orthogonal dimension from the LOW/MEDIUM/HIGH verdict. Evaluate it first and in this order: invalidated assumption that breaks the current problem framing -> return to research and resume at Phase 2.5; otherwise non-positive value on the current supported surface -> terminate the work. A `LOW` supported-surface verdict with a non-positive value signal still terminates. Only when no termination signal fires does the LOW/MEDIUM/HIGH verdict control the next step.
 - Rule: when no termination signal fires, any `MEDIUM` or `HIGH` report means revise the proposal and re-run all four.
 - Rule: do not keep old `LOW` reports after a substantive proposal revision.
+- Rule: if proposal revision and risk review enter a second round, create or update audit history under `~/ai/conventions/audit-history.md`. Track prior-finding closure/regression, new findings, oscillation classification, decompose-trigger status, watch signals, and the current `continue` / `apply` / `decompose` determination.
+- Rule: if hard revise/review triggers do not decide `continue`, `apply`, or `decompose`, use the decision-agent dispatch pattern in `~/ai/conventions/audit-history.md` before the orchestrator calls the loop.
 - Rule: if a proposer claims it "re-ran the risks itself," ignore that claim and re-dispatch the actual risk agents.
 - Gate: model. The risk gate is the proposal review.
 
@@ -229,3 +232,4 @@ Without that record, the phase was not skipped correctly.
 - `~/ai/conventions/no-backwards-compatibility.md`
 - `~/ai/conventions/no-deferred-stubs.md`
 - `~/ai/conventions/gate-ownership.md`
+- `~/ai/conventions/audit-history.md`

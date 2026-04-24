@@ -54,28 +54,31 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 ### PR review / justification
 
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
-  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?` | Model: `gpt-high`
+  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
 
 - `commit-hygiene-operator` - Audit or rewrite a branch's commits into small, testable, reviewable history without changing the cumulative diff.
   File: [~/ai/agents/commit-hygiene-operator.md](agents/commit-hygiene-operator.md) | Inputs: `branch`, `base`, `mode`, `target_commit_plan?`, `repo_root`, `worktrees_root?`, `worktree_path?`, `python_bin?` | Model: `gpt-high`
 
 - `pr-review-operator` - Run the full PR review pipeline across risk, research, test-audit, decomposition, and posted review comments.
-  File: [~/ai/agents/pr-review-operator.md](agents/pr-review-operator.md) | Inputs: `pr_number`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?` | Model: `gpt-high`
+  File: [~/ai/agents/pr-review-operator.md](agents/pr-review-operator.md) | Inputs: `pr_number`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-gauntlet` - Orchestrate the multi-round justification loop across interrogator, researcher, value assessment, and adjudication.
-  File: [~/ai/agents/pr-justification-gauntlet.md](agents/pr-justification-gauntlet.md) | Inputs: `pr_number`, `work_dir`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `pr_meta_path?`, `diff_path?` | Model: `gpt-high`
+  File: [~/ai/agents/pr-justification-gauntlet.md](agents/pr-justification-gauntlet.md) | Inputs: `pr_number`, `work_dir`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `pr_meta_path?`, `diff_path?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-interrogator` - Read only the PR and open or press threads for any change that is not obviously justified in this PR.
-  File: [~/ai/agents/pr-justification-interrogator.md](agents/pr-justification-interrogator.md) | Inputs: `pr metadata`, `diff`, `threads.json?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-interrogator.md](agents/pr-justification-interrogator.md) | Inputs: `pr metadata`, `diff`, `threads.json?`, `audit_history_path?` | Model: `claude-opus`
 
 - `pr-justification-researcher` - Gather evidence from planning docs, Jira, related PRs, and git history for each open justification thread.
-  File: [~/ai/agents/pr-justification-researcher.md](agents/pr-justification-researcher.md) | Inputs: `repo_root`, `planning_root?`, `jira_url`, `jira_project`, `jira_account_email`, `threads.json`, `prior_history?` | Model: `gpt-high`
+  File: [~/ai/agents/pr-justification-researcher.md](agents/pr-justification-researcher.md) | Inputs: `repo_root`, `planning_root?`, `jira_url`, `jira_project`, `jira_account_email`, `threads.json`, `prior_history?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-value-assessor` - Score the benefit and cost of keeping each challenged change in the current PR.
-  File: [~/ai/agents/pr-justification-value-assessor.md](agents/pr-justification-value-assessor.md) | Inputs: `threads.json`, `prior_history?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-value-assessor.md](agents/pr-justification-value-assessor.md) | Inputs: `threads.json`, `prior_history?`, `audit_history_path?` | Model: `claude-opus`
 
 - `pr-justification-adjudicator` - Decide when a justification thread is settled and cull it as `drop`, `backlog`, `keep`, or continue to another round.
-  File: [~/ai/agents/pr-justification-adjudicator.md](agents/pr-justification-adjudicator.md) | Inputs: `threads.json`, `round history` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-adjudicator.md](agents/pr-justification-adjudicator.md) | Inputs: `threads.json`, `round history`, `audit_history_path?` | Model: `claude-opus`
+
+- `decision-encoder` - Maintain canonical audit history after revise/review rounds by encoding findings, role determinations, watch signals, and summarization tail.
+  File: [~/ai/agents/decision-encoder.md](agents/decision-encoder.md) | Inputs: `audit_history_path`, `round_number`, `artifact_under_review`, `round_artifacts`, `role_outputs`, `mode?` | Model: `gpt-high`
 
 - `fastapi-review-operator` - Run the secondary FastAPI-specific PR review once the primary review pipeline has already passed its risk gate.
   File: [~/ai/agents/fastapi-review-operator.md](agents/fastapi-review-operator.md) | Inputs: `pr_number`, `repo_root`, `repo?`, `agents_dir?`, `reference_doc?` | Model: `gpt-high`
@@ -126,6 +129,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence
+- [`~/ai/conventions/audit-history.md`](conventions/audit-history.md) - audit history schema, revise/review loop rules, decision-agent dispatch, and finding ID convention
 
 ## Model Roles
 

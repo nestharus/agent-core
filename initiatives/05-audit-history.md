@@ -1,6 +1,6 @@
 # Initiative 05 — Audit history for revise/review cycles
 
-**Status:** queued (first use landed inline in Initiative 01's round-3 decision)
+**Status:** landed (convention + decision-encoder operator + operator-input propagation landed in this commit)
 **Depends on:** — (orthogonal to 01-04; can run any time)
 **Blocks:** — (soft: improves the quality of any multi-round cycle, including 02/03/04)
 
@@ -70,3 +70,6 @@ This experience should inform the schema and the operator design when the initia
 ## Log
 
 - **2026-04-23** — Initiative queued. Captured framing + firm constraints. Prototype history applied inline to Initiative 01's round-3 decision; results feed the formal schema later.
+- **2026-04-23** — Research fan-out (4 tracks: R1 schema, R2 operator audit, R3 methodology, R4 encoder placement). Synthesis produced problem-def with 10 AG-gaps and 6 options (A-F). All options A-F moved to proposal.
+- **2026-04-23** — Proposal cycle: v0 (9 non-blocking N-findings) → v2 (1 documented residual O1, no oscillation; ready to apply). Convergence in one round. Encoder placement resolved as new `decision-encoder` operator; summarization policy `≥12000 words`; single role-tagged history file.
+- **2026-04-23** — Applied: new `~/ai/conventions/audit-history.md`, new `~/ai/agents/decision-encoder.md`, `audit_history_path?` input propagated across 7 operators (coderabbit-operator, pr-review-operator, pr-justification-gauntlet/interrogator/researcher/value-assessor/adjudicator), workflow references added to all 4 revise/review workflows (implementation-pipeline, pr-review, coderabbit-loop, research), AGENTS.md routing updated.

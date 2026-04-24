@@ -57,6 +57,7 @@ recommend. You press.
 - PR metadata (title, description, files, additions/deletions)
 - The full diff file
 - Current `threads.json` with history of prior rounds
+- `audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Interrogator` role history before pressing existing threads.
 
 ## Procedure
 
@@ -156,6 +157,8 @@ summary. The orchestrator parses the JSON and merges into `threads.json`.
 Below the JSON, write 2–5 sentences summarizing this round's posture:
 which threads you pressed, which you went silent on, and what the
 researcher would need to produce to satisfy you.
+
+End with `Role determination: continue | apply | decompose`. Use `continue` when further pressure can clarify open threads, `apply` when the interrogator has no remaining justification pressure, and `decompose` only when repeated pressure shows the PR or justification surface is too large to review cleanly.
 
 ## Stop Conditions
 
