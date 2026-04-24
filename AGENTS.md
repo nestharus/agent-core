@@ -132,6 +132,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence
+- [`~/ai/conventions/agent-questions-and-session-graph.md`](conventions/agent-questions-and-session-graph.md) - sub-agent question envelope, root surfacing, session graph, and resume/fallback convention
 - [`~/ai/conventions/audit-history.md`](conventions/audit-history.md) - audit history schema, revise/review loop rules, decision-agent dispatch, and finding ID convention
 - [`~/ai/conventions/workflow-execution-violations.md`](conventions/workflow-execution-violations.md) - process-review violation taxonomy and blocking/advisory defaults
 

@@ -8,6 +8,7 @@ Do not restate or override that matrix in project docs.
 Use it exactly, including the synthesis/audit-vs-judgment split and the rule that `gpt-xhigh` is not the default coordinator.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
+Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Git and PR conventions: `~/ai/conventions/git.md`
 Audit-history convention for revise/review loops: `~/ai/conventions/audit-history.md`
@@ -53,6 +54,7 @@ Core path:
 - Use when the request is vague, symptoms are broad, or the actual problem is unclear.
 - Artifact: `research/NN-*.md`
 - Role: document the problem space with evidence, constraints, examples, and open questions. **Do not** design solutions.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 - Gate: human. The user confirms that the framing is correct enough to continue.
 
 ## Phase 2 - Synthesize User Needs (optional; usually paired with Phase 1)
@@ -61,6 +63,7 @@ Core path:
 - Artifact: `research/NN-*-needs.md`
 - Role: map research to project-specific constraints, priorities, and anti-goals, and call out unanswered questions that block proposal work.
 - Rules: follow `~/ai/models/roles.md`. This phase is synthesis, not judgment, and still does not implement.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 - Gate: human. The user confirms the mapping and answers open questions.
 
 ## Phase 2.5 - Existing-State Risk Profile
@@ -73,6 +76,7 @@ Core path:
 - Rule: capture what exists now, what is already risky or brittle, which adjacent surfaces sit inside the blast radius, and which supported or user-reachable paths exercise this surface today.
 - Rule: keep the map bounded to the touched surface plus adjacent supported paths. Do not expand into a whole-system inventory.
 - Rule: if the current supported path is unclear, return to research. Resume by updating the `problem map`, then re-enter Phase 2.5 before proposal work starts.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 - Gate: human. The user confirms that the map names the right terrain before proposal work begins.
 
 ## Phase 3 - Proposal
@@ -124,6 +128,7 @@ The exact model assignments for these roles live in `~/ai/models/roles.md`.
 - Rule: identify anything parallel that should be merged into or removed instead of re-created.
 - Rule: if multiple implementation agents will work later, follow `~/ai/conventions/worktree-isolation.md`.
 - Rule: if hookpoint research shows the approved `problem map` or assumption register is wrong, stop and return to research; resume at Phase 2.5 with an updated `problem map` before implementation continues.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 - Gate: human. The user confirms what survives, what is replaced, and what is deleted.
 
 ## Phase 6 - Implementation (required; test/code separation)
@@ -134,6 +139,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 
 - Rule: Phase 6 consumes the approved `research/NN-problem-map.md`, approved `proposals/NN-*.md` including its test-intent track and assumption register, `risk/NN-supported-surface.md`, and `research/NN-hookpoints.md`.
 - Rule: if Step 6a, 6b, or 6c uncovers evidence that invalidates an approved assumption or shows the touched surface differs materially from the approved `problem map`, stop implementation and return to research; resume at Phase 2.5 before more code or tests are written.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 
 ### Step 6a - Define contract
 
@@ -171,6 +177,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Policy: follow `~/ai/workflows/coderabbit-loop.md`.
 - Rules: do not duplicate the CodeRabbit procedure here. This phase reviews the actual diff, not the proposal.
 - Rule: if CodeRabbit or the fix pass surfaces evidence that invalidates an approved assumption or collapses the approved net-value case, return to research and resume at Phase 2.5 instead of treating it as an ordinary review fix.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 
 ## Phase 8 - Post-CodeRabbit Review Gates
 
@@ -180,6 +187,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Rule: do not duplicate the full procedure here.
 - Rule: if those gates say the diff should be split, split it before opening PRs.
 - Rule: Process-tree review: after Phase 8 gates pass and before Phase 9, run `process-tree-auditor` on the delegated CodeRabbit and PR-review subtrees. A blocking process violation prevents draft PR creation until the affected subtree is rerun or repaired.
+- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 
 ## Phase 9 - Draft PR
 

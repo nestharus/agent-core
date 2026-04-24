@@ -34,6 +34,12 @@ All sub-agent invocation goes through the `agents` CLI.
 - Pipeline docs should describe model choice, prompt shape, working directory, and log capture.
 - CLI reference details stay in `/home/nes/projects/agent-runner/README.md`, not in `~/ai/`.
 
+## Sub-agent questions
+
+Sub-agents do not talk to the user directly. When a sub-agent needs user input, it writes a question artifact under `~/ai/conventions/agent-questions-and-session-graph.md`, returns `NEEDS_INPUT:<question_artifact_path>`, and stops.
+
+The root orchestrator reads the artifact, presents the question and structured options to the user, writes the paired answer artifact, and continues the originating work through the feature-detected resume path or the session-files fallback from that convention. Downstream workflow steps that depend on the answer are blocked until continuation evidence exists.
+
 ## Parallel writers
 
 When multiple agents run concurrently and at least one writes tracked files, each agent MUST operate on its own git worktree.

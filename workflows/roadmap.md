@@ -10,6 +10,7 @@ Model assignments follow `~/ai/models/roles.md`.
 This doc cites layer-specific routing but does not restate the model matrix.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
+Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
 Market-research rules: `~/ai/workflows/research.md`
 Ticket handoff: `~/ai/workflows/implementation-pipeline.md`
 
@@ -60,6 +61,7 @@ Do not use this workflow for:
 - **Surface check**: if research reveals a product-strategy shift that changes
   the framing of the problem, re-enter the product-strategy alignment loop
   instead of continuing downward here.
+- **Question handling**: delegated questions are allowed only for framing choices that block market research or downstream ordering. The root handles `NEEDS_INPUT:<question_artifact>` through `~/ai/conventions/agent-questions-and-session-graph.md`.
 - **Gate**: human approves the market framing before roadmap work begins.
 
 ### Layer 1 - Executive roadmap
@@ -76,6 +78,7 @@ Do not use this workflow for:
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 1 gate.
 - **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
+- **Question handling**: delegated questions are allowed only for ordering disagreements that require human strategic input. The root must answer and apply them before engineering-layer decomposition begins.
 - **Gate**: human approves the strategic ordering before engineering-layer
   decomposition begins.
 
@@ -97,6 +100,7 @@ Do not use this workflow for:
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 2 gate.
 - **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
+- **Question handling**: delegated questions are allowed only for engineering-vs-executive divergence or ordering decisions owned by the user. The root blocks Layer 3 until continuation evidence exists.
 - **Gate**: human resolves engineering-vs-executive ordering disagreements.
 
 ### Layer 3 - AI-optimized roadmap
@@ -115,6 +119,7 @@ Do not use this workflow for:
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 3 gate.
 - **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
+- **Question handling**: delegated questions are allowed only for divergence from Layer 2 that the orchestrator flags as human-reviewable. Model-owned decomposition and coverage gates do not become user Q&A.
 - **Gate**: model. The orchestrator validates completeness against Layer 2.
   Human review is required only if the orchestrator flags divergence.
 
@@ -126,6 +131,7 @@ Do not use this workflow for:
 - **Constraint**: tickets are handoff artifacts, not mini-roadmaps. Keep them
   implementation-ready.
 - **Process-tree review**: when ticket generation used delegated operators, run `process-tree-auditor` on the delegated ticket-generation subtree before implementation handoff. The expected process includes each delegated operator prompt/log, generated ticket output, and handoff status. A blocking process violation prevents tickets from entering the implementation pipeline.
+- **Question handling**: delegated questions are allowed only for ticket-review decisions owned by the user. The implementation pipeline cannot consume tickets that depend on an unanswered question.
 - **Gate**: human reviews tickets before they enter the implementation
   pipeline.
 
@@ -164,6 +170,7 @@ See `~/ai/models/roles.md`.
   use `~/ai/workflows/research.md`.
 - **This workflow expands or revises over time.** It is not the bootstrap path
   for a product with no initial roadmap.
+- **Question handling stays root-owned.** Delegated `NEEDS_INPUT:<question_artifact>` returns are allowed only at layer framing, disagreement, divergence, and ticket-review gates. The root surfaces the question and blocks dependent layers until answer and continuation evidence exist.
 
 ## Expansion vs Revision
 

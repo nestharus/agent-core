@@ -8,6 +8,8 @@ Run on the **actual diff**, not the proposal. Proposals can look reasonable whil
 
 When PR review enters a repeated fix/gate loop, follow `~/ai/conventions/audit-history.md` for audit-history schema, oscillation classification, and decision-agent dispatch.
 
+Delegated user questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
+
 Process-tree review uses `~/ai/agents/process-tree-auditor.md` and the violation taxonomy in `~/ai/conventions/workflow-execution-violations.md`.
 
 ## Gates
@@ -128,6 +130,7 @@ Synthesis rules:
 - Tag each finding with severity so the fix pass has an execution order.
 - Preserve decomposition recommendations exactly when multi-concern review calls for a split.
 - Put any supported-surface mismatch, research re-entry trigger, or non-positive-value termination ahead of ordinary fix-pass findings.
+- Surface and apply any `NEEDS_INPUT:<question_artifact>` returned for user-owned evidence, missing gate inputs, unclear test intent, justification ambiguity, or pre-posting loop decisions before posting. A synthesized PR comment cannot consume unanswered or unapplied question-dependent gate output.
 
 ## Fix Pass
 
@@ -136,6 +139,8 @@ When fix passes repeat, maintain audit history under `~/ai/conventions/audit-his
 If hard triggers do not decide the next action and the choice is `apply` versus another narrow fix pass, dispatch per-role decision agents under `~/ai/conventions/audit-history.md` before acting. Record the reconciled determination in the audit history.
 
 When a fix pass reruns gates, run `process-tree-auditor` on the rerun subtree before the next synthesis or loop decision. If the loop is using audit history, the process-tree audit report is a role output for `decision-encoder`.
+
+If a delegated gate or operator returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Gate-affecting answers are recorded in audit history as deciding inputs before the loop continues, applies fixes, decomposes, posts, or opens a PR.
 
 If any gate surfaces findings that require code changes:
 

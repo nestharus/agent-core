@@ -89,6 +89,12 @@ Unauthorized stubs, silent placeholders, partial migrations, backwards-compatibi
 
 Default severity: `blocking`.
 
+### 11. Question/answer handling violation
+
+A sub-agent emitted a question artifact that the root did not surface, the workflow advanced while a blocking question was unanswered, an answer artifact was received but not applied to the originating work, continuation used the wrong session/graph, or resume/fallback evidence is missing.
+
+Default severity: `blocking` when the unanswered or unapplied question affects any downstream workflow input, gate, user-facing output, branch mutation, PR action, or approval. `needs_input` when required question, answer, or continuation evidence is absent. `advisory` only for non-blocking display metadata defects that do not affect the answer contract or continuation target.
+
 ## Reporting Requirements
 
 Each finding records:

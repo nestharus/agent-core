@@ -33,6 +33,7 @@ The file contains shared round summaries plus role-tagged sections:
 ### Adjudicator
 ### CodeRabbit operator
 ## Decision register
+## User Q&A Inputs
 ## Watch signals
 ## Summarization tail
 ## Final state
@@ -127,6 +128,23 @@ Each entry records:
 - dissent or ambiguity, if any
 - next action
 
+## User Q&A Inputs
+
+Q&A turns from `~/ai/conventions/agent-questions-and-session-graph.md` are not audit-history rounds by themselves. They become audit-history inputs only when the answer affects a revise/review loop, gate, verdict, or `continue` / `apply` / `decompose` decision.
+
+When a Q&A turn affects a loop decision, record:
+
+- `question_id`
+- question artifact path
+- answer artifact path
+- originating invocation UUID and session ID when known
+- continuation method: `resume-by-session-id` or `session-files-fallback`
+- deciding input summary
+- applied-to artifact, phase, gate, or finding chain
+- continuation evidence path
+
+The decision register should cite the answer as a deciding input, not as a replacement for role verdicts or gate outputs.
+
 ## Summarization Tail
 
 The `decision-encoder` keeps the current round and two prior rounds in full.
@@ -141,6 +159,7 @@ Never summarize away:
 - decompose-trigger status and trigger reason
 - the latest decision-register entry
 - any role determination that is still part of the current `continue` / `apply` / `decompose` decision
+- Q&A inputs that remain active deciding inputs, unresolved blockers, or cited evidence for the latest decision-register entry
 
 Summaries must preserve trend lines, final disposition of old findings, and any chain that later findings cite.
 

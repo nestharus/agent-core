@@ -8,6 +8,7 @@ Model assignments follow `~/ai/models/roles.md`.
 This doc cites phase-level choices but does not restate the matrix.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
+Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
 Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
@@ -60,6 +61,8 @@ Human writes or confirms the question.
 Scope it tightly. "Which caching library should we use?" beats
 "How should caching work?".
 
+Delegated agents may return `NEEDS_INPUT:<question_artifact>` only for scope clarification or reframing questions that block research. The root handles those questions through `~/ai/conventions/agent-questions-and-session-graph.md` before Phase 2 starts.
+
 ### Phase 2 - Research
 
 Dispatch according to the chosen shape.
@@ -74,6 +77,8 @@ Each researcher:
 - Does not design solutions.
 
 Research produces evidence, not proposals.
+
+In parallel fanout, delegated researchers may ask only for scope corrections that change their assigned sub-question. The root must answer and record continuation evidence before Phase 3 consumes the affected finding.
 
 For parallel-fanout research, after Phase 2 returns and before Phase 3 synthesis, run `process-tree-auditor` on the fanout subtree. The expected process lists each researcher question, prompt, log, and raw finding artifact. A blocking process violation prevents synthesis from consuming incomplete fanout.
 
@@ -96,6 +101,8 @@ findings into one deliverable.
 
 Do not invent a recommendation from thin data.
 
+If inconclusive evidence leaves a human-owned reframe or follow-up decision unresolved, the coordinator may return `NEEDS_INPUT:<question_artifact>`. Do not synthesize a recommendation or advance to Phase 4 until the answer is applied.
+
 ### Phase 4 - Decision
 
 Human reads the synthesized report and decides next steps.
@@ -106,6 +113,8 @@ Human reads the synthesized report and decides next steps.
 - Commission follow-up research.
 - If later evidence invalidates a recorded assumption, re-enter research and
   resume at Phase 2.5 rather than patching the proposal around it.
+
+Any delegated question at this phase must be limited to accept, reframe, or follow-up decisions owned by the user. The root surfaces it and blocks downstream proposal work until continuation evidence exists.
 
 ## Rules
 
@@ -121,6 +130,7 @@ Human reads the synthesized report and decides next steps.
 - **Synthesis happens once.** Do not synthesize the synthesis. If the result is
   wrong, fix the bad research output and re-synthesize from source findings.
 - **Use audit history for repeated review loops.** When research synthesis is revised and re-reviewed across rounds, follow `~/ai/conventions/audit-history.md` so prior findings, watch signals, and determinations remain visible.
+- **Question handling.** Use `~/ai/conventions/agent-questions-and-session-graph.md` for delegated scope, reframe, inconclusive-synthesis, and follow-up questions. Sub-agents must not ask the user to replace required research or model-owned synthesis.
 
 ## Design Research Specialization
 

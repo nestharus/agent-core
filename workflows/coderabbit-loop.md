@@ -2,6 +2,8 @@
 
 Step 7 of the implementation pipeline. Run until per-pass value drops to zero; do not push during the loop.
 
+Delegated user questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
+
 ## Preconditions
 
 - Run the loop from the branch under review, not from `main`.
@@ -34,6 +36,8 @@ Typical convergence: 3-6 passes.
 
 When an agent-driven `coderabbit-operator` runs this loop, run `process-tree-auditor` after convergence and before returning to Phase 8. The expected process includes the operator prompt/log, pass outputs, amend-only evidence, latest CodeRabbit output, and audit-history role output when the loop reached a second pass. A blocking process violation prevents handoff to PR review gates.
 
+If the operator returns `NEEDS_INPUT:<question_artifact>`, the root may surface it only for user-owned evidence, changed intent, test-truth ambiguity, or borderline continue/apply/decompose decisions. The loop and Phase 8 handoff are blocked until answer and continuation evidence exist.
+
 ## Rules
 
 - **Never push during the loop.** The branch stays local. Pushing between passes breaks the amend-only pattern and creates force-push noise in review history.
@@ -45,6 +49,7 @@ When an agent-driven `coderabbit-operator` runs this loop, run `process-tree-aud
 - **Treat tests as ground truth.** If a review finding shows a test is wrong, route that through changed intent, corrected fixture truth, explicit invalidation, or documented test bug evidence; otherwise fix product code.
 - **Stale re-posts are ignorable.** CodeRabbit sometimes re-posts prior-pass findings against a new HEAD after the fix has landed. Verify against the current file; if the fix is present, move on.
 - **Track pass-loop oscillation.** When a CodeRabbit loop reaches a second pass, use the audit-history schema to distinguish progress from same-family churn, duplicate reposts, and flip-flops.
+- **Record gate-affecting answers.** If a surfaced question affects a continue, apply, or decompose decision, record the question and answer artifacts as audit-history inputs before the loop decision.
 - **Local branch hygiene matters.** Because the branch stays local, rebases and fixups stay cheap until the loop converges.
 - **Use the latest pass output.** Do not keep fixing against stale comments after a fresh amend and rerun.
 

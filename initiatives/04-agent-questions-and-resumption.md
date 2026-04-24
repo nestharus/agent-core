@@ -1,8 +1,9 @@
 # Initiative 04 — Agent question-back + session resumption
 
-**Status:** queued
-**Depends on:** 03 (soft — the root-orchestrator / sub-orchestrator split from 03 clarifies where Q&A flows through)
+**Status:** landed (~/ai-side convention + workflow edits applied; agent-runner work spawned as Init 06)
+**Depends on:** 03 (landed)
 **Blocks:** —
+**Spawned:** Initiative 06 (agent-runner session-id resumption)
 
 ## Problem (user framing, verbatim)
 
@@ -62,3 +63,6 @@ This sub-initiative may spawn its own initiative file (`05-agent-runner-session-
 ## Log
 
 - **2026-04-23** — Initiative queued. Captured framing, firm constraints, and the agent-runner sub-track.
+- **2026-04-24** — Research fan-out: R1 runner capability (real `agents` help output), R2 question-back patterns, R3 workflow integration (confirmed Init-02b does NOT block Init 04), R4 session-graph survey (LangGraph / MCP / Claude Code / Temporal / OpenAI Assistants). Synthesis: 17 QG-gaps, 8 options (A-H). All A-H move to proposal; agent-runner work (D runner track) spawns Init 06.
+- **2026-04-24** — Proposal cycle: v0 (11 non-blocking R-findings including R-B backward-compat) → v2 (1 S-finding, internal §2/§8.2 scope inconsistency on decision-encoder). S1 resolved at apply by keeping decision-encoder in Init 04 scope (closes QG15 fully). Convergence in one revision round. 0 blocking, 0 oscillation.
+- **2026-04-24** — Applied: new `~/ai/conventions/agent-questions-and-session-graph.md`, updates to `audit-history.md` (new `User Q&A Inputs` section + skeleton line), `workflow-execution-violations.md` (new question/answer handling violation class), `decision-encoder.md` (Q&A role_outputs), `process-tree-auditor.md` (Q&A verification step), 7 workflow files, AGENTS.md routing. Spawned Init 06 (agent-runner session-id resumption).

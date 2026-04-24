@@ -21,5 +21,6 @@ Order is stable: numbered prefixes do not get reused. A dropped initiative gets 
 | 02a | Tests encode intent (continuation of 02; firstness-evidence chain deferred to 02b) | landed (commit `3d7d9cc`) | 01 |
 | 02b | Tests firstness-evidence mechanism (Step 6b artifact, Test Audit cross-check, absence routing) | deferred — awaits partial-firstness disposition vocabulary | 01 + disposition settled |
 | 03 | Process-tree review — validate workflow execution via agents process tree + `process-tree-auditor` operator | landed | — |
-| 04 | Agent Q&A + session resumption — let sub-agents ask the user questions and resume cleanly; agent-runner session-id feature | queued | 03 (soft) |
+| 04 | Agent Q&A + session resumption — let sub-agents ask the user questions and resume cleanly (~/ai side); agent-runner work spawned as Init 06 | landed | 03 (soft) |
 | 05 | Audit history — per-role decision history passed to each LLM in a cycle; self-oscillation visibility; decision-encoder reviewer | landed | — |
+| 06 | Agent-runner session-id resumption — non-interactive resume-with-answer path for Init 04; provider-aware acceptance evidence | queued | 04 |

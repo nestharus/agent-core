@@ -54,6 +54,10 @@ Use Markdown or JSON. Required fields per expected node or child group:
 - `prompt`: prompt file path or `unknown`.
 - `log`: log file path or `unknown`.
 - `expected_outputs`: output paths or status strings.
+- `questions_allowed`: `true` or `false` for this expected node or child group.
+- `question_artifacts`: expected question artifact paths or `none`.
+- `answer_artifacts`: expected answer artifact paths or `none`.
+- `continuation_evidence`: resume or fallback continuation artifact paths when an answer was required.
 - `blocking_if_missing`: `true` or `false`.
 - `notes`: documented skip or workflow-specific interpretation, if any.
 
@@ -105,6 +109,10 @@ For each expected prompt, log, gate report, status, or output:
 - verify required verdicts such as `LOW`, `ALIGNED`, `PASS`, `SINGLE_CONCERN`, or workflow-specific equivalents;
 - verify isolation evidence by scanning companion prompts/logs for sibling `agents ... -p <path> ...` invocations and declared write intent; flag concurrent tracked-file writers that share a worktree or project root, or return `NEEDS_INPUT` when a required isolation check lacks path/write evidence;
 - flag summary-shaped logs, missing concrete step evidence, missing outputs, malformed required sections, or claimed success without required artifacts.
+- if a mapped node returned `NEEDS_INPUT`, verify the question artifact exists, is listed in the expected process when required, and was not treated as ordinary success;
+- for each blocking question artifact, verify the root-surfaced answer artifact exists before downstream dependent nodes run;
+- verify continuation evidence names the same `question_id`, origin invocation UUID, session ID when known, and session-graph manifest;
+- flag `Question/answer handling violation` when a question was emitted but not surfaced, the workflow advanced while unanswered, an answer was received but not applied, or the continuation target does not match the question artifact.
 
 ### Step 5: Classify Violations
 
@@ -161,6 +169,10 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 ## Companion Artifact Verification
 | Artifact | Expected by | Present | Result |
 |---|---|---:|---|
+
+## Question/Answer Verification
+| Question ID | Origin node | Surfaced | Answered | Continuation method | Applied evidence | Result |
+|---|---|---:|---:|---|---|---|
 
 ## Violations
 | ID | Severity | Class | Evidence source | Location | Summary |

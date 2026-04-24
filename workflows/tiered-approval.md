@@ -6,6 +6,8 @@ This file defines the tiers.
 Implementation, roadmap, deployment, and live-server workflows
 cite it rather than restating the policy.
 
+Delegated questions about approval or visible actions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
+
 ## The three tiers
 
 | Tier | Examples | Authorization |
@@ -44,6 +46,7 @@ Operational rule:
   even when the actions are related.
 - A later Tier-3 action needs its own approval unless a pre-authorized
   runbook in `DECISIONS.md` covers it.
+- If a delegated agent needs user input about a visible action or approval, it must return `NEEDS_INPUT:<question_artifact>` and stop. The root orchestrator surfaces the question, writes the answer artifact, and blocks the visible action until continuation evidence exists.
 
 ## Why per-action
 
@@ -113,6 +116,8 @@ A pre-authorized runbook:
 Agents may execute a pre-authorized runbook without asking again for
 that exact covered action, but must still log execution details for
 audit: actor, time, and target.
+
+Delegated questions about whether a runbook covers an action use the root-surfaced question envelope. Sub-agents must not treat a direct user answer inside their own transcript as Tier-3 approval evidence.
 
 ## Relation to other workflows
 
