@@ -35,7 +35,7 @@ Optional phases:
 - `Phase 4.5` alignment for governance-heavy projects
 
 Core path:
-- `Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10`
+- `Phase 2.5 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10`
 
 ## Phase 0 - RCA (bugs only)
 
@@ -60,24 +60,43 @@ Core path:
 - Rules: follow `~/ai/models/roles.md`. This phase is synthesis, not judgment, and still does not implement.
 - Gate: human. The user confirms the mapping and answers open questions.
 
+## Phase 2.5 - Existing-State Risk Profile
+
+- Run after scope is known and before proposal work starts.
+- Artifact: `research/NN-problem-map.md`
+- Role: build the approved `problem map` of the touched surface as it exists today. Inputs are the planned change surface: files, symbols, endpoints, commands, jobs, or workflows expected to change.
+- Rule: if research already produced a draft `problem map`, use Phase 2.5 to validate and narrow that draft against the exact planned change surface into `research/NN-problem-map.md`. Do not keep a competing second map.
+- Rule: if research already produced a draft assumption register for the touched surface, carry it into Phase 3 for validation and narrowing into the approved assumption register in `proposals/NN-*.md`. Do not keep a competing second register.
+- Rule: capture what exists now, what is already risky or brittle, which adjacent surfaces sit inside the blast radius, and which supported or user-reachable paths exercise this surface today.
+- Rule: keep the map bounded to the touched surface plus adjacent supported paths. Do not expand into a whole-system inventory.
+- Rule: if the current supported path is unclear, return to research. Resume by updating the `problem map`, then re-enter Phase 2.5 before proposal work starts.
+- Gate: human. The user confirms that the map names the right terrain before proposal work begins.
+
 ## Phase 3 - Proposal
 
 - Artifact: `proposals/NN-*.md`
-- Role: propose design, scope, architecture, tradeoffs, anti-scope, and expected tests. State what will not be changed. **Do not** implement.
+- Inputs: approved `problem map` from Phase 2.5 and any research from Phases 1-2.
+- Role: propose design, scope, architecture, tradeoffs, anti-scope, expected tests, and the specific current-state risk the change reduces. State what will not be changed. **Do not** implement.
 - Rules: the proposal must be reviewable on its own terms. "We will figure it out during implementation" is not sufficient design. The proposer does not write its own risk reports.
+- Rules: include a supported-surface track covering deployment mode, customer cohort, adjacent public or user-reachable paths, blast-radius notes for unchanged adjacent paths, migration path, rollback path, and observability.
+- Rules: include a qualitative net-value statement. State whether the proposal clearly reduces a concrete current-state risk on the current supported surface and whether that reduction clearly outweighs the added blast radius plus the migration and rollback burden.
+- Rules: name those inputs from the artifact fields. Existing-state risk comes from `known risky or brittle behavior already present` plus `current supported and user-reachable paths through the surface`; change blast radius comes from `adjacent surfaces within the blast radius` plus `adjacent public or user-reachable paths`; migration cost comes from `migration path` plus `rollback path`.
+- Rules: include a short assumption register. Each assumption must name the evidence it relies on and what source or observation would invalidate it. If research already drafted a register for this touched surface, Phase 3 validates and narrows it into the approved assumption register in `proposals/NN-*.md`. Do not keep a competing second register.
 - Gate: no default human approval step. The proposal advances only by passing Phase 4.
 
 ## Phase 4 - Risk Gates (required; parallel)
 
-Run the risk gate on the proposal artifact, not on hand-waved intent.
-The exact model assignments for these three roles live in `~/ai/models/roles.md`.
+Run the risk gate on the proposal artifact, the `problem map`, and the supported-surface track, not on hand-waved intent.
+The exact model assignments for these roles live in `~/ai/models/roles.md`.
 
-- Artifacts: `risk/NN-audit.md`, `risk/NN-scope.md`, `risk/NN-shortcut.md`
+- Artifacts: `risk/NN-audit.md`, `risk/NN-scope.md`, `risk/NN-shortcut.md`, `risk/NN-supported-surface.md`
 - `audit risk`: presence, contracts, migrations, tests, and other checklist obligations
 - `scope risk`: does the proposal stay within the stated scope
 - `shortcut risk`: do proposed shortcuts defeat the underlying purpose
-- Rule: all three reports must return `LOW`.
-- Rule: if any report returns `MEDIUM` or `HIGH`, revise the proposal and re-run all three.
+- `supported-surface risk`: does the proposal reduce risk on the current supported surface it claims to target, using the approved `problem map`, supported-surface track, net-value statement, and assumption register, including adjacent public or user-reachable paths, deployment mode, migration, rollback, and observability
+- Rule: all four reports must return `LOW` on the LOW/MEDIUM/HIGH verdict dimension.
+- Rule: supported-surface termination is an orthogonal dimension from the LOW/MEDIUM/HIGH verdict. Evaluate it first and in this order: invalidated assumption that breaks the current problem framing -> return to research and resume at Phase 2.5; otherwise non-positive value on the current supported surface -> terminate the work. A `LOW` supported-surface verdict with a non-positive value signal still terminates. Only when no termination signal fires does the LOW/MEDIUM/HIGH verdict control the next step.
+- Rule: when no termination signal fires, any `MEDIUM` or `HIGH` report means revise the proposal and re-run all four.
 - Rule: do not keep old `LOW` reports after a substantive proposal revision.
 - Rule: if a proposer claims it "re-ran the risks itself," ignore that claim and re-dispatch the actual risk agents.
 - Gate: model. The risk gate is the proposal review.
@@ -97,6 +116,7 @@ The exact model assignments for these three roles live in `~/ai/models/roles.md`
 - Role: map the approved proposal onto the existing codebase and find reusable pieces, extension points, conflicting systems, and deletion candidates.
 - Rule: identify anything parallel that should be merged into or removed instead of re-created.
 - Rule: if multiple implementation agents will work later, follow `~/ai/conventions/worktree-isolation.md`.
+- Rule: if hookpoint research shows the approved `problem map` or assumption register is wrong, stop and return to research; resume at Phase 2.5 with an updated `problem map` before implementation continues.
 - Gate: human. The user confirms what survives, what is replaced, and what is deleted.
 
 ## Phase 6 - Implementation (required; test/code separation)
@@ -104,6 +124,8 @@ The exact model assignments for these three roles live in `~/ai/models/roles.md`
 Implementation has three sub-steps.
 The test writer and the code writer must be different agent invocations.
 That rule is load-bearing: if the same agent writes both, the tests mirror the implementation instead of validating the contract.
+
+- Rule: if Step 6a, 6b, or 6c uncovers evidence that invalidates an approved assumption or shows the touched surface differs materially from the approved `problem map`, stop implementation and return to research; resume at Phase 2.5 before more code or tests are written.
 
 ### Step 6a - Define contract
 
@@ -135,6 +157,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Run CodeRabbit only after implementation is functionally complete enough for review.
 - Policy: follow `~/ai/workflows/coderabbit-loop.md`.
 - Rules: do not duplicate the CodeRabbit procedure here. This phase reviews the actual diff, not the proposal.
+- Rule: if CodeRabbit or the fix pass surfaces evidence that invalidates an approved assumption or collapses the approved net-value case, return to research and resume at Phase 2.5 instead of treating it as an ordinary review fix.
 
 ## Phase 8 - Post-CodeRabbit Review Gates
 
@@ -179,11 +202,12 @@ Practical default:
 
 ## Decision Recording
 
-If a phase is skipped, narrowed, or deferred:
+If a phase is skipped, narrowed, deferred, terminated for non-positive value, or sent back to research on invalidated assumptions:
 - record it in `DECISIONS.md` or the project equivalent
 - record who made the decision
 - record why the change was accepted
 - record what risk is being accepted
+- record what evidence caused the termination or research re-entry
 
 Without that record, the phase was not skipped correctly.
 

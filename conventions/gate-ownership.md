@@ -37,6 +37,7 @@ This table is cited by
 | RCA (bugs) | Human | User decides if the bug is worth fixing at all. |
 | Problem research (optional) | Human | User confirms scope framing. |
 | Synthesize user needs (optional) | Human | User confirms the mapping and answers open questions. |
+| Existing-state risk profile (Phase 2.5) | Human | User confirms that the touched-surface `problem map` names the right current terrain before proposal work starts. |
 | Proposal | Model - audit (`gpt-high`) + scope (`claude-opus`) + shortcut (`claude-opus`) in parallel | The risk assessment is the review. No human gate. |
 | Alignment (optional) | Model - `claude-opus` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
 | Hookpoint research | Human | User confirms which pre-existing code survives. |
@@ -45,6 +46,7 @@ This table is cited by
 | Test audit | Model - `gpt-high` | Tests cover the stated acceptance criteria. Checklist gate. |
 | Multi-concern | Model - `claude-opus` | Decide whether the PR should be split. |
 | Justification | Model - `claude-opus` | Decide whether every change justifies its presence. |
+| Supported-surface verification | Model - supported-surface verification role (see `~/ai/models/roles.md`) | Validate that the actual diff still reduces risk on the approved supported surface; return to research on invalidated assumptions and stop the PR on non-positive value. |
 | Commit hygiene | Model - `gpt-high` | Validate small, testable, single-concern commits. |
 | Draft PR open | Automated (no gate) | Routine pipeline output. |
 | Promote to ready-for-review | Human | User decides when the PR is ready for external eyes. |

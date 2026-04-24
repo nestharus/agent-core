@@ -82,6 +82,12 @@ findings into one deliverable.
 - Synthesis is construction, not judgement.
 - Output structure: question -> evidence -> options with tradeoffs ->
   recommendation.
+- When the deliverable feeds proposal work on an existing system, append a
+  draft current `problem map` plus a short draft assumption register for the
+  touched surface. Phase 2.5 validates and narrows the map into
+  `research/NN-problem-map.md`; Phase 3 validates and narrows the register
+  into the approved assumption register in `proposals/NN-*.md`. Do not keep
+  competing second artifacts.
 - If the evidence is inconclusive, say so.
 
 Do not invent a recommendation from thin data.
@@ -90,9 +96,12 @@ Do not invent a recommendation from thin data.
 
 Human reads the synthesized report and decides next steps.
 
-- Accept the recommendation and move to proposal.
+- Accept the recommendation and move to proposal only when the current
+  `problem map` is explicit enough to constrain proposal work.
 - Reject and reframe the question.
 - Commission follow-up research.
+- If later evidence invalidates a recorded assumption, re-enter research and
+  resume at Phase 2.5 rather than patching the proposal around it.
 
 ## Rules
 
