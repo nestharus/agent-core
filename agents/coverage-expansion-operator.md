@@ -169,6 +169,7 @@ The test-writer prompt must require:
 
 - expected values derived from the behavior spec, not from current implementation
 - one behavior per test
+- each emitted test listed with its behavior verdict classification (`VERIFIED`, `SUSPICIOUS`, `AMBIGUOUS`, or `OBVIOUSLY_BROKEN`); tests may only be written from `VERIFIED` or human-confirmed behavior
 - existing local test patterns
 - strict xfail markers for discovered bugs with verified intended behavior
 - report sections conforming to `~/ai/conventions/test-reports.md`
@@ -261,7 +262,7 @@ Write `reports/report-index.md` with:
 
 ## PR Pointer
 - Comment URL: `<url or pending>`
-- Canonical PDF URL: `<S3 URL, signed URL, presigned URL, or pending>`
+- Canonical PDF URL: `<S3 URL, signed URL, presigned URL, or pending; use pending unless the PDF was actually uploaded to S3 or the project wrapper provided a real signed URL>`
 - Actions artifact fallback URL: `<url or n/a>`
 ````
 
