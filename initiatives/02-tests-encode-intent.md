@@ -1,8 +1,9 @@
 # Initiative 02 — Tests encode intent, driven by risk
 
-**Status:** queued
-**Depends on:** Initiative 01 (risk and value axes) reaching Phase 4 user acceptance
+**Status:** decomposed — continues as Initiative 02a (this file, now scoped to 6 of 7 constraints); firstness-evidence mechanism deferred to Initiative 02b.
+**Depends on:** Initiative 01 landed (commit `acf79cd`)
 **Blocks:** —
+**Spawned:** Initiative 02b (firstness-evidence mechanism) via round-2 decompose trigger.
 
 ## Problem (user framing, verbatim)
 
@@ -56,3 +57,7 @@ The value of a given test depends on the risk it reduces and the existing-state 
 ## Log
 
 - **2026-04-23** — Initiative queued. Captured firm constraints from user. Blocked on Initiative 01.
+- **2026-04-23** — Initiative 01 landed; user delegated autonomous execution of the remaining queue. 4-track research fan-out dispatched: R1 operator audit (bg `bz6m46ooc`), R2 workflow integration (bg `bp8q07en9`), R3 constraint semantics (bg `bk18u6t2k`), R4 discovery limits (bg `bx05hrog0`).
+- **2026-04-23** — All 4 research tracks landed (20 / 31 / 23 / 19 KB). Synthesis produced problem-def with 7 options (A-G), 8 gaps (TG1-TG8). A-F moved to proposal; G (operator topology) deferred.
+- **2026-04-23** — Proposal cycle: v0 (12 non-blocking J-findings) → v2 (4 non-blocking K-findings, 3 single-gen oscillation) → v3 (1 non-blocking L-finding — **two-gen oscillation in the firstness-artifact chain** J-05 → K-02 → L-01). Per methodology, two-gen in a tracked area = hard decompose trigger. Decompose fired on round 2.
+- **2026-04-23** — **Decomposed.** Initiative 02b spawned to handle the firstness-evidence mechanism (Step 6b artifact, Test Audit cross-check, absence-handling routing) once a partial-firstness disposition vocabulary is settled. This file (Initiative 02a) continues with the other 6 constraints: tests-as-ground-truth, fixtures external, test levels, risk-driven necessity, value from risk reduction, discovery bounded. TG1 closure in 02a is via workflow ordering (Phase 3 → Step 6b → Step 6c with separate writers), not diff-time evidence. K-01, K-03, K-04 closures survive into 02a.

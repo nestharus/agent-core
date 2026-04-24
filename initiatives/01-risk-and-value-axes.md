@@ -1,6 +1,6 @@
 # Initiative 01 — Risk and value axes
 
-**Status:** applied, awaiting commit (axes A-D landed; E deferred; H2 shipped as tradeoff; I1 dropped)
+**Status:** landed (commit `acf79cd`; axes A-D live; E deferred; H2 shipped as tradeoff; I1 dropped)
 **Depends on:** —
 **Blocks:** Initiative 02 (tests encode intent)
 

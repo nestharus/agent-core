@@ -10,7 +10,7 @@ Run on the **actual diff**, not the proposal. Proposals can look reasonable whil
 
 | Gate | Model | Purpose |
 |---|---|---|
-| Test audit | `gpt-high` | Do the tests actually cover the stated acceptance criteria? Checklist/presence check. |
+| Test audit | `gpt-high` | Check intent-first tests, risk reduction, acceptance criteria, and fixture externality. |
 | Multi-concern review | `claude-opus` | Should this PR be split? Intent: does everything in this diff belong together? |
 | Justification review | `claude-opus` | Does every change justify its presence? Intent: is anything here for a reason other than the stated purpose? |
 | Supported-Surface Verification | `claude-opus` | Does the actual diff still reduce risk on the approved supported surface, including adjacent paths, migration/rollback, and observability? |
@@ -72,23 +72,30 @@ Review rules:
 - Check which adjacent public or user-reachable paths remain unchanged after the patch.
 - Check what migration path, rollback path, and observability obligations the diff adds or changes.
 - Flag symbolic hardening: a diff that matches a finding label but leaves the supported surface materially unchanged.
+- Check any `risk/NN-test-residuals.md` artifact. If an unverified residual means the diff no longer clearly reduces risk on the approved supported surface, apply the existing supported-surface termination order: invalidated assumption -> return to research and resume at Phase 2.5; otherwise non-positive value -> stop the PR and close it.
 - Keep the supported-surface termination signal separate from the LOW/MEDIUM/HIGH verdict in the review output.
 - Rule: supported-surface termination is an orthogonal dimension from the LOW/MEDIUM/HIGH verdict. Evaluate it first and in this order: invalidated assumption that breaks the current problem framing -> return to research and resume at Phase 2.5; otherwise non-positive value on the current supported surface -> stop the PR and close it rather than parking it for later. A `LOW` supported-surface verdict with a non-positive value signal still means stop the PR and close it rather than parking it for later. Only when no termination signal fires does the LOW/MEDIUM/HIGH verdict control the next step.
 - When no termination signal fires, record ordinary fix-pass findings from that verdict.
 
 ## Test Audit
 
-Asks: do the tests cover what the acceptance criteria said they should cover?
+Asks: do the tests encode intended behavior first, reduce named risks, and cover the stated acceptance criteria?
 
 Audit rules:
 
-- Read the contract first: schemas, endpoint signatures, CLI definitions, public interfaces, and explicit acceptance criteria.
-- Check each acceptance criterion against at least one test.
-- Flag missing coverage.
-- Flag over-assertion: tests that mirror the implementation rather than validate the contract.
-- Flag weak tests that can pass while the implementation is wrong.
+- Read the approved proposal package before judging the tests: `research/NN-problem-map.md`, the approved `proposals/NN-*.md`, `risk/NN-supported-surface.md`, and `risk/NN-test-residuals.md` if it exists.
+- Read the contract next: schemas, endpoint signatures, CLI definitions, public interfaces, explicit acceptance criteria, fixture application points, and test-intent handoff.
+- Check each acceptance criterion and each proposal test-intent item against a test, a deliberate residual entry, or a documented non-applicability reason.
+- Check that every test or test group names the risk it reduces, names the proposal or assumption-register source, and uses one explicit level: `unit`, `component`, `particular-integration`, or `end-to-end`.
+- Check that the selected level is the cheapest reliable validator for the named risk.
+- Check that fixtures are externally applied. Flag durable or shared fixture state, dependency substitutions, seed data, shared mocks, baselines, service setup, or environment setup edited into the test body or declared as same-file fixtures unless project convention names that file pattern as the dedicated fixture file pattern.
 - Flag hidden coupling between fixtures and implementation details.
-- If the same agent wrote both the implementation and the tests, flag it. Tests written by the implementer often mirror the code instead of the contract.
+- Block any test change that relaxes an assertion, regenerates a baseline, deletes coverage, narrows input space, removes a risk annotation, or turns a red test green without a corresponding product-code fix.
+- Allow test renames, typo fixes, and risk-annotation strengthening only when they are net non-assertion-weakening edits.
+- A test edit is not accepted as a review-time justification. It is accepted only as the consequence of changed intended behavior, corrected fixture truth, an explicit invalidation condition, or a documented test bug in the upstream verification artifact. Implementation failure is not a valid reason to edit the test.
+- Treat this as the PR-review counterpart to `~/ai/agents/test-writer.md`'s rule that tests are not changed to match current behavior.
+- Flag over-assertion, weak tests, and same-agent authorship: tests must validate the contract, fail when implementation is wrong, and be written by a separate test writer from the implementation writer.
+- If `risk/NN-test-residuals.md` lists an unverified risk that collapses the approved net-value case, record a Supported-Surface Verification finding for the Synthesize And Post gate instead of treating the missing coverage as an ordinary fix-pass item.
 
 ## Commit Hygiene
 

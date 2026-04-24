@@ -76,12 +76,13 @@ Core path:
 
 - Artifact: `proposals/NN-*.md`
 - Inputs: approved `problem map` from Phase 2.5 and any research from Phases 1-2.
-- Role: propose design, scope, architecture, tradeoffs, anti-scope, expected tests, and the specific current-state risk the change reduces. State what will not be changed. **Do not** implement.
+- Role: propose design, scope, architecture, tradeoffs, anti-scope, a test-intent track, and the specific current-state risk the change reduces. State what will not be changed. **Do not** implement.
 - Rules: the proposal must be reviewable on its own terms. "We will figure it out during implementation" is not sufficient design. The proposer does not write its own risk reports.
 - Rules: include a supported-surface track covering deployment mode, customer cohort, adjacent public or user-reachable paths, blast-radius notes for unchanged adjacent paths, migration path, rollback path, and observability.
 - Rules: include a qualitative net-value statement. State whether the proposal clearly reduces a concrete current-state risk on the current supported surface and whether that reduction clearly outweighs the added blast radius plus the migration and rollback burden.
 - Rules: name those inputs from the artifact fields. Existing-state risk comes from `known risky or brittle behavior already present` plus `current supported and user-reachable paths through the surface`; change blast radius comes from `adjacent surfaces within the blast radius` plus `adjacent public or user-reachable paths`; migration cost comes from `migration path` plus `rollback path`.
 - Rules: include a short assumption register. Each assumption must name the evidence it relies on and what source or observation would invalidate it. If research already drafted a register for this touched surface, Phase 3 validates and narrows it into the approved assumption register in `proposals/NN-*.md`. Do not keep a competing second register.
+- Rules: include a test-intent track. For each expected test or test group, name the change risk or verification risk, intended behavior or acceptance condition, selected level (`unit`, `component`, `particular-integration`, or `end-to-end`), fixture source or fixture application point, assumption-register link if the behavior depends on an assumption, expected observable signal, and any residual risk the test will not verify.
 - Gate: no default human approval step. The proposal advances only by passing Phase 4.
 
 ## Phase 4 - Risk Gates (required; parallel)
@@ -90,7 +91,7 @@ Run the risk gate on the proposal artifact, the `problem map`, and the supported
 The exact model assignments for these roles live in `~/ai/models/roles.md`.
 
 - Artifacts: `risk/NN-audit.md`, `risk/NN-scope.md`, `risk/NN-shortcut.md`, `risk/NN-supported-surface.md`
-- `audit risk`: presence, contracts, migrations, tests, and other checklist obligations
+- `audit risk`: presence, contracts, migrations, test-intent track, fixture source, residual-risk artifact, and other checklist obligations
 - `scope risk`: does the proposal stay within the stated scope
 - `shortcut risk`: do proposed shortcuts defeat the underlying purpose
 - `supported-surface risk`: does the proposal reduce risk on the current supported surface it claims to target, using the approved `problem map`, supported-surface track, net-value statement, and assumption register, including adjacent public or user-reachable paths, deployment mode, migration, rollback, and observability
@@ -125,21 +126,26 @@ Implementation has three sub-steps.
 The test writer and the code writer must be different agent invocations.
 That rule is load-bearing: if the same agent writes both, the tests mirror the implementation instead of validating the contract.
 
+- Rule: Phase 6 consumes the approved `research/NN-problem-map.md`, approved `proposals/NN-*.md` including its test-intent track and assumption register, `risk/NN-supported-surface.md`, and `research/NN-hookpoints.md`.
 - Rule: if Step 6a, 6b, or 6c uncovers evidence that invalidates an approved assumption or shows the touched surface differs materially from the approved `problem map`, stop implementation and return to research; resume at Phase 2.5 before more code or tests are written.
 
 ### Step 6a - Define contract
 
 - Owner: orchestrator
-- Produces: schemas, signatures, commands, interface boundaries, and explicit behavioral assumptions
+- Produces: schemas, signatures, commands, interface boundaries, explicit behavioral assumptions, fixture application points, and test-intent handoff
 - Rule: the contract must be clear enough that another agent can write tests from it without seeing implementation code.
+- Rule: the contract must preserve every change risk or verification risk, selected test level, fixture source, assumption-register link, and expected observable signal from the approved proposal test-intent track.
 
-### Step 6b - Write tests
+### Step 6b - Encode tests first
 
-- Inputs: contracts only
+- Inputs: contract, approved proposal test-intent track, approved `problem map`, `risk/NN-supported-surface.md`, and hookpoint research.
 - Rule: the test writer is a separate agent invocation from Step 6c.
 - Rule: the test writer does **not** see the implementation.
-- Rule: tests encode expected behavior from the contract.
-- Output: `tests/` changes describing intended behavior
+- Rule: tests encode intended behavior from the contract and proposal test-intent track before Step 6c writes product code.
+- Rule: fixtures are applied from outside the test body. Durable or shared fixture state belongs in dedicated fixture modules, dedicated fixture files, factories, builders, test inputs or test data files, or runner configuration; the test body keeps only behavior-specific arrange/act/assert. Same-file fixture declarations, including `@pytest.fixture` declarations in the same file or class as the test, violate this rule unless the project's convention names that file pattern as the dedicated fixture file pattern.
+- Rule: every test or test group carries a risk annotation naming the risk it reduces, the selected level, and the proposal or assumption-register source. If a test verifies an assumption, the annotation says so.
+- Rule: when a named risk cannot be verified by the test set, produce `risk/NN-test-residuals.md` with the residual class (`combinatorial/path-state`, `bounded-model`, `integration-hidden`, `emergent-interaction`, `temporal/concurrency`, or `generator/search-budget`), technique attempted or considered (`property-based`, `fuzzing`, `mutation`, `symbolic`, `model-checking`, `chaos`, or `graph`), scope, budget or bound, result, remaining residual, invalidating inputs, and whether the residual changes the net-value case.
+- Output: `risk/NN-test-residuals.md` when any named risk remains unverified.
 
 ### Step 6c - Write code
 
@@ -202,7 +208,7 @@ Practical default:
 
 ## Decision Recording
 
-If a phase is skipped, narrowed, deferred, terminated for non-positive value, or sent back to research on invalidated assumptions:
+If a phase is skipped, narrowed, deferred, terminated for non-positive value, sent back to research on invalidated assumptions, or accepted with a named unverifiable residual risk that does not collapse the approved net-value case under the supported-surface termination rule:
 - record it in `DECISIONS.md` or the project equivalent
 - record who made the decision
 - record why the change was accepted

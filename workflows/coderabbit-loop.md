@@ -37,6 +37,8 @@ Typical convergence: 3-6 passes.
 - **Stop on value, not on emptiness.** "Per-pass value drops to zero" means the remaining findings are nitpicks, out-of-scope suggestions, or duplicates. It does not mean the report is literally empty.
 - **Do not pre-commit around CodeRabbit.** Fix findings in the working tree, amend, re-run. Do not create a new commit per pass.
 - **Run tests as needed, not as a loop ritual.** Validate when a finding changes behavior, contracts, or risk. The loop contract itself is amend-and-rerun, not "new commit plus full push cycle."
+- **Do not weaken tests to converge.** A CodeRabbit finding is not a reason to relax assertions, regenerate baselines, delete coverage, narrow input space, or remove risk annotations.
+- **Treat tests as ground truth.** If a review finding shows a test is wrong, route that through changed intent, corrected fixture truth, explicit invalidation, or documented test bug evidence; otherwise fix product code.
 - **Stale re-posts are ignorable.** CodeRabbit sometimes re-posts prior-pass findings against a new HEAD after the fix has landed. Verify against the current file; if the fix is present, move on.
 - **Local branch hygiene matters.** Because the branch stays local, rebases and fixups stay cheap until the loop converges.
 - **Use the latest pass output.** Do not keep fixing against stale comments after a fresh amend and rerun.

@@ -41,9 +41,9 @@ This table is cited by
 | Proposal | Model - audit (`gpt-high`) + scope (`claude-opus`) + shortcut (`claude-opus`) in parallel | The risk assessment is the review. No human gate. |
 | Alignment (optional) | Model - `claude-opus` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
 | Hookpoint research | Human | User confirms which pre-existing code survives. |
-| Implementation | Continuous (test suite, CI, smoke) | No explicit gate. Failures block the pipeline. |
+| Implementation | Continuous (test suite, CI, smoke, tests-first encoding artifacts) | No explicit gate. Failures block the pipeline, and Step 6b must produce risk-annotated tests plus any required residual-risk artifact before Step 6c writes code. |
 | CodeRabbit | Model - loop owner agent | Rerun until per-pass value drops to zero. |
-| Test audit | Model - `gpt-high` | Tests cover the stated acceptance criteria. Checklist gate. |
+| Test audit | Model - `gpt-high` | Validate that tests encode intended behavior first, reduce named risks, preserve fixture externality, keep explicit levels, and do not weaken ground-truth tests to match implementation. Checklist gate. |
 | Multi-concern | Model - `claude-opus` | Decide whether the PR should be split. |
 | Justification | Model - `claude-opus` | Decide whether every change justifies its presence. |
 | Supported-surface verification | Model - supported-surface verification role (see `~/ai/models/roles.md`) | Validate that the actual diff still reduces risk on the approved supported surface; return to research on invalidated assumptions and stop the PR on non-positive value. |
