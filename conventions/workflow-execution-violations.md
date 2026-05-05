@@ -13,6 +13,8 @@ Classify each finding by evidence source:
 - `inferred`: supported by combining tree and companion evidence.
 - `missing`: required evidence is absent.
 
+Audited-run narrative notes or rationale are not valid `tree`, `companion`, or `inferred` evidence for workflow-audit PASS.
+
 When a required review depends on missing evidence, fail closed with `NEEDS_INPUT` or a blocking violation. Do not convert missing evidence into a pass.
 
 ## Severity Defaults
