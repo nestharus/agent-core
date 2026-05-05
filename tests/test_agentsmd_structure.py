@@ -1,0 +1,183 @@
+import re
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+AGENTS_MD = REPO_ROOT / "AGENTS.md"
+
+
+def _agents_text():
+    return AGENTS_MD.read_text(encoding="utf-8")
+
+
+def _assert_heading_on_own_line(text, heading):
+    assert re.search(rf"(?m)^{re.escape(heading)}$", text), (
+        f"missing heading on its own line: {heading}"
+    )
+
+
+def _section_after_heading(text, heading):
+    match = re.search(rf"(?m)^{re.escape(heading)}$", text)
+    assert match, f"missing section heading: {heading}"
+    following = text[match.end() :]
+    next_heading = re.search(r"(?m)^##\s+", following)
+    if next_heading:
+        return following[: next_heading.start()]
+    return following
+
+
+def _relative_markdown_targets(text):
+    for match in re.finditer(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", text):
+        target = match.group(1).strip()
+        if not target:
+            continue
+        target = target.split(None, 1)[0].strip("<>")
+        if target.startswith(("http://", "https://", "mailto:", "/", "#")):
+            continue
+        target = target.split("#", 1)[0]
+        if target:
+            yield target
+
+
+def test_new_section_headings_present():
+    text = _agents_text()
+    for heading in (
+        "## Project Setup Pattern",
+        "## Ecosystem Map",
+        "### Per-Project Policy",
+    ):
+        _assert_heading_on_own_line(text, heading)
+
+
+def test_existing_section_headings_preserved():
+    text = _agents_text()
+    for heading in (
+        "## Operator Routing Table",
+        "## How to Invoke",
+        "## Workflow Topologies",
+        "## Conventions",
+        "## Model Roles",
+        "## Operator File Format",
+        "## How Projects Extend This",
+    ):
+        _assert_heading_on_own_line(text, heading)
+
+
+def test_existing_routing_subsection_headings_preserved():
+    text = _agents_text()
+    for heading in (
+        "### AGENTS maintenance",
+        "### Coverage / behavior / test authoring",
+        "### PR review / justification",
+        "### Implementation pipeline orchestration",
+        "### Strategic planning / proposal alignment cycle",
+        "### Roadmap cascade",
+        "### Worktree / branch execution",
+        "### External integration",
+    ):
+        _assert_heading_on_own_line(text, heading)
+
+
+def test_required_new_links_resolve():
+    for target in (
+        "conventions/project-layout.md",
+        "agents/implementation-pipeline-orchestrator.md",
+        "VALUES.md",
+        "clients/",
+        "tools/README.md",
+        "DECISIONS.md",
+        "agents/linear-operator.md",
+        "agents/jira-operator.md",
+        "conventions/rebase-verification.md",
+        "conventions/wu-session-lifecycle.md",
+    ):
+        assert (REPO_ROOT / target).exists(), f"missing required link target: {target}"
+
+
+def test_all_relative_links_in_agents_md_resolve():
+    missing = [
+        target
+        for target in _relative_markdown_targets(_agents_text())
+        if not (REPO_ROOT / target).exists()
+    ]
+    assert missing == []
+
+
+def test_routing_table_rows_preserved():
+    text = _agents_text()
+    # Inputs markers copied from the current AGENTS.md representative rows:
+    # agentsmd-curator: Inputs: `mode`, `repo_root`, `agents_md?`, `agents_dir?`, `findings_to_fix?`, `operator_file?`, `routing_entry?`
+    # coverage-analyzer: Inputs: `task`, `worktree_path`, `scope?`
+    # pr-writer: Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`
+    # coderabbit-operator: Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?`
+    # implementation-pipeline-orchestrator: Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?`
+    # worktree-operator: Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`
+    # jira-operator: Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email`
+    entries = {
+        "agentsmd-curator": (
+            "agents/agentsmd-curator.md",
+            "Inputs: `mode`, `repo_root`, `agents_md?`, `agents_dir?`, `findings_to_fix?`, `operator_file?`, `routing_entry?`",
+            "gpt-high",
+        ),
+        "coverage-analyzer": (
+            "agents/coverage-analyzer.md",
+            "Inputs: `task`, `worktree_path`, `scope?`",
+            "gpt-high",
+        ),
+        "pr-writer": (
+            "agents/pr-writer.md",
+            "Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`",
+            "gpt-high",
+        ),
+        "coderabbit-operator": (
+            "agents/coderabbit-operator.md",
+            "Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?`",
+            "gpt-high",
+        ),
+        "implementation-pipeline-orchestrator": (
+            "agents/implementation-pipeline-orchestrator.md",
+            "Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?`",
+            "claude-opus",
+        ),
+        "worktree-operator": (
+            "agents/worktree-operator.md",
+            "Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`",
+            "gpt-high",
+        ),
+        "jira-operator": (
+            "agents/jira-operator.md",
+            "Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email`",
+            "claude-haiku",
+        ),
+    }
+    for name, (path, inputs_marker, model) in entries.items():
+        assert re.search(rf"(?m)^- `{re.escape(name)}` - ", text), (
+            f"missing operator row: {name}"
+        )
+        file_link = f"File: [~/ai/{path}]({path})"
+        assert file_link in text, f"missing file path for {name}: {path}"
+        entry_pattern = (
+            rf"(?ms)^- `{re.escape(name)}` - .*?\n"
+            rf"  .*?{re.escape(file_link)}.*?"
+            rf"{re.escape(inputs_marker)}.*? \| Model: `{re.escape(model)}`$"
+        )
+        assert re.search(entry_pattern, text), (
+            f"missing expected inputs or model marker for {name}: {inputs_marker}; {model}"
+        )
+
+
+def test_new_convention_bullets_present():
+    conventions = _section_after_heading(_agents_text(), "## Conventions")
+    for link in (
+        "[`~/ai/conventions/rebase-verification.md`](conventions/rebase-verification.md)",
+        "[`~/ai/conventions/wu-session-lifecycle.md`](conventions/wu-session-lifecycle.md)",
+    ):
+        assert link in conventions
+
+
+def test_github_url_present_in_ecosystem_map():
+    text = _agents_text()
+    ecosystem_match = re.search(r"(?m)^## Ecosystem Map$", text)
+    assert ecosystem_match, "missing Ecosystem Map section"
+    following_lines = text[ecosystem_match.end() :].splitlines()[:30]
+    assert "https://github.com/nestharus/ai" in "\n".join(following_lines)
