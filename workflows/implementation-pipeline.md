@@ -20,6 +20,7 @@ Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-se
 Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Git and PR conventions: `~/ai/conventions/git.md`
 Audit-history convention for revise/review loops: `~/ai/conventions/audit-history.md`
+Proposer/critic pattern for proposal risk gates: ~/ai/conventions/proposer-critic-pattern.md
 Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
 Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
 Rebase verification gate: `~/ai/conventions/rebase-verification.md`
