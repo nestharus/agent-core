@@ -1,3 +1,24 @@
+---
+workflow:
+  id: implementation-pipeline
+workflow_dispatch_contract:
+  orchestrator: "implementation-pipeline-orchestrator"
+  inputs:
+    - "ticket id and branch, worktree, scratch, and planning paths"
+    - "non-empty ticket description from the configured Jira or Linear ticket system"
+  expectations:
+    - "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases"
+    - "uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant"
+    - "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
+  outputs:
+    - "planning artifacts under the per-WU planning directory"
+    - "tested repository diff and draft PR URL when the work proceeds"
+    - "ticket comments and audit-history closure evidence at PR and finalization points"
+  non_goals:
+    - "does not use git-resident ticket files as the source of truth"
+    - "does not skip phases implicitly"
+    - "does not inline the orchestrator role into the root conversation"
+---
 # Implementation Pipeline
 
 End-to-end pipeline from triggering event to merged PR.

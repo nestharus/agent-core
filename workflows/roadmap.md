@@ -1,3 +1,24 @@
+---
+workflow:
+  id: roadmap
+workflow_dispatch_contract:
+  orchestrator: "roadmap-orchestrator"
+  inputs:
+    - "problem, philosophy, proposal, DECISIONS, market research, and engineering research artifacts"
+    - "current roadmap layer to expand or revise and scratch path for risk-gate outputs"
+  expectations:
+    - "cascades from market framing through executive, engineering, AI, and ticket-generation layers"
+    - "runs three fresh risk gates per roadmap layer and requires all LOW verdicts before advancing"
+    - "routes prototype escape hatches when feasibility or decomposition cannot be proven by research alone"
+  outputs:
+    - "market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files"
+    - "generated implementation tickets for approved AI roadmap slices"
+    - "risk-gate reports and process-tree-auditor evidence at each gated layer"
+  non_goals:
+    - "does not bootstrap a first product pipeline from nothing"
+    - "does not handle small features inside an existing product area"
+    - "does not continue when product framing must reset through alignment"
+---
 # Roadmap Workflow
 
 Strategic pipeline that decomposes a multi-quarter product direction into

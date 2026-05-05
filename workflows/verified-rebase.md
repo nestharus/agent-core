@@ -1,3 +1,24 @@
+---
+workflow:
+  id: verified-rebase
+workflow_dispatch_contract:
+  orchestrator: "jj-operator"
+  inputs:
+    - "BRANCH and TARGET refs for the rebase"
+    - "optional SOURCE and PARENT_BUNDLE for scoped or stacked rebases"
+  expectations:
+    - "produces a deterministic bundle for rebase review"
+    - "computes mechanical provenance from predicted tree, actual tree, conflicts, and range-diff output"
+    - "does not push and does not resolve conflicts"
+  outputs:
+    - "bundle under .tmp/verified-rebase/<branch-slug>/<timestamp>/"
+    - "stdout verdict CLEAN, DIRTY-EXPLAINED, DIRTY-UNPROVENANCED, or BLOCKED"
+    - "local refs/pre-rebase/<branch> rollback anchor and rollback.sh helper"
+  non_goals:
+    - "does not provide a plain rebase fallback"
+    - "does not decide whether the caller should push"
+    - "does not judge semantic correctness of conflict resolutions"
+---
 # Verified Rebase
 
 Produce a deterministic artifact bundle for every rebase so a reviewer inspects O(residual) content instead of O(full-diff), with a cheap local rollback when the bundle shows unacceptable residuals.

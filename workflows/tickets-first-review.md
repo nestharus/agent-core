@@ -1,3 +1,24 @@
+---
+workflow:
+  id: tickets-first-review
+workflow_dispatch_contract:
+  orchestrator: "implementation-pipeline-orchestrator with tickets_first_variant=true"
+  inputs:
+    - "tracker ticket, origin branch name, branch head SHA, and local reviewer context"
+    - "project AGENTS.md opt-in declaring the tickets-first review variant"
+  expectations:
+    - "uses the tracker ticket and pushed branch as the review unit before a PR exists"
+    - "requires ticket-prefixed branch and commit naming for new branches"
+    - "inserts a human local-review gate between automated review gates and draft PR creation"
+  outputs:
+    - "tracker ticket body with source, touched paths, branch summary, and local-review acceptance criteria"
+    - "reviewer approval, revision request, or rejection before Phase 9 can draft a PR"
+    - "eventual draft PR only after local review passes"
+  non_goals:
+    - "does not replace the default draft-PR workflow for projects that have not opted in"
+    - "does not delete branches when transitioning existing draft PRs"
+    - "does not treat automated gates as the human local review"
+---
 # Tickets-First Review Workflow
 
 Alternative review topology where the tracker ticket — not a draft PR — is the unit of review. The branch is reviewed locally on the reviewer's machine; a PR is only opened **after** review passes.

@@ -1,3 +1,24 @@
+---
+workflow:
+  id: tiered-approval
+workflow_dispatch_contract:
+  orchestrator: "root orchestrator before visible external actions"
+  inputs:
+    - "candidate action, current state, audience visibility, reversal path, and any pre-authorized runbook"
+    - "project DECISIONS.md or equivalent when pre-authorization is claimed"
+  expectations:
+    - "classifies actions into read, confined-write, or visible-write tiers"
+    - "requires explicit per-action approval before Tier 3 visible writes unless a runbook pre-authorizes the exact action"
+    - "keeps approval questions root-owned when delegated agents need user input"
+  outputs:
+    - "approval request with state, reversal path, and concrete action for Tier 3 work"
+    - "execution log details for approved or pre-authorized visible actions"
+    - "clear Tier 2 treatment for routine draft PR creation and maintenance"
+  non_goals:
+    - "does not batch multiple visible actions into one approval"
+    - "does not treat ambiguous user replies as approval"
+    - "does not let one agent both propose and execute a Tier 3 action without human approval"
+---
 # Tiered Approval Safety
 
 Every action an agent can take falls into one of three tiers.
