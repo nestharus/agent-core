@@ -13,6 +13,7 @@ Agent invocation: `~/ai/workflows/agents-cli.md`
 Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
 Market-research rules: `~/ai/workflows/research.md`
 Ticket handoff: `~/ai/workflows/implementation-pipeline.md`
+Proposer/critic pattern for layer proposal/risk loops: ~/ai/conventions/proposer-critic-pattern.md
 
 ## When to use
 

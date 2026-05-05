@@ -3,6 +3,7 @@
 Step 7 of the implementation pipeline. Run until per-pass value drops to zero; do not push during the loop.
 
 Delegated user questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
+CodeRabbit is a proposer/critic loop whose accept equivalent is value-zero / useful-finding convergence; see ~/ai/conventions/proposer-critic-pattern.md.
 
 ## Preconditions
 
