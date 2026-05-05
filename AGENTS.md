@@ -6,6 +6,14 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+## Project Setup Pattern
+
+Projects organized for agent-driven workflows follow the umbrella layout `~/projects/<name>/{trunk,planning,worktrees}/`: the git repository sits at `trunk/`, machine-local planning artifacts live in `planning/<branch>/`, and per-WU worktrees live in `worktrees/<branch>/`.
+
+- Full layout rule (single-repo and multi-repo umbrella variants): [`~/ai/conventions/project-layout.md`](conventions/project-layout.md).
+- `worktree_path`, `scratch_dir`, `planning_dir` semantics for an orchestrator-driven WU: [`~/ai/agents/implementation-pipeline-orchestrator.md`](agents/implementation-pipeline-orchestrator.md) § Required Inputs.
+- Machine-local planning artifacts live outside the worktree/repo diff; do not add new `.gitignore` rules for this WU's machine-local planning artifacts; upload durable outputs to the ticket when they need to survive.
+
 ## Operator Routing Table
 
 ### AGENTS maintenance
@@ -172,6 +180,21 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 - `jira-operator` - Read, comment on, transition, search, or create Jira issues through the Atlassian REST API.
   File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email` | Model: `claude-haiku`
 
+## Ecosystem Map
+
+The `~/ai/` ecosystem composes operators, clients, tools, workflows, and conventions. The discoverability map:
+
+- [`~/ai/VALUES.md`](VALUES.md) — ecosystem composition principles and lean-client posture.
+- [`~/ai/clients/`](clients/) — first-party client libraries (currently the Linear GraphQL client).
+- [`~/ai/tools/README.md`](tools/README.md) — ecosystem-wide tools (scheduler, PR-batch poller).
+- [`~/ai/DECISIONS.md`](DECISIONS.md) — `~/ai/`-layer decisions, exceptions, and bootstrap context.
+- [`~/ai/agents/linear-operator.md`](agents/linear-operator.md) — Linear ticket operator (Markdown-native).
+- [`~/ai/agents/jira-operator.md`](agents/jira-operator.md) — Jira ticket operator (ADF).
+
+Ecosystem-wide infrastructure (scheduler, PR-batch poller, ticket integration clients) lives in `~/ai/`, not in any application-layer project, per [`~/ai/VALUES.md`](VALUES.md) § Lean clients.
+
+Source-of-truth repository: <https://github.com/nestharus/ai>.
+
 ## How to Invoke
 
 Use the shared wrapper conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
@@ -207,6 +230,8 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/workflow-execution-violations.md`](conventions/workflow-execution-violations.md) - process-review violation taxonomy and blocking/advisory defaults
 - [`~/ai/conventions/review-convergence.md`](conventions/review-convergence.md) - non-converging review loops are a hard decomposition trigger; stop iterating and split the work
 - [`~/ai/conventions/project-layout.md`](conventions/project-layout.md) - `~/projects/<name>/{trunk,planning,worktrees}/` umbrella layout for agent-driven projects
+- [`~/ai/conventions/rebase-verification.md`](conventions/rebase-verification.md) - deterministic rebase verification, residual bundle, and rollback convention
+- [`~/ai/conventions/wu-session-lifecycle.md`](conventions/wu-session-lifecycle.md) - WU spawn, run, merge, and post-merge wake lifecycle
 
 ## Model Roles
 
@@ -229,3 +254,16 @@ lives at `<project>/trunk/AGENTS.md`.
 Project-specific operator wrappers live in `<project>/trunk/agents/` and reference `~/ai/agents/<name>.md` as their base procedure.
 
 See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for the shared contract; once a `Project wrappers` section exists there, use it. Until then, follow the current convention: frontmatter, `Base procedure: ~/ai/agents/<name>.md`, and repo-specific defaults only.
+
+### Per-Project Policy
+
+A project's own `AGENTS.md` declares the per-project policy knobs the orchestrator and ticket operator read at dispatch time:
+
+- `ticket_system`: `jira` or `linear` — selects the ticket backend per [`~/ai/agents/implementation-pipeline-orchestrator.md`](agents/implementation-pipeline-orchestrator.md) § Ticket System Pluggability.
+- Linear projects declare `linear_team_key` (and optionally `linear_project_id`).
+- Jira projects declare `jira_url`, `jira_project`, and `jira_account_email`.
+- `skip_problem_map_gate` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
+- `auto_merge_after_phase_9` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
+- `tickets_first_variant` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
+
+Semantics for each knob live on the orchestrator's input contract; the project `AGENTS.md` only declares the chosen values.
