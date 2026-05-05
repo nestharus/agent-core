@@ -1,0 +1,694 @@
+doc_id: linear-client-usage
+title: Linear Client Usage Guide
+version_hint: 2025
+kind: usage_guide
+scope: Developers using the Linear client for issue management and automation
+description: |
+  Comprehensive guide for setting up and using the Linear client wrappers. This project
+  provides a canonical Python LinearClient at scripts/clients/linear_client.py with direct
+  GraphQL support.
+
+  Import from scripts.clients.linear_client for all Linear API interactions.
+domain:
+  - linear
+  - automation
+  - cli
+  - python
+  - typescript
+primary_runtime_references:
+  - path: scripts/clients/linear_client.py
+    description: Python wrapper for Linear TypeScript CLI scripts
+  - path: scripts/clients/linear/src/client.ts
+    description: TypeScript Linear SDK client (uses @linear/sdk ^64.0.0)
+external_references:
+  - url: https://developers.linear.app/docs/sdk/getting-started
+    title: Linear SDK Documentation
+  - url: https://linear.app/settings/api
+    title: Linear API Settings
+
+client_architecture:
+  title: Single-Client Architecture
+  summary: |
+    This project provides a single canonical LinearClient implementation at
+    scripts/clients/linear_client.py. This client uses TypeScript scripts
+    under the hood for full Linear SDK capabilities.
+
+  location: scripts/clients/linear_client.py
+  role: Canonical implementation
+  use_case: All Python code requiring Linear API access
+
+  when_to_use:
+    import: from scripts.clients.linear_client import LinearClient
+    description: |
+      Use this client for all Python code. This is the canonical, single-source-of-truth
+      implementation with full API coverage. Ideal for:
+      - Any Python scripts or automation
+      - PR tooling and merge scripts
+      - CI/CD pipelines
+
+  capabilities:
+    name: LinearClient (linear_client.py)
+    advantages:
+      - Full Linear SDK capabilities via TypeScript CLI
+      - Access to all SDK methods and types
+      - Automatic pagination and error handling from SDK
+      - Rich type information from SDK
+    requirements:
+      - Requires Node.js runtime (v18.0.0+)
+      - TypeScript compilation step required (npm run build)
+
+sections:
+  - id: setup
+    index: 1
+    title: Setup
+    category: setup
+    summary: Installation and configuration steps for the Linear client.
+    items:
+      - id: setup-prerequisites
+        title: Prerequisites
+        requirements:
+          - Node.js 18.0.0 or higher
+          - Python 3.14 or higher
+          - A Linear API key with appropriate permissions
+          - npm or yarn for TypeScript dependencies
+
+      - id: setup-install-dependencies
+        title: Install Dependencies
+        steps:
+          - step: Install TypeScript dependencies
+            command: cd scripts/clients/linear && npm install
+            description: Installs @linear/sdk (^64.0.0) and other required packages
+          - step: Build TypeScript scripts
+            command: cd scripts/clients/linear && npm run build
+            description: Compiles TypeScript to JavaScript in dist/ directory
+          - step: Verify Python environment
+            command: uv sync
+            description: Ensures Python dependencies are installed
+
+      - id: setup-directory-structure
+        title: Directory Structure
+        structure: |
+          scripts/clients/
+          ├── linear_client.py           # Python wrapper
+          └── linear/                    # TypeScript scripts
+              ├── package.json
+              ├── tsconfig.json
+              ├── src/
+              │   ├── client.ts          # Base Linear client
+              │   ├── get-issue.ts       # Fetch issue details
+              │   ├── create-issue.ts    # Create new issue
+              │   ├── update-issue.ts    # Update existing issue
+              │   ├── list-comments.ts   # List issue comments
+              │   ├── create-comment.ts  # Create comment
+              │   ├── list-projects.ts   # List projects
+              │   └── list-teams.ts      # List teams
+              └── dist/                  # Compiled JavaScript (generated)
+
+  - id: authentication
+    index: 2
+    title: Authentication
+    category: setup
+    summary: How to obtain and configure Linear API credentials.
+    items:
+      - id: auth-obtain-key
+        title: Obtaining an API Key
+        steps:
+          - step: Navigate to Linear API settings
+            url: https://linear.app/settings/api
+          - step: Click "Create new personal API key"
+          - step: Provide a descriptive name (e.g., "AI Workflow Automation")
+          - step: Copy the generated API key
+            note: This key will only be shown once - store it securely
+
+      - id: auth-configure-env
+        title: Configuring Environment Variables
+        text: |
+          Set the LINEAR_API_KEY environment variable to authenticate requests.
+        methods:
+          - method: Shell export
+            code: |
+              export LINEAR_API_KEY="lin_api_your_key_here"
+          - method: .env file
+            code: |
+              LINEAR_API_KEY=lin_api_your_key_here
+            note: Ensure .env is in .gitignore
+          - method: Python code
+            code: |
+              import os
+              os.environ["LINEAR_API_KEY"] = "lin_api_your_key_here"
+
+  - id: security
+    index: 3
+    title: Security Best Practices
+    category: security
+    summary: Important security considerations when using the Linear client.
+    rules:
+      - id: security-never-commit-keys
+        rule: Never commit API keys to version control
+        enforcement: Add .env to .gitignore, use environment variables only
+
+      - id: security-key-rotation
+        rule: Rotate API keys regularly
+        recommendation: Rotate every 90 days or immediately if compromised
+
+      - id: security-least-privilege
+        rule: Use API keys with minimal required permissions
+        note: Linear API keys inherit workspace permissions from the user
+
+      - id: security-error-logging
+        rule: API keys must not appear in error messages or logs
+        implementation: The LinearClient class sanitizes error messages to prevent key leakage
+
+  - id: python-api
+    index: 4
+    title: LinearClient API Reference (scripts/clients/linear_client.py)
+    category: api
+    summary: |
+      Complete reference for the canonical Python LinearClient. This is the single
+      source-of-truth implementation for Linear API access in Python. All code
+      should import from this module.
+    items:
+      - id: python-api-initialization
+        title: Client Initialization
+        examples:
+          - description: Initialize with explicit API key
+            language: python
+            code: |
+              from scripts.clients.linear_client import LinearClient
+
+              client = LinearClient(api_key="lin_api_your_key_here")
+
+          - description: Initialize from environment variable
+            language: python
+            code: |
+              from scripts.clients.linear_client import LinearClient
+              import os
+
+              # LINEAR_API_KEY must be set in environment
+              client = LinearClient()
+
+          - description: Error handling for missing API key
+            language: python
+            code: |
+              from scripts.clients.linear_client import LinearClient, LinearClientError
+
+              try:
+                  client = LinearClient()
+              except LinearClientError as e:
+                  print(f"Error: {e.code} - {e.message}")
+                  # Error: MISSING_API_KEY - LINEAR_API_KEY must be provided or set in environment
+
+      - id: python-api-get-issue
+        title: Get Issue Details
+        method: get_issue(issue_id)
+        description: Fetch detailed information about a Linear issue.
+        parameters:
+          - name: issue_id
+            type: str
+            description: Linear issue identifier (e.g., "NES-24") or UUID
+        returns:
+          type: dict[str, Any]
+          fields:
+            - id: str
+            - identifier: str
+            - title: str
+            - description: str | None
+            - priority: int
+            - estimate: int | None
+            - url: str
+            - branchName: str
+            - createdAt: str
+            - updatedAt: str
+            - completedAt: str | None
+            - canceledAt: str | None
+            - dueDate: str | None
+            - team: dict | None (id, name, key)
+            - assignee: dict | None (id, name, email)
+            - state: dict | None (id, name, type)
+            - project: dict | None (id, name)
+            - parent: dict | None (id, identifier, title)
+            - commentCount: int
+            - childrenCount: int
+        examples:
+          - language: python
+            code: |
+              issue = client.get_issue("NES-24")
+              print(f"Title: {issue['title']}")
+              print(f"Branch: {issue['branchName']}")
+              print(f"URL: {issue['url']}")
+
+      - id: python-api-create-issue
+        title: Create New Issue
+        method: create_issue(team, title, description=None, project=None, priority=None)
+        description: Create a new Linear issue.
+        parameters:
+          - name: team
+            type: str
+            required: true
+            description: Team identifier - UUID, team key (e.g., "NES"), or team name (e.g., "Neshq")
+          - name: title
+            type: str
+            required: true
+            description: Issue title
+          - name: description
+            type: str | None
+            required: false
+            description: Issue description (supports Markdown)
+          - name: project
+            type: str | None
+            required: false
+            description: Project ID to associate the issue with
+          - name: priority
+            type: int | None
+            required: false
+            description: Priority level (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
+        returns:
+          type: dict[str, Any]
+          fields:
+            - id: str
+            - identifier: str
+            - title: str
+            - url: str
+            - branchName: str
+        examples:
+          - language: python
+            code: |
+              # Team can be a name, key, or UUID - names are resolved automatically
+              issue = client.create_issue(
+                  team="Neshq",  # Team name - also accepts "NES" (key) or UUID
+                  title="Implement user authentication",
+                  description="Add JWT-based authentication to the API",
+                  priority=2
+              )
+              print(f"Created: {issue['identifier']} - {issue['url']}")
+
+      - id: python-api-update-issue
+        title: Update Existing Issue
+        method: update_issue(issue_id, title=None, description=None, status=None, priority=None)
+        description: |
+          Update fields of an existing Linear issue.
+
+          Note: At least one updatable field (title, description, status, or priority) must be
+          provided. If none are supplied, the call will fail with a LinearClientError having
+          code NO_UPDATES instead of performing a no-op.
+        parameters:
+          - name: issue_id
+            type: str
+            required: true
+            description: Linear issue ID
+          - name: title
+            type: str | None
+            required: false
+            description: New title
+          - name: description
+            type: str | None
+            required: false
+            description: New description
+          - name: status
+            type: str | None
+            required: false
+            description: New status/state ID
+          - name: priority
+            type: int | None
+            required: false
+            description: New priority level (0-4)
+        returns:
+          type: dict[str, Any]
+          fields:
+            - id: str
+            - identifier: str
+            - title: str
+            - url: str
+            - updatedAt: str
+        examples:
+          - language: python
+            code: |
+              updated = client.update_issue(
+                  issue_id="NES-24",
+                  title="Updated title",
+                  priority=1
+              )
+              print(f"Updated at: {updated['updatedAt']}")
+
+      - id: python-api-comments
+        title: Issue Comments
+        methods:
+          - name: list_comments(issue_id)
+            description: List all comments on an issue
+            returns: list[dict[str, Any]]
+          - name: create_comment(issue_id, body)
+            description: Create a new comment on an issue
+            returns: dict[str, Any]
+        examples:
+          - description: List comments
+            language: python
+            code: |
+              comments = client.list_comments("NES-24")
+              for comment in comments:
+                  print(f"{comment['user']['name']}: {comment['body']}")
+
+          - description: Create comment
+            language: python
+            code: |
+              comment = client.create_comment(
+                  issue_id="NES-24",
+                  body="Implementation complete, ready for review"
+              )
+              print(f"Comment created: {comment['id']}")
+
+      - id: python-api-list-operations
+        title: List Operations
+        methods:
+          - name: list_projects()
+            description: |
+              List projects in the workspace (first page only). Note: Large workspaces
+              may have additional projects not returned. For complete coverage, use the
+              Linear API pagination directly.
+            returns: list[dict[str, Any]]
+          - name: list_teams()
+            description: List all teams in the workspace
+            returns: list[dict[str, Any]]
+        examples:
+          - description: List projects (first page)
+            language: python
+            code: |
+              projects = client.list_projects()
+              for project in projects:
+                  print(f"{project['name']}: {project['url']}")
+
+          - description: List teams
+            language: python
+            code: |
+              teams = client.list_teams()
+              for team in teams:
+                  print(f"{team['key']}: {team['name']}")
+
+      - id: python-api-error-handling
+        title: Error Handling
+        description: |
+          All methods raise LinearClientError on failure. Error codes fall into two categories:
+          client-side errors (raised by the Python wrapper) and API-level errors (returned by
+          the Linear API via the TypeScript scripts).
+        exception:
+          name: LinearClientError
+          attributes:
+            - name: code
+              type: str
+              description: Error code identifying the type of error
+            - name: message
+              type: str
+              description: Human-readable error message
+        client_error_codes:
+          description: Errors raised by the Python wrapper before reaching the API
+          codes:
+            - code: MISSING_API_KEY
+              description: No API key provided or found in environment
+            - code: SCRIPTS_NOT_FOUND
+              description: TypeScript scripts directory not found
+            - code: SCRIPT_NOT_FOUND
+              description: Specific TypeScript script not found
+            - code: NODE_NOT_FOUND
+              description: Node.js is not installed or not found on PATH
+            - code: SUBPROCESS_ERROR
+              description: Failed to run script due to OS error
+            - code: PARSE_ERROR
+              description: Failed to parse JSON response from script
+        api_error_codes:
+          description: Errors returned by the Linear API or TypeScript scripts
+          codes:
+            - code: NOT_FOUND
+              description: Requested resource (issue, project, etc.) not found
+            - code: ISSUE_NOT_FOUND
+              description: Requested issue identifier or ID was not found
+            - code: TEAM_NOT_FOUND
+              description: Specified team ID was not found
+            - code: UNAUTHORIZED
+              description: Invalid or expired API key
+            - code: INVALID_INPUT
+              description: Invalid input parameters (empty required fields, invalid priority, etc.)
+            - code: NO_UPDATES
+              description: No fields provided to update
+            - code: CREATE_ISSUE_FAILED
+              description: Failed to create issue
+            - code: UPDATE_ISSUE_FAILED
+              description: Failed to update issue
+            - code: LIST_PROJECTS_FAILED
+              description: Failed to list projects
+            - code: LIST_TEAMS_FAILED
+              description: Failed to list teams
+            - code: LIST_COMMENTS_FAILED
+              description: Failed to list comments
+            - code: CREATE_COMMENT_FAILED
+              description: Failed to create comment
+            - code: GET_ISSUE_FAILED
+              description: Failed to fetch issue details
+            - code: UNKNOWN_ERROR
+              description: Unspecified error from Linear API
+        examples:
+          - language: python
+            code: |
+              from scripts.clients.linear_client import LinearClient, LinearClientError
+
+              client = LinearClient()
+              try:
+                  issue = client.get_issue("INVALID-123")
+              except LinearClientError as e:
+                  print(f"Error {e.code}: {e.message}")
+                  # Handle client-side errors
+                  if e.code == "MISSING_API_KEY":
+                      print("Set LINEAR_API_KEY environment variable")
+                  elif e.code == "NODE_NOT_FOUND":
+                      print("Install Node.js to use the Linear client")
+                  # Handle API-level errors
+                  elif e.code == "NOT_FOUND":
+                      print("Issue does not exist")
+                  elif e.code == "UNAUTHORIZED":
+                      print("Invalid API key")
+
+  - id: python-cli
+    index: 5
+    title: Python CLI (uv run linear)
+    category: api
+    summary: Simple command-line interface for common Linear operations.
+    items:
+      - id: python-cli-overview
+        title: Overview
+        text: |
+          The Python CLI provides simple commands for common Linear operations, suitable for
+          use in shell scripts and Claude command files. All commands output JSON.
+
+          Note: The Python CLI intentionally exposes only a subset of fields for shell-script
+          friendliness (e.g., create-issue lacks --priority, update-issue only supports
+          --description). For advanced options like priority, title/status updates, and labels,
+          use the Python LinearClient API or the TypeScript CLI directly.
+
+      - id: python-cli-usage
+        title: Usage
+        commands:
+          - command: uv run linear get-issue <ISSUE_ID>
+            description: Fetch issue details
+            example: uv run linear get-issue NES-24
+
+          - command: uv run linear list-projects
+            description: List projects in the workspace (first page only)
+            example: uv run linear list-projects
+
+          - command: uv run linear list-teams
+            description: List all teams in the workspace
+            example: uv run linear list-teams
+
+          - command: uv run linear list-comments <ISSUE_ID>
+            description: List comments on an issue
+            example: uv run linear list-comments NES-24
+
+          - command: >-
+              uv run linear create-issue --team <TEAM> --title <TITLE>
+              [--description <DESC>] [--project <PROJECT>]
+            description: Create a new issue (team can be UUID, name, or key)
+            example: >-
+              uv run linear create-issue --team Neshq --title "New feature"
+              --description "Feature description"
+
+          - command: uv run linear update-issue <ISSUE_ID> [--description <DESC>]
+            description: |
+              Update an issue description. Fails with NO_UPDATES if no updatable
+              fields are provided.
+            example: uv run linear update-issue NES-24 --description "Updated description"
+
+          - command: uv run linear create-comment <ISSUE_ID> --body <BODY>
+            description: Create a comment on an issue
+            example: uv run linear create-comment NES-24 --body "Implementation complete"
+
+  - id: typescript-cli
+    index: 6
+    title: TypeScript CLI Scripts
+    category: api
+    summary: Direct usage of TypeScript CLI scripts (advanced).
+    items:
+      - id: typescript-cli-overview
+        title: Overview
+        text: |
+          The TypeScript scripts can be invoked directly using Node.js. The Python wrapper
+          is the recommended interface, but direct CLI usage is available for scripting
+          and debugging.
+
+      - id: typescript-cli-authentication
+        title: Authentication
+        text: |
+          All scripts require the LINEAR_API_KEY environment variable to be set.
+        example:
+          command: export LINEAR_API_KEY="lin_api_your_key_here"
+
+      - id: typescript-cli-response-format
+        title: Response Format
+        text: |
+          All scripts output JSON in a standardized format.
+        success_response:
+          language: json
+          code: |
+            {
+              "ok": true,
+              "data": {
+                // Response data specific to the operation
+              }
+            }
+        error_response:
+          language: json
+          code: |
+            {
+              "ok": false,
+              "error": {
+                "code": "ERROR_CODE",
+                "message": "Human-readable error message"
+              }
+            }
+
+      - id: typescript-cli-scripts
+        title: Available Scripts
+        scripts:
+          - script: get-issue.js
+            usage: node dist/get-issue.js --issue-id <ID>
+            description: Fetch issue details
+            example: node dist/get-issue.js --issue-id NES-24
+
+          - script: create-issue.js
+            usage: >-
+              node dist/create-issue.js --team <TEAM> --title <TITLE>
+              [--description <DESC>] [--project <PROJECT>] [--priority <PRIORITY>]
+            description: Create a new issue (team can be UUID, name, or key)
+            example: >-
+              node dist/create-issue.js --team Neshq --title "New feature"
+              --description "Feature description"
+            note: >-
+              Additional options available (--assignee, --state, --parent-id, --labels,
+              --body as alias for --description). Run with --help for full list.
+
+          - script: update-issue.js
+            usage: >-
+              node dist/update-issue.js --issue-id <ID> [--title <TITLE>]
+              [--description <DESC>] [--state <STATE>] [--priority <PRIORITY>]
+            description: Update an existing issue
+            example: >-
+              node dist/update-issue.js --issue-id NES-24 --title "Updated title"
+              --description "New description"
+            note: >-
+              Additional options available (--assignee, --project, --parent-id, --labels,
+              --body as alias for --description). Run with --help for full list.
+              At least one updatable field must be provided; otherwise the command fails
+              with error code NO_UPDATES.
+
+          - script: list-comments.js
+            usage: node dist/list-comments.js --issue-id <ID>
+            description: List comments on an issue
+            example: node dist/list-comments.js --issue-id NES-24
+
+          - script: create-comment.js
+            usage: node dist/create-comment.js --issue-id <ID> --body <BODY>
+            description: Create a comment on an issue
+            example: node dist/create-comment.js --issue-id NES-24 --body "Comment text"
+
+          - script: list-projects.js
+            usage: node dist/list-projects.js
+            description: |
+              List projects (first page only). Large workspaces may have additional
+              projects not returned by this command.
+            example: node dist/list-projects.js
+
+          - script: list-teams.js
+            usage: node dist/list-teams.js
+            description: List all teams
+            example: node dist/list-teams.js
+
+  - id: migration-guide
+    index: 7
+    title: Migration Guide
+    category: guide
+    summary: Guidance for migrating from direct API calls to the Linear client.
+    items:
+      - id: migration-benefits
+        title: Benefits of Using the Client
+        benefits:
+          - Consistent error handling with structured exceptions
+          - Automatic JSON parsing and response validation
+          - Type hints for better IDE support
+          - Simplified authentication management
+          - Abstraction over subprocess execution
+
+      - id: migration-from-direct-api
+        title: Migrating from Direct REST API Calls
+        before:
+          description: Direct API call using requests
+          language: python
+          code: |
+            import requests
+
+            headers = {"Authorization": f"Bearer {api_key}"}
+            response = requests.get(
+                f"https://api.linear.app/graphql",
+                headers=headers,
+                json={"query": "{ issue(id: \"NES-24\") { title } }"}
+            )
+            data = response.json()
+        after:
+          description: Using LinearClient
+          language: python
+          code: |
+            from scripts.clients.linear_client import LinearClient
+
+            client = LinearClient()
+            issue = client.get_issue("NES-24")
+            title = issue["title"]
+
+      - id: migration-from-subprocess
+        title: Migrating from Direct Subprocess Calls
+        before:
+          description: Direct subprocess call
+          language: python
+          code: |
+            import subprocess
+            import json
+
+            result = subprocess.run(
+                ["node", "scripts/clients/linear/dist/get-issue.js", "--issue-id", "NES-24"],
+                env={"LINEAR_API_KEY": api_key},
+                capture_output=True,
+                text=True
+            )
+            data = json.loads(result.stdout)["data"]
+        after:
+          description: Using LinearClient
+          language: python
+          code: |
+            from scripts.clients.linear_client import LinearClient
+
+            client = LinearClient()
+            issue = client.get_issue("NES-24")
+
+      - id: migration-testing
+        title: Testing After Migration
+        recommendations:
+          - Run existing tests to ensure functionality is preserved
+          - Add error handling with LinearClientError
+          - Update type hints to use the return types documented in this guide
+          - Verify authentication works with environment variables
+        test_command: uv run pytest scripts/tests/clients/test_linear_client.py -v

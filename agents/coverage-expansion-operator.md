@@ -68,6 +68,10 @@ Required outputs:
 - `reports/engineering-report.md` and `reports/engineering-report.pdf`.
 - `reports/investigative-report.md` and `reports/investigative-report.pdf`.
 - `reports/report-index.md`: artifact manifest with PDF paths, screenshot paths, non-UI evidence paths, spec path, test paths, and PR pointer URL if known.
+- `findings/index.md`: ordered list of every pending finding (`fid`, short title, `finding_type`, evidence path, target PDF path).
+- `findings/<fid>.md`: one structured manifest per SUSPICIOUS/AMBIGUOUS item (schema in §Finding Manifest Schema).
+- `findings/<fid>.pdf`: one **per-finding canonical PDF** rendered from `<fid>.md` with embedded screenshot or frame sequence. This is the artifact a project wrapper attaches to a single tracker ticket.
+- `findings/<fid>/` (input asset directory): `screenshot.png` (annotated) for `state` or `bug-frontend`; `frames/` + `narration.md` from `trace-recorder.md` for `behavior`; `log.txt` or `assertion-diff.txt` for `bug-backend`.
 
 The canonical PDF URL surfaced in the PR pointer comment is the S3 URL defined by `~/ai/conventions/test-reports.md`; the Actions artifact URL is a secondary fallback.
 
@@ -156,6 +160,39 @@ The coverage-expansion operator also copies the investigator's three report file
 For `SUSPICIOUS` and `AMBIGUOUS` behavior, report the finding and the sources checked. Do not write tests from it unless a human supplies a verdict.
 
 For `OBVIOUSLY_BROKEN` behavior, report the bug and write tests only when the intended behavior is explicit enough to support a `VERIFIED` or human-confirmed expected result.
+
+### 5.5. Synthesize Findings From SUSPICIOUS/AMBIGUOUS Items
+
+Every SUSPICIOUS or AMBIGUOUS item from behavior investigation that needs human input becomes one finding manifest. The manifest is the structured artifact that downstream project wrappers turn into a tracker ticket — one finding, one ticket, no batching. Reports and PR comments may summarize, but the manifest is the source of truth.
+
+For each such item:
+
+1. Allocate a stable `fid`: `f-<YYYY-MM-DD>-<short-slug>` (e.g., `f-2026-04-21-lead-time-one-bound`). The date is the run date; the slug names the item.
+2. Confirm the `finding_type` tag from behavior-investigator: `question` | `bug-frontend` | `bug-backend`. For `bug-*`, also confirm `intent_source` (commit hash, PR, ticket, doc) — without it, downgrade to `question`.
+3. Confirm the structured locator from behavior-investigator is present: `where_page`, `where_route`, `where_component` (`file:line`), and `where_selector` for UI-touching findings. If any is missing or `unresolved:`, do not generate a finding — return `NEEDS_INPUT` and surface which locator was missing for which item. Prose breadcrumbs are not acceptable.
+4. Capture evidence according to `finding_type` (and `question_type` for questions):
+   - `question` + `state`, or `bug-frontend` — capture one annotated screenshot of the element under question/the broken UI state, per the screenshot rule in `~/ai/conventions/test-reports.md`. Annotation must visually mark the **specific element**, not just the page. Save as `findings/<fid>/screenshot.png`.
+   - `question` + `behavior` — invoke `trace-recorder.md` with `output_root=${scratch_dir}/coverage-expansion/<report_slug>/findings`:
+     ```bash
+     agents -a ${agents_dir}/trace-recorder.md -p "$worktree_path" \
+       -f "$scratch_dir/coverage-expansion/<report_slug>/TRACE_RECORDER_<fid>.prompt.md" \
+       > "$scratch_dir/coverage-expansion/<report_slug>/findings/<fid>/trace-recorder-output.md" 2>&1
+     ```
+     Result: `findings/<fid>/frames/`, `videos/`, `trace.zip`, and `narration.md`.
+   - `bug-backend` — capture an assertion diff, log excerpt, normalized JSON snapshot, or other non-UI evidence. No screenshot. Save as `findings/<fid>/log.txt` or `findings/<fid>/assertion-diff.txt`.
+5. Write `findings/<fid>.md` using the schema in §Finding Manifest Schema below. The Markdown body must inline-reference the evidence files via relative paths (`![](frames/01-initial-state.png)`, `![](screenshot.png)`, fenced code blocks for log excerpts) so that PDF rendering embeds them.
+6. **Render the per-finding canonical PDF.** The project wrapper supplies the rendering chain (e.g., `md2pdf` for RFQ). The output is one PDF per finding at `findings/<fid>.pdf` and is the artifact attached to that finding's tracker ticket. The orchestrator does not invoke the chain itself — it requires the project wrapper to declare and run it. If no wrapper chain is declared, stop with `NEEDS_INPUT`.
+7. After all findings are written and rendered, write `findings/index.md`:
+   ```markdown
+   # Pending Findings
+   | fid | finding_type | question_type | title | evidence | pdf |
+   |---|---|---|---|---|---|
+   | f-2026-04-21-lead-time-one-bound | question     | behavior | Lead-time filter: one bound vs both | `findings/f-2026-04-21-lead-time-one-bound/frames/` | `findings/f-2026-04-21-lead-time-one-bound.pdf` |
+   | f-2026-04-21-stock-badge-meaning  | question     | state    | "In Stock" badge semantics            | `findings/f-2026-04-21-stock-badge-meaning/screenshot.png` | `findings/f-2026-04-21-stock-badge-meaning.pdf` |
+   | f-2026-04-21-currency-rounding    | bug-backend  | —        | Currency rounding off by one cent     | `findings/f-2026-04-21-currency-rounding/assertion-diff.txt` | `findings/f-2026-04-21-currency-rounding.pdf` |
+   ```
+
+This step does **not** publish anything to a tracker. Publishing is a project-wrapper concern; the manifest plus its per-finding PDF exists so wrappers can consume them without re-parsing report prose. Each finding is self-contained in its single PDF — that is what makes the format portable across trackers.
 
 ### 6. Write Tests From the Spec
 
@@ -266,14 +303,91 @@ Write `reports/report-index.md` with:
 - Actions artifact fallback URL: `<url or n/a>`
 ````
 
+## Finding Manifest Schema
+
+Each `findings/<fid>.md` is a structured manifest a project wrapper can consume without re-parsing prose. Frontmatter fields are stable; the body is a human-readable rendering of the same data, written to render cleanly when the manifest is converted to PDF (the per-finding canonical PDF that gets attached to the tracker ticket).
+
+```markdown
+---
+fid: f-2026-04-21-lead-time-one-bound
+title: Lead-time filter behavior when only one bound is set
+finding_type: question                  # question | bug-frontend | bug-backend
+question_type: behavior                  # state | behavior  (only for finding_type=question; omit for bug-*)
+verdict: AMBIGUOUS                       # SUSPICIOUS | AMBIGUOUS
+where_page: Cost Estimation
+where_route: /cost-estimation/:rfqId
+where_component: frontend/src/components/LeadTimeFilter.jsx:142
+where_selector: '[data-testid="lead-time-filter-min"]'
+user_workflow: |
+  Open RFQ → click Cost Estimation tab → expand Lead Time filter → enter min only
+intent_source: ''                        # required for bug-*: commit hash / PR# / ticket / doc URL. Empty for question.
+evidence:
+  type: behavior                         # state | behavior | non-ui
+  frames_dir: findings/f-2026-04-21-lead-time-one-bound/frames/   # behavior only
+  narration: findings/f-2026-04-21-lead-time-one-bound/narration.md  # behavior only
+  screenshot: ''                         # state / bug-frontend only
+  log: ''                                # bug-backend / non-ui only
+source_refs:
+  - behavior-investigation-product.md#question-2
+  - behavior-investigation-investigative.md#lead-time-filter
+code_refs:
+  - backend/routers/cost_estimation_streaming.py:99
+  - frontend/src/components/LeadTimeFilter.jsx:142
+pdf: findings/f-2026-04-21-lead-time-one-bound.pdf
+pr_pointer: pending                      # PR URL once known; project wrapper fills this in
+---
+
+## Decision needed
+Should the lead-time filter be a no-op when only one bound is set, or should the UI always require both bounds before applying?
+
+## What happens now
+<verbatim "what happens" prose from the investigator>
+
+## Failure mode if the current behavior is wrong
+<verbatim "failure mode" prose from the investigator>
+
+## Evidence
+
+<!-- For `behavior` questions, embed each frame inline followed by its narration step. The PDF render bakes the images in. -->
+![Frame 01 — initial state](findings/<fid>/frames/01-initial-state.png)
+**Step 1.** <narration step 1 from trace-recorder narration.md>
+
+![Frame 02 — after entering min only](findings/<fid>/frames/02-after-min.png)
+**Step 2.** <narration step 2>
+
+<!-- For `state` and `bug-frontend`, embed the single annotated screenshot. -->
+<!-- For `bug-backend`, embed the assertion diff or log excerpt as a fenced code block. -->
+```
+
+The body's image references must be **relative to the manifest file** so the PDF chain (e.g., `md2pdf`) resolves them against the correct directory. The publisher attaches `findings/<fid>.pdf` to the tracker ticket — not the raw frames or screenshots, since the PDF already embeds them.
+
+For `bug-backend` findings, replace the `## Evidence` section with:
+
+````markdown
+## Evidence
+
+```text
+<assertion diff or log excerpt verbatim>
+```
+
+The intended behavior is sourced from <intent_source>.
+````
+
 ## Stop Conditions
 
-- Return `NEEDS_INPUT` if no P0 target exists or the selected behavior remains `AMBIGUOUS`.
+- Return `NEEDS_INPUT` if no P0 target exists or the selected behavior remains `AMBIGUOUS` *and* a finding manifest could not be synthesized from it.
 - Return `NEEDS_INPUT` if a strict xfail would lack a behavior-source commit hash.
+- Return `NEEDS_INPUT` if a `bug-frontend` or `bug-backend` finding lacks `intent_source`. Do not promote a question to a bug without a citable intent source — keep it as `question` instead.
+- Return `NEEDS_INPUT` if any pending finding lacks one of `where_route`, `where_component`, or (for UI findings) `where_selector`. Do not paper over with prose; surface the missing locator and which sources were checked.
+- Return `NEEDS_INPUT` if no project wrapper has declared a per-finding PDF render chain.
 - Return `BLOCKED` if coverage, risk, behavior investigation, test writing, screenshot capture, non-UI evidence capture, or PDF generation cannot produce required artifacts.
-- Return `BLOCKED` if a required report PDF is missing.
+- Return `BLOCKED` if a required per-run report PDF (Product / Engineering / Investigative) is missing.
+- Return `BLOCKED` if a per-finding canonical PDF (`findings/<fid>.pdf`) is missing for any pending finding.
 - Return `BLOCKED` if the canonical S3 PDF URL cannot be produced and no Actions-artifact fallback URL is available.
 - Return `BLOCKED` if a UI-touching behavior lacks a screenshot.
+- Return `BLOCKED` if a `question`+`state` or `bug-frontend` finding lacks an annotated screenshot of the element.
+- Return `BLOCKED` if a `question`+`behavior` finding lacks a `frames/` directory and `narration.md` from `trace-recorder.md`.
+- Return `BLOCKED` if a `bug-backend` finding lacks an assertion diff, log excerpt, or other non-UI evidence artifact.
 - Return `BLOCKED` if a code claim lacks `file_path:line_number` and an exact fenced code block.
 
 ## Final Response
@@ -286,4 +400,6 @@ Return a compact summary with:
 - discovered bugs and strict-xfail tests
 - canonical PDF paths
 - screenshot or non-UI evidence paths
+- pending finding count broken down by `finding_type` (`question`, `bug-frontend`, `bug-backend`) + path to `findings/index.md`
+- list of `fid`s emitted with their `finding_type` and per-finding PDF path
 - any `NEEDS_INPUT` or `BLOCKED` reason

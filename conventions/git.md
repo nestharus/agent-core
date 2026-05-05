@@ -10,15 +10,16 @@
 
 Choose one naming scheme based on the project's tracker:
 
-- **`feat/<short-description>`** is the default when there is no ticket system or when the project does not require ticket-linked branches.
-- **`<TICKET-ID>-<short-description>`** is the variant for Linear or Jira work. Match the ticket ID casing exactly so the tracker auto-links.
+- **`<TICKET-ID>-<short-description>`** is **required** when the project uses a tracker (Linear, Jira, GitHub Issues with ticket-style IDs). Match the ticket ID casing exactly so the tracker auto-links. Every branch must reference an open ticket — if there isn't one yet, file it first, *then* cut the branch.
+- **`feat/<short-description>`** is permitted only when the project has no tracker, or has explicitly declared in its `AGENTS.md` that ticket-linked branches are not required.
 - Keep branch names short enough to stay legible in the GitHub UI. Cap total length at about 50 characters.
 - Use lowercase hyphenated descriptions after the prefix or ticket ID.
+- The `fix/` and `feat/` *kind prefixes* are redundant once a ticket prefix is present and should be dropped — the ticket already conveys the work type.
 
 Examples:
 
-- `feat/add-caching-layer`
-- `ENG-4321-add-caching-layer`
+- `ENG-4321-add-caching-layer` (ticket-tracked project — required form)
+- `feat/add-caching-layer` (no-tracker project only)
 
 ### Topology for Multi-PR Initiatives
 
@@ -59,11 +60,14 @@ git config --global commit.gpgsign true
 - **No agent authorship attribution.** Agents do not add `Co-Authored-By:`, `Generated-By:`, "Claude wrote this", "Generated with ...", or similar trailers.
 - The commit author is the human operator who ran the pipeline; agents are tools.
 - Prefer small, testable commits. Each commit should build, pass tests, and represent one concern.
+- **Reference the ticket in every commit message** when the project uses a tracker. Use a leading scope, e.g. `INFA-118: surface script error in download status` — the tracker auto-links the commit and the change history stays navigable from the ticket. The same form is acceptable as a trailing `Refs: INFA-118` line for fixup-style commits where the leading scope would distort readability. Multiple tickets are listed comma-separated (`INFA-118, INFA-117: ...`).
+- Branches that span several commits must reference the ticket on at least the head commit; per-commit references are preferred so individual cherries stay traceable when reorganizing.
 
 ## Pull Requests
 
 - Open PRs in draft mode first.
 - **Draft PR creation is routine.** Opening a draft PR is a normal pipeline step and is not treated as a special approval-gated action.
+- **Variant — tickets-first review:** projects that opt into the tickets-first variant in `~/ai/workflows/tickets-first-review.md` instead defer PR creation until **after** local review passes. The default in this section still holds for projects that haven't opted in.
 - **Promotion is human.** Moving a draft PR to ready-for-review requires an explicit human decision.
 - Keep one concern per PR. For multi-concern split rules, see `~/ai/workflows/pr-review.md`.
 - A large deletion is its own PR unless the repo documents a stronger exception.

@@ -1,0 +1,498 @@
+"""Command-line interface for Linear client operations.
+
+This module provides simple CLI commands for common Linear operations,
+intended to simplify usage in shell scripts and Claude command files.
+"""
+
+import argparse
+import json
+import sys
+from typing import NoReturn
+
+from .client import LinearClient, LinearClientError
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser subclass that outputs JSON errors to maintain consistent output format."""
+
+    def error(self, message: str) -> NoReturn:
+        """Output structured JSON error and exit with code 2."""
+        print(json.dumps({"ok": False, "error": {"code": "INVALID_INPUT", "message": message}}))
+        sys.exit(2)
+
+
+def get_issue(issue_id: str) -> None:
+    """Fetch and print issue details as JSON."""
+    client = LinearClient()
+    issue = client.get_issue(issue_id)
+    print(json.dumps({"ok": True, "data": issue}, indent=2))
+
+
+def get_issue_description(issue_id: str) -> None:
+    """Fetch and print only the issue description as plain text."""
+    client = LinearClient()
+    issue = client.get_issue(issue_id)
+    print(issue.get("description") or "")
+
+
+def split_plans(issue_id: str, output_dir: str) -> None:
+    """Split ticket description into individual plan files.
+
+    Extracts plans from the ticket description (after the `---` separator)
+    and writes each plan to a separate file in the output directory.
+
+    Args:
+        issue_id: The issue identifier (e.g., NES-24)
+        output_dir: Directory to write plan files (e.g., .tmp/plans/NES-24)
+    """
+    import os
+    import re
+
+    client = LinearClient()
+    issue = client.get_issue(issue_id)
+    description = issue.get("description") or ""
+
+    # Find the plan section after ---
+    separator_match = re.search(r"^---\s*$", description, re.MULTILINE)
+    if not separator_match:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "NO_PLAN",
+                        "message": "No plan found (missing --- separator)",
+                    },
+                }
+            )
+        )
+        sys.exit(1)
+
+    plan_content = description[separator_match.end() :].strip()
+
+    # Split on "### Plan N:" headers
+    plan_pattern = re.compile(r"^### Plan \d+:", re.MULTILINE)
+    matches = list(plan_pattern.finditer(plan_content))
+
+    if not matches:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "NO_PLANS",
+                        "message": "No plans found (no '### Plan N:' headers)",
+                    },
+                }
+            )
+        )
+        sys.exit(1)
+
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+
+    plans = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(plan_content)
+        plan_text = plan_content[start:end].strip()
+
+        # Extract plan title from header
+        header_line = plan_text.split("\n")[0]
+        plan_num = i + 1
+        plan_file = os.path.join(output_dir, f"plan{plan_num}.md")
+
+        with open(plan_file, "w", encoding="utf-8") as f:
+            f.write(plan_text)
+
+        plans.append({"file": plan_file, "header": header_line})
+
+    print(json.dumps({"ok": True, "data": {"plans": plans, "count": len(plans)}}, indent=2))
+
+
+def list_projects() -> None:
+    """List and print projects as JSON (first page only)."""
+    client = LinearClient()
+    projects = client.list_projects()
+    print(json.dumps({"ok": True, "data": {"projects": projects}}, indent=2))
+
+
+def list_teams() -> None:
+    """List and print all teams as JSON."""
+    client = LinearClient()
+    teams = client.list_teams()
+    print(json.dumps({"ok": True, "data": {"teams": teams}}, indent=2))
+
+
+def list_comments(issue_id: str) -> None:
+    """List and print comments on an issue as JSON."""
+    client = LinearClient()
+    result = client.list_comments(issue_id)
+    # Extract comments list from rich metadata to preserve CLI contract
+    comments = result.get("comments", [])
+    print(json.dumps({"ok": True, "data": {"comments": comments}}, indent=2))
+
+
+def create_issue(
+    team: str,
+    title: str,
+    description: str | None = None,
+    project_id: str | None = None,
+    labels: list[str] | None = None,
+    create_missing_labels: bool = False,
+) -> None:
+    """Create a new issue and print result as JSON.
+
+    When ``labels`` is supplied the names are resolved to UUIDs (creating
+    them when ``create_missing_labels=True``) and applied at create-time.
+    Resolution failures raise before the issue is created so we never
+    produce a half-labeled ticket.
+    """
+    client = LinearClient()
+    label_ids: list[str] | None = None
+    if labels:
+        label_ids = client.resolve_label_ids(team, labels, create_missing=create_missing_labels)
+    issue = client.create_issue(
+        team=team,
+        title=title,
+        description=description,
+        project_id=project_id,
+        label_ids=label_ids,
+    )
+    print(json.dumps({"ok": True, "data": issue}, indent=2))
+
+
+def update_issue(
+    issue_id: str,
+    description: str | None = None,
+    description_file: str | None = None,
+) -> None:
+    """Update an issue description and print result as JSON.
+
+    Args:
+        issue_id: The issue identifier (e.g., NES-24)
+        description: New description text (mutually exclusive with
+            description_file)
+        description_file: Path to file containing new description
+            (mutually exclusive with description)
+    """
+    # Read description from file if provided
+    if description_file:
+        with open(description_file, encoding="utf-8") as f:
+            description = f.read()
+
+    client = LinearClient()
+    issue = client.update_issue(
+        issue_id=issue_id,
+        description=description,
+    )
+    print(json.dumps({"ok": True, "data": issue}, indent=2))
+
+
+def create_comment(issue_id: str, body: str) -> None:
+    """Create a comment on an issue and print result as JSON."""
+    client = LinearClient()
+    comment = client.create_comment(issue_id=issue_id, body=body)
+    print(json.dumps({"ok": True, "data": comment}, indent=2))
+
+
+def get_comment(issue_id: str, title: str) -> None:
+    """Get a comment by title and print result as JSON."""
+    client = LinearClient()
+    comment = client.get_comment_by_title(issue_id=issue_id, title=title)
+    if comment:
+        print(json.dumps({"ok": True, "data": comment}, indent=2))
+    else:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"No comment with title '{title}' found",
+                    },
+                }
+            )
+        )
+        sys.exit(1)
+
+
+def upsert_comment(
+    issue_id: str, title: str, body: str | None = None, body_file: str | None = None
+) -> None:
+    """Create or update a comment by title and print result as JSON.
+
+    Args:
+        issue_id: The issue identifier (e.g., NES-24)
+        title: The comment title to match/create
+        body: Comment body text (mutually exclusive with body_file)
+        body_file: Path to file containing comment body (mutually exclusive with body)
+    """
+    # Read body from file if provided
+    if body_file:
+        with open(body_file, encoding="utf-8") as f:
+            body = f.read()
+
+    if not body:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "INVALID_INPUT",
+                        "message": "Either --body or --body-file must be provided",
+                    },
+                }
+            )
+        )
+        sys.exit(2)
+
+    client = LinearClient()
+    comment = client.upsert_comment(issue_id=issue_id, title=title, body=body)
+    print(json.dumps({"ok": True, "data": comment}, indent=2))
+
+
+def list_labels(team: str) -> None:
+    """List labels on a team."""
+    client = LinearClient()
+    labels = client.list_labels(team=team)
+    print(json.dumps({"ok": True, "data": labels}, indent=2))
+
+
+def create_label(
+    team: str, name: str, color: str | None = None, description: str | None = None
+) -> None:
+    """Create a label on a team."""
+    client = LinearClient()
+    label = client.create_label(team=team, name=name, color=color, description=description)
+    print(json.dumps({"ok": True, "data": label}, indent=2))
+
+
+def apply_labels(
+    issue_id: str,
+    team: str,
+    labels: list[str],
+    create_missing: bool,
+    replace: bool,
+) -> None:
+    """Apply (or replace) labels on an existing issue."""
+    client = LinearClient()
+    result = client.apply_labels(
+        issue_id=issue_id,
+        team=team,
+        label_names=labels,
+        create_missing=create_missing,
+        replace=replace,
+    )
+    print(json.dumps({"ok": True, "data": result}, indent=2))
+
+
+def main() -> None:
+    """Parse arguments and dispatch to appropriate command."""
+    parser = JsonArgumentParser(
+        description="CLI for Linear client operations",
+        prog="linear",
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # get-issue command
+    get_issue_parser = subparsers.add_parser("get-issue", help="Fetch issue details")
+    get_issue_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+
+    # get-issue-description command
+    get_issue_desc_parser = subparsers.add_parser(
+        "get-issue-description", help="Fetch issue description as plain text"
+    )
+    get_issue_desc_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+
+    # split-plans command
+    split_plans_parser = subparsers.add_parser(
+        "split-plans", help="Split ticket plans into individual files"
+    )
+    split_plans_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    split_plans_parser.add_argument(
+        "--output-dir",
+        required=True,
+        help="Directory to write plan files (e.g., .tmp/plans/NES-24)",
+    )
+
+    # list-projects command
+    subparsers.add_parser("list-projects", help="List projects (first page only)")
+
+    # list-teams command
+    subparsers.add_parser("list-teams", help="List all teams")
+
+    # list-comments command
+    list_comments_parser = subparsers.add_parser("list-comments", help="List comments on an issue")
+    list_comments_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+
+    # create-issue command
+    create_issue_parser = subparsers.add_parser("create-issue", help="Create a new issue")
+    create_issue_parser.add_argument(
+        "--team", required=True, help="Team identifier (UUID, key, or name)"
+    )
+    create_issue_parser.add_argument("--title", required=True, help="Issue title")
+    create_issue_parser.add_argument("--description", help="Issue description")
+    create_issue_parser.add_argument("--project", help="Project ID")
+    create_issue_parser.add_argument(
+        "--labels", help="Comma-separated label names (e.g. 'agent-runner,prereq')"
+    )
+    create_issue_parser.add_argument(
+        "--create-missing-labels",
+        action="store_true",
+        help="Create any label name that does not yet exist on the team",
+    )
+
+    # update-issue command
+    update_issue_parser = subparsers.add_parser("update-issue", help="Update an issue description")
+    update_issue_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    update_issue_parser.add_argument("--description", help="New issue description")
+    update_issue_parser.add_argument(
+        "--description-file", help="Path to file containing new issue description"
+    )
+
+    # create-comment command
+    create_comment_parser = subparsers.add_parser(
+        "create-comment", help="Create a comment on an issue"
+    )
+    create_comment_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    create_comment_parser.add_argument("--body", required=True, help="Comment body")
+
+    # get-comment command
+    get_comment_parser = subparsers.add_parser("get-comment", help="Get a comment by title")
+    get_comment_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    get_comment_parser.add_argument("--title", required=True, help="Comment title to search for")
+
+    # list-labels command
+    list_labels_parser = subparsers.add_parser("list-labels", help="List labels on a team")
+    list_labels_parser.add_argument(
+        "--team", required=True, help="Team identifier (UUID, key, or name)"
+    )
+
+    # create-label command
+    create_label_parser = subparsers.add_parser("create-label", help="Create a label on a team")
+    create_label_parser.add_argument(
+        "--team", required=True, help="Team identifier (UUID, key, or name)"
+    )
+    create_label_parser.add_argument("--name", required=True, help="Label name")
+    create_label_parser.add_argument("--color", help="Hex color (e.g. #5e6ad2)")
+    create_label_parser.add_argument("--description", help="Label description")
+
+    # apply-labels command
+    apply_labels_parser = subparsers.add_parser(
+        "apply-labels", help="Apply (or replace) labels on an issue"
+    )
+    apply_labels_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    apply_labels_parser.add_argument(
+        "--team",
+        required=True,
+        help="Team identifier (UUID, key, or name) used for label resolution / creation",
+    )
+    apply_labels_parser.add_argument(
+        "--labels",
+        required=True,
+        help="Comma-separated label names (e.g. 'agent-runner,prereq')",
+    )
+    apply_labels_parser.add_argument(
+        "--create-missing",
+        action="store_true",
+        help="Create any label name that does not yet exist on the team",
+    )
+    apply_labels_parser.add_argument(
+        "--replace",
+        action="store_true",
+        help="Replace the issue's labels (default merges with existing)",
+    )
+
+    # upsert-comment command
+    upsert_comment_parser = subparsers.add_parser(
+        "upsert-comment", help="Create or update a comment by title"
+    )
+    upsert_comment_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    upsert_comment_parser.add_argument(
+        "--title", required=True, help="Comment title to match/create"
+    )
+    upsert_comment_parser.add_argument("--body", help="Comment body")
+    upsert_comment_parser.add_argument("--body-file", help="Path to file containing comment body")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "INVALID_INPUT",
+                        "message": "A command is required. Available commands: get-issue, "
+                        "list-projects, list-teams, list-comments, create-issue, "
+                        "update-issue, create-comment, get-comment, upsert-comment",
+                    },
+                }
+            )
+        )
+        sys.exit(2)
+
+    try:
+        if args.command == "get-issue":
+            get_issue(args.issue_id)
+        elif args.command == "get-issue-description":
+            get_issue_description(args.issue_id)
+        elif args.command == "split-plans":
+            split_plans(args.issue_id, args.output_dir)
+        elif args.command == "list-projects":
+            list_projects()
+        elif args.command == "list-teams":
+            list_teams()
+        elif args.command == "list-comments":
+            list_comments(args.issue_id)
+        elif args.command == "create-issue":
+            create_issue(
+                team=args.team,
+                title=args.title,
+                description=args.description,
+                project_id=args.project,
+                labels=[s.strip() for s in args.labels.split(",") if s.strip()] if args.labels else None,
+                create_missing_labels=args.create_missing_labels,
+            )
+        elif args.command == "update-issue":
+            update_issue(
+                issue_id=args.issue_id,
+                description=args.description,
+                description_file=args.description_file,
+            )
+        elif args.command == "create-comment":
+            create_comment(issue_id=args.issue_id, body=args.body)
+        elif args.command == "get-comment":
+            get_comment(issue_id=args.issue_id, title=args.title)
+        elif args.command == "upsert-comment":
+            upsert_comment(
+                issue_id=args.issue_id,
+                title=args.title,
+                body=args.body,
+                body_file=args.body_file,
+            )
+        elif args.command == "list-labels":
+            list_labels(team=args.team)
+        elif args.command == "create-label":
+            create_label(
+                team=args.team,
+                name=args.name,
+                color=args.color,
+                description=args.description,
+            )
+        elif args.command == "apply-labels":
+            apply_labels(
+                issue_id=args.issue_id,
+                team=args.team,
+                labels=[s.strip() for s in args.labels.split(",") if s.strip()],
+                create_missing=args.create_missing,
+                replace=args.replace,
+            )
+    except LinearClientError as e:
+        print(json.dumps({"ok": False, "error": {"code": e.code, "message": e.message}}))
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

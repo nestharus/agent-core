@@ -35,59 +35,71 @@ evidence for a human reviewer to make a judgment call.
 
 ## Required Inputs
 
-- `workflow`: Description of the user workflow to record (e.g., "create a new RFQ, add line items, submit for pricing")
 - `worktree_path`: Path to the codebase
 - `app_url`: URL where the app is running (e.g., `http://localhost:3000`)
-- `ambiguity`: What specifically is ambiguous — from behavior-investigator output
-- `questions`: Initial questions to investigate during recording
+- `questions`: List of question records to record evidence for. Each record has:
+  - `qid` — stable question id (e.g., `q-2026-04-21-lead-time-one-bound`)
+  - `question_type` — `state` or `behavior`. This operator only handles `behavior`; skip `state` questions and let the orchestrator capture a single annotated screenshot for those.
+  - `where_route`, `where_component`, `where_selector` — locator from behavior-investigator
+  - `user_workflow` — click path to reach the element
+  - `decision_needed` — the specific yes/no or A-vs-B question
+  - `ambiguity` — what specifically is ambiguous
+- `output_root` (optional, default `/tmp/traces`): root directory for output. The orchestrator usually points this at the run's `questions/` directory so frames sit next to the question manifest.
 
 ## Procedure
 
-### 1. Set Up Trace Recording
+You produce one frame folder per `behavior` question. Frames are named so a reviewer can walk them in order, and a `narration.md` per question maps each frame to a step in answering that one question. Do **not** dump all questions into a single combined trace — the answerer needs to focus on one question at a time.
+
+### 1. Set Up Per-Question Trace Recording
+
+For each question with `question_type == behavior`, set up an isolated output directory:
+
+```text
+${output_root}/<qid>/
+  frames/
+    01-initial-state.png
+    02-before-<action>.png
+    03-after-<action>.png
+    ...
+  videos/
+  trace.zip
+  narration.md
+```
 
 ```bash
 cd <worktree_path>
+mkdir -p ${output_root}/<qid>/frames ${output_root}/<qid>/videos
+```
 
-# Create output directory
-mkdir -p /tmp/traces/<workflow_slug>
+Write one Playwright script per question:
 
-# Write Playwright trace script
-cat > /tmp/traces/<workflow_slug>/record-trace.mjs << 'SCRIPT'
+```javascript
+// ${output_root}/<qid>/record-trace.mjs
 import { chromium } from 'playwright';
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
-  recordVideo: { dir: '/tmp/traces/<workflow_slug>/videos/' },
+  recordVideo: { dir: '${output_root}/<qid>/videos/' },
   viewport: { width: 1280, height: 720 }
 });
 
-// Start tracing
-await context.tracing.start({
-  screenshots: true,
-  snapshots: true,
-  sources: true
-});
-
+await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
 const page = await context.newPage();
 
-// === WORKFLOW STEPS GO HERE ===
-// Each step: action + screenshot + annotation
+// 1. Navigate to where_route, follow user_workflow to reach the element
+await page.goto('<app_url><where_route>');
+await page.screenshot({ path: '${output_root}/<qid>/frames/01-initial-state.png' });
 
-await page.goto('<app_url>');
-await page.screenshot({ path: '/tmp/traces/<workflow_slug>/screenshots/01-initial-state.png' });
+// 2. Capture each step that bears on the decision_needed.
+//    Before/after pairs around any state change; one frame per visible transition.
 
-// ... workflow steps ...
+// ...
 
-// Stop tracing
-await context.tracing.stop({
-  path: '/tmp/traces/<workflow_slug>/trace.zip'
-});
-
+await context.tracing.stop({ path: '${output_root}/<qid>/trace.zip' });
 await browser.close();
-SCRIPT
-
-npx playwright test /tmp/traces/<workflow_slug>/record-trace.mjs --config=/dev/null 2>&1
 ```
+
+Run each per-question script independently so a failure in one doesn't poison the others.
 
 ### 2. Capture Decision Points
 
@@ -131,69 +143,48 @@ While recording, note:
 - States that look wrong but might be intentional
 - States that look right but might be masking a bug
 
-### 5. Produce Review Document
+### 5. Produce Per-Question Narration
 
-Write a structured review document at `/tmp/traces/<workflow_slug>/review.md`:
+Write `${output_root}/<qid>/narration.md` for every recorded question. Each frame must be referenced; orphan frames mean the reviewer has to guess which step they belong to.
 
 ```markdown
-# Behavior Review: <workflow>
+# Frame Walkthrough — <qid>
 
-## Status: NEEDS_HUMAN_REVIEW
+## The Question
+<verbatim `decision_needed` from the input>
 
-## Context
-- **Feature:** <what feature this is>
-- **Ambiguity source:** <behavior-investigator report reference>
-- **Recorded on:** <date>
-- **App version:** <commit hash>
-- **URL:** <app_url>
+## Locator
+- **Page:** <where_page>
+- **Route:** `<where_route>`
+- **Component:** `<where_component>`
+- **Selector:** `<where_selector>`
 
 ## Trace Artifacts
-- Trace file: `/tmp/traces/<slug>/trace.zip`
-  - View: `npx playwright show-trace /tmp/traces/<slug>/trace.zip`
-- Video: `/tmp/traces/<slug>/videos/*.webm`
-- Screenshots: `/tmp/traces/<slug>/screenshots/`
+- Trace zip: `trace.zip` (open with `npx playwright show-trace trace.zip`)
+- Video: `videos/<file>.webm`
+- Frames: `frames/`
 
-## Workflow Walkthrough
+## Frames (walk in order)
 
-### Step 1: <action>
-**Screenshot:** `screenshots/01-initial-state.png`
-**Observation:** <what the UI shows>
-**Question:** <none — this looks expected>
+### 01-initial-state.png
+**Step:** Land on the page, before any interaction.
+**What to look at:** <element to focus on, e.g. "lead-time filter is empty">
+**Why this frame matters for the question:** <connect frame → decision_needed>
 
-### Step 2: <action>
-**Before:** `screenshots/02-before-<action>.png`
-**After:** `screenshots/03-after-<action>.png`
-**Observation:** <what changed>
-**Question:** Should <specific thing> happen here? The code does X but the ticket says Y.
+### 02-before-<action>.png / 03-after-<action>.png
+**Step:** <action — what the user does>
+**Before:** <state of the relevant element>
+**After:** <state after the action>
+**What changed:** <the diff a reviewer should see>
+**Why this frame matters for the question:** <connect frame → decision_needed>
 
-### Step 3: <action>
-**Screenshot:** `screenshots/04-<state>.png`
-**Observation:** <suspicious behavior>
-**Question:** Is this intentional? <specific question>
+...
 
-## Summary of Questions for Human Review
-
-1. **<Specific question>**
-   - Evidence FOR current behavior: <what suggests it's correct>
-   - Evidence AGAINST: <what suggests it's wrong>
-   - Screenshots: <refs>
-
-2. **<Specific question>**
-   ...
-
-## Suspicious Behaviors Observed
-
-| # | Behavior | Severity | Screenshot | Notes |
-|---|----------|----------|------------|-------|
-| 1 | <description> | <cosmetic/functional/data> | <ref> | <context> |
-
-## Recommended Actions
-
-- [ ] Human reviews questions 1-N and provides verdicts
-- [ ] After verdicts: behavior-investigator updates specs
-- [ ] After specs: test-writer produces tests for verified behaviors
-- [ ] Suspicious behaviors filed as bugs if human confirms
+## Summary
+After walking the frames, the reviewer should be able to answer: *<verbatim decision_needed>* with a one-line yes/no/A-vs-B.
 ```
+
+The orchestrator merges this `narration.md` plus the frame paths back into the corresponding `questions/<qid>.md` manifest.
 
 ### 6. HCI-Specific Observations
 

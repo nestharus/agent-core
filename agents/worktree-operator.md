@@ -117,13 +117,28 @@ done
 
 ## Procedure: Open PR
 
-After creating a worktree and making commits:
+After creating a worktree and making commits, dispatch `pr-writer` to author the title + body before opening the PR:
 
 ```bash
 cd ${worktrees_root}/<name>
 git push -u origin <branch-name>
-gh pr create
+
+# Author the title + body via pr-writer (enforces the audience and content rules
+# — no internal jargon, no commit history, no closed-PR or planning-artifact refs).
+agents -m gpt-high -a ~/ai/agents/pr-writer.md \
+  --input branch=<branch-name> \
+  --input base=main \
+  --input repo_root=${worktrees_root}/<name> \
+  --input output_path=${worktrees_root}/<name>/.tmp/pr-body.md
+  # Optional: --input context_files=<comma-separated paths the writer should read for intent>
+  # Optional: --input stack_parent_pr=<num> if base is another open PR's head branch
+
+gh pr create --draft \
+  --title "$(cat ${worktrees_root}/<name>/.tmp/pr-body.md.title)" \
+  --body-file ${worktrees_root}/<name>/.tmp/pr-body.md
 ```
+
+Never invoke `gh pr create` with an empty body or a hand-authored body. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
 
 ## Stop Conditions
 

@@ -102,6 +102,7 @@ Do not use this workflow for:
 - **Process-tree review**: after the parallel risk gates join and before the layer advances, run `process-tree-auditor` on the layer risk-gate subtree. The expected process includes the three risk reports, required model/role assignments, prompts/logs, and verdict artifacts. A blocking process violation prevents the layer gate from advancing.
 - **Question handling**: delegated questions are allowed only for engineering-vs-executive divergence or ordering decisions owned by the user. The root blocks Layer 3 until continuation evidence exists.
 - **Gate**: human resolves engineering-vs-executive ordering disagreements.
+- **Prototype escape hatch**: when feasibility risk cannot be assessed from research alone (the proposed substrate's behavior under load, the third-party integration's actual contract, etc.), dispatch `~/ai/agents/prototype-orchestrator.md` per `~/ai/workflows/build-prototype.md` with `roadmap_layer=engineering-roadmap` and the unanswered feasibility question. The prototype's dossier supplies the evidence the feasibility risk gate is waiting on. Roadmap revision incorporates the dossier's findings before the layer's gates re-run.
 
 ### Layer 3 - AI-optimized roadmap
 
@@ -122,6 +123,7 @@ Do not use this workflow for:
 - **Question handling**: delegated questions are allowed only for divergence from Layer 2 that the orchestrator flags as human-reviewable. Model-owned decomposition and coverage gates do not become user Q&A.
 - **Gate**: model. The orchestrator validates completeness against Layer 2.
   Human review is required only if the orchestrator flags divergence.
+- **Prototype escape hatch**: when a slice's contract / parallelizability / schema cannot be named without trying it, dispatch `~/ai/agents/prototype-orchestrator.md` with `roadmap_layer=ai-roadmap-phase-N` and the slice's unknowns as the prototype's question. The dossier's spawned-tickets.md becomes the slice's eventual implementation tickets at Layer 4; the dossier's risk-profile becomes the slice's pre-Phase-2.5 baseline.
 
 ### Layer 4 - Ticket generation
 

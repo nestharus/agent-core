@@ -79,6 +79,18 @@ Screenshot requirements:
 
 If the UI cannot be run, the report must say so and classify the missing screenshot under the applicable workflow-execution violation class. Do not silently replace the screenshot with prose.
 
+### Question-bearing screenshots
+
+When a screenshot accompanies a question for a human reviewer (a SUSPICIOUS, AMBIGUOUS, or `state`-typed question manifest), the annotation must visually mark the **specific element the question is about** — the badge, the field, the cell, the toast — not just the page. A page-level highlight that the reviewer must scan to find the element fails this rule.
+
+Acceptable forms:
+
+- a tight box around the element under question, with a label that names what the question is about (e.g., `"In Stock" badge — question: stock > 0 vs ≥ requested qty?`)
+- an arrow pointing at the element from a clear margin
+- a callout/zoom inset of the element next to the full-page screenshot
+
+When the question is about transitions, sequences, timing, or interaction (a `behavior`-typed question manifest), one screenshot is not sufficient. Use a frame sequence with `narration.md` per the trace-recorder operator and store it under the question's directory. Cite the frames directory, not a single frame, from the PDF.
+
 ## Non-UI Evidence Rule
 
 Backend-only, CLI-only, data-only, or pure business-logic tests do not need screenshots.
@@ -155,6 +167,22 @@ Use three reports when coverage expansion or test writing discovers behavior tha
 - Investigative report: evidence trail, coverage/risk inputs, behavior sources, commit archaeology, commands run, and unresolved questions.
 
 Only include items that need attention. Do not add positives for behavior that already works.
+
+## Per-Finding PDF (canonical tracker-ticket attachment)
+
+The three reports above are **per-run summaries**. They are the right shape for an S3 bundle linked from the PR pointer comment, but they are the **wrong granularity for a tracker ticket** — a ticket asks one question or describes one bug, and the answerer should not have to scroll through unrelated items.
+
+For every finding (question, bug-frontend, or bug-backend) emitted by a coverage-expansion run, the workflow produces one **per-finding PDF** that is the canonical attachment on that finding's tracker ticket:
+
+- exactly one finding per PDF — no batching
+- self-contained: embeds the question/bug, the locator, the evidence (screenshot, frame sequence, or log/diff), and the source refs
+- text-only or text+embedded-images — no external assets, no JavaScript, no HTML side-channel, no `trace.zip` requiring Playwright tooling
+- portable: the PDF should remain answerable if the team migrates off the current tracker
+- file size budget: ~150 KB per PDF for state/bug findings; up to ~1 MB for behavior findings with embedded frames
+
+Tracker integrations attach the PDF directly to the ticket. Raw screenshots, frame directories, traces, and videos remain in the run bundle (S3 or local) but are **not** attached individually to the ticket — that defeats the portability purpose. If a power user wants the trace, the per-run bundle URL appears in the ticket body.
+
+Do not also produce HTML versions of per-finding artifacts. PDFs are the canonical attachment; HTML is redundant.
 
 ## Upload Contract
 

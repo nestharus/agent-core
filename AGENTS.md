@@ -59,6 +59,9 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 
 ### PR review / justification
 
+- `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
+  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?` | Model: `gpt-high`
+
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
 
@@ -92,6 +95,67 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 - `fastapi-best-practices` - Use as the FastAPI reviewer reference for architecture, contracts, state, and testing judgments in the secondary review.
   File: [~/ai/agents/fastapi-best-practices.md](agents/fastapi-best-practices.md) | Inputs: `reference doc only` | Model: `n/a`
 
+### Implementation pipeline orchestration
+
+- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. The only human gates surfaced by this orchestrator are (1) Phase 2.5 problem-map review and (2) NEEDS_INPUT new-value questions.
+  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?` | Model: `claude-opus`
+
+### Strategic planning / proposal alignment cycle
+
+The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `proposal.md` review loop. The orchestrator dispatches Stage 1 / 1b-classify / 1b-integrate / 2 / 2b-classify / 2b-integrate; the proposer is user-driven (the orchestrator does NOT run the proposer).
+
+- `alignment-cycle-orchestrator` - Run the proposal alignment review cycle: Stage 1 problem-alignment, Stage 1b-classify + 1b-integrate (problem expansion), Stage 2 philosophy-alignment, Stage 2b-classify + 2b-integrate (philosophy expansion). Halts at 2b-classify if `philosophy-decisions.md` is written (user-input gate). Produces a run report.
+  File: [~/ai/agents/alignment-cycle-orchestrator.md](agents/alignment-cycle-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, axis tables, scratch dir | Model: `claude-opus`
+
+- `proposer` - Write or update `proposal.md` as a system-design document grounded in `problem.md` + `philosophy.md`. Brownfield revisions consume `problem-review.md` + `philosophy-review.md`. Stack/build-order content is roadmap-/DECISIONS-layer concern, not proposal content.
+  File: [~/ai/agents/proposer.md](agents/proposer.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, optional review files | Model: `gpt-high`
+
+- `problem-alignment` - Stage 1 alignment review: read `problem.md` + `proposal.md` + project's axis reference table; produce `problem-review.md` (always) and `problem-surfaces.md` (when new surfaces are discovered).
+  File: [~/ai/agents/problem-alignment.md](agents/problem-alignment.md) | Inputs: `problem.md`, `proposal.md`, project axis table | Model: `claude-opus`
+
+- `problem-expansion-classify` - Stage 1b-classify (judge): read `problem-surfaces.md` and judge each surface as `discard / already-covered`, `discard / proposal-specific`, `discard / out-of-scope`, `new-axis`, or `axis-expansion`. Writes `problem-classification.md`. Does NOT modify `problem.md`.
+  File: [~/ai/agents/problem-expansion-classify.md](agents/problem-expansion-classify.md) | Inputs: `problem-surfaces.md`, `problem.md`, project axis table | Model: `claude-opus`
+
+- `problem-expansion-integrate` - Stage 1b-integrate (synthesis): read `problem-classification.md` and synthesize integrated text into `problem.md` + the axis reference table for `new-axis` and `axis-expansion` verdicts. Skips `discard` verdicts. Does NOT re-judge.
+  File: [~/ai/agents/problem-expansion-integrate.md](agents/problem-expansion-integrate.md) | Inputs: `problem-classification.md`, `problem-surfaces.md`, `problem.md`, project axis table | Model: `gpt-high`
+
+- `philosophy-alignment` - Stage 2 alignment review: read `philosophy.md` + `proposal.md` + `problem-review.md`; produce `philosophy-review.md` (always) and `philosophy-surfaces.md` (when new philosophical concerns are discovered).
+  File: [~/ai/agents/philosophy-alignment.md](agents/philosophy-alignment.md) | Inputs: `philosophy.md`, `proposal.md`, `problem-review.md` | Model: `claude-opus`
+
+- `philosophy-expansion-classify` - Stage 2b-classify (judge): classify each concern as A absorbable, B compatible-addition, C tension, D new-axis, or E contradiction. Writes `philosophy-classification.md` (always) and `philosophy-decisions.md` (only when any C/D/E surface user-input concerns). Does NOT modify `philosophy.md`.
+  File: [~/ai/agents/philosophy-expansion-classify.md](agents/philosophy-expansion-classify.md) | Inputs: `philosophy-surfaces.md`, `philosophy.md`, `philosophy-alignment.md` | Model: `claude-opus`
+
+- `philosophy-expansion-integrate` - Stage 2b-integrate (synthesis): apply absorbable clarifications (A) and provisional new principles (B) to `philosophy.md`. Skips C/D/E (those live in `philosophy-decisions.md` and are user-owned). Does NOT modify `philosophy-decisions.md`.
+  File: [~/ai/agents/philosophy-expansion-integrate.md](agents/philosophy-expansion-integrate.md) | Inputs: `philosophy-classification.md`, `philosophy-surfaces.md`, `philosophy.md` | Model: `gpt-high`
+
+### Roadmap cascade
+
+The roadmap workflow cascades from market research (Layer 0) through ticket regeneration (Layer 4). Each layer has 3x risk gates (claude-opus, all-LOW required) before advancing.
+
+- `roadmap-orchestrator` - Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.
+  File: [~/ai/agents/roadmap-orchestrator.md](agents/roadmap-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, `DECISIONS.md`, scratch dir | Model: `claude-opus`
+
+- `executive-roadmap-proposer` - Layer 1: write/update `executive-roadmap.md` from problem + philosophy + proposal + market research. Strategic ordering of value slices and milestones.
+  File: [~/ai/agents/executive-roadmap-proposer.md](agents/executive-roadmap-proposer.md) | Inputs: `problem.md`, `philosophy.md`, `proposal.md`, `market-research.md`, optional risk reports | Model: `gpt-high`
+
+- `engineering-roadmap-proposer` - Layer 2: write/update `engineering-roadmap.md` from approved executive-roadmap + DECISIONS.md + engineering-research. Names foundation-phase substrate and per-VS engineering effort.
+  File: [~/ai/agents/engineering-roadmap-proposer.md](agents/engineering-roadmap-proposer.md) | Inputs: `executive-roadmap.md`, `DECISIONS.md`, `engineering-research.md`, optional risk reports | Model: `gpt-high`
+
+- `ai-roadmap-proposer` - Layer 3: write/update `ai-roadmap-phase-N.md` from approved engineering-roadmap + per-phase scope. Decomposes a phase into AI-implementable Work Units with named contracts/schemas/parallelization.
+  File: [~/ai/agents/ai-roadmap-proposer.md](agents/ai-roadmap-proposer.md) | Inputs: `engineering-roadmap.md`, phase scope, optional risk reports | Model: `gpt-high`
+
+- `ticket-generation-agent` - Layer 4: generate per-WU ticket files for one phase from the approved `ai-roadmap-phase-N.md`. One ticket file per WU, named `WU-<phase>-<NN>.md`, with named contracts/schemas/acceptance criteria/dependencies preserved verbatim.
+  File: [~/ai/agents/ticket-generation-agent.md](agents/ticket-generation-agent.md) | Inputs: `ai-roadmap-phase-N.md`, phase id | Model: `gpt-high`
+
+- `engineering-research-agent` - Layer 2 Stage 2a: survey the existing codebase + adjacent reference projects to produce `engineering-research.md`. Read-only against project files.
+  File: [~/ai/agents/engineering-research-agent.md](agents/engineering-research-agent.md) | Inputs: `repo_root`, optional reference repos | Model: `gpt-high`
+
+- `market-research-agent` - Layer 0: synthesize market research streams into `market-research.md`. Reads research streams from `research/`.
+  File: [~/ai/agents/market-research-agent.md](agents/market-research-agent.md) | Inputs: `research/` directory, optional prior synthesis | Model: `gpt-high`
+
+- `roadmap-risk-types` - Reference catalog of risk types per roadmap layer. Not a callable operator; the roadmap-orchestrator reads this to construct risk-assessment prompts.
+  File: [~/ai/agents/roadmap-risk-types.md](agents/roadmap-risk-types.md) | Inputs: `reference doc only` | Model: `n/a`
+
 ### Worktree / branch execution
 
 - `worktree-operator` - Create, list, sync, or remove git worktrees for feature branches.
@@ -121,7 +185,9 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 ## Workflow Topologies
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)
 - PR review gates (test-audit, multi-concern, justification, commit-hygiene): [`~/ai/workflows/pr-review.md`](workflows/pr-review.md)
+- Tickets-first review (variant: ticket is the unit of review; PR drafted only after review passes): [`~/ai/workflows/tickets-first-review.md`](workflows/tickets-first-review.md)
 - CodeRabbit loop (CLI-only, amend-only, stop at value-zero): [`~/ai/workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md)
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
 - Roadmap (4-layer strategic pipeline): [`~/ai/workflows/roadmap.md`](workflows/roadmap.md)
@@ -139,6 +205,8 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/agent-questions-and-session-graph.md`](conventions/agent-questions-and-session-graph.md) - sub-agent question envelope, root surfacing, session graph, and resume/fallback convention
 - [`~/ai/conventions/audit-history.md`](conventions/audit-history.md) - audit history schema, revise/review loop rules, decision-agent dispatch, and finding ID convention
 - [`~/ai/conventions/workflow-execution-violations.md`](conventions/workflow-execution-violations.md) - process-review violation taxonomy and blocking/advisory defaults
+- [`~/ai/conventions/review-convergence.md`](conventions/review-convergence.md) - non-converging review loops are a hard decomposition trigger; stop iterating and split the work
+- [`~/ai/conventions/project-layout.md`](conventions/project-layout.md) - `~/projects/<name>/{trunk,planning,worktrees}/` umbrella layout for agent-driven projects
 
 ## Model Roles
 
@@ -152,6 +220,12 @@ See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for 
 
 A project's own `AGENTS.md` should reference this file for the generic routing layer, then add only project-local overrides and extensions.
 
-Project-specific operator wrappers live in `<project>/agents/` and reference `~/ai/agents/<name>.md` as their base procedure.
+Projects organized for agent-driven workflows use the
+`~/projects/<name>/{trunk,planning,worktrees}/` umbrella layout per
+[`~/ai/conventions/project-layout.md`](conventions/project-layout.md).
+The git repository sits at `trunk/`; the project's own `AGENTS.md`
+lives at `<project>/trunk/AGENTS.md`.
+
+Project-specific operator wrappers live in `<project>/trunk/agents/` and reference `~/ai/agents/<name>.md` as their base procedure.
 
 See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for the shared contract; once a `Project wrappers` section exists there, use it. Until then, follow the current convention: frontmatter, `Base procedure: ~/ai/agents/<name>.md`, and repo-specific defaults only.

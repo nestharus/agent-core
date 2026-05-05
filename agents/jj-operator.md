@@ -49,23 +49,41 @@ You manage branch dependencies and rebases using jj in a repository where jj is 
 - `--input worktrees_root=<path>` (optional, default `${repo_root}/worktrees`) — root directory containing synced git worktrees.
 - `--input branch_policy=<pattern>` (optional, no default) — caller's branch naming convention for feature, basis, and integration branches.
 
-## Procedure: Rebase Branch onto Main
+## Procedure: Verified Rebase
+
+This is the **single rebase path**. The operator never performs a plain rebase in isolation — every rebase produces a verified-rebase bundle so callers can inspect residuals before pushing. Orchestration lives in [`~/ai/workflows/verified-rebase.md`](../workflows/verified-rebase.md); this procedure is the execution unit the workflow delegates to.
+
+Inputs:
+- `$BRANCH` — branch to rebase
+- `$TARGET` — ref to rebase onto (`origin/main` for main-target; a parent branch ref for stacked)
+- `$BUNDLE` — absolute path to the workflow's bundle directory (created by the workflow's phase 1)
+- `$SOURCE` (optional) — first commit in `$BRANCH`'s unique contribution. When set, scope the rebase with `-s "$SOURCE"` instead of `-b "$BRANCH"`. See verified-rebase workflow's "Stale parent history" section.
+
+Operator responsibilities: **only** the jj rebase step and divergent-revision cleanup. Ref capture, ort prediction, residual diffs, conflict-artifact capture, verdict, and `rollback.sh` are the workflow's job.
 
 ```bash
 cd ${repo_root}
 JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
 
-# 1. Fetch latest main
-jj git fetch
+# Precondition: the workflow has already run `jj git fetch`,
+# captured `$PRE_BASE`/`$PRE_TIP`/`$NEW_TARGET`/`$JJ_PRE_OP_ID`,
+# and computed `$PREDICTED_TREE`.
 
-# 2. Rebase — all descendants auto-follow
-jj --config "$JJ_IMMUTABLE" rebase -b <feature-branch> -d main
+# 1. Rebase — all descendants auto-follow
+if [ -n "${SOURCE:-}" ]; then
+  jj --config "$JJ_IMMUTABLE" rebase -s "$SOURCE" -d "$NEW_TARGET"
+else
+  jj --config "$JJ_IMMUTABLE" rebase -b "$BRANCH" -d "$NEW_TARGET"
+fi
 
-# 3. Clean up divergent revisions (see Cleanup procedure below)
+# 2. Clean up divergent revisions (see Clean Up Divergent Revisions procedure)
 
-# 4. Push
-jj git push -b <feature-branch>
+# DO NOT push. The workflow stops after bundle production; push is a caller decision.
 ```
+
+After the operator returns, the workflow captures `$POST_TIP`/`$POST_CHANGE_ID`, snapshots the conflict artifacts, computes the four residual diffs, and writes the bundle. If the caller accepts the verdict, the caller runs `jj git push -b "$BRANCH"` themselves.
+
+For rollback, the caller runs `$BUNDLE/rollback.sh` — never invoke `jj op restore` directly from this operator.
 
 ## Procedure: Set Up Branch Dependencies
 
@@ -110,26 +128,31 @@ The PR for `<feature-branch>` targets `main` but won't be mergeable until parent
 
 ## Procedure: When a Parent PR is Merged
 
-```bash
-cd ${repo_root}
-JJ_IMMUTABLE='revset-aliases."immutable_heads()"="none()"'
+The child's rebase onto `main` goes through [`~/ai/workflows/verified-rebase.md`](../workflows/verified-rebase.md), not a bare `jj rebase`. The workflow handles the fetch, prediction, and bundle production; after it returns `CLEAN`, this procedure does the bookmark cleanup and push.
 
-jj git fetch                                                    # picks up new main
-jj --config "$JJ_IMMUTABLE" rebase -b <child-branch> -d main    # child was on its parent, now on main
-jj bookmark forget <merged-parent-branch>                       # clean up merged bookmark
-# Clean up divergent revisions (see below)
-jj bookmark set <child-branch> -r <rebased-change-id>          # resolve any bookmark conflict
-jj git push -b <child-branch>                                   # push the rebased branch
+```bash
+# 1. Run the verified-rebase workflow for the child:
+#    BRANCH=<child-branch>  TARGET=origin/main  (no PARENT_BUNDLE)
+#
+# 2. Inspect the bundle at .tmp/verified-rebase/<child-slug>/<timestamp>/.
+#    Proceed only on CLEAN or acceptable DIRTY-EXPLAINED.
+
+# 3. Bookmark + push cleanup:
+cd ${repo_root}
+jj bookmark forget <merged-parent-branch>                 # clean up merged bookmark
+jj bookmark set <child-branch> -r <rebased-change-id>     # resolve any bookmark conflict
+jj git push -b <child-branch>                             # push the rebased child
 ```
 
-Children of A rebase automatically.
+Children of the merged parent auto-rebase in jj when the parent moves; the Verified Rebase workflow captures this state deterministically and records it in the bundle.
 
-**Collapsing a basis branch when one parent merges:**
+**Collapsing a basis branch when one parent merges:** run the Verified Rebase workflow for the basis branch with the appropriate `$TARGET`, then do the bookmark cleanup.
+
 ```bash
-# One parent was merged — collapse the basis to the remaining parent
-jj --config "$JJ_IMMUTABLE" rebase -b <basis-branch> -d main <remaining-parent-branch>
-# Or if both parents merged:
-jj --config "$JJ_IMMUTABLE" rebase -b <basis-branch> -d main
+# One parent was merged — collapse the basis to the remaining parent:
+#   BRANCH=<basis-branch>  TARGET=<remaining-parent-branch>
+# Both parents merged — collapse to main:
+#   BRANCH=<basis-branch>  TARGET=origin/main
 ```
 
 Once all parents are merged, delete the basis:
@@ -244,7 +267,7 @@ If jj is unavailable or a worktree needs manual rebase:
 
 ## Procedure: Verified Squash + Rebase (Integration Branches)
 
-When rebasing a branch with many fix commits onto updated main, follow this exact sequence. Skipping steps causes silent regressions.
+Use this when rebasing a branch with many fix commits onto updated main. It's a **composition**: Phase 1 below (squash with zero-diff verification) followed by [`~/ai/workflows/verified-rebase.md`](../workflows/verified-rebase.md), which owns the actual rebase, conflict-artifact capture, and residual bundle.
 
 ### Phase 1: Verify Squash
 
@@ -262,29 +285,26 @@ git diff "$UNSQUASHED_TIP" "$SQUASHED"
 # If non-zero, the squash lost content — do not proceed
 ```
 
-### Phase 2: Analyze Conflicts Before Resolving
+### Phase 2: Run Verified Rebase
+
+Move `$BRANCH` to the squashed commit, then invoke the verified-rebase workflow:
 
 ```bash
-# 4. Fetch latest main and start rebase
-git fetch origin main
-git branch -f temp-rebase "$SQUASHED"
-git checkout temp-rebase
-git rebase origin/main
-# Rebase will stop with conflicts
+git branch -f "$BRANCH" "$SQUASHED"
 
-# 5. List ALL conflicted files
-git diff --name-only --diff-filter=U
-
-# 6. For EACH conflicted file, read both sides and the commit logs
-#    to understand intent before resolving:
-#    - What commits on main touched this file? (git log origin/main -- <file>)
-#    - What did our branch change? (git show $UNSQUASHED_TIP -- <file>)
-#    - Are both changes needed? Which supersedes the other?
+# Run the workflow:  BRANCH=<branch>  TARGET=origin/main
+# (See ~/ai/workflows/verified-rebase.md for inputs and phases.)
 ```
 
-### Phase 3: Resolve with Intent
+The workflow handles: fetch, ort prediction, jj rebase, conflict artifacts, residual diffs, verdict, and `rollback.sh`. For each conflicted file, the workflow's `conflict-artifacts/<slug>.conflict` contains jj's first-class conflict representation — consult that instead of re-reading both sides by hand.
 
-For each conflict, the resolution must be justified by the commit history:
+### Phase 3: Inspect Bundle and Decide
+
+- `CLEAN` — proceed to Phase 4.
+- `DIRTY-EXPLAINED` — inspect `residual.patch` and each `.conflict` file; justify every hunk against main's commits using the Resolution Cheat Sheet below. If any resolution is unjustifiable, run the bundle's `rollback.sh` and redo.
+- `DIRTY-UNPROVENANCED` — **do not push**. Residual paths outside `conflict-artifacts/files.txt` indicate content the rebase introduced without provenance. Usually means a resolution corrupted an adjacent file or a commit was dropped/reordered. Roll back and investigate.
+
+**Resolution Cheat Sheet** (for eyeballing `.conflict` files):
 
 | Conflict type | Resolution |
 |---------------|------------|
@@ -295,30 +315,20 @@ For each conflict, the resolution must be justified by the commit history:
 | Both added env vars | Merge both additions |
 | DRY helper vs inline code | Take the helper, update defaults to match our config |
 
-**Never** use `git checkout --ours` or `--theirs` without reading both sides first.
+**Never** use `git checkout --ours` or `--theirs` blindly. The `.conflict` file shows both sides — read them.
 
-### Phase 4: Verify and Push
+### Phase 4: Push and Sync
+
+After the bundle is accepted:
 
 ```bash
-# 7. After resolving all conflicts
-GIT_EDITOR=true git rebase --continue
+# 1. Push
+git push --force-with-lease origin "$BRANCH"
 
-# 8. Diff rebased tree vs original to identify what the rebase introduced
-git diff "$UNSQUASHED_TIP"..HEAD --stat
-# Every change here should be explainable by main's commits
-
-# 9. Verify critical changes survived
-grep -c "critical_pattern" path/to/file  # for each critical fix
-
-# 10. Update branch and push
-git branch -f <integration-branch> HEAD
-git checkout <integration-branch>
-git push --force-with-lease origin <integration-branch>
-
-# 11. Sync worktree
+# 2. Sync any worktree for this branch (see worktree-operator)
 cd ${worktrees_root}/<name>
-git fetch origin <integration-branch> --quiet
-git reset --hard origin/<integration-branch>
+git fetch origin "$BRANCH" --quiet
+git reset --hard "origin/$BRANCH"
 ```
 
 ## Procedure: Integration Branch Lifecycle
@@ -351,8 +361,8 @@ When main moves forward while validating:
 
 1. **Check what main added** — `git log $(git merge-base HEAD origin/main)..origin/main`
 2. **Identify conflict zones** — `comm -12 <(our changed files) <(main's changed files)`
-3. **Follow Verified Squash + Rebase** procedure above
-4. **Re-validate every required suite** from the start of the project's validation order — rebase can introduce regressions
+3. **Run Verified Rebase** — [`~/ai/workflows/verified-rebase.md`](../workflows/verified-rebase.md) with `BRANCH=<integration-branch> TARGET=origin/main`. Use Verified Squash + Rebase (above) if the branch has many fix commits that should be squashed first.
+4. **Re-validate every required suite** from the start of the project's validation order — rebase can introduce regressions.
 
 ### Decomposing into Mergeable PRs
 
@@ -367,12 +377,12 @@ After all suites pass:
 
 | Situation | Action |
 |-----------|--------|
-| Branch needs latest main | Rebase procedure |
-| Parent PR merged | Parent-merged procedure |
+| Branch needs latest main (any rebase) | Verified Rebase procedure (driven by `~/ai/workflows/verified-rebase.md`) |
+| Parent PR merged | Parent-merged procedure (calls Verified Rebase for the child) |
 | Multiple unmerged deps | Create basis branch |
 | Need cross-PR CI run | Create integration branch |
 | Too many commits on branch | Squash procedure |
-| Squash + rebase with many conflicts | Verified Squash + Rebase procedure |
+| Squash + rebase with many conflicts | Verified Squash + Rebase procedure (Phase 1 squash → Verified Rebase) |
 | Integration branch needs rebase | Integration Branch Lifecycle → Rebasing |
 | Integration branch passes CI | Integration Branch Lifecycle → Decomposing |
 | `(divergent)` markers in jj log | Cleanup procedure |

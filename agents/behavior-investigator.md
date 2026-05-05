@@ -158,11 +158,19 @@ For the product team. No engineering jargon. Reference pages, features, and user
 ## Questions
 
 ### <Question number>: <Short description>
-**Where:** <Page name> → <specific UI element or workflow step>
+**Finding type:** `question` | `bug-frontend` | `bug-backend`
+**Question type (only for `question`):** `state` | `behavior`
+**Where (page):** <Page name>
+**Where (route):** `<frontend route or path>`
+**Where (component):** `<file path>:<line>`
+**Where (selector):** `<css selector / data-testid / stable text>`
+**User workflow:** <click path to reach the element>
 **What happens now:** <what the user sees>
 **What might be wrong:** <the concern, in product terms>
-**Screenshot:** <path or "see attached">
-**Decision needed:** <specific yes/no or A-vs-B question for product>
+**Failure mode:** <what the user sees if the behavior is wrong>
+**Intent source (required for `bug-*`, blank for `question`):** <commit hash / PR # / ticket key / doc URL>
+**Evidence:** <screenshot path for `state`/`bug-frontend`, frame-sequence directory for `behavior`, log/assertion-diff path for `bug-backend`>
+**Decision needed (for `question`) / Expected behavior (for `bug-*`):** <specific yes/no or A-vs-B question for product, or the verified intended behavior for bugs>
 ```
 
 #### 2. Engineering Report (`/tmp/behavior-investigation/<target_slug>-engineering.md`)
@@ -202,13 +210,49 @@ Full evidence trail for future reference. Includes all commit archaeology, PR co
 
 ### Tracing to Product Features
 
-For SUSPICIOUS and AMBIGUOUS verdicts, you MUST trace the code path to the user-facing page:
+For SUSPICIOUS and AMBIGUOUS verdicts that touch UI behavior, you MUST trace the code path to the user-facing page and emit a **structured locator** for every item, not a prose breadcrumb. A downstream operator turns each item into a question for human review and needs more than "Cost Estimation → Lead Time Filter".
 
-1. Search frontend components that consume this backend data
-2. Identify which page/view renders the component (check the route registry, page map, or renderer entrypoint)
-3. Describe the user workflow that triggers the code path
-4. Describe what the user would see if the behavior is wrong (wrong price? missing results? crash?)
-5. If possible, capture a Playwright screenshot of the affected UI area
+For each UI-touching item, fill in:
+
+| Field | Required | Example |
+|---|---|---|
+| `where_page` | yes | "Cost Estimation" |
+| `where_route` | yes — the actual frontend route or path | `/cost-estimation/:rfqId` |
+| `where_component` | yes — `path/to/component.jsx:line` | `frontend/src/components/MaterialEstimateCard.js:482` |
+| `where_selector` | one of selector / `data-testid` / stable text | `[data-testid="lead-time-filter-min"]` or `text=Lead time` |
+| `user_workflow` | yes — the click path that gets a user to the element | "Open RFQ → click Cost Estimation tab → expand Lead Time filter" |
+| `failure_mode` | yes — what the user sees if the behavior is wrong | "Error banner above the filter; cost estimation stalls" |
+
+If you cannot resolve `where_route`, `where_component`, or `where_selector`, do not paper over the gap with prose. Mark the field `unresolved: <reason>` and list which sources you checked. The orchestrator will decide whether to escalate or drop the item.
+
+### Classify each finding by type and routing
+
+Every SUSPICIOUS or AMBIGUOUS item gets two tags so a downstream publisher can route it to the right tracker board:
+
+#### `finding_type` — what kind of finding this is
+
+- `question` — intent is unclear or contested; a human (usually product) needs to decide. Use for `AMBIGUOUS` verdicts and for `SUSPICIOUS` verdicts where you can describe the discrepancy but cannot confidently say which side is wrong without product input.
+- `bug-frontend` — the code is wrong and the wrong code is in a frontend file (UI component, route, browser-side logic). Intent is clear from sources (commit, PR, ticket, doc); current code does not match. Use only when you can cite the intent source.
+- `bug-backend` — same as `bug-frontend` but the wrong code is in a backend file (API, service, database layer, CLI, worker). Use only when you can cite the intent source.
+
+Decision rule:
+- Intent unresolved → `question`.
+- Intent resolved AND wrong layer is frontend → `bug-frontend`.
+- Intent resolved AND wrong layer is backend → `bug-backend`.
+- Intent resolved AND the bug spans both layers → file the most-broken layer; cross-link in the manifest's `code_refs`.
+
+Never invent intent to upgrade a `question` into a `bug-*`. If you don't have a citable intent source, it stays a `question`.
+
+#### `question_type` — `state` vs `behavior` (only for `finding_type: question`)
+
+For `finding_type: question`, also tag:
+
+- `state` — the question is about what is shown at a single moment (a label, a value, a badge, presence/absence, a color). One annotated screenshot is enough evidence.
+- `behavior` — the question is about transitions, sequences, timing, or interaction ("should this update immediately when X changes, or only after Save?", "what happens when the user toggles between A and B?"). A frame-by-frame Playwright sequence is required, not a single screenshot.
+
+For `finding_type: bug-frontend`, capture an annotated screenshot of the broken UI state (or a frame sequence if the bug is timing-dependent). For `finding_type: bug-backend`, capture an assertion diff or log excerpt — no screenshot.
+
+Record both tags in the Product/Engineering report items and in the Investigative report. The orchestrator turns these into per-finding manifests for the publisher.
 
 ## Stop Conditions
 

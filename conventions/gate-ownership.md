@@ -34,13 +34,13 @@ This table is cited by
 | Phase | Gate owner | What the gate does |
 |---|---|---|
 | **Implementation pipeline** | | |
-| RCA (bugs) | Human | User decides if the bug is worth fixing at all. |
-| Problem research (optional) | Human | User confirms scope framing. |
-| Synthesize user needs (optional) | Human | User confirms the mapping and answers open questions. |
-| Existing-state risk profile (Phase 2.5) | Human | User confirms that the touched-surface `problem map` names the right current terrain before proposal work starts. |
-| Proposal | Model - audit (`gpt-high`) + scope (`claude-opus`) + shortcut (`claude-opus`) in parallel | The risk assessment is the review. No human gate. |
+| RCA (bugs) | Model - orchestrator advances when each named root cause is reproduced or documented `Hypothesis (unreproduced)` | No default human gate. Surface a NEEDS_INPUT new-value-question only if the reproduced cause invalidates the original framing. |
+| Problem research (optional) | Model - orchestrator advances when framing artifact is non-empty and free of unresolved new-value questions | No default human gate. |
+| Synthesize user needs (optional) | Model - orchestrator advances when synthesis artifact is non-empty and free of unresolved new-value questions | No default human gate. |
+| Existing-state risk profile (Phase 2.5) | **Human** | User confirms the `problem map` names the right current terrain. **First of the two surviving human gates** in the implementation pipeline. |
+| Proposal | Model - audit (`gpt-high`) + scope (`claude-opus`) + shortcut (`claude-opus`) + supported-surface (`claude-opus`) in parallel | The risk assessment is the review. No human gate. |
 | Alignment (optional) | Model - `claude-opus` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
-| Hookpoint research | Human | User confirms which pre-existing code survives. |
+| Hookpoint research | Model - orchestrator advances when artifact is non-empty, contains the four required sections, and does not invalidate the approved problem map | No default human gate. Returning to Phase 2.5 re-engages the problem-map human gate. |
 | Implementation | Continuous (test suite, CI, smoke, tests-first encoding artifacts) | No explicit gate. Failures block the pipeline, and Step 6b must produce risk-annotated tests plus any required residual-risk artifact before Step 6c writes code. |
 | CodeRabbit | Model - loop owner agent | Rerun until per-pass value drops to zero. |
 | Test audit | Model - `gpt-high` | Validate that tests encode intended behavior first, reduce named risks, preserve fixture externality, keep explicit levels, and do not weaken ground-truth tests to match implementation. Checklist gate. |
@@ -48,8 +48,9 @@ This table is cited by
 | Justification | Model - `claude-opus` | Decide whether every change justifies its presence. |
 | Supported-surface verification | Model - supported-surface verification role (see `~/ai/models/roles.md`) | Validate that the actual diff still reduces risk on the approved supported surface; return to research on invalidated assumptions and stop the PR on non-positive value. |
 | Commit hygiene | Model - `gpt-high` | Validate small, testable, single-concern commits. |
-| Draft PR open | Automated (no gate) | Routine pipeline output. |
-| Promote to ready-for-review | Human | User decides when the PR is ready for external eyes. |
+| Draft PR open | Automated (orchestrator) | Routine pipeline output. |
+| Promote to ready-for-review | Automated (orchestrator runs `gh pr ready` after Phase 8 process-tree audit clears) | No human gate. |
+| **NEEDS_INPUT new-value question** | **Human** | The orchestrator surfaces sub-agent NEEDS_INPUT artifacts to the root only when they carry a previously-unevaluated value, scope, or trade-off question. **Second of the two surviving human gates.** Procedural NEEDS_INPUT is resolved by the orchestrator without bothering the user. |
 | **Roadmap pipeline** | | |
 | Market research | Human | User approves the market framing. |
 | Executive roadmap | Model - 3x risk (market-misread / dependency / completeness) | All risks must be `LOW`, or revise. |
