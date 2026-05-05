@@ -94,3 +94,26 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 **Re-evaluation trigger.** When NES-163 lands, NES-137's scope expansion documented here is closed. Future WUs should NOT remove `test_workflow_aliases_convention.py` tests as a matter of course; the deletion here is targeted, evidenced, and tracker-backed. If NES-163 reintroduces the test in a generalized form (option 1 in the brief), no further action on this WU is needed; the deletion here is forward-compatible with that fix.
 
 ---
+
+---
+
+## D-2026-05-05d - NES-154 brenner_bot and research-team coexist
+
+**WU**: NES-154. **Phase**: 6c implementation of the Phase 3 decision-only proposal. **Decision**: `coexist`.
+
+**Context.** NES-154 compared upstream `brenner_bot` with the planned NES-151 `research-team` workflow. Upstream `brenner_bot` is a scientific-method research system: its method centers on problem selection, parallel hypotheses, discriminative tests, Bayesian update, and iteration; its operator set is 17 scientific-method moves; its repo describes a product/runtime with Agent Mail, ntm, Bun CLI, Next.js web app, and lab-like artifacts. The closest landed `/home/nes/ai/` research workflow is a markdown/operator workflow for open-ended investigation, option analysis, external-source review, feasibility assessment, comparable-product study, and evidence-backed synthesis. NES-151 `research-team` has not yet landed a concrete workflow artifact under `/home/nes/ai/workflows/`.
+
+**Decision.** Keep `brenner_bot` and `research-team` as separate research mechanisms. Route literature-shaped, scientific, hypothesis-evidence, methodology-driven questions to `brenner_bot` or a future explicitly chartered successor. Route design-pattern, best-practice, library, tool, implementation-approach, and comparable-product questions to `research-team` once NES-151 lands, with `/home/nes/ai/workflows/research.md` remaining the landed generic precursor until then. Do not treat `research-team` as replacing `brenner_bot`, and do not import or invoke `brenner_bot` from `research-team` without a later integration WU.
+
+**Anti-scope.** This decision does NOT include code changes to `/home/nes/ai/` workflows, operators, conventions, tests, or clients; upstream `brenner_bot` modifications; a fork or upstream PR; implementation of an integration; Linear status transitions; or resurrection of structural tests for `/home/nes/ai/DECISIONS.md` or `/home/nes/ai/AGENTS.md`.
+
+**Justifying evidence.**
+
+- NES-154 problem map: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/nes-154-problem-map.md`
+- Upstream method scrape: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/upstream/brennerbot-method.md` from `https://brennerbot.org/method` scraped 2026-05-05.
+- Upstream operators scrape: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/upstream/brennerbot-operators.md` from `https://brennerbot.org/operators` scraped 2026-05-05.
+- Upstream repo clone: `/tmp/brenner_bot_clone/README.md`, `/tmp/brenner_bot_clone/AGENTS.md`, and `/tmp/brenner_bot_clone/LICENSE`.
+- Duplicate inventory: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/nes-154-duplicates.md` found no prior `brenner_bot` decision and no landed NES-151 `research-team` workflow artifact.
+- Risk profile: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/risk/nes-154-risk-profile.md` scored both touched docs surfaces LOW.
+
+**Re-evaluation trigger.** Revisit this decision if NES-151 lands a `research-team` workflow with a stable downstream-researcher extension point, if a future WU is chartered to create a license-safe `brenner_bot` integration or successor, if upstream `brenner_bot` materially changes its method/runtime/licensing, or if a future scientific-literature WU demonstrates that the coexist boundary misroutes real work.
