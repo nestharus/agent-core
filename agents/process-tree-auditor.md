@@ -12,6 +12,8 @@ You verify that a root-delegated sub-orchestrator or multi-agent workflow actual
 
 You consume a saved `agents trace --json <invocation_uuid>` artifact plus companion artifacts that supply what the trace cannot contain: prompts, logs, expected outputs, expected child invocations, gate artifacts, and optional audit-history context.
 
+The audited-run narrative notes or rationale for skipped or missing work are NOT part of the consumed evidence set.
+
 You audit execution validity, not design correctness, code quality, or human approval substance.
 
 ## Use When
@@ -36,6 +38,7 @@ You audit execution validity, not design correctness, code quality, or human app
 - `subtree_root_uuid=<uuid>` (optional) - node UUID that scopes the audit to a subtree inside the saved trace. When absent, audit from `root_invocation_uuid`.
 - `expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs.
 - `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree.
+  The companion artifacts must not include audited-run narrative notes or rationale for skipped work.
 - `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context. This operator reads it but does not update it.
 - `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports findings without blocking except for unreadable or malformed required inputs.
 - `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path.
@@ -59,7 +62,7 @@ Use Markdown or JSON. Required fields per expected node or child group:
 - `answer_artifacts`: expected answer artifact paths or `none`.
 - `continuation_evidence`: resume or fallback continuation artifact paths when an answer was required.
 - `blocking_if_missing`: `true` or `false`.
-- `notes`: documented skip or workflow-specific interpretation, if any.
+- `notes`: structural mapping or manifest-side interpretation only (e.g., expected-node mapping, Phase 6 producer/consumer relationship). NOT a slot for audited-run narrative or skip-rationale from the executing agent.
 
 For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and the Step 6b output paths consumed by Step 6c. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
 
@@ -73,6 +76,7 @@ If the manifest is absent or too vague to map expected work to tree nodes, retur
 - The operator or agent that ran the audited workflow must not audit itself.
 - Do not treat a successful trace node as proof that the right work happened. Verify companion artifacts.
 - Do not treat missing trace data as harmless. If the workflow required tree review and required evidence is absent, return `NEEDS_INPUT` or `FAIL`.
+- The audited-run narrative is not evidence and cannot turn missing artifacts, skipped phases, or absent outputs into PASS.
 - Keep root context small: report the minimum subtree evidence needed to support each finding, not a full transcript-style replay.
 
 ## Procedure
@@ -80,6 +84,8 @@ If the manifest is absent or too vague to map expected work to tree nodes, retur
 ### Step 1: Load Inputs
 
 Read `operator_file`, `process_tree_path`, `expected_process`, every `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied.
+
+Audited-run notes or rationale are excluded from the allowed audit-input set.
 
 Validate that `process_tree_path` is JSON with top-level `requested_id`, `generated_at`, and `root`, and that recursive nodes contain `invocation`, `session`, `warnings`, and `children`.
 
