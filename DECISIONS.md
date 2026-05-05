@@ -73,3 +73,24 @@ NES-128 (the WU-PREREQ-01 ticket) was retroactively labeled `agent-runner`, `seg
 **Re-evaluation trigger.** Same as the parent D-2026-05-04: any further client extension goes through the orchestrator. The only justification for this manual extension is that it directly closes a NEEDS_INPUT raised by the very bootstrap pipeline that the user authorized to be a one-time exception.
 
 ---
+
+## D-2026-05-05 — NES-137 scope expansion: delete NES-142 branch-diff scope-guard test
+
+**Context.** During NES-137 (A1 — code-quality convention) Phase 7 → Phase 8 handoff, the orchestrator rebased the `nes-137-code-quality-convention` branch onto current `origin/master` (`05757d7`, the NES-142 workflow-aliases merge). After rebase, `pytest -q tests/` failed on `tests/test_workflow_aliases_convention.py::test_branch_diff_only_contains_convention_and_tests` — a test introduced by NES-142 that hard-codes `ALLOWED_DIFF_PATHS = {conventions/workflow-aliases.md, tests/test_workflow_aliases_convention.py}` and runs `git diff --name-only master...HEAD`, asserting equality. That assertion was correct on the NES-142 branch (single-convention scope-guard) but was not generalized at merge; on `master` it fails on every other branch by construction.
+
+The orchestrator surfaced this as a new-value scope question to the root per `~/ai/agents/implementation-pipeline-orchestrator.md` § NEEDS_INPUT handling.
+
+**Decision.** Expand NES-137's scope just enough to delete that one function (`test_branch_diff_only_contains_convention_and_tests`), the now-unused `ALLOWED_DIFF_PATHS` constant, and the now-unused `import subprocess` at the top of `tests/test_workflow_aliases_convention.py`. The other tests in that file (covering required sections, dispatch contract, schema keys, anti-pattern callouts, relative-link resolution) remain intact.
+
+**Justifying evidence.** Linear NES-163 (`https://linear.app/neshq/issue/NES-163/nes-142-follow-up-branch-diff-structural-test-asserts-only-convention`) tracks the structural fix on the NES-142 surface (generalize the assertion, move it to a PR template, or scope it to a deselected directory). Until that lands, the test is a strict pre-merge blocker for every WU branch. The minimum scope expansion that unblocks NES-137 and every future WU is to remove the assertion from the test suite on this branch; the NES-163 ticket carries the task forward.
+
+**Anti-scope.** This decision does NOT:
+
+- Modify any other test in `tests/test_workflow_aliases_convention.py`.
+- Modify `conventions/workflow-aliases.md` (the convention itself stays as merged).
+- Backport this fix to NES-142's branch retroactively.
+- Generalize the assertion or migrate it to a PR template — that's NES-163's job.
+
+**Re-evaluation trigger.** When NES-163 lands, NES-137's scope expansion documented here is closed. Future WUs should NOT remove `test_workflow_aliases_convention.py` tests as a matter of course; the deletion here is targeted, evidenced, and tracker-backed. If NES-163 reintroduces the test in a generalized form (option 1 in the brief), no further action on this WU is needed; the deletion here is forward-compatible with that fix.
+
+---

@@ -1,5 +1,4 @@
 import re
-import subprocess
 from pathlib import Path
 
 
@@ -67,12 +66,6 @@ REQUIRED_RELATIVE_LINK_TARGETS = (
     "../conventions/agent-questions-and-session-graph.md",
     "../agents/operator-file-format.md",
 )
-
-ALLOWED_DIFF_PATHS = {
-    "conventions/workflow-aliases.md",
-    "tests/test_workflow_aliases_convention.py",
-}
-
 
 def _conv_text():
     return CONV_PATH.read_text(encoding="utf-8")
@@ -142,24 +135,3 @@ def test_relative_markdown_links_resolve():
         if not (CONV_PATH.parent / target).resolve().exists()
     ]
     assert missing == [], f"relative Markdown links do not resolve: {missing}"
-
-
-def test_branch_diff_only_contains_convention_and_tests():
-    """T6 risk: WU scope expansion; level: particular-integration; source: proposal §7 T6."""
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "master...HEAD"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, (
-        f"git diff command failed (rc={result.returncode}): {result.stderr.strip()}"
-    )
-    changed_paths = {
-        line.strip() for line in result.stdout.splitlines() if line.strip()
-    }
-    assert changed_paths == ALLOWED_DIFF_PATHS, (
-        "unexpected branch diff paths from master...HEAD: "
-        f"{sorted(changed_paths)}; allowed: {sorted(ALLOWED_DIFF_PATHS)}"
-    )

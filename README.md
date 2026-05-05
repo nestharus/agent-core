@@ -59,6 +59,8 @@ Reusable process docs.
 
 Cross-project rules.
 
+- [`conventions/code-quality.md`](conventions/code-quality.md) - Cross-project code-shape rules for generated and reviewed code: function classification, max nesting depth, inline mini-function extraction, duplicate responsibility handling, and push-vs-pull system coupling.
+
 - [`conventions/gate-ownership.md`](conventions/gate-ownership.md) — Rule for which workflow phase gates are user-owned versus model-owned.
 
 - [`conventions/git.md`](conventions/git.md) — Branch, worktree, commit, and PR conventions for repository work.

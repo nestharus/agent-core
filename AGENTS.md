@@ -219,6 +219,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 
 ## Conventions
 
+- [`~/ai/conventions/code-quality.md`](conventions/code-quality.md) - shared code-quality rules for function classification, max nesting depth, inline mini-function extraction, duplicate responsibility handling, and push-vs-pull system coupling
 - [`~/ai/conventions/git.md`](conventions/git.md) - branches, GPG, draft PR routine, no-attribution
 - [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md) - parallel-agent rule
 - [`~/ai/conventions/no-backwards-compatibility.md`](conventions/no-backwards-compatibility.md)
