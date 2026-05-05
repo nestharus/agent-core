@@ -1,3 +1,23 @@
+---
+workflow:
+  id: build-prototype
+workflow_dispatch_contract:
+  orchestrator: "prototype-orchestrator"
+  inputs:
+    - "prototype question, project planning path, branch or worktree context, and any defer-source ticket"
+    - "evidence that the implementation pipeline or roadmap layer is too unclear to scope directly"
+  expectations:
+    - "uses unconstrained exploration to arrive at a concrete answer before imposing review discipline"
+    - "stabilizes the demonstrable state and organizes findings into a prototype dossier"
+    - "runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene"
+  outputs:
+    - "dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md"
+    - "recommended downstream tickets, roadmap revisions, or scope-cut decisions"
+  non_goals:
+    - "does not bypass the implementation pipeline for ordinary well-scoped work"
+    - "does not treat the prototype branch as the load-bearing deliverable"
+    - "does not run proposal-based PR review gates during the hack phase"
+---
 # Build Prototype Workflow
 
 A workflow for **arriving at an answer fast** when the framing of work is too unclear, too large, or too ambiguous for the implementation pipeline to scope. Distinct from `~/ai/workflows/implementation-pipeline.md` — same goal of "land working code" eventually, very different shape getting there.

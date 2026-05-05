@@ -1,3 +1,24 @@
+---
+workflow:
+  id: pr-review
+workflow_dispatch_contract:
+  orchestrator: "pr-review-operator"
+  inputs:
+    - "actual branch diff or PR, approved proposal package, test evidence, and audit-history context"
+    - "base branch or true stacked parent for comparison"
+  expectations:
+    - "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks"
+    - "runs on the actual diff after CodeRabbit rather than judging the proposal alone"
+    - "routes repeated fix or gate loops through audit-history and process-tree review"
+  outputs:
+    - "gate verdicts and actionable findings for the next fix pass or decomposition"
+    - "synthesized PR-review comment when posting is in scope"
+    - "process-tree-auditor evidence before synthesis or downstream PR movement"
+  non_goals:
+    - "does not review prototype work that lacks a proposal contract"
+    - "does not treat human review as a substitute for model-owned gates"
+    - "does not allow findings to remain optional commentary before the PR advances"
+---
 # PR Review Gates
 
 **This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md` — the step that makes implementation work consumable for review by gating the diff against the proposal that scoped it. It runs after CodeRabbit (`~/ai/workflows/coderabbit-loop.md`). Gates the draft PR before it is opened, or before it is promoted if it was opened already.

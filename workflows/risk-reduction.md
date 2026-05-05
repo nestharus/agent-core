@@ -1,3 +1,24 @@
+---
+workflow:
+  id: risk-reduction
+workflow_dispatch_contract:
+  orchestrator: "local risk-reduction orchestrator"
+  inputs:
+    - "project planning risk-profile.md with evidence-backed MEDIUM or HIGH entries"
+    - "one selected risk axis and surface to reduce through a small ticket"
+  expectations:
+    - "picks one risk-reduction item from the aggregate project risk profile"
+    - "chooses the narrowest lever that measurably lowers the named risk axis"
+    - "re-scores the affected surface after the work lands"
+  outputs:
+    - "hardening or risk-reduction ticket tied to one axis and one surface"
+    - "tests, contract docs, consolidation, lifecycle documentation, or deprecation work"
+    - "updated project risk profile showing removal or downgrade of the risk entry"
+  non_goals:
+    - "does not run without an evidence-backed aggregate risk profile"
+    - "does not run concurrently with an implementation WU on the same surface"
+    - "does not claim success without re-scoring the original axis"
+---
 # Risk Reduction Workflow
 
 A general-development workflow that runs **between** implementation tickets to lower the project-level risk profile. The implementation pipeline produces per-WU risk profiles and aggregates them into the project profile (`<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md`). This workflow consumes that aggregate and picks the next risk-reduction unit.

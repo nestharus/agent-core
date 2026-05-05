@@ -1,3 +1,25 @@
+---
+workflow:
+  id: alignment-cycle
+workflow_dispatch_contract:
+  orchestrator: "alignment-cycle-orchestrator"
+  inputs:
+    - "project problem.md, philosophy.md, proposal.md, and axis reference table"
+    - "scratch directory for problem, philosophy, classification, and run-report artifacts"
+  expectations:
+    - "reviews proposal alignment against the problem definition and product philosophy"
+    - "splits judgement from synthesis through classify and integrate stages"
+    - "halts only when philosophy decisions require root-surfaced user input"
+  outputs:
+    - "problem-review.md and optional problem-surfaces.md or problem-classification.md artifacts"
+    - "updated problem.md and project axis reference table when Stage 1b-integrate runs"
+    - "philosophy-review.md and optional philosophy-surfaces.md, philosophy-classification.md, or philosophy-decisions.md artifacts"
+    - "updated philosophy.md when Stage 2b-integrate runs"
+    - "run-report.md describing completed stages, skips, and open NEEDS_INPUT artifacts"
+  non_goals:
+    - "does not author or update proposal.md as the proposer"
+    - "does not re-run alignment stages inside the same cycle after integrations"
+---
 # Alignment Cycle
 
 End-to-end procedure for the proposal alignment review loop that runs against any project's `problem.md` ↔ `philosophy.md` ↔ `proposal.md` triangle.

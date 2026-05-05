@@ -1,3 +1,24 @@
+---
+workflow:
+  id: research
+workflow_dispatch_contract:
+  orchestrator: "research coordinator or implementation-pipeline Phase 1"
+  inputs:
+    - "focused research question, scope constraints, output location, and source requirements"
+    - "optional decomposition into single-agent, parallel-fanout, or deep-reasoning shape"
+  expectations:
+    - "collects primary-source evidence before forming options or recommendations"
+    - "keeps research factual and separate from solution proposal design"
+    - "synthesizes findings once into a traceable report with assumptions and tradeoffs"
+  outputs:
+    - "planning research report with question, evidence, options, recommendation, and open risks"
+    - "raw finding artifacts for parallel-fanout sub-questions when used"
+    - "optional draft problem map and assumption register for downstream proposal work"
+  non_goals:
+    - "does not design or implement the solution"
+    - "does not cite derivative summaries when primary sources are available"
+    - "does not advance past inconclusive evidence that needs user-owned reframing"
+---
 # Research Workflow
 
 For open-ended investigation: option analysis, external-source review,

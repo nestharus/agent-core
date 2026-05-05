@@ -1,3 +1,24 @@
+---
+workflow:
+  id: coderabbit-loop
+workflow_dispatch_contract:
+  orchestrator: "coderabbit-operator"
+  inputs:
+    - "branch under review, base branch, and project worktree path"
+    - "current review commit and optional audit-history context for repeated passes"
+  expectations:
+    - "runs CodeRabbit on the actual branch diff and applies useful findings in place"
+    - "amends the reviewed commit between passes without pushing during the loop"
+    - "stops when the latest pass has no remaining value worth another iteration"
+  outputs:
+    - "amended local branch commit containing accepted CodeRabbit fixes"
+    - "latest CodeRabbit pass output and optional audit-history entries for repeated loops"
+    - "process-tree-auditor evidence before handoff to PR review gates"
+  non_goals:
+    - "does not push or force-push during the loop"
+    - "does not weaken tests, regenerate baselines, or relax assertions to converge"
+    - "does not replace the post-CodeRabbit PR review gates"
+---
 # CodeRabbit Loop
 
 Step 7 of the implementation pipeline. Run until per-pass value drops to zero; do not push during the loop.
