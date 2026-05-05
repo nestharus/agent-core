@@ -230,6 +230,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/workflow-execution-violations.md`](conventions/workflow-execution-violations.md) - process-review violation taxonomy and blocking/advisory defaults
 - [`~/ai/conventions/review-convergence.md`](conventions/review-convergence.md) - non-converging review loops are a hard decomposition trigger; stop iterating and split the work
 - [`~/ai/conventions/project-layout.md`](conventions/project-layout.md) - `~/projects/<name>/{trunk,planning,worktrees}/` umbrella layout for agent-driven projects
+- [`~/ai/conventions/bootstrap-pattern.md`](conventions/bootstrap-pattern.md) - lifecycle for converting a general operator into a project-specific wrapper (open path / closed path / re-bootstrap triggers)
 - [`~/ai/conventions/rebase-verification.md`](conventions/rebase-verification.md) - deterministic rebase verification, residual bundle, and rollback convention
 - [`~/ai/conventions/wu-session-lifecycle.md`](conventions/wu-session-lifecycle.md) - WU spawn, run, merge, and post-merge wake lifecycle
 
