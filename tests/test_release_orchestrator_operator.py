@@ -6,12 +6,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ORCHESTRATOR = REPO_ROOT / "agents" / "release-orchestrator.md"
 WORKFLOW = REPO_ROOT / "workflows" / "release-management.md"
 AGENTS_MD = REPO_ROOT / "AGENTS.md"
-SUB_OPERATORS = [
+SHIPPED_SUB_OPERATORS = [
     "release-cut-operator.md",
-    "release-hotfix-operator.md",
     "release-promote-operator.md",
+]
+FORWARD_REFERENCED_SUB_OPERATORS = [
+    "release-hotfix-operator.md",
     "release-reconcile-operator.md",
 ]
+SUB_OPERATORS = SHIPPED_SUB_OPERATORS + FORWARD_REFERENCED_SUB_OPERATORS
 REQUIRED_FRONTMATTER_KEYS = {"description", "model", "output_format"}
 REQUIRED_H2_SECTIONS = (
     "## Role",
@@ -250,9 +253,16 @@ def test_forward_references_to_sub_operators_present():
         _assert_contains(text, "release orchestrator", operator)
 
 
+def test_shipped_sub_operator_files_exist():
+    """Shipped release sub-operator files are present after their WUs land."""
+    for operator in SHIPPED_SUB_OPERATORS:
+        path = REPO_ROOT / "agents" / operator
+        assert path.exists(), f"expected shipped sub-operator exists: {path}"
+
+
 def test_forward_referenced_files_do_not_exist():
-    """Forward-referenced sub-operator files are intentionally absent for NES-243."""
-    for operator in SUB_OPERATORS:
+    """Still-future sub-operator files are intentionally absent."""
+    for operator in FORWARD_REFERENCED_SUB_OPERATORS:
         path = REPO_ROOT / "agents" / operator
         assert not path.exists(), f"unexpected sub-operator exists: {path}"
 
