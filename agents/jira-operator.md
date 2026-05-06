@@ -78,6 +78,13 @@ Then the markdown body. Validate that the rendered markdown preserves the struct
 
 JIRA Cloud comments use **ADF (Atlassian Document Format)**, NOT markdown. ADF is JSON-structured.
 
+**Endpoint contract:**
+- The canonical comment-create endpoint is `POST /rest/api/3/issue/{issueIdOrKey}/comment`; the runnable URL remains `${jira_url}/rest/api/3/issue/$ISSUE_KEY/comment`.
+- The single permitted fallback is `POST /rest/api/2/issue/{issueIdOrKey}/comment` (v2 + singular), only when the canonical v3 request returns HTTP 404 and the response body confirms the endpoint is missing or unavailable, such as `No endpoint POST` or an equivalent missing-endpoint indicator. A silent 404, generic 404, issue-not-found 404, auth 404, or permission 404 does not trigger fallback.
+- `/comments` plural is non-supported for comment creation; the observed bad shape `/rest/api/2/issue/{issueIdOrKey}/comments` is non-supported and must not be used as canonical or fallback.
+- If both the canonical v3 attempt and the permitted v2 singular fallback fail, return `BLOCKED` with each attempted path plus the verbatim HTTP status and body for each attempt.
+- Rationale: `~/work/rfqautomation-linux/DECISIONS.md` § "`jira-operator` hardening note (no ticket)", INFA-141, comment IDs `17120` and `17623`, dated `2026-05-05`.
+
 For simple plain-text comments:
 
 ```bash
