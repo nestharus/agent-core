@@ -2,6 +2,33 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-06h — NES-246 scope expansion to fold NES-244 cleanup residual
+
+**WU**: NES-246 (release-promote-operator). **Phase**: 2.5 → 9. **Decision**: `Expand NES-246 scope (option A) to include the NES-244 cleanup residual in the same PR.`
+
+**Context.** When NES-244 (`release-cut-operator`) shipped at commit `048c6bc`, it added `agents/release-cut-operator.md` on disk but did NOT update `tests/test_release_orchestrator_operator.py::test_forward_referenced_files_do_not_exist`, which still asserted that all four release sub-operator files were absent. The test went red on master and would have stayed red until each successor sub-WU (NES-245/246/247) flipped its own file from the not-exist set. NES-246's own deliverable (`agents/release-promote-operator.md`) created a second member of the not-exist set, so NES-246's PR would either land green AND fix NES-244's residual at the same time, or land red.
+
+The orchestrator's Phase 2.5 step 6 surfaced this as a NEEDS_INPUT new-value question (since the original NES-246 anti-scope said "single operator file"). The user picked option A: "Expand scope, fold NES-244 cleanup into NES-246."
+
+**Decision.** Within NES-246's PR (#41, `cf85e12`):
+
+1. Author `agents/release-promote-operator.md` (the original NES-246 deliverable).
+2. Author `tests/test_release_promote_operator.py` (the structural test for the new operator).
+3. Refactor `tests/test_release_orchestrator_operator.py` so the `SUB_OPERATORS` constant splits into `SHIPPED_SUB_OPERATORS = ["release-cut-operator.md", "release-promote-operator.md"]` and `FORWARD_REFERENCED_SUB_OPERATORS = ["release-hotfix-operator.md", "release-reconcile-operator.md"]`. The previous `test_forward_referenced_files_do_not_exist` is split into `test_shipped_sub_operator_files_exist` (positive existence for the shipped set) and a narrowed `test_forward_referenced_files_do_not_exist` (negative existence for the still-forward-referenced set). The dispatch-table test and the forward-references-present test continue to iterate over the union, so guard semantics are preserved.
+
+**Anti-scope (kept intact).** Do NOT touch any other release operator (`release-hotfix-operator.md`, `release-reconcile-operator.md`); do NOT redesign the structural-test pattern itself (the assertion-shape "every successor flips a file" brittleness remains, deferred to a NES-243 follow-up hygiene ticket); do NOT promote any real release; do NOT modify `AGENTS.md`, `release-management.md`, `release-orchestrator.md`, or any wrapper-owned schema.
+
+**Justifying evidence.**
+
+- NES-246 dispatch (rolled-in scope text): the resume-prompt enumerated the three scope items above and pinned the lean-mode test surface in the risk profile.
+- Risk profile: `/home/nes/projects/ai/planning/nes-246-release-promote-operator/risk/nes-246-risk-profile.md` (operator surface HIGH, test surface MEDIUM, single-axis Language fragmentation).
+- Phase 4 risk gates (audit/scope/shortcut/supported-surface): all LOW; the scope-risk gate explicitly accepted the expansion as approved expansion rather than scope creep.
+- Phase 8 PR-review gates (test-audit/multi-concern/justification/commit-hygiene): PASS / SINGLE_CONCERN / JUSTIFIED / PASS. The multi-concern gate confirmed splitting would create more churn than clarity.
+- Process-tree audits #1, #2, #3: PASS.
+- Final state: PR #41 squash-merged at `cf85e12`. `test_forward_referenced_files_do_not_exist` is now green on master.
+
+**Re-evaluation trigger.** When NES-245 (`release-hotfix-operator`) lands, it must remove `release-hotfix-operator.md` from `FORWARD_REFERENCED_SUB_OPERATORS` and add it to `SHIPPED_SUB_OPERATORS`. Same for NES-247 (`release-reconcile-operator`). If a future WU forgets to perform that flip, the structural-guard pattern surfaces it (just as NES-244's miss surfaced for NES-246). If three or more successor WUs forget the flip, that is a signal that the structural-guard pattern's "every successor flips a file" brittleness should be redesigned (the deferred NES-243 follow-up).
+
 ## D-2026-05-06 — NES-244 Tier-1 rewind for Step 6c log evidence
 
 **Context.** Phase 6 process-tree audit returned `FAIL:1 violations`. The single blocking violation: Step 6c's `agents` final-result message did not echo the Step 6b output-index path or test path as pre-product-code-change read evidence. Step 6b and Step 6c invocation UUIDs were distinct (`b0aea170-d567-41bc-8209-089582a337da` vs `309b15e5-17fa-4313-8021-ad28beb81142`), timing order was correct, all output artifacts existed on disk, and the structural test suite passed 23/23 — only the log-side consumption evidence was missing per `~/ai/workflows/implementation-pipeline.md` Step 6c rule that "Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes."
