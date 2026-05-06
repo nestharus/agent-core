@@ -218,6 +218,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - Tickets-first review (variant: ticket is the unit of review; PR drafted only after review passes): [`~/ai/workflows/tickets-first-review.md`](workflows/tickets-first-review.md)
 - CodeRabbit loop (CLI-only, amend-only, stop at value-zero): [`~/ai/workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md)
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
+- Linter bootstrap (A1 linter coverage inventory, ecosystem research, and setup-PR proposal): [`~/ai/workflows/linter-bootstrap.md`](workflows/linter-bootstrap.md)
 - Research disposition boundaries (brenner_bot / research-team routing): [`~/ai/DECISIONS.md`](DECISIONS.md) D-2026-05-05d.
 - Roadmap (4-layer strategic pipeline): [`~/ai/workflows/roadmap.md`](workflows/roadmap.md)
 - Tiered approval (3-tier action safety): [`~/ai/workflows/tiered-approval.md`](workflows/tiered-approval.md)

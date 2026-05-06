@@ -163,3 +163,26 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 - Risk profile: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/risk/nes-154-risk-profile.md` scored both touched docs surfaces LOW.
 
 **Re-evaluation trigger.** Revisit this decision if NES-151 lands a `research-team` workflow with a stable downstream-researcher extension point, if a future WU is chartered to create a license-safe `brenner_bot` integration or successor, if upstream `brenner_bot` materially changes its method/runtime/licensing, or if a future scientific-literature WU demonstrates that the coexist boundary misroutes real work.
+
+## D-2026-05-06 — NES-138 Phase 6 Tier-1 rewind (Step 6c log evidence)
+
+**Context.** While running the implementation pipeline orchestrator on NES-138 (linter-bootstrap workflow), Phase 6's process-tree audit returned `FAIL` with one blocking finding `P6-F01`: the Step 6c R1 log (`logs/nes-138-phase-6c.log`, invocation UUID `12d2bf35-3c85-4dc2-9811-068c1b9c4f14`) succeeded with passing tests but did not echo `step6b-output-index.md` or otherwise prove it consumed the Step 6b output index. The agent had read the index (you can verify by the test pass rate against the contract), but its final summary message did not include explicit per-file-read lines.
+
+**Decision.** Tier-1 rewind per the implementation-pipeline orchestrator's violation-escalation policy:
+
+1. Restore worktree to pre-Step-6c state (`git restore --staged --worktree AGENTS.md README.md workflows/index.json` + `rm workflows/linter-bootstrap.md`). Step 6b's test file at `tests/test_linter_bootstrap_workflow.py` retained because the contract did not change.
+2. Edit the Step 6c prompt (`prompts/nes-138-phase-6c.md`) to require an explicit `## Step 6b consumption evidence` section near the top of the response, listing all six absolute paths consumed before authoring product code. The previous Step 6c attempt was failed by the audit specifically because the log did not echo `step6b-output-index.md` even though the agent did read it.
+3. Re-dispatch Step 6c (R2 invocation UUID `b2b47590-01cc-4097-8e82-1f6da500507c`); R2 log includes the consumption-evidence section.
+4. Re-capture trace, re-synthesize Phase 6 R2 tree (`audits/phase6-r2-synthesized-tree.json`), re-run process-tree audit (`audits/phase6-r2-process-tree-audit.report.md`). R2 verdict: PASS, P6-F01 closed.
+
+**Anti-scope.** Step 6b was NOT re-dispatched — the contract did not change between R1 and R2, so the test writer's prior output remains valid. Re-running Step 6b would have wasted compute and would have made R2 less faithful as a "rewind of just the failing phase."
+
+**Justifying evidence.**
+
+- R1 audit report (failed): `/home/nes/projects/ai/planning/nes-138-linter-bootstrap-workflow/.scratch/audits/phase6-process-tree-audit.report.md` (verdict FAIL; finding P6-F01).
+- R2 audit report (passed): `/home/nes/projects/ai/planning/nes-138-linter-bootstrap-workflow/.scratch/audits/phase6-r2-process-tree-audit.report.md` (verdict PASS; P6-F01 closed).
+- R1 Step 6c log lacking echo: `/home/nes/projects/ai/planning/nes-138-linter-bootstrap-workflow/.scratch/logs/nes-138-phase-6c.log`.
+- R2 Step 6c log with echo: `/home/nes/projects/ai/planning/nes-138-linter-bootstrap-workflow/.scratch/logs/nes-138-phase-6c-r2.log`.
+- Tests pass under R2 (`68 passed in 0.13s`); index regen idempotent.
+
+**Re-evaluation trigger.** Revisit this rewind pattern if subsequent WUs see Step 6c logs that ALSO lack consumption-evidence echo. If the failure recurs, propose updating either `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 6 step 6c or a shared agent-prompt convention to make the consumption-evidence echo a default contract for all Phase 6 code-writer dispatches, rather than re-stating it in every WU's per-WU prompt.
