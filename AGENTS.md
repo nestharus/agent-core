@@ -249,11 +249,13 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 ## Conventions
 
 - [`~/ai/conventions/code-quality.md`](conventions/code-quality.md) - shared code-quality rules for function classification, max nesting depth, inline mini-function extraction, duplicate responsibility handling, and push-vs-pull system coupling
+- [`~/ai/conventions/design-patterns.md`](conventions/design-patterns.md) - shared design-pattern corpus consumed by workflow/agent design auditors
 - [`~/ai/conventions/git.md`](conventions/git.md) - branches, GPG, draft PR routine, no-attribution
 - [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md) - parallel-agent rule
 - [`~/ai/conventions/no-backwards-compatibility.md`](conventions/no-backwards-compatibility.md)
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
+- [`~/ai/conventions/proposer-critic-pattern.md`](conventions/proposer-critic-pattern.md) - proposer/critic decomposition for risk-gated implementation
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence
 - [`~/ai/conventions/agent-questions-and-session-graph.md`](conventions/agent-questions-and-session-graph.md) - sub-agent question envelope, root surfacing, session graph, and resume/fallback convention
 - [`~/ai/conventions/audit-history.md`](conventions/audit-history.md) - audit history schema, revise/review loop rules, decision-agent dispatch, and finding ID convention

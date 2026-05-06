@@ -135,7 +135,7 @@ Non-stop rule: a pull site missing ownership/interface proof is a HIGH finding, 
 
 vs `agents/function-classification-auditor.md` (A5 / NES-141): function classification, nesting depth, inline-function, and duplicate-responsibility enforcement are A5 scope; not A4. This operator must not report those as push-vs-pull findings.
 
-vs `agents/cohesion-coupling-auditor.md` (A6 / NES-148; NES-209 split pending): cohesion-by-classifications-touched and coupling-by-distinct-symbols/modules-referenced are A6 scope; not A4. A site can be A4-LOW because the contract is declared yet A6-HIGH because it still references many symbols.
+vs `agents/cohesion-auditor.md` / `agents/coupling-auditor.md` (A6 / NES-148 / NES-209): cohesion-by-classifications-touched and coupling-by-distinct-symbols/modules-referenced are A6 scope; not A4. A site can be A4-LOW because the contract is declared yet A6-HIGH because it still references many symbols.
 
 vs `agents/process-tree-auditor.md`: process-tree topology audit is process-tree-auditor scope; not A4. The push-pull-auditor does not audit `agents trace` topology, workflow design audit, routing maintenance, CI, linter, pre-commit, runtime behavior, or remediation-code authoring.
 
@@ -144,5 +144,6 @@ vs `agents/process-tree-auditor.md`: process-tree topology audit is process-tree
 - `~/ai/conventions/code-quality.md` § Push-vs-pull system coupling, § Failure modes, § Numerical thresholds.
 - `~/ai/conventions/agent-questions-and-session-graph.md` § Pull-vs-Push Policy - terminology disambiguation only; this is a distinct and different concern from A4 system coupling.
 - `~/ai/agents/function-classification-auditor.md` - A5 sibling boundary.
-- `~/ai/agents/cohesion-coupling-auditor.md` - A6 sibling boundary.
+- `~/ai/agents/cohesion-auditor.md` - A6 cohesion sibling boundary.
+- `~/ai/agents/coupling-auditor.md` - A6 coupling sibling boundary.
 - `~/ai/agents/process-tree-auditor.md` - process-tree boundary.

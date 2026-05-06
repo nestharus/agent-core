@@ -145,7 +145,7 @@ Final stdout vocabulary:
 
 ## Sibling Boundaries
 
-Versus `cohesion-coupling-auditor.md` (A6 / NES-148 / NES-209): A5 audits individual changed functions and asks whether each function has exactly one A1 classification. A6 audits component-level cohesion and pairwise coupling using different A1 rows. A5 may produce function-classification evidence that a later A6 review can consume, but A5 does not score component cohesion, count external symbols/modules, compute coupling, or alter A6 thresholds.
+Versus `cohesion-auditor.md` / `coupling-auditor.md` (A6 / NES-148 / NES-209): A5 audits individual changed functions and asks whether each function has exactly one A1 classification. A6 audits component-level cohesion and pairwise coupling using different A1 rows. A5 may produce function-classification evidence that a later A6 review can consume, but A5 does not score component cohesion, count external symbols/modules, compute coupling, or alter A6 thresholds.
 
 Versus operator and workflow design auditors: `agent-design-auditor.md` and `workflow-design-auditor.md` audit prompt or workflow design, including frontmatter, concern boundaries, output clarity, design patterns, and stop behavior. They may audit this A5 operator file as a document, but they do not classify changed product functions. A5 audits source-code function responsibility in a diff, not operator or workflow design quality.
 
@@ -154,6 +154,7 @@ Versus `process-tree-auditor.md`: process-tree audit verifies whether a workflow
 ## Cross-References
 
 - `~/ai/conventions/code-quality.md` - A1 source-of-truth categories, single-classification rule, `Function categories per function`, and `multi-classifier function`.
-- `~/ai/agents/cohesion-coupling-auditor.md` - A6 sibling boundary and local read-only critic shape.
+- `~/ai/agents/cohesion-auditor.md` - A6 cohesion sibling boundary and local read-only critic shape.
+- `~/ai/agents/coupling-auditor.md` - A6 coupling sibling boundary and local read-only critic shape.
 - `~/ai/agents/agent-design-auditor.md` - operator-design auditor boundary.
 - `~/ai/agents/process-tree-auditor.md` - runtime process-audit boundary.

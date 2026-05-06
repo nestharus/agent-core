@@ -484,7 +484,8 @@ def test_b31_cross_references_targets():
         "agent-questions-and-session-graph.md",
         "Pull-vs-Push Policy",
         "~/ai/agents/function-classification-auditor.md",
-        "~/ai/agents/cohesion-coupling-auditor.md",
+        "~/ai/agents/cohesion-auditor.md",
+        "~/ai/agents/coupling-auditor.md",
         "~/ai/agents/process-tree-auditor.md",
     ):
         assert token in cross_references
