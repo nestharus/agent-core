@@ -1,0 +1,189 @@
+---
+workflow:
+  id: code-quality
+workflow_dispatch_contract:
+  orchestrator: "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller"
+  inputs:
+    - "repo_root, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout"
+    - "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, and wu_id"
+    - "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
+  expectations:
+    - "dispatches A4/A5/A6a/A6b auditors as four parallel children and writes a durable code-quality bundle"
+    - "aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states"
+    - "preserves the convention as the single rule reference; does not redefine A1"
+  outputs:
+    - "dispatch manifest, child prompts/logs/reports, normalized findings.json plus findings.md, and aggregate-code-quality.md"
+    - "role outputs suitable for proposer revision, decision-encoder, or PR-review consumption"
+  non_goals:
+    - "does not implement fixes, edit child auditors, or replace child auditor procedures"
+    - "does not redefine A1 or duplicate the convention's rule descriptions"
+    - "does not wire implementation-pipeline Phase 4 entry - that is downstream WU work"
+---
+# Code-Quality Workflow
+
+## Purpose
+
+Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/conventions/code-quality.md` as the rule reference and the existing child auditors as the executable procedures. The workflow owns dispatch, artifact layout, finding normalization, aggregate verdicts, currentness semantics, audit-history handoff, and process-tree handoff for callers that need one code-quality result.
+
+## Use When
+
+- An implementation-pipeline Phase 4 caller has proposal, touched-surface, and diff or equivalent change evidence and needs one composite code-quality gate.
+- A PR-review caller has branch or PR diff evidence and wants normalized A1 findings from the supported auditor fanout.
+- An ad-hoc developer wants to run the same composite review over a local diff and touched-surface package without entering the implementation pipeline.
+
+## Do Not Use When
+
+- The target is workflow design, operator design, runtime procedure adherence, or rebase drift; use `~/ai/workflows/audit.md` for those surfaces.
+- The caller needs PR-review's distinct multi-concern, justification, or commit-hygiene gates.
+- The caller needs topology verification of an agent run; `process-tree-auditor` remains the topology authority.
+
+## Required Inputs
+
+- `repo_root=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; points to the repository being reviewed.
+- `diff_path=<path>`: required for PR-review and ad-hoc invocations, and required in Phase 4 when A4/A5 are selected; contains a unified diff or equivalent text change artifact.
+- `touched_surfaces_path=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; lists changed files, module/package/component labels, and known component boundaries.
+- `scratch_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores prompts and logs.
+- `planning_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores durable reports, findings, manifest, and aggregate output.
+- `proposal_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required.
+- `problem_map_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required.
+- `risk_profile_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required.
+- `wu_id=<id>`: required for Phase 4 pipeline-callable invocations; optional provenance for PR-review and ad-hoc invocations.
+- `base_ref=<ref>`: optional for Phase 4, PR-review, and ad-hoc invocations; records diff provenance.
+- `head_ref=<ref>`: optional for Phase 4, PR-review, and ad-hoc invocations; records diff provenance.
+- `changed_files_path=<path>`: optional inventory for Phase 4, PR-review, and ad-hoc invocations.
+- `changed_functions_path=<path>`: optional inventory for A5 and any caller that can provide function-level change evidence.
+- `code_trace_paths=<paths>`: optional evidence for coupling review when traces or symbol maps exist.
+- `code_quality_ref=<path>`: optional reference override; defaults to `~/ai/conventions/code-quality.md`.
+
+## Output Paths
+
+Default slug: caller-supplied `${slug}` or `code-quality-workflow`.
+
+Pipeline-callable mode splits observability from durable handoff:
+
+- Prompts root: `${scratch_dir}/code-quality/${slug}/prompts`.
+- Logs root: `${scratch_dir}/code-quality/${slug}/logs`.
+- Durable reports root: `${planning_dir}/code-quality/${slug}/reports`.
+- Normalized machine-readable findings: `${planning_dir}/code-quality/${slug}/findings.json`.
+- Normalized human-readable findings: `${planning_dir}/code-quality/${slug}/findings.md`.
+- Dispatch manifest: `${planning_dir}/code-quality/${slug}/dispatch-manifest.md`.
+- Aggregate report: `${planning_dir}/code-quality/${slug}/aggregate-code-quality.md`.
+- Optional expected process artifact: `${planning_dir}/code-quality/${slug}/process-tree-expected.md` when a downstream gated workflow consumes the fanout.
+
+Standalone mode uses one root:
+
+- Standalone artifact root: `${code_quality_work_dir}/`.
+
+## Dispatch Manifest
+
+Write `dispatch-manifest.md` before child dispatch where possible. Every selected child row defaults to required.
+
+| Concern | Auditor | Model | Prompt path | Log path | Report path | Required |
+|---|---|---|---|---|---|---:|
+| A4 | push-pull-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/push-pull-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/push-pull-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/push-pull-auditor.md` | true |
+| A5 | function-classification-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/function-classification-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/function-classification-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/function-classification-auditor.md` | true |
+| A6 | cohesion-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/cohesion-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/cohesion-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/cohesion-auditor.md` | true |
+| A6 | coupling-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/coupling-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/coupling-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/coupling-auditor.md` | true |
+
+`Required=false` is allowed only with a written applicability reason in the manifest. Optionality records evidence applicability; it is not a way to demote relevant A1 review.
+
+## Per-Concern Auditor Routing
+
+### A4 - Push-vs-pull system coupling
+
+Auditor path: `~/ai/agents/push-pull-auditor.md`. Model: `gpt-high`.
+
+- Required inputs: `repo_root`, `diff_path`, `output_path`.
+- Optional inputs: `base_ref`, `head_ref`, `changed_files_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+
+### A5 - Function classification
+
+Auditor path: `~/ai/agents/function-classification-auditor.md`. Model: `gpt-high`.
+
+- Required inputs: `repo_root`, `diff_path`, `output_path`.
+- Optional inputs: `changed_functions_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+
+### A6 - Cohesion
+
+Auditor path: `~/ai/agents/cohesion-auditor.md`. Model: `gpt-high`.
+
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `touched_surfaces_path`.
+- Optional inputs: `diff_path`, `output_path`.
+
+### A6 - Coupling
+
+Auditor path: `~/ai/agents/coupling-auditor.md`. Model: `gpt-high`.
+
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `touched_surfaces_path`.
+- Optional inputs: `diff_path`, `code_trace_paths`, `output_path`.
+
+## Aggregate Verdict
+
+The aggregate verdict uses these outcomes:
+
+- `NEEDS_INPUT:<absolute_artifact_path>` when any required child returns `NEEDS_INPUT`.
+- `BLOCKED:<reason>` when required files are unreadable, unwritable, malformed, or required child auditor reports are malformed.
+- `HIGH` when any required child returns `HIGH`.
+- `MEDIUM` when coupling returns `MEDIUM` and no child returns `HIGH`.
+- `LOW` when every required child returns `LOW`.
+
+Completed severity rollup is worst-case: `HIGH > MEDIUM > LOW`. Coupling is the only child whose native vocabulary currently includes MEDIUM. `NEEDS_INPUT` and `BLOCKED` are stop states, not severity values, and native child report paths and source verdicts remain visible in the aggregate report.
+
+Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOCKED` before downstream gate consumption.
+
+## Finding Normalization
+
+`findings.json` and `findings.md` are both required. `findings.json` is the canonical machine-readable artifact; `findings.md` is the human-readable rendering of the same normalized records.
+
+Each normalized finding records `id`, `source_auditor`, `source_id`, `severity` or stop-state, `metric` / `failure_mode`, `path`, optional location anchors (`function`, `component`, `source_component`, `target_component`, `line_span_or_diff_hunk`), `evidence`, `closure_expectation`, `report_path`, and `blocks_pipeline`.
+
+Stable IDs use `CQ-<round?>-F<NN>` for canonical pipeline use and `CQ-F<NN>` for standalone bundles. Original child IDs remain in `source_id`.
+
+## Audit-History Ownership
+
+`code-quality.md` reads `audit_history_path` when supplied and may pass relevant history to child auditors as context.
+
+`code-quality.md` does not write canonical audit history. It emits role outputs and normalized findings for the caller or `decision-encoder` to record the round when a revise/review loop continues.
+
+## Rerun And Currentness Semantics
+
+After substantive proposal, touched-surface, or diff revision, all required children rerun. Prior `LOW` reports are stale unless target identity proves exact equality.
+
+Equality predicates include commit SHA, diff base plus head, file list, `touched_surfaces_path` content hash, proposal-path content hash, optional context-path content hashes, child operator file content hashes, and `code_quality_ref` content hash.
+
+## Process-Tree Relationship
+
+`process-tree-auditor` audits the four-child fanout before downstream gate consumption when applicable.
+
+The topology result is separate from the semantic aggregate. Topology review returns `PASS|FAIL|NEEDS_INPUT|BLOCKED`; semantic code-quality aggregation returns `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>`.
+
+## Standalone Mode
+
+Standalone callers supply `code_quality_work_dir`, `repo_root`, `diff_path`, `touched_surfaces_path`, optional refs, and optional `code_quality_ref`.
+
+All standalone artifacts are written under `${code_quality_work_dir}/`. The result is advisory or blocking according to the caller's mode; no implementation phases run automatically.
+
+## Pipeline-Callable Mode
+
+Pipeline-callable callers supply `planning_dir`, `scratch_dir`, `wu_id`, `repo_root`, `touched_surfaces_path`, optional Phase 4 evidence, and diff or equivalent change evidence for selected diff-first children.
+
+Prompts and logs are written under `${scratch_dir}/code-quality/${slug}/`; reports, dispatch manifest, `findings.json`, `findings.md`, aggregate output, and optional expected-process artifacts are written under `${planning_dir}/code-quality/${slug}/`.
+
+Missing required evidence becomes `BLOCKED:<reason>` instead of an inferred pass.
+
+## Stop Conditions And Escalation
+
+- `LOW`: all required children completed at `LOW`; caller may continue through a blocking code-quality gate.
+- `MEDIUM`: no required child returned `HIGH`, coupling returned `MEDIUM`, and caller policy decides whether advisory or blocking handling applies.
+- `HIGH`: at least one required child returned `HIGH`; caller revises the target or escalates through the owning review loop.
+- `NEEDS_INPUT:<absolute_artifact_path>`: caller surfaces the artifact to the root user or owning gate and preserves partial artifacts from children that already ran.
+- `BLOCKED:<reason>`: caller fixes unreadable, unwritable, malformed, or missing evidence/report conditions and preserves partial artifacts from children that already ran.
+
+## Anti-Scope
+
+- Does not implement any auditor or replace any auditor's procedure.
+- Does not redefine A1 or duplicate convention rule descriptions.
+- Does not edit child auditor operators; NES-235 captures cleanup of stale bundled A6 references.
+- Does not include nesting/inline/duplicate auditors; none exist, and future tickets file them.
+- Does not wire implementation-pipeline Phase 4 entry modes.
+- Does not replace `audit.md`, PR-review gates, or `process-tree-auditor`.

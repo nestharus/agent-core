@@ -241,6 +241,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - CodeRabbit loop (CLI-only, amend-only, stop at value-zero): [`~/ai/workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md)
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
 - Linter bootstrap (A1 linter coverage inventory, ecosystem research, and setup-PR proposal): [`~/ai/workflows/linter-bootstrap.md`](workflows/linter-bootstrap.md)
+- Code quality (A1 composite auditor fanout and aggregate verdict): [`~/ai/workflows/code-quality.md`](workflows/code-quality.md)
 - Roadmap (4-layer strategic pipeline): [`~/ai/workflows/roadmap.md`](workflows/roadmap.md)
 - Tiered approval (3-tier action safety): [`~/ai/workflows/tiered-approval.md`](workflows/tiered-approval.md)
 - Verified rebase (deterministic residual bundle + rollback; single rebase path): [`~/ai/workflows/verified-rebase.md`](workflows/verified-rebase.md)

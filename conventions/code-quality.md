@@ -103,6 +103,7 @@ It also does not replace project-local architecture rules. A project may have st
 
 ## Cross-references
 
+- `~/ai/workflows/code-quality.md` - composite dispatch workflow for existing A1 auditors; this is an operational pointer only and does not change this convention's rule text, failure modes, numerical thresholds, or policy-only status.
 - `~/ai/agents/function-classification-auditor.md` - A5 / NES-141 enforcement surface for the `Function categories per function` threshold and `multi-classifier function` findings; this is a forward pointer only and does not change this convention's categories, rule, failure modes, thresholds, or policy-only status.
 - `~/ai/conventions/risk-profile.md` § Scoring axes - duplicate-system count, change-path entropy, and risk scoring mechanics.
 - `~/ai/workflows/implementation-pipeline.md` § Step 2.5.4 and § Phase 3 - duplicate-systems inventory plus cascade/consolidate/accept handling.
