@@ -43,7 +43,7 @@ Detect silent drift introduced by the rebase: any change in the merged-from-main
 - A pre-existing helper / abstraction that was deleted or refactored. The WU's product code may compile because the new abstraction has the same name but different semantics.
 - A pre-existing comment, doc, or contract in the touched area that was edited or removed. The WU's understanding of "the contract" may now be stale.
 
-Implementation: a `gpt-high` drift-check operator (TODO: write `~/ai/agents/rebase-drift-checker.md`) reads the merged-into-base diff (`git log --first-parent main..HEAD-pre-rebase` × the touched-surface enumeration from Phase 2.5 problem map) and reports any overlap between the merged changes and the WU's touched surface. Overlap is the signal; the operator surfaces what overlapped + verdict (`drift detected | no drift`).
+Implementation: `~/ai/agents/rebase-drift-checker.md` is the `gpt-high` operator for check #4. It reads `merged_base_diff_path`, `problem_map_path`, and `report_path`; the merged-base diff is caller-supplied, and verified-rebase's `main-delta.patch` / `target-delta.patch` is the normal source when a verified-rebase bundle exists. The operator crosses that diff with the Phase 2.5 touched-surface enumeration and writes `${planning_dir}/risk/<wu>-rebase-drift.md` unless the caller supplies a different `report_path`. Overlap is the signal; the operator surfaces what overlapped plus one stdout verdict: `rebase-drift: drift detected; report=<path>` or `rebase-drift: no drift; report=<path>`.
 
 ## Outcomes
 
@@ -61,6 +61,6 @@ Treating the rebase as "git plumbing" and not running any of the four checks. A 
 
 ## TODO (open work)
 
-- Write the `rebase-drift-checker` operator that automates check #4. Until that exists, the orchestrator surfaces a `NEEDS_INPUT` to the user citing the touched-surface enumeration and asks the user to verify drift manually. This is friction; the operator port closes that.
+- Check #4's operator now exists at `~/ai/agents/rebase-drift-checker.md`; manual drift `NEEDS_INPUT` is no longer the normal path.
 - Define the per-project coverage tooling adapter so check #2 is uniform across Rust / Python / TypeScript projects.
 - Decide whether contract / behavior verification (check #3) should produce a verdict artifact (e.g., `${planning_dir}/risk/<wu>-rebase-contract-verify.md`) for downstream auditing.
