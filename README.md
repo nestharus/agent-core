@@ -47,6 +47,8 @@ Reusable process docs.
 
 - [`workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md) — End-to-end delivery pipeline from trigger through merge, including RCA routing for bugs.
 
+- [`workflows/linter-bootstrap.md`](workflows/linter-bootstrap.md) - Identify A1 linter coverage gaps, research ecosystem lint rules, and propose a setup PR.
+
 - [`workflows/pr-review.md`](workflows/pr-review.md) — Post-CodeRabbit PR gates for tests, concern-splitting, justification, and commit hygiene.
 
 - [`workflows/project-bootstrap.md`](workflows/project-bootstrap.md) — Open-path, wrapper-emission, closed-path, and re-bootstrap workflow for project-specific operator wrappers.
