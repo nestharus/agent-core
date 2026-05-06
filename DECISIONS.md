@@ -186,3 +186,21 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 - Tests pass under R2 (`68 passed in 0.13s`); index regen idempotent.
 
 **Re-evaluation trigger.** Revisit this rewind pattern if subsequent WUs see Step 6c logs that ALSO lack consumption-evidence echo. If the failure recurs, propose updating either `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 6 step 6c or a shared agent-prompt convention to make the consumption-evidence echo a default contract for all Phase 6 code-writer dispatches, rather than re-stating it in every WU's per-WU prompt.
+
+## D-2026-05-06b - NES-222 / NES-219B workflow-process-auditor boundaries
+
+**Context.** NES-222 implements the NES-219B child WU from the NES-219 audit proposer framework split. The child lands `workflow-process-auditor` as a runtime procedure-adherence auditor for completed workflow runs, plus its routing row and the durable boundary record required by the parent NES-219 proposal.
+
+**Decision.** Accept divergence between the adjacent runtime-review operators with explicit boundaries. `workflow-reviewer` remains the narrow single-operator step-log reviewer; `workflow-process-auditor` audits multi-artifact workflow runs; step logs are supporting evidence in a broader runtime bundle.
+
+`process-tree-auditor` remains topology / expected-process authority for trace topology, expected-process manifests, child invocations, model mapping, and companion artifact verification. `workflow-process-auditor` consumes process-tree reports as evidence and does NOT emit a substitute `PASS | FAIL` topology verdict.
+
+**Anti-scope.** NES-222 does not modify `process-tree-auditor`, does not modify `workflow-reviewer`, does not add `audit.md`, does not wire implementation-pipeline entry modes, and does not regenerate workflow indexes. NES-219C / NES-223 owns audit sub-workflow composition; NES-219D owns implementation-pipeline entry modes and orchestrator wiring.
+
+**Justifying evidence.**
+
+- NES-222 proposal: `/home/nes/projects/ai/planning/nes-222-workflow-process-auditor/proposals/nes-222-NES-222.md`
+- NES-222 problem map: `/home/nes/projects/ai/planning/nes-222-workflow-process-auditor/research/nes-222-problem-map.md`
+- Parent NES-219 proposal: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/proposals/nes-219-audit-proposer-framework.md`
+
+**Re-evaluation trigger.** Revisit this boundary only if a later WU intentionally consolidates runtime review responsibilities, changes `process-tree-auditor` topology ownership, or changes `workflow-reviewer` from a narrow step-log reviewer into a multi-artifact workflow-run auditor.

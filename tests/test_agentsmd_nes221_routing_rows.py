@@ -55,12 +55,17 @@ def test_existing_agentsmd_structure_suite_remains_present():
         assert f"def {test_name}(" in structure_text
 
 
-def test_agentsmd_omits_sibling_auditor_and_future_workflow_entries():
-    """T20: AGENTS.md does not add sibling NES-222/NES-223/NES-224 routing entries."""
+def test_agentsmd_omits_future_audit_workflow_entries():
+    """T20: AGENTS.md does not add NES-223/NES-224 routing entries that have not landed yet.
+
+    The original guard also excluded `workflow-process-auditor`. That row is now in
+    scope because NES-222 ships it; the row's structural assertions live in
+    `tests/test_agentsmd_structure.py`. This test continues to guard against the
+    audit sub-workflow (NES-223) and pipeline entry-mode wiring (NES-224 / NES-219D)
+    that have not yet shipped.
+    """
     text = _agents_text()
 
-    assert not re.search(r"(?m)^- `workflow-process-auditor` - ", text)
-    assert "agents/workflow-process-auditor.md" not in text
     assert "workflows/audit.md" not in text
     assert "Audit sub-workflow" not in text
     assert "pipeline_entry_mode" not in text
