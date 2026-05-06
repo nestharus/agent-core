@@ -46,6 +46,48 @@ curl -u "${jira_account_email}:$JIRA_API_KEY" "${jira_url}/rest/api/3/..."
 
 If auth fails: check that `$JIRA_API_KEY` is in env (`env | grep JIRA_API_KEY`); the token rotates periodically. If rotated, the user regenerates at https://id.atlassian.com/manage-profile/security/api-tokens.
 
+## Error Handling
+
+For any Jira REST call (`read`, `comment`, `transition`, `create`, or `search`) that returns a 4xx response, surface the failure verbatim in `BLOCKED:` output before any higher-level diagnosis.
+
+Required envelope:
+
+```text
+BLOCKED: JIRA <METHOD> <PATH> returned HTTP <STATUS>
+Response body:
+<response body exactly as returned by Jira, preserved verbatim without truncation or rewriting>
+```
+
+The operator MUST NOT name a higher-level cause, diagnosis, or classification such as `lacks permission`, `rotated token`, or `account lacks access` unless a confirmatory probe was performed and the probe result supports that diagnosis. If no probe is performed, the `BLOCKED` output contains only the original failed request envelope.
+
+Confirmatory probes are optional diagnostics. The canonical auth probe is `GET /rest/api/3/myself`; project visibility may use a targeted probe such as `GET /rest/api/3/project/<key>`. When a probe is performed, include both the original failed request envelope and the probe envelope with method, path, status, and response body or a short status-only line.
+
+Wrong shape:
+
+```text
+BLOCKED: azure_email account (aaron.solomon@scint.ai) lacks permission to create issues in INFA project
+```
+
+Right shape:
+
+```text
+BLOCKED: JIRA POST /rest/api/3/issue returned HTTP 400
+Response body:
+{"errorMessages":[],"errors":{"parentId":"Given parent work item does not belong to appropriate hierarchy"}}
+```
+
+Right shape with probe:
+
+```text
+BLOCKED: JIRA POST /rest/api/3/issue returned HTTP 401
+Response body:
+{"errorMessages":["Unauthorized"],"errors":{}}
+
+Confirmatory probe: GET /rest/api/3/myself returned HTTP 401
+Probe response body:
+{"errorMessages":["Unauthorized"],"errors":{}}
+```
+
 ## Procedure: Read
 
 ```bash
@@ -168,7 +210,7 @@ curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
   "${jira_url}/rest/api/3/issue"
 ```
 
-A successful POST returns `{"id":"...","key":"${jira_project}-NNN","self":"..."}`. Print the new key + browse URL `${jira_url}/browse/${jira_project}-NNN` (the output contract). Surface BLOCKED on 400/403/404; surface NEEDS_INPUT only when the project's `Create` screen requires an unspecified field that the caller did not supply.
+A successful POST returns `{"id":"...","key":"${jira_project}-NNN","self":"..."}`. Print the new key + browse URL `${jira_url}/browse/${jira_project}-NNN` (the output contract). For any Jira REST 4xx response, follow `## Error Handling` for the `BLOCKED` envelope shape; surface `NEEDS_INPUT` only when the project's `Create` screen requires an unspecified field that the caller did not supply.
 
 **ADF description from a markdown brief.** When the caller passes a markdown brief path instead of ADF JSON, render the brief to ADF: H1/H2/H3 → `heading` nodes (level 1/2/3); paragraphs → `paragraph`; bullet/numbered → `bulletList`/`orderedList`; fenced code → `codeBlock` with the language attr; inline backticks → `code` mark; `[text](url)` → `text` with `link` mark. Preserve structural section headings verbatim so the orchestrator's read-back contract validation passes.
 
@@ -197,10 +239,13 @@ For `transition`: print before-status → after-status.
 For `search`: print one line per result (`KEY  status  summary`).
 For `create`: print the new key + browse URL.
 
+For any Jira REST 4xx response, the failure output MUST follow the envelope defined in `## Error Handling`.
+
 ## Stop Conditions
 
-- Return `BLOCKED` if `$JIRA_API_KEY` is unset or returns 401 (likely rotated; ask user to refresh)
-- Return `BLOCKED` if the issue key doesn't resolve (typo or moved project)
+- Return `BLOCKED` if `$JIRA_API_KEY` is unset before making a Jira request.
+- Return `BLOCKED` for Jira HTTP 401 or any Jira REST 4xx response using the `## Error Handling` envelope.
+- Return `BLOCKED` if an issue key lookup returns HTTP 404 or another Jira 4xx response, using the `## Error Handling` envelope.
 - Return `NEEDS_INPUT` if a transition request would hit a workflow guard (assignee required, comment required, etc.) — surface the blocker
 
 ## Project Reference

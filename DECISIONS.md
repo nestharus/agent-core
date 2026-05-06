@@ -204,3 +204,23 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 - Parent NES-219 proposal: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/proposals/nes-219-audit-proposer-framework.md`
 
 **Re-evaluation trigger.** Revisit this boundary only if a later WU intentionally consolidates runtime review responsibilities, changes `process-tree-auditor` topology ownership, or changes `workflow-reviewer` from a narrow step-log reviewer into a multi-artifact workflow-run auditor.
+
+## D-2026-05-06c — NES-228 Phase 6c Tier-1 rewinds for log-evidence visibility
+
+**WU**: NES-228. **Phase**: 6c (code writer). **Decision**: `Tier-1 rewind ×2 to satisfy process-tree audit #2 invariant 4 (Step 6c log echoes Step 6b output paths)`.
+
+**Context.** Phase 6c's first dispatch (UUID not retained) and second dispatch (UUID `3f962136-5134-4675-ad6f-de95322a69f5`) both produced correct edits to `~/ai/agents/jira-operator.md` that made all 17 Phase 6b contract tests pass. However, neither agent included the consumed-input echo block in its final assistant response — the first attempt omitted it entirely; the second attempt ran a shell `echo` that did not appear in the harness-captured `tee` log (the agents CLI logs the assistant's final response, not intermediate tool stdout). Process-tree audit #2 invariant 4 explicitly requires the Step 6c log to echo `step6b-output-index.md` as evidence of consumption.
+
+**Decision.** Per the orchestrator's autonomous-on-destructive-git-ops policy and Tier-1 rewind rule, run `git checkout -- agents/jira-operator.md` to discard the prior attempt's product changes and re-dispatch Phase 6c with stricter prompt wording requiring the consumed-input lines in the agent's final response message text (not via shell echo). Step 6b was never rewound — its output index, residual artifact, and pytest file are unchanged across all three Step 6c attempts. The third Step 6c invocation (UUID `1308f997-d5ec-404e-8866-b2dd56e57b66`) produced both the correct operator edits AND the required echo block in its log; process-tree audit #2 returned `PASS` against this final tree.
+
+**Anti-scope.** This rewind does NOT change the Step 6b output index, the contract, the proposal, or the audit-history's Round 1–3 records (those settled on Phase 4 R3 LOW). It does not change the test file produced in Phase 6b. It does not modify the Phase 6c prompt's substantive contract requirements — only the echo-block formatting guidance was tightened.
+
+**Justifying evidence.**
+
+- Process-tree audit #2 report: `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/audits/phase6-process-tree-audit.report.md` (verdict `PASS`).
+- Final Step 6c log (with echo block): `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/logs/nes-228-phase-6c.log` lines 16-21.
+- Phase 6b output index: `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/phase6/step6b-output-index.md` (unchanged across all three Step 6c attempts).
+- Synthesized tree: `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/audits/phase6-synthesized-tree.json`.
+- Expected-process manifest with Tier-1 rewind context: `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/audits/phase6-expected-process.md` § Tier-1 rewind context.
+
+**Re-evaluation trigger.** Same as the NES-138 rewind entry above — if the Step-6c-log-echo friction recurs, canonicalize the echo-block requirement at the orchestrator/operator level rather than per-WU.
