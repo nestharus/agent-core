@@ -169,6 +169,34 @@
         ]
       }
     },
+    "project-bootstrap": {
+      "path": "workflows/project-bootstrap.md",
+      "workflow": {
+        "id": "project-bootstrap"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs the open path against shared operators before trusting a project-specific wrapper",
+          "emits or refreshes thin project-local wrappers only when stable project facts justify them",
+          "uses qualitative stale-wrapper signals to choose closed path or re-bootstrap"
+        ],
+        "inputs": [
+          "target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger",
+          "evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting"
+        ],
+        "non_goals": [
+          "does not redefine bootstrap-pattern lifecycle vocabulary",
+          "does not implement category-specific linter, ticket, code-quality, alias, or routing bootstraps",
+          "does not migrate existing project-local wrappers"
+        ],
+        "orchestrator": "Work Manager or root coordinator",
+        "outputs": [
+          "project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions",
+          "optional project-local wrapper and optional project AGENTS routing/policy update",
+          "NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct"
+        ]
+      }
+    },
     "research": {
       "path": "workflows/research.md",
       "workflow": {
