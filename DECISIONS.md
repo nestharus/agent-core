@@ -224,3 +224,23 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 - Expected-process manifest with Tier-1 rewind context: `/home/nes/projects/ai/planning/nes-228-jira-operator-surface-http-error/.scratch/audits/phase6-expected-process.md` § Tier-1 rewind context.
 
 **Re-evaluation trigger.** Same as the NES-138 rewind entry above — if the Step-6c-log-echo friction recurs, canonicalize the echo-block requirement at the orchestrator/operator level rather than per-WU.
+
+## D-2026-05-06d — NES-234 Phase 2.5.1 scope expansion to fix stale operator-name references
+
+**WU**: NES-234. **Phase**: 2.5.1 (coverage inventory). **Decision**: `Expand scope to fix four stale operator-name references in alignment-cycle-orchestrator.md as part of the Phase 6c orchestrator-extension edit`.
+
+**Context.** Phase 2.5.1 (coverage inventory) surfaced that `~/ai/agents/alignment-cycle-orchestrator.md` references operator files that do not exist: `problem-expansion.md` (lines 24, 75) and `philosophy-expansion.md` (lines 25, 135). The actual files in `~/ai/agents/` are `problem-expansion-integrate.md` and `philosophy-expansion-integrate.md`. The workflow doc `~/ai/workflows/alignment-cycle.md` and `~/ai/AGENTS.md` already reference the `*-integrate.md` names; the orchestrator doc is the only stale source. NES-234 will edit this same file to add the empty-state bootstrap prelude.
+
+**Decision.** Per the bug-disposition contract in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 2.5.1 step 4, the user (via root-orchestrator-question artifact `q-ddbaaa93-ab20-454d-9add-e776903410e4`) selected option A: expand scope to fix the four stale references in the same Phase 6c orchestrator-extension edit. The extension touches the same four-line region (Stage 1b/2b dispatch lines + the dispatch-targets table at the top of the file), so the typo fix sits next to the new empty-state prelude rather than in a separate edit.
+
+**Anti-scope.** This expansion does NOT change the Stage 1/1b/2/2b sub-agent files themselves (`problem-expansion-integrate.md`, `philosophy-expansion-integrate.md`, etc. are untouched). It does NOT change `~/ai/workflows/alignment-cycle.md` or `~/ai/AGENTS.md` (already correct). It is a name-substitution-only change in the orchestrator doc. No separate tracker ticket is filed because the fix lands in this WU.
+
+**Justifying evidence.**
+
+- Question artifact: `/home/nes/projects/ai/planning/nes-234-bootstrap-operators/.scratch/questions/q-ddbaaa93-ab20-454d-9add-e776903410e4.question.json`.
+- Answer artifact: `/home/nes/projects/ai/planning/nes-234-bootstrap-operators/.scratch/questions/q-ddbaaa93-ab20-454d-9add-e776903410e4.answer.json`.
+- Coverage inventory: `/home/nes/projects/ai/planning/nes-234-bootstrap-operators/research/nes-234-coverage-inventory.md` § 5 Bug Discovery.
+- Stale references confirmed via `grep -n 'problem-expansion\|philosophy-expansion' /home/nes/ai/agents/alignment-cycle-orchestrator.md` → lines 24, 25, 75, 135.
+- Actual files confirmed via `ls /home/nes/ai/agents/ | grep -E '(problem|philosophy)-(expansion)'` → only `*-classify.md` and `*-integrate.md` exist.
+
+**Re-evaluation trigger.** Revisit this scope expansion only if Phase 4 risk gates flag the typo fix as out-of-scope (which would require splitting the WU). Otherwise the fix lands in Phase 6c alongside the bootstrap prelude.

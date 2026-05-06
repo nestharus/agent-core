@@ -21,8 +21,10 @@ Run the alignment review process against the current proposal, expand the proble
 | `proposal.md` | Current proposal | Proposer (user-driven) |
 | `problem-alignment.md` | Stage 1 agent instructions | Problem expansion agent (axis table updated when new axes added) |
 | `philosophy-alignment.md` | Stage 2 agent instructions | This orchestrator (read-only) |
-| `problem-expansion.md` | Problem expansion agent instructions | This orchestrator (read-only) |
-| `philosophy-expansion.md` | Philosophy expansion agent instructions | This orchestrator (read-only) |
+| `problem-bootstrap.md` | Empty-state problem seed operator instructions | This orchestrator (read-only) |
+| `philosophy-bootstrap.md` | Empty-state philosophy seed operator instructions | This orchestrator (read-only) |
+| `problem-expansion-integrate.md` | Problem expansion integration agent instructions | This orchestrator (read-only) |
+| `philosophy-expansion-integrate.md` | Philosophy expansion integration agent instructions | This orchestrator (read-only) |
 | `proposer.md` | Proposer agent instructions | This orchestrator (read-only) |
 | `problem-review.md` | Stage 1 output — alignment findings | Written each run by Stage 1 |
 | `problem-surfaces.md` | Stage 1 output — new problem surfaces | Written by Stage 1 (only if surfaces found) |
@@ -33,6 +35,16 @@ Run the alignment review process against the current proposal, expand the proble
 ---
 
 ## Process
+
+### Empty-state Prelude
+
+Before Stage 1, check whether the project's `problem.md` and `philosophy.md` seed artifacts exist. This prelude is additive: after both seed documents exist, continue to the existing Stage 1 / 1b / 2 / 2b dispatch logic unchanged.
+
+1. If `problem.md` does not exist, dispatch `problem-bootstrap.md` (model: `gpt-high`) with the supplied `brief_path`, `project_root`, target `problem_path`, target `axis_table_path`, and `scratch_dir`. If `problem-bootstrap` returns `BLOCKED:<reason>` or `NEEDS_INPUT:<absolute_artifact_path>`, surface that same marker to the root and halt before philosophy bootstrap.
+2. After `problem-bootstrap` completes, verify that `problem_path` now exists and is non-empty. If validation fails, surface `BLOCKED:<reason>` and halt.
+3. If `philosophy.md` does not exist, dispatch `philosophy-bootstrap.md` (model: `gpt-high`) with the supplied `brief_path`, the now-present `problem_path`, target `philosophy_path`, and `scratch_dir`. If `philosophy-bootstrap` returns `BLOCKED:<reason>` or `NEEDS_INPUT:<absolute_artifact_path>`, surface that same marker to the root and halt.
+4. After `philosophy-bootstrap` completes, verify that `philosophy_path` now exists and is non-empty. If validation fails, surface `BLOCKED:<reason>` and halt.
+5. Record whether the empty-state prelude ran or was skipped in the run report, then proceed to Stage 1.
 
 ### Stage 1: Problem Alignment Review
 
@@ -72,7 +84,7 @@ Check whether `problem-classification.md` contains at least one `new-axis` or `a
 
 If every verdict is `discard`, skip the integrate sub-stage — there is nothing to synthesize.
 
-Otherwise, run a sub-agent with the instructions in `problem-expansion.md` (model: `gpt-high`).
+Otherwise, run a sub-agent with the instructions in `problem-expansion-integrate.md` (model: `gpt-high`).
 
 Provide the agent with:
 - `problem-classification.md` (authoritative verdicts; the integrator must not re-judge)
@@ -132,7 +144,7 @@ Skip if `philosophy-decisions.md` was written by Stage 2b-classify (the user-inp
 
 Skip if `philosophy-classification.md` contains no A and no B verdicts (every concern requires user input or every concern was already absorbed elsewhere).
 
-Otherwise, run a sub-agent with the instructions in `philosophy-expansion.md` (model: `gpt-high`).
+Otherwise, run a sub-agent with the instructions in `philosophy-expansion-integrate.md` (model: `gpt-high`).
 
 Provide the agent with:
 - `philosophy-classification.md` (authoritative verdicts; the integrator must not re-judge)
@@ -169,6 +181,7 @@ Report what the expansion agents did:
 
 - **Problem definition expanded:** yes/no. If yes, list new axes added and existing axes expanded.
 - **Philosophy expanded:** yes/no. If yes, list principles clarified, new principles added, and whether `philosophy-decisions.md` was produced.
+- **Bootstrap prelude:** ran/skipped. If ran, list whether `problem-bootstrap.md` and/or `philosophy-bootstrap.md` produced seed artifacts.
 - **User input required:** yes/no. If `philosophy-decisions.md` exists, the user must resolve the decisions before the next cycle can produce a clean run.
 
 ### Summary

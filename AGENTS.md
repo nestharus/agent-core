@@ -131,6 +131,12 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 
 The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `proposal.md` review loop. The orchestrator dispatches Stage 1 / 1b-classify / 1b-integrate / 2 / 2b-classify / 2b-integrate; the proposer is user-driven (the orchestrator does NOT run the proposer).
 
+- `problem-bootstrap` - Create an initial product `problem.md` and standalone axis reference table from a fresh brief when the alignment cycle starts from an empty product-strategy state.
+  File: [~/ai/agents/problem-bootstrap.md](agents/problem-bootstrap.md) | Inputs: `brief_path`, `project_root`, `problem_path`, `axis_table_path`, `scratch_dir` | Model: `gpt-high`
+
+- `philosophy-bootstrap` - Create an initial product `philosophy.md` from a fresh brief plus an existing readable `problem.md` when the alignment cycle lacks philosophy seed content.
+  File: [~/ai/agents/philosophy-bootstrap.md](agents/philosophy-bootstrap.md) | Inputs: `brief_path`, `problem_path`, `philosophy_path`, `scratch_dir` | Model: `gpt-high`
+
 - `alignment-cycle-orchestrator` - Run the proposal alignment review cycle: Stage 1 problem-alignment, Stage 1b-classify + 1b-integrate (problem expansion), Stage 2 philosophy-alignment, Stage 2b-classify + 2b-integrate (philosophy expansion). Halts at 2b-classify if `philosophy-decisions.md` is written (user-input gate). Produces a run report.
   File: [~/ai/agents/alignment-cycle-orchestrator.md](agents/alignment-cycle-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, axis tables, scratch dir | Model: `claude-opus`
 

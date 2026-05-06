@@ -45,6 +45,10 @@ This is **not** the proposer. The user (or a separate proposer dispatch) updates
 
 ## Phase Map
 
+### Empty-state prelude
+
+Before Stage 1, the orchestrator may run an empty-state prelude when seed documents are missing. If `problem.md` is absent, it dispatches [`problem-bootstrap`](../agents/problem-bootstrap.md) (`gpt-high`) with `brief_path`, `problem_path`, `axis_table_path`, and `scratch_dir`; if `philosophy.md` is absent after `problem.md` exists, it dispatches [`philosophy-bootstrap`](../agents/philosophy-bootstrap.md) (`gpt-high`) with `brief_path`, `problem_path`, `philosophy_path`, and `scratch_dir`. Bootstrap `BLOCKED` or `NEEDS_INPUT` markers halt the cycle; otherwise the existing Stage 1 / 1b / 2 / 2b topology proceeds unchanged.
+
 ```
 Stage 1                — problem-alignment       (claude-opus)  → problem-review.md (always), problem-surfaces.md (conditional)
   Stage 1b-classify    — problem-expansion-classify  (claude-opus)  → problem-classification.md
@@ -128,6 +132,8 @@ If a phase is skipped beyond the conditional-skip rules, narrowed, or accepted w
 ## Adjacent references
 
 - [`~/ai/agents/alignment-cycle-orchestrator.md`](../agents/alignment-cycle-orchestrator.md)
+- [`~/ai/agents/problem-bootstrap.md`](../agents/problem-bootstrap.md)
+- [`~/ai/agents/philosophy-bootstrap.md`](../agents/philosophy-bootstrap.md)
 - [`~/ai/agents/problem-alignment.md`](../agents/problem-alignment.md)
 - [`~/ai/agents/problem-expansion-classify.md`](../agents/problem-expansion-classify.md)
 - [`~/ai/agents/problem-expansion-integrate.md`](../agents/problem-expansion-integrate.md)
