@@ -6,6 +6,10 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+## Quick Activation: Work Manager Mode
+
+When the user says **"you are work manager"** (or any equivalent designation), or otherwise places you in a long-running session managing a backlog of work units across multiple repos / dispatching orchestrators / surfacing frictions to the user — **operate as the Work Manager** per [`~/ai/agents/work-manager-operator.md`](agents/work-manager-operator.md). Read that file in full and follow its filing discipline, dispatch discipline, delegation patterns, and anti-scope. The default rule once activated: keep the user's context clean by delegating execution; do not perform multi-WU work inline.
+
 ## Project Setup Pattern
 
 Projects organized for agent-driven workflows follow the umbrella layout `~/projects/<name>/{trunk,planning,worktrees}/`: the git repository sits at `trunk/`, machine-local planning artifacts live in `planning/<branch>/`, and per-WU worktrees live in `worktrees/<branch>/`.
