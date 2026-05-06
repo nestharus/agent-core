@@ -2,6 +2,14 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-06 — NES-244 Tier-1 rewind for Step 6c log evidence
+
+**Context.** Phase 6 process-tree audit returned `FAIL:1 violations`. The single blocking violation: Step 6c's `agents` final-result message did not echo the Step 6b output-index path or test path as pre-product-code-change read evidence. Step 6b and Step 6c invocation UUIDs were distinct (`b0aea170-d567-41bc-8209-089582a337da` vs `309b15e5-17fa-4313-8021-ad28beb81142`), timing order was correct, all output artifacts existed on disk, and the structural test suite passed 23/23 — only the log-side consumption evidence was missing per `~/ai/workflows/implementation-pipeline.md` Step 6c rule that "Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes."
+
+**Decision.** Tier-1 rewind. Reset `nes-244-release-cut-operator` to its parent commit `1e35ca4` (master tip), re-dispatch Step 6b (since the test file was in the same rewound commit) and Step 6c with a corrected prompt that explicitly requires the agent's final-result message to begin with a path manifest of files read before product-code changes. Re-run the Phase 6 process-tree audit before advancing to Phase 7.
+
+**Evidence.** Audit report at `/home/nes/projects/ai/planning/nes-244-release-cut-operator/.scratch/process-tree-audit-2/PROCESS_TREE_AUDIT.report.md`. Rewound commit was `5ae82fd`.
+
 ## D-2026-05-05 — NES-219 Phase 2.5 defer-to-prototype gate disposition
 
 **Context.** Phase 2.5 risk profile for NES-219 (`audit + proposer framework`) rolled up `HIGH` with `defer-signals-fired=2`:
