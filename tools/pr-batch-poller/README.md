@@ -1,55 +1,142 @@
-# `pr-batch-poller` — batched GitHub PR status query
+# `pr-batch-poller` - batched GitHub PR status query
 
-**Status: skeleton. Not yet implemented.**
+Status: implemented.
 
 ## One concern
 
-Given a list of GitHub PR identifiers (`<owner>/<repo>#<num>`), return the merged status, last-comment timestamp, and last-event timestamp for **all of them** in a small number of API calls (ideally one). The caller can then decide which PRs need action, without paying the cost of one polling call per PR.
+Given a list of GitHub PR identifiers, return merged status, last conversation-comment timestamp, and last-event timestamp for all of them in a small number of GitHub GraphQL calls. The caller decides what to do with the rows.
+
+## CLI grammar
+
+```text
+python3 tools/pr-batch-poller --prs <owner>/<repo>#<num>[,<owner>/<repo>#<num>...] [--since <iso8601>] [--format jsonl|json|table]
+python3 tools/pr-batch-poller --prs-file <path>                                      [--since <iso8601>] [--format jsonl|json|table]
+```
+
+`--prs` and `--prs-file` are mutually exclusive, and exactly one is required. `--format` defaults to `jsonl`.
+
+## PR identifier grammar and input rules
+
+Identifiers use this grammar:
+
+```text
+^(?P<owner>[A-Za-z0-9][A-Za-z0-9-]*)/(?P<repo>[A-Za-z0-9._-]+)#(?P<number>[1-9][0-9]*)$
+```
+
+Owner and repository spelling is case-preserving. The PR number is a positive integer with no leading zeros: `acme/widget#1` is accepted; `acme/widget#0` and `acme/widget#001` are rejected as invalid input.
+
+`--prs` splits on commas, trims whitespace around each token, and rejects empty tokens. `--prs-file` strips each line, ignores blank lines, and has no comment syntax because `#` is part of the PR identifier. Duplicate identifiers are removed after canonicalization while preserving first-seen order.
+
+## `--since` semantics
+
+`--since` accepts only offset-aware ISO-8601 timestamps. `Z` is accepted as UTC. Naive timestamps are rejected before GitHub is called.
+
+Filtering is client-side. The tool still fetches each requested PR by alias, then suppresses unchanged success rows whose `last_event_at <= since`. Error rows are always retained. Conversation-comment counts use fetched `PullRequest.comments.nodes[].updatedAt` values greater than `since`.
+
+## Output formats and format stability
+
+`jsonl` emits one JSON object per line with a trailing newline. `json` emits one JSON array containing the same row objects. These two formats are machine-readable contracts. `table` is human-only and does not promise fixed spacing or columns beyond showing PR identity and status.
+
+## Schema version rule
+
+Every row includes `schema_version: 1`. Future incompatible changes must increment the version. Additive field changes must be documented with the version they entered.
+
+## Success row schema
+
+A success row has `row_type: "pr_status"` and `error: null`. All fields are present:
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | Current integer schema version, `1`. |
+| `row_type` | `"pr_status"`. |
+| `pr` | Canonical `<owner>/<repo>#<num>`. |
+| `owner` | Parsed owner. |
+| `repo` | Parsed repository. |
+| `number` | Positive PR number. |
+| `pr_url` | GitHub PR URL. |
+| `state` | GitHub PR state. |
+| `merged` | GitHub merged flag. |
+| `merged_at` | Merge timestamp, or null. |
+| `merge_sha` | Merge commit OID, or null. |
+| `head_sha` | PR head OID, or null. |
+| `head_ref_name` | PR head branch name, or null. |
+| `base_ref_name` | Base branch name, or null. |
+| `base_ref_oid` | Base ref OID from GitHub, or null. |
+| `updated_at` | GitHub `pullRequest.updatedAt`. |
+| `last_event_at` | Same as `updated_at` for this tool. |
+| `last_comment_at` | Latest fetched conversation-comment `updatedAt`, or null. |
+| `new_comments_since` | Null when `--since` is omitted; otherwise a count of fetched conversation comments newer than `since`. |
+| `error` | Null for success rows. |
+
+Null means unavailable or not applicable. A missing field is a schema violation.
+
+## Error row schema
+
+An error row has `row_type: "error"` and the same identity fields: `schema_version`, `pr`, `owner`, `repo`, and `number`.
+
+All success status fields are also present. They are null when no trusted GitHub value exists. For `comment_window_exceeded`, trusted PR status fields may be populated, while `new_comments_since` remains null because the exact count is not trustworthy.
+
+`error` is an object with `code` and `message` strings.
+
+## Error codes
+
+- `repo_not_found_or_forbidden` - the repository alias is null in the GraphQL response.
+- `pr_not_found_or_forbidden` - the PR alias is null under a present repository.
+- `graphql_partial_error` - a GraphQL error path maps to one requested PR alias.
+- `comment_window_exceeded` - `--since` was supplied, the fetched 100 conversation comments are all newer than `since`, and GitHub reports another comments page.
+
+Unmapped GraphQL errors are fatal because the batch cannot be trusted.
+
+## Chunk size and GraphQL batching strategy
+
+The default chunk size is 50 PRs. Each chunk builds deterministic aliases around:
+
+```graphql
+repository(owner: "...", name: "...") {
+  pullRequest(number: ...) {
+    number
+    url
+    state
+    merged
+    mergedAt
+    mergeCommit { oid }
+    headRefName
+    headRefOid
+    baseRefName
+    baseRefOid
+    updatedAt
+    comments(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes { updatedAt }
+      pageInfo { hasNextPage }
+    }
+  }
+}
+```
+
+The tool calls `gh api graphql -f query=<query>` through one subprocess boundary. Chunking happens at the GraphQL request boundary, not by making one request per PR.
+
+## Resumer-handoff shape
+
+A merged success row supplies the PR-derived fields needed by the wake composition layer: `pr_url`, `merge_sha`, `head_sha`, `head_ref_name` as branch name, and `merged_at`.
+
+The composition layer joins those values to session state and supplies `ticket_id`, `session_manifest_path`, and `pre_merge_main_sha`. `base_ref_oid` is not `pre_merge_main_sha`.
+
+## Exit codes and stderr/stdout contract
+
+- `0` - usable batch response; per-PR failures, if any, are emitted as error rows.
+- `1` - fatal runtime or query failure. No data rows are emitted.
+- `2` - fatal CLI or input error. No data rows are emitted.
+
+Fatal diagnostics are concise and written to stderr as `pr-batch-poller: <message>`. Machine rows are written only to stdout.
 
 ## Anti-scope
 
-- The poller does NOT decide what to do with the results. It returns data.
-- The poller does NOT schedule itself. (`scheduler` does that.)
-- The poller does NOT wake WU sessions. (`wu-session-resumer` does that.)
-- The poller does NOT mutate PR state (no merging, no commenting, no labeling). It is read-only.
-- The poller does NOT subscribe to webhooks. (Webhook-driven wakeup is a separate possibility, not a degradation of this tool.)
+Not webhook-driven; not session-aware; not the merge-detection wake mechanism.
 
-## Inputs (proposed)
-
-- `--prs <list>` — comma-separated `<owner>/<repo>#<num>`. Or `--prs-file <path>` reading newline-separated entries.
-- `--since <iso8601>` — only return events newer than this timestamp. Used to skip "no change since last poll" cases without re-emitting the full state.
-- `--format <json|jsonl|table>` — output format.
-
-## Outputs (proposed shape, JSONL)
-
-```json
-{"pr": "nestharus/agent-runner#123", "merged": true,  "merged_at": "2026-05-04T12:34:56Z", "last_event_at": "...", "new_comments_since": 0}
-{"pr": "nestharus/agent-runner#124", "merged": false, "merged_at": null,                    "last_event_at": "...", "new_comments_since": 3}
-{"pr": "nestharus/oulipoly-x#9",     "merged": false, "merged_at": null,                    "last_event_at": "...", "new_comments_since": 0}
-```
-
-## Batching strategy
-
-GitHub's REST API does not have a "GET status of N PRs" endpoint. The batching is done via the GraphQL API: a single GraphQL query can fetch up to ~100 PRs in one request via aliased `repository(...) { pullRequest(number: ...) { ... } }` blocks or via a `search()` query with the issue list.
-
-Implementation plan:
-
-1. Group PRs by owner/repo. (One repo → one node block in the query.)
-2. Build a single GraphQL query with one aliased PR field per PR.
-3. Execute via `gh api graphql -f query=…` (no extra credentials beyond the user's gh token).
-4. Parse the response and emit one JSONL line per PR.
-
-A single query handles 50+ PRs comfortably. If the input exceeds GitHub's per-query limits, the poller chunks at the GraphQL boundary, not at the per-PR boundary.
+The tool does not schedule itself, decide actions, mutate PR state, discover WU sessions, read session manifests, or call the resumer.
 
 ## Used by
 
-- (planned) `~/ai/agents/wu-session-resumer.md` — given a list of in-flight WU sessions' PR URLs, the resumer asks the poller for batched status, then wakes only the sessions whose PRs changed.
-- Other workflows that need bulk PR status (e.g. release coordinators, multi-PR campaigns) are obvious future consumers.
-
-## TODO
-
-- Implement.
-- Decide whether to use `gh api graphql` or directly hit the GraphQL endpoint with the user's token.
-- Define a stable JSONL schema and version it.
-- Decide error semantics: one PR returns 404 — does the whole batch fail or does that PR get a `{"pr":..., "error":"not_found"}` line?
-- Decide if `--since` filtering happens server-side (via a `updated_at >= since` filter on the GraphQL search) or client-side (request all, filter locally).
+- `scheduler` can run the poller on a cadence.
+- Wake composition can inspect JSONL or JSON rows and decide which merged PRs need follow-up.
+- `wu-session-resumer` receives one already-known merge event from that composition layer; it does not poll.

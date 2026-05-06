@@ -15,7 +15,7 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 ## Current tools
 
 - `scheduler/` — generic scheduled-task primitive. Bind a schedule (cron-style, interval, one-shot) to a script invocation, an agent dispatch, or a workflow run. **Status: skeleton only; see `scheduler/README.md`.**
-- `pr-batch-poller/` — single-call GitHub PR status query for N PRs at once. Returns merged-status, new-comments, last-event-timestamp per PR. Used by the `wu-session-resumer` agent (per `~/ai/conventions/wu-session-lifecycle.md` Stage 6) to wake sessions in batches rather than one-poll-per-PR. **Status: skeleton only; see `pr-batch-poller/README.md`.**
+- `pr-batch-poller/` — single-call GitHub PR status query for N PRs at once. Returns merged-status, new-comments, last-event-timestamp per PR. Used by the `wu-session-resumer` agent (per `~/ai/conventions/wu-session-lifecycle.md` Stage 6) to wake sessions in batches rather than one-poll-per-PR. **Status: implemented; see `pr-batch-poller/README.md`.**
 - `workflow_index/` — deterministic generator for `workflows/index.json` from YAML frontmatter in `workflows/*.md`. **Status: implemented; see `workflow_index/README.md`.**
 
 ## Composition pattern
