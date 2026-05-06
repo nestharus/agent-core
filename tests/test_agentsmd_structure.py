@@ -13,6 +13,19 @@ WORKFLOW_PROCESS_AUDITOR_INPUTS = (
     "`process_tree_report_path?`, `expected_process_path?`, "
     "`audit_history_path?`, `report_path?`, `mode?`"
 )
+WU_SESSION_RESUMER = "wu-session-resumer"
+WU_SESSION_RESUMER_LINK = (
+    "[~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md)"
+)
+WU_SESSION_RESUMER_INPUTS = (
+    "pr_url",
+    "merge_sha",
+    "head_sha",
+    "pre_merge_main_sha",
+    "branch_name",
+    "ticket_id",
+    "session_manifest_path",
+)
 
 
 def _agents_text():
@@ -232,3 +245,26 @@ def test_workflow_process_auditor_routing_row_boundary_phrases(repo_root):
 
     assert "consumes process-tree reports as evidence" in row
     assert "does not replace" in row
+
+
+# NES-168 / coverage-gap MEDIUM / proposal Test-Intent T12.
+def test_wu_session_resumer_routing_row_present(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WU_SESSION_RESUMER)
+
+    assert row.startswith(f"- `{WU_SESSION_RESUMER}` - ")
+
+
+# NES-168 / coverage-gap MEDIUM / proposal Test-Intent T12.
+def test_wu_session_resumer_routing_row_links_operator_file(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WU_SESSION_RESUMER)
+
+    assert f"File: {WU_SESSION_RESUMER_LINK}" in row
+
+
+# NES-168 / behavioral-ambiguity MEDIUM / proposal Test-Intent T13.
+def test_wu_session_resumer_routing_row_inputs_and_model(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WU_SESSION_RESUMER)
+
+    assert re.search(r"\|\s+Model:\s+`?gpt-high`?", row)
+    for input_name in WU_SESSION_RESUMER_INPUTS:
+        assert f"`{input_name}`" in row

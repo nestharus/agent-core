@@ -124,6 +124,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. The only human gates surfaced by this orchestrator are (1) Phase 2.5 problem-map review and (2) NEEDS_INPUT new-value questions.
   File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?` | Model: `claude-opus`
 
+- `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
+  File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
+
 ### Strategic planning / proposal alignment cycle
 
 The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `proposal.md` review loop. The orchestrator dispatches Stage 1 / 1b-classify / 1b-integrate / 2 / 2b-classify / 2b-integrate; the proposer is user-driven (the orchestrator does NOT run the proposer).
