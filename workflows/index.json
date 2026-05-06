@@ -148,12 +148,14 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases",
+          "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
           "uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant",
           "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
         ],
         "inputs": [
           "ticket id and branch, worktree, scratch, and planning paths",
-          "non-empty ticket description from the configured Jira or Linear ticket system"
+          "non-empty ticket description from the configured Jira or Linear ticket system",
+          "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
         ],
         "non_goals": [
           "does not use git-resident ticket files as the source of truth",

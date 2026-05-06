@@ -6,8 +6,10 @@ workflow_dispatch_contract:
   inputs:
     - "ticket id and branch, worktree, scratch, and planning paths"
     - "non-empty ticket description from the configured Jira or Linear ticket system"
+    - "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
   expectations:
     - "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases"
+    - "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it"
     - "uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant"
     - "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
   outputs:
@@ -75,6 +77,52 @@ Optional phases:
 
 Core path:
 - `Phase 2.5 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10`
+
+## Entry Modes
+
+Entry modes select how audit evidence enters the implementation pipeline. They do not change the phase ownership rules, do not add a new operator, and do not skip phases implicitly.
+
+### `normal` (default)
+
+`normal` is the default when `pipeline_entry_mode` is absent or explicitly `normal`. The orchestrator runs the existing Phase 0 ticket/worktree/bootstrap route and then continues through Phase 2.5, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7, Phase 8, Phase 9, and Final/closure as before. It does not dispatch `~/ai/workflows/audit.md`, consume an audit bundle, import review findings, or switch modes based on stray fields.
+
+Absent or `normal` mode rejects non-empty audit-only fields as `BLOCKED:entry-mode-input-conflict`. Audit-only fields include `audit_workflow_path`, `audit_target_type`, `audit_target_paths`, `audit_target_manifest`, `audit_target_ref`, `audit_report_bundle_path`, `existing_review_bundle_path`, `existing_review_bundle_schema`, `reviewed_target_paths`, `reviewed_target_ref`, `current_target_ref`, `review_staleness_policy`, `review_staleness_fallback`, and `proposer_fix_scope`. `audit_history_path` is not pollution because it is normal loop memory.
+
+### `review_first`
+
+`review_first` treats the audit bundle as evidence and not a substitute for implementation-pipeline research. It runs after Phase 0 bootstrap and before Phase 2.5 prompt composition. Phase 0 still initializes the ticket render, worktree, `${scratch_dir}`, `${planning_dir}`, and core conventions first. The orchestrator then dispatches `~/ai/workflows/audit.md` against the declared target identity and writes prompts/logs under `${scratch_dir}/audit/${audit_slug}/` and the durable bundle under `${planning_dir}/audit/${audit_slug}/`.
+
+The durable bundle must contain `dispatch-manifest.md`, `aggregate-audit.md`, `findings.json`, `findings.md`, and every per-auditor report required by the manifest. Phase 2.5 consumes that bundle as evidence and not a substitute for its own required artifacts. Phase 2.5 still produces all seven artifacts: problem-map, coverage, lifecycle, entrypoints, duplicates, cross-language, and risk-profile.
+
+Immediately after the audit fanout returns and before Phase 2.5 or Phase 3 consumes the aggregate, the orchestrator dispatches `process-tree-auditor` on the audit fanout. The later Phase 4 process-tree audit still runs and its expected process includes the entry-mode audit subtree when the proposal depended on audit evidence.
+
+If the current aggregate LOW covers every current ticket acceptance/scope item and leaves no remaining non-audit implementation or verification ask, the orchestrator records a value-zero decision and halts before proposal work; otherwise the pipeline continues through Phase 2.5, and the resulting Phase 2.5 plus audit evidence seeds Phase 3. `NEEDS_INPUT` and `BLOCKED` audit outcomes halt before proposal work.
+
+### `plug_existing_review`
+
+`plug_existing_review` imports one existing audit bundle instead of running a fresh pre-Phase-2.5 audit. The only structured import schema is `nes-design-audit-v1`; unknown `pipeline_entry_mode` values are rejected as `BLOCKED:unknown-pipeline-entry-mode`.
+
+Before Phase 3 prompt composition, the orchestrator validates `existing_review_bundle_path`, `existing_review_bundle_schema`, required files, target identity, currentness, and staleness policy. Required bundle files are `dispatch-manifest.md`, `aggregate-audit.md`, `findings.json`, `findings.md`, and per-auditor reports required by the manifest. A missing required bundle file is rejected before Phase 3 consumes any finding.
+
+Staleness follows the audit workflow currentness predicates, not mtime cleanup heuristics. `review_staleness_policy=exact-match` requires the imported target identity and current target identity to match. `required` reruns audit before proposal work and treats the prior bundle as context. `allow-with-drift-report` requires a drift report mapping changed files or sections; stale non-LOW findings may seed still-existing target items, but stale LOW/no-drift reports are context only for changed targets and require current re-audit before closure.
+
+Imported finding IDs preserve the original `source_id` and `origin_bundle_path`, assign WU-local seed IDs as `SEED-FNN`, and defer canonical `R<N>-F<NN>` mapping to `decision-encoder` or the caller once a revise/review loop begins.
+
+### Shared Entry-Mode Inputs
+
+The orchestrator owns the full input table. Shared entry-mode inputs include `pipeline_entry_mode`, `audit_workflow_path`, `audit_target_type`, `audit_target_paths`, `audit_target_manifest`, `audit_target_ref`, `design_patterns_ref`, `operator_format_ref`, `audit_slug`, `audit_report_bundle_path`, `existing_review_bundle_path`, `existing_review_bundle_schema`, `reviewed_target_paths`, `reviewed_target_ref`, `current_target_ref`, `review_staleness_policy`, `review_staleness_fallback`, `proposer_fix_scope`, and runtime evidence fields required by `audit.md`.
+
+### Entry-Mode Audit History And Re-Audit
+
+Initial `review_first` and imported findings are seed critic evidence, not a completed revise/review loop by themselves. Record bundle references in `${planning_dir}/audit-history.md` when a second round begins or when `decision-encoder` records finding closure or regression. The record includes bundle path, target identity, aggregate verdict, source IDs, WU-local IDs, canonical IDs when assigned, and a currentness flag.
+
+A substantive revision is any change to audited target paths or target-manifest items; commit/head/ref, PR base/head/file list, runtime invocation UUID, runtime artifact bundle, or non-git content hash; proposal closure strategy; workflow/operator/runtime behavior contract; or corpus/reference path used to justify closure. Formatting-only or typo-only edits outside audited sections may be recorded as non-substantive with a reason. Uncertainty is substantive.
+
+Before findings close after a substantive revision, the orchestrator requires rerunning `audit.md` against the current affected targets, process-tree-auditing that fanout before consumption, and updating the audit bundle reference. A stale LOW/no-drift report is context only for changed targets and cannot close them without current re-audit before closure.
+
+### Entry-Mode Proposer Research Handoff
+
+Phase 3 prompt composition includes the audit bundle as evidence. If the proposer cannot close audit findings from existing evidence, it emits `DESIGN_RESEARCH_REQUIRED` with source finding IDs, the missing pattern knowledge, a focused research question, and an output slug. The orchestrator then dispatches `~/ai/workflows/research.md` and writes design-fix research artifacts under `${planning_dir}/research/design-fixes/`, then re-dispatches Phase 3 with those artifacts.
 
 ## Where artifacts live
 
@@ -359,7 +407,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 See `~/ai/conventions/gate-ownership.md` for the phase-by-phase table.
 
 Rule of thumb:
-- the **only** human gates in this pipeline are (1) the Phase 2.5 problem-map review and (2) NEEDS_INPUT new-value-question surfacing per `~/ai/agents/implementation-pipeline-orchestrator.md`
+- the default pipeline human gates are (1) the Phase 2.5 problem-map review and (2) NEEDS_INPUT new-value-question surfacing per `~/ai/agents/implementation-pipeline-orchestrator.md`; `tickets_first_variant=true` adds the Phase 8.5 human local-review gate before Phase 9
 - every other phase belongs to a model gate or to automation
 - the proposal is reviewed by the risk gate, not by an extra human approval pass
 - Phase 9 (draft PR) and Phase 10 (promotion) are both automated by the orchestrator

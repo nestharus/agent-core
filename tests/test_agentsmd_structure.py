@@ -142,7 +142,7 @@ def test_routing_table_rows_preserved():
     # coverage-analyzer: Inputs: `task`, `worktree_path`, `scope?`
     # pr-writer: Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?`
     # coderabbit-operator: Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?`
-    # implementation-pipeline-orchestrator: Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?`
+    # implementation-pipeline-orchestrator: Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?`, `tickets_first_variant?`
     # worktree-operator: Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`
     # jira-operator: Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email`
     entries = {
@@ -168,7 +168,7 @@ def test_routing_table_rows_preserved():
         ),
         "implementation-pipeline-orchestrator": (
             "agents/implementation-pipeline-orchestrator.md",
-            "Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?`",
+            "Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?`, `tickets_first_variant?`",
             "claude-opus",
         ),
         "worktree-operator": (
