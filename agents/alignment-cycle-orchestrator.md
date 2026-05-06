@@ -136,6 +136,8 @@ The agent writes:
 - `philosophy-classification.md` (per-concern verdict: A — absorbable, B — compatible addition, C — tension, D — new-axis, E — contradiction)
 - `philosophy-decisions.md` (only if any concern is C, D, or E — these require user input and the orchestrator surfaces this artifact to the root as a NEEDS_INPUT new-value-question per `~/ai/conventions/agent-questions-and-session-graph.md`)
 
+The `philosophy-decisions.md` gate remains the domain artifact for C/D/E concerns. If a direct `AskUserQuestion` attempt for a human-owned value/scope/trade-off question is permission-denied, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial` and return `NEEDS_INPUT:<absolute_artifact_path>` with the question artifact; procedural permission-denial that the orchestrator can resolve from supplied inputs stays inline.
+
 If `philosophy-decisions.md` was written, halt the cycle after this sub-stage and surface the artifact to the root. Stage 2b-integrate runs on the next cycle after the user has answered.
 
 #### Stage 2b-integrate

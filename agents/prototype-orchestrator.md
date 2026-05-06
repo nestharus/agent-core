@@ -201,6 +201,8 @@ Mechanical. Do not gate.
 
 ## NEEDS_INPUT Handling
 
+For direct `AskUserQuestion` permission-denial on a human-owned value, scope, or trade-off question, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: return `NEEDS_INPUT:<absolute_artifact_path>` with the question artifact and halt; procedural permission-denial that the prototype orchestrator can resolve from supplied inputs stays inline.
+
 Sub-agents and the prototype workflow itself emit `NEEDS_INPUT:<question_artifact>` per `~/ai/conventions/agent-questions-and-session-graph.md`. You classify each:
 
 - **Procedural NEEDS_INPUT** (a hack agent can't proceed because of a missing input you can supply, e.g. credentials, env var name, path): you supply it and re-dispatch. Do not bother the root.

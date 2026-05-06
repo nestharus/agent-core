@@ -40,6 +40,16 @@ The sub-agent must stop before taking any action that depends on the answer. It 
 
 When `origin.invocation_uuid` or `origin.session_id` is unknown at emission time, `origin.prompt_path` and `origin.log_path` are mandatory. The root must correlate those paths to SQLite state through `agents trace --json` and `session_turns` before attempting session-id resume.
 
+## AskUserQuestion Permission-Denial
+
+Direct `AskUserQuestion` permission-denial on a human-owned new-value, scope, or trade-off question is a question-emission trigger alongside the sub-agent emission rule, and it uses the existing question-artifact envelope rather than an inline answer.
+
+For that denied human-owned question, write `${scratch_dir}/questions/q-<uuidv4>.question.json` as JSON per the Question Artifact Schema, return `NEEDS_INPUT:<absolute_artifact_path>`, and halt before any dependent action.
+
+Procedural permission-denial or procedural `NEEDS_INPUT` that the orchestrator can resolve from supplied inputs stays inline and does not bother the root.
+
+Forbidden language: permission denial is not a user decline and does not authorize defaults or self-applied answers. self-applying defaults on a new-value, scope, or trade-off question after `AskUserQuestion` is denied is a contract violation.
+
 ## Question Artifact Schema
 
 The artifact is JSON. Required fields:
