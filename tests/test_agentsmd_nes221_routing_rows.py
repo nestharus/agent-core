@@ -56,16 +56,14 @@ def test_existing_agentsmd_structure_suite_remains_present():
 
 
 def test_agentsmd_omits_future_audit_workflow_entries():
-    """T20: AGENTS.md does not add NES-223/NES-224 routing entries that have not landed yet.
+    """T20: AGENTS.md does not add NES-224 pipeline wiring before it lands.
 
     The original guard also excluded `workflow-process-auditor`. That row is now in
     scope because NES-222 ships it; the row's structural assertions live in
-    `tests/test_agentsmd_structure.py`. This test continues to guard against the
-    audit sub-workflow (NES-223) and pipeline entry-mode wiring (NES-224 / NES-219D)
-    that have not yet shipped.
+    `tests/test_agentsmd_structure.py`. NES-223 now lands the Audit sub-workflow
+    row, so this guard only protects against premature NES-224 / NES-219D
+    `pipeline_entry_mode` wiring.
     """
     text = _agents_text()
 
-    assert "workflows/audit.md" not in text
-    assert "Audit sub-workflow" not in text
     assert "pipeline_entry_mode" not in text
