@@ -9,9 +9,9 @@ AGENTS_MD = REPO_ROOT / "AGENTS.md"
 SHIPPED_SUB_OPERATORS = [
     "release-cut-operator.md",
     "release-promote-operator.md",
+    "release-hotfix-operator.md",
 ]
 FORWARD_REFERENCED_SUB_OPERATORS = [
-    "release-hotfix-operator.md",
     "release-reconcile-operator.md",
 ]
 SUB_OPERATORS = SHIPPED_SUB_OPERATORS + FORWARD_REFERENCED_SUB_OPERATORS
@@ -258,6 +258,17 @@ def test_shipped_sub_operator_files_exist():
     for operator in SHIPPED_SUB_OPERATORS:
         path = REPO_ROOT / "agents" / operator
         assert path.exists(), f"expected shipped sub-operator exists: {path}"
+
+
+def test_shipped_sub_operator_files_well_formed():
+    """Shipped release sub-operator files parse with the operator-format frontmatter."""
+    for operator in SHIPPED_SUB_OPERATORS:
+        path = REPO_ROOT / "agents" / operator
+        frontmatter = _parse_frontmatter(path.read_text(encoding="utf-8"))
+
+        assert set(frontmatter) == REQUIRED_FRONTMATTER_KEYS
+        assert frontmatter["description"]
+        assert frontmatter["model"] == "gpt-high"
 
 
 def test_forward_referenced_files_do_not_exist():
