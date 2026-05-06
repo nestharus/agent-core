@@ -26,6 +26,13 @@ WU_SESSION_RESUMER_INPUTS = (
     "ticket_id",
     "session_manifest_path",
 )
+# NES-243 intentionally forward-references these four future release sub-operators.
+NES_243_ALLOWED_FORWARD_REFERENCES = {
+    "agents/release-cut-operator.md",
+    "agents/release-hotfix-operator.md",
+    "agents/release-promote-operator.md",
+    "agents/release-reconcile-operator.md",
+}
 
 
 def _agents_text():
@@ -146,6 +153,7 @@ def test_all_relative_links_in_agents_md_resolve():
         target
         for target in _relative_markdown_targets(_agents_text())
         if not (REPO_ROOT / target).exists()
+        and target not in NES_243_ALLOWED_FORWARD_REFERENCES
     ]
     assert missing == []
 
@@ -166,7 +174,9 @@ def test_routing_and_workflow_topology_links_are_operational_artifacts():
         assert target.startswith("agents/"), (
             f"operator routing File target must stay under agents/: {target}"
         )
-        assert (REPO_ROOT / target).exists(), (
+        assert (REPO_ROOT / target).exists() or (
+            target in NES_243_ALLOWED_FORWARD_REFERENCES
+        ), (
             f"operator routing File target must resolve: {target}"
         )
         assert not target.startswith(

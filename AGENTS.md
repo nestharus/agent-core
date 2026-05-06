@@ -127,6 +127,23 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
   File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
 
+### Release management
+
+- `release-orchestrator` - Orchestrate a staged release lifecycle across cut, freeze, hotfix, promote, tag, and reconcile phases.
+  File: [~/ai/agents/release-orchestrator.md](agents/release-orchestrator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `tag_pattern`, `qa_lane_id`, `manifest_path?`, `release_manifest_path?`, `freeze_window`, `qa_evidence_path`, `required_checks_policy`, `settings_state_or_runbook_ticket`, `hotfix_policy`, `promotion_approval`, `reconcile_obligations`, `ticket_system`, `jira_url?`, `jira_project?`, `jira_account_email?`, `jira_issue_key?`, `jira_release_key?`, `linear_team_key?`, `linear_project_id?`, `linear_issue_key?`, `linear_release_key?`, `release_ticket_key?` | Model: `claude-opus`
+
+- `release-cut-operator` - Forward-referenced NES-244 operator for release branch cut mechanics.
+  File: [~/ai/agents/release-cut-operator.md](agents/release-cut-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `develop_branch_name`, `release_branch_name`, `manifest_path?`, `release_manifest_path?`, `required_checks_policy`, `settings_state_or_runbook_ticket` | Model: `gpt-high`
+
+- `release-hotfix-operator` - Forward-referenced NES-245 operator for release hotfix and cherry-pick mechanics.
+  File: [~/ai/agents/release-hotfix-operator.md](agents/release-hotfix-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `release_branch_name`, `hotfix_branch_name?`, `manifest_path?`, `release_manifest_path?`, `hotfix_policy`, `qa_evidence_path`, `promotion_approval` | Model: `gpt-high`
+
+- `release-promote-operator` - Forward-referenced NES-246 operator for promotion and tag mechanics.
+  File: [~/ai/agents/release-promote-operator.md](agents/release-promote-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `release_branch_name`, `main_branch_name`, `tag_pattern`, `manifest_path?`, `release_manifest_path?`, `qa_evidence_path`, `promotion_approval` | Model: `gpt-high`
+
+- `release-reconcile-operator` - Forward-referenced NES-247 operator for post-release reconciliation mechanics.
+  File: [~/ai/agents/release-reconcile-operator.md](agents/release-reconcile-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `manifest_path?`, `release_manifest_path?`, `reconcile_obligations` | Model: `gpt-high`
+
 ### Strategic planning / proposal alignment cycle
 
 The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `proposal.md` review loop. The orchestrator dispatches Stage 1 / 1b-classify / 1b-integrate / 2 / 2b-classify / 2b-integrate; the proposer is user-driven (the orchestrator does NOT run the proposer).
@@ -233,6 +250,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 ## Workflow Topologies
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- Release management (staged cut/freeze/hotfix/promote/tag/reconcile lifecycle): [`~/ai/workflows/release-management.md`](workflows/release-management.md)
 - Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)
 - PR review gates (test-audit, multi-concern, justification, commit-hygiene): [`~/ai/workflows/pr-review.md`](workflows/pr-review.md)
