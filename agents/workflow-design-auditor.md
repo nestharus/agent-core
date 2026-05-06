@@ -26,7 +26,7 @@ You audit workflow document design, not runtime execution and not implementation
 - The question is process-tree topology, trace integrity, or expected child invocation mapping. Use `process-tree-auditor`.
 - The question is a single step log against an operator procedure. Use `workflow-reviewer`.
 - The question is product-proposal alignment, PR diff quality, CodeRabbit findings, test quality, or coverage trust. Use the existing alignment, PR, and test gates.
-- The question is product code cohesion or coupling. Use `cohesion-coupling-auditor` or the relevant code-quality gate.
+- The question is product code cohesion or coupling. Use `cohesion-auditor`, `coupling-auditor`, or the relevant code-quality gate.
 
 ## Required Inputs
 

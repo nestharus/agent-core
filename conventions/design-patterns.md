@@ -29,7 +29,7 @@ Use these entries as report citations for `workflow-design-auditor` and `agent-d
 ### DP-004 - Single-concern operator/tool composition
 - Short statement: Operators and tools should own one coherent concern and compose with adjacent specialists instead of accumulating unrelated modes.
 - Canonical authority: `~/ai/VALUES.md`
-- Exemplars: `~/ai/agents/operator-file-format.md`; `~/ai/conventions/code-quality.md`; `~/ai/agents/cohesion-coupling-auditor.md`
+- Exemplars: `~/ai/agents/operator-file-format.md`; `~/ai/conventions/code-quality.md`; `~/ai/agents/cohesion-auditor.md`; `~/ai/agents/coupling-auditor.md`
 - Auditor use: Cite when an operator bundles unrelated responsibilities, hides a second system inside flags, or duplicates an adjacent specialist.
 
 ### DP-005 - Model-owned gates and no self-certification
@@ -47,7 +47,7 @@ Use these entries as report citations for `workflow-design-auditor` and `agent-d
 ### DP-007 - Operator frontmatter and recommended body skeleton
 - Short statement: Operator files require dispatchable frontmatter and should use explicit body sections that make routing, inputs, procedure, and stop behavior auditable.
 - Canonical authority: `~/ai/agents/operator-file-format.md`
-- Exemplars: `~/ai/agents/cohesion-coupling-auditor.md`; `~/ai/agents/process-tree-auditor.md`; `~/ai/agents/operator-file-format.md`
+- Exemplars: `~/ai/agents/cohesion-auditor.md`; `~/ai/agents/coupling-auditor.md`; `~/ai/agents/process-tree-auditor.md`; `~/ai/agents/operator-file-format.md`
 - Auditor use: Cite when an operator is malformed for CLI loading or when missing body sections create material routing or invocation ambiguity.
 
 ### DP-008 - Process-tree audits at fanout joins
@@ -77,5 +77,5 @@ Use these entries as report citations for `workflow-design-auditor` and `agent-d
 ### DP-012 - Explicit anti-scope and stop conditions
 - Short statement: Operators and workflows should name boundaries and stop conditions so callers know when to proceed, hand off, block, or ask for input.
 - Canonical authority: `~/ai/agents/operator-file-format.md`
-- Exemplars: `~/ai/agents/process-tree-auditor.md`; `~/ai/agents/cohesion-coupling-auditor.md`; `~/ai/conventions/agent-questions-and-session-graph.md`
+- Exemplars: `~/ai/agents/process-tree-auditor.md`; `~/ai/agents/cohesion-auditor.md`; `~/ai/agents/coupling-auditor.md`; `~/ai/conventions/agent-questions-and-session-graph.md`
 - Auditor use: Cite when an artifact lacks out-of-scope routing, stop outcomes, escalation behavior, or question-handling boundaries.
