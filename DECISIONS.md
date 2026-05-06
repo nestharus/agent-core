@@ -2,6 +2,52 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-05 — NES-219 Phase 2.5 defer-to-prototype gate disposition
+
+**Context.** Phase 2.5 risk profile for NES-219 (`audit + proposer framework`) rolled up `HIGH` with `defer-signals-fired=2`:
+
+1. Risk profile rolls up HIGH on a majority of touched surfaces (6 of 8 surfaces are HIGH).
+2. Cross-language trace shows implicit contracts in so many sites that change-path entropy is HIGH on its own.
+
+Per `~/ai/workflows/implementation-pipeline.md` § Defer to prototype, two or more fired signals trigger the orchestrator's defer-to-prototype gate (`proceed in exhaustive mode`, `defer to prototype`, or `terminate WU`). Per the orchestrator spec, `skip_problem_map_gate=true` does not suppress this defer-detection; it only suppresses the routine problem-map approval.
+
+**Decision.** Proceed in exhaustive mode without a separate human round-trip. The dispatching user already evaluated the defer/proceed/terminate trade-off in the dispatch text (NES-219 framed as urgent / "highest priority" / "this unblocks ALL subsequent workflow / agent design work"; explicit Tier-2 split shapes A–E pre-described; "Tier-2 split is EXPECTED and ENCOURAGED"; explicit `NEEDS_INPUT` contract restricts root escalation to "genuine value/scope questions only — e.g., the corpus shape choice"). The defer/terminate options are implicitly declined; the corpus-shape question is the only genuine value question reserved for root escalation, and it is deferred to Phase 3 per the dispatch.
+
+**Mode propagation.** Phase 3 / 4 / 5 / 6b run in **exhaustive mode** for the six HIGH surfaces (`workflow-design-auditor`, `agent-design-auditor`, `workflow-process-auditor`, `audit.md`, `implementation-pipeline.md`, corpus-surface candidates), **lean with MEDIUM callouts** for `~/ai/AGENTS.md`, and **lean** for the `workflows/index.json` regeneration. Phase 3 is asked to evaluate single-WU vs Tier-2 split as a packaging decision and to surface that recommendation in the proposal.
+
+**Project-level aggregation.** The MEDIUM/HIGH surfaces from `risk/nes-219-risk-profile.md` are appended to `/home/nes/projects/ai/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile.
+
+**Evidence.**
+
+- Risk profile: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/risk/nes-219-risk-profile.md`
+- Problem map: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/research/nes-219-problem-map.md`
+- Phase 2.5 sub-step inventories: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/research/nes-219-{coverage-inventory,lifecycle-map,entrypoints,duplicates,cross-language-trace}.md`
+
+## D-2026-05-05 — NES-219 Tier-2 split into NES-219A–E
+
+**Context.** NES-219 is a meta/planning WU for the audit proposer framework. Phase 4 cleared the proposal, but the approved proposal and Step 6a contract both require a Tier-2 split because the work rolls up HIGH across distinct review contracts: corpus/design-auditor substrate, runtime procedure auditing, audit workflow composition, implementation-pipeline entry modes, and mechanical routing/index closure. Filing the child WUs keeps NES-219's parent PR limited to the durable decision record while the framework files land in separately reviewable implementation WUs.
+
+**Decision.** NES-219 is split under parent NES-219 into these child WUs, filed in dependency order:
+
+1. `NES-219A` / Linear `NES-221` — no dependency — Corpus and design-auditor substrate: add `~/ai/conventions/design-patterns.md`, `~/ai/agents/workflow-design-auditor.md`, `~/ai/agents/agent-design-auditor.md`, and only the AGENTS.md rows needed for those operators.
+2. `NES-219B` / Linear `NES-222` — depends on `NES-219A` — Workflow process auditor: add `~/ai/agents/workflow-process-auditor.md` with runtime evidence bundle, `process-tree-auditor` boundary, `workflow-reviewer` boundary, and its AGENTS.md row.
+3. `NES-219C` / Linear `NES-223` — depends on `NES-219A` and `NES-219B` — Audit sub-workflow: add `~/ai/workflows/audit.md`, target typing, dispatch manifest, auditor routing, aggregate verdict schema, finding normalization, audit-history ownership, rerun semantics, process-tree relationship, standalone/pipeline-callable modes, index regeneration, and Workflow Topologies routing.
+4. `NES-219D` / Linear `NES-224` — depends on `NES-219C` — Implementation-pipeline entry modes plus orchestrator wiring plus proposer-research integration: add `review_first` and `plug_existing_review`, dispatch/validation/staleness handling in `implementation-pipeline-orchestrator.md`, audit-bundle consumption, Phase 3 finding handoff, current re-audit after substantive revision, and conditional AGENTS routing updates.
+5. `NES-219E` / Linear `NES-225` — depends on `NES-219A-D` — Cross-reference and structural verification closure: perform final AGENTS.md reachability audit, `workflows/index.json` check, targeted workflow metadata/index tests, and any follow-up structural tests chosen during child-WU Phase 6b.
+
+The parent NES-219 worktree must not add the operator, workflow, corpus, AGENTS, or generated-index files for these child WUs; those changes belong to NES-221 through NES-225.
+
+**Cross-references.**
+
+- Proposal artifact: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/proposals/nes-219-audit-proposer-framework.md`
+- Audit history: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/audit-history.md`
+- Hookpoints: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/research/nes-219-hookpoints.md`
+- Contract: `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/contracts/nes-219-meta-deliverable.md`
+
+**Evidence.**
+
+The Linear filing map is recorded in `/home/nes/projects/ai/planning/nes-219-audit-proposer-framework/.scratch/phase6/sub-wu-tickets.txt`; NES-221 through NES-225 were parent-linked to NES-219 with the saved NES-219 UUID.
+
 ## D-2026-05-04 — Linear-backed pipeline bootstrap exception
 
 **Context.** The implementation-pipeline-orchestrator (`~/ai/agents/implementation-pipeline-orchestrator.md`) was originally JIRA-only. The `agent-runner` project chose Linear as its ticket system, not JIRA. Adding Linear support is itself meaningful work, and the orchestrator-compliant path requires a working ticket source — but no Linear-backed orchestrator exists yet, so there is no compliant way to track the work that creates the Linear-backed orchestrator. Chicken-and-egg.
