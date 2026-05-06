@@ -112,6 +112,34 @@
         ]
       }
     },
+    "code-quality": {
+      "path": "workflows/code-quality.md",
+      "workflow": {
+        "id": "code-quality"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "dispatches A4/A5/A6a/A6b auditors as four parallel children and writes a durable code-quality bundle",
+          "aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states",
+          "preserves the convention as the single rule reference; does not redefine A1"
+        ],
+        "inputs": [
+          "repo_root, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout",
+          "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, and wu_id",
+          "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
+        ],
+        "non_goals": [
+          "does not implement fixes, edit child auditors, or replace child auditor procedures",
+          "does not redefine A1 or duplicate the convention's rule descriptions",
+          "does not wire implementation-pipeline Phase 4 entry - that is downstream WU work"
+        ],
+        "orchestrator": "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller",
+        "outputs": [
+          "dispatch manifest, child prompts/logs/reports, normalized findings.json plus findings.md, and aggregate-code-quality.md",
+          "role outputs suitable for proposer revision, decision-encoder, or PR-review consumption"
+        ]
+      }
+    },
     "coderabbit-loop": {
       "path": "workflows/coderabbit-loop.md",
       "workflow": {

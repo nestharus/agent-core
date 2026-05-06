@@ -244,3 +244,66 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 - Actual files confirmed via `ls /home/nes/ai/agents/ | grep -E '(problem|philosophy)-(expansion)'` → only `*-classify.md` and `*-integrate.md` exist.
 
 **Re-evaluation trigger.** Revisit this scope expansion only if Phase 4 risk gates flag the typo fix as out-of-scope (which would require splitting the WU). Otherwise the fix lands in Phase 6c alongside the bootstrap prelude.
+
+## D-2026-05-06e — NES-207 Phase 2.5 drift-discovery accepted with residual
+
+**WU**: NES-207 (`code-quality workflow`). **Phase**: 2.5.4 (duplicate-systems inventory). **Decision**: `Accept drift residual; file tracker NES-235; do not modify auditor operators in NES-207 per brief anti-scope.`
+
+**Context.** Phase 2.5 duplicate-systems inventory at `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/research/nes-207-duplicates.md § Drift discoveries` surfaced stale `cohesion-coupling-auditor.md` references in `agents/push-pull-auditor.md:138,147`, `agents/function-classification-auditor.md:148,157`, `agents/workflow-design-auditor.md:29`, `agents/agent-design-auditor.md:27`, `conventions/design-patterns.md:32,50,80`, and `tests/test_push_pull_auditor_operator.py:487`. The bundled file was removed by NES-209's split into single-concern `cohesion-auditor.md` + `coupling-auditor.md`; NES-209 missed updating these references. Verified `tests/test_push_pull_auditor_operator.py::test_b31_cross_references_targets` and `tests/test_function_classification_auditor_operator.py::test_t11_sibling_boundaries_exclude_adjacent_scopes` still pass (string-tolerant assertions); no test currently fails against HEAD.
+
+**Decision.** Per NES-207's brief anti-scope ("Do NOT modify any auditor operator. They're complete."), drift cleanup is out of scope for this WU. Filed Linear tracker `NES-235` ("Cleanup: stale cohesion-coupling-auditor.md references after NES-209 split") to capture the work. The new `workflows/code-quality.md` will reference the split single-concern auditors directly and will not depend on the missing bundled operator. NEEDS_INPUT to root not surfaced because the brief's anti-scope already supplies the disposition; per the orchestrator NEEDS_INPUT classification, a question the brief already answers is procedural.
+
+**Anti-scope.** This decision does not commit NES-207 to fixing any of the listed stale references. It does not update tests, conventions, or auditor docs. NES-235 is the cleanup vehicle.
+
+**Justifying evidence.**
+
+- Duplicate-systems inventory drift section: `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/research/nes-207-duplicates.md` lines 183-250.
+- Coverage inventory bug-discovery (verified false; tests pass): `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/research/nes-207-coverage-inventory.md` line 5; pytest run shown in NES-207 Phase 2.5 orchestrator log.
+- Tracker ticket: `NES-235` (https://linear.app/neshq/issue/NES-235/cleanup-stale-cohesion-coupling-auditormd-references-after-nes-209).
+- NES-207 brief anti-scope: dispatcher message body for NES-207 implementation pipeline run.
+
+**Re-evaluation trigger.** If a future test added against `agents/cohesion-auditor.md` / `agents/coupling-auditor.md` cross-references catches the stale text and starts failing on HEAD, NES-235 is bumped from "discovered drift" to "blocking" priority and a separate Tier-1 rewind on the failing surface is taken.
+
+## D-2026-05-06f — NES-207 Phase 4 Tier-1 redispatch (shared claude-opus session)
+
+**WU**: NES-207. **Phase**: 4 (process-tree audit #1). **Decision**: `Tier-1 redispatch of phase4-supported-surface gate to break shared session/chain with phase4-scope.`
+
+**Context.** Phase 4 risk gates returned LOW × 4. Process-tree audit #1 (`/home/nes/projects/ai/planning/nes-207-code-quality-workflow/.scratch/audits/phase4-process-tree-audit.report.md`) returned BLOCKING with one violation: `phase4-scope` (UUID `6f60f218-d85b-4641-ad0f-f437fa6628f1`) and `phase4-supported-surface` (UUID `245535d0-750c-4a6d-ada9-b911b77abca4`) share session `cce04028-b488-4c07-ad2f-b8ab564cf3b6` and chain `778ca4c7-edab-4b04-99c5-6cf4ca026239`. Both ran on `claude-opus` within ~8 s of each other; `phase4-shortcut` (also claude-opus, ~4 s after scope) got a distinct session, so the claude-opus provider does not deterministically reuse sessions — the collision is incidental rather than systemic. The expected-process manifest's independence invariant treats shared sessions as a blocking integrity violation regardless of report content.
+
+**Decision.** Per the orchestrator's autonomous-on-process-tree-violations rule, re-dispatch only `phase4-supported-surface` as a fresh `agents` invocation; keep the existing scope/audit/shortcut reports (all LOW × 3 are unchanged). The supported-surface report file is overwritten in place. After redispatch, re-fetch `agents trace --json` and re-run process-tree audit #1.
+
+**Anti-scope.** This redispatch does NOT change the Phase 3 proposal, the risk profile, the supported-surface gate's substantive prompt, or the other three Phase 4 gates. It only re-runs the one invocation that collided on session/chain.
+
+**Justifying evidence.**
+
+- Process-tree audit #1 BLOCKING report: `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/.scratch/audits/phase4-process-tree-audit.report.md` lines 23, 25, 55.
+- Phase 4 expected-process manifest invariant 1: `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/.scratch/audits/phase4-expected-process.md` § Required invariants.
+- Trace JSON (pre-redispatch): `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/.scratch/audits/trace-full.json`.
+
+**Re-evaluation trigger.** If `claude-opus` provider sessions collide across re-dispatch attempts more than twice on the same WU, the manifest invariant should be relaxed at the convention level (or session-isolation guarantees added to the agents CLI), not reapplied per-WU.
+
+## D-2026-05-06g — NES-207 Phase 6c BLOCKED reclassified as not-blocking
+
+**WU**: NES-207. **Phase**: 6c (code writer). **Decision**: `Reclassify Step 6c agent's BLOCKED return as a misclassification of pre-existing repo state; proceed without re-dispatch.`
+
+**Context.** The Step 6c gpt-high agent (UUID `b891eb51-04e7-4c86-967d-092a5b7c9be0`) returned `BLOCKED:full pytest fails in existing Linear CLI tests outside the allowed NES-207 edit scope` after producing all five product files and confirming the four NES-207-relevant gate suites pass:
+
+- `pytest tests/test_code_quality_workflow_shape.py` — 23 passed
+- `pytest tests/test_workflow_metadata.py tests/test_workflow_index.py` — pass with user-owned `TMPDIR`
+- `pytest tests/test_agentsmd_structure.py tests/test_code_quality_convention.py` — 16 passed
+- `pytest` (full suite) — 19 failed, 422 passed; failures are in `clients/linear/tests/test_cli_unit.py` with `ModuleNotFoundError: No module named 'scripts'`.
+
+The orchestrator verified the failures are pre-existing on `origin/master @ d3d627e`: stashing the NES-207 worktree changes and running the same Linear CLI suite reproduced `13 failed, 6 errors`. The failures are independent of NES-207's deliverable and outside its anti-scope ("Do NOT modify any auditor operator. They're complete." plus the brief's restriction to the workflow file + cross-references).
+
+**Decision.** The orchestrator (judge) overrules the Step 6c agent's BLOCKED return: NES-207's product code is correct, all WU-relevant gates pass, and the pre-existing CLI suite failure is unrelated to this WU. No Tier-1 redispatch. The pipeline proceeds to process-tree audit #2 with the existing Step 6c invocation as the authoritative product.
+
+**Anti-scope.** This decision does NOT fix the Linear CLI test failures. Those are tracked separately (or should be — if no tracker exists, a future hardening WU can file one). It does not weaken any test, modify any product code, or change any other Phase 6 artifact.
+
+**Justifying evidence.**
+
+- Pre-existing failure verification: `git stash` on the NES-207 worktree, `python3 -m pytest clients/linear/tests/test_cli_unit.py` returns `13 failed, 6 errors` with the same `ModuleNotFoundError`. Reproduction shown in the orchestrator's Phase 6c diagnostic Bash run.
+- NES-207 product gates pass: 62 passed in `pytest tests/test_code_quality_workflow_shape.py tests/test_workflow_metadata.py tests/test_workflow_index.py tests/test_agentsmd_structure.py tests/test_code_quality_convention.py` with `TMPDIR=/home/nes/tmp`.
+- Step 6c log: `/home/nes/projects/ai/planning/nes-207-code-quality-workflow/.scratch/logs/nes-207-phase-6c.log` includes the verbatim "Step 6c consumed:" block and the gate-result block.
+- Brief anti-scope: NES-207 dispatch text "Do NOT modify any auditor operator" and "Workflow file at `~/ai/workflows/code-quality.md` plus minor cross-references in `~/ai/conventions/code-quality.md` and `~/ai/AGENTS.md` Workflow Topologies index."
+
+**Re-evaluation trigger.** If a future ~/ai-layer WU touches the Linear CLI client surface and the same test failures persist, file a hardening tracker for the `ModuleNotFoundError: No module named 'scripts'` import path and treat this DECISIONS entry as evidence that the failure precedes that WU.
