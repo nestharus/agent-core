@@ -28,6 +28,12 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `agentsmd-maintenance-orchestrator` - Run the full AGENTS maintenance loop when the shared operator catalog or routing layer needs audit, triage, risk-gating, and verification.
   File: [~/ai/agents/agentsmd-maintenance-orchestrator.md](agents/agentsmd-maintenance-orchestrator.md) | Inputs: `repo_root`, `agents_md?`, `agents_dir?`, `triage_policy?`, `risk_gate_required?` | Model: `gpt-high`
 
+- `workflow-design-auditor` - Audit workflow document design against the shared design-pattern corpus; does not audit runtime execution.
+  File: [~/ai/agents/workflow-design-auditor.md](agents/workflow-design-auditor.md) | Inputs: `workflow_file`, `repo_root`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+
+- `agent-design-auditor` - Audit operator prompt design, operator-file-format conformance, and single-concern shape; does not maintain AGENTS routing.
+  File: [~/ai/agents/agent-design-auditor.md](agents/agent-design-auditor.md) | Inputs: `operator_file`, `repo_root`, `operator_format_ref?`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+
 - `workflow-reviewer` - Verify that a multi-step operator run actually followed its required procedure and produced the expected outputs.
   File: [~/ai/agents/workflow-reviewer.md](agents/workflow-reviewer.md) | Inputs: `operator_file`, `step_log`, `expected_outputs?`, `mode?` | Model: `claude-opus`
 
