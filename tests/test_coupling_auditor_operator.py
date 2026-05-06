@@ -1,11 +1,11 @@
-"""Structural tests for the NES-148 cohesion/coupling auditor operator."""
+"""Structural tests for the NES-209 coupling auditor operator."""
 
 import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OPERATOR_PATH = REPO_ROOT / "agents" / "cohesion-coupling-auditor.md"
+OPERATOR_PATH = REPO_ROOT / "agents" / "coupling-auditor.md"
 CODE_QUALITY_PATH = REPO_ROOT / "conventions" / "code-quality.md"
 
 REQUIRED_FRONTMATTER_KEYS = {"description", "model", "output_format"}
@@ -29,14 +29,11 @@ REQUIRED_CROSS_REFERENCES = (
     "risk-profile.md",
     "implementation-pipeline.md",
 )
-A1_METRIC_ROWS = (
-    "Cohesion by classifications touched",
-    "Coupling by distinct external symbols/modules referenced",
-)
+A1_METRIC_ROWS = ("Coupling by distinct external symbols/modules referenced",)
 
 
 def _operator_text():
-    assert OPERATOR_PATH.exists(), "missing agents/cohesion-coupling-auditor.md"
+    assert OPERATOR_PATH.exists(), "missing agents/coupling-auditor.md"
     return OPERATOR_PATH.read_text(encoding="utf-8")
 
 
@@ -73,16 +70,11 @@ def _has_band(section, verdict, value_pattern):
         if re.search(rf"\b{re.escape(verdict)}\b", line, re.IGNORECASE)
         and re.search(value_pattern, line)
     ]
-    if same_line:
-        return True
-    return bool(
-        re.search(rf"\b{re.escape(verdict)}\b", section, re.IGNORECASE)
-        and re.search(value_pattern, section)
-    )
+    return bool(same_line)
 
 
 def test_operator_file_exists():
-    assert OPERATOR_PATH.exists(), "missing agents/cohesion-coupling-auditor.md"
+    assert OPERATOR_PATH.exists(), "missing agents/coupling-auditor.md"
     assert OPERATOR_PATH.stat().st_size > 1000
 
 
@@ -124,7 +116,7 @@ def test_cross_references_resolve():
         )
 
 
-def test_a1_metric_rows_quoted_verbatim():
+def test_a1_metric_row_quoted_verbatim():
     a1_text = CODE_QUALITY_PATH.read_text(encoding="utf-8")
     operator_text = _operator_text()
 
@@ -136,12 +128,6 @@ def test_a1_metric_rows_quoted_verbatim():
 def test_threshold_bands_named():
     metric_binding = _section_after_h2(_operator_text(), "Metric Binding")
 
-    assert _has_band(metric_binding, "LOW", r"\b1\b"), (
-        "cohesion LOW band must include 1"
-    )
-    assert _has_band(metric_binding, "HIGH", r"(?:>=\s*2|≥\s*2|2\+)"), (
-        "cohesion HIGH band must include >=2, ≥2, or 2+"
-    )
     assert _has_band(metric_binding, "LOW", r"\b0-2\b"), (
         "coupling LOW band must include 0-2"
     )
@@ -156,7 +142,8 @@ def test_threshold_bands_named():
 def test_output_path_pattern_present():
     output_format = _section_after_h2(_operator_text(), "Output Format")
 
-    assert "cohesion-coupling.md" in output_format
+    assert "coupling.md" in output_format
+    assert "cohesion-coupling.md" not in output_format
 
 
 def test_evidence_rule_stated():
@@ -179,3 +166,9 @@ def test_critic_role_stated():
 
     assert re.search(r"\bcritic\b", text, re.IGNORECASE)
     assert "proposer-critic-pattern.md" in text
+
+
+def test_metric_binding_excludes_opposite_row():
+    metric_binding = _section_after_h2(_operator_text(), "Metric Binding")
+
+    assert "Cohesion by classifications touched" not in metric_binding
