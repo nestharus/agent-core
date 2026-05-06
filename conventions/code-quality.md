@@ -107,3 +107,4 @@ It also does not replace project-local architecture rules. A project may have st
 - `~/ai/conventions/risk-profile.md` § Scoring axes - duplicate-system count, change-path entropy, and risk scoring mechanics.
 - `~/ai/workflows/implementation-pipeline.md` § Step 2.5.4 and § Phase 3 - duplicate-systems inventory plus cascade/consolidate/accept handling.
 - `~/ai/conventions/agent-questions-and-session-graph.md` § Pull-vs-Push Policy - terminology disambiguation only.
+- `~/ai/agents/push-pull-auditor.md` - A4 / NES-140 enforcement surface for the `Push-vs-pull system coupling` rule and `uncontrolled-source coupler` findings; this is a forward pointer only and does not change this convention's rule text, failure modes, numerical thresholds, or policy-only status.
