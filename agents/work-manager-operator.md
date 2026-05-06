@@ -120,7 +120,7 @@ Per `~/ai/agents/linear-operator.md`, status transitions are user-owned for in-f
 
 ### GitHub auto-transition
 
-Linear has a workspace-level GitHub integration. When pr-writer emits `Closes NES-NNN` in PR bodies, merge → Done auto-transitions occur. As of 2026-05-05, pr-writer does NOT yet emit close-keywords (NES-204 fixes). Until that ships, manual post-merge transitions per the dispatch discipline above.
+Linear has a workspace-level GitHub integration. NES-204 activated `pr-writer` close-keyword footer emission: when a known Linear key is supplied through `linear_issue_keys`, the PR body may include `Closes NES-NNN` and merge → Done auto-transitions can occur. Manual post-merge transitions remain appropriate when the footer was omitted, the PR did not reach the relevant default branch, or Linear automation did not actually complete.
 
 ## Anti-scope
 

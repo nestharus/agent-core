@@ -108,7 +108,7 @@ def test_routing_table_rows_preserved():
     # Inputs markers copied from the current AGENTS.md representative rows:
     # agentsmd-curator: Inputs: `mode`, `repo_root`, `agents_md?`, `agents_dir?`, `findings_to_fix?`, `operator_file?`, `routing_entry?`
     # coverage-analyzer: Inputs: `task`, `worktree_path`, `scope?`
-    # pr-writer: Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`
+    # pr-writer: Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?`
     # coderabbit-operator: Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?`
     # implementation-pipeline-orchestrator: Inputs: `wu_id`, `ticket_branch`, `repo_root`, `worktree_path`, `scratch_dir`, `audit_history_path?`
     # worktree-operator: Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`
@@ -126,7 +126,7 @@ def test_routing_table_rows_preserved():
         ),
         "pr-writer": (
             "agents/pr-writer.md",
-            "Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`",
+            "Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?`",
             "gpt-high",
         ),
         "coderabbit-operator": (

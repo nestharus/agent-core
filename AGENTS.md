@@ -72,7 +72,7 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
-  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?` | Model: `gpt-high`
+  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `gpt-high`
 
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
