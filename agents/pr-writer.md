@@ -33,6 +33,7 @@ The PR description's job is to explain **what this PR does**, **why it does it t
 - `--input context_files=<comma-separated-paths>` (optional) — paths to artifacts that describe what the PR is supposed to accomplish: a problem statement, a contract, a Phase 6a contract file, an acceptance-criteria list, etc. Read these to understand intent; do NOT cite them in the body (they're scratch-only).
 - `--input stack_parent_pr=<num>` (optional) — when the base is another open PR's head branch, supply that PR number so it can be cited as the stack dependency.
 - `--input merged_refs=<comma-separated-list>` (optional) — open list of PR numbers / commit SHAs that have **already merged to main** and that the description may need to cite for context (e.g., a contract test extension that piggybacks on a previously-merged restructure). Verify each is actually on main before citing.
+- `--input linear_issue_keys=<KEY1,KEY2,...>` (optional) — known Linear issue keys for the close-keyword footer. Parse as comma-separated tokens, ASCII-trim each token, uppercase it, deduplicate in first-seen order, and drop empty, non-Linear-shaped, unknown, ambiguous, or JIRA-shaped tokens (for example `PROJ-123`).
 
 ## Required Audience Rules — ABSOLUTE
 
@@ -46,6 +47,8 @@ Forbidden vocabulary in the description (the body and the title):
 - Internal release-shape jargon: "integration v2", "integration branch", "integration: merge ...", "wave model".
 - Implementation-pipeline mechanics: "4 risk gates", "process-tree audit", "Tier-1 rewind", "audit-history", "Phase 2.5 → 9", "DECISIONS.md", "step6b output index".
 - Internal initiative ticket prefixes when the audience can't resolve them: avoid bare "INFA-XX" / "KAN-XX" unless they're widely understood by the project's reviewers.
+
+Narrow close-keyword exception: explicit Linear issue keys supplied through `linear_issue_keys` may appear only as the Linear close-keyword footer described below. This exception does not permit close-keyword text in the title, headings, `Tickets` / `Issues` / `Linear` / `References` section names, fenced code blocks, indented code blocks, blockquotes, list items, table cells, HTML comments, or with trailing punctuation, Markdown links, or explanatory prose.
 
 If a term is necessary because it names a real product concept, define it inline once (e.g., "channels are independent product release lines — `internal`, `e2e`, `beta`") then use it.
 
@@ -110,11 +113,24 @@ Stack PRs add one section near the top:
 This PR's review base is **#<num>**. Merge that first; this PR's diff is a clean delta against `main` afterward.
 ```
 
+### Linear close-keyword footer
+
+When `linear_issue_keys` resolves to one or more accepted Linear-shaped keys, append exactly one standalone normal Markdown paragraph line per key in input order:
+
+```text
+Closes <KEY>
+```
+
+Use capital `C`, one ASCII space, and the uppercase Linear key. Separate the footer from the preceding prose with a blank line, and place it after the prose body sections, such as after `Verification` and `Out of scope` when those sections exist. Do not add a heading for the footer.
+
+When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-keyword footer. JIRA-shaped keys, for example `PROJ-123`, are not emitted by default; Phase 9 callers do not pass `linear_issue_keys` when `ticket_system=jira`. Do not guess, infer, or invent Linear keys from the branch name, branch slug, PR title, or prose in `context_files`; the only acceptable source is the explicit `linear_issue_keys` input.
+
 ## Title Rules
 
 - ≤ 70 characters preferred; ≤ 80 hard cap.
 - Conventional prefix encouraged when the codebase uses one (`fix(scope):`, `feat(scope):`, `test(scope):`, `chore(scope):`, `docs(scope):`, `refactor(scope):`).
 - No internal jargon in the title (no `WU-WR-NN:` prefix, no "wave 1", etc.).
+- No close keyword or `Closes <KEY>` text in the title.
 - Describe what changes for the user/system, not the work-unit name.
 
 ## Procedure
@@ -126,13 +142,16 @@ This PR's review base is **#<num>**. Merge that first; this PR's diff is a clean
    - For a commit SHA: `git -C ${repo_root} merge-base --is-ancestor <sha> origin/main` — must succeed. If not, drop it.
 4. Verify any `stack_parent_pr`:
    - `gh pr view <stack_parent_pr> --json state,headRefName` — must be `OPEN`, and `headRefName` must equal the value of `${base}`. If not, return `BLOCKED:invalid-stack-parent`.
-5. Compose the title and body following the rules above. Use the recommended skeleton or skip sections that don't apply.
+5. Compose the title and body following the rules above. Use the recommended skeleton or skip sections that don't apply. If `linear_issue_keys` is supplied, normalize the explicit input, drop JIRA-shaped keys, deduplicate accepted Linear keys, and append the close-keyword footer only after the reviewer-facing prose sections.
 6. Self-audit before writing the output:
    - Title: scan for forbidden vocabulary. Reject and rewrite.
+   - Title: scan for `Closes <KEY>` or any close-keyword form. Reject and rewrite.
    - Body: scan for `wave`, `Slot`, `Cluster`, `WU-`, `phase`, `integration`, `pipeline`, `gate`, `audit`, `DECISIONS`, `RCA` — each must be either absent or used as a literal product-concept noun with an inline definition.
    - Body: scan for `planning/` and `~/projects/` and `${scratch_dir}` paths. Reject and rewrite.
    - Body: scan for any PR number that isn't `${stack_parent_pr}` or a verified `merged_refs` member. Reject the unverified citation.
    - Body: scan for sections titled "Changes (commits)", "Pipeline ...", "Audit ...", "Round N", "Tickets", "Docs". Reject those sections.
+   - Body close-keyword self-audit: reject any close keyword inside fenced code, indented code, blockquote, list item, table cell, HTML comment, heading, or any `Tickets` / `Issues` / `Linear` / `References` section.
+   - Body close-keyword self-audit: when `linear_issue_keys` is supplied and accepted keys remain, require one standalone `Closes <KEY>` paragraph per key, separated from neighbors by blank lines or normal paragraph boundaries, and placed after the prose sections.
 7. Write the title to `${output_path}.title` (single line, no trailing newline issues).
 8. Write the body to `${output_path}` (markdown, ending with a single trailing newline).
 

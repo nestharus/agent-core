@@ -46,6 +46,8 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 
 **Status transitions:** the JIRA path supports a `transition` task (used by some downstream workflows). The Linear path intentionally omits status transitions — on Linear, status changes are user-owned, not pipeline-owned (per `linear-operator.md` § Do Not Use When).
 
+**PR close footer:** Phase 9 passes `${ticket_id}` to `pr-writer` as `linear_issue_keys` only when `ticket_system=linear`. The JIRA path and no-ticket cold-start gaps omit that optional input; JIRA-shaped keys are not emitted as PR-body close-keyword footers by default.
+
 ## Required Inputs
 
 - One of `jira_issue_key` OR `linear_issue_key` — the issue key on the project's chosen ticket site. The orchestrator dispatches `${ticket_operator}` (`task=read`) at bootstrap to fetch the ticket and renders the description into `${scratch_dir}/ticket.md`. **Tickets live on the ticket system, not on disk.** The orchestrator does not read or write any `plans/tickets/**` file. If neither key is supplied, `wu_brief_path` must be present so Phase 0 can draft the ticket via `${ticket_operator}` (`task=create`) before continuing; in that case the caller must also supply `ticket_system` (`jira` or `linear`) so the orchestrator knows which backend to address.
@@ -258,9 +260,10 @@ In the tickets-first variant (per `~/ai/workflows/tickets-first-review.md`), the
    - `repo_root=${repo_root}`
    - `output_path=${scratch_dir}/pr-body.md`
    - `context_files=${planning_dir}/research/${wu_lower}-problem-map.md,${planning_dir}/proposals/${wu_lower}-${wu_id}.md,${planning_dir}/contracts/${wu_lower}-${slug}.md` (plus any RCA evidence path on the RCA track)
+   - `linear_issue_keys=${ticket_id}` if and only if `ticket_system=linear`; omit for `ticket_system=jira` and when no ticket system is selected
    - `stack_parent_pr=<num>` if and only if `base` is the head branch of another open PR
    - `merged_refs=<comma-separated>` if the body needs to cite merged-to-main PRs or commits for context
-   Dispatch: `agents -m gpt-high -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-9-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-9-pr-writer.log`. Do NOT hand-author the body, do NOT use a `${wu_id}: ${slug}` title pattern (that's internal jargon the writer rejects), do NOT inline the body into the `gh` invocation.
+   The optional `linear_issue_keys` input gives `pr-writer` the known Linear key for its close-keyword footer; the orchestrator still does not author or append PR body text. Dispatch: `agents -m gpt-high -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-9-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-9-pr-writer.log`. Do NOT hand-author the body, do NOT use a `${wu_id}: ${slug}` title pattern (that's internal jargon the writer rejects), do NOT inline the body into the `gh` invocation.
 3. Verify both `${scratch_dir}/pr-body.md` and `${scratch_dir}/pr-body.md.title` exist and are non-empty. If `pr-writer` returned `BLOCKED:*` or `NEEDS_INPUT:*`, follow the orchestrator's NEEDS_INPUT-classification rule.
 4. `gh pr create --draft --title "$(cat ${scratch_dir}/pr-body.md.title)" --body-file ${scratch_dir}/pr-body.md`.
 5. Record the PR URL in `${scratch_dir}/pr-url.txt`.
