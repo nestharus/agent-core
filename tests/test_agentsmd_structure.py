@@ -268,3 +268,23 @@ def test_wu_session_resumer_routing_row_inputs_and_model(repo_root):
     assert re.search(r"\|\s+Model:\s+`?gpt-high`?", row)
     for input_name in WU_SESSION_RESUMER_INPUTS:
         assert f"`{input_name}`" in row
+
+
+def test_problem_bootstrap_routing_row_references_operator_file(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), "problem-bootstrap")
+
+    assert "problem-bootstrap.md" in row
+
+
+def test_philosophy_bootstrap_routing_row_references_operator_file(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), "philosophy-bootstrap")
+
+    assert "philosophy-bootstrap.md" in row
+
+
+def test_bootstrap_routing_rows_use_gpt_high_model(repo_root):
+    text = _agents_text_from(repo_root)
+
+    for name in ("problem-bootstrap", "philosophy-bootstrap"):
+        row = _routing_row(text, name)
+        assert re.search(r"\|\s+Model:\s+`?gpt-high`?", row)
