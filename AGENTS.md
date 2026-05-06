@@ -40,6 +40,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `process-tree-auditor` - Audit an `agents trace --json` process tree plus companion artifacts to verify root-delegated workflow execution.
   File: [~/ai/agents/process-tree-auditor.md](agents/process-tree-auditor.md) | Inputs: `operator_file`, `process_tree_path`, `root_invocation_uuid`, `subtree_root_uuid?`, `expected_process`, `companion_artifacts`, `audit_history_path?`, `mode?`, `report_path?` | Model: `gpt-high`
 
+- `workflow-process-auditor` - Audit workflow run artifacts for procedure adherence; consumes process-tree reports as evidence but does not replace `process-tree-auditor`.
+  File: [~/ai/agents/workflow-process-auditor.md](agents/workflow-process-auditor.md) | Inputs: `workflow_file`, `run_artifacts`, `repo_root`, `process_tree_report_path?`, `expected_process_path?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+
 ### Coverage / behavior / test authoring
 
 - `coverage-analyzer` - Build a coverage inventory when you need covered vs. uncovered code, dead tests, or regression-baseline data.

@@ -4,10 +4,23 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AGENTS_MD = REPO_ROOT / "AGENTS.md"
+WORKFLOW_PROCESS_AUDITOR = "workflow-process-auditor"
+WORKFLOW_PROCESS_AUDITOR_LINK = (
+    "[~/ai/agents/workflow-process-auditor.md](agents/workflow-process-auditor.md)"
+)
+WORKFLOW_PROCESS_AUDITOR_INPUTS = (
+    "Inputs: `workflow_file`, `run_artifacts`, `repo_root`, "
+    "`process_tree_report_path?`, `expected_process_path?`, "
+    "`audit_history_path?`, `report_path?`, `mode?`"
+)
 
 
 def _agents_text():
     return AGENTS_MD.read_text(encoding="utf-8")
+
+
+def _agents_text_from(repo_root):
+    return (repo_root / "AGENTS.md").read_text(encoding="utf-8")
 
 
 def _assert_heading_on_own_line(text, heading):
@@ -37,6 +50,12 @@ def _relative_markdown_targets(text):
         target = target.split("#", 1)[0]
         if target:
             yield target
+
+
+def _routing_row(text, name):
+    match = re.search(rf"(?ms)^- `{re.escape(name)}` - .*?(?=^- `|\Z)", text)
+    assert match, f"missing operator row: {name}"
+    return match.group(0)
 
 
 def test_new_section_headings_present():
@@ -181,3 +200,35 @@ def test_github_url_present_in_ecosystem_map():
     assert ecosystem_match, "missing Ecosystem Map section"
     following_lines = text[ecosystem_match.end() :].splitlines()[:30]
     assert "https://github.com/nestharus/ai" in "\n".join(following_lines)
+
+
+# S2 / coverage-gap MEDIUM / lean-plus / proposal Test-Intent T12.
+def test_workflow_process_auditor_routing_row_present(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WORKFLOW_PROCESS_AUDITOR)
+
+    assert row.startswith(f"- `{WORKFLOW_PROCESS_AUDITOR}` - ")
+
+
+# S2 / coverage-gap MEDIUM / lean-plus / proposal Test-Intent T12.
+def test_workflow_process_auditor_routing_row_links_operator_file(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WORKFLOW_PROCESS_AUDITOR)
+
+    assert f"File: {WORKFLOW_PROCESS_AUDITOR_LINK}" in row
+
+
+# S2 / coverage-gap MEDIUM and blast-radius MEDIUM / lean-plus /
+# proposal Test-Intent T12.
+def test_workflow_process_auditor_routing_row_inputs_and_model(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WORKFLOW_PROCESS_AUDITOR)
+
+    assert WORKFLOW_PROCESS_AUDITOR_INPUTS in row
+    assert re.search(r"\|\s+Model:\s+`?gpt-high`?", row)
+
+
+# S2 / blast-radius MEDIUM and duplicate-system-count HIGH boundary / lean-plus /
+# proposal Test-Intent T12.
+def test_workflow_process_auditor_routing_row_boundary_phrases(repo_root):
+    row = _routing_row(_agents_text_from(repo_root), WORKFLOW_PROCESS_AUDITOR)
+
+    assert "consumes process-tree reports as evidence" in row
+    assert "does not replace" in row
