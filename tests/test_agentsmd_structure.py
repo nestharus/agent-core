@@ -52,7 +52,8 @@ def _section_after_heading(text, heading):
     return following
 
 
-def _relative_markdown_targets(text):
+def _relative_markdown_links(text):
+    links = []
     for match in re.finditer(r"(?<!!)\[[^\]]+\]\(([^)]+)\)", text):
         target = match.group(1).strip()
         if not target:
@@ -62,7 +63,21 @@ def _relative_markdown_targets(text):
             continue
         target = target.split("#", 1)[0]
         if target:
-            yield target
+            links.append((match.group(0), target))
+    return links
+
+
+def _relative_markdown_targets(text):
+    for _label, target in _relative_markdown_links(text):
+        yield target
+
+
+def _file_markdown_targets(text):
+    return [
+        target
+        for match in re.finditer(r"File:\s+(?P<link>(?<!!)\[[^\]]+\]\([^)]+\))", text)
+        for _label, target in _relative_markdown_links(match.group("link"))
+    ]
 
 
 def _routing_row(text, name):
@@ -133,6 +148,64 @@ def test_all_relative_links_in_agents_md_resolve():
         if not (REPO_ROOT / target).exists()
     ]
     assert missing == []
+
+
+def test_routing_and_workflow_topology_links_are_operational_artifacts():
+    """Risk: dispatch-surface static-link pollution; level: unit/structural.
+
+    Source: NES-208 proposal Test-intent track and assumption A7.
+    """
+    text = _agents_text()
+    operator_routing = _section_after_heading(text, "## Operator Routing Table")
+    workflow_topologies = _section_after_heading(text, "## Workflow Topologies")
+    conventions = _section_after_heading(text, "## Conventions")
+
+    operator_file_targets = _file_markdown_targets(operator_routing)
+    assert operator_file_targets, "expected operator routing File: links"
+    for target in operator_file_targets:
+        assert target.startswith("agents/"), (
+            f"operator routing File target must stay under agents/: {target}"
+        )
+        assert (REPO_ROOT / target).exists(), (
+            f"operator routing File target must resolve: {target}"
+        )
+        assert not target.startswith(
+            ("workflows/", "conventions/", "models/", "tools/", "clients/")
+        ), f"operator routing File target uses non-agent surface: {target}"
+        assert target not in {"DECISIONS.md", "VALUES.md"}, (
+            f"operator routing File target uses static doc: {target}"
+        )
+
+    convention_targets = list(_relative_markdown_targets(conventions))
+    assert convention_targets, "expected convention section links"
+    for target in convention_targets:
+        assert target.startswith("conventions/"), (
+            f"conventions target must stay under conventions/: {target}"
+        )
+        assert (REPO_ROOT / target).exists(), f"conventions target must resolve: {target}"
+
+    workflow_targets = list(_relative_markdown_targets(workflow_topologies))
+    convention_dispatch_targets = [
+        target
+        for target in operator_file_targets + workflow_targets
+        if target.startswith("conventions/")
+    ]
+    assert convention_dispatch_targets == []
+
+    assert workflow_targets, "expected workflow topology links"
+    for target in workflow_targets:
+        assert target.startswith("workflows/"), (
+            f"workflow topology target must stay under workflows/: {target}"
+        )
+        assert (REPO_ROOT / target).exists(), (
+            f"workflow topology target must resolve: {target}"
+        )
+        assert target not in {"DECISIONS.md", "VALUES.md", "models/roles.md"}, (
+            f"workflow topology target uses static doc: {target}"
+        )
+        assert not target.startswith("conventions/"), (
+            f"workflow topology target uses convention surface: {target}"
+        )
 
 
 def test_routing_table_rows_preserved():
