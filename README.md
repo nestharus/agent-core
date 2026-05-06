@@ -49,6 +49,8 @@ Reusable process docs.
 
 - [`workflows/pr-review.md`](workflows/pr-review.md) — Post-CodeRabbit PR gates for tests, concern-splitting, justification, and commit hygiene.
 
+- [`workflows/project-bootstrap.md`](workflows/project-bootstrap.md) — Open-path, wrapper-emission, closed-path, and re-bootstrap workflow for project-specific operator wrappers.
+
 - [`workflows/research.md`](workflows/research.md) — Research process for open-ended investigation, option analysis, and externally sourced scoping.
 
 - [`workflows/roadmap.md`](workflows/roadmap.md) — Strategic roadmap pipeline for turning product direction into scoped shippable work.

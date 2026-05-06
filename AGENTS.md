@@ -212,6 +212,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 ## Workflow Topologies
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)
 - PR review gates (test-audit, multi-concern, justification, commit-hygiene): [`~/ai/workflows/pr-review.md`](workflows/pr-review.md)
 - Tickets-first review (variant: ticket is the unit of review; PR drafted only after review passes): [`~/ai/workflows/tickets-first-review.md`](workflows/tickets-first-review.md)
