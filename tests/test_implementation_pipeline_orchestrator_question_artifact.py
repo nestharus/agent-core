@@ -100,3 +100,78 @@ def test_needs_input_handling_covers_sub_agents_and_orchestrator_permission_deni
     _assert_matches(section, section_name, r"\bprocedural\b", "procedural split")
     _assert_matches(section, section_name, r"\bvalue(?:/scope)?\b", "value/scope split")
     _assert_matches(section, section_name, r"\bscope\b", "scope split")
+
+
+def test_entry_mode_preflight_missing_target_identity_uses_question_artifact():
+    section_name = "entry-mode preflight missing target identity"
+    text = _orchestrator_text()
+
+    _assert_matches(
+        text,
+        section_name,
+        r"(?is)(?:entry-mode|pipeline_entry_mode|review_first).{0,800}missing target identity.{0,800}NEEDS_INPUT:<absolute_artifact_path>",
+        "missing target identity NEEDS_INPUT",
+    )
+    _assert_contains(text, section_name, "${scratch_dir}/questions/")
+    _assert_matches(
+        text,
+        section_name,
+        r"q-<uuidv4>\.question\.json",
+        "question artifact filename",
+    )
+
+
+def test_entry_mode_preflight_stale_bundle_needs_input_fallback_uses_question_artifact():
+    section_name = "entry-mode preflight stale bundle needs_input fallback"
+    text = _orchestrator_text()
+
+    _assert_matches(
+        text,
+        section_name,
+        r"(?is)stale bundle.{0,800}review_staleness_fallback=needs_input.{0,800}NEEDS_INPUT:<absolute_artifact_path>",
+        "stale bundle needs_input fallback NEEDS_INPUT",
+    )
+    _assert_contains(text, section_name, "${scratch_dir}/questions/")
+    _assert_matches(
+        text,
+        section_name,
+        r"q-<uuidv4>\.question\.json",
+        "question artifact filename",
+    )
+
+
+def test_required_review_staleness_policy_reruns_review_first_without_question():
+    section_name = "required staleness policy"
+    text = _orchestrator_text()
+
+    _assert_matches(
+        text,
+        section_name,
+        r"(?is)review_staleness_policy=required.{0,160}(?:always reruns|dispatch a fresh) `?review_first`?",
+        "required policy reruns review_first",
+    )
+    _assert_matches(
+        text,
+        section_name,
+        r"(?is)review_staleness_policy=required.{0,260}prior bundle as context",
+        "required policy treats prior bundle as context",
+    )
+
+
+def test_entry_mode_preflight_user_owned_staleness_choice_uses_question_artifact():
+    section_name = "entry-mode preflight user-owned staleness choice"
+    text = _orchestrator_text()
+
+    _assert_matches(
+        text,
+        section_name,
+        r"(?is)user-owned.{0,300}staleness.{0,300}choice.{0,800}NEEDS_INPUT:<absolute_artifact_path>",
+        "user-owned staleness choice NEEDS_INPUT",
+    )
+    _assert_contains(text, section_name, "${scratch_dir}/questions/")
+    _assert_matches(
+        text,
+        section_name,
+        r"q-<uuidv4>\.question\.json",
+        "question artifact filename",
+    )

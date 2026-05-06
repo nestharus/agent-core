@@ -21,8 +21,8 @@ You audit completed workflow runs, not source-code quality, test quality, PR val
 ## Use When
 
 - A completed workflow run needs procedure-adherence review beyond tree shape.
-- Future `audit.md` receives `target_type=runtime`.
-- A future implementation-pipeline `review_first` target is a workflow run rather than a source file.
+- Current `audit.md` receives `target_type=runtime`.
+- A current implementation-pipeline `review_first` target is a workflow run rather than a source file.
 - A process-tree audit passed topology but the caller still needs to know whether procedure artifacts match the written workflow.
 - A root coordinator has a runtime evidence bundle and needs a LOW/MEDIUM/HIGH procedure-adherence verdict.
 

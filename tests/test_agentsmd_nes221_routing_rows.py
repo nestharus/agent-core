@@ -55,15 +55,24 @@ def test_existing_agentsmd_structure_suite_remains_present():
         assert f"def {test_name}(" in structure_text
 
 
-def test_agentsmd_omits_future_audit_workflow_entries():
-    """T20: AGENTS.md does not add NES-224 pipeline wiring before it lands.
-
-    The original guard also excluded `workflow-process-auditor`. That row is now in
-    scope because NES-222 ships it; the row's structural assertions live in
-    `tests/test_agentsmd_structure.py`. NES-223 now lands the Audit sub-workflow
-    row, so this guard only protects against premature NES-224 / NES-219D
-    `pipeline_entry_mode` wiring.
-    """
+def test_agentsmd_advertises_implementation_pipeline_entry_mode_inputs():
+    """T20: NES-224 exposes compact implementation-pipeline entry-mode routing."""
     text = _agents_text()
+    match = re.search(
+        r"(?ms)^- `implementation-pipeline-orchestrator` - .*?(?=^- `|\Z)",
+        text,
+    )
+    assert match, "missing implementation-pipeline-orchestrator AGENTS row"
+    row = match.group(0)
 
-    assert "pipeline_entry_mode" not in text
+    for marker in (
+        "pipeline_entry_mode?",
+        "audit_target_*?",
+        "existing_review_bundle_path?",
+        "review_staleness_policy?",
+        "tickets_first_variant?",
+        "claude-opus",
+    ):
+        assert marker in row
+    assert "wu_id" not in row
+    assert "ticket_branch" not in row
