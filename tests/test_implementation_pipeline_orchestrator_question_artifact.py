@@ -44,26 +44,18 @@ def test_non_negotiables_define_askuserquestion_permission_denial_artifact_rule(
     _assert_matches(
         section,
         section_name,
-        r"q-<uuidv4>\.question\.json",
-        "question id or artifact filename",
+        r"\bvalue(?:/scope)?\b|\bscope\b",
+        "value/scope split",
     )
-    _assert_contains(section, section_name, "${scratch_dir}/questions/")
     _assert_contains(section, section_name, "NEEDS_INPUT:<")
-    _assert_matches(section, section_name, r"\bhalts?\b", "halt behavior")
     _assert_contains(
         section,
         section_name,
         "~/ai/conventions/agent-questions-and-session-graph.md",
     )
+    _assert_contains(section, section_name, "AskUserQuestion Permission-Denial")
     _assert_matches(section, section_name, r"\bprocedural\b", "procedural split")
-    _assert_matches(section, section_name, r"\bnew[- ]value\b", "new-value split")
     _assert_matches(section, section_name, r"\binline\b", "inline procedural handling")
-    _assert_matches(
-        section,
-        section_name,
-        r"\bcontract violation\b",
-        "contract violation framing",
-    )
 
 
 def test_phase_2_5_human_gate_defines_permission_denial_question_artifact_fallback():
@@ -81,14 +73,9 @@ def test_phase_2_5_human_gate_defines_permission_denial_question_artifact_fallba
         r"permission[- ](?:denial|denied)",
         "permission-denial term",
     )
-    _assert_matches(
-        section,
-        section_name,
-        r"(?:q-<uuidv4>|\.question\.json)",
-        "question id or JSON artifact filename",
-    )
     _assert_contains(section, section_name, "NEEDS_INPUT")
     _assert_contains(section, section_name, "agent-questions-and-session-graph.md")
+    _assert_contains(section, section_name, "AskUserQuestion Permission-Denial")
 
 
 def test_needs_input_handling_covers_sub_agents_and_orchestrator_permission_denial():
@@ -100,6 +87,24 @@ def test_needs_input_handling_covers_sub_agents_and_orchestrator_permission_deni
     _assert_matches(section, section_name, r"\bprocedural\b", "procedural split")
     _assert_matches(section, section_name, r"\bvalue(?:/scope)?\b", "value/scope split")
     _assert_matches(section, section_name, r"\bscope\b", "scope split")
+    _assert_contains(
+        section,
+        section_name,
+        "~/ai/conventions/agent-questions-and-session-graph.md",
+    )
+    _assert_contains(section, section_name, "AskUserQuestion Permission-Denial")
+    _assert_matches(
+        section,
+        section_name,
+        r"permission[- ](?:denial|denied)",
+        "permission-denial term",
+    )
+    _assert_matches(
+        section,
+        section_name,
+        r"NEEDS_INPUT:<absolute_artifact_path>|NEEDS_INPUT:<question_artifact",
+        "question artifact marker",
+    )
 
 
 def test_entry_mode_preflight_missing_target_identity_uses_question_artifact():

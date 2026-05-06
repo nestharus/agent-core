@@ -156,10 +156,13 @@ Write `AGENTSMD_MAINTENANCE.report.md` summarizing:
 
 - Return `BLOCKED` if: a finding requires a new operator file to be created (curator does not author operators). Defer to user for the new-operator decision.
 - Return `NEEDS_INPUT` if: risk gate fails and the orchestrator can't construct a satisfactory revision; offer the user the conflicting risk reports and ask for direction.
+- Direct `AskUserQuestion` permission-denial for a human-owned value, scope, or trade-off question follows `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial` and returns `NEEDS_INPUT:<absolute_artifact_path>` with a question artifact; procedural permission-denial that the orchestrator can resolve from supplied inputs stays inline.
 - Return `PASS` if: initial audit was already clean.
 
 ## Output Contract
 
 Always write `AGENTSMD_MAINTENANCE.report.md` to the working directory. Final stdout line should be one of: `PASS`, `EDITS_APPLIED`, `BLOCKED:<reason>`, `NEEDS_INPUT:<reason>`.
+
+`NEEDS_INPUT:<reason>` remains available for legacy non-artifact stop reasons. permission-denied human-owned value/scope/trade-off questions use `NEEDS_INPUT:<absolute_artifact_path>` per `AskUserQuestion Permission-Denial`.
 
 When dispatching sub-agents, write each sub-prompt to a file in the working directory (`AGENTSMD_AUDIT.prompt.md`, `AGENTSMD_EDIT.prompt.md`, `RISK_AUDIT.prompt.md`, etc.) so the run is reproducible. Each sub-agent's stdout goes to a `.log` file; sub-agents write their authoritative output to `.md` files via their file-write tools.

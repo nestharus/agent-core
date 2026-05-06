@@ -459,6 +459,12 @@ When a risk assessment returns MEDIUM or HIGH at any layer:
 
 ---
 
+## NEEDS_INPUT Handling
+
+For roadmap human gates, unresolved risk-direction questions, and other human-owned value/scope/trade-off questions, direct `AskUserQuestion` permission-denial follows `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: return `NEEDS_INPUT:<absolute_artifact_path>` with the question artifact and halt before dependent roadmap work. Procedural permission-denial or procedural NEEDS_INPUT that the roadmap orchestrator can resolve from supplied inputs stays inline.
+
+---
+
 ## Run Report
 
 After each layer completes (all risk gates LOW, human/model gate passed), produce a brief status report:
