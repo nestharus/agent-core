@@ -31,11 +31,11 @@ This agent does not change the ordering or scope from the engineering roadmap. I
 ### Step 1: Understand the implementation pipeline
 
 Read `AGENTS.md`, specifically:
-- The 8-phase implementation pipeline (research → synthesis → proposal → 3x risk → hookpoints → test agent → code agent → CodeRabbit → PR review)
+- The implementation pipeline (research → synthesis → proposal → Phase 4 risk gates → hookpoints → test agent → code agent → CodeRabbit → PR review)
 - The test/code agent separation rules (test agent sees contracts only; code agent sees contracts + tests)
 - The per-feature PR workflow
 - The "single concern per PR" rule from PR review
-- The model roles table
+- Workflow/routing context from `AGENTS.md`, with model assignments from `models/roles.md`
 
 ### Step 2: Decompose each initiative into work units
 
@@ -118,11 +118,14 @@ For each work unit, determine which `AGENTS.md` pipeline phases apply:
 
 - **Research needed?** If the work unit introduces new technology or patterns not in the codebase, it needs Phase 1 (problem research) and Phase 5 (hookpoint research). If it follows existing patterns, these can be lightweight or skipped.
 - **Proposal needed?** All work units need a Phase 3 proposal, but for simple pattern-following units, the proposal can be brief.
-- **Risk assessment?** All work units go through Phase 4 (3x risk). For small units following established patterns, risk should be LOW quickly.
-- **Model assignment**: Per `AGENTS.md` model roles table:
+- **Risk assessment?** All work units go through Phase 4's four risk gates. For small units following established patterns, risk should be LOW quickly.
+- **Model assignment**: Per `models/roles.md`:
   - Research: gpt-high
   - Proposal: gpt-high
-  - Risk: claude-opus (3x parallel)
+  - Audit risk: gpt-high
+  - Scope risk: claude-opus
+  - Shortcut risk: claude-opus
+  - Supported-surface risk: claude-opus
   - Hookpoints: gpt-high
   - Test agent: gpt-high
   - Code agent: gpt-high
@@ -239,7 +242,7 @@ Before submitting output, verify:
 - [ ] Every acceptance criterion is binary (pass/fail, not subjective)
 - [ ] Versioned entities include optimistic locking test criteria
 - [ ] Dependency graph is acyclic (topological sort succeeds)
-- [ ] Model assignments follow the `AGENTS.md` model roles table
+- [ ] Model assignments follow `models/roles.md`
 - [ ] Parallelizable work units don't share output files or migration files
 - [ ] No work units are orphaned (every unit traces to an engineering initiative)
 - [ ] No engineering initiative is partially decomposed (all aspects covered)

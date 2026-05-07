@@ -2,7 +2,7 @@
 
 Risk type definitions for the roadmap workflow. Each risk type is specific to the failure modes of its layer. The orchestrator constructs risk assessment prompts by combining a risk type definition from this file with the artifact being assessed and its cross-reference documents.
 
-Risk assessments use `claude-opus` and follow the same structure as implementation risk assessments in `plans/risk/`. Three risk agents run in parallel per layer. All must return LOW for the layer to pass.
+Risk assessments follow the per-risk model assignments in `workflows/roadmap.md` and use the same structure as implementation risk assessments in `plans/risk/`. Three risk agents run in parallel per layer. All must return LOW for the layer to pass.
 
 ---
 
