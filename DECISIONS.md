@@ -2,6 +2,35 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07b — NES-267 Phase 7 Tier-1 rewind + tight-anti-scope retry; cascade specification deferred to sibling WUs
+
+**WU**: NES-267 (procedural-test-handoff). **Phase**: 7 (CodeRabbit loop). **Decision**: `Tier-1 rewind from Round-2 6-pass MAX_PASSES_REACHED state back to clean Phase 6 commit; re-dispatch CodeRabbit with tight anti-scope and max-passes=2; accept the resulting 1-in-scope-amend state and proceed.`
+
+Round 2 of the CodeRabbit loop ran 6 passes and amended 18 findings. Most amends added orchestrator-side mechanism — a `DISPATCH_REQUIRED` marker convention, an orchestrator update-the-output-index rule, a `re-invokes or continues the code writer` strategy, and a process-tree-auditor extension verifying procedural-handoff nodes — all of which crossed the ticket's anti-scope ("No new operators", "this WU edits the workflow document only"). Pass 6 then surfaced 3 real workflow-spec findings (R6-F02 emitted-test-path update mechanism unspecified; R6-F03 `re-invokes or continues` conflates strategies; R6-F05 `DISPATCH_REQUIRED` marker format undefined) — questions about the orchestrator-side mechanism CodeRabbit itself had introduced in earlier amends.
+
+The orchestrator reset (`git reset --hard e5d98e2`) to the clean post-Phase-6 commit, re-rebased onto current `master` (which had landed PR #53 for `process-tree-auditor` canonical-gate-report verification), then re-dispatched CodeRabbit with `max-passes=2` and explicit skip rules covering: orchestrator-behavior findings, new-artifact-format findings, Step 6c resume-vs-fresh-invocation strategy findings, process-tree-audit-extension findings, pr-review-extension findings, workflow-execution-violations-extension findings, and runtime/integration-test findings. Round 3 applied 2 in-scope clarity fixes in pass 1 and 1 in-scope clarity fix in pass 2, then stopped at the configured cap. The final commit is `3d34929` (squashed-onto-rebased single commit), diff = `workflows/implementation-pipeline.md` (8 line additions) + `tests/test_implementation_pipeline_procedural_handoff.py` (102 line additions).
+
+**Anti-scope (kept intact via tight Round-3 skip rules).**
+
+- Did NOT introduce a `DISPATCH_REQUIRED` marker convention or any new artifact format.
+- Did NOT specify orchestrator detection / dispatch / output-index-update behavior in `~/ai/workflows/implementation-pipeline.md`.
+- Did NOT extend `~/ai/agents/process-tree-auditor.md` to verify procedural-handoff nodes.
+- Did NOT extend `~/ai/workflows/pr-review.md` to verify procedural-handoff evidence.
+- Did NOT extend `~/ai/conventions/workflow-execution-violations.md` to add procedural-handoff false-completion examples.
+- Did NOT add runtime / integration tests of the procedural handoff. Structural pytest only.
+
+**Residual (deferred).** The 3 Round-2 cap-time findings (orchestrator-side update mechanism unspecified; resume-vs-fresh-invocation strategy unspecified; `DISPATCH_REQUIRED`-style marker format unspecified) are explicit forward-drift items for sibling NES-237-derived WUs that own the orchestrator + auditor + violation-taxonomy + pr-review cascade. They are NOT silent gaps — they are flagged in the Phase 2.5 duplicates inventory (`/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/research/nes-267-duplicates.md`) and the proposal's Residual-Risk section (`/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/proposals/nes-267-NES-267.md`).
+
+**Justifying evidence.**
+
+- Round-2 CodeRabbit summary (showing the drift): `/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/.scratch/coderabbit/CODERABBIT_summary.md`
+- Round-2 pass 6 (the 3 cap-time findings): `/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/.scratch/coderabbit/CODERABBIT_pass6.md`
+- Round-3 prompt (the tight anti-scope rules): `/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/.scratch/prompts/nes-267-phase-7-coderabbit-r3.md`
+- Round-3 pass 1: `/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/.scratch/coderabbit-r3/CODERABBIT_pass1.md`
+- Round-3 pass 2: `/home/nes/projects/ai/planning/nes-267-procedural-test-handoff/.scratch/coderabbit-r3/CODERABBIT_pass2.md`
+- Final commit SHA: `3d34929`.
+- Reflog evidence of the rewind: `e5d98e2 HEAD@{5}: rebase (finish)` followed by amend chain through `0d4cae4 HEAD@{0}` then `git reset --hard e5d98e2`, then re-rebase onto `master` (`4cd0191`).
+
 ## D-2026-05-07a — NES-241 Phase 6c scope expansion (assertion-drift fix in same family)
 
 **WU**: NES-241 (test-cli-unit-drift). **Phase**: 6c. **Decision**: `Expand NES-241 scope (option A) to include the row-20 assertion-drift fix on TestMain.test_create_issue_command in the same WU.`
