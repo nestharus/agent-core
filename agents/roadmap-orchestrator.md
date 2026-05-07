@@ -16,7 +16,7 @@ Transform the aligned product strategy (`problem.md`, `philosophy.md`, `proposal
 
 ## Model Selection
 
-Model selection follows the guidance in `src/models.md`. Summary for this workflow:
+Model selection follows the guidance in `models/roles.md`. Roadmap risk-gate model assignments follow the per-risk split in `workflows/roadmap.md`. Summary for this workflow:
 
 | Role | Model | Rationale |
 |---|---|---|
@@ -24,7 +24,7 @@ Model selection follows the guidance in `src/models.md`. Summary for this workfl
 | Web research execution | `gpt-high` | Focused investigation via Firecrawl; high controllability |
 | Proposals (internal layers) | `gpt-high` | Constraint-aware design, systematic evaluation. Escalate to `gpt-xhigh` only on recurrence or stall |
 | Public-facing documents | `claude-opus` | Executive roadmap, pitch deck — any artifact shown to stakeholders. Opus produces higher quality writing. |
-| Risk assessment | `claude-opus` | Alignment checking, coherence judgment |
+| Roadmap risk gates | See `workflows/roadmap.md` | Per-risk assignments: checklist/presence risks use `gpt-high`; intent/direction risks use `claude-opus` |
 | Synthesis | `gpt-high` | Merging research findings into structured reports |
 | Visual review | `gemini-high` | Screenshot or visual artifact review |
 
@@ -214,7 +214,7 @@ If the proposer fails or produces a roadmap that cannot pass risk after 2 revisi
 - `executive-roadmap.md` (always written)
 - `executive-surfaces.md` (only if surfaces found)
 
-#### Stage 1b: Executive Risk Assessment (3x claude-opus, parallel)
+#### Stage 1b: Executive Risk Assessment (3x parallel)
 
 Construct three risk assessment prompts from `roadmap-risk-types.md`, section "Executive Roadmap Risks." Each prompt includes:
 - The risk type definition, severity criteria, and assessment checklist from `roadmap-risk-types.md`
@@ -233,7 +233,7 @@ git worktree add worktrees/exec-risk-completeness -b exec-risk-completeness
 # Run in parallel
 agents -m claude-opus -p worktrees/exec-risk-market -f .tmp/executive-risk-market-misread.md &
 agents -m claude-opus -p worktrees/exec-risk-dependency -f .tmp/executive-risk-dependency-trap.md &
-agents -m claude-opus -p worktrees/exec-risk-completeness -f .tmp/executive-risk-completeness.md &
+agents -m gpt-high -p worktrees/exec-risk-completeness -f .tmp/executive-risk-completeness.md &
 wait
 
 # Collect outputs to plans/risk/
@@ -241,9 +241,9 @@ wait
 ```
 
 **Risk types:**
-1. **Market misread** — Are value assessments evidence-based?
-2. **Dependency trap** — Does the ordering create fragile critical paths?
-3. **Completeness** — Are all proposal subsystems covered?
+1. **Market misread** (`claude-opus`) — Are value assessments evidence-based?
+2. **Dependency trap** (`claude-opus`) — Does the ordering create fragile critical paths?
+3. **Completeness** (`gpt-high`) — Are all proposal subsystems covered?
 
 See `roadmap-risk-types.md` for full definitions.
 
@@ -310,14 +310,14 @@ agents -m gpt-high -p <worktree> -f product-strategy/engineering\ roadmap\ propo
 - `engineering-roadmap.md` (always written)
 - `engineering-surfaces.md` (only if surfaces found)
 
-#### Stage 2c: Engineering Risk Assessment (3x claude-opus, parallel)
+#### Stage 2c: Engineering Risk Assessment (3x parallel)
 
 Same pattern as Stage 1b. Construct three prompts from `roadmap-risk-types.md`, section "Engineering Roadmap Risks."
 
 **Risk types:**
-1. **Feasibility** — Are effort estimates realistic?
-2. **Integration** — Will independently-built slices integrate?
-3. **Drift** — Does engineering add/drop/reinterpret executive priorities?
+1. **Integration** (`claude-opus`) — Will independently-built slices integrate?
+2. **Drift** (`claude-opus`) — Does engineering add/drop/reinterpret executive priorities?
+3. **Feasibility** (`gpt-high`) — Are effort estimates realistic?
 
 **All three must return LOW.** If any is not LOW, follow the resolution path in `roadmap-risk-types.md` and re-run the full gate.
 
@@ -358,23 +358,23 @@ agents -m gpt-high -p <worktree> -f product-strategy/ai\ roadmap\ proposer.md
 **Outputs:**
 - `ai-roadmap.md` (always written)
 
-#### Stage 3b: AI Risk Assessment (3x claude-opus, parallel)
+#### Stage 3b: AI Risk Assessment (3x parallel)
 
 Same pattern. Construct three prompts from `roadmap-risk-types.md`, section "AI Roadmap Risks."
 
 **Risk types:**
-1. **Decomposition** — Are work unit boundaries clean?
-2. **Coverage** — Is every engineering item decomposed?
-3. **Dependency** — Is the dependency graph acyclic?
+1. **Decomposition** (`claude-opus`) — Are work unit boundaries clean?
+2. **Dependency** (`claude-opus`) — Is the dependency graph acyclic?
+3. **Coverage** (`gpt-high`) — Is every engineering item decomposed?
 
 **All three must return LOW.** If any is not LOW, follow the resolution path and re-run the full gate.
 
-#### Stage 3c: Model Gate
+### Stage 3c: Validate AI Roadmap
 
 The orchestrator validates:
 - Every engineering roadmap slice appears in the AI roadmap
 - The dependency graph is acyclic (topological sort succeeds)
-- Model assignments follow the model roles table in `AGENTS.md`
+- Model assignments follow `models/roles.md`
 
 No human gate — this is a formatting transformation of the already-approved engineering roadmap.
 

@@ -180,7 +180,7 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
 
 ### Roadmap cascade
 
-The roadmap workflow cascades from market research (Layer 0) through ticket regeneration (Layer 4). Each layer has 3x risk gates (claude-opus, all-LOW required) before advancing.
+The roadmap workflow cascades from market research (Layer 0) through ticket regeneration (Layer 4). Each layer has 3x risk gates (per-risk model assignment per `workflows/roadmap.md`, all-LOW required) before advancing.
 
 - `roadmap-orchestrator` - Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.
   File: [~/ai/agents/roadmap-orchestrator.md](agents/roadmap-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, `DECISIONS.md`, scratch dir | Model: `claude-opus`
