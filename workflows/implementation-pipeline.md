@@ -312,6 +312,7 @@ The exact model assignments for these roles live in `~/ai/models/roles.md`.
 Implementation has three sub-steps.
 The test writer and the code writer must be different agent invocations.
 That rule is load-bearing: if the same agent writes both, the tests mirror the implementation instead of validating the contract.
+Step 6a defines the level outer contract; during Step 6c, once passing evidence exists, post-prototype internal component contract derivation may be triggered.
 
 - Rule: Phase 6 firstness evidence is the Phase 6 process-tree review plus companion artifacts. The companion artifacts are the expected-process manifest, Step 6b prompt/log, Step 6c prompt/log, Step 6b output index, Step 6b output paths, and evidence that Step 6c consumed those outputs. A commit marker is optional supporting evidence only. A PR-diff test file is not required firstness evidence.
 - Convention: `${scratch_dir}/phase6/` resolves under the same per-run scratch directory supplied by the invoking workflow, matching the `scratch_dir` input pattern used by `agents/test-audit-gate.md` and `agents/red-phase-gate.md`.
@@ -324,13 +325,14 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 ### Step 6a - Define contract
 
 - Owner: orchestrator
-- Produces: schemas, signatures, commands, interface boundaries, explicit behavioral assumptions, fixture application points, and test-intent handoff
+- Produces: the level outer contract: schemas, signatures, commands, interface boundaries, explicit behavioral assumptions, fixture application points, and test-intent handoff
 - Rule: the contract must be clear enough that another agent can write tests from it without seeing implementation code.
 - Rule: the contract must preserve every change risk or verification risk, selected test level, fixture source, assumption-register link, and expected observable signal from the approved proposal test-intent track.
+- Rule: Step 6a does not author internal component contracts; those can only be derived from later prototype evidence when the Post-prototype internal contract derivation rule in Step 6c is triggered.
 
 ### Step 6b - Encode tests first
 
-- Inputs: contract, approved proposal test-intent track, approved `problem map`, **approved `risk/NN-risk-profile.md`**, characterization tests already produced in Phase 2.5 step 2.5.1 for any uncovered behaviors on the touched surface, `risk/NN-supported-surface.md`, and hookpoint research.
+- Inputs: level outer contract, approved proposal test-intent track, approved `problem map`, **approved `risk/NN-risk-profile.md`**, characterization tests already produced in Phase 2.5 step 2.5.1 for any uncovered behaviors on the touched surface, `risk/NN-supported-surface.md`, and hookpoint research.
 - Rule: the test writer is a separate agent invocation from Step 6c.
 - Rule: the test writer does **not** see the implementation.
 - Rule: in **lean mode**, smoke + AC coverage is sufficient; residuals are named but not blocking. In **exhaustive mode**, per-named-risk + per-AC + property-based / mutation / fuzz coverage is required for surfaces scored HIGH on `coverage-gap` or `behavioral-ambiguity`; residual tests are blocking unless explicitly accepted in `risk/NN-test-residuals.md`. Per-surface mode applies independently.
@@ -357,7 +359,13 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
 - Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
 - Rule: Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes.
-- Rule: Process-tree review: after Step 6c completes and before Phase 7, run `process-tree-auditor` on the Phase 6 subtree. The expected process must prove separate Step 6b and Step 6c invocations, timing order, Step 6b output index presence, Step 6b output paths, and Step 6c consumption of those outputs. A `blocking` independence, output/artifact, or silent-success violation prevents CodeRabbit. Missing required evidence is `NEEDS_INPUT:<question_artifact>` when it can still be supplied, otherwise `blocking`; the affected subtree is `rerun or repaired` before downstream consumption.
+- Rule: Post-prototype internal contract derivation: after Step 6c produces a passing level prototype that passes level behavior tests, derive internal component contracts only when Phase 3 opened recursive or component-decomposition scope, or when candidate internal components emerge from the passing prototype.
+- Rule: when neither trigger arm fires, no derivation record is required and Phase 7 proceeds unchanged.
+- Rule: when either trigger arm fires and no internal component split is accepted, record an evidence-bearing no-split / rejection subsection before Phase 7.
+- Rule: for docs/workflow WUs, the Step 6b structural pytest may serve as the level behavior test evidence when that is the honest test level.
+- Rule: derived internal contracts are recorded as named post-prototype subsections in the existing `${planning_dir}/contracts/${wu_lower}-${slug}.md` contract artifact, not in a new file.
+- Rule: derivation-record fields are `prototype_evidence_links`, `accidental_coupling_exclusions`, `neighbor_claims`, `rejected_component_candidates`, `generalization_notes`, and `generalization_probe_refs`; `generalization_probe_refs` records divergence references only and does not specify probe content in this workflow.
+- Rule: Process-tree review: after Step 6c completes and before Phase 7, run `process-tree-auditor` on the Phase 6 subtree. The expected process must prove separate Step 6b and Step 6c invocations, timing order, Step 6b output index presence, Step 6b output paths, Step 6c consumption of those outputs, and the derivation record or no-split / rejection subsection when a derivation trigger fires. A `blocking` independence, output/artifact, or silent-success violation prevents CodeRabbit. Missing required evidence is `NEEDS_INPUT:<question_artifact>` when it can still be supplied, otherwise `blocking`; the affected subtree is `rerun or repaired` before downstream consumption.
 
 ## Phase 7 - CodeRabbit Loop
 
