@@ -638,3 +638,39 @@ The other Phase 2.5.1-named uncovered surface (`agents/pr-writer.md` frontmatter
 - Companion precedent: NES-263 (PR #49 merged 2026-05-07) took the same approach for the haiku→opus sweep on ticket operators.
 
 **Re-evaluation trigger.** If Phase 6b fails to produce structural tests for the two dispatch-flag surfaces, this decision is invalid and Phase 2.5.1 must be re-entered to produce characterization tests on a precursor branch. That is a Tier-1 rewind to pre-Phase-6b.
+
+## D-2026-05-07-NES255a — Phase 7 CodeRabbit terminated `BLOCKED:coderabbit-cli-hung`; proceed to Phase 8
+
+**WU**: NES-255 (process-tree-auditor stat-and-read canonical gate reports at audit time).
+
+**Phase**: 7 (CodeRabbit loop).
+
+**Decision**: Accept terminal state `BLOCKED:coderabbit-cli-hung` from the `coderabbit-operator` and proceed to Phase 8 without iterating CodeRabbit further.
+
+**Justifying evidence**:
+- `${planning_dir}/risk/nes-255-coderabbit-summary.md` — terminal state recorded; 0 completed passes / 0 findings.
+- `${scratch_dir}/CODERABBIT_pass1.raw.md` — empty (CLI stayed at `Reviewing` for ~27 minutes without findings, rate-limit guidance, or a PR-required error).
+- `coderabbit auth status` after the hung pass — authenticated as `nestharus` via GitHub provider (auth is not the cause).
+- Diff under review = 3 files: 2 Markdown specs (`agents/process-tree-auditor.md`, `agents/implementation-pipeline-orchestrator.md`) + 1 structural pytest (`tests/test_process_tree_auditor_operator.py`). No source code; CodeRabbit historically produces 0–1 findings on this shape.
+
+**Rationale**: CodeRabbit hang is an infrastructure/CLI failure, not a content signal. Phase 8's PR-review gates (`test-audit`, `multi-concern`, `justification`, `commit-hygiene`) provide the rigorous content backstop. If Phase 8 surfaces concerns CodeRabbit would have caught, the orchestrator re-enters the affected phase per the standard loop. This is **not** a Tier-1 violation (no pipeline rule was broken; the CLI failed to produce evidence).
+
+**Audit-history**: Round 7 entry already recorded by `coderabbit-operator` documenting the terminal state.
+
+**Re-evaluation trigger**: If Phase 8 PR-review gates surface findings that CodeRabbit would have produced (e.g. style/docstring nits on Markdown), retry CodeRabbit before opening the PR. Otherwise leave as terminal `BLOCKED:coderabbit-cli-hung`.
+
+## D-2026-05-07-NES255b — Phase 8 commit-hygiene MEDIUM resolved by subject-line amend
+
+**WU**: NES-255.
+
+**Phase**: 8 (PR-review gates).
+
+**Decision**: Amend the single commit's subject line from 80 chars (`NES-255: process-tree-auditor stat-and-read canonical gate reports at audit time`) to 52 chars (`NES-255: verify canonical gate reports at audit time`) and force-push-with-lease. Re-run only the commit-hygiene gate per `~/ai/workflows/pr-review.md` § Fix Pass.
+
+**Justifying evidence**:
+- `${planning_dir}/risk/nes-255-commit-hygiene.md` (initial run): MEDIUM — subject 80 > 72-char limit. All other findings LOW. Operator's recommended replacement subject given verbatim.
+- Branch is solo-owned WU branch (no concurrent author work); force-push-with-lease is safe.
+- Pre-amend branch SHA: `baee2da`; post-amend branch SHA: `f875ccd` (recorded for audit-history).
+- `${planning_dir}/risk/nes-255-commit-hygiene.md` (re-run after amend): LOW.
+
+**Rationale**: The other three Phase 8 gates (test-audit, multi-concern, justification) returned LOW, so the diff content is fine; only commit-message hygiene needed remediation. Per `~/ai/workflows/pr-review.md` § Fix Pass, only re-run the gates that flagged findings unless the fix touched another gate's area. Subject-only amend does not change diff content, so no other gate needs re-run. Amending (rather than appending a "fix subject" commit) is the correct remediation: a no-content commit would itself be a commit-hygiene anti-pattern. Amend + force-push-with-lease is consistent with the orchestrator's "autonomous on routine pipeline ops" intent given the user's `auto_merge_after_phase_9=true` flag.

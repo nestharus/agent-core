@@ -36,11 +36,11 @@ You audit execution validity, not design correctness, code quality, or human app
 - `process_tree_path=<path>` (required) - saved JSON output from `agents trace --json <root_invocation_uuid>`.
 - `root_invocation_uuid=<uuid>` (required) - invocation UUID used to produce the trace.
 - `subtree_root_uuid=<uuid>` (optional) - node UUID that scopes the audit to a subtree inside the saved trace. When absent, audit from `root_invocation_uuid`.
-- `expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs.
+- `expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs. Canonical-output rows live inside this manifest, not as a separate top-level input.
 - `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree.
   The companion artifacts must not include audited-run narrative notes or rationale for skipped work.
-- `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context. This operator reads it but does not update it.
-- `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports findings without blocking except for unreadable or malformed required inputs.
+- `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context and qualifying canonical-output deletion or replacement lineage evidence. This operator reads it but does not update it.
+- `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.
 - `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path.
 
 ## Expected Process Manifest
@@ -64,6 +64,25 @@ Use Markdown or JSON. Required fields per expected node or child group:
 - `blocking_if_missing`: `true` or `false`.
 - `notes`: structural mapping or manifest-side interpretation only (e.g., expected-node mapping, Phase 6 producer/consumer relationship). NOT a slot for audited-run narrative or skip-rationale from the executing agent.
 
+Optional canonical-output row fields for verdict-bearing artifacts consumed as gates:
+
+```md
+- id: phase4-audit-risk
+  canonical_output_path: /abs/planning/risk/wu-audit.md
+  expected_verdict:
+    type: exact|regex
+    value: LOW
+  expected_sha256: <optional sha256>
+```
+
+- `canonical_output_path`: absolute path to stat and read at audit time. For implementation-pipeline Phase 4/8 rows, `canonical_output_path` projects directly from the corresponding join-manifest entry.
+- `expected_verdict`: tagged matcher for the verdict parsed from the current canonical file. `type` is `exact|regex`; `value` is the exact expected verdict or regex.
+- `expected_sha256`: optional content-currentness hash. When a NES-254 join manifest is available, its `sha256` projects to `expected_sha256`.
+
+For join-manifest composition, the verdict expectation comes from the gate contract, not from `verdict_line`. Treat `verdict_line` as prior observed evidence only.
+
+Step 6b output indexes, raw findings, dispatch manifests, generated tickets, and other non-verdict artifacts remain ordinary `expected_outputs` unless a caller defines a real verdict contract.
+
 For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and the Step 6b output paths consumed by Step 6c. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
 
 If the manifest is absent or too vague to map expected work to tree nodes, return `NEEDS_INPUT`.
@@ -75,6 +94,7 @@ If the manifest is absent or too vague to map expected work to tree nodes, retur
 - Do not dispatch agents or run workflow steps on behalf of the audited operator.
 - The operator or agent that ran the audited workflow must not audit itself.
 - Do not treat a successful trace node as proof that the right work happened. Verify companion artifacts.
+- For canonical-output rows, `WROTE:`, dispatch stdout, orchestrator stdout, prior PASS verdicts, agents-result JSON, and successful trace nodes are context only and cannot prove current canonical-output existence/content.
 - Do not treat missing trace data as harmless. If the workflow required tree review and required evidence is absent, return `NEEDS_INPUT` or `FAIL`.
 - The audited-run narrative is not evidence and cannot turn missing artifacts, skipped phases, or absent outputs into PASS.
 - Keep root context small: report the minimum subtree evidence needed to support each finding, not a full transcript-style replay.
@@ -83,7 +103,7 @@ If the manifest is absent or too vague to map expected work to tree nodes, retur
 
 ### Step 1: Load Inputs
 
-Read `operator_file`, `process_tree_path`, `expected_process`, every `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied.
+Read `operator_file`, `process_tree_path`, `expected_process`, every `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied. Load ordinary expected nodes and any canonical rows containing `canonical_output_path`, `expected_verdict`, and optional `expected_sha256`; when `audit_history_path` is present, keep its deletion/replacement entries available for Step 4.
 
 Audited-run notes or rationale are excluded from the allowed audit-input set.
 
@@ -112,9 +132,9 @@ If the trace proves topology but companion artifacts are missing for procedure o
 
 For each expected prompt, log, gate report, status, or output:
 
-- verify that the artifact exists or the supplied status appears in a supplied log/report;
+- verify that ordinary artifacts exist, or that an ordinary non-canonical supplied status appears in a supplied log/report;
 - verify that it belongs to the mapped node or expected child group when the evidence is available;
-- verify required verdicts such as `LOW`, `ALIGNED`, `PASS`, `SINGLE_CONCERN`, or workflow-specific equivalents;
+- verify ordinary required verdicts such as `LOW`, `ALIGNED`, `PASS`, `SINGLE_CONCERN`, or workflow-specific equivalents;
 - verify isolation evidence by scanning companion prompts/logs for sibling `agents ... -p <path> ...` invocations and declared write intent; flag concurrent tracked-file writers that share a worktree or project root, or return `NEEDS_INPUT` when a required isolation check lacks path/write evidence;
 - flag summary-shaped logs, missing concrete step evidence, missing outputs, malformed required sections, or claimed success without required artifacts.
 - if a mapped node returned `NEEDS_INPUT`, verify the question artifact exists, is listed in the expected process when required, and was not treated as ordinary success;
@@ -124,6 +144,22 @@ For each expected prompt, log, gate report, status, or output:
 - for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c prompt/log evidence shows those paths were consumed by Step 6c;
 - classify missing Step 6b output index, missing Step 6c consumption evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
 
+For each canonical-output row, `canonical_output_path` must be verified from the current filesystem: stat `canonical_output_path`, read the current file, parse verdict from the current file, compare the parsed verdict with `expected_verdict`, and when `expected_sha256` is present compute the current sha256 and compare it with `expected_sha256`.
+
+If `expected_sha256` is absent, operate in degraded mode: still stat the path, read the file, and parse the verdict, but record the limitation as path + verdict-regex only because non-verdict-preserving content changes cannot be detected without a hash.
+
+Canonical-output block classes:
+
+- `canonical_output_missing`: current `canonical_output_path` stat fails; blocking unless accepted deletion/replacement lineage is verified.
+- `canonical_output_modified`: current sha256 differs from `expected_sha256`; blocking because the canonical gate output is not the manifest-pinned content.
+- `canonical_output_missing_unexplained`: deletion evidence is absent, incomplete, mismatched, or replacement verification fails; blocking.
+- `canonical_output_unreadable`: current path exists but cannot be read; blocking.
+- `canonical_output_verdict_mismatch`: parsed verdict is absent, malformed, or does not match `expected_verdict`; blocking.
+
+When a canonical path is missing, read `audit_history_path` if supplied and parse entries headed `### Canonical Output Deletion`. A qualifying deletion entry must include all fields: `actor`, `timestamp`, `manifest_path`, `gate_name`, `canonical_output_path`, `old_sha256`, `reason`, `replacement_path`, and `replacement_sha256`. The entry qualifies only when `canonical_output_path` matches the missing row and `old_sha256` matches `expected_sha256` when that value exists.
+
+If `replacement_path` is not `none`, verify the replacement path by stat, read, verdict check against the row's `expected_verdict`, and `replacement_sha256` hash check when supplied. If `replacement_path: none`, accept it only as a lineage note for a lifecycle transition where no downstream consumer should use a replacement; it cannot pass a current gate row that still requires the old canonical output.
+
 ### Step 5: Classify Violations
 
 Use `~/ai/conventions/workflow-execution-violations.md`.
@@ -131,19 +167,23 @@ Use `~/ai/conventions/workflow-execution-violations.md`.
 Classify each finding as:
 
 - `blocking`: downstream workflow cannot trust or consume the output.
-- `advisory`: record and continue; downstream workflow can consume the output.
+- `advisory`: record and continue for ordinary findings; downstream workflow can consume ordinary outputs.
 - `needs_input`: required evidence is missing or too vague to decide.
+
+Canonical-output missing, unreadable, malformed verdict, verdict mismatch, hash mismatch, and failed replacement checks are blocking gate-consumption failures for canonical rows. Advisory mode may downgrade ordinary findings, but it cannot convert an untrusted canonical gate report into PASS.
 
 Include the evidence source:
 
 - `tree`: proven directly from trace metadata.
-- `companion`: proven from prompts, logs, reports, outputs, or audit history.
+- `companion`: proven from prompts, logs, reports, outputs, or verified deletion/replacement lineage from audit history. Logs and reports cannot prove current canonical-output existence or content.
 - `inferred`: reasoned from the combination of tree and companion artifacts.
 - `missing`: required evidence absent.
 
 ### Step 6: Apply Audit-History Rule
 
-If `audit_history_path` is supplied, read it for prior round context, active watch signals, and expected loop state.
+If `audit_history_path` is supplied, read it for prior round context, active watch signals, expected loop state, and recognizable `### Canonical Output Deletion` lineage entries used by Step 4.
+
+For deletion lineage, parse only the required fields `actor`, `timestamp`, `manifest_path`, `gate_name`, `canonical_output_path`, `old_sha256`, `reason`, `replacement_path`, and `replacement_sha256`; do not infer missing fields from logs, stdout, or trace success.
 
 Do not write audit history. Emit this report as a role output. The caller uses `decision-encoder` to encode it when the workflow is in an audit-history loop.
 
@@ -180,6 +220,10 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 | Artifact | Expected by | Present | Result |
 |---|---|---:|---|
 
+## Canonical Output Verification
+| Expected id | Canonical path | Present | Readable | Parsed verdict | Expected verdict | Current sha256 | Expected sha256 | Deletion/replacement evidence | Result |
+|---|---|---:|---:|---|---|---|---|---|---|
+
 ## Question/Answer Verification
 | Question ID | Origin node | Surfaced | Answered | Continuation method | Applied evidence | Result |
 |---|---|---:|---:|---|---|---|
@@ -199,7 +243,7 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 
 Final stdout:
 
-- `PASS` when every required process element is mapped, succeeded or stopped as expected, and required outputs are verified.
+- `PASS` when every required process element is mapped, succeeded or stopped as expected, ordinary required outputs are verified, and canonical-output rows pass current stat/read/verdict/hash checks or accepted lineage.
 - `FAIL:<count> violations` when one or more blocking violations are present.
 - `NEEDS_INPUT:<missing fields or artifacts>` when required evidence is absent or too vague to audit.
 - `BLOCKED:<reason>` when required files cannot be read or parsed.
