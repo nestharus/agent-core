@@ -227,8 +227,9 @@ After all six sub-steps land:
    - Dispatch a `gpt-high` proposal-revision pass with the failing reports as input.
    - Update `${planning_dir}/audit-history.md` per `~/ai/conventions/audit-history.md`.
    - Re-dispatch all four risk gates from clean state. Old `LOW` reports are discarded.
-5. Apply the supported-surface termination rule: invalidated-assumption → return to research; non-positive value → terminate the WU and emit a NEEDS_INPUT new-value-question to the root.
-6. **Process-tree audit #1**: dispatch `process-tree-auditor` (`gpt-high`) against the Phase 4 subtree from `agents trace --json`. The expected-process manifest names the entry-mode subtree when Phase 3 consumed `review_first` or `plug_existing_review` evidence, so the Phase 4 audit can verify both the proposal-risk fanout and the pre-proposal audit fanout lineage. A `blocking` verdict halts the pipeline until the affected subtree is rerun.
+5. **Write Phase 4 join manifest.** After all four current reports are LOW and before applying supported-surface termination, write `${planning_dir}/risk/phase-4-join-manifest.json`. The manifest records one object per gate (`audit`, `scope`, `shortcut`, `supported-surface`) with `gate_name`, `producing_invocation_uuid`, `canonical_output_path`, `size`, `mtime`, `sha256`, `verdict_line`, and `verified_at`. `canonical_output_path` is the expected `${planning_dir}/risk/${wu_lower}-{gate}.md` path. The orchestrator reads `producing_invocation_uuid` from `agents trace --json` as the UUID of the most recent completed child invocation whose declared output matches the gate's canonical report path; if a single most recent producing invocation cannot be unambiguously identified, the orchestrator blocks before writing the manifest and treats the condition as a missing phase artifact under the Violation Detection and Escalation policy. The orchestrator computes `size`, `mtime`, and `sha256` from that path on disk, and parses `verdict_line` from the canonical path on disk; verdict evidence is not trusted from stdout, `WROTE:`, or agents-result JSON.
+6. Apply the supported-surface termination rule: invalidated-assumption → return to research; non-positive value → terminate the WU and emit a NEEDS_INPUT new-value-question to the root.
+7. **Process-tree audit #1**: dispatch `process-tree-auditor` (`gpt-high`) against the Phase 4 subtree from `agents trace --json`. The expected-process manifest names the entry-mode subtree when Phase 3 consumed `review_first` or `plug_existing_review` evidence, so the Phase 4 audit can verify both the proposal-risk fanout and the pre-proposal audit fanout lineage. A `blocking` verdict halts the pipeline until the affected subtree is rerun.
 
 ### Entry-Mode Re-Audit, Audit History, And Termination
 
@@ -279,8 +280,18 @@ Dispatch `coderabbit-operator` per `~/ai/workflows/coderabbit-loop.md`. Inputs: 
    - multi-concern (`claude-opus`)
    - justification (`claude-opus`)
    - commit-hygiene (`gpt-high`)
-2. If multi-concern review says split, split the work and re-enter from the affected phase.
-3. **Process-tree audit #3**: dispatch `process-tree-auditor` against the CodeRabbit + PR-review subtrees. `blocking` verdict halts draft PR.
+2. Wait for all four PR-review gates and bind their canonical report paths under `${planning_dir}/risk/${wu_lower}-<gate>.md` for `<gate>` in `test-audit`, `multi-concern`, `justification`, and `commit-hygiene`. Per the Canonical Join Manifest Re-Verification rule, re-verify `${planning_dir}/risk/phase-4-join-manifest.json` at this phase join before proceeding to step 3.
+3. **Write Phase 8 join manifest.** Write `${planning_dir}/risk/phase-8-join-manifest.json` before split handling or Process-tree audit #3. The manifest records one object per PR-review gate with `gate_name`, `producing_invocation_uuid`, `canonical_output_path`, `size`, `mtime`, `sha256`, `verdict_line`, and `verified_at`. The orchestrator reads `producing_invocation_uuid` from `agents trace --json` as the UUID of the most recent completed child invocation whose declared output matches the gate's canonical report path; if a single most recent producing invocation cannot be unambiguously identified, the orchestrator blocks before writing the manifest and treats the condition as a missing phase artifact under the Violation Detection and Escalation policy. The orchestrator computes `size`, `mtime`, and `sha256` from `canonical_output_path`, and parses `verdict_line` from the canonical path on disk; verdict evidence is not trusted from stdout, `WROTE:`, or agents-result JSON.
+4. If multi-concern review says split, split the work and re-enter from the affected phase.
+5. **Process-tree audit #3**: dispatch `process-tree-auditor` against the CodeRabbit + PR-review subtrees. `blocking` verdict halts draft PR.
+
+### Canonical Join Manifest Re-Verification
+
+After any join manifest exists, every resume start, every phase join, every transition that consumes prior PASS state, and final PASS or final close MUST re-verify all existing join manifests. Here, `resume start` means any orchestrator invocation that continues from existing `${planning_dir}` or `${scratch_dir}` state instead of starting Phase 2.5 from empty state, and `prior PASS state` means any previously recorded LOW, non-blocking, or PASS gate/audit result used as evidence to advance. For each manifest entry, the orchestrator re-stats `canonical_output_path`, recomputes `size`, `mtime`, and `sha256`, and re-reads `verdict_line` from the canonical path on disk. A missing canonical path, stat mismatch (`size` or `mtime`), `sha256` mismatch, or changed `verdict_line` is `BLOCKED:join-manifest-mismatch`.
+
+On detection, append `${planning_dir}/audit-history.md` evidence naming the manifest path, gate name, canonical path, recorded values, observed values, and affected transition before any rerun, rewind, split, shrink, or escalation consumes the stale state.
+
+If the orchestrator or a downstream sub-agent intentionally removes, renames, or supersedes a canonical gate report during rewind, redo, split, shrink, or another approved lifecycle transition, the actor must append an audit-history entry before removal or immediately after detection. Entry fields include `actor`, `timestamp`, `manifest_path`, `gate_name`, `canonical_output_path`, `old_sha256`, `reason`, `replacement_path`, and `replacement_sha256` when applicable.
 
 ### Phase 8.5 — Human Local Review Gate (tickets-first variant only)
 
@@ -343,6 +354,7 @@ A violation is detected when ANY of the following are true:
 - The Step 6b output index does not exist after Step 6b completes.
 - Step 6c log does not echo the Step 6b output paths it consumed.
 - Any process-tree audit returns `blocking`.
+- A join-manifest entry mismatches the filesystem: missing canonical path, `size`/`mtime` stat mismatch, `sha256` mismatch, or changed `verdict_line` for any recorded canonical gate report.
 - A sub-agent dispatched via something other than the `agents` CLI (e.g. local Agent tool).
 - A required prompt or log file is missing from `${scratch_dir}/`.
 
