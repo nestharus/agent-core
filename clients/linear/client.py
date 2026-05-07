@@ -1384,6 +1384,137 @@ query IssueUnresolvedComments($id: String!, $after: String) {
             "totalCount": len(all_comments),
         }
 
+    def search_issues(
+        self,
+        *,
+        team_key: str | None = None,
+        team_id: str | None = None,
+        title_contains: str | None = None,
+        title_starts_with: str | None = None,
+        label_names: list[str] | None = None,
+        include_archived: bool = False,
+        first: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Search issues by team, title, and labels in one request.
+
+        Args:
+            team_key: Team key or name to resolve before searching. Mutually
+                exclusive with ``team_id``.
+            team_id: Team UUID to use directly. Mutually exclusive with
+                ``team_key``.
+            title_contains: Case-insensitive title substring filter. Empty
+                strings are treated as omitted.
+            title_starts_with: Title prefix filter. Empty strings are treated
+                as omitted.
+            label_names: Label names that must all be present. Blank entries
+                are ignored after trimming whitespace.
+            include_archived: Whether archived issues are included.
+            first: Maximum number of issues to return, from 1 through 100.
+
+        Returns:
+            A single page of issue dictionaries with flattened ``labels``.
+
+        Raises:
+            LinearClientError: ``INVALID_INPUT`` for invalid arguments,
+                ``NOT_FOUND`` when a team key cannot be resolved, and
+                ``API_ERROR``, ``PARSE_ERROR``, or ``GRAPHQL_ERROR`` propagated
+                from the GraphQL transport.
+        """
+        if (team_key is None) == (team_id is None):
+            raise LinearClientError(
+                "INVALID_INPUT",
+                "Exactly one of team_key or team_id must be provided",
+            )
+        if first < 1 or first > 100:
+            raise LinearClientError(
+                "INVALID_INPUT",
+                "first must be between 1 and 100",
+            )
+
+        if team_key is not None:
+            resolved_team_id = self._resolve_team_id(team_key)
+            if resolved_team_id is None:
+                raise LinearClientError("NOT_FOUND", f"Team not found: {team_key}")
+        else:
+            resolved_team_id = team_id.strip()
+            if not resolved_team_id:
+                raise LinearClientError(
+                    "INVALID_INPUT",
+                    "team_id must not be empty",
+                )
+
+        query = """query SearchIssues($filter: IssueFilter!, $first: Int!, $includeArchived: Boolean!) {
+  issues(filter: $filter, first: $first, includeArchived: $includeArchived) {
+    nodes {
+      id
+      identifier
+      title
+      url
+      state {
+        id
+        name
+        type
+      }
+      team {
+        id
+        key
+        name
+      }
+      labels {
+        nodes {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+"""
+        issue_filter: dict[str, Any] = {"team": {"id": {"eq": resolved_team_id}}}
+        if title_contains:
+            issue_filter.setdefault("title", {})["containsIgnoreCase"] = title_contains
+        if title_starts_with:
+            issue_filter.setdefault("title", {})["startsWith"] = title_starts_with
+        for label_name in label_names or []:
+            normalized_label_name = label_name.strip()
+            if normalized_label_name:
+                issue_filter.setdefault("and", []).append(
+                    {"labels": {"name": {"eq": normalized_label_name}}}
+                )
+
+        result = self._run_graphql(
+            query,
+            {
+                "filter": issue_filter,
+                "first": first,
+                "includeArchived": include_archived,
+            },
+        )
+        nodes = result.get("data", {}).get("issues", {}).get("nodes", [])
+        if not isinstance(nodes, list):
+            return []
+
+        issues: list[dict[str, Any]] = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            labels = node.get("labels")
+            label_nodes = labels.get("nodes", []) if isinstance(labels, dict) else []
+            if not isinstance(label_nodes, list):
+                label_nodes = []
+            issues.append(
+                {
+                    "id": node.get("id"),
+                    "identifier": node.get("identifier"),
+                    "title": node.get("title"),
+                    "url": node.get("url"),
+                    "state": node.get("state"),
+                    "team": node.get("team"),
+                    "labels": label_nodes,
+                }
+            )
+        return issues
+
     def list_labels(self, team: str) -> list[dict[str, Any]]:
         """List issue labels visible to a team.
 
