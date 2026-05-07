@@ -313,6 +313,7 @@ Implementation has three sub-steps.
 The test writer and the code writer must be different agent invocations.
 That rule is load-bearing: if the same agent writes both, the tests mirror the implementation instead of validating the contract.
 Step 6a defines the level outer contract; during Step 6c, once passing evidence exists, post-prototype internal component contract derivation may be triggered.
+Rule: Step 6c may discover procedural obligations during implementation, but discovery does not relax the different-invocation rule; procedural tests still go through a separate Step 6b-style test-writer invocation.
 
 - Rule: Phase 6 firstness evidence is the Phase 6 process-tree review plus companion artifacts. The companion artifacts are the expected-process manifest, Step 6b prompt/log, Step 6c prompt/log, Step 6b output index, Step 6b output paths, and evidence that Step 6c consumed those outputs. A commit marker is optional supporting evidence only. A PR-diff test file is not required firstness evidence.
 - Convention: `${scratch_dir}/phase6/` resolves under the same per-run scratch directory supplied by the invoking workflow, matching the `scratch_dir` input pattern used by `agents/test-audit-gate.md` and `agents/red-phase-gate.md`.
@@ -344,8 +345,8 @@ Step 6a defines the level outer contract; during Step 6c, once passing evidence 
 - Rule: pre-existing code without prior tests is not required to prove retroactive firstness. Current-work behavior changes and current-work risk reduction are not grandfathered.
 - Rule: when a named risk cannot be verified by the test set, produce `risk/NN-test-residuals.md` with the residual class (`combinatorial/path-state`, `bounded-model`, `integration-hidden`, `emergent-interaction`, `temporal/concurrency`, or `generator/search-budget`), technique attempted or considered (`property-based`, `fuzzing`, `mutation`, `symbolic`, `model-checking`, `chaos`, or `graph`), scope, budget or bound, result, remaining residual, invalidating inputs, and whether the residual changes the net-value case.
 - Output: test files in the project test roots, with risk annotations on every test or test group.
-- Output: `${scratch_dir}/phase6/step6b-output-index.md`, listing every proposal test-intent item, named risk, selected level, source, emitted test file or test group, residual entry, or documented non-applicability reason.
-- Output-index fields: approved proposal path, contract path, approved `problem map` path, `risk/NN-supported-surface.md` path, hookpoint research path, Step 6b prompt path, Step 6b log path, each test-intent item, named risk, selected level, proposal or assumption-register source, emitted test file path and test or test-group identifier, residual entry path when the item maps to `risk/NN-test-residuals.md`, documented non-applicability reason when no test is emitted, and declared fixture source or fixture application point.
+- Output: `${scratch_dir}/phase6/step6b-output-index.md`, listing every proposal test-intent item, named risk, selected level, source, emitted test file or test group, residual entry, documented non-applicability reason, and listing implementation-discovered procedural obligations with their emitted procedural tests or residual entries.
+- Output-index fields: approved proposal path, contract path, approved `problem map` path, `risk/NN-supported-surface.md` path, hookpoint research path, Step 6b prompt path, Step 6b log path, each test-intent item, named risk, selected level, proposal or assumption-register source, emitted test file path and test or test-group identifier, residual entry path when the item maps to `risk/NN-test-residuals.md`, documented non-applicability reason when no test is emitted, declared fixture source or fixture application point, procedural obligation, Step 6c evidence that discovered the obligation, emitted procedural test file path and test or test-group identifier when a procedural test was authored, or procedural residual entry path when no procedural test is emitted; residual class when no procedural test is emitted.
 - Output: `risk/NN-test-residuals.md` when any named risk remains unverified.
 
 ### Step 6c - Write code
@@ -353,10 +354,13 @@ Step 6a defines the level outer contract; during Step 6c, once passing evidence 
 - Inputs: contracts, `${scratch_dir}/phase6/step6b-output-index.md`, and the tests from Step 6b.
 - Rule: the code writer is a separate agent invocation from Step 6b.
 - Rule: the job is to make the tests pass while respecting the approved design and architecture.
+- Rule: If implementation reveals a procedural obligation in races, ordering constraints, retries, resource lifecycle quirks, behaviors-under-conditions, or implementation-specific quirks that is not already represented by Step 6b tests, the code writer MUST record the obligation and dispatch a procedural-test handoff.
+- Rule: Recording requires writing the procedural obligation and the Step 6c evidence that discovered it to `${scratch_dir}/phase6/step6b-output-index.md`. The handoff dispatches a fresh, separate Step 6b-style test-writer invocation; the Step 6c code writer MUST NOT author the procedural test inline.
 - Rule: if tests fail after Step 6c, re-invoke the code agent with the test output.
 - Rule: do **not** re-invoke the test agent because the implementation failed.
 - Rule: if a test is wrong, that is the contract's fault, not the test's.
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
+- Rule: The component cannot close until each implementation-discovered procedural obligation has either an authored procedural test linked from the Step 6b output index, or a recorded residual entry with residual class.
 - Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
 - Rule: Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes.
 - Rule: Post-prototype internal contract derivation: after Step 6c produces a passing level prototype that passes level behavior tests, derive internal component contracts only when Phase 3 opened recursive or component-decomposition scope, or when candidate internal components emerge from the passing prototype.
