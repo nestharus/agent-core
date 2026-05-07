@@ -22,6 +22,8 @@ AUDITED_WORKFLOW_CONVENTION_DOCS: tuple[str, ...] = (
     "conventions/gate-ownership.md",
 )
 
+AUDITED_PATTERN_DOCS: tuple[str, ...] = ("patterns/infrastructure-reference.md",)
+
 WORKFLOW_CONVENTION_ALLOWED_DECISIONS_TARGETS: dict[str, tuple[str, ...]] = {
     "workflows/implementation-pipeline.md": ("${worktree_path}/DECISIONS.md",),
     "workflows/alignment-cycle.md": ("${project_root}/DECISIONS.md",),
@@ -30,6 +32,13 @@ WORKFLOW_CONVENTION_ALLOWED_DECISIONS_TARGETS: dict[str, tuple[str, ...]] = {
     "conventions/rebase-verification.md": ("${worktree_path}/DECISIONS.md",),
     "conventions/wu-session-lifecycle.md": ("${worktree_path}/DECISIONS.md",),
     "conventions/gate-ownership.md": ("${worktree_path}/DECISIONS.md",),
+}
+
+PATTERN_ALLOWED_DECISIONS_TARGETS: dict[str, tuple[str, ...]] = {
+    "patterns/infrastructure-reference.md": (
+        "${project_root}/DECISIONS.md",
+        "caller-supplied project decisions path",
+    ),
 }
 
 WORKFLOW_CONVENTION_READ_REFERENCE_ALLOWLIST: dict[
@@ -140,6 +149,32 @@ def _workflow_convention_forbidden_write_target_reason(
     return None
 
 
+def _pattern_forbidden_write_target_reason(relpath: str, line: str) -> str | None:
+    allowed_fragments = PATTERN_ALLOWED_DECISIONS_TARGETS.get(relpath)
+    if allowed_fragments is None:
+        return f"no allowed DECISIONS.md target configured for {relpath!r}"
+
+    if "${worktree_path}/DECISIONS.md" in line:
+        return "forbidden target ${worktree_path}/DECISIONS.md"
+    if "${repo_root}/DECISIONS.md" in line:
+        return "forbidden target ${repo_root}/DECISIONS.md"
+    if "~/ai/DECISIONS.md" in line:
+        return "forbidden target ~/ai/DECISIONS.md"
+    if "/home/nes/ai/DECISIONS.md" in line:
+        return "forbidden target /home/nes/ai/DECISIONS.md"
+    if _has_unallowed_decisions_target(line, allowed_fragments):
+        expected = " and ".join(allowed_fragments)
+        return f"unqualified DECISIONS.md (expected {expected})"
+
+    missing_fragments = [
+        fragment for fragment in allowed_fragments if fragment not in line
+    ]
+    if missing_fragments:
+        missing = " and ".join(missing_fragments)
+        return f"missing required fragment(s): {missing}"
+    return None
+
+
 def _is_workflow_convention_write_reference(
     relpath: str, lineno: int, line: str
 ) -> bool:
@@ -237,6 +272,28 @@ def test_workflow_convention_decisions_write_references_use_per_file_target() ->
     )
 
 
+def test_pattern_decisions_write_references_use_project_decisions_target() -> None:
+    assert set(PATTERN_ALLOWED_DECISIONS_TARGETS) == set(AUDITED_PATTERN_DOCS)
+    failures: list[str] = []
+
+    for relpath in AUDITED_PATTERN_DOCS:
+        path = REPO_ROOT / relpath
+        for lineno, line in _decision_lines(path):
+            if not _is_write_reference(line):
+                continue
+
+            reason = _pattern_forbidden_write_target_reason(relpath, line)
+            if reason is not None:
+                failures.append(f"{relpath}:{lineno}: {reason}: {line.strip()!r}")
+
+    assert not failures, "\n".join(
+        [
+            "Pattern DECISIONS.md write references must use the project decisions target:",
+            *failures,
+        ]
+    )
+
+
 def test_workflow_convention_decisions_read_references_stay_allowed() -> None:
     for (relpath, lineno), expected_fragments in (
         WORKFLOW_CONVENTION_READ_REFERENCE_ALLOWLIST.items()
@@ -300,6 +357,8 @@ def test_write_classifier_recognizes_workflow_convention_shapes() -> None:
     write_examples = [
         "Skip only by explicit written decision in `DECISIONS.md`.",
         "Removing axes requires a project-level decision recorded in `DECISIONS.md`.",
+        "Platform decisions will be recorded in `${project_root}/DECISIONS.md` "
+        "(or the caller-supplied project decisions path) as they are made.",
         "Recording a runbook in `DECISIONS.md` pre-authorizes the action.",
         "Document it in `DECISIONS.md`.",
         "Any drop is a regression that needs disposition in DECISIONS.md.",
