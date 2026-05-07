@@ -2,6 +2,22 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07g — NES-270 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: NES-270 (recursion-control). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind from commit d6032f6 back to origin/master 7e7848b; restore Phase 6b test file from dropped commit; re-dispatch Step 6c with explicit log-echo-of-Step-6b-paths instruction; re-run process-tree audit #2 against the new run.`
+
+Process-tree audit #2 returned `FAIL (blocking)` on the first Phase 6 commit (`d6032f6`). The blocking finding: the Step 6c log did not echo the Step 6b output-index path near the top, so Phase 6's required producer-consumer log evidence was missing — even though Step 6c and Step 6b had distinct invocation UUIDs, the diff was the expected two files, the Step 6b output index existed, and all 7 NES-270 tests passed.
+
+Per the orchestrator's violation-escalation policy (Tier-1: "rewind and retry from clean state"), the orchestrator reset the worktree to `7e7848b` (current origin/master HEAD), preserved the Step 6b test file content from the dropped commit, and re-dispatched Step 6c with a strengthened prompt requiring the Step 6c agent's first response sentence to literally echo:
+
+- the Step 6b output-index path (`/home/nes/projects/ai/planning/nes-270-recursion-control/.scratch/phase6/step6b-output-index.md`),
+- the Step 6b test-file path (`/home/nes/projects/ai/worktrees/nes-270-recursion-control/tests/test_implementation_pipeline_recursion_control.py`),
+- the Step 6a contract path (`/home/nes/projects/ai/planning/nes-270-recursion-control/contracts/nes-270-recursion-control.md`),
+
+before any product-code edit. The Step 6b artifacts (`step6b-output-index.md`, residuals file, test file content) were unchanged across the rewind; only the workflow-doc edit was redone with proper log evidence.
+
+This is a structural/logging violation, not a content violation. The first run produced a correct workflow-doc edit (tests passed, diff was clean) but lacked the auditable log echo. The Tier-1 retry preserves all upstream artifacts (proposal, risk profile, contracts, tests) and only re-runs the single failing phase-internal step.
+
 ## D-2026-05-07b — NES-267 Phase 7 Tier-1 rewind + tight-anti-scope retry; cascade specification deferred to sibling WUs
 
 **WU**: NES-267 (procedural-test-handoff). **Phase**: 7 (CodeRabbit loop). **Decision**: `Tier-1 rewind from Round-2 6-pass MAX_PASSES_REACHED state back to clean Phase 6 commit; re-dispatch CodeRabbit with tight anti-scope and max-passes=2; accept the resulting 1-in-scope-amend state and proceed.`

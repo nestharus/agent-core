@@ -77,6 +77,7 @@ Optional phases:
 
 Core path:
 - `Phase 2.5 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10`
+- Recursion edge: completed parent `Phase 6` component work may open a child recursion level that enters `level-open` and reuses the same Phase 6 contract/test/code path; the parent reaches `child-levels-open` only after candidate children have been considered for framing.
 
 ## Entry Modes
 
@@ -131,6 +132,8 @@ Phase artifacts (`research/NN-*`, `proposals/NN-*`, `risk/NN-*`, contracts, audi
 - For projects on `~/ai/conventions/project-layout.md`'s umbrella layout, the planning directory is `~/projects/<name>/planning/<branch>/`.
 - For legacy single-repo projects that have not migrated, planning may transitionally live under `${repo_root}/tmp/scratch/<wu>/` or similar — but the migration goal is to lift it out so the worktree only carries product code + tests.
 - Tests authored in **Phase 6b** and product code authored in **Phase 6c** **are** committed in the working repository and therefore land in the worktree. The test/code boundary is the planning-vs-product boundary.
+
+Recursive Phase 6 artifact references are scoped by the single key `level_id`. Any recursive Phase 6 record, output-index row, emitted test group identifier, residual reference, overlay reference, swap reference, halt reference, or child-framing reference that could collide across parent and child levels must carry `level_id`; when represented as a string artifact identifier, use `<level_id>:<local_artifact_id>`. This scopes references only; sibling record types named here reserve the shared scoping key without defining their schemas, lifecycle, scheduling, or halt/swap criteria, and sibling record schemas that already carry `level_id` compose by using the same scope key.
 
 The `implementation-pipeline-orchestrator` exposes `planning_dir` as a required input. Path references like `research/NN-rca.md` below are relative to `${planning_dir}` unless the rule explicitly names the worktree.
 
@@ -320,6 +323,9 @@ Rule: Step 6c may discover procedural obligations during implementation, but dis
 - Rule: Phase 6 consumes the approved `research/NN-problem-map.md`, approved `proposals/NN-*.md` including its test-intent track and assumption register, `risk/NN-supported-surface.md`, and `research/NN-hookpoints.md`.
 - Rule: RCA-track. The reproduction tests produced in Phase 0 are inputs to the Phase 3 test-intent track and to Phase 6b. Step 6b carries them forward (existing tests satisfy firstness when the Step 6b output index maps them to the named risk and source). Step 6c is not complete until each pre-fix red test from Phase 0 runs green against post-fix HEAD.
 - Rule: RCA-track evidence is **verbatim output, not summary**. The red run is captured by reverting the planned-change product file(s) to the branch's base (`origin/main` or the stacked parent), running each reproduction test, and pasting the failure block into the Phase 9 evidence artifact. The green run is captured by restoring the fix and re-running the same test, pasting the pass block. "Tests passed" is not evidence; the actual `pytest` / Playwright / runner command output is.
+- Rule: Recursive child entry. A child recursion level enters `level-open` only after an audited `ChildLevelFramingRecord` exists for that child framing. Existing overlay and audit machinery supplies the review evidence through `audit_overlay_refs`; this workflow rule does not add a new scheduler, workflow, or operator.
+- Rule: Recursive parent exit. A parent level may transition into `child-levels-open` only after each candidate child has been considered for framing. This rule does not define halt criteria; halt criteria belong to the sibling halt-rule WU.
+- Rule: Recursive Phase 6 reuse. Once a child recursion level enters `level-open`, the same Step 6a contract, Step 6b test-first, Step 6c implementation, procedural-test, swap, and audit semantics apply at that child's `level_id` where those semantics exist, with continuous-overlay review evidence carried through `audit_overlay_refs` for the audited framing record.
 - Rule: if Step 6a, 6b, or 6c uncovers evidence that invalidates an approved assumption or shows the touched surface differs materially from the approved `problem map`, stop implementation and return to research; resume at Phase 2.5 before more code or tests are written.
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
 
@@ -330,6 +336,17 @@ Rule: Step 6c may discover procedural obligations during implementation, but dis
 - Rule: the contract must be clear enough that another agent can write tests from it without seeing implementation code.
 - Rule: the contract must preserve every change risk or verification risk, selected test level, fixture source, assumption-register link, and expected observable signal from the approved proposal test-intent track.
 - Rule: Step 6a does not author internal component contracts; those can only be derived from later prototype evidence when the Post-prototype internal contract derivation rule in Step 6c is triggered.
+- Rule: `ChildLevelFramingRecord` is Step 6a contract text for recursive child entry, not a standalone schema file or operator output. Required fields, in order:
+  1. `parent_level_id`
+  2. `source_component_implementation_ref`
+  3. `derived_child_outer_contract_ref`
+  4. `transferred_level_behavior_test_refs`
+  5. `persisted_neighbor_claim_refs`
+  6. `framing_rationale_evidence_refs`
+  7. `audit_overlay_refs`
+  8. `parent_artifact_currency_refs`
+- Rule: `parent_artifact_currency_refs` is load-bearing for currency audit. It records whether parent-side artifacts named by `source_component_implementation_ref`, `derived_child_outer_contract_ref`, `transferred_level_behavior_test_refs`, `persisted_neighbor_claim_refs`, and `framing_rationale_evidence_refs` are current for child entry; if any parent-side artifact is substantively revised, the `ChildLevelFramingRecord` is stale until refreshed, superseded, or accepted as residual risk.
+- Rule: `audit_overlay_refs` point to the existing overlay review evidence for the audited `ChildLevelFramingRecord`; this cross-reference does not add a new scheduler, workflow, or operator.
 
 ### Step 6b - Encode tests first
 
@@ -343,10 +360,11 @@ Rule: Step 6c may discover procedural obligations during implementation, but dis
 - Rule: every test or test group carries a risk annotation naming the risk it reduces, the selected level, and the proposal or assumption-register source. If a test verifies an assumption, the annotation says so.
 - Rule: firstness applies per named risk, selected level, and test group from the approved test-intent track. Existing tests satisfy this rule only when the Step 6b output index maps them to the named risk, selected level, and proposal or assumption-register source.
 - Rule: pre-existing code without prior tests is not required to prove retroactive firstness. Current-work behavior changes and current-work risk reduction are not grandfathered.
+- Rule: Recursive Step 6b carry-through maps `transferred_level_behavior_test_refs`, every emitted test group identifier, and each residual entry or residual reference for a child level to the same `level_id`. Preserve the fixture source or fixture application point in the Step 6b output index so the child-level application point remains traceable.
 - Rule: when a named risk cannot be verified by the test set, produce `risk/NN-test-residuals.md` with the residual class (`combinatorial/path-state`, `bounded-model`, `integration-hidden`, `emergent-interaction`, `temporal/concurrency`, or `generator/search-budget`), technique attempted or considered (`property-based`, `fuzzing`, `mutation`, `symbolic`, `model-checking`, `chaos`, or `graph`), scope, budget or bound, result, remaining residual, invalidating inputs, and whether the residual changes the net-value case.
 - Output: test files in the project test roots, with risk annotations on every test or test group.
 - Output: `${scratch_dir}/phase6/step6b-output-index.md`, listing every proposal test-intent item, named risk, selected level, source, emitted test file or test group, residual entry, documented non-applicability reason, and listing implementation-discovered procedural obligations with their emitted procedural tests or residual entries.
-- Output-index fields: approved proposal path, contract path, approved `problem map` path, `risk/NN-supported-surface.md` path, hookpoint research path, Step 6b prompt path, Step 6b log path, each test-intent item, named risk, selected level, proposal or assumption-register source, emitted test file path and test or test-group identifier, residual entry path when the item maps to `risk/NN-test-residuals.md`, documented non-applicability reason when no test is emitted, declared fixture source or fixture application point, procedural obligation, Step 6c evidence that discovered the obligation, emitted procedural test file path and test or test-group identifier when a procedural test was authored, or procedural residual entry path when no procedural test is emitted; residual class when no procedural test is emitted.
+- Output-index fields: approved proposal path, contract path, approved `problem map` path, `risk/NN-supported-surface.md` path, hookpoint research path, Step 6b prompt path, Step 6b log path, `level_id` when recursive Phase 6 work emits level-scoped artifacts, each test-intent item, named risk, selected level, proposal or assumption-register source, emitted test file path and test or test-group identifier, residual entry path when the item maps to `risk/NN-test-residuals.md`, documented non-applicability reason when no test is emitted, declared fixture source or fixture application point, procedural obligation, Step 6c evidence that discovered the obligation, emitted procedural test file path and test or test-group identifier when a procedural test was authored, or procedural residual entry path when no procedural test is emitted; residual class when no procedural test is emitted. The path `${scratch_dir}/phase6/step6b-output-index.md` remains the Step 6b output index path; recursive rows and artifact identifiers carry `level_id` and use `<level_id>:<local_artifact_id>` when a string identifier is needed.
 - Output: `risk/NN-test-residuals.md` when any named risk remains unverified.
 
 ### Step 6c - Write code
@@ -360,6 +378,7 @@ Rule: Step 6c may discover procedural obligations during implementation, but dis
 - Rule: do **not** re-invoke the test agent because the implementation failed.
 - Rule: if a test is wrong, that is the contract's fault, not the test's.
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
+- Rule: Recursive Step 6c consumes the Step 6b output index at `${scratch_dir}/phase6/step6b-output-index.md`, emitted tests, test paths, and test-group identifiers for the matching `level_id`. Its log evidence must echo the scoped Step 6b output index and test paths it read before product-code changes.
 - Rule: The component cannot close until each implementation-discovered procedural obligation has either an authored procedural test linked from the Step 6b output index, or a recorded residual entry with residual class.
 - Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
 - Rule: Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes.
