@@ -269,6 +269,18 @@ You (the orchestrator) own the contract. Compose `${planning_dir}/contracts/${wu
 
 Dispatch `process-tree-auditor` (`gpt-high`) against the Phase 6 subtree. The expected-process manifest must require: separate Step 6b and Step 6c invocations, timing order, output-index presence, output paths, Step 6c log evidence of consuming Step 6b outputs. A `blocking` verdict prevents Phase 7.
 
+#### Phase 6 halt-state transition gate
+
+Before accepting the Phase 6 halt-state transition or advance to Phase 7, enforce the Phase 6 evidence-bearing halt rule from `~/ai/workflows/implementation-pipeline.md`.
+
+1. When the recursion level for this WU terminates here (per `~/ai/workflows/implementation-pipeline.md` § Phase 6 evidence-bearing halt rule), read `${planning_dir}/risk/${wu_lower}-halt-record.md` from disk. For WUs whose recursion does not terminate at this level, the same canonical path must contain an explicit `non-applicable` statement; a missing artifact is NOT equivalent to non-applicability.
+2. Verify the artifact is either a valid `HaltRecord` or an explicit `non-applicable` statement. Missing, unreadable, blank, stale, incomplete, or otherwise invalid content is not valid halt evidence. Treat `stale` as evidence whose cited refs are missing, superseded by a later Phase 6 rerun or process-tree audit, or fail to prove currentness for the active WU and level; do not infer currentness from mtime alone.
+3. For a `HaltRecord`, verify all workflow-required field tokens are present: `halt_basis`, `component_candidates_considered`, `evidence_refs`, and `residual_risk_refs`.
+4. For `halt_basis`, verify the field value is one of the allowed options: `clarify contracts`, `reduce accidental coupling`, `expose a design challenge`, `improve evidence`, and `lower meaningful risk`.
+5. Scan overlay-audit verdicts for split-or-revise findings. A halt may overlay a split-or-revise verdict only when the record cites the conflict in `evidence_refs` with explicit override evidence; accepted conflicts must be recorded as a Decision Recording entry named `auditor_verdict_conflict_residual` and cited from `evidence_refs`. If the halt overrules the verdict by omission, the gate fails with `halt_overrules_split_or_revise_by_omission`.
+6. On missing, unreadable, blank, incomplete, stale, missing-field, missing-enum-evidence, verdict-conflict, or present-artifact-without-valid-`HaltRecord`-or-explicit-non-applicability, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 6`, violation code `halt_record_missing_or_invalid` (for step 2-4 failures) or `halt_overrules_split_or_revise_by_omission` (for the step 5 verdict-conflict case), canonical path, refused action `Phase 6 halt-state transition / advance to Phase 7`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse the Phase 6 halt-state transition and must not advance to Phase 7; write `${scratch_dir}/questions/q-<uuidv4>.question.json`; halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
+7. On valid halt evidence or explicit non-applicability, allow the Phase 6 halt-state transition / advance to Phase 7.
+
 ### Phase 7 — CodeRabbit Loop
 
 #### Pre-dispatch swap-record gate
