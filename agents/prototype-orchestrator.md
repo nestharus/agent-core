@@ -171,7 +171,7 @@ After 3.5 + 3.6 + 3.7 clear:
 3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options:
    - `approve` — proceed to P4 and file the spawned tickets as recommended.
    - `revise <section>` — dispatch a revision pass against the named dossier section(s). Common revisions: spawned-tickets list, branch-disposition, risk-profile axis-overrides.
-   - `reject` — terminate the prototype. Record termination + rationale in `DECISIONS.md`. The dossier survives; it is the record of what was tried and why it didn't reach approval.
+   - `reject` — terminate the prototype. Record termination + rationale in `${worktree_path}/DECISIONS.md`. The dossier survives; it is the record of what was tried and why it didn't reach approval.
 
 ### Phase P4 — Hand-off
 
@@ -213,7 +213,7 @@ Sub-agents and the prototype workflow itself emit `NEEDS_INPUT:<question_artifac
 ## Stop Conditions
 
 - **Success**: P4 complete, dossier handed off, spawned tickets filed, branch disposition applied.
-- **Termination at P3 human gate**: user rejected the dossier. Record in `DECISIONS.md`; halt. The dossier survives as the record of "what was tried, why it didn't ship."
+- **Termination at P3 human gate**: user rejected the dossier. Record in `${worktree_path}/DECISIONS.md`; halt. The dossier survives as the record of "what was tried, why it didn't ship."
 - **Termination during P1**: all vectors hit walls AND the user accepts "no answer found" as the answer. Treat the absence-of-answer as the dossier's answer; continue to P2 (stabilize the closest-to-working state) and P3 (write up what didn't work). This is a valid prototype outcome — capturing why the approach fails is itself a deliverable.
 - **Tier-1 reset** (rare for prototypes): if a P3 audit-history loop detects the dossier was authored from a fundamentally wrong P1 outcome (e.g. the agent claimed an answer the evidence does not support), re-run P3 with corrected evidence. Tier-2 is splitting the prototype into multiple smaller prototypes; rare but allowed when the question turned out to be three questions.
 

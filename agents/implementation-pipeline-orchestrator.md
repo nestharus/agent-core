@@ -107,7 +107,7 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 - Projects with `tickets_first_variant=true` add the Phase 8.5 human-local-review gate before Phase 9; default-variant projects do not.
 - **AskUserQuestion permission-denial citation.** For direct `AskUserQuestion` permission-denial on human-owned value/scope/trade-off or new-value questions, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: procedural permission-denial or NEEDS_INPUT that the orchestrator can resolve from supplied inputs stays inline; non-procedural questions return `NEEDS_INPUT:<absolute_artifact_path>` and halt per that convention.
 - All other human gates listed in `~/ai/workflows/implementation-pipeline.md` are removed for this orchestrator's runs.
-- **You are autonomous on destructive git ops.** When the violation-escalation policy requires a Tier-1 rewind, you may `git reset --hard` and `git push --force-with-lease origin main`, delete branches, and remove worktrees without asking the user. Record the rewind in `DECISIONS.md` before re-attempting the failed phase.
+- **You are autonomous on destructive git ops.** When the violation-escalation policy requires a Tier-1 rewind, you may `git reset --hard` and `git push --force-with-lease origin main`, delete branches, and remove worktrees without asking the user. Record the rewind in `${worktree_path}/DECISIONS.md` before re-attempting the failed phase.
 - Per-WU prompts live in `${scratch_dir}/prompts/<wu>-<phase>.md`. Per-WU logs live in `${scratch_dir}/logs/<wu>-<phase>.log`.
 
 ## Procedure
@@ -141,7 +141,7 @@ Phase 2.5 produces seven artifacts (problem map, coverage inventory, lifecycle m
 
 When `pipeline_entry_mode=review_first`, dispatch `~/ai/workflows/audit.md` after Phase 0 and before Step 2.5.0 prompt composition. Prompts/logs live under `${scratch_dir}/audit/${audit_slug}/`; the durable bundle lives under `${planning_dir}/audit/${audit_slug}/` with `dispatch-manifest.md`, `aggregate-audit.md`, `findings.json`, `findings.md`, and per-auditor reports required by the manifest. Immediately after the audit fanout return/join, dispatch `process-tree-auditor`; Phase 2.5 or Phase 3 may consume the aggregate only after that process review clears. The audit bundle is evidence and not a substitute for Phase 2.5; Phase 2.5 still produces problem-map, coverage, lifecycle, entrypoints, duplicates, cross-language, and risk-profile artifacts.
 
-If the `review_first` aggregate LOW is current and there is no remaining value in the ticket, use the value-zero termination contract: append a `DECISIONS.md` record containing WU id, phase, decision, aggregate LOW, no remaining value, and evidence path; dispatch `${ticket_operator}` with `task=comment` citing the bundle path and target identity; then `halt-before-Phase-3`. Determine "no remaining value" as gate evaluation, not synthesis: the aggregate LOW must cover every current ticket acceptance/scope item, and the ticket must have no remaining non-audit implementation or verification ask. If coverage is partial or ambiguous, continue to Phase 2.5; emit `NEEDS_INPUT` only if that comparison surfaces a previously unevaluated value, scope, or trade-off question.
+If the `review_first` aggregate LOW is current and there is no remaining value in the ticket, use the value-zero termination contract: append a `${worktree_path}/DECISIONS.md` record containing WU id, phase, decision, aggregate LOW, no remaining value, and evidence path; dispatch `${ticket_operator}` with `task=comment` citing the bundle path and target identity; then `halt-before-Phase-3`. Determine "no remaining value" as gate evaluation, not synthesis: the aggregate LOW must cover every current ticket acceptance/scope item, and the ticket must have no remaining non-audit implementation or verification ask. If coverage is partial or ambiguous, continue to Phase 2.5; emit `NEEDS_INPUT` only if that comparison surfaces a previously unevaluated value, scope, or trade-off question.
 
 #### Step 2.5.0 — Problem map (foundation)
 
@@ -154,7 +154,7 @@ If the `review_first` aggregate LOW is current and there is no remaining value i
 1. Compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-coverage.md` instructing a `gpt-high` researcher to produce `${planning_dir}/research/${wu_lower}-coverage-inventory.md` per Phase 2.5 step 2.5.1. The agent reads tests covering the touched surface, maps each named behavior to a test, lists uncovered behaviors.
 2. Dispatch.
 3. **If uncovered behaviors are found**, dispatch a separate `gpt-high` test-writer to produce **characterization tests** capturing the current behavior of those uncovered surfaces, on the WU branch. These tests land in the worktree (they are product test code, not planning artifacts) at the project's test roots.
-4. **Bug discovery rule**: if the test-writer produces tests that fail against current `HEAD` (i.e., the current code is genuinely broken, not just uncovered), file a tracker ticket via `${ticket_operator}` (`task=create`) per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5. Add a `Blocks` link (JIRA: `Blocks` link type; Linear: parent/related issue link) from the new ticket to the current `${ticket_id}`. Emit a `NEEDS_INPUT` to the root with options `block on consolidation`, `proceed with current scope (note in DECISIONS.md)`, `expand scope to fix in this WU`. Block until answered.
+4. **Bug discovery rule**: if the test-writer produces tests that fail against current `HEAD` (i.e., the current code is genuinely broken, not just uncovered), file a tracker ticket via `${ticket_operator}` (`task=create`) per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5. Add a `Blocks` link (JIRA: `Blocks` link type; Linear: parent/related issue link) from the new ticket to the current `${ticket_id}`. Emit a `NEEDS_INPUT` to the root with options `block on consolidation`, `proceed with current scope (note in ${worktree_path}/DECISIONS.md)`, `expand scope to fix in this WU`. Block until answered.
 
 #### Step 2.5.2 — Lifecycle map
 
@@ -204,7 +204,7 @@ After all six sub-steps land:
    If the runtime denies `AskUserQuestion` for this problem-map / risk-profile-acceptance / defer-question gate, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: permission-denied human-owned value/scope/trade-off questions return `NEEDS_INPUT:<absolute_artifact_path>` and stop before step 7, while procedural permission-denial stays inline when the orchestrator can resolve it. `skip_problem_map_gate=true` does not weaken this rule; it only suppresses the routine problem-map approval step, not a genuine new-value or permission-denied question.
 7. **Branch on the gate outcome:**
    - If the user picked `defer to prototype`: dispatch `~/ai/agents/prototype-orchestrator.md` with `prototype_id` derived from the WU's slug (e.g. `${wu_lower}-clarify`), `question` constructed from the ticket + Phase 2.5 evidence, `defer_source=${ticket_id}`, and shared `repo_root` / `worktree_path` (a prototype worktree under `${repo_root}/worktrees/prototype-${wu_lower}-clarify/` or the umbrella equivalent) / `planning_dir=${planning_dir}/../prototype-${wu_lower}-clarify/`. Halt the implementation pipeline for this WU. Comment on the WU's ticket via `${ticket_operator}` (`task=comment`) noting deferral + prototype dossier path. The WU re-enters implementation only when the prototype's dossier spawns new tickets that supersede or replace it.
-   - If the user picked `terminate WU`: record termination + rationale in `${repo_root}/DECISIONS.md`. Comment on the ticket via `${ticket_operator}` (`task=comment`). Halt.
+   - If the user picked `terminate WU`: record termination + rationale in `${worktree_path}/DECISIONS.md`. Comment on the ticket via `${ticket_operator}` (`task=comment`). Halt.
    - If the user picked `proceed in exhaustive mode` (or no defer-signals fired and the user approved the standard gate): proceed to step 8.
 8. **Mode propagation**: parse the approved risk profile and set per-surface mode for downstream phases. Pass `risk_profile_path` and the per-surface mode map into Phase 3's prompt; Phase 4, 5, 6b read it from the artifact.
 
@@ -238,7 +238,7 @@ After all six sub-steps land:
 
 **Audit-history insertion.** Record bundle references in `${planning_dir}/audit-history.md` when a second round begins or when `decision-encoder` records finding closure/regression. The entry includes bundle path, target identity, aggregate verdict, source IDs, WU-local IDs, canonical `R<N>-F<NN>` IDs when assigned, currentness flag, and whether a stale bundle was context only. Imported records preserve `source_id`, `origin_bundle_path`, and `SEED-FNN` until `decision-encoder` maps them.
 
-**Value-zero termination.** If a current entry-mode aggregate LOW leaves no remaining value, append a `DECISIONS.md` entry with WU id, phase, aggregate LOW, no remaining value, and evidence path; dispatch `${ticket_operator}` with `task=comment` citing the bundle path and target identity; then `halt-before-Phase-3`. Stale LOW findings never trigger value-zero termination.
+**Value-zero termination.** If a current entry-mode aggregate LOW leaves no remaining value, append a `${worktree_path}/DECISIONS.md` entry with WU id, phase, aggregate LOW, no remaining value, and evidence path; dispatch `${ticket_operator}` with `task=comment` citing the bundle path and target identity; then `halt-before-Phase-3`. Stale LOW findings never trigger value-zero termination.
 
 ### Phase 5 — Hookpoint Research
 
@@ -294,7 +294,7 @@ In the tickets-first variant (per `~/ai/workflows/tickets-first-review.md`), the
 4. On answer:
    - **A (review passed):** record approval in `${planning_dir}/audit-history.md` with the reviewer's identifier (or "user-via-root" if anonymous) and head SHA, then proceed to Phase 9.
    - **B (revisions):** the user's revision details land as a new round of audit-history. Re-enter from the appropriate phase (typically Phase 7 if the request is review-comment-shaped, Phase 6 if it requires test/code changes). Re-run Phase 8 audits + Phase 8.5 gate after the new round. The Phase 9 draft PR does not open until A.
-   - **C (rejected):** record termination in `DECISIONS.md`, comment closure on the ticket via `${ticket_operator}` (`task=comment`), halt WU. Do not open a PR.
+   - **C (rejected):** record termination in `${worktree_path}/DECISIONS.md`, comment closure on the ticket via `${ticket_operator}` (`task=comment`), halt WU. Do not open a PR.
 5. Phase 9's ticket cross-link step (step 6 below) does **not** repeat the branch-citation comment from step 2 above; instead it adds a follow-up comment containing the PR URL once the draft PR is open. The branch-citation comment from this phase remains as the historical record.
 
 ### Phase 9 — Draft PR
@@ -328,7 +328,7 @@ This override does NOT replace the Phase 8 audit gates — those still run and a
 ### Final — Audit-history close + DECISIONS.md sync + ticket close-comment
 
 1. Append the closing entry to `${planning_dir}/audit-history.md`.
-2. If any phase was narrowed, terminated, sent back, or accepted with a residual: append to `${repo_root}/DECISIONS.md` with WU id, phase, decision, justifying evidence path.
+2. If any phase was narrowed, terminated, sent back, or accepted with a residual: append to `${worktree_path}/DECISIONS.md` with WU id, phase, decision, justifying evidence path.
 3. **Comment back to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-final-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a comment body (ADF for JIRA, Markdown for Linear) containing: PR URL, audit-history closing summary, and any decision-tail entries appended in step 2. Dispatch as `agents -m claude-haiku`. Do NOT transition the ticket status from this orchestrator — status transitions are user-owned, not pipeline-owned.
 
 ## Violation Detection and Escalation
@@ -352,7 +352,7 @@ Escalation tiers (apply in order, do not skip):
 2. **Tier 2 — Split.** If a Tier-1 retry produces another violation on the same WU, split the WU into smaller WUs (per-AC, per-table, per-field). Use `~/ai/agents/` ticket regen workflow on a fresh per-phase branch. Then re-enter Phase 2.5 for each split WU.
 3. **Tier 3 — Shrink.** If Tier-2 splits still violate, shrink to single-AC or single-function granularity. Re-enter Phase 2.5.
 
-Record every Tier-1→2→3 transition in `DECISIONS.md`.
+Record every Tier-1→2→3 transition in `${worktree_path}/DECISIONS.md`.
 
 ## NEEDS_INPUT Handling
 
