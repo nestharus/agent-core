@@ -25,7 +25,7 @@ Minimal stub (early-stage project):
 | Guild name | Humility |
 
 ### Hosting
-Platform decisions will be recorded in `DECISIONS.md` as they are made.
+Platform decisions will be recorded in `${project_root}/DECISIONS.md` (or the caller-supplied project decisions path) as they are made.
 ````
 
 Full shape (established project):
