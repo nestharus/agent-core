@@ -1,3 +1,4 @@
+import re
 import subprocess
 from pathlib import Path
 
@@ -245,6 +246,97 @@ def test_phase_6_introduction_distinguishes_outer_vs_internal():
         "internal component contract" in introduction
         or "internal component contracts" in introduction
     )
+
+
+def test_current_layer_component_pair_integration_tests_are_derivation_evidence():
+    """Risk: AC1/S2/S5 workflow-contract gap. Level: particular-integration. Source: proposal lines 40 and 65."""
+    introduction = _section(_workflow_doc_text(), PHASE_6_HEADING, STEP_6A_HEADING)
+    step_6c = _step_6c_section()
+    phase_6 = _phase_6_section()
+
+    assert re.search(
+        r"(?is)\bcurrent[- ]layer\b.{0,180}\bintegration tests?\b.{0,180}"
+        r"\b(interactions?|component[- ]pair|interacting component)\b|"
+        r"\bintegration tests?\b.{0,180}\b(interactions?|component[- ]pair|interacting component)\b"
+        r".{0,180}\bcurrent[- ]layer\b",
+        introduction,
+    )
+    assert "Post-prototype internal contract derivation" in step_6c
+    assert "LevelComponentSet" in step_6c
+    assert re.search(
+        r"(?is)\bLevelComponentSet\b.{0,260}\bintegration_test_refs\b|"
+        r"\bintegration_test_refs\b.{0,260}\bLevelComponentSet\b",
+        step_6c,
+    )
+    assert "### Step 6d" not in phase_6
+
+
+def test_levelcomponentset_integration_test_fields():
+    """Risk: AC2/AC3/S5 derivation-record drift. Level: particular-integration. Source: proposal lines 43 and 66."""
+    step_6c = _step_6c_section()
+
+    assert "LevelComponentSet" in step_6c
+    for field in (
+        "layer_level_id",
+        "integration_test_refs",
+        "coverage_summary",
+        "prototype_evidence_links",
+        "accidental_coupling_exclusions",
+        "neighbor_claims",
+        "rejected_component_candidates",
+        "generalization_notes",
+        "generalization_probe_refs",
+    ):
+        assert field in step_6c
+    assert "component_pair_refs[]" in step_6c or "component_pair_refs" in step_6c
+    assert re.search(
+        r"(?is)\bcoverage_summary\b.{0,260}\bno interacting pairs\b.{0,260}"
+        r"\b(interacting pair|missing test refs?|missing integration)\b|"
+        r"\b(interacting pair|missing test refs?|missing integration)\b.{0,260}"
+        r"\bno interacting pairs\b.{0,260}\bcoverage_summary\b",
+        step_6c,
+    )
+    assert re.search(
+        r"(?is)\bcomponent_pair_refs\[\]\b.{0,260}\baccepted component(?:s| inventory)?\b.{0,260}"
+        r"\bneighbor_claims\b|\bneighbor_claims\b.{0,260}\baccepted component(?:s| inventory)?\b.{0,260}"
+        r"\bcomponent_pair_refs\[\]\b",
+        step_6c,
+    )
+
+
+def test_step_6b_output_index_layer_integration_intent():
+    """Risk: AC1/AC3/S4 output-index handoff drift. Level: particular-integration. Source: proposal lines 42 and 67."""
+    step_6b = _step_6b_section()
+    start_token = "- Output-index fields:"
+    end_token = "- Output: `risk/NN-test-residuals.md`"
+
+    assert start_token in step_6b, "Step 6b is missing its output-index field list"
+    assert end_token in step_6b, "Step 6b is missing the residuals output after field list"
+    field_list = step_6b[
+        step_6b.index(start_token) : step_6b.index(end_token, step_6b.index(start_token))
+    ]
+
+    assert re.search(
+        r"(?is)\bintegration[- ]test(?:\s+intent)?\b.{0,360}"
+        r"\bparticular-integration\b.{0,360}\b(layer_level_id|level_id)\b.{0,360}"
+        r"\bintegration_test_refs\b|"
+        r"\bparticular-integration\b.{0,360}\bintegration[- ]test(?:\s+intent)?\b"
+        r".{0,360}\b(layer_level_id|level_id)\b.{0,360}\bintegration_test_refs\b",
+        field_list,
+    )
+    assert re.search(
+        r"(?is)\bLevelComponentSet\b.{0,360}\bintegration_test_refs\b|"
+        r"\bintegration_test_refs\b.{0,360}\bLevelComponentSet\b",
+        field_list,
+    )
+    for procedural_field in (
+        "procedural obligation",
+        "Step 6c evidence",
+        "emitted procedural test file path",
+        "procedural residual entry path",
+        "residual class",
+    ):
+        assert procedural_field in field_list
 
 
 def test_no_new_workflow_file_path():

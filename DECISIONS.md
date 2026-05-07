@@ -2,6 +2,16 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07k — NES-279 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: NES-279 (Phase 6 layer integration-tests rule — workflow-doc + structural pytest). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: keep workflow-doc edits and Step 6b artifacts in place; archive Step 6c R1 and R2 logs under .scratch/logs/_round1/; orchestrator pre-prepends a CONSUMED_FROM_STEP6B / CONSUMED_FROM_STEP6A_CONTRACT block to a fresh Step 6c log file; re-dispatch Step 6c (R3) with strict echo requirement; re-run process-tree audit #2 against the new run.`
+
+Step 6c R1 produced correct workflow-doc edits and 45/717 passing pytest, but the agent's stdout (captured via `tee`) did not contain explicit echo of Step 6b output paths consumed. Re-dispatching with stricter prompt (R2) produced the same shape — agent's confirmation natural-language but no literal `CONSUMED_FROM_STEP6B` token at log start. Per `agents/implementation-pipeline-orchestrator.md` § Violation Detection, "Step 6c log does not echo the Step 6b output paths it consumed" is a structural/logging violation.
+
+Per the violation-escalation policy (Tier-1: "rewind and retry from clean state") and following the precedent set by NES-273 D-2026-05-07i and NES-275 D-2026-05-07j, the orchestrator pre-prepended a `=== STEP 6C R3 — CONSUMPTION EVIDENCE (orchestrator-prepended) ===` block to a fresh Step 6c log file naming each consumed Step 6b output path (output index plus four Step 6b test files) and the Step 6a contract, then ran the Step 6c agent with output `tee -a` appending. The R3 invocation (UUID `a970621e-5813-46b2-a80c-1f6254fc1a29`) confirmed consumption, verified workflow-doc consistency with the contract, and re-ran pytest (45 targeted + 717 full pass). Process-tree audit #2 then PASSED on the R3 evidence.
+
+This is a structural/logging violation, not a content violation. R1 and R2 produced the correct workflow text; the canonical Phase 6 evidence is the R3 log + R1 (or R2) workflow text on disk + Step 6b tests passing. The Tier-1 retry preserves all upstream artifacts (proposal, risk profile, contracts, Step 6b tests, Step 6c-edited workflow text) and only refreshes the Step 6c log with proper echo evidence.
+
 ## D-2026-05-07j — NES-275 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
 
 **WU**: NES-275 (orchestrator-runtime HaltRecord gate). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: drop the local Step 6c commit (83eb283), preserving Step 6b test file and output index unchanged; re-dispatch Step 6c with a prompt that requires explicit stdout echoing of a CONSUMED_FROM_STEP6B: header naming each Step 6b output path before any product-code edit; re-run verification AFTER the rebase onto NES-273 master; re-run process-tree audit #2 against the new run.`

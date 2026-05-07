@@ -249,6 +249,71 @@ def test_step6b_and_step6c_carry_level_scope():
     )
 
 
+def test_layer_level_id_scopes_recursive_integration_tests():
+    """Risk: S1/S3 level identity drift. Level: particular-integration. Source: proposal lines 39, 41, and 69."""
+    workflow = _workflow_text()
+    artifacts = _section(workflow, r"Where artifacts live")
+    top_level = _phase6_top_level(workflow)
+    recursive_reuse = next(
+        (
+            line
+            for line in top_level.splitlines()
+            if "Recursive Phase 6 reuse" in line
+        ),
+        "",
+    )
+    child_entry = next(
+        (
+            line
+            for line in top_level.splitlines()
+            if "Recursive child entry" in line
+        ),
+        "",
+    )
+
+    assert recursive_reuse, "Phase 6 top-level text is missing recursive reuse rule"
+    _assert_contains_all(
+        artifacts,
+        (
+            "layer_level_id",
+            "level_id",
+            "<level_id>:<local_artifact_id>",
+        ),
+        where="Where artifacts live layer_level_id scoping",
+    )
+    assert re.search(
+        r"(?is)\blayer_level_id\b.{0,260}\b(current layer|composed identity|composes?)\b"
+        r".{0,260}\blevel_id\b|\blevel_id\b.{0,260}\b(current layer|composed identity|composes?)\b"
+        r".{0,260}\blayer_level_id\b",
+        artifacts,
+    )
+    assert re.search(
+        r"(?is)\blayer_level_id\b.{0,220}\bnot\b.{0,120}\bindependent\b.{0,120}\b(scope key|axis)\b",
+        artifacts,
+    ) or re.search(
+        r"(?is)\bnot\b.{0,120}\bindependent\b.{0,120}\b(scope key|axis)\b.{0,220}"
+        r"\blayer_level_id\b",
+        artifacts,
+    )
+    assert re.search(
+        r"(?is)\bintegration tests?\b.{0,220}\b(child|child level)\b.{0,220}\blevel_id\b|"
+        r"\b(child|child level)\b.{0,220}\blevel_id\b.{0,220}\bintegration tests?\b",
+        recursive_reuse,
+    )
+    assert "ChildLevelFramingRecord" in child_entry
+    assert "level-open" in child_entry
+    assert "integration_test_refs" not in child_entry
+    assert re.search(
+        r"(?is)\bintegration[- ]test evidence\b.{0,160}\bnot\b.{0,160}"
+        r"\bchild[- ]entry (?:condition|criterion|gate)\b|"
+        r"\bchild[- ]entry (?:condition|criterion|gate)\b.{0,160}\bnot\b.{0,160}"
+        r"\bintegration[- ]test evidence\b|"
+        r"\bintegration tests?\b.{0,160}\bnot\b.{0,160}"
+        r"\bchild[- ]entry (?:condition|criterion|gate)\b",
+        top_level,
+    )
+
+
 def test_recursion_control_text_cross_references_overlay_review_without_scheduler():
     workflow = _workflow_text()
     top_level = _phase6_top_level(workflow)

@@ -120,6 +120,43 @@ def test_swap_record_requires_required_field_tokens():
     )
 
 
+def test_same_layer_integration_evidence_stays_upstream_of_swap_record():
+    """Risk: S7 swap-boundary conflation. Level: particular-integration. Source: proposal lines 45 and 70."""
+    boundary = _boundary_rule(_workflow_text())
+
+    _assert_contains_all(
+        boundary,
+        (
+            "PrototypeSwapRecord",
+            "component_test_results",
+            "procedural_test_results",
+            "level_behavior_test_results",
+        ),
+        where="PrototypeSwapRecord preserved fields with integration boundary pointer",
+    )
+    _assert_regex(
+        boundary,
+        r"(?is)(same[- ]layer|current[- ]layer).{0,180}"
+        r"(component[- ]pair|pairwise).{0,180}integration[- ]test evidence|"
+        r"integration[- ]test evidence.{0,180}(same[- ]layer|current[- ]layer).{0,180}"
+        r"(component[- ]pair|pairwise)",
+        "same-layer component-pair integration-test evidence",
+    )
+    _assert_regex(
+        boundary,
+        r"(?is)integration[- ]test evidence.{0,220}(upstream|before swap readiness|consumed before)|"
+        r"(upstream|before swap readiness|consumed before).{0,220}integration[- ]test evidence",
+        "integration-test evidence consumed upstream of swap readiness",
+    )
+    _assert_regex(
+        boundary,
+        r"(?is)(distinct from|not folded into|not a replacement for|not folded into)"
+        r".{0,220}(component_test_results|procedural_test_results|level_behavior_test_results)",
+        "integration-test evidence distinct from swap result fields",
+    )
+    assert "integration_test_results" not in boundary
+
+
 def test_swap_record_blocks_phase7_without_record_or_non_applicability():
     boundary = _boundary_rule(_workflow_text())
 

@@ -159,6 +159,48 @@ def test_haltrecord_required_fields_present():
         assert field in halt_block
 
 
+def test_integration_test_missing_violation():
+    """Risk: AC4/S6 missing pair coverage silent-skip. Level: particular-integration. Source: proposal lines 44 and 68."""
+    halt_block = _step_6c_halt_block()
+
+    assert HALTRECORD_REQUIRED_FIELDS == (
+        "halt_basis",
+        "component_candidates_considered",
+        "evidence_refs",
+        "residual_risk_refs",
+    )
+    assert HALT_BASIS_OPTIONS == (
+        "clarify contracts",
+        "reduce accidental coupling",
+        "expose a design challenge",
+        "improve evidence",
+        "lower meaningful risk",
+    )
+    assert "integration_test_missing" in halt_block
+    _assert_matches(
+        halt_block,
+        r"(?is)\b(interacting component pair|component_pair_refs\[\]|component pair)\b"
+        r".{0,220}\bintegration_test_refs\b.{0,220}\bintegration_test_missing\b|"
+        r"\bintegration_test_missing\b.{0,220}\b(interacting component pair|component_pair_refs\[\]|component pair)\b"
+        r".{0,220}\bintegration_test_refs\b",
+        "integration_test_missing tied to missing interacting-pair integration refs",
+    )
+    _assert_matches(
+        halt_block,
+        r"(?is)\b(not|is not|cannot|must not)\b.{0,140}\b(non-applicability|non applicable|silently skipped|silent skip)\b|"
+        r"\b(no-silent-skip|no silent skip)\b",
+        "missing integration-test refs are not non-applicability or silent skip",
+    )
+    _assert_matches(
+        halt_block,
+        r"(?is)\breplayable\b.{0,180}\b(pair|which pair|component pair)\b.{0,180}"
+        r"\b(expected coverage|expected integration coverage|coverage expected)\b|"
+        r"\b(pair|which pair|component pair)\b.{0,180}\b(expected coverage|expected integration coverage|coverage expected)\b"
+        r".{0,180}\breplayable\b",
+        "replayable missing-pair evidence",
+    )
+
+
 def test_component_candidates_considered_required():
     # Risk: component_candidates_considered is required. Level: unit / structural. Source: NES-271 proposal Test-Intent Track.
     halt_block = _step_6c_halt_block()
