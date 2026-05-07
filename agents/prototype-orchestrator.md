@@ -179,7 +179,7 @@ Mechanical. Do not gate.
 
 1. **File spawned tickets.** For each entry in `${planning_dir}/dossier/spawned-tickets.md`:
    - Compose `${scratch_dir}/prompts/${prototype_id}-p4-jira-create-${entry_id}.md` instructing `jira-operator` (`task=create`). Pass through summary, description (ADF rendered from the markdown), `issuetype` per the entry, `parent` Epic, `labels` (apply `hardening` for risk-reduction tickets per the project's `AGENTS.md` label conventions; pair with routing-area labels).
-   - Dispatch `agents -m claude-haiku -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`.
+   - Dispatch `agents -m claude-opus -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`.
    - Capture the new key + URL.
    - For each link the entry specifies (`Blocks` to `${jira_issue_key}`, `Relates` to `${defer_source}`, etc.), call the JIRA `/issueLink` API. The `jira-operator` doesn't have a native link task — make the API call directly per `~/projects/<name>/AGENTS.md` § Link types reference.
    - Append the new key + URL back into `${planning_dir}/dossier/spawned-tickets.md` so the dossier is self-referential.

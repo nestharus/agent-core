@@ -1,6 +1,6 @@
 ---
 description: 'Read/comment/transition JIRA issues on a configured Atlassian site via REST API. Auth via $JIRA_API_KEY env var. User email comes from project config.'
-model: claude-haiku
+model: claude-opus
 output_format: ''
 ---
 

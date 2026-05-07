@@ -220,7 +220,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 ### External integration
 
 - `jira-operator` - Read, comment on, transition, search, or create Jira issues through the Atlassian REST API.
-  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email` | Model: `claude-haiku`
+  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email` | Model: `claude-opus`
 
 ## Ecosystem Map
 
