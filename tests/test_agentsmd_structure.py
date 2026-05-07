@@ -245,7 +245,7 @@ def test_routing_table_rows_preserved():
         "pr-writer": (
             "agents/pr-writer.md",
             "Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?`",
-            "gpt-high",
+            "claude-opus",
         ),
         "coderabbit-operator": (
             "agents/coderabbit-operator.md",
@@ -272,14 +272,10 @@ def test_routing_table_rows_preserved():
         assert re.search(rf"(?m)^- `{re.escape(name)}` - ", text), (
             f"missing operator row: {name}"
         )
+        row = _routing_row(text, name)
         file_link = f"File: [~/ai/{path}]({path})"
-        assert file_link in text, f"missing file path for {name}: {path}"
-        entry_pattern = (
-            rf"(?ms)^- `{re.escape(name)}` - .*?\n"
-            rf"  .*?{re.escape(file_link)}.*?"
-            rf"{re.escape(inputs_marker)}.*? \| Model: `{re.escape(model)}`$"
-        )
-        assert re.search(entry_pattern, text), (
+        assert file_link in row, f"missing file path for {name}: {path}"
+        assert inputs_marker in row and f"Model: `{model}`" in row, (
             f"missing expected inputs or model marker for {name}: {inputs_marker}; {model}"
         )
 

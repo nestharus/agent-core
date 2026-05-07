@@ -125,7 +125,7 @@ git push -u origin <branch-name>
 
 # Author the title + body via pr-writer (enforces the audience and content rules
 # — no internal jargon, no commit history, no closed-PR or planning-artifact refs).
-agents -m gpt-high -a ~/ai/agents/pr-writer.md \
+agents -m claude-opus -a ~/ai/agents/pr-writer.md \
   --input branch=<branch-name> \
   --input base=main \
   --input repo_root=${worktrees_root}/<name> \

@@ -618,3 +618,23 @@ A shared `session.id` reflects pool reuse, not prompt cross-talk: each invocatio
 **Decision**: Accept the session-pooling residual as an infrastructure property of the `agents` CLI rather than a workflow violation. The Phase-4 process-tree-audit #1 manifest's "Independence check" is updated to require distinct **invocation UUIDs** and per-gate independent prompts/outputs, NOT distinct session UUIDs.
 
 **Re-evaluation trigger**: If a future Phase 4 (or Phase 8 review-gates) run shows a gate's verdict matching a sibling's reasoning verbatim (i.e., evidence of actual cross-talk), the assumption above is invalidated and the workflow's parallel-dispatch contract needs amendment — either an `agents` CLI flag to force fresh sessions for parallel sibling dispatches, or a workflow-doc-level rule to dispatch claude-opus parallel siblings via separate worktrees / separate OULIPOLY_INVOCATION roots.
+
+## D-2026-05-07f — NES-264 Phase 2.5.1 characterization-test skip (change-target surface)
+
+**Phase.** 2.5.1 — coverage inventory.
+
+**Decision.** Skip the orchestrator's standard Phase 2.5.1 characterization-test dispatch for the two uncovered surfaces named in `~/projects/ai/planning/nes-264-pr-writer-opus/research/nes-264-coverage-inventory.md` (Phase 9 PR-writer dispatch flag in `agents/implementation-pipeline-orchestrator.md`; PR-opening PR-writer dispatch flag in `agents/worktree-operator.md`). Cover those surfaces in **Phase 6b** as structural tests asserting the *new* model literal (`claude-opus`) instead of capturing the *current* literal (`gpt-high`).
+
+**Why.** Phase 2.5.1's characterization-test pattern guards behaviors the WU is *not* changing, so the WU does not silently regress them. NES-264's whole purpose is to change the dispatch flag literal at exactly these two sites. Writing a `gpt-high` characterization test in 2.5.1 and then flipping it in 6b is procedural busywork — the Phase 6b structural test against `claude-opus` is the same coverage at the right test layer (target-state assertion, not historical capture).
+
+The other Phase 2.5.1-named uncovered surface (`agents/pr-writer.md` frontmatter `model:`) is also a change target and is similarly handled. The minimum coverage required for that surface is the existing `tests/test_agentsmd_structure.py` routing-row assertion (T2), updated in Phase 6b to expect `claude-opus`. Phase 6b additionally adds a direct frontmatter assertion (`tests/test_pr_writer_operator_spec.py::test_pr_writer_frontmatter_model_is_claude_opus`, T1) as belt-and-suspenders coverage of the operator file itself.
+
+**Anti-scope.** Does not skip Phase 6b structural tests. Does not affect the four risk-gate evaluations in Phase 4. Does not change the WU's anti-scope (frontmatter + dispatch literals + structural test only).
+
+**Justifying evidence.**
+
+- Coverage inventory: `~/projects/ai/planning/nes-264-pr-writer-opus/research/nes-264-coverage-inventory.md` (verdict: `CHARACTERIZATION TESTS NEEDED — <list>`).
+- Convention: `~/ai/conventions/risk-profile.md` § "Discoveries during Phase 2.5" — characterization tests guard behavior the WU will change but does not intend to alter; the dispatch flag literal IS the intended alteration here.
+- Companion precedent: NES-263 (PR #49 merged 2026-05-07) took the same approach for the haiku→opus sweep on ticket operators.
+
+**Re-evaluation trigger.** If Phase 6b fails to produce structural tests for the two dispatch-flag surfaces, this decision is invalid and Phase 2.5.1 must be re-entered to produce characterization tests on a precursor branch. That is a Tier-1 rewind to pre-Phase-6b.
