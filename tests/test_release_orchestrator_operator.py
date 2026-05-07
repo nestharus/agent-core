@@ -10,10 +10,9 @@ SHIPPED_SUB_OPERATORS = [
     "release-cut-operator.md",
     "release-promote-operator.md",
     "release-hotfix-operator.md",
-]
-FORWARD_REFERENCED_SUB_OPERATORS = [
     "release-reconcile-operator.md",
 ]
+FORWARD_REFERENCED_SUB_OPERATORS = []
 SUB_OPERATORS = SHIPPED_SUB_OPERATORS + FORWARD_REFERENCED_SUB_OPERATORS
 REQUIRED_FRONTMATTER_KEYS = {"description", "model", "output_format"}
 REQUIRED_H2_SECTIONS = (
