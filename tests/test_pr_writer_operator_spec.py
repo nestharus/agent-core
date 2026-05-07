@@ -33,6 +33,17 @@ def _assert_regex(text, pattern, message):
     assert re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL), message
 
 
+def test_pr_writer_frontmatter_model_is_claude_opus():
+    """NES-264 contract §1.1 / proposal T1: pr-writer defaults to claude-opus."""
+    text = _operator_text()
+    match = re.match(r"\A---\n(?P<frontmatter>.*?)\n---", text, flags=re.DOTALL)
+    assert match, "operator spec must start with YAML frontmatter"
+
+    frontmatter = match.group("frontmatter")
+    assert re.search(r"(?m)^model:\s*claude-opus\s*$", frontmatter)
+    assert not re.search(r"(?m)^model:\s*gpt-high\s*$", frontmatter)
+
+
 def test_inputs_declares_linear_issue_keys_optional():
     inputs = _section_after_heading(_operator_text(), "## Inputs")
 
