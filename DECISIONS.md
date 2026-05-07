@@ -2,6 +2,21 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07l — NES-278 Phase 8 test-audit PARTIAL on `workflows/index.json` accepted as gate-policy residual
+
+**WU**: NES-278 (Author `~/ai/workflows/rca.md` workflow). **Phase**: 8 (Post-CodeRabbit gates). **Decision**: `Accept test-audit verdict PARTIAL as a documented residual; advance to Phase 9.`
+
+The Phase 8 test-audit gate (`tests-audit-gate.md`, invocation `c8073a1a-81fe-4b04-bcd5-dbab139e77f3`) returned `Verdict: PARTIAL` with two findings:
+
+1. **Spec-alignment PARTIAL** on `workflows/index.json`: the gate's `NON_PRODUCT` allow-list does not include `*.json`, so the regenerated workflow-index file is treated as a product file requiring a `coverage/spec-*.md` anchor. None exists because `workflows/index.json` is deterministic generator output from `tools/workflow_index/generator.py` whose source-of-truth is `workflows/*.md` frontmatter. This is a gate-policy gap, not a real test issue. Coverage of the regenerated index is provided by global currentness tests (`tests/test_workflow_metadata.py:71` runs `check_index(WORKFLOWS_DIR, WORKFLOWS_DIR / "index.json")`) which the WU's pytest run includes (passes).
+2. **Coverage-delta PARTIAL** is the documented implementation-mode default (per `tests-audit-gate.md` § Non-Negotiables: "In implementation mode, coverage-delta is always `PARTIAL`."). Same-PR resolution would require CI baseline artifacts which this orchestrator's local pipeline does not produce.
+
+Acceptance rationale: both PARTIAL components are gate-policy limitations rather than substantive defects in the diff. The actual product test-quality verdict is PASS (`tests/test_rca_workflow.py:461` verifies the index entry and the structural test passes). The proposal's residual-risk section (`proposals/nes-278-NES-278.md:155–169`) named `workflows/index.json` regen as a known surface; this PARTIAL fits that named residual. Not advancing on this PARTIAL would block every WU that touches `workflows/index.json` until the gate is updated — out of scope here.
+
+Mitigation: re-running the structural test suite locally (`PYTHONPATH=. python3 -m pytest tests/test_rca_workflow.py tests/test_workflow_metadata.py tests/test_workflow_index.py tests/test_agentsmd_structure.py -q`) returns 71 passing assertions; the broader test surface (`PYTHONPATH=. python3 -m pytest -q`) returns 957 passing. Index correctness is verified through behavioural evidence rather than spec-alignment.
+
+Evidence path: `/home/nes/projects/ai/planning/nes-278-rca-workflow/risk/nes-278-test-audit.md` for the gate verdict; `/home/nes/projects/ai/planning/nes-278-rca-workflow/proposals/nes-278-NES-278.md:155-169` for the named residual.
+
 ## D-2026-05-07k — NES-279 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
 
 **WU**: NES-279 (Phase 6 layer integration-tests rule — workflow-doc + structural pytest). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: keep workflow-doc edits and Step 6b artifacts in place; archive Step 6c R1 and R2 logs under .scratch/logs/_round1/; orchestrator pre-prepends a CONSUMED_FROM_STEP6B / CONSUMED_FROM_STEP6A_CONTRACT block to a fresh Step 6c log file; re-dispatch Step 6c (R3) with strict echo requirement; re-run process-tree audit #2 against the new run.`

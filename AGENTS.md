@@ -260,6 +260,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 ## Workflow Topologies
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- RCA workflow (full incident-to-close root-cause analysis): [`~/ai/workflows/rca.md`](workflows/rca.md)
 - Release management (staged cut/freeze/hotfix/promote/tag/reconcile lifecycle): [`~/ai/workflows/release-management.md`](workflows/release-management.md)
 - Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)

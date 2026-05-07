@@ -283,6 +283,35 @@
         ]
       }
     },
+    "rca": {
+      "path": "workflows/rca.md",
+      "workflow": {
+        "id": "rca"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs the full RCA lifecycle from incident framing through evidence, tracker filing, investigation, post-mortem, action-item tickets, runbooks, tracker comments, and close-or-pending decision",
+          "dispatches incident-investigator and post-mortem-author as separate operator invocations and uses ticket operators for tracker side effects",
+          "wraps implementation-pipeline action-item WUs without replacing implementation review or PR review gates"
+        ],
+        "inputs": [
+          "incident handle or incident context, incident brief path or enough framing to create one, evidence directory, repo_root, scratch_dir, and planning_dir",
+          "ticket_system linear or jira with existing incident issue key or create context, plus Linear or Jira operator inputs for tracker filing and comments",
+          "action_item_policy file-only, file-and-handoff, or file-and-dispatch, plus action-item worktree/planning/scratch path policy when implementation WUs are dispatched"
+        ],
+        "non_goals": [
+          "does not mutate source code, git state, applications, production, or external systems except documented tracker create/comment operations",
+          "does not edit incident-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
+          "does not replace implementation-pipeline Phase 4, Phase 7, Phase 8, CodeRabbit, or PR-review gates"
+        ],
+        "orchestrator": "Work Manager or root RCA coordinator",
+        "outputs": [
+          "incident brief, evidence pack, findings, post-mortem, action-item index, runbooks, tracker comment/link evidence, and RCA close or pending record",
+          "created or identified incident tracker key and action-item ticket keys",
+          "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot proceed"
+        ]
+      }
+    },
     "release-management": {
       "path": "workflows/release-management.md",
       "workflow": {
