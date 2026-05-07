@@ -19,7 +19,7 @@ class TestGetIssueDescription:
         """Should print issue description when it exists."""
         mock_issue = {"description": "This is the ticket description."}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -35,7 +35,7 @@ class TestGetIssueDescription:
         """Should print empty string when description is None."""
         mock_issue = {"description": None}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -51,7 +51,7 @@ class TestGetIssueDescription:
         """Should print empty string when description key is missing."""
         mock_issue = {}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -78,7 +78,7 @@ This is the second plan content.
 """
         mock_issue = {"description": description}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -107,7 +107,7 @@ This is the second plan content.
         description = "Just some text without separator"
         mock_issue = {"description": description}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -132,7 +132,7 @@ This is content but no Plan N: headers
 """
         mock_issue = {"description": description}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -156,7 +156,7 @@ This is the only plan.
 """
         mock_issue = {"description": description}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -185,7 +185,7 @@ class TestUpdateIssue:
             "updatedAt": "2024-01-01T00:00:00Z",
         }
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.update_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -216,7 +216,7 @@ class TestUpdateIssue:
             "updatedAt": "2024-01-01T00:00:00Z",
         }
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.update_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -233,7 +233,7 @@ class TestMain:
         """Should call get_issue with issue_id argument."""
         mock_issue = {"id": "uuid", "identifier": "NES-123", "title": "Test"}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -250,7 +250,7 @@ class TestMain:
         """Should call get_issue_description with issue_id argument."""
         mock_issue = {"description": "Test description"}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -271,7 +271,7 @@ Content
 """
         mock_issue = {"description": description}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -292,7 +292,7 @@ Content
         """Should call list_projects."""
         mock_projects = [{"id": "proj-1", "name": "Project 1"}]
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.list_projects.return_value = mock_projects
             mock_client_class.return_value = mock_client
@@ -309,7 +309,7 @@ Content
         """Should call list_teams."""
         mock_teams = [{"id": "team-1", "name": "Team 1"}]
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.list_teams.return_value = mock_teams
             mock_client_class.return_value = mock_client
@@ -326,7 +326,7 @@ Content
         """Should call list_comments with issue_id argument."""
         mock_comments = {"comments": [{"id": "comment-1", "body": "Hello"}]}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.list_comments.return_value = mock_comments
             mock_client_class.return_value = mock_client
@@ -343,7 +343,7 @@ Content
         """Should call create_issue with required arguments."""
         mock_issue = {"id": "uuid", "identifier": "NES-124", "title": "New Issue"}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.create_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -369,6 +369,7 @@ Content
                 title="New Issue",
                 description="Issue description",
                 project_id=None,
+                label_ids=None,
             )
             captured = capsys.readouterr()
             result = json.loads(captured.out)
@@ -384,7 +385,7 @@ Content
             "updatedAt": "2024-01-01T00:00:00Z",
         }
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.update_issue.return_value = mock_issue
             mock_client_class.return_value = mock_client
@@ -410,7 +411,7 @@ Content
         """Should call create_comment with issue_id and body."""
         mock_comment = {"id": "comment-uuid", "body": "Comment text"}
 
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.create_comment.return_value = mock_comment
             mock_client_class.return_value = mock_client
@@ -437,7 +438,7 @@ Content
 
     def test_handles_linear_client_error(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should catch LinearClientError and output JSON error."""
-        with patch("scripts.clients.linear_cli.LinearClient") as mock_client_class:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.get_issue.side_effect = LinearClientError("NOT_FOUND", "Issue not found")
             mock_client_class.return_value = mock_client

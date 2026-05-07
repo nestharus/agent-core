@@ -2,6 +2,32 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07a — NES-241 Phase 6c scope expansion (assertion-drift fix in same family)
+
+**WU**: NES-241 (test-cli-unit-drift). **Phase**: 6c. **Decision**: `Expand NES-241 scope (option A) to include the row-20 assertion-drift fix on TestMain.test_create_issue_command in the same WU.`
+
+After Step 6c applied the 19 patch-target fixes, 18 of 19 in-scope tests turned green. `TestMain.test_create_issue_command` (line 367–372 of `clients/linear/tests/test_cli_unit.py`) still failed because its `mock_client.create_issue.assert_called_once_with(...)` expected the old four-keyword signature `(team, title, description, project_id=None)` but the CLI now passes a fifth keyword `label_ids=None` (added by BOOT-04). The Step 6a contract's stop-and-research clause forbade orchestrator-side assertion edits, so Step 6c surfaced `NEEDS_INPUT` (artifact `q-8c09a77f-23e2-4cd3-aa68-03d18f298e0a.question.json`) with three options: (A) expand scope, (B) ship 18/19 with a follow-up tracker, (C) Tier-1 rewind into two split tickets. The user selected option A.
+
+**Rationale.** This is the same drift family as the 19 path-fixes (test left behind by code evolution), surfaced now only because the path-fix unblocked the assertion from running at all. Option B would leave pytest CI for `clients/linear/tests/` red and require a tracker for a one-keyword edit; option C would discard six 2.5.* artifacts plus the proposal for a one-line fix. Option A is the minimum-diff outcome that ships pytest green. Precedent: NES-246 + NES-203 picked option A for identical "small drift fix in same family" questions.
+
+**Scope expansion (limited).** This decision authorizes exactly two edits inside `clients/linear/tests/test_cli_unit.py`: (a) the 19 patch-target literal swaps already enumerated in the original contract; (b) one keyword-argument addition `label_ids=None,` inside `TestMain.test_create_issue_command`'s `assert_called_once_with(...)`. No other test's assertion is touched. No other file is modified.
+
+**Contract revision (R2).** `${planning_dir}/contracts/nes-241-test-cli-unit-drift.md` was amended (R2 — 2026-05-07) to add row 20 to the mechanical-change table, refine the test-surface boundary, and tighten the stop-and-research clause so that any further assertion drift other than row 20 still halts the WU. R2 was authored by the orchestrator before the Step 6c re-dispatch; the re-dispatched code agent reads the revised contract.
+
+**Anti-scope (kept intact).**
+
+- Did NOT broaden assertions on any test other than `test_create_issue_command`.
+- Did NOT add new tests, restructure layout, rename anything, or touch fixtures.
+- Did NOT modify product code in `clients/linear/cli.py` or `clients/linear/client.py`.
+- Did NOT touch packaging, scripts/, conftest, or pre-commit config.
+
+**Justifying evidence.**
+
+- Question artifact: `/home/nes/projects/ai/planning/nes-241-test-cli-unit-drift/.scratch/questions/q-8c09a77f-23e2-4cd3-aa68-03d18f298e0a.question.json`
+- Step 6c retry NEEDS_INPUT context: `/home/nes/projects/ai/planning/nes-241-test-cli-unit-drift/.scratch/phase6/step6c-needs-input.md`
+- Revised contract (R2): `/home/nes/projects/ai/planning/nes-241-test-cli-unit-drift/contracts/nes-241-test-cli-unit-drift.md` (§ "Contract revision (R2)" + § "Row 20 — `test_create_issue_command` assertion drift").
+- Step 6c re-dispatch log: `/home/nes/projects/ai/planning/nes-241-test-cli-unit-drift/.scratch/logs/nes-241-phase-6c-row20.log` (created when the re-dispatch fires).
+
 ## D-2026-05-06i — NES-245 in-orchestrator scope decisions (test-drift, mid-pipeline rebase, contract revision)
 
 **WU**: NES-245 (release-hotfix-operator). **Phase**: 2.5 → 8. **Decisions** (three, all recorded together because they form one mid-pipeline arc):
