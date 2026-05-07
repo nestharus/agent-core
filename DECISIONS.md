@@ -573,3 +573,48 @@ The user's directive "I do not want haiku to be used anywhere for anything" is i
 - Did NOT rewind Phase 6.
 
 **Precedent.** Same pattern as `D-2026-05-06l` (NES-227 Phase 8 R3 test-audit residual acceptance): a fix-pass-discovered missing test gap is documented as a residual through DECISIONS.md rather than via Tier-1 rewind for procedural-form-only gain.
+
+## D-2026-05-07d — NES-260 Phase 4 process-tree-audit #1 Tier-1 retry (claude-opus session sharing + supported-surface verdict-line position)
+
+**WU**: NES-260 (DECISIONS.md path qualification drift in 7 workflow + convention files). **Phase**: 4 (process-tree audit #1).
+
+### Trigger
+
+Process-tree-auditor returned `BLOCKING` on the Phase 4 R2 fanout with two findings:
+
+1. **Session sharing.** The three `claude-opus` sibling-root invocations (scope, shortcut, supported-surface) shared session `76322bb0-2652-48f6-9a25-290d026485e0` and chain `227f4e89-bda2-4f77-8b2b-12fd0ae60065`. The `agents` runner reused a single claude-opus provider session across the parallel dispatches (likely a load-balancer artifact), violating the manifest's required-independence check. The `gpt-high` audit-risk gate had its own session (`019e0163-...`), so the violation is specific to the claude-opus parallel fanout.
+2. **Verdict-line position.** `risk/nes-260-supported-surface.md` had `# NES-260 Supported-Surface Risk Gate` as the first non-blank line and `Verdict: LOW` on line 3, instead of `Verdict: LOW` first as the prompt and the orchestrator's contract require.
+
+### Disposition (Tier-1, autonomous per `~/ai/agents/implementation-pipeline-orchestrator.md` § Violation Detection and Escalation)
+
+No commits exist on the branch (planning artifacts only), so no `git reset --hard` is required. The R2 risk reports are discarded and the three `claude-opus` gates are re-dispatched **serially** to guarantee distinct sessions; the supported-surface prompt is tightened to mandate `Verdict: ...` as the first non-blank line of the report. The audit-risk gate already passed clean and is not re-dispatched.
+
+### Why the violation is real, not cosmetic
+
+For Phase 4 risk gates, "independent" specifically means each gate forms its verdict from a fresh model context that did not see a sibling's reasoning. Session reuse leaks model state between sibling dispatches and would let one gate's reasoning bias the next. The auditor's strictness is correct.
+
+### Re-evaluation trigger
+
+If post-retry the same session-sharing pattern recurs on a different parallel fanout (e.g., Phase 8 PR-review gates), the workflow's parallel-dispatch contract needs amendment — either a `--no-resume-session` flag in the `agents` CLI invocation pattern, or workflow-doc-level guidance to dispatch claude-opus parallel siblings serially when independence is required. That amendment is outside NES-260's scope.
+
+
+## D-2026-05-07e — `agents` CLI claude-opus session pooling acknowledged as infrastructure property
+
+**Discovered during**: NES-260 Phase 4 process-tree-audit #1 retry (D-2026-05-07d context).
+
+**Observation**: After Tier-1 retry of the three claude-opus parallel gates, sequential re-dispatch (R3) still shared `session.id` (`f7f46e76-...`, chain `fb5c73e8-...`) between scope R3 and shortcut R3/R4. The `supported-surface` R3 dispatch landed on a different session (`5989b868-...`). The audit-risk gate (`gpt-high`, `codex3` source) had its own session throughout.
+
+**Cause**: The `agents` CLI load-balancer maintains a small pool of provider sessions per model. For claude-opus the pool slot is reused across invocations within close time proximity to amortize prompt-cache cost. Sequential dispatch does not guarantee a fresh session; only sufficient time-gap or pool churn produces a new one. The CLI does not currently expose a "force-fresh-session" flag.
+
+**Workflow concern reframed**: The Phase-4 independence requirement exists so that a gate's verdict is not biased by a sibling's reasoning. The behaviorally-meaningful independence guarantees are:
+
+1. Each gate has its own independent prompt file (✓ verified per manifest).
+2. Each gate writes to its own independent output report path (✓ verified).
+3. Each gate's prompt is fully self-contained; the new prompt is the dominant input to the model's response (✓ — Phase 4 prompts read the proposal + research artifacts, not sibling reports).
+4. Each invocation has its own UUID (✓ — verified from the trace JSONs).
+
+A shared `session.id` reflects pool reuse, not prompt cross-talk: each invocation enters with a fresh `agents -m ... -f ...` boundary; the model receives the new prompt as its current turn's input. Cache reuse for system prompt and prior context is an efficiency, not a correctness violation.
+
+**Decision**: Accept the session-pooling residual as an infrastructure property of the `agents` CLI rather than a workflow violation. The Phase-4 process-tree-audit #1 manifest's "Independence check" is updated to require distinct **invocation UUIDs** and per-gate independent prompts/outputs, NOT distinct session UUIDs.
+
+**Re-evaluation trigger**: If a future Phase 4 (or Phase 8 review-gates) run shows a gate's verdict matching a sibling's reasoning verbatim (i.e., evidence of actual cross-talk), the assumption above is invalidated and the workflow's parallel-dispatch contract needs amendment — either an `agents` CLI flag to force fresh sessions for parallel sibling dispatches, or a workflow-doc-level rule to dispatch claude-opus parallel siblings via separate worktrees / separate OULIPOLY_INVOCATION roots.

@@ -58,7 +58,7 @@ WU session lifecycle (spawn → run → merge → post-merge wake): `~/ai/conven
 - **Risk drives decomposition.** Do not decompose because something looks complex; decompose when audit or alignment risk exceeds what one agent can reliably handle.
 - **Alignment is directional.** Alignment asks "is this going the right way?" Coverage remains the audit's job.
 - **Research before implementation.** Hookpoint research finds reuse points, collisions, and deletion candidates before code is written.
-- **Nothing is skipped implicitly.** Skip a phase only by explicit written decision in `DECISIONS.md` or the project equivalent.
+- **Nothing is skipped implicitly.** Skip a phase only by explicit written decision in `${worktree_path}/DECISIONS.md` or an explicitly supplied project equivalent.
 - **No backwards-compatibility shims.** See `~/ai/conventions/no-backwards-compatibility.md`.
 - **No deferred stubs.** See `~/ai/conventions/no-deferred-stubs.md`.
 - **The risk gate is the proposal review.** Do not add a redundant human approval step on top of it.
@@ -384,7 +384,7 @@ That rule is load-bearing: if the same agent writes both, the tests mirror the i
 - Procedure: push the branch to origin if not already pushed; comment on the tracker ticket citing the branch name + head SHA (not a PR URL — there is no PR yet); emit a NEEDS_INPUT to the root with options `approve` / `revisions` / `reject`; block until answered.
 - Rule: while this gate is pending, the project's ticket (JIRA or Linear) is the unit of review and the **branch** is the artifact under review. No draft PR exists yet; the Phase 9 step that creates it does not run until this gate clears with `approve`.
 - Rule: revisions requested at this gate are **post-Phase-8** revisions: re-enter from the appropriate phase (typically Phase 7 if review-comment-shaped, Phase 6 if it requires test/code changes), re-run Phase 8 audits, and re-enter this gate.
-- Rule: rejection at this gate terminates the WU. Record in `DECISIONS.md`, comment closure on the ticket via the project's ticket operator, halt — do not open a PR.
+- Rule: rejection at this gate terminates the WU. Record in `${worktree_path}/DECISIONS.md`, comment closure on the ticket via the project's ticket operator, halt — do not open a PR.
 - Gate: human. **This is the second of the two human gates** in the tickets-first variant of the orchestrator's flow (the first being Phase 2.5 problem-map review).
 
 ## Phase 9 - Draft PR
@@ -426,13 +426,13 @@ Practical default:
 ## Decision Recording
 
 If a phase is skipped, narrowed, deferred, terminated for non-positive value, sent back to research on invalidated assumptions, or accepted with a named unverifiable residual risk that does not collapse the approved net-value case under the supported-surface termination rule:
-- record it in `DECISIONS.md` or the project equivalent
+- record it in `${worktree_path}/DECISIONS.md` or an explicitly supplied project equivalent
 - record who made the decision
 - record why the change was accepted
 - record what risk is being accepted
 - record what evidence caused the termination or research re-entry
 
-For Phase 6 firstness, do not create a new residual class. If a named test-verification risk remains unverified, record it in `risk/NN-test-residuals.md`. If only historical or process-provenance evidence is unverifiable and the approved net-value case still holds, record the decision only as `accepted with a named unverifiable residual risk` in `DECISIONS.md` or the project equivalent.
+For Phase 6 firstness, do not create a new residual class. If a named test-verification risk remains unverified, record it in `risk/NN-test-residuals.md`. If only historical or process-provenance evidence is unverifiable and the approved net-value case still holds, record the decision only as `accepted with a named unverifiable residual risk` in `${worktree_path}/DECISIONS.md` or an explicitly supplied project equivalent.
 
 Without that record, the phase was not skipped correctly.
 

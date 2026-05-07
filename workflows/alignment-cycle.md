@@ -6,6 +6,7 @@ workflow_dispatch_contract:
   inputs:
     - "project problem.md, philosophy.md, proposal.md, and axis reference table"
     - "scratch directory for problem, philosophy, classification, and run-report artifacts"
+    - "project_root for resolving ${project_root}/DECISIONS.md decision records"
   expectations:
     - "reviews proposal alignment against the problem definition and product philosophy"
     - "splits judgement from synthesis through classify and integrate stages"
@@ -127,7 +128,7 @@ After all stages complete (or halt at the user-input gate), the orchestrator wri
 
 ## Decision recording
 
-If a phase is skipped beyond the conditional-skip rules, narrowed, or accepted with a residual concern, record it in the project's `DECISIONS.md` (or equivalent) with who decided, why, what risk is being accepted, and what evidence justified the deviation. The conditional-skip rules above do NOT require DECISIONS.md entries — they are normal cycle behavior.
+If a phase is skipped beyond the conditional-skip rules, narrowed, or accepted with a residual concern, record it in `${project_root}/DECISIONS.md` (or an explicitly supplied project equivalent) with who decided, why, what risk is being accepted, and what evidence justified the deviation. The conditional-skip rules above do NOT require `${project_root}/DECISIONS.md` entries — they are normal cycle behavior.
 
 ## Adjacent references
 

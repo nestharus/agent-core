@@ -122,7 +122,7 @@ Search the code.
 Run the command.
 
 Do not ask things already recorded in
-`DECISIONS.md`, `NOTES.md`, or the project equivalent.
+the caller-supplied project decisions path, `NOTES.md`, or the project equivalent.
 
 Do not ask "is this OK?" on every action.
 
@@ -139,7 +139,7 @@ user gates.
 
 Make the call.
 
-Document it in `DECISIONS.md`.
+Document it in `${worktree_path}/DECISIONS.md` when running inside a WU, or in the caller-supplied project decisions path otherwise.
 
 Keep moving.
 
