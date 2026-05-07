@@ -287,6 +287,30 @@ def apply_labels(
     print(json.dumps({"ok": True, "data": result}, indent=2))
 
 
+def search_issues(
+    *,
+    team_key: str | None = None,
+    team_id: str | None = None,
+    title_contains: str | None = None,
+    title_starts_with: str | None = None,
+    labels: list[str] | None = None,
+    include_archived: bool = False,
+    first: int = 50,
+) -> None:
+    """Search issues and print results as JSON."""
+    client = LinearClient()
+    issues = client.search_issues(
+        team_key=team_key,
+        team_id=team_id,
+        title_contains=title_contains,
+        title_starts_with=title_starts_with,
+        label_names=labels,
+        include_archived=include_archived,
+        first=first,
+    )
+    print(json.dumps({"ok": True, "data": issues}, indent=2))
+
+
 def main() -> None:
     """Parse arguments and dispatch to appropriate command."""
     parser = JsonArgumentParser(
@@ -362,6 +386,44 @@ def main() -> None:
     get_comment_parser = subparsers.add_parser("get-comment", help="Get a comment by title")
     get_comment_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
     get_comment_parser.add_argument("--title", required=True, help="Comment title to search for")
+
+    # search-issues command
+    search_issues_parser = subparsers.add_parser(
+        "search-issues",
+        help="Search Linear issues by team, title, and labels",
+    )
+    search_issues_team_group = search_issues_parser.add_mutually_exclusive_group(required=True)
+    search_issues_team_group.add_argument(
+        "--team-key",
+        help="Team key or name to resolve before searching",
+    )
+    search_issues_team_group.add_argument(
+        "--team-id",
+        help="Team UUID to search without team-resolution lookup",
+    )
+    search_issues_parser.add_argument(
+        "--title-contains",
+        help="Case-insensitive title fragment to match",
+    )
+    search_issues_parser.add_argument(
+        "--title-starts-with",
+        help="Title prefix to match",
+    )
+    search_issues_parser.add_argument(
+        "--labels",
+        help="Comma-separated label names; all supplied labels must be present",
+    )
+    search_issues_parser.add_argument(
+        "--include-archived",
+        action="store_true",
+        help="Include archived issues",
+    )
+    search_issues_parser.add_argument(
+        "--first",
+        type=int,
+        default=50,
+        help="Maximum issues to request, 1-100 (default: 50)",
+    )
 
     # list-labels command
     list_labels_parser = subparsers.add_parser("list-labels", help="List labels on a team")
@@ -471,6 +533,18 @@ def main() -> None:
                 title=args.title,
                 body=args.body,
                 body_file=args.body_file,
+            )
+        elif args.command == "search-issues":
+            search_issues(
+                team_key=args.team_key,
+                team_id=args.team_id,
+                title_contains=args.title_contains,
+                title_starts_with=args.title_starts_with,
+                labels=[s.strip() for s in args.labels.split(",") if s.strip()]
+                if args.labels
+                else None,
+                include_archived=args.include_archived,
+                first=args.first,
             )
         elif args.command == "list-labels":
             list_labels(team=args.team)

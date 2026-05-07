@@ -384,3 +384,87 @@ The orchestrator verified the failures are pre-existing on `origin/master @ d3d6
 - Brief anti-scope: NES-207 dispatch text "Do NOT modify any auditor operator" and "Workflow file at `~/ai/workflows/code-quality.md` plus minor cross-references in `~/ai/conventions/code-quality.md` and `~/ai/AGENTS.md` Workflow Topologies index."
 
 **Re-evaluation trigger.** If a future ~/ai-layer WU touches the Linear CLI client surface and the same test failures persist, file a hardening tracker for the `ModuleNotFoundError: No module named 'scripts'` import path and treat this DECISIONS entry as evidence that the failure precedes that WU.
+
+## D-2026-05-06j — NES-227 Phase 2.5 bug-discovery: proceed with current scope, NES-241 stays separate
+
+**WU**: NES-227 (`clients/linear` `search_issues` + `search-issues` CLI). **Phase**: 2.5.1 (coverage inventory bug-discovery rule). **Decision**: `Proceed with current scope. NES-241 handles the unrelated test-drift in its own WU.`
+
+**Context.** Phase 2.5 coverage inventory ran `pytest clients/linear/tests/` on HEAD. Result: 13 failures + 6 errors, all from `clients/linear/tests/test_cli_unit.py` patching the obsolete `scripts.clients.linear_cli` module path. The module was renamed to `clients.linear.cli` by BOOT-04 / D-2026-05-04b but the patch targets in this test file were not updated. The test file is in NES-227's touched surface (Phase 6b will add CLI tests there for `search-issues`). Tracker NES-241 was filed at 10:41 by the orchestrator for the unrelated patch-target drift. Per the orchestrator's Phase 2.5 bug-discovery rule, NES-227 surfaced a `NEEDS_INPUT` to the root with options `proceed with current scope`, `expand scope`, `block on consolidation`. The user selected option A.
+
+**Decision.** NES-227 stays scoped to a single client method + CLI subcommand. New `search-issues` tests are authored alongside the broken `test_cli_unit.py` cases without modifying them — pytest only fails for cases that explicitly run, so adding new tests next to the existing broken ones is mechanically safe. NES-241 handles the `scripts.clients.linear_cli` → `clients.linear.cli` patch-target migration in its own WU. The Phase 2.5.6 risk profile is computed against the originally-scoped touched surface (no test-drift fix included).
+
+**Anti-scope.** This decision does NOT touch the broken `scripts.clients.linear_cli.*` patch targets in `test_cli_unit.py`. It does NOT modify any existing client method on `LinearClient`. It does NOT close NES-241 by superseding. It does NOT change the original NES-227 dispatch anti-scope ("single client method + CLI subcommand"; "Do NOT modify existing client methods").
+
+**Justifying evidence.**
+
+- Question artifact (answered A): `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/questions/q-96fd33ae-f7d3-4285-b4cb-fa7161e4719f.question.json`.
+- Coverage inventory bug-discovery section: `/home/nes/projects/ai/planning/nes-227-search-issues/research/nes-227-coverage-inventory.md`.
+- Tracker NES-241 dispatch log: `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/logs/nes-227-phase-2.5-tracker-create.log`.
+- Tracker brief: `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/tracker-tests-drift-brief.md`.
+- NES-227 problem map (touched surface = `client.py` + `cli.py` + `tests/`, no test-drift fix): `/home/nes/projects/ai/planning/nes-227-search-issues/research/nes-227-problem-map.md`.
+- Original dispatch anti-scope: NES-227 dispatch text "Do NOT modify existing client methods" + "Do NOT touch the broken `scripts.clients.linear_cli` patch targets in `test_cli_unit.py` — that's NES-241's scope".
+
+**Re-evaluation trigger.** If a future Phase 6c run on NES-227 shows that adding new `test_cli_unit.py` cases triggers cascading failures in the existing broken cases (i.e., the file's broken state is no longer mechanically isolable), Tier-1 rewind back to Phase 2.5 and reconsider option B/C.
+
+## D-2026-05-06k — NES-227 Phase 4 Tier-1 sequential redispatch (claude-opus session pooling) + R1/R2 archived-round residuals accepted
+
+**WU**: NES-227. **Phase**: 4 (process-tree audit #1). **Decision**: `Tier-1 sequential redispatch of R3 claude-opus gates to break shared session/chain; accept R1/R2 archived-round session collisions as residual per NES-207 D-2026-05-06f precedent.`
+
+**Context.** Phase 4 risk gates ran across three rounds (R1, R2, R3) because R1 returned scope MEDIUM and R2 returned audit MEDIUM. All three rounds dispatched the four risk gates in parallel within ~3-4 seconds of each other. Process-tree audit #1 (`/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/phase4-process-tree-audit.report.md`, R1 of audit) returned `FAIL` with three blocking violations:
+
+- `PTA-P4-001`: R1 `claude-opus` siblings `dc5c91e6` (scope), `c46a6307` (shortcut), `b3c66461` (supported-surface) share session `e3119d2d-c816-4839-bc7c-49b13d18497d` and chain `a04c37d7-b90d-4f56-88e0-ede33c97ba22`.
+- `PTA-P4-002`: R2 `claude-opus` siblings share session `81aedbf3-...` and chain `4dc28ba3-...`.
+- `PTA-P4-003`: R3 `claude-opus` siblings share session `b235d8c2-...` and chain `48efc73f-...`.
+
+The `gpt-high` audit gate per round was unaffected — different provider, different chain. The `claude-opus` session pooling collision matches the precedent at `D-2026-05-06f` (NES-207): "the claude-opus provider does not deterministically reuse sessions — the collision is incidental rather than systemic."
+
+**Decision (1) — R3 Tier-1 sequential redispatch.** The R3 reports are the canonical Phase 4 outputs. Re-dispatched the three R3 `claude-opus` gates (scope, shortcut, supported-surface) sequentially (not parallel), each as its own `agents` invocation, with the redispatched logs at `.scratch/logs/nes-227-phase-4-{scope,shortcut,supported-surface}.r3b.log`. The redispatched R3 reports overwrite the canonical `risk/nes-227-{scope,shortcut,supported-surface}.md` paths in place. The new R3 sessions are independent: `dc647d38-...` (scope), `d7e51081-...` (shortcut), `a0ca4b47-...` (supported-surface). All three returned LOW. The original R3 colliding nodes (`f42635a4`, `eb2c70b9`, `dd9f0f52`) remain in the trace as superseded but are no longer the canonical Phase 4 R3 evidence.
+
+**Decision (2) — R1/R2 archived-round residuals accepted.** The R1/R2 Phase 4 reports are archived (`.r1.md`/`.r2.md`) as historical audit-history rounds whose verdicts have already been superseded by R3. Re-running R1/R2 would invalidate the audit-history finding-closure trail (R1-F01 closed at R2; R2-F01 closed at R3) by orphaning the prior-round artifacts the closure determinations cite. Per `D-2026-05-06f`'s precedent that claude-opus session collisions are incidental, R1/R2 archived-round trace topology collisions are accepted as residual. The substantive content of each R1/R2 report is unchanged by session pooling — each gate had its own prompt, its own report file, and its own LOW/MEDIUM verdict; the collision is purely on the provider session/chain layer.
+
+**Anti-scope.** This decision does NOT change the Phase 3 proposal, the risk profile, the Phase 2.5 evidence, the audit-history finding-closure trail (R1-F01 closed; R2-F01 closed), or the per-round verdict semantics. It does NOT modify R1/R2 archived reports. It only re-dispatches R3's three colliding `claude-opus` gates sequentially and updates the canonical R3 reports at the standard paths.
+
+**Justifying evidence.**
+
+- Process-tree audit #1 R1 report (FAIL): `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/phase4-process-tree-audit.report.md`.
+- NES-207 controlling precedent: `~/ai/DECISIONS.md` § `D-2026-05-06f`.
+- R3 redispatch logs: `.scratch/logs/nes-227-phase-4-{scope,shortcut,supported-surface}.r3b.log`.
+- Original colliding R3 logs (kept for trace correlation): `.scratch/logs/nes-227-phase-4-{scope,shortcut,supported-surface}.r3.log`.
+- New R3 invocation UUIDs: `275b96a3` (scope, session `dc647d38-...`), `22387bfc` (shortcut, session `d7e51081-...`), `9e973a9a` (supported-surface, session `a0ca4b47-...`).
+- Audit-history finding-closure trail (carried forward unchanged): `/home/nes/projects/ai/planning/nes-227-search-issues/audit-history.md`.
+
+**Re-evaluation trigger.** If process-tree audit #1 R2 (against the redispatched + accepted-residual trace) still flags R3 collision, escalate to Tier-2 split. If R1/R2 archived-round collisions are insufficient as residual under future workflow-violation rules, file a hardening tracker for the agents CLI to expose a `--new-session` / `--no-session-reuse` flag or to dispatch parallel `claude-opus` invocations with deterministic session isolation.
+
+## D-2026-05-06l — NES-227 Phase 8 fix-pass firstness residuals accepted (contract-derived test additions, no product change)
+
+**WU**: NES-227. **Phase**: 8 (test-audit gate fix-pass loop). **Decision**: `Accept three contract-derived test additions added after product code as a strict-firstness residual; the underlying product code is byte-identical to the post-CodeRabbit state (7f79e0f) and the new tests strengthen contract-row coverage rather than encoding new behavior.`
+
+**Context.** The Phase 8 test-audit gate ran twice as MEDIUM after the proposal/contract-driven test-first separation closed cleanly at `7f79e0f` (Step 6b output index, Phase 6 process-tree audit #2 PASS). Each MEDIUM round flagged contract behaviors not directly locked by tests:
+
+- Phase 8 R1 test-audit (`risk/nes-227-phase8-test-audit.md` R1 — archived superseded): `--first 200` argparse passthrough was named in the contract but not locked by `test_main_search_issues_first_passthrough` (which only parameterized `25` and `0`).
+- Phase 8 R3 test-audit (`risk/nes-227-phase8-test-audit.md` R3): `inspect.signature` keyword-only enforcement and non-list `data.issues.nodes` normalization to `[]` were named in the contract but not directly locked by tests.
+
+Each finding was contract-derived (the contract at `/home/nes/projects/ai/planning/nes-227-search-issues/contracts/nes-227-search-issues.md` names every behavior the test-audit gate flagged). Each fix-pass added the missing test parameterization or test case mechanically without modifying product code:
+
+- Fix-pass R1 (`/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/prompts/nes-227-phase-8-fix-pass.md`) added `test_main_search_issues_first_passthrough[200]`. Result: 17 → 18 CLI tests pass.
+- Fix-pass R2 (`/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/prompts/nes-227-phase-8-fix-pass-r2.md`) added `test_search_issues_signature_is_all_keyword_only` + `test_search_issues_non_list_nodes_returns_empty_list`. Result: 45 → 47 client tests pass.
+
+**Decision.** Accept these three test additions as **firstness-strict residuals** rather than re-running Step 6b/6c from scratch under a regenerated test-first ordering. Justification (per the Phase 8 R3 test-audit gate's recommended-revisions option 1):
+
+1. **Product code is byte-identical between `7f79e0f` and `f1ee034`+** for the parser/dispatch/method-signature/response-normalization paths the new tests lock. The fix-passes added test code only; no product code was modified to make the new tests pass.
+2. **The contract pinned every behavior the new tests cover.** The behaviors were already in scope at Step 6a contract authoring time; Step 6b's prompt simply did not enumerate every contract row as a separate test obligation. Step 6b's output index is updated (this round) to map the three new tests to their contract rows so the audit history's coverage map remains complete.
+3. **Re-running Step 6b/6c from scratch** to regenerate strict pre-product test-first evidence would require Tier-1 rewind to before Phase 6c, which would invalidate the Phase 6 process-tree audit #2 PASS, the entire Phase 7 CodeRabbit loop's amend trail, and the Phase 8 R1/R2 gate verdicts. The cost-benefit trade is clearly negative: the firstness violation is procedural-ordering-only, the substantive coverage matches the contract, and no product behavior is at risk.
+4. **Precedent.** The orchestrator has accepted similar process-ordering residuals in `D-2026-05-06f` (NES-207 claude-opus session collisions accepted as incidental) and `D-2026-05-06k` (NES-227's own R1/R2 archived-round session collisions accepted citing the same precedent). The pattern is: when a process-tree-audit-style finding is procedurally-true but substantively-zero-risk, document the residual in DECISIONS.md citing the substantive-evidence path that reduces risk to LOW.
+
+**Anti-scope.** This decision does NOT modify product code. It does NOT re-author tests already encoded by Step 6b. It does NOT change the contract. It does NOT close the Phase 8 test-audit gate's MEDIUM verdict by overriding — instead, it accepts the firstness-strict residual as documented and the orchestrator allows the loop to terminate with the substantive coverage gap closed.
+
+**Justifying evidence.**
+
+- Phase 8 R3 test-audit report: `/home/nes/projects/ai/planning/nes-227-search-issues/risk/nes-227-phase8-test-audit.md` (Verdict: MEDIUM with P8-TA-F01, P8-TA-F02; recommended revisions option 1 = "record an explicit process exception accepting the Phase 8 fix-pass `[200]` case as contract-derived").
+- Fix-pass R1 log: `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/logs/nes-227-phase-8-fix-pass.log` (17 → 18; 175 → 176 total).
+- Fix-pass R2 log: `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/logs/nes-227-phase-8-fix-pass-r2.log` (45 → 47; 176 → 178 total).
+- Step 6b output index updated to map the three new tests to their contract rows: `/home/nes/projects/ai/planning/nes-227-search-issues/.scratch/phase6/step6b-output-index.md`.
+- Contract: `/home/nes/projects/ai/planning/nes-227-search-issues/contracts/nes-227-search-issues.md`.
+- Controlling precedents for documented procedural-residual acceptance: `${worktree_path}/DECISIONS.md` § `D-2026-05-06f` (cited via `D-2026-05-06k`).
+
+**Re-evaluation trigger.** If a future Phase 8 test-audit gate (or any downstream consumer) treats `D-2026-05-06l`'s residual acceptance as insufficient and demands strict pre-product test-first evidence for these three tests, the only remediation is Tier-1 rewind to pre-Phase-6c. That rewind requires user approval before initiation per the orchestrator's risk-of-loss profile (would discard ~6 hours of Phase 6/7/8 work for procedural-form-only gain).
