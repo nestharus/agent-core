@@ -848,3 +848,19 @@ The other Phase 2.5.1-named uncovered surface (`agents/pr-writer.md` frontmatter
 The future-WU mitigation (NOT this WU's scope): make the orchestrator explicitly substitute `${worktree_path}/tests/...` in Step 6b prompts instead of `~/ai/tests/...`, so the dispatched agent has no ambiguity. Filed as a watch signal for the orchestrator-doc maintenance backlog (not a separate Linear ticket — too narrow until it recurs).
 
 **Re-evaluation trigger**: If process-tree audit #2 flags Step 6b's edit-location as a violation, escalate to Tier-1 rewind.
+
+## D-2026-05-07-NES277a — NES-277 Phase 6 Tier-1 rewind (Step 6c evidence repair)
+
+**WU:** NES-277 post-mortem-author operator.
+
+**Phase:** 6.
+
+**Decision:** Tier-1 rewind of Step 6c output.
+
+**Trigger:** Phase 6 process-tree audit (`/home/nes/projects/ai/planning/nes-277-post-mortem-author/.scratch/phase-6-process-tree-audit.report.md`) returned `blocking` with two violations: P6-001 (Step 6c log lacked `READ:` echoes for Step 6b output paths) and P6-002 (Step 6c verification command referenced `tests/test_agents_dir_models.py`, which is absent in this worktree).
+
+**Action:** Discarded `agents/post-mortem-author.md` and reverted `AGENTS.md`; the Step 6b test module (`tests/test_post_mortem_author_operator.py`) was preserved (sha256 unchanged from Step 6b emit). Re-dispatched Step 6c with a corrected prompt that mandates explicit `READ:` echoes via Bash before any product-file read, and a verification command targeting only `tests/test_agentsmd_structure.py` plus the new test module.
+
+**Justifying evidence:** Phase 6 process-tree audit report path above.
+
+**Rationale:** No commit pre-existed on the branch; rewind was a worktree-level discard, not a `git reset`.

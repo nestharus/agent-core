@@ -86,6 +86,11 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `incident-investigator` - Investigate an incident from a brief, evidence directory, and read-only repository, then write evidence-backed findings without mutating code or external systems.
   File: [~/ai/agents/incident-investigator.md](agents/incident-investigator.md) | Inputs: `incident_brief_path`, `evidence_dir`, `repo_root`, `findings_path?` | Model: `gpt-high`
 
+- `post-mortem-author` — Synthesizes a post-mortem from incident-investigator findings and the incident brief, then writes one Markdown document
+  File: [~/ai/agents/post-mortem-author.md](agents/post-mortem-author.md)
+  Inputs: findings_path, incident_brief_path, output_path
+  Model: claude-opus
+
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
