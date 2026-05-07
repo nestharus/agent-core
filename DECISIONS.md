@@ -2,6 +2,48 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-06i — NES-245 in-orchestrator scope decisions (test-drift, mid-pipeline rebase, contract revision)
+
+**WU**: NES-245 (release-hotfix-operator). **Phase**: 2.5 → 8. **Decisions** (three, all recorded together because they form one mid-pipeline arc):
+
+### (1) Phase 2.5 bug-discovery resolved in-orchestrator with scope expansion (test-drift fix)
+
+When the WU started, `tests/test_release_orchestrator_operator.py::test_forward_referenced_files_do_not_exist` (NES-243's forward-reference guard) was already red on master because PR #40 (NES-244) had landed `agents/release-cut-operator.md` without updating the `SUB_OPERATORS` list. Adding `agents/release-hotfix-operator.md` would compound the failure. Per `~/ai/conventions/risk-profile.md` § "Discoveries during Phase 2.5", this is a bug-discovery requiring NEEDS_INPUT to the root with options `block on consolidation`, `proceed with note`, `expand scope to fix in this WU`.
+
+`AskUserQuestion` was permission-denied (this happened during the run). Per `~/ai/conventions/agent-questions-and-session-graph.md` § AskUserQuestion Permission-Denial, the orchestrator classified the question as **procedural-and-resolvable-from-supplied-inputs**: the WU input `auto_merge_after_phase_9=true` requires green CI for auto-merge to fire, and the WU's anti-scope (per the user prompt) is on operator files in `agents/`, not on tests. The minimum-diff test fix is therefore an inline-resolvable orchestrator decision, not a value/scope question for the root. Disposition recorded at `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/.scratch/phase-2.5-bug-discovery-disposition.md`.
+
+**Decision (1)**: expand NES-245 scope to include the minimum mechanical edit to `tests/test_release_orchestrator_operator.py` that returns the suite to green. No separate tracker ticket filed.
+
+### (2) Mid-pipeline rebase forced by NES-246 #41/#42 landing on master between Phase 6 and Phase 8
+
+While the pipeline was running, NES-246's PRs #41 (release-promote-operator + structural test) and #42 (the D-2026-05-06h DECISIONS entry above) merged to master. PR #41 also performed exactly the kind of `SUB_OPERATORS` → `SHIPPED_SUB_OPERATORS` + `FORWARD_REFERENCED_SUB_OPERATORS` refactor that NES-245 was about to do as its own minimal test-fix per Decision (1). Phase 8 multi-concern (R2 against `dd16c2d`) surfaced this as `MULTI_CONCERN_RECOMMEND_SPLIT` because the WU's diff against the new master rendered NES-246's added files as phantom deletions.
+
+**Decision (2)**: rebase NES-245 onto fresh master (`4fa9347`) and **adopt NES-246's split pattern** instead of regressing to my originally-specced skip-on-absent pattern. The rebase resolved the conflict in `tests/test_release_orchestrator_operator.py` by (a) moving `release-hotfix-operator.md` from `FORWARD_REFERENCED_SUB_OPERATORS` to `SHIPPED_SUB_OPERATORS`, and (b) adding `test_shipped_sub_operator_files_well_formed`. This is strictly stronger than skip-on-absent: presence + frontmatter shape are checked separately per shipped file, the monotonic rollout invariant is enforced per file, and each new sibling WU (NES-247) must explicitly move its name to SHIPPED.
+
+### (3) Step 6a contract revised post-rebase to acknowledge the adopted pattern
+
+The Step 6a contract was originally written before the rebase and specced the skip-on-absent pattern. After Decision (2), Phase 8 test-audit (R3) flagged the contract drift (R10-F01) — the on-disk test no longer matched its own contract. Rather than reverting the test to the (weaker) original pattern, the contract was amended to record that the post-rebase shipped contract is NES-246's split pattern, with rationale for the strict-improvement claim. test-audit R4 against the updated contract returned LOW.
+
+**Justifying evidence.**
+
+- Bug-discovery disposition: `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/.scratch/phase-2.5-bug-discovery-disposition.md`
+- Audit history (full multi-round trail): `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/audit-history.md`
+- Final post-rebase / post-revision contract: `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/contracts/nes-245-release-hotfix-operator.md`
+- Final Phase 8 risk reports: `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/risk/nes-245-phase8-{test-audit,multi-concern,justification,commit-hygiene}.md` (all LOW / SINGLE_CONCERN / LOW_CONCERN against final HEAD `48a9dc0`).
+- Process-tree audit reports: `/home/nes/projects/ai/planning/nes-245-release-hotfix-operator/.scratch/phase{4,6,8}-process-tree-audit.report.md` (all PASS).
+- Merged PR: https://github.com/nestharus/ai/pull/43 (squash-merged as `212c5c6`).
+
+**Anti-scope (kept intact for the WU itself).**
+
+- Did NOT cherry-pick against any real repo, mutate any branch outside the WU's worktree, or run `gh` against live release infrastructure.
+- Did NOT redefine the blast-radius taxonomy. The shipped operator file CITES the RFQ doc paths and Non-Negotiables forbids redefinition.
+- Did NOT touch sibling release operator files (`release-cut-operator.md`, `release-promote-operator.md`, `release-orchestrator.md`, future `release-reconcile-operator.md`).
+
+**Mode propagation.**
+
+- Future WUs adding sibling release operators (NES-247) inherit the SHIPPED/FORWARD-REFERENCED split pattern. Each new sibling WU must explicitly move its operator file to `SHIPPED_SUB_OPERATORS` AND add the file to disk in the same PR; the structural test makes silent rollout failure (the original NES-243 forward-reference guard's failure mode) impossible.
+- The orchestrator's permission-denial classification on `AskUserQuestion` (§ AskUserQuestion Permission-Denial) was exercised in this WU. Future orchestrator runs may want to record whether the procedural-vs-non-procedural classification was correctly applied; this WU's disposition file is one example of the procedural classification being safe to apply when a downstream input (here `auto_merge_after_phase_9=true`) entails a mechanical prerequisite.
+
 ## D-2026-05-06h — NES-246 scope expansion to fold NES-244 cleanup residual
 
 **WU**: NES-246 (release-promote-operator). **Phase**: 2.5 → 9. **Decision**: `Expand NES-246 scope (option A) to include the NES-244 cleanup residual in the same PR.`
