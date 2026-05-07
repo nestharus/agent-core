@@ -81,6 +81,11 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `push-pull-auditor` - Audit changed code-level and deployment-level pull sites for A1 push-vs-pull system coupling and report `uncontrolled-source coupler` findings with decoupling direction.
   File: [~/ai/agents/push-pull-auditor.md](agents/push-pull-auditor.md) | Inputs: `repo_root`, `diff_path`, `output_path`, `base_ref?`, `head_ref?`, `changed_files_path?`, `proposal_path?`, `problem_map_path?`, `risk_profile_path?`, `code_quality_ref?` | Model: `gpt-high`
 
+### Incident / RCA
+
+- `incident-investigator` - Investigate an incident from a brief, evidence directory, and read-only repository, then write evidence-backed findings without mutating code or external systems.
+  File: [~/ai/agents/incident-investigator.md](agents/incident-investigator.md) | Inputs: `incident_brief_path`, `evidence_dir`, `repo_root`, `findings_path?` | Model: `gpt-high`
+
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
