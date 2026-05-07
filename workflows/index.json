@@ -42,7 +42,8 @@
         ],
         "inputs": [
           "project problem.md, philosophy.md, proposal.md, and axis reference table",
-          "scratch directory for problem, philosophy, classification, and run-report artifacts"
+          "scratch directory for problem, philosophy, classification, and run-report artifacts",
+          "project_root for resolving ${project_root}/DECISIONS.md decision records"
         ],
         "non_goals": [
           "does not author or update proposal.md as the proposer",
@@ -436,7 +437,7 @@
         ],
         "inputs": [
           "candidate action, current state, audience visibility, reversal path, and any pre-authorized runbook",
-          "project DECISIONS.md or equivalent when pre-authorization is claimed"
+          "caller-supplied project_decisions_path or equivalent when pre-authorization is claimed"
         ],
         "non_goals": [
           "does not batch multiple visible actions into one approval",

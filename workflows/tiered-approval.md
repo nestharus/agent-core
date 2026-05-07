@@ -5,7 +5,7 @@ workflow_dispatch_contract:
   orchestrator: "root orchestrator before visible external actions"
   inputs:
     - "candidate action, current state, audience visibility, reversal path, and any pre-authorized runbook"
-    - "project DECISIONS.md or equivalent when pre-authorization is claimed"
+    - "caller-supplied project_decisions_path or equivalent when pre-authorization is claimed"
   expectations:
     - "classifies actions into read, confined-write, or visible-write tiers"
     - "requires explicit per-action approval before Tier 3 visible writes unless a runbook pre-authorizes the exact action"
@@ -35,7 +35,7 @@ Delegated questions about approval or visible actions follow `~/ai/conventions/a
 |---|---|---|
 | 1 — Read | List channels, read messages, fetch member lists, inspect roles, query a database, read a file, enumerate a directory | Always allowed |
 | 2 — Confined write | Edit files locally, commit to git, run tests, open a draft PR, write to `.tmp/`, modify a worktree | Always allowed |
-| 3 — Visible write | Send messages to users, create channels, modify roles, kick or ban, change permissions, deploy, promote a draft PR to ready-for-review on a public-audience repo, publish to a landing page, send email-ready HTML | **Requires explicit per-action approval**, unless a runbook is pre-authorized in `DECISIONS.md` or the project equivalent |
+| 3 — Visible write | Send messages to users, create channels, modify roles, kick or ban, change permissions, deploy, promote a draft PR to ready-for-review on a public-audience repo, publish to a landing page, send email-ready HTML | **Requires explicit per-action approval**, unless a runbook is pre-authorized in the caller-supplied `${project_decisions_path}` or the project equivalent |
 
 Tier meanings:
 
@@ -66,7 +66,7 @@ Operational rule:
 - Do not bundle multiple Tier-3 actions into one approval request,
   even when the actions are related.
 - A later Tier-3 action needs its own approval unless a pre-authorized
-  runbook in `DECISIONS.md` covers it.
+  runbook in the caller-supplied `${project_decisions_path}` covers it.
 - If a delegated agent needs user input about a visible action or approval, it must return `NEEDS_INPUT:<question_artifact>` and stop. The root orchestrator surfaces the question, writes the answer artifact, and blocks the visible action until continuation evidence exists.
 
 ## Why per-action
@@ -76,7 +76,7 @@ Actions with different blast radii must be approved individually.
 "Yes to kick user A" is not "yes to kick users A, B, and C".
 
 The only exception is a runbook that has been pre-authorized in
-`DECISIONS.md` or the project equivalent.
+the caller-supplied `${project_decisions_path}` or the project equivalent.
 Pre-authorization must be explicit.
 A runbook does not self-authorize.
 
@@ -121,10 +121,10 @@ implementation loop or directly affect users:
 - Posting to external services through hooks or APIs that reach
   third-party users.
 
-## Pre-authorization via DECISIONS.md
+## Pre-authorization via project decisions path
 
 Projects can pre-authorize specific Tier-3 runbooks by recording them
-in `DECISIONS.md` or the project equivalent.
+in the caller-supplied `${project_decisions_path}` or the project equivalent.
 This is the only exception to explicit per-action approval.
 
 A pre-authorized runbook:

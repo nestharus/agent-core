@@ -53,7 +53,7 @@ Implementation: `~/ai/agents/rebase-drift-checker.md` is the `gpt-high` operator
   - `rewind` — drop the rebase, return to the pre-rebase commit, abandon the rebase attempt. Useful when the merged-from-main change made the WU's premise wrong.
   - `re-enter Phase 2.5` — the merged change invalidates the WU's problem map. Restart from problem-map.
 
-The disposition is recorded in `${planning_dir}/audit-history.md` and, when it changes the WU's outcome, in `${repo_root}/DECISIONS.md`.
+The disposition is recorded in `${planning_dir}/audit-history.md` and, when it changes the WU's outcome, in `${worktree_path}/DECISIONS.md`.
 
 ## Anti-pattern
 
