@@ -2,6 +2,22 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07i — NES-273 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: NES-273 (orchestrator-runtime swap-record gate). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: restore agents/implementation-pipeline-orchestrator.md to its master HEAD state in the worktree (no commits to revert; working-tree changes only); preserve the Step 6b test file and output index unchanged; re-dispatch Step 6c with a prompt that requires explicit stdout echoing of each Step 6b output path consumed; re-run process-tree audit #2 against the new run.`
+
+Process-tree audit #2 returned `FAIL (blocking)` on the first Phase 6 run. The blocking finding (`PTA2-F01`): the Step 6c log echoed only `WROTE:` for its own output, plus `PYTEST_NEW: passed=9 failed=0` and `PYTEST_REGRESSION: passed=667 failed=0`, but did NOT echo either Step 6b output path it consumed (`tests/test_implementation_pipeline_orchestrator_swap_gate.py` and `.scratch/phase6/step6b-output-index.md`). Per `agents/implementation-pipeline-orchestrator.md` § Violation Detection, "Step 6c log does not echo the Step 6b output paths it consumed" is a structural/logging violation.
+
+Per the violation-escalation policy (Tier-1: "rewind and retry from clean state"), the orchestrator restored the orchestrator markdown to its master HEAD state in the worktree, preserved the Step 6b artifacts (test file + output index unchanged), and re-dispatched Step 6c with a strengthened prompt requiring the Step 6c agent's response to literally echo:
+
+- the Step 6b output-index path (`/home/nes/projects/ai/planning/nes-273-orchestrator-runtime-swap-gate/.scratch/phase6/step6b-output-index.md`),
+- the Step 6b test-file path (`/home/nes/projects/ai/worktrees/nes-273-orchestrator-runtime-swap-gate/tests/test_implementation_pipeline_orchestrator_swap_gate.py`),
+- the Step 6a contract path (`/home/nes/projects/ai/planning/nes-273-orchestrator-runtime-swap-gate/contracts/nes-273-orchestrator-runtime-swap-gate.md`),
+
+before any product-code edit. The Step 6b artifacts (test file, output index) are preserved across the rewind; only the orchestrator-markdown edit is redone with proper log evidence.
+
+This is a structural/logging violation, not a content violation. The first run produced a correct orchestrator-markdown edit (9 new tests passed, full suite 667/667) but lacked the auditable log echo. The Tier-1 retry preserves all upstream artifacts (proposal, risk profile, contracts, tests) and only re-runs the single failing phase-internal step.
+
 ## D-2026-05-07g — NES-270 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
 
 **WU**: NES-270 (recursion-control). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind from commit d6032f6 back to origin/master 7e7848b; restore Phase 6b test file from dropped commit; re-dispatch Step 6c with explicit log-echo-of-Step-6b-paths instruction; re-run process-tree audit #2 against the new run.`

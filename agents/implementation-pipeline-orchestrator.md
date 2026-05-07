@@ -271,6 +271,18 @@ Dispatch `process-tree-auditor` (`gpt-high`) against the Phase 6 subtree. The ex
 
 ### Phase 7 — CodeRabbit Loop
 
+#### Pre-dispatch swap-record gate
+
+Before dispatching `coderabbit-operator`, enforce the Phase 6 → Phase 7 `PrototypeSwapRecord` boundary from `~/ai/workflows/implementation-pipeline.md`.
+
+1. Read `${planning_dir}/risk/${wu_lower}-prototype-swap-record.md` from disk.
+2. Verify the artifact is either a valid `PrototypeSwapRecord` or an explicit `non-applicable` statement. A missing artifact is not equivalent to non-applicability.
+3. For a `PrototypeSwapRecord`, verify all workflow-required field tokens are present: `level_id`, `prototype_ref`, `component_refs`, `component_test_results`, `procedural_test_results`, `level_behavior_test_results`, `removed_or_retired_refs`, and `audit_overlay_refs`.
+4. For a `PrototypeSwapRecord`, verify the terminal-state field uses one of `consumed`, `non-applicable`, or `superseded`.
+5. For a `PrototypeSwapRecord`, verify each `audit_overlay_refs` entry identifies an artifact path plus verdict/currentness evidence proving applicability to the swapped component inventory.
+6. On a missing, unreadable, blank, incomplete, stale (including overlay evidence that fails to prove currentness under step 5), missing-terminal-state, or missing-overlay-evidence artifact, or on a present artifact that contains neither a valid `PrototypeSwapRecord` shape nor an explicit non-applicability statement, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 7`, violation code `prototype_swap_record_missing_or_invalid`, canonical path, refused action `Phase 7 CodeRabbit dispatch`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse Phase 7 CodeRabbit dispatch, write `${scratch_dir}/questions/q-<uuidv4>.question.json`, and halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
+7. On valid swap evidence or explicit non-applicability, allow the following Phase 7 CodeRabbit dispatch to proceed.
+
 Dispatch `coderabbit-operator` per `~/ai/workflows/coderabbit-loop.md`. Inputs: branch `${branch_name}`, base `main`, worktree path. Loop terminates per the operator's value-zero stop condition.
 
 ### Phase 8 — Post-CodeRabbit Gates + Process-tree Audit #3
