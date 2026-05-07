@@ -1,4 +1,5 @@
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -33,6 +34,8 @@ NES_243_ALLOWED_FORWARD_REFERENCES = {
     "agents/release-promote-operator.md",
     "agents/release-reconcile-operator.md",
 }
+FORBIDDEN_TOKEN = "claude-" + "haiku"
+FORBIDDEN_TOKEN_SELF_TEST = Path("tests/test_agentsmd_structure.py")
 
 
 def _agents_text():
@@ -262,7 +265,7 @@ def test_routing_table_rows_preserved():
         "jira-operator": (
             "agents/jira-operator.md",
             "Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email`",
-            "claude-haiku",
+            "claude-opus",
         ),
     }
     for name, (path, inputs_marker, model) in entries.items():
@@ -279,6 +282,53 @@ def test_routing_table_rows_preserved():
         assert re.search(entry_pattern, text), (
             f"missing expected inputs or model marker for {name}: {inputs_marker}; {model}"
         )
+
+
+def _frontmatter_model(path):
+    text = (REPO_ROOT / path).read_text(encoding="utf-8")
+    match = re.search(r"(?m)^model:\s+(\S+)\s*$", text)
+    assert match, f"missing model frontmatter in {path}"
+    return match.group(1)
+
+
+def test_ticket_operator_models_are_claude_opus():
+    assert _frontmatter_model(Path("agents/jira-operator.md")) == "claude-opus"
+    assert _frontmatter_model(Path("agents/linear-operator.md")) == "claude-opus"
+
+
+# NES-263 / D-2026-05-07a and Phase 4 F1: keep the no-small-Claude
+# migration repo-wide, while excluding historical decision/audit records.
+def test_no_claude_haiku_in_repo():
+    violations = []
+    tracked_rel_paths = subprocess.check_output(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "*.md", "*.py"],
+        text=True,
+    ).splitlines()
+    candidate_paths = sorted(
+        REPO_ROOT / rel_path
+        for rel_path in tracked_rel_paths
+        # D-2026-05-07b: .tmp/ contains 2026-04-22 historical research
+        # artifacts, treated like DECISIONS.md historical entries.
+        if ".tmp" not in Path(rel_path).parts
+        if Path(rel_path).name not in {"DECISIONS.md", "audit-history.md"}
+        and Path(rel_path) != FORBIDDEN_TOKEN_SELF_TEST
+    )
+
+    for path in candidate_paths:
+        for line_num, line_text in enumerate(
+            path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            if FORBIDDEN_TOKEN in line_text:
+                violations.append((path.relative_to(REPO_ROOT), line_num, line_text))
+
+    formatted_violations = "\n".join(
+        f"{path}:{line_num}: {line_text}"
+        for path, line_num, line_text in violations
+    )
+    assert violations == [], (
+        f"forbidden model token found in current repo files:\n{formatted_violations}"
+    )
 
 
 def test_new_convention_bullets_present():

@@ -28,7 +28,7 @@ That is the authoritative source for flags, options, named-agent resolution, TOM
 agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
-- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `claude-opus`, `claude-sonnet`, `claude-haiku`, or similar. See `~/ai/models/roles.md` for selection guidance.
+- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `claude-opus`, `claude-sonnet`, or similar. See `~/ai/models/roles.md` for selection guidance.
 - `-p <worktree-path>`: the agent's working directory. For parallel writers, this MUST be a git worktree. See `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
 - `2>&1 | tee <log-path>`: capture stdout and stderr into a log file for review.
@@ -49,7 +49,7 @@ Use the README for other invocation forms. In `~/ai/`, the pattern above is the 
 
 All sub-agent invocation goes through the `agents` CLI.
 
-- Claude models are invoked as `claude-opus`, `claude-sonnet`, or `claude-haiku` through the CLI.
+- Claude models are invoked as `claude-opus` or `claude-sonnet` through the CLI.
 - Pipeline docs should describe model choice, prompt shape, working directory, and log capture.
 - CLI reference details stay in `/home/nes/projects/agent-runner/README.md`, not in `~/ai/`.
 

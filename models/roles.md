@@ -23,7 +23,6 @@ Do not restate the matrix there.
 | `gpt-xhigh` | Reserve for **very large** problems only. Not the default coordinator. | Multi-file proposals spanning subsystems; research that needs deep reasoning across many sources before delegation; rare strategic synthesis where reasoning depth, not judgement, is the bottleneck. |
 | `claude-opus` | Judge. Intent / alignment / purpose-fit only. | Scope risk, shortcut risk, alignment gates, multi-concern PR review, justification PR review, adversarial writing reviews, and "does this still serve the stated purpose?" checks. |
 | `claude-sonnet` | Light checks, summaries, fast passes. | Quick sanity checks, diff summaries, formatting work. |
-| `claude-haiku` | Fastest, smallest tasks. | Low-reasoning batch work such as categorization and simple triage. |
 
 ## Phase-by-phase assignment (implementation pipeline)
 
