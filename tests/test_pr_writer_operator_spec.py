@@ -106,6 +106,36 @@ def test_self_audit_close_keyword_rules_present():
         )
 
 
+def test_existing_pr_title_body_edit_uses_rest_patch():
+    procedure = _section_after_heading(_operator_text(), "## Procedure")
+
+    required_patterns = {
+        "REST PATCH endpoint uses explicit PR number variable": (
+            r"\bPATCH\s+/repos/\{owner\}/\{repo\}/pulls/\$\{existing_pr_number\}(?=\s|\\|$)"
+        ),
+        "existing PR number resolution documented": r"already-known\s+PR\s+number|REPLACE_WITH_PR_NUMBER",
+        "`title` field PATCHed": r"-f\s+title\s*=",
+        "`body` field PATCHed": r"-f\s+body\s*=",
+        "`gh pr edit` excluded from title/body refresh path": (
+            r"gh\s+pr\s+edit.{0,160}(?:NOT|not).{0,160}title/body|"
+            r"(?:NOT|not).{0,160}title/body.{0,160}gh\s+pr\s+edit"
+        ),
+        "Projects-classic GraphQL/deprecation rationale": (
+            r"Projects[- ]classic|deprecat(?:ed|ion)"
+        ),
+    }
+    missing = [
+        name
+        for name, pattern in required_patterns.items()
+        if not re.search(pattern, procedure, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    ]
+
+    assert not missing, (
+        "Procedure must document existing-PR title/body REST edit guidance; "
+        f"missing: {', '.join(missing)}"
+    )
+
+
 def test_jira_exclusion_documented():
     text = _operator_text()
 

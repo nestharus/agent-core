@@ -155,6 +155,19 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
 7. Write the title to `${output_path}.title` (single line, no trailing newline issues).
 8. Write the body to `${output_path}` (markdown, ending with a single trailing newline).
 
+### Existing-PR title/body edit
+
+When a caller has regenerated `${output_path}.title` and `${output_path}` for an existing pull request, refresh the PR through the REST Pulls API. Use the already-known PR number for that existing PR; this subsection does not introduce a new operator input. This avoids the Projects-classic GraphQL deprecation path that `gh pr edit` can traverse while only updating the title/body fields needed here.
+
+```sh
+existing_pr_number="REPLACE_WITH_PR_NUMBER"
+gh api -X PATCH /repos/{owner}/{repo}/pulls/${existing_pr_number} \
+  -f title="$(cat "${output_path}.title")" \
+  -f body="$(cat "${output_path}")"
+```
+
+`gh pr edit` is NOT the title/body refresh path; it is reserved only for non-title/body metadata edits (labels, assignees, milestones).
+
 ## Stop Conditions
 
 - `BLOCKED:invalid-stack-parent` — the supplied `stack_parent_pr` doesn't exist, isn't OPEN, or its head branch isn't equal to `${base}`.
