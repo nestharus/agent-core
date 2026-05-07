@@ -703,3 +703,54 @@ The other Phase 2.5.1-named uncovered surface (`agents/pr-writer.md` frontmatter
 - `${planning_dir}/risk/nes-255-commit-hygiene.md` (re-run after amend): LOW.
 
 **Rationale**: The other three Phase 8 gates (test-audit, multi-concern, justification) returned LOW, so the diff content is fine; only commit-message hygiene needed remediation. Per `~/ai/workflows/pr-review.md` § Fix Pass, only re-run the gates that flagged findings unless the fix touched another gate's area. Subject-only amend does not change diff content, so no other gate needs re-run. Amending (rather than appending a "fix subject" commit) is the correct remediation: a no-content commit would itself be a commit-hygiene anti-pattern. Amend + force-push-with-lease is consistent with the orchestrator's "autonomous on routine pipeline ops" intent given the user's `auto_merge_after_phase_9=true` flag.
+
+## D-2026-05-07g — NES-269 AC #3 documentary/runtime split (residual deferred to NES-273)
+
+**WU**: NES-269 (NES-233 enhancement: explicit prototype-swap step before Phase 7 in Phase 6). **Phase**: 4 (after round 3 — two MEDIUM gates held verdict at MEDIUM with v1-anti-scope-induced root cause). **Decision**: option A from question artifact `q-4e591351-cea0-4f9c-9642-82d7748fec24.question.json` — file follow-up Linear ticket + accept the documented residual; expect round-4 risk gates to flip to LOW.
+
+**Context.** Three rounds of revise/review honored every v1-anti-scope-compatible recommendation from both MEDIUM gates (canonical artifact path, identity fields `level_id`/`prototype_ref`, terminal-state vocabulary `consumed`/`non-applicable`/`superseded`, `audit_overlay_refs` minimum entry shape, structural pytest tightened to assert enforcer + refused action, residual paragraph added to Risk section, named follow-up). The audit and shortcut gates each held at MEDIUM with the same root cause: AC #3's plain reading is operational ("Phase 7 cannot consume a diff that has no swap record") but v1 anti-scope explicitly forbids the orchestrator-runtime edit that would close it; both gates explicitly endorsed landing at MEDIUM with documented residual and a concrete tracked-ticket follow-up as the LOW-closure path.
+
+**Resolution.** Filed **NES-273** ("NES-269 follow-up: orchestrator-runtime PrototypeSwapRecord gate at Phase 7 dispatch", https://linear.app/neshq/issue/NES-273) with parent NES-233 and blocked-by NES-269 + NES-270. The proposal at `${planning_dir}/proposals/nes-269-NES-269.md` was edited to cite NES-273 inline in five places (problem statement, anti-scope, A6, Risk-section residual, Detailed change list) and to require the workflow-rule paragraph itself to cite NES-273 inline so any future reader of `~/ai/workflows/implementation-pipeline.md` sees the documentary/runtime split is tracked, not abandoned. The AC #3 structural test was tightened to assert presence of the `NES-273` token in the rule body. The contract is: **the workflow rule (NES-269) declares the no-bypass clause; the orchestrator-runtime gate (NES-273) enforces it.** Together they close AC #3 — NES-269 closes the documentary/text reading, NES-273 closes the runtime/operational reading.
+
+**Residual classification.** With NES-273 filed and cited, the residual flips from "structurally unavoidable MEDIUM (anti-scope-induced)" to "deferred to NES-273 follow-up — LOW-closure path explicitly endorsed by both round-3 MEDIUM gates."
+
+**Anti-scope (kept intact).**
+
+- No edit to `~/ai/agents/implementation-pipeline-orchestrator.md` in this WU.
+- No new operators.
+- No new workflow file.
+- No overlay scheduling (sibling NES-270 owns that).
+
+**Justifying evidence.**
+
+- Question artifact: `/home/nes/projects/ai/planning/nes-269-swap-step/.scratch/questions/q-4e591351-cea0-4f9c-9642-82d7748fec24.question.json`
+- Round-3 audit gate (MEDIUM, recommend option 2 = workflow-contract-only AC #3 with named follow-up): `/home/nes/projects/ai/planning/nes-269-swap-step/risk/nes-269-audit.md`
+- Round-3 shortcut gate (MEDIUM, recommend "open the follow-up WU now with NES-269+NES-270 as blockers"): `/home/nes/projects/ai/planning/nes-269-swap-step/risk/nes-269-shortcut.md`
+- Round-3 scope gate (LOW): `/home/nes/projects/ai/planning/nes-269-swap-step/risk/nes-269-scope.md`
+- Round-3 supported-surface gate (LOW): `/home/nes/projects/ai/planning/nes-269-swap-step/risk/nes-269-supported-surface.md`
+- Audit history: `/home/nes/projects/ai/planning/nes-269-swap-step/audit-history.md` (rounds 1, 2, 3 with revise directions)
+- Filed follow-up ticket: NES-273 (https://linear.app/neshq/issue/NES-273)
+
+**Re-evaluation trigger.** If round-4 risk gates do NOT flip both audit + shortcut to LOW after the proposal cites NES-273 inline, the assumption that "concrete tracked-ticket follow-up converts a structurally-unavoidable MEDIUM to LOW" is invalidated; the orchestrator must surface a fresh new-value question to the root because the LOW-closure path that both MEDIUM gates explicitly endorsed in round 3 turned out not to actually flip the verdicts.
+
+## D-2026-05-07h — NES-269 mid-pipeline rebase to absorb NES-268 (PR #54)
+
+**WU**: NES-269. **Phase**: between Phase 6 (process-tree-audit #2 PASS) and Phase 7. **Decision**: rebase the working tree onto fresh master (PR #54 / NES-268 landed during this WU's Phase 4 → Phase 6 sequence) and resolve the workflow-file conflict by keeping both NES-268's six new Step 6c rules (post-prototype internal contract derivation + the edited Process-tree review rule with derivation-record clause) AND NES-269's new Phase 6 → Phase 7 `PrototypeSwapRecord` boundary rule. Both DECISIONS.md additions (NES-255's `D-2026-05-07-NES255a/b` from upstream + NES-269's own `D-2026-05-07g`) are preserved.
+
+**Rationale.** Per `D-2026-05-06i § (2) Mid-pipeline rebase forced by NES-246 #41/#42` precedent: when a sibling WU lands on master between Phase 4 and Phase 9 of a mid-flight WU, rebase rather than open a stale-base PR. NES-268 was an explicitly-named sibling in NES-269's "Sibling-WU collision plan" (proposal § Sibling-WU collision plan) with mitigation: "NES-269 explicitly avoids `Step 6d`, lands as an ordered boundary paragraph after Step 6c". The collision was therefore expected and the resolution is mechanical paragraph-order, not design-level.
+
+**Anti-scope (kept intact through rebase).** The rebase did not modify Phase 6c's product (the `PrototypeSwapRecord` boundary rule paragraph is byte-identical pre/post-rebase), the new test file, or any planning artifact. The merge resolution only re-positioned NES-269's bullet 6 lines lower in `workflows/implementation-pipeline.md` because NES-268 inserted 6 new bullets between Step 6c's `Step 6c log output must echo...` rule (the old anchor) and the Process-tree review rule.
+
+**Verification.** After conflict resolution, `pytest tests/test_implementation_pipeline_swap_record.py -q` returns `5 passed`, and `pytest tests/ -q` returns `646 passed` (versus 611 before rebase — gain is exactly NES-268's 35 new tests in `test_implementation_pipeline_contract_derivation.py` + `test_implementation_pipeline_phase6_invariants.py`). No NES-268 test regressed; no NES-269 test regressed.
+
+**Process-tree audit revisitation.** Process-tree audit #2 (Phase 6) returned PASS against the pre-rebase state. The rebase did not change any verification fact: (a) Step 6b/6c invocation UUIDs are unchanged (`4914ead8` vs `1232877c`); (b) timing order is unchanged; (c) Step 6b output index and test file are unchanged; (d) Step 6c's content contribution (the PrototypeSwapRecord rule paragraph) is byte-identical; (e) anti-scope is still honored. The audit's conclusions stand without re-dispatch.
+
+**Justifying evidence.**
+
+- Pre-rebase HEAD (master): `334bc2e` (NES-264).
+- Post-rebase HEAD (master): `1f0ef21` (NES-268).
+- Sibling collision plan citation: `${planning_dir}/proposals/nes-269-NES-269.md` § "Sibling-WU collision plan".
+- Test counts: `pytest tests/ -q` was 611 passed pre-rebase, 646 passed post-rebase.
+- Process-tree audit #2 report: `${planning_dir}/risk/nes-269-process-tree-audit-2.md` (Verdict: PASS, recorded against pre-rebase Step 6c output which is byte-identical to the post-rebase content).
+
+**Addendum — second sibling rebase post-CodeRabbit (NES-267, PR #55).** During Phase 7, NES-267 ("add procedural-test handoff to Phase 6 workflow", PR #55, master `7e7848b`) landed on master between the CodeRabbit pre-pass sanity check and the loop's convergence. NES-267 is also named in the WU's sibling-WU collision plan ("NES-267 owns procedural-test handoff and Step 6b/6c procedural obligations; NES-269 only references `procedural_test_results` and does not redefine that handoff"), so the collision was anticipated. The post-CodeRabbit rebase against `7e7848b` was conflict-free because NES-267's edits target Step 6b's output-index spec and Step 6c's middle bullets (procedural-obligation rules), while NES-269's edit is the last bullet of Step 6c immediately before the Phase 7 H2. Test counts after the second rebase: 651 passed (gained NES-267's 5 new tests on top of the 646 from the first rebase). CodeRabbit-amended commit was rebased from `10b62b5` to `adebef4`. No content was modified during the second rebase.
