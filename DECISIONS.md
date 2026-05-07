@@ -2,6 +2,23 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07j — NES-275 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: NES-275 (orchestrator-runtime HaltRecord gate). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: drop the local Step 6c commit (83eb283), preserving Step 6b test file and output index unchanged; re-dispatch Step 6c with a prompt that requires explicit stdout echoing of a CONSUMED_FROM_STEP6B: header naming each Step 6b output path before any product-code edit; re-run verification AFTER the rebase onto NES-273 master; re-run process-tree audit #2 against the new run.`
+
+Process-tree audit #2 returned `FAIL (2 blocking)` on the first Phase 6 commit (`83eb283`). Two blocking findings:
+
+- `R1-F01`: Step 6c log did not contain explicit `READ:` evidence for the Step 6b output index path (`step6b-output-index.md`) and the test file path. Same shape as NES-273 R1-F01 (silent-success / false-completion) — pattern recurs across orchestrator-runtime mirror WUs.
+- `R1-F02`: Step 6c log records `677 passed`, but the expected-process manifest names `686 tests` (the post-rebase count after master advanced to include NES-273's `test_implementation_pipeline_orchestrator_swap_gate.py`). Test count drifted because Step 6c verification ran before the rebase; the manifest reflects the current head's test population.
+
+Per the violation-escalation policy (Tier-1: "rewind and retry from clean state"), the orchestrator drops the local Step 6c commit, preserves Step 6b artifacts (test file + output index unchanged), and re-dispatches Step 6c with a strengthened prompt requiring the agent's first response section to echo:
+
+- `CONSUMED_FROM_STEP6B: <path>` lines for each Step 6b output path (test file + output index),
+- `CONSUMED_FROM_STEP6A: <path>` for the Step 6a contract,
+- the post-rebase pytest invocation and pass count (expected `686 passed` or higher if other WUs land during the run).
+
+This is a structural/logging violation, not a content violation. The first run produced a correct orchestrator-markdown edit (8 new halt-gate tests + full suite 686/686 post-rebase) but lacked the auditable log echo and reported the pre-rebase count. The Tier-1 retry preserves all upstream artifacts (proposal, risk profile, contracts, tests) and only re-runs the Step 6c invocation with proper log evidence.
+
 ## D-2026-05-07i — NES-273 Phase 6 Tier-1 rewind + retry to add Step 6c log-echo evidence
 
 **WU**: NES-273 (orchestrator-runtime swap-record gate). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: restore agents/implementation-pipeline-orchestrator.md to its master HEAD state in the worktree (no commits to revert; working-tree changes only); preserve the Step 6b test file and output index unchanged; re-dispatch Step 6c with a prompt that requires explicit stdout echoing of each Step 6b output path consumed; re-run process-tree audit #2 against the new run.`
