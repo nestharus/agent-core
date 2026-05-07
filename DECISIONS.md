@@ -552,3 +552,24 @@ The user's directive "I do not want haiku to be used anywhere for anything" is i
 - Test residual: `/home/nes/projects/ai/planning/nes-263-ticket-operator-opus/risk/nes-263-test-residuals.md`
 - File classification: `git log --oneline -- .tmp/` shows only the initial-structure commit; `grep -rn` shows no other references.
 - Resume dispatch prompt user-stated exception: "DECISIONS.md historical entries — leave alone" + "F. DECISIONS.md — Line 135 (BOOT-02 historical reference) — leave alone. Historical entries describe the past, not current state."
+## D-2026-05-07c — NES-254: accept the 9th test as a CodeRabbit-loop addition
+
+**WU**: NES-254 — implementation-pipeline-orchestrator: write join manifest with canonical-output stat after parallel fanout. **Phase**: 7 (CodeRabbit loop). **Decision**: Keep `tests/test_implementation_pipeline_join_manifest.py::test_phase8_verdict_line_is_read_from_canonical_path` as-is. Do NOT rewind Phase 6 to insert it into the Step 6b tests-first set.
+
+**Rationale.** The 9th test closes a real Phase 4 / Phase 8 spec-parity gap: Phase 4 already had the equivalent `test_phase4_verdict_line_is_read_from_canonical_path` (Phase 6b set); Phase 8 carries the identical contract but the equivalent test was missing. CodeRabbit pass 2 (R3-F05 in `.scratch/coderabbit/CODERABBIT_pass2.md`) flagged this as a "Missing test caught a real gap" and the operator added it per `~/ai/agents/coderabbit-operator.md` § Procedure: Single Pass (`Apply, run tests, git commit --amend --no-edit`). Phase 6 process-tree audit #2 had already PASSED at `risk/nes-254-process-tree-audit-phase6.md` confirming clean Step 6b/6c separation. Removing the test would weaken coverage of a load-bearing rule (verdict-line source for Phase 8) and violate `~/ai/workflows/coderabbit-loop.md` § Rules — "Do not weaken tests to converge."
+
+**Evidence paths.**
+
+- `~/ai/agents/coderabbit-operator.md` (the "Missing test caught a real gap → Apply" pattern).
+- `${planning_dir}/.scratch/coderabbit/CODERABBIT_pass2.md` (R3-F05 finding + applied edit).
+- `${planning_dir}/risk/nes-254-process-tree-audit-phase6.md` (Phase 6 process-tree PASS).
+- `tests/test_implementation_pipeline_join_manifest.py:161` (the test).
+- `${planning_dir}/risk/nes-254-test-audit.md` (round 2 — accepts the residual).
+
+**Anti-scope (kept intact).**
+
+- Did NOT add tests to other surfaces.
+- Did NOT modify Step 6b tests-first artifacts retroactively.
+- Did NOT rewind Phase 6.
+
+**Precedent.** Same pattern as `D-2026-05-06l` (NES-227 Phase 8 R3 test-audit residual acceptance): a fix-pass-discovered missing test gap is documented as a residual through DECISIONS.md rather than via Tier-1 rewind for procedural-form-only gain.
