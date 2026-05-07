@@ -287,9 +287,111 @@ def _frontmatter_model(path):
     return match.group(1)
 
 
+def _optional_frontmatter_model_site(path):
+    text = (REPO_ROOT / path).read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return None
+
+    end = text.find("\n---", 4)
+    assert end != -1, f"unterminated YAML frontmatter in {path}"
+    frontmatter = text[4:end]
+
+    match = re.search(r"(?m)^model:\s+(\S+)\s*$", frontmatter)
+    if not match:
+        return None
+    line_num = frontmatter[: match.start()].count("\n") + 2
+    return match.group(1), f"{path}:{line_num}"
+
+
+def _model_roles_registry():
+    text = (REPO_ROOT / "models/roles.md").read_text(encoding="utf-8")
+    matrix = _section_after_heading(text, "## Matrix")
+    registry = set()
+    in_table = False
+
+    for line in matrix.splitlines():
+        if line.startswith("|"):
+            in_table = True
+            match = re.match(r"^\|\s*`([^`]+)`\s*\|", line)
+            if match:
+                registry.add(match.group(1))
+        elif in_table:
+            break
+
+    assert registry, "expected backticked model IDs in models/roles.md ## Matrix table"
+    return registry
+
+
+def _tracked_markdown_under(*roots):
+    tracked_rel_paths = subprocess.check_output(
+        ["git", "-C", str(REPO_ROOT), "ls-files", *[f"{root}/*.md" for root in roots]],
+        text=True,
+    ).splitlines()
+    return [Path(rel_path) for rel_path in tracked_rel_paths]
+
+
+def _is_model_placeholder(token):
+    return (
+        token.startswith(("<", "{", "$"))
+        or re.fullmatch(r"[A-Z_]+", token) is not None
+        or re.search(r"[<>{}$]", token) is not None
+    )
+
+
+def _concrete_dispatch_model_sites():
+    dispatch_sites = {}
+    dispatch_pattern = re.compile(r"\bagents\b[^\n]*?(?:-m|--model)\s+(?P<token>\S+)")
+
+    for rel_path in _tracked_markdown_under("agents", "workflows"):
+        path = REPO_ROOT / rel_path
+        for line_num, line_text in enumerate(
+            path.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            for match in dispatch_pattern.finditer(line_text):
+                token = match.group("token").strip("`'\".,;)")
+                if not token or _is_model_placeholder(token):
+                    continue
+                dispatch_sites.setdefault(token, []).append(f"{rel_path}:{line_num}")
+
+    return dispatch_sites
+
+
 def test_ticket_operator_models_are_claude_opus():
     assert _frontmatter_model(Path("agents/jira-operator.md")) == "claude-opus"
     assert _frontmatter_model(Path("agents/linear-operator.md")) == "claude-opus"
+
+
+def test_model_roles_registry_covers_frontmatter_and_dispatch_models():
+    registry = _model_roles_registry()
+    model_sites = {}
+
+    for rel_path in sorted((REPO_ROOT / "agents").glob("*.md")):
+        rel_path = rel_path.relative_to(REPO_ROOT)
+        if rel_path == Path("agents/operator-file-format.md"):
+            continue
+        model_site = _optional_frontmatter_model_site(rel_path)
+        if model_site is None:
+            continue
+        model, site = model_site
+        model_sites.setdefault(model, []).append(site)
+
+    for model, sites in _concrete_dispatch_model_sites().items():
+        model_sites.setdefault(model, []).extend(sites)
+
+    undeclared = {
+        model: sorted(sites)
+        for model, sites in sorted(model_sites.items())
+        if model not in registry
+    }
+    formatted_undeclared = "\n".join(
+        f"{model}:\n" + "\n".join(f"  {site}" for site in sites)
+        for model, sites in undeclared.items()
+    )
+    assert undeclared == {}, (
+        "model IDs used by operator frontmatter or concrete agents dispatches "
+        f"are missing from models/roles.md ## Matrix:\n{formatted_undeclared}"
+    )
 
 
 # NES-263 / D-2026-05-07a and Phase 4 F1: keep the no-small-Claude

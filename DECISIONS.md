@@ -770,3 +770,48 @@ The other Phase 2.5.1-named uncovered surface (`agents/pr-writer.md` frontmatter
 - Process-tree audit #2 report: `${planning_dir}/risk/nes-269-process-tree-audit-2.md` (Verdict: PASS, recorded against pre-rebase Step 6c output which is byte-identical to the post-rebase content).
 
 **Addendum — second sibling rebase post-CodeRabbit (NES-267, PR #55).** During Phase 7, NES-267 ("add procedural-test handoff to Phase 6 workflow", PR #55, master `7e7848b`) landed on master between the CodeRabbit pre-pass sanity check and the loop's convergence. NES-267 is also named in the WU's sibling-WU collision plan ("NES-267 owns procedural-test handoff and Step 6b/6c procedural obligations; NES-269 only references `procedural_test_results` and does not redefine that handoff"), so the collision was anticipated. The post-CodeRabbit rebase against `7e7848b` was conflict-free because NES-267's edits target Step 6b's output-index spec and Step 6c's middle bullets (procedural-obligation rules), while NES-269's edit is the last bullet of Step 6c immediately before the Phase 7 H2. Test counts after the second rebase: 651 passed (gained NES-267's 5 new tests on top of the 646 from the first rebase). CodeRabbit-amended commit was rebased from `10b62b5` to `adebef4`. No content was modified during the second rebase.
+
+## D-2026-05-07-NES272a — Phase 2.5 roadmap-doc drift filed as NES-274; proceed with current scope
+
+**WU**: NES-272 (`models/roles.md` synthesis-guidance staleness).
+
+**Phase**: 2.5 (existing-state risk profile, duplicates inventory).
+
+**Decision**: File a single Linear tracker (NES-274) for four roadmap-related drift items surfaced by the duplicates inventory; do **not** add a `Blocks` link to NES-272; **proceed with current scope** (note in this DECISIONS entry); do **not** expand NES-272 to consolidate roadmap-doc model claims.
+
+**Justifying evidence**:
+- Duplicates inventory: `/home/nes/projects/ai/planning/nes-272-roles-md-stale/research/nes-272-duplicates.md` § Drift discoveries (4 items).
+- Tracker filed: `NES-274` — https://linear.app/neshq/issue/NES-274/roadmap-docs-drift-workflow-vs-operator-frontmatter-vs-agentsmd-model.
+- Partial-overlap note: pre-existing `NES-201` covers drift item #1 narrowly; items #2/#3/#4 are net-new in NES-274. User can decide whether to close NES-201 as superseded.
+- `linear-operator` create dispatch log: `/home/nes/projects/ai/planning/nes-272-roles-md-stale/.scratch/logs/nes-272-phase-2.5-drift-tracker.log`.
+
+**Rationale**: The four drifts (`workflows/roadmap.md` ↔ `roadmap-orchestrator.md` ↔ `AGENTS.md` model claims; `ai-roadmap-proposer.md` Phase 4 summary stale; `roadmap-orchestrator.md:19` cites stale `src/models.md` path) live entirely in roadmap-system documentation, NOT in NES-272's touched surface (`models/roles.md`). The user's dispatch brief explicitly anti-scopes to "Doc edit only" / "Phase 7 anti-scope discipline" — that maps to the `proceed with current scope (note in DECISIONS.md)` disposition under `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5 (Drift). Filing the tracker preserves the discovery for separate hardening work without expanding NES-272.
+
+**Re-evaluation trigger**: If a downstream Phase 2.5/3 finding shows that `models/roles.md` consistency cannot be established without also reconciling roadmap-doc claims, return here and re-evaluate. (No such finding so far; the touched surface is independent.)
+
+## D-2026-05-07-NES272b — Phase 6b Step 6b in-flight worktree remediation
+
+**WU**: NES-272.
+
+**Phase**: 6 (Step 6b — test writer).
+
+**Decision**: The Step 6b dispatched test writer authored the new test (`test_model_roles_registry_covers_frontmatter_and_dispatch_models`) into `/home/nes/ai/tests/test_agentsmd_structure.py` (the `master`-checked-out worktree at `~/ai/`) instead of `/home/nes/projects/ai/worktrees/nes-272-roles-md-stale/tests/test_agentsmd_structure.py` (the WU branch worktree). The orchestrator captured the diff, applied it cleanly to the WU worktree (`git apply` exited 0), and reverted the master worktree (`git checkout -- tests/test_agentsmd_structure.py`). All 22 tests in `test_agentsmd_structure.py` PASS against the WU branch.
+
+**Justifying evidence**:
+- Producing invocation UUID: `e8a09d96-4eff-489e-b2fa-bb7af46433e7` (Step 6b test writer; codex3/gpt-high; logged at `${scratch_dir}/logs/nes-272-phase-6b.log`).
+- Diff captured at `/tmp/nes-272-step6b.patch` (4 helper functions + 1 test function; +101 lines).
+- WU worktree post-apply: `git status --short tests/` reports `M tests/test_agentsmd_structure.py`.
+- Master worktree post-revert: `git status --short tests/` is clean.
+- WU worktree pytest: 22/22 passed including the new test.
+- Step 6b output index: `${scratch_dir}/phase6/step6b-output-index.md` (unchanged; lists the test path correctly as `tests/test_agentsmd_structure.py`).
+
+**Rationale**: The contract and Step 6b prompt referenced the test file as `~/ai/tests/test_agentsmd_structure.py`, which is ambiguous between the symlink-style logical path (the agent should resolve it relative to its `-p` working directory, i.e., the WU worktree) and the absolute filesystem path (the master worktree). The agent picked the absolute interpretation. The remediation transfers the bytes — same diff, same producing-invocation-UUID lineage, same test logic — to the WU branch. This does NOT trigger a Tier-1 rewind because:
+
+1. The Step 6b invocation itself is preserved as the producing invocation; no re-dispatch occurred.
+2. The test content was not changed, only the file location was corrected.
+3. The contract is unchanged; the Step 6c prompt will read the test from the WU worktree at `tests/test_agentsmd_structure.py` per the contract.
+4. The master worktree is restored; no leakage to `master`.
+
+The future-WU mitigation (NOT this WU's scope): make the orchestrator explicitly substitute `${worktree_path}/tests/...` in Step 6b prompts instead of `~/ai/tests/...`, so the dispatched agent has no ambiguity. Filed as a watch signal for the orchestrator-doc maintenance backlog (not a separate Linear ticket — too narrow until it recurs).
+
+**Re-evaluation trigger**: If process-tree audit #2 flags Step 6b's edit-location as a violation, escalate to Tier-1 rewind.
