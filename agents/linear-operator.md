@@ -23,7 +23,8 @@ You read, comment on, and create Linear issues using the ported Linear GraphQL c
 
 ## Required Inputs
 
-- `task`: one of `read`, `comment`, `create`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`.
+- `task`: one of `read`, `comment`, `create`, `update-estimate`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`; `task=read` is the Phase 0 bootstrap read path.
+- `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Invoke `clients.linear.cli update-issue "${issue_key}" --estimate <int>` for the numeric field update, then use the existing comment/upsert-comment path to write a durable Markdown note containing inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment` and for `apply-labels`).
 - `body` (for `comment`): markdown body — Linear renders Markdown natively, no ADF.
 - `output_path` (for `read`): destination file path the operator must write the rendered ticket to (used by orchestrator Phase 0 bootstrap).
@@ -61,7 +62,7 @@ This returns a JSON envelope:
 
 ```json
 {"ok": true, "data": {"id": "...uuid...", "identifier": "NES-34", "title": "...",
- "description": "<markdown>", "state": {"name": "..."}, "team": {"key": "NES"},
+ "description": "<markdown>", "estimate": 5, "state": {"name": "..."}, "team": {"key": "NES"},
  "labels": [...], "project": {"id": "...", "slugId": "..."},
  "parent": {...}, "url": "https://linear.app/..."}}
 ```
@@ -84,10 +85,14 @@ status: <state name>
 parent: <parent key or empty>
 labels: [label1, label2]
 url: <linear url>
+story_point_estimate: <issue estimate or null>
+estimate_source: <parsed source or missing>
+estimate_rationale: <parsed rationale or null>
+estimate_field: "estimate"
 ---
 ```
 
-Then the markdown body is the issue description verbatim (Linear stores Markdown natively, no rendering step). Do not transform headings, lists, or code blocks. `labels:` must come from the real `get-issue` `labels` data, and project readback may include `project.slugId` and project teams. The orchestrator validates only that the rendered description is non-empty.
+Then the markdown body is the issue description verbatim (Linear stores Markdown natively, no rendering step). Do not transform headings, lists, or code blocks. `story_point_estimate` comes from the Linear `estimate` field. `estimate_source` and `estimate_rationale` are parsed from description labels such as `Estimate Source` and `Estimate Rationale`; use `missing` and `null` when absent. `estimate_field: "estimate"` identifies the mutation target for later refinement. `labels:` must come from the real `get-issue` `labels` data, and project readback may include `project.slugId` and project teams. The orchestrator validates only that the rendered description is non-empty.
 
 Implementation:
 
@@ -105,12 +110,30 @@ fm = ['---',
   f\"parent: {(d.get('parent') or {}).get('identifier','')}\",
   f\"labels: {[lbl.get('name','') for lbl in (d.get('labels') or [])]}\",
   f\"url: {d.get('url','')}\",
+  f\"story_point_estimate: {d.get('estimate') if d.get('estimate') is not None else 'null'}\",
+  \"estimate_source: missing\",
+  \"estimate_rationale: null\",
+  \"estimate_field: \\\"estimate\\\"\",
   '---', '']
 with open(os.environ['OUTPUT_PATH'], 'w') as f:
     f.write('\n'.join(fm))
     f.write(d.get('description') or '')
 " ISSUE_JSON="$ISSUE_JSON" OUTPUT_PATH="$output_path"
 ```
+
+## Procedure: Update Estimate
+
+Used by `~/ai/agents/implementation-pipeline-orchestrator.md` after Phase 3 artifact verification and before Phase 4 prompt composition.
+
+Required inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`.
+
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli update-issue \
+    "${issue_key}" \
+    --estimate <int>
+```
+
+After the numeric update succeeds, write a durable Markdown note through the existing comment/upsert-comment procedure. The note must contain inherited estimate, refined estimate, source, and delta rationale, and may include the verbatim `estimate_delta_flag` for audit evidence. Parse both command envelopes and return `BLOCKED` on any 4xx, auth, not-found, or `INVALID_INPUT` failure. This task does not transition status/state.
 
 ## Procedure: Comment
 
@@ -251,6 +274,7 @@ Both CLI commands return the standard JSON envelope. Parse `identifier`, `title`
 For `read`: write the rendered ticket to `output_path`; print the key, title, state, parent in a brief block.
 For `comment`: print the new comment ID + a confirmation line.
 For `create`: print the new key + URL.
+For `update-estimate`: print the issue key, refined estimate, and comment ID for the durable Markdown note.
 For `list-projects`: print one line per result (`ID  state  name`, omitting blank state).
 For `list-labels`: print one line per result (`ID  name`).
 For `create-label`: print the new label ID + name.

@@ -29,6 +29,9 @@ linear_client_usage:
       --team ACR --labels hardening,Bug
     get_issue: >-
       PYTHONPATH=$HOME/ai python3 -m clients.linear.cli get-issue ACR-113
+    update_issue: >-
+      PYTHONPATH=$HOME/ai python3 -m clients.linear.cli update-issue
+      ACR-122 --estimate 13
   notes:
     - "Use slugId or UUID for project tokens; project names and URLs are not accepted identifiers."
     - "Team-owned labels win over workspace labels with the same name; duplicate labels in the same tier are ambiguous."

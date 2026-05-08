@@ -608,6 +608,7 @@ mutation IssueCreate($input: IssueCreateInput!) {
         state_id: str | None = None,
         parent_id: str | None = None,
         label_ids: list[str] | None = None,
+        estimate: int | None = None,
     ) -> dict[str, Any]:
         """Update an existing issue in Linear.
 
@@ -623,6 +624,7 @@ mutation IssueCreate($input: IssueCreateInput!) {
             state_id: Optional UUID of the workflow state.
             parent_id: Optional UUID of the parent issue (for sub-issues).
             label_ids: Optional list of label UUIDs to apply to the issue.
+            estimate: Optional fibonacci story-point estimate.
 
         Returns:
             Dictionary containing the updated issue data:
@@ -637,6 +639,7 @@ mutation IssueCreate($input: IssueCreateInput!) {
                 is invalid (INVALID_PRIORITY), or API call fails.
         """
         self._validate_priority(priority)
+        self._validate_estimate(estimate)
 
         # Build input object with only provided fields
         input_data: dict[str, Any] = {}
@@ -660,6 +663,8 @@ mutation IssueCreate($input: IssueCreateInput!) {
             input_data["parentId"] = parent_id
         if label_ids is not None:
             input_data["labelIds"] = label_ids
+        if estimate is not None:
+            input_data["estimate"] = estimate
 
         if not input_data:
             raise LinearClientError(

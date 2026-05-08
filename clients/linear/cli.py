@@ -200,8 +200,9 @@ def update_issue(
     issue_id: str,
     description: str | None = None,
     description_file: str | None = None,
+    estimate: int | None = None,
 ) -> None:
-    """Update an issue description and print result as JSON.
+    """Update an issue and print result as JSON.
 
     Args:
         issue_id: The issue identifier (e.g., NES-24)
@@ -209,6 +210,7 @@ def update_issue(
             description_file)
         description_file: Path to file containing new description
             (mutually exclusive with description)
+        estimate: Optional story-point estimate.
     """
     # Read description from file if provided
     if description_file:
@@ -216,10 +218,12 @@ def update_issue(
             description = f.read()
 
     client = LinearClient()
-    issue = client.update_issue(
-        issue_id=issue_id,
-        description=description,
-    )
+    update_kwargs: dict[str, object] = {"issue_id": issue_id}
+    if description is not None:
+        update_kwargs["description"] = description
+    if estimate is not None:
+        update_kwargs["estimate"] = estimate
+    issue = client.update_issue(**update_kwargs)
     print(json.dumps({"ok": True, "data": issue}, indent=2))
 
 
@@ -457,6 +461,11 @@ def main() -> None:
     update_issue_parser.add_argument(
         "--description-file", help="Path to file containing new issue description"
     )
+    update_issue_parser.add_argument(
+        "--estimate",
+        type=int,
+        help="Story-point estimate (allowed: 1, 2, 3, 5, 8, 13, 21, 40, 100)",
+    )
 
     # create-comment command
     create_comment_parser = subparsers.add_parser(
@@ -639,6 +648,7 @@ def main() -> None:
                 issue_id=args.issue_id,
                 description=args.description,
                 description_file=args.description_file,
+                estimate=args.estimate,
             )
         elif args.command == "create-comment":
             create_comment(issue_id=args.issue_id, body=args.body)

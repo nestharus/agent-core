@@ -23,7 +23,8 @@ You read, comment on, and transition JIRA issues on `${jira_url}`. Auth uses HTT
 
 ## Required Inputs
 
-- `task`: one of `read`, `comment`, `transition`, `search`, `create`
+- `task`: one of `read`, `comment`, `transition`, `search`, `create`, `update-estimate`; `task=read` is the Phase 0 bootstrap read path.
+- `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Perform `PUT /rest/api/3/issue/{issueKey}` with `fields.customfield_10016=<int>`, then post an ADF durable note containing inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `${jira_project}-34` (required for read/comment/transition)
 - `body` (for `comment`): the comment text — supports plain text OR pre-built ADF JSON
 - `target_status` (for `transition`): destination status name (e.g., "In Progress")
@@ -92,11 +93,11 @@ Probe response body:
 
 ```bash
 curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
-  "${jira_url}/rest/api/3/issue/${jira_project}-34?fields=summary,status,description,assignee" \
+  "${jira_url}/rest/api/3/issue/${jira_project}-34?fields=summary,status,description,assignee,customfield_10016" \
   | python3 -m json.tool | head -40
 ```
 
-Default field set: `summary,status,description,assignee,issuetype,priority,labels`. For comments: `comment` field (or fetch `/comment` subresource).
+Default field set: `summary,status,description,assignee,issuetype,priority,labels,customfield_10016`. For comments: `comment` field (or fetch `/comment` subresource).
 
 ### Read for orchestrator bootstrap (description as markdown)
 
@@ -111,10 +112,30 @@ issuetype: <type>
 parent: <parent key or empty>
 labels: [label1, label2]
 url: ${jira_url}/browse/${jira_project}-34
+story_point_estimate: <numeric customfield_10016 or null>
+estimate_source: <parsed source or missing>
+estimate_rationale: <parsed rationale or null>
+estimate_field: "customfield_10016"
 ---
 ```
 
-Then the markdown body. Validate that the rendered markdown preserves the structural section headings of the original ticket so downstream readers do not lose the description's shape on ADF↔markdown round-trips.
+Then the markdown body. `story_point_estimate` is the numeric value of `customfield_10016`; `estimate_source` and `estimate_rationale` are parsed from description labels such as `Estimate Source` and `Estimate Rationale`, with `missing` and `null` when absent. `estimate_field: "customfield_10016"` identifies the mutation target for later refinement. Validate that the rendered markdown preserves the structural section headings of the original ticket so downstream readers do not lose the description's shape on ADF↔markdown round-trips.
+
+## Procedure: Update Estimate
+
+Used by `~/ai/agents/implementation-pipeline-orchestrator.md` after Phase 3 artifact verification and before Phase 4 prompt composition.
+
+Required inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`.
+
+```bash
+curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
+  -X PUT \
+  -H "Content-Type: application/json" \
+  -d '{"fields":{"customfield_10016":<int>}}' \
+  "${jira_url}/rest/api/3/issue/{issueKey}"
+```
+
+The request body uses `fields.customfield_10016` and trusts the orchestrator-supplied allowed value; JIRA allowed-values validation remains outside this operator task. After the numeric update succeeds, post a durable ADF note through `POST /rest/api/3/issue/{issueKey}/comment`. The ADF note must contain inherited estimate, refined estimate, source, and delta rationale, and may include the verbatim `estimate_delta_flag` for audit evidence. For any REST 4xx response, use the standard `BLOCKED` envelope. This task does not transition status/state.
 
 ## Procedure: Comment
 
@@ -254,6 +275,7 @@ For `comment`: print the new comment ID + a confirmation line.
 For `transition`: print before-status → after-status.
 For `search`: print one line per result (`KEY  status  summary`).
 For `create`: print the new key + browse URL.
+For `update-estimate`: print the issue key, refined estimate, and comment ID for the durable ADF note.
 
 For any Jira REST 4xx response, the failure output MUST follow the envelope defined in `## Error Handling`.
 
