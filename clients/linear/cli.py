@@ -152,6 +152,7 @@ def create_issue(
     project_id: str | None = None,
     labels: list[str] | None = None,
     create_missing_labels: bool = False,
+    estimate: int | None = None,
 ) -> None:
     """Create a new issue and print result as JSON.
 
@@ -167,13 +168,16 @@ def create_issue(
     label_ids: list[str] | None = None
     if labels:
         label_ids = client.resolve_label_ids(team, labels, create_missing=create_missing_labels)
-    issue = client.create_issue(
-        team=team,
-        title=title,
-        description=description,
-        project_id=resolved_project_id,
-        label_ids=label_ids,
-    )
+    create_kwargs = {
+        "team": team,
+        "title": title,
+        "description": description,
+        "project_id": resolved_project_id,
+        "label_ids": label_ids,
+    }
+    if estimate is not None:
+        create_kwargs["estimate"] = estimate
+    issue = client.create_issue(**create_kwargs)
     if labels and label_ids:
         issue_id = issue.get("id") or issue.get("identifier")
         if issue_id:
@@ -431,6 +435,11 @@ def main() -> None:
     create_issue_parser.add_argument("--description", help="Issue description")
     create_issue_parser.add_argument("--project", help="Project UUID or slugId")
     create_issue_parser.add_argument(
+        "--estimate",
+        type=int,
+        help="Story-point estimate (allowed: 1, 2, 3, 5, 8, 13, 21, 40, 100)",
+    )
+    create_issue_parser.add_argument(
         "--label",
         action="append",
         help="Label name; repeatable and accepts comma-delimited values",
@@ -623,6 +632,7 @@ def main() -> None:
                 project_id=args.project,
                 labels=_split_values(args.label),
                 create_missing_labels=args.create_missing_labels,
+                estimate=args.estimate,
             )
         elif args.command == "update-issue":
             update_issue(

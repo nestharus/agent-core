@@ -204,7 +204,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 - `ai-roadmap-proposer` - Layer 3: write/update `ai-roadmap-phase-N.md` from approved engineering-roadmap + per-phase scope. Decomposes a phase into AI-implementable Work Units with named contracts/schemas/parallelization.
   File: [~/ai/agents/ai-roadmap-proposer.md](agents/ai-roadmap-proposer.md) | Inputs: `engineering-roadmap.md`, phase scope, optional risk reports | Model: `gpt-high`
 
-- `ticket-generation-agent` - Layer 4: generate per-WU ticket files for one phase from the approved `ai-roadmap-phase-N.md`. One ticket file per WU, named `WU-<phase>-<NN>.md`, with named contracts/schemas/acceptance criteria/dependencies preserved verbatim.
+- `ticket-generation-agent` - Layer 4: generate phase ticket artifacts (`tickets/INDEX.md`, `tickets/INIT-NNN.md`, `tickets/SLICE-NNN.md`) from the approved `ai-roadmap-phase-N.md`, preserving named contracts/schemas/acceptance criteria/dependencies verbatim and including SLICE story-point estimate/source/rationale fields while INIT remains unsized.
   File: [~/ai/agents/ticket-generation-agent.md](agents/ticket-generation-agent.md) | Inputs: `ai-roadmap-phase-N.md`, phase id | Model: `gpt-high`
 
 - `engineering-research-agent` - Layer 2 Stage 2a: survey the existing codebase + adjacent reference projects to produce `engineering-research.md`. Read-only against project files.

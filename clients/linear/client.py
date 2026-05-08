@@ -15,6 +15,7 @@ import urllib.request
 from typing import Any, cast
 
 LINEAR_API_URL = "https://api.linear.app/graphql"
+ALLOWED_ESTIMATES = {1, 2, 3, 5, 8, 13, 21, 40, 100}
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -34,6 +35,7 @@ class LinearClientError(Exception):
         INVALID_RESPONSE: Linear response is missing required query fields.
         INVALID_PRIORITY: Priority value not in valid range 0-4.
         NO_UPDATES: No fields provided to update an issue.
+        INVALID_INPUT: User input failed client-side validation.
         PAGINATION_ERROR: Pagination did not advance properly.
     """
 
@@ -255,6 +257,21 @@ class LinearClient:
             raise LinearClientError(
                 "INVALID_PRIORITY",
                 f"Priority must be between 0 and 4, got: {priority}",
+            )
+
+    def _validate_estimate(self, estimate: int | None) -> None:
+        """Validate that estimate is an allowed story-point value."""
+        if estimate is None:
+            return
+        if (
+            not isinstance(estimate, int)
+            or isinstance(estimate, bool)
+            or estimate not in ALLOWED_ESTIMATES
+        ):
+            allowed = ", ".join(str(value) for value in sorted(ALLOWED_ESTIMATES))
+            raise LinearClientError(
+                "INVALID_INPUT",
+                f"estimate must be a fibonacci point value: {allowed}",
             )
 
     def get_issue(self, issue_id: str) -> dict[str, Any]:
@@ -490,6 +507,7 @@ query($ticketId: String!) {
         state_id: str | None = None,
         parent_id: str | None = None,
         label_ids: list[str] | None = None,
+        estimate: int | None = None,
     ) -> dict[str, Any]:
         """Create a new issue in Linear.
 
@@ -505,6 +523,7 @@ query($ticketId: String!) {
             state_id: Optional UUID of the workflow state.
             parent_id: Optional UUID of the parent issue (for sub-issues).
             label_ids: Optional list of label UUIDs to apply to the issue.
+            estimate: Optional fibonacci story-point estimate.
 
         Returns:
             Dictionary containing the created issue data:
@@ -519,6 +538,7 @@ query($ticketId: String!) {
                 or API call fails.
         """
         self._validate_priority(priority)
+        self._validate_estimate(estimate)
 
         team_id = self._resolve_team_id(team)
         if team_id is None:
@@ -557,6 +577,8 @@ mutation IssueCreate($input: IssueCreateInput!) {
             input_data["parentId"] = parent_id
         if label_ids:
             input_data["labelIds"] = label_ids
+        if estimate is not None:
+            input_data["estimate"] = estimate
 
         variables = {"input": input_data}
         result = self._run_graphql(mutation, variables)

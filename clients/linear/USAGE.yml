@@ -10,6 +10,7 @@ linear_client_usage:
     create_issue: >-
       PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-issue
       --team ACR --project acr-strategy --label hardening --label Bug
+      --estimate 5
       --title "Implement project-aware labels"
     search_issues: >-
       PYTHONPATH=$HOME/ai python3 -m clients.linear.cli search-issues
