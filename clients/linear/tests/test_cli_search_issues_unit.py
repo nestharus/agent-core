@@ -207,7 +207,7 @@ def test_search_issues_preserves_rich_filter_command_contract(
             "routing",
             "--title-starts-with",
             "AST-",
-            "--labels",
+            "--label",
             "hardening,prereq",
             "--first",
             "20",
@@ -281,22 +281,21 @@ def test_main_search_issues_conflicting_team_flags_exits_2(
 
 
 @pytest.mark.parametrize(
-    ("labels_arg", "expected_label_names"),
+    ("label_args", "expected_label_names"),
     [
-        ("a,b,c", ["a", "b", "c"]),
-        (" a, b ,, c ", ["a", "b", "c"]),
-        ("x", ["x"]),
-        (None, None),
+        (["--label", "hardening,Bug"], ["hardening", "Bug"]),
+        (["--label", "hardening", "--label", "Bug"], ["hardening", "Bug"]),
+        (["--label", " a, b ,, c "], ["a", "b", "c"]),
+        (["--label", "x"], ["x"]),
+        ([], None),
     ],
 )
 def test_main_search_issues_labels_normalization(
-    labels_arg: str | None,
+    label_args: list[str],
     expected_label_names: list[str] | None,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    argv = ["linear", "search-issues", "--team-key", "NES"]
-    if labels_arg is not None:
-        argv.extend(["--labels", labels_arg])
+    argv = ["linear", "search-issues", "--team-key", "NES", *label_args]
 
     mock_client, _ = run_main_with_mock_client(argv, capsys)
 
@@ -347,7 +346,7 @@ def test_main_search_issues_help_smoke(capsys: pytest.CaptureFixture[str]) -> No
         "--team-id",
         "--title-contains",
         "--title-starts-with",
-        "--labels",
+        "--label",
         "--include-archived",
         "--first",
     ]:
@@ -364,3 +363,94 @@ def test_search_files_do_not_patch_scripts_clients_linear_cli() -> None:
 
     for test_file in test_files:
         assert forbidden not in test_file.read_text(encoding="utf-8")
+
+
+def test_acr113_main_search_issues_project_and_singular_labels_forwarded(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T11: search-issues accepts --project and repeatable singular --label."""
+    mock_client, result = run_main_with_mock_client(
+        [
+            "linear",
+            "search-issues",
+            "--team-key",
+            "ACR",
+            "--project",
+            "acr-strategy",
+            "--label",
+            "hardening,Bug",
+            "--label",
+            "Feature",
+        ],
+        capsys,
+        ISSUE_FIXTURE,
+    )
+
+    mock_client.search_issues.assert_called_once_with(
+        team_key="ACR",
+        team_id=None,
+        title_contains=None,
+        title_starts_with=None,
+        project="acr-strategy",
+        label_names=["hardening", "Bug", "Feature"],
+        include_archived=False,
+        first=50,
+    )
+    assert result == {"ok": True, "data": ISSUE_FIXTURE}
+
+
+def test_acr113_main_list_issues_project_and_singular_labels_forwarded(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T11: list-issues coexists with ACR-22 and gains the same tuple filters."""
+    mock_client, result = run_main_with_mock_client(
+        [
+            "linear",
+            "list-issues",
+            "--team",
+            "ACR",
+            "--project",
+            "acr-strategy",
+            "--label",
+            "hardening",
+            "--label",
+            "Bug",
+            "--first",
+            "10",
+        ],
+        capsys,
+        ISSUE_FIXTURE,
+    )
+
+    mock_client.search_issues.assert_called_once_with(
+        team_key="ACR",
+        team_id=None,
+        title_contains=None,
+        title_starts_with=None,
+        project="acr-strategy",
+        label_names=["hardening", "Bug"],
+        include_archived=False,
+        first=10,
+    )
+    assert result == {"ok": True, "data": ISSUE_FIXTURE}
+
+
+@pytest.mark.parametrize(
+    "command_team_args",
+    [["search-issues", "--team-key", "ACR"], ["list-issues", "--team", "ACR"]],
+)
+def test_acr113_issue_query_commands_reject_plural_labels(
+    command_team_args: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T11: issue query commands use --label, not apply-labels' --labels flag."""
+    with (
+        patch.object(sys, "argv", ["linear", *command_team_args, "--labels", "hardening"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+
+    assert exc_info.value.code == 2
+    result = stdout_json(capsys)
+    assert result["ok"] is False
+    assert result["error"]["code"] == "INVALID_INPUT"

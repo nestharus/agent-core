@@ -18,7 +18,9 @@ def test_orchestrator_linear_inputs_pass_to_create_list_search_dispatches():
     text = _orchestrator_text()
 
     assert "`linear_team_key` is passed through for team-scoped create, list, and search" in text
-    assert "`linear_project_id`, when supplied, is passed through only to create" in text
+    assert "`linear_project_id` is optional" in text
+    assert "project UUID or `slugId`" in text
+    assert "create/query dispatches" in text
 
 
 def test_orchestrator_known_issue_read_comment_needs_no_separate_team_selection():

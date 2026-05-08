@@ -41,7 +41,7 @@ This convention does not mandate a freshness file, checksum, or commit marker. C
 
 ## Applicable Categories
 
-Ticketing applies when a project benefits from a ticket-operator wrapper around `~/ai/agents/linear-operator.md` or `~/ai/agents/jira-operator.md`; stable project facts might include team key, board id, label conventions, and parent-issue routing.
+Ticketing applies when a project benefits from a ticket-operator wrapper around `~/ai/agents/linear-operator.md` or `~/ai/agents/jira-operator.md`; stable project facts might include team key, board id, label conventions, and parent-issue routing. For Linear wrappers, the team key is required, the optional project token may be a UUID or `slugId`, per-team labels are stable facts, and parent routing remains explicit rather than inferred.
 
 Code quality applies when a quality wrapper can carry stable project facts such as audit commands, report locations, quality gates, and project-specific review conventions.
 

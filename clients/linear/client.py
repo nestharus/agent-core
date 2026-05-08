@@ -15,6 +15,10 @@ import urllib.request
 from typing import Any, cast
 
 LINEAR_API_URL = "https://api.linear.app/graphql"
+UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
 
 
 class LinearClientError(Exception):
@@ -27,6 +31,7 @@ class LinearClientError(Exception):
         PARSE_ERROR: Failed to parse JSON response or non-UTF-8 response.
         GRAPHQL_ERROR: GraphQL-level errors returned by the API.
         NOT_FOUND: Requested resource (issue, team, etc.) not found.
+        INVALID_RESPONSE: Linear response is missing required query fields.
         INVALID_PRIORITY: Priority value not in valid range 0-4.
         NO_UPDATES: No fields provided to update an issue.
         PAGINATION_ERROR: Pagination did not advance properly.
@@ -276,7 +281,8 @@ class LinearClient:
             - team: dict | None (id, name, key)
             - assignee: dict | None (id, name, email)
             - state: dict | None (id, name, type)
-            - project: dict | None (id, name)
+            - project: dict | None (id, name, slugId, teams)
+            - labels: list[dict]
             - parent: dict | None (id, identifier, title)
 
         Raises:
@@ -315,7 +321,26 @@ query($issueId: String!) {
     }
     project {
       id
+      slugId
       name
+      teams {
+        nodes {
+          id
+          key
+          name
+        }
+      }
+    }
+    labels {
+      nodes {
+        id
+        name
+        color
+        team {
+          id
+          key
+        }
+      }
     }
     parent {
       id
@@ -330,6 +355,53 @@ query($issueId: String!) {
         issue = result.get("data", {}).get("issue")
         if not issue:
             raise LinearClientError("NOT_FOUND", f"Issue not found: {issue_id}")
+
+        if "project" not in issue:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: project",
+            )
+
+        project = issue.get("project")
+        if isinstance(project, dict):
+            teams = project.get("teams")
+            if isinstance(teams, dict):
+                team_nodes = teams.get("nodes")
+                if not isinstance(team_nodes, list):
+                    raise LinearClientError(
+                        "INVALID_RESPONSE",
+                        "Linear issue response missing required field: project.teams.nodes",
+                    )
+                project = {**project, "teams": team_nodes}
+            else:
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    "Linear issue response missing required field: project.teams",
+                )
+        elif project is not None:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response field project must be an object or null",
+            )
+
+        if "labels" not in issue or issue.get("labels") is None:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: labels",
+            )
+
+        labels = issue.get("labels")
+        if not isinstance(labels, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response field labels must be an object",
+            )
+        label_nodes = labels.get("nodes")
+        if not isinstance(label_nodes, list):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: labels.nodes",
+            )
 
         # Build the response with proper structure
         return {
@@ -349,7 +421,8 @@ query($issueId: String!) {
             "team": issue.get("team"),
             "assignee": issue.get("assignee"),
             "state": issue.get("state"),
-            "project": issue.get("project"),
+            "project": project,
+            "labels": label_nodes,
             "parent": issue.get("parent"),
         }
 
@@ -482,7 +555,7 @@ mutation IssueCreate($input: IssueCreateInput!) {
             input_data["stateId"] = state_id
         if parent_id is not None:
             input_data["parentId"] = parent_id
-        if label_ids is not None:
+        if label_ids:
             input_data["labelIds"] = label_ids
 
         variables = {"input": input_data}
@@ -820,9 +893,9 @@ mutation CommentCreate($input: CommentCreateInput!) {
         cursor: str | None = None
 
         query_with_team_filter = """
-query($includeArchived: Boolean!, $teamId: ID!, $after: String) {
+query($includeArchived: Boolean!, $teamId: ID!, $first: Int!, $after: String) {
   projects(
-    first: 100
+    first: $first
     includeArchived: $includeArchived
     filter: {accessibleTeams: {id: {eq: $teamId}}}
     after: $after
@@ -861,8 +934,8 @@ query($includeArchived: Boolean!, $teamId: ID!, $after: String) {
 }
 """
         query_without_team_filter = """
-query($includeArchived: Boolean!, $after: String) {
-  projects(first: 100, includeArchived: $includeArchived, after: $after) {
+query($includeArchived: Boolean!, $first: Int!, $after: String) {
+  projects(first: $first, includeArchived: $includeArchived, after: $after) {
     pageInfo {
       hasNextPage
       endCursor
@@ -901,7 +974,10 @@ query($includeArchived: Boolean!, $after: String) {
         )
 
         while True:
-            variables: dict[str, Any] = {"includeArchived": include_archived}
+            variables: dict[str, Any] = {
+                "includeArchived": include_archived,
+                "first": 100,
+            }
             if resolved_team_id is not None:
                 variables["teamId"] = resolved_team_id
             if cursor is not None:
@@ -928,6 +1004,37 @@ query($includeArchived: Boolean!, $after: String) {
             cursor = next_cursor
 
         return all_projects
+
+    def resolve_project_id(
+        self,
+        team: str,
+        project: str,
+        include_archived: bool = False,
+    ) -> str:
+        """Resolve a Linear project UUID or slugId within a team's visible projects."""
+        token = project.strip()
+        if not token:
+            raise LinearClientError("NOT_FOUND", "Project not found: empty project token")
+
+        projects = self.list_projects(team_id=team, include_archived=include_archived)
+        matches: list[dict[str, Any]] = []
+        if UUID_RE.match(token):
+            matches = [p for p in projects if p.get("id") == token]
+        elif "://" not in token and "/" not in token:
+            matches = [p for p in projects if p.get("slugId") == token]
+
+        if not matches:
+            raise LinearClientError("NOT_FOUND", f"Project not found for team {team}: {project}")
+
+        distinct_ids = {str(match.get("id")) for match in matches if match.get("id")}
+        if not distinct_ids:
+            raise LinearClientError("NOT_FOUND", f"Project not found for team {team}: {project}")
+        if len(distinct_ids) > 1:
+            raise LinearClientError(
+                "AMBIGUOUS_PROJECT",
+                f"Project token matches multiple projects for team {team}: {project}",
+            )
+        return next(iter(distinct_ids))
 
     def list_teams(self, include_archived: bool = False) -> list[dict[str, Any]]:
         """List all teams in the Linear workspace.
@@ -1391,6 +1498,7 @@ query IssueUnresolvedComments($id: String!, $after: String) {
         team_id: str | None = None,
         title_contains: str | None = None,
         title_starts_with: str | None = None,
+        project: str | None = None,
         label_names: list[str] | None = None,
         include_archived: bool = False,
         first: int = 50,
@@ -1406,8 +1514,9 @@ query IssueUnresolvedComments($id: String!, $after: String) {
                 strings are treated as omitted.
             title_starts_with: Title prefix filter. Empty strings are treated
                 as omitted.
-            label_names: Label names that must all be present. Blank entries
-                are ignored after trimming whitespace.
+            project: Optional project UUID or slugId resolved within the team.
+            label_names: Label names resolved within the team to ID filters.
+                Blank entries are ignored after trimming whitespace.
             include_archived: Whether archived issues are included.
             first: Maximum number of issues to return, from 1 through 100.
 
@@ -1435,6 +1544,7 @@ query IssueUnresolvedComments($id: String!, $after: String) {
             resolved_team_id = self._resolve_team_id(team_key)
             if resolved_team_id is None:
                 raise LinearClientError("NOT_FOUND", f"Team not found: {team_key}")
+            team_token = team_key
         else:
             resolved_team_id = team_id.strip()
             if not resolved_team_id:
@@ -1442,6 +1552,7 @@ query IssueUnresolvedComments($id: String!, $after: String) {
                     "INVALID_INPUT",
                     "team_id must not be empty",
                 )
+            team_token = resolved_team_id
 
         query = """query SearchIssues($filter: IssueFilter!, $first: Int!, $includeArchived: Boolean!) {
   issues(filter: $filter, first: $first, includeArchived: $includeArchived) {
@@ -1475,12 +1586,17 @@ query IssueUnresolvedComments($id: String!, $after: String) {
             issue_filter.setdefault("title", {})["containsIgnoreCase"] = title_contains
         if title_starts_with:
             issue_filter.setdefault("title", {})["startsWith"] = title_starts_with
-        for label_name in label_names or []:
-            normalized_label_name = label_name.strip()
-            if normalized_label_name:
-                issue_filter.setdefault("and", []).append(
-                    {"labels": {"name": {"eq": normalized_label_name}}}
-                )
+        if project:
+            project_id = self.resolve_project_id(team_token, project)
+            issue_filter["project"] = {"id": {"eq": project_id}}
+        normalized_label_names = [name.strip() for name in label_names or [] if name.strip()]
+        if normalized_label_names:
+            label_ids = self.resolve_label_ids(
+                team_token,
+                normalized_label_names,
+                create_missing=False,
+            )
+            issue_filter["labels"] = {"id": {"in": label_ids}}
 
         result = self._run_graphql(
             query,
@@ -1498,10 +1614,26 @@ query IssueUnresolvedComments($id: String!, $after: String) {
         for node in nodes:
             if not isinstance(node, dict):
                 continue
+            if "labels" not in node or node.get("labels") is None:
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response missing required field: labels for {identifier}",
+                )
             labels = node.get("labels")
-            label_nodes = labels.get("nodes", []) if isinstance(labels, dict) else []
+            if not isinstance(labels, dict):
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response field labels must be an object for {identifier}",
+                )
+            label_nodes = labels.get("nodes")
             if not isinstance(label_nodes, list):
-                label_nodes = []
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response missing required field: labels.nodes for {identifier}",
+                )
             issues.append(
                 {
                     "id": node.get("id"),
@@ -1624,7 +1756,25 @@ mutation IssueLabelCreate($input: IssueLabelCreateInput!) {
         """
         if not label_names:
             return []
-        existing = {lbl["name"]: lbl["id"] for lbl in self.list_labels(team)}
+        labels_by_name: dict[str, dict[str, list[str]]] = {}
+        for label in self.list_labels(team):
+            name = label.get("name")
+            label_id = label.get("id")
+            if not name or not label_id:
+                continue
+            tier = "team" if label.get("team") else "workspace"
+            labels_by_name.setdefault(name, {"team": [], "workspace": []})[tier].append(label_id)
+
+        existing: dict[str, str] = {}
+        for name, tiers in labels_by_name.items():
+            chosen_tier = tiers["team"] or tiers["workspace"]
+            if len(chosen_tier) > 1:
+                raise LinearClientError(
+                    "AMBIGUOUS_LABEL",
+                    f"Label name is duplicated in the same tier on team {team}: {name}",
+                )
+            if chosen_tier:
+                existing[name] = chosen_tier[0]
         resolved: list[str] = []
         for name in label_names:
             if name in existing:
@@ -1667,20 +1817,34 @@ mutation IssueLabelCreate($input: IssueLabelCreateInput!) {
             LinearClientError: If issue not found, team not found,
                 label resolution fails, or API call fails.
         """
+        team_id = self._resolve_team_id(team)
+        if team_id is None:
+            raise LinearClientError("NOT_FOUND", f"Team not found: {team}")
+
+        label_query = """
+query($id: String!) {
+  issue(id: $id) {
+    team { id key }
+    labels { nodes { id } }
+  }
+}
+"""
+        label_result = self._run_graphql(label_query, {"id": issue_id})
+        issue = (label_result.get("data") or {}).get("issue")
+        if not isinstance(issue, dict) or not issue:
+            raise LinearClientError("NOT_FOUND", f"Issue not found: {issue_id}")
+        issue_team_id = ((issue.get("team") or {}).get("id")) if isinstance(issue, dict) else None
+        if issue_team_id != team_id:
+            raise LinearClientError(
+                "INVALID_INPUT",
+                f"Issue/team mismatch for {issue_id}: expected team {team}",
+            )
+
         ids_to_apply = self.resolve_label_ids(team, label_names, create_missing)
 
         if replace:
             final_ids = list(dict.fromkeys(ids_to_apply))
         else:
-            # Fetch current label IDs via a direct query because get_issue
-            # does not include labels in its return shape.
-            label_query = """
-query($id: String!) {
-  issue(id: $id) { labels { nodes { id } } }
-}
-"""
-            label_result = self._run_graphql(label_query, {"id": issue_id})
-            issue = (label_result.get("data") or {}).get("issue") or {}
             nodes = ((issue.get("labels") or {}).get("nodes")) or []
             current_ids = [n.get("id") for n in nodes if n.get("id")]
             final_ids = list(dict.fromkeys(current_ids + ids_to_apply))
