@@ -5,7 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 from pytest_mock import MockerFixture
 
-from clients.linear.client import LinearClient, LinearClientError
+from clients.linear.client import (
+    ROUTINE_MANAGER_OWNED_STATES,
+    LinearClient,
+    LinearClientError,
+)
 
 
 ACR113_TEAM_ID = "11111111-1111-1111-1111-111111111111"
@@ -2877,6 +2881,397 @@ class TestSetTicketState:
 
         assert exc_info.value.code == "API_ERROR"
         assert "Failed to update state" in exc_info.value.message
+
+
+class TestLinearClientTransitionIssue:
+    def _routine_state(self, name: str) -> str:
+        assert name in ROUTINE_MANAGER_OWNED_STATES
+        return name
+
+    def _issue_response(self) -> dict[str, Any]:
+        return {
+            "data": {
+                "issue": {
+                    "id": "issue-uuid",
+                    "identifier": "ACR-130",
+                    "state": {
+                        "id": "todo-state",
+                        "name": self._routine_state("Todo"),
+                        "type": "unstarted",
+                    },
+                    "team": {
+                        "id": "team-uuid",
+                        "key": "ACR",
+                        "name": "Agent Core",
+                    },
+                }
+            }
+        }
+
+    def _states_response(self, state_nodes: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"data": {"team": {"states": {"nodes": state_nodes}}}}
+
+    def _update_response(self) -> dict[str, Any]:
+        return {
+            "data": {
+                "issueUpdate": {
+                    "success": True,
+                    "issue": {
+                        "id": "issue-uuid",
+                        "identifier": "ACR-130",
+                        "state": {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                    },
+                }
+            }
+        }
+
+    def test_list_workflow_states_returns_team_state_nodes(
+        self, mocker: MockerFixture
+    ) -> None:
+        state_nodes = [
+            {"id": "todo-state", "name": self._routine_state("Todo"), "type": "unstarted"},
+            {
+                "id": "progress-state",
+                "name": self._routine_state("In Progress"),
+                "type": "started",
+            },
+        ]
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=self._states_response(state_nodes),
+        )
+
+        client = LinearClient(api_key="test-key")
+        result = client.list_workflow_states("team-uuid")
+
+        assert result == state_nodes
+        assert run_graphql.call_args.args[1] == {"teamId": "team-uuid"}
+
+    def test_resolve_workflow_state_id_for_issue_returns_team_scoped_match(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "id": "todo-state",
+                            "name": self._routine_state("Todo"),
+                            "type": "unstarted",
+                        },
+                        {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        result = client.resolve_workflow_state_id_for_issue(
+            "ACR-130",
+            self._routine_state("In Progress"),
+        )
+
+        assert result == {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "team_id": "team-uuid",
+            "before_state_id": "todo-state",
+            "before_state_name": self._routine_state("Todo"),
+            "target_state_id": "progress-state",
+            "target_state_name": self._routine_state("In Progress"),
+        }
+        assert run_graphql.call_count == 2
+
+    def test_list_workflow_states_rejects_malformed_team_payload(
+        self, mocker: MockerFixture
+    ) -> None:
+        mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value={"data": {"team": {"states": None}}},
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.list_workflow_states("team-uuid")
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+
+    def test_resolve_workflow_state_id_for_issue_requires_issue_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        response = self._issue_response()
+        response["data"]["issue"].pop("id")
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=response,
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert run_graphql.call_count == 1
+
+    def test_resolve_workflow_state_id_for_issue_rejects_malformed_state(
+        self, mocker: MockerFixture
+    ) -> None:
+        response = self._issue_response()
+        response["data"]["issue"]["state"] = "todo-state"
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                response,
+                self._states_response(
+                    [
+                        {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        }
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert run_graphql.call_count == 1
+
+    def test_resolve_workflow_state_id_for_issue_requires_current_state_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        response = self._issue_response()
+        response["data"]["issue"]["state"].pop("id")
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                response,
+                self._states_response(
+                    [
+                        {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        }
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert run_graphql.call_count == 1
+
+    def test_resolve_workflow_state_id_for_issue_requires_target_state_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        }
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert run_graphql.call_count == 2
+
+    def test_transition_issue_happy_path_updates_state_id_payload(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "id": "todo-state",
+                            "name": self._routine_state("Todo"),
+                            "type": "unstarted",
+                        },
+                        {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                    ]
+                ),
+                self._update_response(),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        result = client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert result == {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "beforeStatus": self._routine_state("Todo"),
+            "afterStatus": self._routine_state("In Progress"),
+            "stateId": "progress-state",
+        }
+        request_variables = [call.args[1] for call in run_graphql.call_args_list]
+        assert request_variables[-1] == {
+            "id": "issue-uuid",
+            "input": {"stateId": "progress-state"},
+        }
+
+    def test_transition_issue_already_in_target_state_skips_mutation(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "id": "todo-state",
+                            "name": self._routine_state("Todo"),
+                            "type": "unstarted",
+                        },
+                        {
+                            "id": "progress-state",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        result = client.transition_issue("ACR-130", self._routine_state("Todo"))
+
+        assert result == {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "beforeStatus": self._routine_state("Todo"),
+            "afterStatus": self._routine_state("Todo"),
+            "stateId": "todo-state",
+        }
+        assert run_graphql.call_count == 2
+
+    def test_transition_issue_blank_target_status_raises_invalid_input_before_mutation(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(LinearClient, "_run_graphql")
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", "")
+
+        assert exc_info.value.code == "INVALID_INPUT"
+        run_graphql.assert_not_called()
+
+    def test_transition_issue_off_list_target_status_raises_invalid_input_before_mutation(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(LinearClient, "_run_graphql")
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", "Backlog")
+
+        assert exc_info.value.code == "INVALID_INPUT"
+        run_graphql.assert_not_called()
+
+    def test_transition_issue_missing_matching_state_raises_not_found(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "id": "done-state",
+                            "name": self._routine_state("Done"),
+                            "type": "completed",
+                        }
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "NOT_FOUND"
+        assert run_graphql.call_count == 2
+
+    def test_transition_issue_duplicate_matching_states_raise_ambiguous_state(
+        self, mocker: MockerFixture
+    ) -> None:
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            side_effect=[
+                self._issue_response(),
+                self._states_response(
+                    [
+                        {
+                            "id": "progress-state-a",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                        {
+                            "id": "progress-state-b",
+                            "name": self._routine_state("In Progress"),
+                            "type": "started",
+                        },
+                    ]
+                ),
+            ],
+        )
+
+        client = LinearClient(api_key="test-key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.transition_issue("ACR-130", self._routine_state("In Progress"))
+
+        assert exc_info.value.code == "AMBIGUOUS_STATE"
+        assert run_graphql.call_count == 2
 
 
 class TestACR113LabelInventoryAndResolution:

@@ -32,6 +32,15 @@ linear_client_usage:
     update_issue: >-
       PYTHONPATH=$HOME/ai python3 -m clients.linear.cli update-issue
       ACR-122 --estimate 13
+    transition_issue:
+      description: "Manager-owned routine status transition for a Linear issue."
+      example: >-
+        PYTHONPATH=$HOME/ai python3 -m clients.linear.cli transition-issue
+        ACR-130 --target-status "In Progress"
+      routine_states:
+        - Todo
+        - In Progress
+        - Done
   notes:
     - "Use slugId or UUID for project tokens; project names and URLs are not accepted identifiers."
     - "Team-owned labels win over workspace labels with the same name; duplicate labels in the same tier are ambiguous."

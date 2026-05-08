@@ -36,7 +36,7 @@ The orchestrator supports two ticket backends for release evidence comments, rea
 
 Detection rule: exactly one `ticket_system` is selected for a release lifecycle. If `ticket_system=jira`, require `jira_url`, `jira_project`, `jira_account_email`, and a Jira release identity such as `jira_issue_key`, `jira_release_key`, or shared `release_ticket_key`. If `ticket_system=linear`, require `linear_team_key`, allow optional `linear_project_id`, and require a Linear release identity such as `linear_issue_key`, `linear_release_key`, or shared `release_ticket_key`.
 
-Ticket integration is not a release gate by itself. It records context, comments, and runbook-shaped evidence only; lifecycle state changes remain user-owned unless a future release workflow changes that contract.
+Ticket integration is not a release gate by itself. It records context, comments, and runbook-shaped evidence only. Release lifecycle gates remain governed by the release workflow; routine WU ticket status transitions remain manager-owned where release work dispatches tracked WUs. This release orchestrator does not introduce a ticket `task=transition` dispatch for release lifecycle gates.
 
 ## Required Inputs
 

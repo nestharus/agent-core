@@ -1096,3 +1096,78 @@ Phase 2.5 sub-step 2.5.1 (coverage inventory) and 2.5.4 (duplicates) revealed th
 - **Risk profile**: `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/risk/acr-49-risk-profile.md`. Rolled up HIGH because the per-surface "Duplicate-system count" axis was scored HIGH for every surface (operator frontmatter, AGENTS.md routing row, workflow body restatement). Coverage gap is HIGH because no existing test enforces workflow-body ↔ frontmatter agreement.
 - **Residual**: HIGH verdict is recorded as residual. The fix in this WU IS the closure for the gap — a structural test that converts drift from "documentation discipline" into a CI-enforced invariant. Anti-scope (operator file, AGENTS.md, models/roles.md) is preserved.
 - **Evidence**: `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/risk/acr-49-risk-profile.md`, `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/research/acr-49-duplicates.md`, `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/research/acr-49-coverage-inventory.md`.
+
+## D-2026-05-08g — ACR-130 Phase 6c Tier-1 rewind: missing FIRST LOG LINE REQUIREMENT
+
+**WU**: ACR-130 (Linear status transitions documented as user-owned but should be manager/pipeline-owned). **Phase**: 6c (Write code). **Decision**: Tier-1 rewind. The first Step 6c dispatch produced correct product code and a clean test suite (1186/1186 passing, ruff clean), but the captured stdout did not contain the `consumed: <step6b-output-index-path>` first log line nor the per-test-file `consumed:` echoes required by `~/ai/agents/implementation-pipeline-orchestrator.md` § Step 6c item 1 (FIRST LOG LINE REQUIREMENT, added in PR #77 / commit 8a1f1cd). This is a Phase 6 violation per the orchestrator's violation-detection list ("Step 6c log does not echo the Step 6b output paths it consumed").
+
+The orchestrator's Step 6c prompt for ACR-130 round 1 omitted the FIRST LOG LINE REQUIREMENT block. The orchestrator restored `clients/linear/cli.py`, `clients/linear/client.py`, `clients/linear/USAGE.yml`, and the six modified `agents/`/`workflows/` markdown files to worktree HEAD (Step 6b test changes preserved) and re-composed the Step 6c prompt with the FIRST LOG LINE REQUIREMENT block. Round 2 was then dispatched as a fresh `agents -m gpt-high` invocation.
+
+**Evidence**: 
+- Round 1 6c log: `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/.scratch/logs/acr-130-phase-6c.log` (no `consumed:` line).
+- Round 1 6c invocation UUID: `39e2b08d-51af-4863-9e01-ddbb90c7e5e7` (preserved in audit history; product code from this invocation was discarded).
+- Pre-existing precedent: D-2026-05-08d (ACR-63 Phase 6c Tier-1 rewind for the same root cause).
+
+**No tier escalation**: Round 2 is the first retry. Tier-2 split or Tier-3 shrink only if round 2 also violates.
+
+## D-2026-05-08h — ACR-130 Phase 6c rounds 2 & 3 (FIRST LOG LINE persistence + acceptance)
+
+**WU**: ACR-130. **Phase**: 6c. **Decision**: Round 2 (UUID `b3f4e9b1-c849-46eb-acee-a0adc8c20452`, session `019e0934-6838-76e1-9234-8e3e38962ba8`) included the FIRST LOG LINE REQUIREMENT block in the prompt but the agent ignored it — its response began with implementation summary text rather than the required `consumed:` lines. The orchestrator rewound the product files a second time and dispatched a third Step 6c attempt with an extreme-clarity prompt that explicitly forbade any preamble before the 9 `consumed:` lines. Round 3 (UUID `d0f4fd15-2f9d-4f40-b277-b2dee8a2efb6`, session `019e093c-4e56-7763-a7a3-1a3b7d8fb200`) succeeded: its response begins with the 9 `consumed:` lines exactly as required, then a blank line, then the implementation summary; gates passed (1186/1186 pytest, ruff check + format clean). Round 3 product code is the accepted Phase 6c output; rounds 1 and 2 product code was discarded.
+
+**Tier classification**: Each Tier-1 retry was treated as autonomous-allowed orchestrator action because the violation was a procedural format issue addressable via prompt revision rather than a scope/value issue addressable via split or shrink. The orchestrator did not escalate to Tier-2/3 because Tier-2 (split) and Tier-3 (shrink) would not resolve a "first response line is wrong text" failure mode. Process-tree audit #2 returned `non-blocking` with the round-3 evidence; only an advisory item flagging this DECISIONS gap remained — addressed by this entry.
+
+**Evidence**: 
+- Round 2 6c log: `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/.scratch/logs/acr-130-phase-6c-r2.log`
+- Round 3 6c log: `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/.scratch/logs/acr-130-phase-6c-r3.log` (first 9 lines after OULIPOLY envelope are the required `consumed:` echoes)
+- Process-tree audit #2: `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/risk/acr-130-phase-6-process-tree-audit.md` (verdict `non-blocking`)
+
+## D-2026-05-08i — ACR-130 Phase 7 → 8 stale-base rebase + residual acceptance
+
+**WU**: ACR-130. **Phase**: 7 → 8. **Decision**: Rebase the WU branch onto current `origin/master` (`68086d6 ACR-49: align roadmap workflow orchestrator model + alignment test (#84)`); accept the two open CodeRabbit findings (R8-F03, R8-F05) as residuals; record the pre-existing `test_no_claude_haiku_in_repo` failure as a non-WU issue.
+
+**Stale-base rebase**: During the session, local `master` advanced from `f5aa689` to `81e851a` (ACR-122 #83) and `origin/master` advanced further to `68086d6` (ACR-49 #84). The CodeRabbit operator's commit `2a54658` was reachable from `f5aa689` (the WU's original branch base). `git diff master..HEAD` after master moved made the WU diff appear to include unrelated ACR-122 reverts (deleted `test_acr122_*` files; -81 lines from DECISIONS.md; modifications to AGENTS.md and `agents/jira-operator.md`). This is the same stale-base-contamination pattern recorded in `D-2026-05-08c` (ACR-5), `D-2026-05-08-acr-122-phase-2.5-rebase-on-current-master`, and `D-2026-05-08-acr-122-phase-8-rebase-on-current-master`. Action: `git fetch origin master && git rebase origin/master`. Three conflicts resolved in DECISIONS.md (kept ACR-122/ACR-49 entries, then appended D-2026-05-08g/h/i ACR-130 entries), `agents/linear-operator.md` task list (combined ACR-122's `update-estimate` with ACR-130's `transition` for a unified task enumeration), and `clients/linear/USAGE.yml` (kept ACR-122's `update_issue` + ACR-130's `transition_issue` examples). Post-rebase HEAD `8065b6c` (subsequently amended to include pyc updates as `c7de99d`). `git diff origin/master..HEAD` now shows 22 in-scope files only.
+
+**CodeRabbit residuals (R8-F03, R8-F05)**:
+- **R8-F03** — `clients/linear/client.py::list_workflow_states()` lacks pagination handling for Linear workflow-state connections. Accept-as-residual: the routine state list (`Todo`, `In Progress`, `Done`) is a closed 3-element set; per-team Linear workflow states are typically <20 in any sane setup, well within Linear's default page size. The exact-match resolver returns `NOT_FOUND` if a state isn't on the first page, so the worst-case failure mode is a clear, debuggable error rather than silent miscarriage. Filing a follow-up ticket would be wider scope than ACR-130.
+- **R8-F05** — `tests/test_linear_status_transition_ownership_convention.py` stale-phrase detection is case-sensitive. Accept-as-residual: the exact-phrase inventory is a defense-in-depth layer; the primary guard is the context-window scanner that already matches case-insensitively across all status/lifecycle tokens. A paraphrase that capitalizes "User-Owned" still trips the context-window guard (because `user-owned` matching is case-insensitive there). The exact-phrase layer is intentionally conservative so it only matches phrases verbatim copied from the Round 2 grep. The two layers together cover both case variants and paraphrases.
+- The CodeRabbit operator's `BLOCKED:NON_CONVERGING_PASS_LOOP` after 7 passes (29 findings applied, 12 skipped) reflects review-grain saturation rather than substantive problems with the diff.
+
+**Pre-existing failure**: `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` fails on `origin/master` at `68086d6` (verified by `git checkout origin/master && python3 -m pytest tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`). The forbidden-token violation comes from `tests/test_workflow_model_alignment.py:205` which is part of ACR-49 (#84), not ACR-130. The ACR-49 PR introduced a self-referential test that lists `claude-haiku` as a string literal in test data, tripping the `test_no_claude_haiku_in_repo` token scanner in the same WU's own repo. This is ACR-49's bug and out-of-scope for ACR-130. The remaining suite passes 1195/1196 (excluding this pre-existing failure).
+
+**Evidence**:
+- Rebased HEAD: `c7de99d ACR-130: routine Linear status transitions are manager-owned (#NN)` (parent: `68086d6`).
+- CodeRabbit summary: `/home/nes/projects/ai/worktrees/acr-130-linear-status-manager-owned/CODERABBIT_summary.md`.
+- CodeRabbit per-pass artifacts: `CODERABBIT_pass1.md` … `CODERABBIT_pass7.md`.
+- Pre-existing failure: `test_workflow_model_alignment.py:205` introduced by ACR-49 (#84).
+
+## D-2026-05-08j — ACR-130 Phase 8 commit-hygiene MEDIUM accepted as residual
+
+**WU**: ACR-130. **Phase**: 8 (commit-hygiene gate). **Decision**: Accept the gate's MEDIUM verdict as residual without amending the commit.
+
+**Trigger**: Phase 8 commit-hygiene gate (UUID `f753530d-c09f-4eba-af63-fce144aa4fb4`) returned **MEDIUM** because the commit `0ce06e5` includes 4 modified `__pycache__/*.pyc` bytecode files. The gate recommended amending the commit to remove them.
+
+**Why accept-as-residual**: The pyc files are tracked at `origin/master` (verified via `git ls-tree origin/master clients/__pycache__ clients/linear/__pycache__`); both `clients/__pycache__/` and `clients/linear/__pycache__/` are tracked tree objects on master. The project's `.gitignore` only lists `.build/` and `.tmp/` — `__pycache__` is NOT ignored. The pyc files are intentionally versioned per project convention. Removing them from this commit would create a master-source / tracked-pyc mismatch where master's tracked bytecode files are stale relative to the post-merge `clients/linear/cli.py` and `clients/linear/client.py` source. That would shift the commit-hygiene problem from "noisy diff" to "tracked artifact stale" — net worse.
+
+**Conflict between gate recommendation and project convention**: The gate is correct that pyc files are review-noise; the project convention is that they are tracked. If the project wants pyc files untracked going forward, that is a separate WU (delete `clients/__pycache__` and `clients/linear/__pycache__` from tracking; add `__pycache__/` to `.gitignore`; ship in a standalone PR). Doing so under ACR-130 would be drive-by per the justification gate's anti-scope test.
+
+**Other Phase 8 gates**: test-audit LOW, multi-concern LOW, justification LOW. The MEDIUM is purely the pyc-tracking convention disagreement.
+
+**Evidence**:
+- Gate report: `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/risk/acr-130-commit-hygiene.md` § "Recommended Action".
+- origin/master tree: `git ls-tree origin/master clients/__pycache__` returns `040000 tree f87cd568a188c63f9f329abd3276f17c36dfd0a0 clients/__pycache__`.
+- Branch HEAD: `0ce06e5 ACR-130: routine Linear status transitions are manager-owned (#NN)`.
+
+## D-2026-05-08k — ACR-130 Phase 8 justification gate Tier-1 retry (shared-session independence violation)
+
+**WU**: ACR-130. **Phase**: 8. **Decision**: Tier-1 retry on the justification gate. Process-tree audit #3 (UUID `32dc42c4-062f-43f3-a71b-7d4972b1755d`) flagged a no-shared-session independence violation: multi-concern (`5afe4796-1608-4c05-adb3-7e24597dd2c1`) and justification (`44d75908-d30c-4dea-b200-3549f881fb16`) shared OULIPOLY session due to agents-CLI session pooling under concurrent claude-opus dispatch. Same recurrence pattern as `D-2026-05-08a` (ACR-5 Phase 4 supported-surface).
+
+**Action**: Re-dispatched justification as fresh invocation `316631c7-2c76-4a0a-9b21-ff026470c5ba` with independent session `cf05b6c3-9f1b-4938-a671-63620667c3c5`; verdict re-confirmed LOW. Updated `phase-8-join-manifest.json` with replacement UUID + new sha256 and recorded supersession.
+
+**Re-running process-tree audit #3** against the refreshed trace.
+
+**Evidence**:
+- Original justification UUID (superseded): `44d75908-d30c-4dea-b200-3549f881fb16`.
+- Replacement UUID: `316631c7-2c76-4a0a-9b21-ff026470c5ba`.
+- Replacement session: `cf05b6c3-9f1b-4938-a671-63620667c3c5`.
+- Updated artifact sha256: `cff0189d0dbec8bcec6e8a6e5b752c488d7e2fe4bf752e9e98ab1bc1acc1d134`.
+- Audit-history sync: this DECISIONS entry records the supersession in lieu of `${planning_dir}/audit-history.md` since the worktree DECISIONS.md is the canonical record for ACR-130.

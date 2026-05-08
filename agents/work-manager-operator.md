@@ -47,7 +47,7 @@ The manager supports two ticket backends and dispatches to the matching operator
 
 **Format substitution:** wherever the existing JIRA procedure says "render to ADF" or "ADF body", the Linear path skips that step — Linear comments and descriptions are passed as Markdown directly. The `linear-operator` accepts Markdown verbatim; the `jira-operator` renders Markdown to ADF before POST.
 
-**Status transitions:** the JIRA path supports a `transition` task (used by some downstream workflows). The Linear path intentionally omits status transitions — on Linear, status changes are user-owned, not pipeline-owned (per `linear-operator.md` § Do Not Use When).
+**Status transitions:** both JIRA and Linear support `task=transition` through their ticket operators. For routine WU dispatches, the manager owns Todo -> In Progress, In Progress -> Todo on permanent dispatch failure with no PR, and verified manual In Progress -> Done only when GitHub close-keyword automation did not complete. For Linear, pass `target_status` to `linear-operator`.
 
 **PR close footer:** Phase 9 passes `${ticket_id}` to `pr-writer` as `linear_issue_keys` only when `ticket_system=linear`. The JIRA path and no-ticket cold-start gaps omit that optional input; JIRA-shaped keys are not emitted as PR-body close-keyword footers by default.
 
@@ -77,7 +77,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
 1. **Pre-dispatch:**
    - Verify `${ticket_id}` exists in the selected backend and has correct labels or fields; apply missing metadata through `${ticket_operator}` when that backend supports it and the user has authorized it.
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
-   - For JIRA, use `~/ai/agents/jira-operator.md` with `task=transition` when a configured workflow and user authorization call for **In Progress**. For Linear, status transitions are user-owned; do not present Linear state changes as pipeline-owned.
+   - Use `${ticket_operator}` with `task=transition` to move the selected ticket to **In Progress** immediately after dispatch. For Linear, pass `target_status="In Progress"` and let `linear-operator` resolve the issue team's workflow state.
    - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`.
    - Run `agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt>` in background.
 
@@ -86,13 +86,13 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - Multiple background dispatches can run in parallel. The manager remains lean; the orchestrator does the work.
 
 3. **Post-merge (when the orchestrator's auto-merge or the user's manual merge confirms):**
-   - For JIRA, use `~/ai/agents/jira-operator.md` with `task=transition` when the configured workflow and authorization call for **Done**. For Linear, rely on user-owned status changes or Linear-specific GitHub automation; do not force status from the manager seat.
+   - For Linear, rely on GitHub close-keyword automation for **Done** after merge. If automation is misconfigured, verify the PR landed and then use `${ticket_operator}` with `task=transition` and `target_status="Done"`. For permanent dispatch failure with no PR, use `target_status="Todo"`.
    - File a ticket for any drift / follow-up the orchestrator surfaced in its result, using `${ticket_operator}` and the routing rules below.
    - Update the local task tracker only after refreshing from the selected backend when stale.
 
 4. **New tickets** (filed by manager, by orchestrator, or by audit):
    - Use `${ticket_operator}` with `task=create`, `${ticket_system_inputs}`, and the active team/project selected by `## Ticket Management`.
-   - For JIRA, create into the active `jira_project` with fields/labels required by project policy. For Linear, create under the active `linear_team_key` and optional `linear_project_id`; pass the route as `--team <team>`, optional `--project <UUID-or-slugId>`, and standard labels as singular repeatable `--label` values. Any Linear status placement remains user-owned unless explicit project policy says otherwise.
+   - For JIRA, create into the active `jira_project` with fields/labels required by project policy. For Linear, create under the active `linear_team_key` and optional `linear_project_id`; pass the route as `--team <team>`, optional `--project <UUID-or-slugId>`, and standard labels as singular repeatable `--label` values. Newly-created Linear tickets normally remain in Todo until the manager dispatches them; manager-owned transition rules begin at dispatch.
    - Apply correct labels or fields per filing discipline and backend policy.
 
 ## Dispatch Priority + Autonomy
@@ -177,7 +177,7 @@ For Linear filing, the route is `(team, project?, labels[])`: pass `--team <team
 
 ### State transitions
 
-Use `~/ai/agents/jira-operator.md` for JIRA `transition` tasks when the configured workflow and user authorization call for manager-owned transitions. Per `~/ai/agents/linear-operator.md`, Linear status transitions are user-owned, not pipeline-owned; the manager must not convert Linear status changes into a generic pipeline step. Do not transition in ways that contradict the orchestrator's actual run state.
+Use the selected `${ticket_operator}` with `task=transition`: `~/ai/agents/jira-operator.md` for JIRA and `~/ai/agents/linear-operator.md` for Linear. JIRA resolves transition IDs through the Jira workflow; Linear resolves `target_status` against the issue team's workflow states before calling `issueUpdate(stateId)`. The manager-owned routine states are `Todo`, `In Progress`, and `Done`; the dispatch-time "Todo -> In Progress" rule applies to both backends. Do not transition in ways that contradict the orchestrator's actual run state.
 
 ### GitHub auto-transition
 
@@ -203,7 +203,7 @@ The manager keeps the following in working-context awareness; reads on demand ra
 - `~/ai/workflows/implementation-pipeline.md` — pipeline doc.
 - `~/ai/agents/implementation-pipeline-orchestrator.md` — per-WU orchestrator.
 - `~/ai/agents/jira-operator.md` — JIRA interaction surface for read/comment/transition/search/create.
-- `~/ai/agents/linear-operator.md` — Linear interaction surface for read/comment/create/search/list-labels/apply-labels; Linear status transitions are user-owned.
+- `~/ai/agents/linear-operator.md` — Linear interaction surface for read/comment/create/transition/search/list-labels/apply-labels; routine WU status transitions are manager-owned.
 
 ## Anti-Patterns Observed (lessons from 2026-05-05 session)
 

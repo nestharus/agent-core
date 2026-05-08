@@ -9,6 +9,7 @@ from clients.linear.cli import (
     get_issue_description,
     main,
     split_plans,
+    transition_issue,
     update_issue,
 )
 from clients.linear.client import LinearClientError
@@ -230,6 +231,151 @@ class TestUpdateIssue:
             mock_client.update_issue.assert_called_once_with(
                 issue_id="NES-123", description="Description from file"
             )
+
+
+class TestTransitionIssue:
+    def test_transition_issue_calls_client_primitive(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        transition_result = {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "beforeStatus": "Todo",
+            "afterStatus": "In Progress",
+            "stateId": "progress-state",
+        }
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.transition_issue.return_value = transition_result
+            mock_client_class.return_value = mock_client
+
+            exit_code = transition_issue(
+                issue_id="ACR-130",
+                target_status="In Progress",
+            )
+
+            assert exit_code is None
+            mock_client.transition_issue.assert_called_once_with(
+                issue_id="ACR-130",
+                target_status="In Progress",
+            )
+            result = stdout_json(capsys)
+            assert result == {"ok": True, "data": transition_result}
+
+    def test_main_transition_issue_command_dispatches_to_wrapper(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        transition_result = {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "beforeStatus": "Todo",
+            "afterStatus": "In Progress",
+            "stateId": "progress-state",
+        }
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.transition_issue.return_value = transition_result
+            mock_client_class.return_value = mock_client
+
+            main(
+                [
+                    "linear",
+                    "transition-issue",
+                    "ACR-130",
+                    "--target-status",
+                    "In Progress",
+                ]
+            )
+
+            mock_client.transition_issue.assert_called_once_with(
+                issue_id="ACR-130",
+                target_status="In Progress",
+            )
+            assert stdout_json(capsys)["ok"] is True
+
+    def test_transition_issue_success_prints_json_envelope(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        transition_result = {
+            "issue_id": "issue-uuid",
+            "identifier": "ACR-130",
+            "beforeStatus": "Todo",
+            "afterStatus": "Done",
+            "stateId": "done-state",
+        }
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.transition_issue.return_value = transition_result
+            mock_client_class.return_value = mock_client
+
+            exit_code = transition_issue(issue_id="ACR-130", target_status="Done")
+
+            assert exit_code is None
+            assert stdout_json(capsys) == {"ok": True, "data": transition_result}
+
+    def test_transition_issue_client_error_propagates_without_catching(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.transition_issue.side_effect = LinearClientError(
+                "INVALID_INPUT",
+                "target_status must be one of the routine manager-owned states",
+            )
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LinearClientError) as exc_info:
+                transition_issue(
+                    issue_id="ACR-130",
+                    target_status="Backlog",
+                )
+
+            assert exc_info.value.code == "INVALID_INPUT"
+            assert "target_status" in exc_info.value.message
+            assert capsys.readouterr().out == ""
+
+    def test_main_transition_issue_client_error_exits_one(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.transition_issue.side_effect = LinearClientError(
+                "INVALID_INPUT",
+                "target_status must be one of the routine manager-owned states",
+            )
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(SystemExit) as exc_info:
+                main(
+                    [
+                        "linear",
+                        "transition-issue",
+                        "ACR-130",
+                        "--target-status",
+                        "Backlog",
+                    ]
+                )
+
+            assert exc_info.value.code == 1
+            result = stdout_json(capsys)
+            assert result["ok"] is False
+            assert result["error"]["code"] == "INVALID_INPUT"
+            assert "target_status" in result["error"]["message"]
+
+    def test_transition_issue_missing_target_status_is_argparse_error(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            main(["linear", "transition-issue", "ACR-130"])
+
+        assert exc_info.value.code == 2
+        result = stdout_json(capsys)
+        assert result["ok"] is False
+        assert result["error"]["code"] == "INVALID_INPUT"
+        assert "--target-status" in result["error"]["message"]
 
 
 class TestMain:
@@ -949,6 +1095,7 @@ Content
             "list-projects",
             "list-labels",
             "create-label",
+            "transition-issue",
             "apply-labels",
             "search-issues",
         ]:

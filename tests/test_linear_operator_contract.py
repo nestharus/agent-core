@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+from clients.linear.client import ROUTINE_MANAGER_OWNED_STATES
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LINEAR_OPERATOR = REPO_ROOT / "agents" / "linear-operator.md"
@@ -16,6 +18,24 @@ def _section(text: str, heading: str) -> str:
     next_heading = re.search(r"(?m)^## ", text[match.end() :])
     end = match.end() + next_heading.start() if next_heading else len(text)
     return text[match.start() : end]
+
+
+def _extract_section(text: str, heading: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(heading)}$", text)
+    assert match, f"missing section heading: {heading}"
+    level = len(heading) - len(heading.lstrip("#"))
+    following = text[match.end() :]
+    next_heading = re.search(rf"(?m)^#{{1,{level}}}\s+", following)
+    if next_heading:
+        return following[: next_heading.start()]
+    return following
+
+
+def _assert_routine_states_are_documented(section: str) -> None:
+    missing = [state for state in ROUTINE_MANAGER_OWNED_STATES if state not in section]
+    assert missing == [], f"Missing routine states in section: {missing}"
+    assert "ROUTINE_MANAGER_OWNED_STATES" in section
+    assert "Backlog" not in section
 
 
 def test_linear_operator_required_inputs_distinguish_team_scoped_from_known_key_tasks():
@@ -103,3 +123,63 @@ def test_linear_operator_does_not_assert_four_heading_brief_contract():
     ]
 
     assert stale_contract_matches == []
+
+
+def test_linear_operator_required_inputs_include_transition_contract() -> None:
+    section = _extract_section(_operator_text(), "## Required Inputs")
+
+    assert "`transition`" in section
+    assert "`target_status`" in section
+    assert "clients.linear.client.ROUTINE_MANAGER_OWNED_STATES" in section
+    _assert_routine_states_are_documented(section)
+
+
+def test_linear_operator_transition_procedure_uses_team_scoped_state_resolution() -> None:
+    section = _extract_section(_operator_text(), "## Procedure: Transition")
+
+    for token in (
+        "transition-issue",
+        "--target-status",
+        "issue.team.id",
+        "workflow states",
+        "exact-match",
+        "issueUpdate",
+        "stateId",
+        "before-status -> after-status",
+    ):
+        assert token in section
+    _assert_routine_states_are_documented(section)
+
+
+def test_linear_operator_transition_stop_conditions_fail_loud() -> None:
+    text = _operator_text()
+    transition_section = _extract_section(text, "## Procedure: Transition")
+    stop_conditions = _extract_section(text, "## Stop Conditions")
+    combined = f"{transition_section}\n{stop_conditions}"
+
+    for token in (
+        "$LINEAR_API_KEY",
+        "unreadable issue",
+        "unknown",
+        "ambiguous",
+        "out-of-contract",
+        "BLOCKED",
+    ):
+        assert token in combined
+
+
+def test_linear_operator_output_contract_includes_transition_summary() -> None:
+    section = _extract_section(_operator_text(), "## Output Contract")
+
+    assert "For `transition`" in section
+    assert "before-status -> after-status" in section
+
+
+def test_linear_operator_rejects_stale_user_owned_transition_contract() -> None:
+    text = _operator_text()
+
+    for phrase in (
+        "Status transitions are user-owned",
+        "Not exposed (user-owned)",
+    ):
+        assert phrase not in text

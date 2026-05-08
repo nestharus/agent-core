@@ -38,6 +38,8 @@ Per `~/ai/models/roles.md` you are `claude-opus`: the judge. You route, dispatch
 ## Optional Inputs
 
 - `jira_issue_key` — if a `Spike` ticket already exists for the prototype, supply it. The orchestrator reads it (for context), comments to it (P3 dossier landed, P4 hand-off complete), and treats it as the parent for spawned-ticket linking. If unset, the prototype is "ticketless" — perfectly valid for early-stage exploration.
+- `linear_issue_key` — Linear equivalent of `jira_issue_key` when the prototype is tracked in Linear.
+- `ticket_system` — `jira` or `linear` when P4 needs to comment through the selected ticket operator. If unset, infer `jira` from `jira_issue_key` and `linear` from `linear_issue_key`.
 - `parent_initiative_epic` — if the prototype is part of an initiative tracked on the JIRA board, the Epic key. Spawned implementation tickets parent under it by default.
 - `defer_source` — when invoked from the implementation-pipeline-orchestrator, the originating WU's `jira_issue_key`. Used to back-link the dossier to the WU that deferred.
 - `roadmap_layer` — when invoked from the roadmap-orchestrator, the layer + artifact path that triggered the prototype. Used to write the layer-update recommendation in the dossier.
@@ -190,8 +192,8 @@ Mechanical. Do not gate.
    - `keep`: `git push origin prototype-${prototype_id}` (if not already pushed). Update spawned tickets to reference the branch by name.
    - `discard`: `git push origin --delete prototype-${prototype_id}`; remove the local worktree (`git worktree remove ${worktree_path}`). The dossier survives in `${planning_dir}/`.
 4. **If `roadmap_layer` was set**: dispatch a roadmap-orchestrator update against the layer's artifact, supplying the dossier as the validation evidence the layer's risk gate was waiting on. The roadmap orchestrator decides whether the layer's risk-gate now clears or whether the dossier surfaces a layer-revision instead.
-5. **If `defer_source` was set**: comment on the deferring WU's JIRA ticket with the dossier summary + spawned-ticket keys + branch disposition. Use `jira-operator` (`task=comment`). Do not transition the deferring WU's status — that's user-owned.
-6. **If `${jira_issue_key}` (the prototype's own ticket, if present) is set**: comment on it with the dossier summary + final answer + spawned-ticket keys. Optionally transition to `Done` if the project's prototype-tickets convention says so.
+5. **If `defer_source` was set**: comment on the deferring WU's ticket with the dossier summary + spawned-ticket keys + branch disposition. Use the selected ticket operator (`task=comment`). Ticket status transitions are manager-owned; the prototype-orchestrator does not move ticket status.
+6. **If the prototype's own ticket is set**: comment on it with the dossier summary + final answer + spawned-ticket keys using the selected ticket operator (`task=comment`). Ticket status transitions remain manager-owned; do not transition the prototype ticket here.
 
 ### Final — Wrap
 

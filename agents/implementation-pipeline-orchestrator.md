@@ -44,7 +44,7 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 
 **Format substitution:** wherever the existing JIRA procedure says "render to ADF" or "ADF body", the Linear path skips that step — Linear comments and descriptions are passed as Markdown directly. The `linear-operator` accepts Markdown verbatim; the `jira-operator` renders Markdown to ADF before POST.
 
-**Status transitions:** the JIRA path supports a `transition` task (used by some downstream workflows). The Linear path intentionally omits status transitions — on Linear, status changes are user-owned, not pipeline-owned (per `linear-operator.md` § Do Not Use When).
+**Status transitions:** ticket status transitions are manager-owned. This orchestrator does not move ticket state during its phases; the work manager moves Todo -> In Progress before or at dispatch and moves In Progress -> Todo only for permanently failed, non-resumable dispatches where no PR was opened. For Linear-backed WUs, Done may come from close-keyword automation after merge; otherwise the manager applies Done through the selected ticket operator per project policy.
 
 **PR close footer:** Phase 9 passes `${ticket_id}` to `pr-writer` as `linear_issue_keys` only when `ticket_system=linear`. The JIRA path and no-ticket cold-start gaps omit that optional input; JIRA-shaped keys are not emitted as PR-body close-keyword footers by default.
 
@@ -399,7 +399,7 @@ This override does NOT replace the Phase 8 audit gates — those still run and a
 
 1. Append the closing entry to `${planning_dir}/audit-history.md`.
 2. If any phase was narrowed, terminated, sent back, or accepted with a residual: append to `${worktree_path}/DECISIONS.md` with WU id, phase, decision, justifying evidence path.
-3. **Comment back to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-final-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a comment body (ADF for JIRA, Markdown for Linear) containing: PR URL, audit-history closing summary, and any decision-tail entries appended in step 2. Dispatch as `agents -m claude-opus`. Do NOT transition the ticket status from this orchestrator — status transitions are user-owned, not pipeline-owned.
+3. **Comment back to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-final-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a comment body (ADF for JIRA, Markdown for Linear) containing: PR URL, audit-history closing summary, and any decision-tail entries appended in step 2. Dispatch as `agents -m claude-opus`. The orchestrator itself does not transition status; routine status transitions are manager-owned. For Linear-backed WUs, Done may come from close-keyword automation after merge; otherwise the manager applies Done through the selected ticket operator per project policy.
 
 ## Violation Detection and Escalation
 

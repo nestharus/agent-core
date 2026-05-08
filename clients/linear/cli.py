@@ -17,7 +17,11 @@ class JsonArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         """Output structured JSON error and exit with code 2."""
-        print(json.dumps({"ok": False, "error": {"code": "INVALID_INPUT", "message": message}}))
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": "INVALID_INPUT", "message": message}}
+            )
+        )
         sys.exit(2)
 
 
@@ -107,7 +111,11 @@ def split_plans(issue_id: str, output_dir: str) -> None:
 
         plans.append({"file": plan_file, "header": header_line})
 
-    print(json.dumps({"ok": True, "data": {"plans": plans, "count": len(plans)}}, indent=2))
+    print(
+        json.dumps(
+            {"ok": True, "data": {"plans": plans, "count": len(plans)}}, indent=2
+        )
+    )
 
 
 def _split_values(values: list[str] | None) -> list[str] | None:
@@ -167,7 +175,9 @@ def create_issue(
         resolved_project_id = client.resolve_project_id(team, project_id)
     label_ids: list[str] | None = None
     if labels:
-        label_ids = client.resolve_label_ids(team, labels, create_missing=create_missing_labels)
+        label_ids = client.resolve_label_ids(
+            team, labels, create_missing=create_missing_labels
+        )
     create_kwargs = {
         "team": team,
         "title": title,
@@ -183,7 +193,9 @@ def create_issue(
         if issue_id:
             readback = client.get_issue(issue_id)
             readback_label_ids = {
-                label.get("id") for label in readback.get("labels", []) if label.get("id")
+                label.get("id")
+                for label in readback.get("labels", [])
+                if label.get("id")
             }
             if any(label_id not in readback_label_ids for label_id in label_ids):
                 client.apply_labels(
@@ -225,6 +237,16 @@ def update_issue(
         update_kwargs["estimate"] = estimate
     issue = client.update_issue(**update_kwargs)
     print(json.dumps({"ok": True, "data": issue}, indent=2))
+
+
+def transition_issue(issue_id: str, target_status: str) -> None:
+    """Transition an issue to a routine manager-owned status."""
+    client = LinearClient()
+    result = client.transition_issue(
+        issue_id=issue_id,
+        target_status=target_status,
+    )
+    print(json.dumps({"ok": True, "data": result}, indent=2))
 
 
 def create_comment(issue_id: str, body: str) -> None:
@@ -302,7 +324,9 @@ def create_label(
 ) -> None:
     """Create a label on a team."""
     client = LinearClient()
-    label = client.create_label(team=team, name=name, color=color, description=description)
+    label = client.create_label(
+        team=team, name=name, color=color, description=description
+    )
     print(json.dumps({"ok": True, "data": label}, indent=2))
 
 
@@ -385,7 +409,7 @@ def list_issues(
     print(json.dumps({"ok": True, "data": issues}, indent=2))
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Parse arguments and dispatch to appropriate command."""
     parser = JsonArgumentParser(
         description="CLI for Linear client operations",
@@ -416,7 +440,9 @@ def main() -> None:
 
     # list-projects command
     list_projects_parser = subparsers.add_parser("list-projects", help="List projects")
-    list_projects_parser.add_argument("--team", help="Team key/name/UUID to scope projects")
+    list_projects_parser.add_argument(
+        "--team", help="Team key/name/UUID to scope projects"
+    )
     list_projects_parser.add_argument(
         "--include-archived",
         action="store_true",
@@ -427,11 +453,15 @@ def main() -> None:
     subparsers.add_parser("list-teams", help="List all teams")
 
     # list-comments command
-    list_comments_parser = subparsers.add_parser("list-comments", help="List comments on an issue")
+    list_comments_parser = subparsers.add_parser(
+        "list-comments", help="List comments on an issue"
+    )
     list_comments_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
 
     # create-issue command
-    create_issue_parser = subparsers.add_parser("create-issue", help="Create a new issue")
+    create_issue_parser = subparsers.add_parser(
+        "create-issue", help="Create a new issue"
+    )
     create_issue_parser.add_argument(
         "--team", required=True, help="Team identifier (UUID, key, or name)"
     )
@@ -455,7 +485,9 @@ def main() -> None:
     )
 
     # update-issue command
-    update_issue_parser = subparsers.add_parser("update-issue", help="Update an issue description")
+    update_issue_parser = subparsers.add_parser(
+        "update-issue", help="Update an issue description"
+    )
     update_issue_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
     update_issue_parser.add_argument("--description", help="New issue description")
     update_issue_parser.add_argument(
@@ -467,6 +499,18 @@ def main() -> None:
         help="Story-point estimate (allowed: 1, 2, 3, 5, 8, 13, 21, 40, 100)",
     )
 
+    # transition-issue command
+    transition_issue_parser = subparsers.add_parser(
+        "transition-issue",
+        help="Transition an issue to a routine manager-owned status",
+    )
+    transition_issue_parser.add_argument("issue_id", help="Issue ID (e.g., ACR-130)")
+    transition_issue_parser.add_argument(
+        "--target-status",
+        required=True,
+        help="Target routine status (Todo, In Progress, or Done)",
+    )
+
     # create-comment command
     create_comment_parser = subparsers.add_parser(
         "create-comment", help="Create a comment on an issue"
@@ -475,16 +519,22 @@ def main() -> None:
     create_comment_parser.add_argument("--body", required=True, help="Comment body")
 
     # get-comment command
-    get_comment_parser = subparsers.add_parser("get-comment", help="Get a comment by title")
+    get_comment_parser = subparsers.add_parser(
+        "get-comment", help="Get a comment by title"
+    )
     get_comment_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
-    get_comment_parser.add_argument("--title", required=True, help="Comment title to search for")
+    get_comment_parser.add_argument(
+        "--title", required=True, help="Comment title to search for"
+    )
 
     # search-issues command
     search_issues_parser = subparsers.add_parser(
         "search-issues",
         help="Search Linear issues by team, title, and labels",
     )
-    search_issues_team_group = search_issues_parser.add_mutually_exclusive_group(required=True)
+    search_issues_team_group = search_issues_parser.add_mutually_exclusive_group(
+        required=True
+    )
     search_issues_team_group.add_argument(
         "--team-key",
         help="Team key or name to resolve before searching",
@@ -552,13 +602,17 @@ def main() -> None:
     )
 
     # list-labels command
-    list_labels_parser = subparsers.add_parser("list-labels", help="List labels on a team")
+    list_labels_parser = subparsers.add_parser(
+        "list-labels", help="List labels on a team"
+    )
     list_labels_parser.add_argument(
         "--team", required=True, help="Team identifier (UUID, key, or name)"
     )
 
     # create-label command
-    create_label_parser = subparsers.add_parser("create-label", help="Create a label on a team")
+    create_label_parser = subparsers.add_parser(
+        "create-label", help="Create a label on a team"
+    )
     create_label_parser.add_argument(
         "--team", required=True, help="Team identifier (UUID, key, or name)"
     )
@@ -601,9 +655,13 @@ def main() -> None:
         "--title", required=True, help="Comment title to match/create"
     )
     upsert_comment_parser.add_argument("--body", help="Comment body")
-    upsert_comment_parser.add_argument("--body-file", help="Path to file containing comment body")
+    upsert_comment_parser.add_argument(
+        "--body-file", help="Path to file containing comment body"
+    )
 
-    args = parser.parse_args()
+    if argv and argv[0] == parser.prog:
+        argv = argv[1:]
+    args = parser.parse_args(argv)
 
     if not args.command:
         available_commands = ", ".join(subparsers.choices)
@@ -649,6 +707,11 @@ def main() -> None:
                 description=args.description,
                 description_file=args.description_file,
                 estimate=args.estimate,
+            )
+        elif args.command == "transition-issue":
+            transition_issue(
+                issue_id=args.issue_id,
+                target_status=args.target_status,
             )
         elif args.command == "create-comment":
             create_comment(issue_id=args.issue_id, body=args.body)
@@ -698,7 +761,9 @@ def main() -> None:
                 replace=args.replace,
             )
     except LinearClientError as e:
-        print(json.dumps({"ok": False, "error": {"code": e.code, "message": e.message}}))
+        print(
+            json.dumps({"ok": False, "error": {"code": e.code, "message": e.message}})
+        )
         sys.exit(1)
 
 
