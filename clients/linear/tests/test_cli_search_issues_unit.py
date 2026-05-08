@@ -281,22 +281,21 @@ def test_main_search_issues_conflicting_team_flags_exits_2(
 
 
 @pytest.mark.parametrize(
-    ("labels_arg", "expected_label_names"),
+    ("label_args", "expected_label_names"),
     [
-        ("a,b,c", ["a", "b", "c"]),
-        (" a, b ,, c ", ["a", "b", "c"]),
-        ("x", ["x"]),
-        (None, None),
+        (["--label", "hardening,Bug"], ["hardening", "Bug"]),
+        (["--label", "hardening", "--label", "Bug"], ["hardening", "Bug"]),
+        (["--label", " a, b ,, c "], ["a", "b", "c"]),
+        (["--label", "x"], ["x"]),
+        ([], None),
     ],
 )
 def test_main_search_issues_labels_normalization(
-    labels_arg: str | None,
+    label_args: list[str],
     expected_label_names: list[str] | None,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    argv = ["linear", "search-issues", "--team-key", "NES"]
-    if labels_arg is not None:
-        argv.extend(["--labels", labels_arg])
+    argv = ["linear", "search-issues", "--team-key", "NES", *label_args]
 
     mock_client, _ = run_main_with_mock_client(argv, capsys)
 
@@ -347,7 +346,7 @@ def test_main_search_issues_help_smoke(capsys: pytest.CaptureFixture[str]) -> No
         "--team-id",
         "--title-contains",
         "--title-starts-with",
-        "--labels",
+        "--label",
         "--include-archived",
         "--first",
     ]:

@@ -543,7 +543,9 @@ def test_acr113_search_issues_resolves_project_and_labels_before_filtering(
     monkeypatch.setattr(
         client, "resolve_project_id", MagicMock(return_value=PROJECT_ID), raising=False
     )
-    monkeypatch.setattr(client, "resolve_label_ids", MagicMock(return_value=["label-hardening"]))
+    monkeypatch.setattr(
+        client, "resolve_label_ids", MagicMock(return_value=["lbl_uuid_abc123"])
+    )
     monkeypatch.setattr(client, "_run_graphql", run_graphql)
 
     client.search_issues(
@@ -562,8 +564,8 @@ def test_acr113_search_issues_resolves_project_and_labels_before_filtering(
     assert variables["filter"] == {
         "team": {"id": {"eq": TEAM_ID}},
         "project": {"id": {"eq": PROJECT_ID}},
-        "labels": {"id": {"in": ["label-hardening"]}},
+        "labels": {"id": {"in": ["lbl_uuid_abc123"]}},
     }
     variables_json = json.dumps(variables)
-    assert "acr-strategy" not in variables_json
-    assert "hardening" not in variables_json
+    assert '"acr-strategy"' not in variables_json
+    assert '"hardening"' not in variables_json
