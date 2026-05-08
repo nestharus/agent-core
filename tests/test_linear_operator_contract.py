@@ -83,3 +83,23 @@ def test_linear_operator_does_not_use_agent_runner_as_active_label_guidance():
     ]
 
     assert active_agent_runner_lines == []
+
+
+def test_linear_operator_does_not_assert_four_heading_brief_contract():
+    """Risk: stale operator prose, four-heading ticket-contract drift; level: structural.
+
+    Source: ACR-110 proposal Test-Intent T1; assumption-register A1/A2/A3.
+    """
+    text = _operator_text()
+
+    stale_contract_pattern = re.compile(
+        r"(?is)(?:MUST\s+contain|validates?\s+that|validation\s+requires|"
+        r"requires\b).{0,240}`Code Boundary`.{0,80}`Test Boundary`.{0,80}"
+        r"`Acceptance Criteria`.{0,80}`Anti-scope`"
+    )
+    stale_contract_matches = [
+        re.sub(r"\s+", " ", match.group(0)).strip()
+        for match in stale_contract_pattern.finditer(text)
+    ]
+
+    assert stale_contract_matches == []
