@@ -2,6 +2,42 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08h — ACR-129 Phase 6 Step 6b regex bug + Step 6c x2 consumption-echo Tier-1 rewinds
+
+**WU**: ACR-129 (jira-operator: customfield_10016 estimate write path lacks Fibonacci validation that Linear path enforces). **Phase**: 6 (test/code separation). **Decision**: `Three Tier-1 rewinds total — one for a Step 6b regex authoring bug, two more for Step 6c consumption-echo gate failures — before clean Step 6c r3 produced consumption-echo + 4/4 ACR-129 tests + 901/901 regression`.
+
+Sequence:
+
+1. **Step 6b round 1** (codex `18c57567-fd13-4cb1-9782-198eed696891`) wrote `tests/test_acr129_jira_operator_estimate_validation.py` using raw f-strings `rf"...{0,200}..."` for regex quantifiers; Python interpolated `{0,200}` as a tuple-format placeholder, which made 2 of 4 assertions impossible to satisfy. Step 6c initial run (`9df608da-6d00-4fa5-9c65-2406a982d4c5`) produced a structurally correct doc edit but pytest reported `2/4` because of the bug, not the doc. Per orchestrator rule "if a test is wrong, revise the contract first then regenerate tests from the revised contract", but here the contract was not at fault — the bug was a regex-syntax authoring error in Step 6b's product. Resolution: `git checkout HEAD -- agents/jira-operator.md` to revert Step 6c, then re-dispatch the test agent with explicit "do not use raw-f-strings for regex quantifiers" instruction. Step 6b retry (codex `34f67897-42be-420f-8202-1cad302d15c8`) regenerated the test file; baseline `0/4 passed; 4/4 failed` against reverted master HEAD as expected.
+2. **Step 6c round 2** (codex `d10d6301-cb5e-4bf2-9c80-4383eb755160`) on the fixed tests produced a correct doc edit (4/4 ACR-129 pass, 901/901 regression pass) but its captured stdout opened with `WROTE:` instead of the two `consumed: <path>` echoes — failing the Step 6c log-echo gate. Same failure mode as the ACR-63 D-2026-05-08d Tier-1 rewind. Resolution: revert + re-dispatch with stricter prompt.
+3. **Step 6c round 3 retry-of-Tier-1** (codex `5688e3f0-bc69-43e2-a27b-bd246affad01`) again summarized at the end and again failed to open with the bare `consumed:` lines — the prompt's FIRST LOG LINE REQUIREMENT was buried among other constraints. Resolution: revert + re-dispatch with the ACR-63 round-2-retry prompt structure (top-of-prompt single-purpose ABSOLUTE FIRST LOG LINE REQUIREMENT section, literal `consumed:` prefix, no markdown links).
+4. **Step 6c round 3 retry-of-Tier-1 second attempt (final)** (codex `462c16d9-0fc9-4b82-8e63-85c683f81b50`) opened with the two required `consumed:` lines, then `WROTE:`, `TESTS_ACR129: 4/4 passed`, `REGRESSION: 901/901 passed; 0 failed`. Consumption-echo gate clean.
+
+**Justifying evidence:**
+
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6b.log` (Step 6b round 1 — buggy regex)
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6c.log` (Step 6c round 1 — 2/4 due to test bug, not impl)
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6b-retry.log` (Step 6b retry — clean)
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6c-retry.log` (Step 6c r2 — substantively correct, no echo)
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6c-tier1.log` (Step 6c r3 first attempt — substantively correct, no echo)
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/acr-129-phase-6c-r3.log` (Step 6c r3 final — clean echo + clean tests + clean regression)
+- `/home/nes/projects/ai/worktrees/acr-129-jira-operator-estimate-validation/DECISIONS.md` § `D-2026-05-08d` (ACR-63 precedent for the same Step 6c log-echo failure mode and resolution)
+
+## D-2026-05-08g — ACR-129 Phase 2.5.4 NEW_DRIFT residual — work-manager status-transition cross-doc inconsistency tracked under ACR-130
+
+**WU**: ACR-129 (jira-operator: customfield_10016 estimate write path lacks Fibonacci validation that Linear path enforces). **Phase**: 2.5.4 (duplicates inventory). **Decision**: `Accept as residual; no new tracker filed because ACR-130 already tracks the resolution from the Linear side`.
+
+The duplicates inventory surfaced one NEW_DRIFT signal: `work-manager-operator.md` (lines 72-96, 178-184) treats JIRA status transitions as manager-authorized when configured workflow + user authorization permit, while `agents/jira-operator.md`, `agents/linear-operator.md`, and `workflows/implementation-pipeline.md` repeatedly call status transitions user-owned (Linear is user-owned per `linear-operator.md:18-23`; the implementation pipeline orchestrator does not transition state from the operator either).
+
+This drift does NOT affect the touched surface of ACR-129 (estimate write path in jira-operator.md). Per the work-manager-operator dispatch, the pre-resolved disposition for mid-pipeline drift is `proceed + note in DECISIONS as residual` (one of the three options enumerated in `~/ai/conventions/risk-profile.md` § Drift). Per the convention, the Blocks link is reserved for divergence that affects the touched surface; this one does not, so no Blocks link is required.
+
+ACR-130 (Linear status transitions documented as user-owned but should be manager/pipeline-owned) is already In Progress and reconciles ownership language across the operator docs from the Linear side. Filing a sibling tracker against ACR-129 would duplicate ACR-130's mandate.
+
+**Justifying evidence:**
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/research/acr-129-duplicates.md` lines 60-69 (NEW_DRIFT statement and recommended-disposition framing)
+- `/home/nes/projects/ai/planning/acr-130-linear-status-manager-owned/.scratch/ticket.md` (existing tracker scope)
+- `~/ai/conventions/risk-profile.md` § "Discoveries during Phase 2.5" (drift convention; Blocks link only when divergence touches surface)
+
 ## D-2026-05-08f — ACR-121 Phase 2.5 step 6 — three scope dispositions narrow the WU
 
 **WU**: ACR-121 (Roadmap Layer 4 ticket-generation-agent emits story-point estimates per ticket). **Phase**: 2.5 step 6 (gate before risk-profile dispatch and Phase 3 proposal). **Decision**: `Three concurrent scope questions answered A/A/A by the user via work-manager-operator updates to the question artifacts, narrowing the WU before Phase 3.
