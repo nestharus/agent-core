@@ -134,6 +134,18 @@ Dispatch a researcher (or self-author) to capture `dossier/challenges.md` — wh
 
 Review what the prototype produced. For each piece of value the prototype demonstrated, propose a downstream ticket. For each high-risk surface, propose a hardening ticket. If the answer was "this approach doesn't work," propose a scope-cut decision. Write these into `dossier/spawned-tickets.md` with: target board, summary, recommended description, parent epic, labels, blocking-vs-related links.
 
+Each spawned-ticket entry also includes:
+
+- `story_point_estimate`: integer selected from `1, 2, 3, 5, 8, 13, 21, 40, 100`, chosen from the prototype evidence as a coarse dossier estimate.
+- `estimate_rationale`: one sentence citing prototype evidence that explains why the estimate fits the spawned-ticket surface.
+- `confidence`: `high | medium | low`, based on how directly the prototype evidence demonstrates the spawned-ticket surface.
+
+Render those fields in each entry as:
+
+- `**Story Point Estimate:** <int from 1, 2, 3, 5, 8, 13, 21, 40, 100>`
+- `**Estimate Rationale:** <one sentence citing prototype evidence>`
+- `**Confidence:** high | medium | low`
+
 #### P3.4 — Proof-test audit (analog of PR-review test-audit)
 
 PR-review's test-audit verifies the test set covers the proposal's test-intent track. Prototypes have no proposal, but they DO have an answer the dossier claims. Proof-test audit verifies the proof tests in `dossier/evidence/` actually demonstrate the answer.
@@ -177,7 +189,7 @@ ONE human gate at the end of P3 — the user reviews the dossier (`answer.md` + 
 
 The prototype produces tickets and updates downstream artifacts. Then it's done.
 
-- **File spawned tickets**: dispatch `jira-operator` (`task=create`) for each entry in `dossier/spawned-tickets.md`. Apply project label conventions (`hardening` for risk-reduction tickets per `~/projects/<name>/AGENTS.md`). Capture each new key + URL in the dossier.
+- **File spawned tickets**: dispatch the project ticket-system operator for each entry in `dossier/spawned-tickets.md`. Jira is the default path: dispatch `jira-operator` (`task=create`) and write the integer `story_point_estimate` to Jira `customfield_10016`. When the ticket-system is Linear, write the integer `story_point_estimate` to the Linear `estimate` field. The rendered ticket description must preserve `Story Point Estimate:`, `Estimate Rationale:`, and `Confidence:` lines from the dossier entry. Apply project label conventions (`hardening` for risk-reduction tickets per `~/projects/<name>/AGENTS.md`). Capture each new key + URL in the dossier.
 - **Update project risk profile**: append the prototype's risk-profile entries to `<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile.
 - **Apply branch disposition**:
   - **merge**: the prototype branch is rare-but-valid feature work. Run it through the implementation pipeline starting at Phase 6 (the test-and-code structure already exists). The dossier is the proposal-equivalent.
@@ -208,6 +220,8 @@ When any of these fire, the orchestrator emits a `NEEDS_INPUT` to the root with 
 - A Layer 3 ai-roadmap decomposes a phase into Work Units. If a WU's contract / parallelizability / schema cannot be named without trying it, a prototype clarifies it. The dossier then drives the WU's eventual ticket and the WU's contract.
 
 The roadmap-orchestrator (when wired to recognize prototype-needs) can dispatch the prototype-orchestrator as a sub-flow. The prototype's dossier is then consumed by the roadmap proposer in the next revision round.
+
+A prototype dispatched from a roadmap layer (Layer 2 or Layer 3 escape hatch) typically produces more spawned-tickets than an implementation-deferred prototype, and many of those tickets land at lower confidence because the surface was being explored, not characterized. That's expected. The dossier's job is to seed the implementation backlog with a coarse but honest estimate; later P3 refinement (Phase 3 of the consumed implementation pipeline) raises confidence per ticket.
 
 ### Implementation pipeline
 

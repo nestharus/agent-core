@@ -118,7 +118,7 @@ P3 is dispatched in three groups: dossier authoring (3 sub-steps; can run in par
 
 #### P3.3 — Spawned-tickets authoring (parallel-safe)
 
-1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-spawned-tickets.md` instructing a `gpt-high` researcher to produce `${planning_dir}/dossier/spawned-tickets.md`. For each piece of value the prototype demonstrated → implementation ticket. For each MEDIUM/HIGH risk-profile axis → hardening ticket (label `hardening` per project `AGENTS.md`). Scope-cut decisions named explicitly. Follow-up prototype tickets when new questions opened up. Each entry: target board, summary, recommended description (markdown), parent epic, labels, blocking-vs-related links to `${jira_issue_key}` / `${defer_source}`.
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-spawned-tickets.md` instructing a `gpt-high` researcher to produce `${planning_dir}/dossier/spawned-tickets.md`. For each piece of value the prototype demonstrated → implementation ticket. For each MEDIUM/HIGH risk-profile axis → hardening ticket (label `hardening` per project `AGENTS.md`). Scope-cut decisions named explicitly. Follow-up prototype tickets when new questions opened up. Each entry: target board, summary, recommended description (markdown), parent epic, labels, blocking-vs-related links to `${jira_issue_key}` / `${defer_source}`, `story_point_estimate`, `estimate_rationale`, and `confidence`. `story_point_estimate` must be an integer from `1, 2, 3, 5, 8, 13, 21, 40, 100`; `estimate_rationale` must be one sentence citing `dossier/evidence/`, `dossier/risk-profile.md`, or `dossier/challenges.md`; `confidence` must be `high | medium | low`.
 2. Dispatch.
 
 #### P3.4 — Finalize `answer.md`
@@ -178,7 +178,7 @@ After 3.5 + 3.6 + 3.7 clear:
 Mechanical. Do not gate.
 
 1. **File spawned tickets.** For each entry in `${planning_dir}/dossier/spawned-tickets.md`:
-   - Compose `${scratch_dir}/prompts/${prototype_id}-p4-jira-create-${entry_id}.md` instructing `jira-operator` (`task=create`). Pass through summary, description (ADF rendered from the markdown), `issuetype` per the entry, `parent` Epic, `labels` (apply `hardening` for risk-reduction tickets per the project's `AGENTS.md` label conventions; pair with routing-area labels).
+   - Compose `${scratch_dir}/prompts/${prototype_id}-p4-jira-create-${entry_id}.md` instructing `jira-operator` (`task=create`) by default. Pass through summary, description (ADF rendered from the markdown), `issuetype` per the entry, `parent` Epic, `labels` (apply `hardening` for risk-reduction tickets per the project's `AGENTS.md` label conventions; pair with routing-area labels), and set Jira `customfield_10016` from the entry's `story_point_estimate`. If the project ticket-system is Linear, compose the equivalent `linear-operator` `task=create` dispatch instead and pass `story_point_estimate` as `--estimate <int>` or `estimate=<int>`. In either backend branch, preserve `Story Point Estimate:`, `Estimate Rationale:`, and `Confidence:` in the rendered description.
    - Dispatch `agents -m claude-opus -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`.
    - Capture the new key + URL.
    - For each link the entry specifies (`Blocks` to `${jira_issue_key}`, `Relates` to `${defer_source}`, etc.), call the JIRA `/issueLink` API. The `jira-operator` doesn't have a native link task — make the API call directly per `~/projects/<name>/AGENTS.md` § Link types reference.
