@@ -305,6 +305,49 @@ Content
             assert result["ok"] is True
             assert result["data"]["projects"] == mock_projects
 
+    def test_list_projects_without_team_keeps_workspace_scope(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: hidden client capability at CLI boundary; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T3 and assumptions A2/A3.
+        """
+        mock_projects = [{"id": "proj-1", "name": "Workspace Project"}]
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.list_projects.return_value = mock_projects
+            mock_client_class.return_value = mock_client
+
+            with patch.object(sys, "argv", ["linear", "list-projects"]):
+                main()
+
+            mock_client.list_projects.assert_called_once_with(team_id=None)
+            result = json.loads(capsys.readouterr().out)
+            assert result["ok"] is True
+            assert result["data"]["projects"] == mock_projects
+
+    def test_list_projects_with_team_forwards_team_key(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: hidden client capability at CLI boundary; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T3 and assumptions A2/A3.
+        """
+        mock_projects = [{"id": "proj-ast", "name": "AST Project"}]
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.list_projects.return_value = mock_projects
+            mock_client_class.return_value = mock_client
+
+            with patch.object(sys, "argv", ["linear", "list-projects", "--team", "AST"]):
+                main()
+
+            mock_client.list_projects.assert_called_once_with(team_id="AST")
+            result = json.loads(capsys.readouterr().out)
+            assert result == {"ok": True, "data": {"projects": mock_projects}}
+
     def test_list_teams_command(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should call list_teams."""
         mock_teams = [{"id": "team-1", "name": "Team 1"}]
@@ -321,6 +364,109 @@ Content
             result = json.loads(captured.out)
             assert result["ok"] is True
             assert result["data"]["teams"] == mock_teams
+
+    def test_list_labels_forwards_ast_team(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mock_labels = [{"id": "label-x", "name": "hardening"}]
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.list_labels.return_value = mock_labels
+            mock_client_class.return_value = mock_client
+
+            with patch.object(sys, "argv", ["linear", "list-labels", "--team", "AST"]):
+                main()
+
+            mock_client.list_labels.assert_called_once_with(team="AST")
+            assert json.loads(capsys.readouterr().out) == {
+                "ok": True,
+                "data": mock_labels,
+            }
+
+    def test_create_label_forwards_ast_team_and_label_fields(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mock_label = {"id": "label-x", "name": "hardening"}
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.create_label.return_value = mock_label
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "create-label",
+                    "--team",
+                    "AST",
+                    "--name",
+                    "hardening",
+                    "--color",
+                    "#abc",
+                    "--description",
+                    "Coverage label",
+                ],
+            ):
+                main()
+
+            mock_client.create_label.assert_called_once_with(
+                team="AST",
+                name="hardening",
+                color="#abc",
+                description="Coverage label",
+            )
+            assert json.loads(capsys.readouterr().out)["data"] == mock_label
+
+    def test_apply_labels_forwards_ast_team_and_merge_flags(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mock_result = {"id": "issue-uuid", "labels": [{"id": "label-x"}]}
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.apply_labels.return_value = mock_result
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "apply-labels",
+                    "AST-12",
+                    "--team",
+                    "AST",
+                    "--labels",
+                    "hardening,prereq",
+                    "--create-missing",
+                    "--replace",
+                ],
+            ):
+                main()
+
+            mock_client.apply_labels.assert_called_once_with(
+                issue_id="AST-12",
+                team="AST",
+                label_names=["hardening", "prereq"],
+                create_missing=True,
+                replace=True,
+            )
+            assert json.loads(capsys.readouterr().out)["data"] == mock_result
 
     def test_list_comments_command(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should call list_comments with issue_id argument."""
@@ -374,6 +520,133 @@ Content
             captured = capsys.readouterr()
             result = json.loads(captured.out)
             assert result["ok"] is True
+
+    def test_create_issue_ast_without_labels_does_not_resolve_or_default_labels(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: NES default + agent-runner routing in CLI; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T7 and assumptions A2/A6/A7.
+        """
+        mock_issue = {"id": "uuid", "identifier": "AST-124", "title": "T"}
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.create_issue.return_value = mock_issue
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "create-issue",
+                    "--team",
+                    "AST",
+                    "--title",
+                    "T",
+                    "--description",
+                    "D",
+                ],
+            ):
+                main()
+
+            mock_client.resolve_label_ids.assert_not_called()
+            mock_client.create_issue.assert_called_once_with(
+                team="AST",
+                title="T",
+                description="D",
+                project_id=None,
+                label_ids=None,
+            )
+            assert json.loads(capsys.readouterr().out)["ok"] is True
+
+    def test_create_issue_ast_labels_resolve_before_create(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: NES default + agent-runner routing in CLI; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T7 and assumptions A2/A6/A7.
+        """
+        mock_issue = {"id": "uuid", "identifier": "AST-125", "title": "T"}
+
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.resolve_label_ids.return_value = ["label-x", "label-y"]
+            mock_client.create_issue.return_value = mock_issue
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "create-issue",
+                    "--team",
+                    "AST",
+                    "--title",
+                    "T",
+                    "--description",
+                    "D",
+                    "--labels",
+                    "x, y",
+                    "--create-missing-labels",
+                ],
+            ):
+                main()
+
+            mock_client.resolve_label_ids.assert_called_once_with(
+                "AST",
+                ["x", "y"],
+                create_missing=True,
+            )
+            mock_client.create_issue.assert_called_once_with(
+                team="AST",
+                title="T",
+                description="D",
+                project_id=None,
+                label_ids=["label-x", "label-y"],
+            )
+            assert json.loads(capsys.readouterr().out)["ok"] is True
+
+    def test_no_command_error_lists_issue_and_project_list_commands(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: parser/help drift across command set; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T10 and assumptions A2/A5.
+        """
+        with (
+            patch.object(sys, "argv", ["linear"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code != 0
+        result = json.loads(capsys.readouterr().out)
+        assert result["ok"] is False
+        assert result["error"]["code"] == "INVALID_INPUT"
+        assert "list-issues" in result["error"]["message"]
+        assert "list-projects" in result["error"]["message"]
+
+    def test_list_issues_without_team_exits_with_team_required_error(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Risk: parser/help drift across command set; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T10 and assumptions A2/A5.
+        """
+        with (
+            patch.object(sys, "argv", ["linear", "list-issues"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+        result = json.loads(capsys.readouterr().out)
+        assert result["ok"] is False
+        assert result["error"]["code"] == "INVALID_INPUT"
+        assert "--team" in result["error"]["message"]
 
     def test_update_issue_command(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should call update_issue with issue_id and description."""

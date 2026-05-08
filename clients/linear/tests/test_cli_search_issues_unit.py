@@ -21,6 +21,18 @@ ISSUE_FIXTURE = [
     }
 ]
 
+AST_ISSUE_FIXTURE = [
+    {
+        "id": "ast-issue-uuid",
+        "identifier": "AST-42",
+        "title": "AST scoped issue",
+        "url": "https://linear.app/acme/issue/AST-42/ast-scoped-issue",
+        "state": {"id": "state-uuid", "name": "Todo", "type": "unstarted"},
+        "team": {"id": "ast-team-uuid", "key": "AST", "name": "AST"},
+        "labels": [{"id": "label-uuid", "name": "hardening"}],
+    }
+]
+
 
 def patched_client(search_result: list[dict[str, object]] | None = None) -> MagicMock:
     mock_client = MagicMock()
@@ -108,6 +120,112 @@ def test_main_search_issues_success(capsys: pytest.CaptureFixture[str]) -> None:
         first=50,
     )
     assert result == {"ok": True, "data": ISSUE_FIXTURE}
+
+
+def test_main_list_issues_team_key_success(capsys: pytest.CaptureFixture[str]) -> None:
+    """Risk: accepted command gap; level: unit.
+
+    Source: ACR-22 proposal Test-Intent T4 and assumptions A2/A4/A5.
+    """
+    mock_client, result = run_main_with_mock_client(
+        ["linear", "list-issues", "--team", "AST"],
+        capsys,
+        AST_ISSUE_FIXTURE,
+    )
+
+    mock_client.search_issues.assert_called_once_with(
+        team_key="AST",
+        include_archived=False,
+        first=50,
+    )
+    assert result == {"ok": True, "data": AST_ISSUE_FIXTURE}
+
+
+def test_main_list_issues_forwards_first_and_include_archived(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Risk: accepted command gap; level: unit.
+
+    Source: ACR-22 proposal Test-Intent T4 and assumptions A2/A4/A5.
+    """
+    mock_client, result = run_main_with_mock_client(
+        [
+            "linear",
+            "list-issues",
+            "--team",
+            "AST",
+            "--first",
+            "25",
+            "--include-archived",
+        ],
+        capsys,
+        AST_ISSUE_FIXTURE,
+    )
+
+    mock_client.search_issues.assert_called_once_with(
+        team_key="AST",
+        include_archived=True,
+        first=25,
+    )
+    assert result["ok"] is True
+
+
+def test_main_list_issues_missing_team_exits_2(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Risk: accepted command gap; level: unit.
+
+    Source: ACR-22 proposal Test-Intent T4 and assumptions A2/A4/A5.
+    """
+    with (
+        patch.object(sys, "argv", ["linear", "list-issues"]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        cli.main()
+
+    assert exc_info.value.code == 2
+    result = stdout_json(capsys)
+    assert result["ok"] is False
+    assert result["error"]["code"] == "INVALID_INPUT"
+    assert "--team" in result["error"]["message"]
+
+
+def test_search_issues_preserves_rich_filter_command_contract(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Risk: regression of existing search command; level: unit.
+
+    Source: ACR-22 proposal Test-Intent T5 and assumption A5.
+    """
+    mock_client, result = run_main_with_mock_client(
+        [
+            "linear",
+            "search-issues",
+            "--team-key",
+            "AST",
+            "--title-contains",
+            "routing",
+            "--title-starts-with",
+            "AST-",
+            "--labels",
+            "hardening,prereq",
+            "--first",
+            "20",
+        ],
+        capsys,
+        AST_ISSUE_FIXTURE,
+    )
+
+    mock_client.search_issues.assert_called_once_with(
+        team_key="AST",
+        team_id=None,
+        title_contains="routing",
+        title_starts_with="AST-",
+        label_names=["hardening", "prereq"],
+        include_archived=False,
+        first=20,
+    )
+    assert result == {"ok": True, "data": AST_ISSUE_FIXTURE}
 
 
 def test_main_search_issues_linear_client_error(capsys: pytest.CaptureFixture[str]) -> None:

@@ -889,3 +889,7 @@ The future-WU mitigation (NOT this WU's scope): make the orchestrator explicitly
 **Justifying evidence:** Phase 6 process-tree audit report path above.
 
 **Rationale:** No commit pre-existed on the branch; rewind was a worktree-level discard, not a `git reset`.
+
+## D-2026-05-07-acr-22-phase-6c-rewind
+
+Tier-1 rewind during ACR-22 Phase 6c. Process-tree audit #2 returned BLOCKING because Step 6c invocation `0edf49a3-d32c-49e1-b801-98f506cfa045` did not echo `READ_STEP6B_INDEX` / `READ_TEST_FILE` evidence (workflow rule: implementation-pipeline.md § Phase 6 step 6c log echo requirement). Empirical test pass + WROTE_CODE summary were context only, not sufficient evidence. Restored product files to pre-6c state via `git restore --staged --worktree`, retained Phase 6b test files, revised 6c prompt to force read echoes into stdout, re-dispatching Step 6c. Audit-history reference: `D-2026-05-07-02` in `~/projects/ai/planning/acr-22-linear-team-aware/audit-history.md`. Old audit report at `~/projects/ai/planning/acr-22-linear-team-aware/risk/acr-22-phase-6-process-tree-audit.md` superseded by next audit invocation.

@@ -34,13 +34,13 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 | JIRA (Atlassian) | `jira_issue_key` | `~/ai/agents/jira-operator.md` (claude-opus) | ADF JSON |
 | Linear | `linear_issue_key` | `~/ai/agents/linear-operator.md` (claude-opus) | Markdown native |
 
-**Detection rule:** if `jira_issue_key` (or `wu_brief_path` with `ticket_system=jira`) is provided, all ticket dispatches use `jira-operator` and JIRA inputs (`jira_url`, `jira_project`, `jira_account_email`). If `linear_issue_key` (or `wu_brief_path` with `ticket_system=linear`) is provided, all ticket dispatches use `linear-operator` and Linear inputs (`linear_team_key`, optional `linear_project_id`). Exactly one system must be selected per WU; cross-system handoff is not supported within a single WU.
+**Detection rule:** if both `jira_issue_key` and `linear_issue_key` are supplied, return `BLOCKED:exactly-one-ticket-system-required`. Otherwise, if `jira_issue_key` (or `wu_brief_path` with `ticket_system=jira`) is provided, all ticket dispatches use `jira-operator` and JIRA inputs (`jira_url`, `jira_project`, `jira_account_email`). If `linear_issue_key` (or `wu_brief_path` with `ticket_system=linear`) is provided, all ticket dispatches use `linear-operator` and Linear inputs (`linear_team_key`, optional `linear_project_id`). `linear_team_key` is passed through for team-scoped create, list, and search linear-operator dispatches. `linear_project_id`, when supplied, is passed through only to create dispatches that should associate the new issue with a project. Known-issue-key read/comment dispatches do not require separate team selection because the issue identifier carries the team identity. Exactly one system must be selected per WU; cross-system handoff is not supported within a single WU.
 
 **Shorthand used in this doc:**
 
 - `${ticket_operator}` = `jira-operator` (JIRA) or `linear-operator` (Linear).
 - `${ticket_id}` = `${jira_issue_key}` (JIRA) or `${linear_issue_key}` (Linear).
-- `${ticket_system_inputs}` = `jira_url, jira_project, jira_account_email` (JIRA) or `linear_team_key[, linear_project_id]` (Linear).
+- `${ticket_system_inputs}` = `jira_url, jira_project, jira_account_email` (JIRA) or `linear_team_key[, linear_project_id for create]` (Linear).
 
 **Format substitution:** wherever the existing JIRA procedure says "render to ADF" or "ADF body", the Linear path skips that step — Linear comments and descriptions are passed as Markdown directly. The `linear-operator` accepts Markdown verbatim; the `jira-operator` renders Markdown to ADF before POST.
 
@@ -51,7 +51,7 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 ## Required Inputs
 
 - One of `jira_issue_key` OR `linear_issue_key` — the issue key on the project's chosen ticket site. The orchestrator dispatches `${ticket_operator}` (`task=read`) at bootstrap to fetch the ticket and renders the description into `${scratch_dir}/ticket.md`. **Tickets live on the ticket system, not on disk.** The orchestrator does not read or write any `plans/tickets/**` file. If neither key is supplied, `wu_brief_path` must be present so Phase 0 can draft the ticket via `${ticket_operator}` (`task=create`) before continuing; in that case the caller must also supply `ticket_system` (`jira` or `linear`) so the orchestrator knows which backend to address.
-- The JIRA path additionally requires `jira_url`, `jira_project`, `jira_account_email` (passed through to every `jira-operator` dispatch). The Linear path additionally requires `linear_team_key` (and optionally `linear_project_id`) (passed through to every `linear-operator` dispatch).
+- The JIRA path additionally requires `jira_url`, `jira_project`, `jira_account_email` (passed through to every `jira-operator` dispatch). The Linear path additionally requires `linear_team_key` for team-scoped create/list/search dispatches. `linear_project_id` is optional and is passed only to create dispatches that should attach the new issue to a project. Known-issue-key read/comment dispatches do not require separate team selection.
 - `repo_root` — absolute path to the project repo root.
 - `worktree_path` — absolute path to the per-WU worktree. Default placement depends on the project's layout (see `~/ai/conventions/project-layout.md`):
   - Single-repo projects: `<repo_root>/worktrees/impl-<wu_lower>` or `~/projects/<name>/worktrees/<branch>/`.
@@ -114,7 +114,7 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 
 ### Phase 0 — Bootstrap
 
-1. Resolve inputs. Detect the ticket system per the Ticket System Pluggability table: if `jira_issue_key` is provided, set `ticket_system=jira`, `ticket_operator=jira-operator`, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If `linear_issue_key` is provided, set `ticket_system=linear`, `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input.
+1. Resolve inputs. Detect the ticket system per the Ticket System Pluggability table: if both `jira_issue_key` and `linear_issue_key` are provided, return `BLOCKED:exactly-one-ticket-system-required`. If only `jira_issue_key` is provided, set `ticket_system=jira`, `ticket_operator=jira-operator`, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If only `linear_issue_key` is provided, set `ticket_system=linear`, `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input.
 2. `mkdir -p ${scratch_dir}/{prompts,logs,phase6,questions}`.
 3. **Draft the ticket if cold-starting.** When `ticket_id` is unset:
    - Compose `${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-create.md` instructing `${ticket_operator}` to perform `task=create`.
