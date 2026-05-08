@@ -16,6 +16,9 @@ from typing import Any, cast
 
 LINEAR_API_URL = "https://api.linear.app/graphql"
 ALLOWED_ESTIMATES = {1, 2, 3, 5, 8, 13, 21, 40, 100}
+ROUTINE_MANAGER_OWNED_STATES: frozenset[str] = frozenset(
+    {"Todo", "In Progress", "Done"}
+)
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -190,8 +193,12 @@ class LinearClient:
                 for err in errors
                 if isinstance(err, dict) and (message := err.get("message"))
             ]
-            joined_messages = "; ".join(error_messages) if error_messages else "Unknown error"
-            raise LinearClientError("GRAPHQL_ERROR", f"Linear API error: {joined_messages}")
+            joined_messages = (
+                "; ".join(error_messages) if error_messages else "Unknown error"
+            )
+            raise LinearClientError(
+                "GRAPHQL_ERROR", f"Linear API error: {joined_messages}"
+            )
 
         return result
 
@@ -997,7 +1004,9 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
 }
 """
         query = (
-            query_with_team_filter if resolved_team_id is not None else query_without_team_filter
+            query_with_team_filter
+            if resolved_team_id is not None
+            else query_without_team_filter
         )
 
         while True:
@@ -1041,7 +1050,9 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
         """Resolve a Linear project UUID or slugId within a team's visible projects."""
         token = project.strip()
         if not token:
-            raise LinearClientError("NOT_FOUND", "Project not found: empty project token")
+            raise LinearClientError(
+                "NOT_FOUND", "Project not found: empty project token"
+            )
 
         projects = self.list_projects(team_id=team, include_archived=include_archived)
         matches: list[dict[str, Any]] = []
@@ -1051,11 +1062,15 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
             matches = [p for p in projects if p.get("slugId") == token]
 
         if not matches:
-            raise LinearClientError("NOT_FOUND", f"Project not found for team {team}: {project}")
+            raise LinearClientError(
+                "NOT_FOUND", f"Project not found for team {team}: {project}"
+            )
 
         distinct_ids = {str(match.get("id")) for match in matches if match.get("id")}
         if not distinct_ids:
-            raise LinearClientError("NOT_FOUND", f"Project not found for team {team}: {project}")
+            raise LinearClientError(
+                "NOT_FOUND", f"Project not found for team {team}: {project}"
+            )
         if len(distinct_ids) > 1:
             raise LinearClientError(
                 "AMBIGUOUS_PROJECT",
@@ -1244,7 +1259,183 @@ query($teamId: String!) {
                 )
             return str(state_id)
 
-        raise LinearClientError("NOT_FOUND", f"No 'Done' state found for team {team_id}")
+        raise LinearClientError(
+            "NOT_FOUND", f"No 'Done' state found for team {team_id}"
+        )
+
+    def list_workflow_states(self, team_id: str) -> list[dict[str, Any]]:
+        """List the workflow states for a team."""
+        query = """
+query($teamId: String!) {
+  team(id: $teamId) {
+    states {
+      nodes {
+        id
+        name
+        type
+      }
+    }
+  }
+}
+"""
+        result = self._run_graphql(query, {"teamId": team_id})
+        team = result.get("data", {}).get("team")
+        if team is None:
+            raise LinearClientError("NOT_FOUND", f"Team not found: {team_id}")
+        if not isinstance(team, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear team response must be an object: {team_id}",
+            )
+        states_payload = team.get("states")
+        if not isinstance(states_payload, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Workflow states missing for team: {team_id}",
+            )
+        states = states_payload.get("nodes", [])
+        if not isinstance(states, list):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Workflow states missing for team: {team_id}",
+            )
+        if not all(isinstance(state, dict) for state in states):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Workflow state entries must be objects for team: {team_id}",
+            )
+        return cast(list[dict[str, Any]], states)
+
+    def resolve_workflow_state_id_for_issue(
+        self, issue_id: str, target_status: str
+    ) -> dict[str, Any]:
+        """Resolve a routine target status to a state ID on the issue's team."""
+        normalized_target = target_status.strip()
+        if not normalized_target:
+            raise LinearClientError(
+                "INVALID_INPUT",
+                "target_status must not be blank",
+            )
+        if normalized_target not in ROUTINE_MANAGER_OWNED_STATES:
+            allowed = ", ".join(sorted(ROUTINE_MANAGER_OWNED_STATES))
+            raise LinearClientError(
+                "INVALID_INPUT",
+                f"target_status must be one of the routine manager-owned states: {allowed}",
+            )
+
+        query = """
+query($issueId: String!) {
+  issue(id: $issueId) {
+    id
+    identifier
+    state {
+      id
+      name
+      type
+    }
+    team {
+      id
+      key
+      name
+    }
+  }
+}
+"""
+        result = self._run_graphql(query, {"issueId": issue_id})
+        issue = result.get("data", {}).get("issue")
+        if issue is None:
+            raise LinearClientError("NOT_FOUND", f"Issue not found: {issue_id}")
+        if not isinstance(issue, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear issue response must be an object: {issue_id}",
+            )
+
+        team = issue.get("team") or {}
+        if not isinstance(team, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear issue response field team must be an object: {issue_id}",
+            )
+        team_id = team.get("id")
+        if not team_id:
+            raise LinearClientError(
+                "NOT_FOUND",
+                f"Issue has no owning team: {issue_id}",
+            )
+        resolved_issue_id = issue.get("id")
+        if not resolved_issue_id:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear issue response missing required field: id for {issue_id}",
+            )
+
+        state = issue.get("state")
+        if state is not None and not isinstance(state, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear issue response field state must be an object or null: {issue_id}",
+            )
+        state = state or {}
+        if state and not state.get("id"):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Linear issue response missing required field: state.id for {issue_id}",
+            )
+        matches = [
+            workflow_state
+            for workflow_state in self.list_workflow_states(str(team_id))
+            if workflow_state.get("name") == normalized_target
+        ]
+        if not matches:
+            raise LinearClientError(
+                "NOT_FOUND",
+                f"No workflow state named {normalized_target!r} on issue team {team_id}",
+            )
+        if len(matches) > 1:
+            raise LinearClientError(
+                "AMBIGUOUS_STATE",
+                f"Multiple workflow states named {normalized_target!r} on issue team {team_id}",
+            )
+        target_state = matches[0]
+        resolved_target_state_id = target_state.get("id")
+        if not resolved_target_state_id:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                f"Workflow state missing required field: id for team {team_id}",
+            )
+        return {
+            "issue_id": resolved_issue_id,
+            "identifier": issue.get("identifier"),
+            "team_id": team_id,
+            "before_state_id": state.get("id"),
+            "before_state_name": state.get("name"),
+            "target_state_id": resolved_target_state_id,
+            "target_state_name": target_state.get("name"),
+        }
+
+    def transition_issue(self, issue_id: str, target_status: str) -> dict[str, Any]:
+        """Perform a routine manager-owned status transition."""
+        resolved = self.resolve_workflow_state_id_for_issue(issue_id, target_status)
+        target_state_id = resolved.get("target_state_id")
+        if not target_state_id:
+            raise LinearClientError(
+                "NOT_FOUND",
+                f"No workflow state ID resolved for issue: {issue_id}",
+            )
+
+        if resolved.get("before_state_id") != target_state_id:
+            self.update_issue(
+                issue_id=str(resolved["issue_id"]),
+                state_id=str(target_state_id),
+            )
+        return {
+            "issue_id": resolved["issue_id"],
+            "identifier": resolved["identifier"],
+            "beforeStatus": resolved["before_state_name"],
+            "afterStatus": resolved["target_state_name"],
+            "stateId": target_state_id,
+        }
 
     def set_ticket_state(self, issue_uuid: str, state_id: str) -> dict[str, Any]:
         """Update a Linear ticket's state.
@@ -1276,7 +1467,9 @@ mutation($issueId: String!, $stateId: String!) {
         result = self._run_graphql(mutation, variables)
         issue_update = result.get("data", {}).get("issueUpdate", {})
         if not issue_update.get("success"):
-            raise LinearClientError("API_ERROR", f"Failed to update state for issue: {issue_uuid}")
+            raise LinearClientError(
+                "API_ERROR", f"Failed to update state for issue: {issue_uuid}"
+            )
         return {"stateName": issue_update.get("issue", {}).get("state", {}).get("name")}
 
     def update_comment(self, comment_id: str, body: str) -> dict[str, Any]:
@@ -1616,7 +1809,9 @@ query IssueUnresolvedComments($id: String!, $after: String) {
         if project:
             project_id = self.resolve_project_id(team_token, project)
             issue_filter["project"] = {"id": {"eq": project_id}}
-        normalized_label_names = [name.strip() for name in label_names or [] if name.strip()]
+        normalized_label_names = [
+            name.strip() for name in label_names or [] if name.strip()
+        ]
         if normalized_label_names:
             label_ids = self.resolve_label_ids(
                 team_token,
@@ -1790,7 +1985,9 @@ mutation IssueLabelCreate($input: IssueLabelCreateInput!) {
             if not name or not label_id:
                 continue
             tier = "team" if label.get("team") else "workspace"
-            labels_by_name.setdefault(name, {"team": [], "workspace": []})[tier].append(label_id)
+            labels_by_name.setdefault(name, {"team": [], "workspace": []})[tier].append(
+                label_id
+            )
 
         existing: dict[str, str] = {}
         for name, tiers in labels_by_name.items():
@@ -1860,7 +2057,9 @@ query($id: String!) {
         issue = (label_result.get("data") or {}).get("issue")
         if not isinstance(issue, dict) or not issue:
             raise LinearClientError("NOT_FOUND", f"Issue not found: {issue_id}")
-        issue_team_id = ((issue.get("team") or {}).get("id")) if isinstance(issue, dict) else None
+        issue_team_id = (
+            ((issue.get("team") or {}).get("id")) if isinstance(issue, dict) else None
+        )
         if issue_team_id != team_id:
             raise LinearClientError(
                 "INVALID_INPUT",

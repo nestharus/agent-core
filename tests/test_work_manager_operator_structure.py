@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+from clients.linear.client import ROUTINE_MANAGER_OWNED_STATES
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORK_MANAGER = REPO_ROOT / "agents" / "work-manager-operator.md"
@@ -185,15 +187,34 @@ def test_ticket_format_substitution_names_adf_and_markdown():
     )
 
 
-def test_linear_status_transition_omission_is_user_owned():
+def test_linear_status_transitions_are_manager_owned_for_dispatch_and_failure():
     text = _operator_text()
+    text_lower = text.lower()
 
+    assert "linear path intentionally omits status transitions" not in text_lower
+    assert "status changes are user-owned" not in text_lower
+    _assert_contains(text, "Work Manager operator", "manager owns")
+    _assert_contains(text, "Work Manager operator", "task=transition")
+    _assert_contains(text, "Work Manager operator", "target_status")
+    for state in ROUTINE_MANAGER_OWNED_STATES:
+        _assert_contains(text, "Work Manager operator", state)
     _assert_matches(
         text,
         "Work Manager operator",
-        r"(?is)\bstatus\b[\s\S]{0,240}\buser-owned\b|"
-        r"\buser-owned\b[\s\S]{0,240}\bstatus\b",
-        "Linear status transitions are user-owned",
+        r"Todo\s*(?:->|\u2192|to)\s*In Progress",
+        "dispatch Todo to In Progress transition",
+    )
+    _assert_matches(
+        text,
+        "Work Manager operator",
+        r"In Progress\s*(?:->|\u2192|back to)\s*Todo",
+        "permanent dispatch failure rollback transition",
+    )
+    _assert_matches(
+        text,
+        "Work Manager operator",
+        r"(?is)In Progress\s*(?:->|\u2192|to)\s*Done[\s\S]{0,240}(GitHub|automation|manual)",
+        "manual Done override for GitHub automation gap",
     )
 
 
@@ -224,18 +245,17 @@ def test_labels_section_uses_active_team_or_backend_aware_wording():
     ) or "active project" in section
 
 
-def test_state_transitions_reference_both_operators_and_linear_user_owned_rule():
+def test_state_transitions_reference_both_operators_and_manager_owned_linear_rule():
     section = _extract_section(_operator_text(), "### State transitions")
 
     _assert_contains(section, "State transitions", "jira-operator.md")
     _assert_contains(section, "State transitions", "linear-operator.md")
-    _assert_matches(
-        section,
-        "State transitions",
-        r"(?is)\bstatus\b[\s\S]{0,240}\buser-owned\b|"
-        r"\buser-owned\b[\s\S]{0,240}\bstatus\b",
-        "Linear status transitions are user-owned",
-    )
+    _assert_contains(section, "State transitions", "task=transition")
+    _assert_contains(section, "State transitions", "target_status")
+    _assert_contains(section, "State transitions", "issueUpdate(stateId)")
+    for state in ROUTINE_MANAGER_OWNED_STATES:
+        _assert_contains(section, "State transitions", state)
+    assert "user-owned" not in section.lower()
 
 
 def test_github_auto_transition_is_linear_specific_without_generic_nes_example():

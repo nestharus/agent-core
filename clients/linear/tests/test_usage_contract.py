@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from clients.linear.client import ROUTINE_MANAGER_OWNED_STATES
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 USAGE = REPO_ROOT / "clients" / "linear" / "USAGE.yml"
@@ -50,3 +52,36 @@ def test_acr113_usage_rejects_stale_linear_wrapper_references() -> None:
     ]
     for token in forbidden:
         assert token not in text
+
+
+def test_acr130_usage_documents_transition_issue_command_and_flag() -> None:
+    """ACR-130: USAGE.yml mirrors the manager-owned Linear transition command."""
+    text = _usage_text()
+
+    assert "transition-issue" in text
+    assert "--target-status" in text
+    assert "Manager-owned routine status transition" in text
+    assert "ACR-130" in text
+
+
+def test_acr130_usage_transition_routine_states_match_client_constant() -> None:
+    """ACR-130: documented routine states stay locked to the client constant."""
+    text = _usage_text()
+    transition_index = text.find("transition_issue:")
+    assert transition_index != -1, "usage must include transition_issue"
+    routine_states_index = text.find("routine_states:", transition_index)
+    assert routine_states_index != -1, "transition usage must include routine_states"
+
+    following = text[routine_states_index:].splitlines()[1:]
+    documented_states = []
+    for line in following:
+        if not line.startswith(" ") or (
+            documented_states and line.strip() and not line.lstrip().startswith("- ")
+        ):
+            break
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            documented_states.append(stripped[2:].strip().strip('"'))
+
+    assert set(documented_states) == set(ROUTINE_MANAGER_OWNED_STATES)
+    assert len(documented_states) == len(ROUTINE_MANAGER_OWNED_STATES)
