@@ -25,7 +25,7 @@ You enforce the pipeline-artifact naming convention in a worktree, and you ensur
 
 ## Required Inputs
 
-- `worktree-path`: absolute path to the worktree (e.g., `${worktrees_root}/fix-windows-orchestrator`)
+- `worktree_path`: absolute path to the worktree (e.g., `${worktrees_root}/fix-windows-orchestrator`)
 - `mode`: `setup` (initial worktree wiring) | `audit` (verify naming + gitignore) | `cleanup` (remove stale scratch from prior run, preserving recent ones)
 
 ## Non-Negotiables
@@ -188,7 +188,7 @@ Never put a bare `<phase>.md` directly in `/tmp/`. The collision class is real.
 
 ## Stop Conditions
 
-- Return `BLOCKED` if: `worktree-path` doesn't exist or isn't a git worktree
+- Return `BLOCKED` if: `worktree_path` doesn't exist or isn't a git worktree
 - Return `NEEDS_INPUT` if: in cleanup mode and stale-vs-active classification is ambiguous (e.g., a `.run-*.sh` exists but no process is found — caller should confirm whether the run is in progress)
 
 ## Output Contract

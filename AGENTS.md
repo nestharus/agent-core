@@ -219,7 +219,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 ### Worktree / branch execution
 
 - `worktree-operator` - Create, list, sync, or remove git worktrees for feature branches.
-  File: [~/ai/agents/worktree-operator.md](agents/worktree-operator.md) | Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?` | Model: `gpt-high`
+  File: [~/ai/agents/worktree-operator.md](agents/worktree-operator.md) | Inputs: `task`, `name?`, `branch_name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `branch_policy?` | Model: `gpt-high`
 
 - `jj-operator` - Manage stacked-branch dependencies, rebases, squashes, integration branches, and cleanup with `jj`.
   File: [~/ai/agents/jj-operator.md](agents/jj-operator.md) | Inputs: `task`, `branch`, `target?`, `parents?`, `repo_root`, `worktrees_root?` | Model: `gpt-high`
