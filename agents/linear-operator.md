@@ -27,7 +27,7 @@ You read, comment on, and create Linear issues using the ported Linear GraphQL c
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment` and for `apply-labels`).
 - `body` (for `comment`): markdown body — Linear renders Markdown natively, no ADF.
 - `output_path` (for `read`): destination file path the operator must write the rendered ticket to (used by orchestrator Phase 0 bootstrap).
-- `brief_path` (for `create`): path to a markdown brief whose contents become the issue description verbatim. The brief MUST contain `Code Boundary`, `Test Boundary`, `Acceptance Criteria`, and `Anti-scope` headings (orchestrator contract).
+- `brief_path` (for `create`): path to a markdown brief whose contents become the issue description verbatim. The orchestrator validates that the rendered description is non-empty; scope and boundaries are derived later in Phase 2.5 / Phase 3 / Step 6a, not pre-declared in the brief.
 - `summary` (for `create`): one-line title for the issue.
 - `parent_key` (for `create`, optional): parent Linear issue key when filing a child WU under an initiative.
 - `labels` (for `create`/`search`/`list-issues`, optional): list of label names resolved in the selected team.
@@ -86,7 +86,7 @@ url: <linear url>
 ---
 ```
 
-Then the markdown body is the issue description verbatim (Linear stores Markdown natively, no rendering step). Do not transform headings, lists, or code blocks. `labels:` must come from the real `get-issue` `labels` data, and project readback may include `project.slugId` and project teams. The orchestrator validates that the rendered markdown contains `Code Boundary`, `Test Boundary`, `Acceptance Criteria`, and `Anti-scope` headings; if any is missing, the orchestrator returns `BLOCKED` and the user revises the Linear ticket.
+Then the markdown body is the issue description verbatim (Linear stores Markdown natively, no rendering step). Do not transform headings, lists, or code blocks. `labels:` must come from the real `get-issue` `labels` data, and project readback may include `project.slugId` and project teams. The orchestrator validates only that the rendered description is non-empty.
 
 Implementation:
 
@@ -161,7 +161,7 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-issue \
 
 Returns `{"ok": true, "data": {"id": "<uuid>", "identifier": "${linear_team_key}-NNN", "url": "..."}}`. Print the new key + URL (the output contract).
 
-**Description from a markdown brief.** Linear stores Markdown natively. The brief is passed verbatim — no ADF render, no heading transformation. The orchestrator's read-back contract validation requires the brief contain the four contract sections (`Code Boundary`, `Test Boundary`, `Acceptance Criteria`, `Anti-scope`); the operator does not synthesize them.
+**Description from a markdown brief.** Linear stores Markdown natively. The brief is passed verbatim — no ADF render, no heading transformation. The orchestrator validates only that the rendered description is non-empty; the operator does not synthesize scope or boundary sections from the brief.
 
 **Anti-pattern.** Do not file the same WU twice. Before creating, search for an existing issue with matching title:
 
