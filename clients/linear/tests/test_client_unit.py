@@ -136,6 +136,55 @@ class TestLinearClientGetIssue:
         assert exc_info.value.code == "PARSE_ERROR"
 
 
+class TestACR22KnownKeyReadContract:
+    def test_get_issue_non_nes_identifier_does_not_resolve_team(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: known-key read team-coupling regression; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T1 and assumption A1.
+        """
+        mock_response = {
+            "data": {
+                "issue": {
+                    "id": "age-issue-uuid",
+                    "identifier": "AGE-1",
+                    "title": "Known AGE issue",
+                    "description": "Read by identifier",
+                    "priority": 3,
+                    "estimate": None,
+                    "url": "https://linear.app/workspace/issue/AGE-1/known-age-issue",
+                    "branchName": "age-1-known-age-issue",
+                    "createdAt": "2026-05-01T00:00:00Z",
+                    "updatedAt": "2026-05-02T00:00:00Z",
+                    "completedAt": None,
+                    "canceledAt": None,
+                    "dueDate": None,
+                    "team": {"id": "age-team-uuid", "name": "Agents", "key": "AGE"},
+                    "assignee": None,
+                    "state": {"id": "state-uuid", "name": "Todo", "type": "unstarted"},
+                    "project": None,
+                    "parent": None,
+                }
+            }
+        }
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=mock_response,
+        )
+        resolve_team_id = mocker.patch.object(LinearClient, "_resolve_team_id")
+
+        client = LinearClient(api_key="test_key")
+        result = client.get_issue("AGE-1")
+
+        assert result["identifier"] == "AGE-1"
+        assert result["team"] == {"id": "age-team-uuid", "name": "Agents", "key": "AGE"}
+        run_graphql.assert_called_once()
+        assert run_graphql.call_args.args[1] == {"issueId": "AGE-1"}
+        resolve_team_id.assert_not_called()
+
+
 class TestLinearClientCreateIssue:
     def test_create_issue_success(self, mocker: MockerFixture) -> None:
         """Successfully create a new issue."""
@@ -315,6 +364,83 @@ class TestLinearClientCreateIssue:
 
         assert exc_info.value.code == "API_ERROR"
         assert "Failed to create issue" in exc_info.value.message
+
+
+class TestACR22CreateIssueTeamRoutingContract:
+    def test_create_issue_ast_team_routes_mutation_to_resolved_team_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: implicit NES default in create; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T2 and assumptions A2/A3.
+        """
+        create_response = {
+            "data": {
+                "issueCreate": {
+                    "success": True,
+                    "issue": {
+                        "id": "ast-issue-uuid",
+                        "identifier": "AST-12",
+                        "title": "AST routed issue",
+                        "url": "https://linear.app/workspace/issue/AST-12/ast-routed-issue",
+                        "branchName": "ast-12-ast-routed-issue",
+                    },
+                }
+            }
+        }
+        list_teams = mocker.patch.object(
+            LinearClient,
+            "list_teams",
+            return_value=[
+                {"id": "ast-team-uuid", "name": "Agent Strategy", "key": "AST"},
+                {"id": "nes-team-uuid", "name": "Nexus", "key": "NES"},
+            ],
+        )
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=create_response,
+        )
+
+        client = LinearClient(api_key="test_key")
+        result = client.create_issue(
+            team="AST",
+            title="AST routed issue",
+            description="Created in AST",
+        )
+
+        assert result["identifier"] == "AST-12"
+        list_teams.assert_called_once_with(include_archived=True)
+        run_graphql.assert_called_once()
+        mutation_variables = run_graphql.call_args.args[1]
+        assert mutation_variables["input"]["teamId"] == "ast-team-uuid"
+        assert mutation_variables["input"]["title"] == "AST routed issue"
+        assert mutation_variables["input"]["description"] == "Created in AST"
+
+    def test_create_issue_unknown_team_stops_before_mutation(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: implicit NES default in create; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T2 and assumptions A2/A3.
+        """
+        mocker.patch.object(
+            LinearClient,
+            "list_teams",
+            return_value=[
+                {"id": "ast-team-uuid", "name": "Agent Strategy", "key": "AST"},
+                {"id": "nes-team-uuid", "name": "Nexus", "key": "NES"},
+            ],
+        )
+        run_graphql = mocker.patch.object(LinearClient, "_run_graphql")
+
+        client = LinearClient(api_key="test_key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.create_issue(team="UNKNOWN", title="Should not create")
+
+        assert exc_info.value.code == "NOT_FOUND"
+        assert "UNKNOWN" in exc_info.value.message
+        run_graphql.assert_not_called()
 
 
 class TestLinearClientUpdateIssue:
@@ -1052,6 +1178,231 @@ class TestLinearClientListProjects:
             client.list_projects()
 
         assert exc_info.value.code == "PAGINATION_ERROR"
+
+
+class TestACR22LabelHelperContracts:
+    def test_list_labels_resolves_ast_team_and_scopes_query(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        labels_response = {
+            "data": {
+                "issueLabels": {
+                    "nodes": [
+                        {
+                            "id": "label-x",
+                            "name": "hardening",
+                            "color": "#abc",
+                            "description": None,
+                            "team": {"id": "ast-team-uuid", "key": "AST", "name": "AST"},
+                        }
+                    ]
+                }
+            }
+        }
+        resolve_team_id = mocker.patch.object(
+            LinearClient,
+            "_resolve_team_id",
+            return_value="ast-team-uuid",
+        )
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=labels_response,
+        )
+
+        client = LinearClient(api_key="test_key")
+        labels = client.list_labels(team="AST")
+
+        assert labels == labels_response["data"]["issueLabels"]["nodes"]
+        resolve_team_id.assert_called_once_with("AST")
+        run_graphql.assert_called_once()
+        assert run_graphql.call_args.args[1] == {"teamId": "ast-team-uuid"}
+
+    def test_create_label_resolves_ast_team_and_sends_team_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        create_response = {
+            "data": {
+                "issueLabelCreate": {
+                    "success": True,
+                    "issueLabel": {
+                        "id": "label-x",
+                        "name": "hardening",
+                        "color": "#abc",
+                        "description": "Coverage label",
+                    },
+                }
+            }
+        }
+        mocker.patch.object(LinearClient, "_resolve_team_id", return_value="ast-team-uuid")
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value=create_response,
+        )
+
+        client = LinearClient(api_key="test_key")
+        label = client.create_label(
+            team="AST",
+            name="hardening",
+            color="#abc",
+            description="Coverage label",
+        )
+
+        assert label["id"] == "label-x"
+        run_graphql.assert_called_once()
+        assert run_graphql.call_args.args[1] == {
+            "input": {
+                "name": "hardening",
+                "teamId": "ast-team-uuid",
+                "color": "#abc",
+                "description": "Coverage label",
+            }
+        }
+
+    def test_resolve_label_ids_missing_label_raises_without_create(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        list_labels = mocker.patch.object(
+            LinearClient,
+            "list_labels",
+            return_value=[{"id": "label-x", "name": "x"}],
+        )
+        create_label = mocker.patch.object(LinearClient, "create_label")
+
+        client = LinearClient(api_key="test_key")
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_label_ids(team="AST", label_names=["x", "y"])
+
+        assert exc_info.value.code == "NOT_FOUND"
+        assert "y" in exc_info.value.message
+        list_labels.assert_called_once_with("AST")
+        create_label.assert_not_called()
+
+    def test_resolve_label_ids_create_missing_creates_and_returns_ids(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mocker.patch.object(
+            LinearClient,
+            "list_labels",
+            return_value=[{"id": "label-x", "name": "x"}],
+        )
+        create_label = mocker.patch.object(
+            LinearClient,
+            "create_label",
+            return_value={"id": "label-y", "name": "y"},
+        )
+
+        client = LinearClient(api_key="test_key")
+        label_ids = client.resolve_label_ids(
+            team="AST",
+            label_names=["x", "y"],
+            create_missing=True,
+        )
+
+        assert label_ids == ["label-x", "label-y"]
+        create_label.assert_called_once_with("AST", "y")
+
+    def test_apply_labels_merges_existing_labels_by_default(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mocker.patch.object(
+            LinearClient,
+            "resolve_label_ids",
+            return_value=["label-new", "label-existing"],
+        )
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issue": {
+                        "labels": {
+                            "nodes": [
+                                {"id": "label-existing"},
+                                {"id": "label-old"},
+                            ]
+                        }
+                    }
+                }
+            },
+        )
+        update_issue = mocker.patch.object(
+            LinearClient,
+            "update_issue",
+            return_value={"id": "issue-uuid", "labels": []},
+        )
+
+        client = LinearClient(api_key="test_key")
+        result = client.apply_labels(
+            issue_id="AST-12",
+            team="AST",
+            label_names=["x"],
+            replace=False,
+        )
+
+        assert result["id"] == "issue-uuid"
+        run_graphql.assert_called_once_with(
+            run_graphql.call_args.args[0],
+            {"id": "AST-12"},
+        )
+        update_issue.assert_called_once_with(
+            "AST-12",
+            label_ids=["label-existing", "label-old", "label-new"],
+        )
+
+    def test_apply_labels_replace_skips_existing_labels_query(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Risk: label helper coverage gap; level: unit.
+
+        Source: ACR-22 proposal Test-Intent T6 and assumptions A2/A3/A7.
+        """
+        mocker.patch.object(
+            LinearClient,
+            "resolve_label_ids",
+            return_value=["label-new", "label-new", "label-other"],
+        )
+        run_graphql = mocker.patch.object(LinearClient, "_run_graphql")
+        update_issue = mocker.patch.object(
+            LinearClient,
+            "update_issue",
+            return_value={"id": "issue-uuid", "labels": []},
+        )
+
+        client = LinearClient(api_key="test_key")
+        client.apply_labels(
+            issue_id="AST-12",
+            team="AST",
+            label_names=["x", "x", "y"],
+            replace=True,
+        )
+
+        run_graphql.assert_not_called()
+        update_issue.assert_called_once_with(
+            "AST-12",
+            label_ids=["label-new", "label-other"],
+        )
 
 
 class TestLinearClientListTeams:

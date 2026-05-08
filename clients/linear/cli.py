@@ -110,10 +110,10 @@ def split_plans(issue_id: str, output_dir: str) -> None:
     print(json.dumps({"ok": True, "data": {"plans": plans, "count": len(plans)}}, indent=2))
 
 
-def list_projects() -> None:
-    """List and print projects as JSON (first page only)."""
+def list_projects(team: str | None = None) -> None:
+    """List and print projects as JSON."""
     client = LinearClient()
-    projects = client.list_projects()
+    projects = client.list_projects(team_id=team)
     print(json.dumps({"ok": True, "data": {"projects": projects}}, indent=2))
 
 
@@ -311,6 +311,22 @@ def search_issues(
     print(json.dumps({"ok": True, "data": issues}, indent=2))
 
 
+def list_issues(
+    *,
+    team: str,
+    include_archived: bool = False,
+    first: int = 50,
+) -> None:
+    """List issues for a team and print results as JSON."""
+    client = LinearClient()
+    issues = client.search_issues(
+        team_key=team,
+        include_archived=include_archived,
+        first=first,
+    )
+    print(json.dumps({"ok": True, "data": issues}, indent=2))
+
+
 def main() -> None:
     """Parse arguments and dispatch to appropriate command."""
     parser = JsonArgumentParser(
@@ -341,7 +357,11 @@ def main() -> None:
     )
 
     # list-projects command
-    subparsers.add_parser("list-projects", help="List projects (first page only)")
+    list_projects_parser = subparsers.add_parser("list-projects", help="List projects")
+    list_projects_parser.add_argument(
+        "--team",
+        help="Optional team identifier (UUID, key, or name) used to scope projects",
+    )
 
     # list-teams command
     subparsers.add_parser("list-teams", help="List all teams")
@@ -359,7 +379,7 @@ def main() -> None:
     create_issue_parser.add_argument("--description", help="Issue description")
     create_issue_parser.add_argument("--project", help="Project ID")
     create_issue_parser.add_argument(
-        "--labels", help="Comma-separated label names (e.g. 'agent-runner,prereq')"
+        "--labels", help="Comma-separated label names (e.g. 'hardening,prereq')"
     )
     create_issue_parser.add_argument(
         "--create-missing-labels",
@@ -422,7 +442,29 @@ def main() -> None:
         "--first",
         type=int,
         default=50,
-        help="Maximum issues to request, 1-100 (default: 50)",
+        help="Maximum issues to request (default: 50)",
+    )
+
+    # list-issues command
+    list_issues_parser = subparsers.add_parser(
+        "list-issues",
+        help="List Linear issues for a team",
+    )
+    list_issues_parser.add_argument(
+        "--team",
+        required=True,
+        help="Team key or name to resolve before listing issues",
+    )
+    list_issues_parser.add_argument(
+        "--include-archived",
+        action="store_true",
+        help="Include archived issues",
+    )
+    list_issues_parser.add_argument(
+        "--first",
+        type=int,
+        default=50,
+        help="Maximum issues to request (default: 50)",
     )
 
     # list-labels command
@@ -453,7 +495,7 @@ def main() -> None:
     apply_labels_parser.add_argument(
         "--labels",
         required=True,
-        help="Comma-separated label names (e.g. 'agent-runner,prereq')",
+        help="Comma-separated label names (e.g. 'hardening,prereq')",
     )
     apply_labels_parser.add_argument(
         "--create-missing",
@@ -487,8 +529,10 @@ def main() -> None:
                     "error": {
                         "code": "INVALID_INPUT",
                         "message": "A command is required. Available commands: get-issue, "
-                        "list-projects, list-teams, list-comments, create-issue, "
-                        "update-issue, create-comment, get-comment, upsert-comment",
+                        "get-issue-description, split-plans, list-issues, list-projects, "
+                        "list-teams, list-comments, create-issue, update-issue, "
+                        "create-comment, get-comment, search-issues, list-labels, "
+                        "create-label, apply-labels, upsert-comment",
                     },
                 }
             )
@@ -503,7 +547,7 @@ def main() -> None:
         elif args.command == "split-plans":
             split_plans(args.issue_id, args.output_dir)
         elif args.command == "list-projects":
-            list_projects()
+            list_projects(team=args.team)
         elif args.command == "list-teams":
             list_teams()
         elif args.command == "list-comments":
@@ -543,6 +587,12 @@ def main() -> None:
                 labels=[s.strip() for s in args.labels.split(",") if s.strip()]
                 if args.labels
                 else None,
+                include_archived=args.include_archived,
+                first=args.first,
+            )
+        elif args.command == "list-issues":
+            list_issues(
+                team=args.team,
                 include_archived=args.include_archived,
                 first=args.first,
             )

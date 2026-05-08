@@ -10,7 +10,7 @@ You read, comment on, and create Linear issues using the ported Linear GraphQL c
 
 ## Use When
 
-- The user references a Linear issue key (e.g., `${linear_team_key}-34`) and wants info posted/read.
+- The user references a Linear issue key (e.g., `AGE-34`) and wants info posted/read.
 - A PR / initiative needs cross-linked from a Linear issue.
 - A multi-PR campaign just landed and you need to log the PR list on the parent issue so the team can find it.
 - The implementation-pipeline orchestrator dispatches Phase 0 read or cold-start create.
@@ -23,19 +23,20 @@ You read, comment on, and create Linear issues using the ported Linear GraphQL c
 
 ## Required Inputs
 
-- `task`: one of `read`, `comment`, `create`, `search`, `list-labels`, `apply-labels`.
-- `issue_key`: e.g., `${linear_team_key}-34` (required for `read`/`comment`).
+- `task`: one of `read`, `comment`, `create`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`.
+- `issue_key`: e.g., `AGE-34` (required for known-issue-key `read`/`comment` and for `apply-labels`).
 - `body` (for `comment`): markdown body — Linear renders Markdown natively, no ADF.
 - `output_path` (for `read`): destination file path the operator must write the rendered ticket to (used by orchestrator Phase 0 bootstrap).
 - `brief_path` (for `create`): path to a markdown brief whose contents become the issue description verbatim. The brief MUST contain `Code Boundary`, `Test Boundary`, `Acceptance Criteria`, and `Anti-scope` headings (orchestrator contract).
 - `summary` (for `create`): one-line title for the issue.
-- `parent_key` (for `create`, optional): parent Linear issue key when filing a child WU under an initiative.
 - `labels` (for `create`, optional): list of label names to apply.
-- `query` (for `search`): plain text or GraphQL filter; the client translates to a `filter:` GraphQL clause.
+- Search filters (optional for `search`): `title_contains`, `title_starts_with`, and `labels`; the client translates these to a GraphQL `filter:` clause.
+- `linear_team_key` is required for `create`, `list-issues`, `list-projects` team scoping, `search`, `list-labels`, `create-label`, and `apply-labels`.
+- `linear_team_key` is not required for known-issue-key `read` and `comment`; the issue identifier already carries the team prefix.
 
 ## Inputs
 
-- `--input linear_team_key=<key>` (required) — Linear team key (e.g. `NES`). Used to scope creates and resolve the team UUID.
+- `--input linear_team_key=<key>` — Linear team key (e.g. `AST`). Required for team-scoped creates, lists, searches, projects, and labels. Not required for known-key reads/comments.
 - `--input linear_project_id=<id>` (optional) — Linear project UUID; when supplied, created issues are added to the project. Distinct from labels.
 
 ## Auth
@@ -51,21 +52,21 @@ The client itself reads `LINEAR_API_KEY` from env on construction; you do not pa
 ## Procedure: Read
 
 ```bash
-PYTHONPATH=$HOME/ai python3 -m clients.linear.cli get-issue "${linear_team_key}-34"
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli get-issue "AGE-34"
 ```
 
 This returns a JSON envelope:
 
 ```json
-{"ok": true, "data": {"id": "...uuid...", "identifier": "NES-34", "title": "...",
- "description": "<markdown>", "state": {"name": "..."}, "team": {"key": "NES"},
+{"ok": true, "data": {"id": "...uuid...", "identifier": "AGE-34", "title": "...",
+ "description": "<markdown>", "state": {"name": "..."}, "team": {"key": "AGE"},
  "labels": [...], "parent": {...}, "url": "https://linear.app/..."}}
 ```
 
 For description-only:
 
 ```bash
-PYTHONPATH=$HOME/ai python3 -m clients.linear.cli get-issue-description "${linear_team_key}-34"
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli get-issue-description "AGE-34"
 ```
 
 ### Read for orchestrator bootstrap (description as markdown)
@@ -74,7 +75,7 @@ When dispatched by `~/ai/agents/implementation-pipeline-orchestrator.md` at Phas
 
 ```yaml
 ---
-key: ${linear_team_key}-34
+key: AGE-34
 summary: <issue title>
 status: <state name>
 parent: <parent key or empty>
@@ -114,7 +115,7 @@ Linear comments are markdown. No ADF. No JSON document model.
 
 ```bash
 PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-comment \
-    "${linear_team_key}-34" \
+    "AGE-34" \
     --body "$(cat <<'EOF'
 PR #123 opened: https://github.com/owner/repo/pull/123
 
@@ -131,7 +132,7 @@ For idempotent commenting (e.g., orchestrator Phase 9 cross-link, where re-runni
 
 ```bash
 PYTHONPATH=$HOME/ai python3 -m clients.linear.cli upsert-comment \
-    "${linear_team_key}-34" \
+    "AGE-34" \
     --title "PR Cross-link" \
     --body "PR #123 opened: https://github.com/owner/repo/pull/123"
 ```
@@ -152,7 +153,7 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-issue \
     ${create_missing_labels:+--create-missing-labels}
 ```
 
-`--labels` is a comma-separated list of label names (e.g. `--labels "agent-runner,segmentation,prereq"`). When `--create-missing-labels` is supplied, any name without an existing label on the team is created on the fly with a default color; otherwise unknown names raise `LinearClientError("NOT_FOUND", ...)` and the issue is NOT created (so partial-label state is impossible).
+`--labels` is a comma-separated list of label names (e.g. `--labels "hardening,segmentation,prereq"`). When `--create-missing-labels` is supplied, any name without an existing label on the team is created on the fly with a default color; otherwise unknown names raise `LinearClientError("NOT_FOUND", ...)` and the issue is NOT created (so partial-label state is impossible).
 
 Returns `{"ok": true, "data": {"id": "<uuid>", "identifier": "${linear_team_key}-NNN", "url": "..."}}`. Print the new key + URL (the output contract).
 
@@ -167,22 +168,21 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli list-projects 2>&1 | head
 
 If a duplicate is found, return the existing key instead of creating a new one. The orchestrator treats a returned existing-key as success.
 
-**Parent linking.** Linear issues can have a parent issue (`parent` field). The current CLI `create-issue` does not expose a `--parent` flag. To set a parent at WU file-time, either (a) include the parent reference in the description body (e.g., `Parent: NES-12`) so a human/operator can link it, or (b) call the underlying Python client directly:
+## Procedure: List Projects
 
 ```bash
-PYTHONPATH=$HOME/ai python3 -c "
-from clients.linear.client import LinearClient
-c = LinearClient()
-c.update_issue('${linear_team_key}-34', parent_id='<parent-uuid-or-key>')
-"
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli list-projects \
+    --team "${linear_team_key}"
 ```
 
-If `update_issue` does not accept `parent_id` in the ported client, surface as `NEEDS_INPUT` rather than silently dropping the parent linkage.
+Returns the standard JSON envelope with projects under `data.projects[]`. Parse `id`, `name`, and `state` (when present) when selecting a project to pass as `linear_project_id`.
+
+**Parent linking.** The operator does not accept a `parent_key` create input yet because the CLI `create-issue` path does not expose a parent flag. If parent linkage is required for a new issue, return `NEEDS_INPUT` with the requested parent reference rather than silently dropping it.
 
 **Label conventions.** When creating tickets, apply project label conventions per `${linear_team_key}`'s setup:
 
 - Risk-reduction / hardening tickets: label `hardening`. Check the project's `AGENTS.md` for the term it prefers (`hardening`, `risk-reduction`).
-- Per-project labels (e.g. `agent-runner`, `~/ai`, `oulipoly`): from the project's routing rules. ~/ai itself uses the `~/ai` label.
+- Per-project labels (e.g. `~/ai`, `oulipoly`, `workflow`): from the project's routing rules. ~/ai itself uses the `~/ai` label.
 - Per-initiative labels (e.g. `segmentation`, `workspace-split`): apply alongside the kind label.
 
 ## Procedure: List Labels
@@ -193,14 +193,22 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli list-labels --team "${linear_t
 
 Returns workspace-level + team-scoped labels visible to the team. Use this when you need to verify a label exists before applying it, or when surfacing the full label inventory for a value-question to the user.
 
+Use `create-label` when the task is label creation rather than applying labels to a specific issue:
+
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-label \
+    --team "${linear_team_key}" \
+    --name "hardening"
+```
+
 ## Procedure: Apply Labels (post-create)
 
 When the orchestrator's brief specifies labels but the issue was already created (e.g., the orchestrator filed a follow-up tracker without labels and now needs to retro-apply), use `apply-labels`:
 
 ```bash
-PYTHONPATH=$HOME/ai python3 -m clients.linear.cli apply-labels "${linear_team_key}-34" \
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli apply-labels "AST-34" \
     --team "${linear_team_key}" \
-    --labels "agent-runner,prereq" \
+    --labels "hardening,prereq" \
     --create-missing
 ```
 
@@ -210,26 +218,34 @@ The merge avoids the `update_issue` foot-gun where supplying `labelIds=[X]` woul
 
 ## Procedure: Search
 
-Linear search uses GraphQL `issueFilter`. The CLI does not directly expose a search subcommand at the time of writing; for ad-hoc search invoke the Python client directly:
+Linear issue discovery uses the CLI directly. Use `list-issues --team` for list-style team discovery:
 
 ```bash
-PYTHONPATH=$HOME/ai python3 -c "
-from clients.linear.client import LinearClient
-import json
-c = LinearClient()
-# Search by title contains within a team:
-results = c.search_issues(team_key='${linear_team_key}', title_contains='<first 8 words>')
-print(json.dumps([{'identifier': r['identifier'], 'title': r['title'], 'state': r.get('state',{}).get('name')} for r in results], indent=2))
-"
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli list-issues \
+    --team "${linear_team_key}" \
+    --first 25
 ```
 
-If `LinearClient.search_issues` is not present in the ported client, surface `NEEDS_INPUT` rather than silently fall back to a less precise list scan. Adding a search method is a future operator-driven WU.
+Use `search-issues --team-key` for filtered search:
+
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli search-issues \
+    --team-key "${linear_team_key}" \
+    --title-contains "<first 8 words>" \
+    --labels "hardening"
+```
+
+Both CLI commands return the standard JSON envelope. Parse `identifier`, `title`, and `state.name` from `data[]`, then emit the operator's `search` output in the line-oriented form below.
 
 ## Output Contract
 
 For `read`: write the rendered ticket to `output_path`; print the key, title, state, parent in a brief block.
 For `comment`: print the new comment ID + a confirmation line.
 For `create`: print the new key + URL.
+For `list-projects`: print one line per result (`ID  state  name`, omitting blank state).
+For `list-labels`: print one line per result (`ID  name`).
+For `create-label`: print the new label ID + name.
+For `apply-labels`: print the issue key + applied label names.
 For `search`: print one line per result (`KEY  state  title`).
 
 ## Stop Conditions
@@ -243,9 +259,10 @@ For `search`: print one line per result (`KEY  state  title`).
 
 | Project | Team key | URL pattern |
 |---------|---------|-------------|
-| Configured Linear team | `${linear_team_key}-XX` | `https://linear.app/<workspace>/issue/${linear_team_key}-XX/...` |
+| Agents | `AGE` | `https://linear.app/<workspace>/issue/AGE-XX/...` |
+| Agent Strategy | `AST` | `https://linear.app/<workspace>/issue/AST-XX/...` |
 
-Examples in this operator use `${linear_team_key}-XX`.
+Known-key read/comment examples in this operator use issue keys such as `AGE-34` or `AST-34`; create/list/search examples use `${linear_team_key}` because those tasks are team-scoped.
 
 ## Notes vs. JIRA Operator
 
