@@ -94,6 +94,20 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - For JIRA, create into the active `jira_project` with fields/labels required by project policy. For Linear, create under the active `linear_team_key` and optional `linear_project_id`; any status placement remains user-owned unless explicit project policy says otherwise.
    - Apply correct labels or fields per filing discipline and backend policy.
 
+## Dispatch Priority + Autonomy
+
+**Autonomy.** A ticket in `Todo` state is the user's authorization to dispatch. When a slot opens in the WU dispatch cap, pick the next ticket and dispatch it without asking the user "should I dispatch X now?". The Todo state IS the approval. Only ask for reconfirmation if the ticket needs scope/value clarification (genuine NEEDS_INPUT-shape question), or there's a real ordering tradeoff between multiple Todo tickets that the user should weigh. Phrasings like "should I dispatch?" or "want me to launch?" are over-asking; phrase status updates as "dispatching X next."
+
+**Priority order** — when picking from Todo, dispatch in this order:
+
+1. **Bugs + hardening first.** Things that are broken or fragile. Get the system operating cleanly at low risk before adding capability. Identified by labels `Bug` or `hardening`. Examples: orphan-running fixes, runtime-enforcement gates, persisted-state risk-assessor, refactors of fragile foundations.
+2. **Must-have features second.** Features that **unblock other work** — capabilities that make further work possible (e.g. estimation enabling roadmap timelines + work prioritization, sprint operations enabling sprint-aware automation). These create more value than they cost. Identified by `Feature` / `Improvement` labels plus a title that names a new capability rather than a refinement of an existing one.
+3. **Nice-to-have features last.** Features that **improve accuracy** without unblocking anything new (e.g., better cycle-time histograms over an existing metrics tool). Defer until must-haves shipped.
+
+When ambiguous whether a feature is must-have vs nice-to-have, ask the user explicitly which bucket. Don't strictly serialize — dispatch in parallel where slots allow — but newly-Todo items in a higher priority bucket should jump the queue ahead of already-Todo lower-priority items.
+
+**Memory note.** The manager updates this operator file when the user's prioritization or dispatch rules change. Do not encode operating rules in `~/.claude*/projects/.../memory/` — those are session-local; this file is the canonical, version-controlled source of truth.
+
 ## Delegation Patterns
 
 ### WU-shaped work (code change, operator authoring, workflow authoring)
