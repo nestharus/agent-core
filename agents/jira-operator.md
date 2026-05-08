@@ -192,6 +192,10 @@ For rich content (tables, headings, links), build ADF in a JSON file and POST wi
 - `parentId: Given parent work item does not belong to appropriate hierarchy` on `POST /issue` means the chosen `parent` is not the right issuetype for the child. On INFA-style hierarchies a Task's parent must be an Epic; verify with a quick `GET /issue/<parent>?fields=issuetype` before creating.
 - `/search/jql` (the GA search endpoint) replaces `/search`. Both currently work but `/search/jql` is the path going forward; pass `jql` and `fields` as query params and parse `issues[]` from the response.
 
+## ACR-126 Immediate Deferral
+
+ACR-126 immediate deferral uses the existing transition path when the project workflow exposes the target: dispatch `task=transition` with `target_status=Blocked`. If `Blocked` is unavailable for that issue type or workflow, the supported fallback is comment-only through `task=comment`; the comment must say that `Blocked` was unavailable and that the deferred marker is therefore recorded by comment evidence. Jira has no declared `apply-labels` / label-update task for fallback labels in this operator vocabulary. Jira also has no declared sprint-removal task here; the implementation orchestrator records sprint/cycle removal as `fallback:operationally-manual` unless a future backend operation exists.
+
 ## Procedure: Transition
 
 ```bash

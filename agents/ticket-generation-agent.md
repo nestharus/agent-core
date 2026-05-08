@@ -116,6 +116,8 @@ Backstop-spike rule: when none of `prototype-dossier`, `layer-2-magnitude`, or `
 
 INIT tickets remain unsized at Layer 4. They keep inherited engineering roadmap effort as informational initiative context, but they do not receive `story_point_estimate`, `estimate_source`, or `estimate_rationale`.
 
+prototype dossier consumption may surface an original-ticket disposition recommendation signal; that lifecycle signal must not affect Layer 4 estimate generation.
+
 ---
 
 ## Output format: `tickets/INIT-NNN.md`

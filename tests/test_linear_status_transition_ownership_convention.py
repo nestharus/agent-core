@@ -34,6 +34,11 @@ STATUS_CONTEXT_TOKENS = (
     *tuple(ROUTINE_MANAGER_OWNED_STATES),
 )
 
+ACR126_ALLOWED_EXCEPTION_LINES = (
+    "ACR-126 defines a narrow Phase 2.5 step 7 defer branch exception",
+    "ACR-126 defines a narrow P4 defer_source original-ticket disposition-execution exception",
+)
+
 STALE_PHRASE_INVENTORY = {
     REPO_ROOT / "agents" / "linear-operator.md": (
         "Status transitions are user-owned",
@@ -78,6 +83,13 @@ def _allowed_user_owned_hit(path: Path, line_number: int) -> bool:
     )
 
 
+def _allowed_acr126_exception_context(line: str) -> bool:
+    lowered = line.casefold()
+    return any(
+        phrase.casefold() in lowered for phrase in ACR126_ALLOWED_EXCEPTION_LINES
+    )
+
+
 def _user_owned_status_context_violations(
     path: Path,
     text: str,
@@ -94,6 +106,8 @@ def _user_owned_status_context_violations(
         start = max(0, index - CONTEXT_WINDOW_LINES)
         end = min(len(lines), index + CONTEXT_WINDOW_LINES + 1)
         snippet = "\n".join(lines[start:end])
+        if _allowed_acr126_exception_context(line):
+            continue
         for token in STATUS_CONTEXT_TOKENS:
             escaped = re.escape(token)
             # Alphabetic tokens need word boundaries to avoid substring matches.
