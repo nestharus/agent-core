@@ -38,6 +38,7 @@ prioritize.
 - `uncovered_areas`: List of uncovered code areas from coverage-analyzer (file paths, line ranges, branch info)
 - `worktree_path`: Path to the codebase
 - `coverage_data` (optional): Path to coverage JSON for context on what IS covered nearby
+- Optional proposal/diff/invariant context may be supplied when available, such as `proposal_path`, `diff_path`, or explicit `invariant_candidates`. Do not make this context mandatory for existing callers.
 
 ## Risk Dimensions
 
@@ -117,6 +118,47 @@ How often does this code change? (High churn = higher value for regression prote
 | LOW | Changed 0-1 times in the last 3 months |
 | STABLE | Not changed in 6+ months |
 
+## Persisted-State Invariant Risk
+
+Challenge newly introduced invariants against persisted state that may already exist outside the running process. This is additive to the R1-R4 and V1-V3 scoring model: persisted-state findings must feed the existing risk dimensions and priority rationale, not a new priority tier or changed P0-P4 vocabulary.
+
+In-scope persisted state includes:
+
+- configuration files such as TOML, YAML, JSON, INI, dotfiles, generated config, sample config, and fixture config
+- environment variables from deployment configs, shell rc files, CI/CD secrets, container manifests, `.env*` templates, and process-environment values set outside the running process
+- databases, including existing rows and table contents written under prior schema or invariant rules
+- other persisted artifacts such as lock files, cache stores, state files, registry entries, generated artifacts, and prior-run outputs
+
+Out of scope: logical or in-memory state, runtime invariant enforcement, tests/docs-only changes with no persisted surface, and planning-only invariants.
+
+Treat an uncovered area, proposal, diff, or invariant candidate as introducing a persisted-state invariant when it newly rejects, requires, narrows, normalizes, or constrains values that were previously legal or unvalidated. Check these six signal categories:
+
+- schema constraints: added or tightened `NOT NULL`, `UNIQUE`, `CHECK`, foreign keys, uniqueness indexes, required columns, or migration assertions
+- type narrowings: `Optional` to required, nullable to non-nullable, broad `str` to `enum` or `Literal`, numeric narrowing, or list/dict shape restrictions
+- validation rules: new regex, length, range, allowed-set, parser strictness, normalization, date/time format, URL format, path format, or identifier format
+- config-file shape: new required keys, removed aliases, renamed keys without fallback, stricter nested object shape, or stricter default handling
+- env-var requirements: new required variable, changed variable name, stricter value format, changed default semantics, bool/int/list parsing changes, or secret/key format changes
+- database constraints: new table or column constraints, assumptions about existing rows, enum columns, deduplication, non-null backfill, unique expectations, or partial-migration states
+
+Decision rule: if old persisted state could have existed legally before the change and the new code would reject it, reinterpret it, fail startup, corrupt data, silently drop it, or require migration, emit a persisted-state invariant entry.
+
+When no proposal/diff/invariant context is supplied, scan each uncovered area yourself for the six signal categories before emitting `no new-invariant context detected`. The bare statement `no new-invariant context was supplied` is not sufficient on its own; the report must name the surfaces inspected and the signals checked.
+
+When concluding `no new invariant introduced`, document which categories were checked and why each is absent. A negative finding is only useful when it explains why no schema constraint, type narrowing, validation rule, config-file shape change, env-var requirement, or database constraint applies.
+
+Persisted-state investigation may run inline or be dispatched as a read-only sub-investigation. Inspect likely persisted surfaces: config-file globs (`*.toml`, `*.yaml`, `*.yml`, `*.json`, `*.ini`, dotfiles), env-var declarations, `.env*` examples, CI workflow files, deployment manifests, container manifests, schema/migration evidence, ORM models, fixtures, seed data, snapshots, tests with persisted rows, lock files, cache directories, state files, generated config, and prior-run artifacts. Read-only means no writes, no migrations, no schema mutations, no env-var changes, no fixture rewrites, and no generated-artifact regeneration.
+
+For each invariant, record:
+
+- `invariant_description`: the new invariant, or `none identified (signals checked: <list>)`
+- `persisted_state_classes_examined`: configuration files, environment variables, databases, and other persisted artifacts examined
+- `existing_state_violations`: old-valid/new-invalid persisted-state evidence, or `none observed (surfaces searched: <list>)`
+- `broken_invariant_test_refs`: tests proving migration, fallback, recoverable error, or accepted-breakage handling, or `missing`
+- `migration_path`: migration, fallback, compatibility, or recoverable-error path
+- `breakage_acceptance_decision`: accepted breakage decision with citation
+
+Exactly one of `migration_path` or `breakage_acceptance_decision` must be present for each new invariant. Absence of both is itself a risk fact. If both are claimed without choosing the actual handling model, record the ambiguity as a risk fact. `breakage_acceptance_decision` must cite a ticket or issue link, an explicit decision artifact, or quoted user direction; an unattributed "accepted" is treated as missing and converted to a risk fact. `broken_invariant_test_refs: missing` also feeds existing R/V scoring and the priority rationale.
+
 ## Procedure
 
 ### 1. Categorize Each Uncovered Area
@@ -136,6 +178,12 @@ git -C <worktree_path> log --oneline --since="3 months ago" -- <file> | wc -l
 # Check what's covered nearby (from coverage data)
 # Look at surrounding functions/methods that ARE covered
 ```
+
+### 1.5. Challenge Persisted-State Invariants
+
+For each uncovered area, use any supplied proposal/diff/invariant context plus the code you inspected to decide whether a new persisted-state invariant may exist. If no such context was supplied, scan the area for the six signal categories in `## Persisted-State Invariant Risk` before concluding none were detected.
+
+If a persisted-state invariant is suspected, inspect or dispatch read-only investigation of the relevant persisted surfaces. Then carry missing migration paths, missing accepted-breakage decisions, missing broken-invariant tests, old-valid/new-invalid evidence, or justified negative findings into Step 2 scoring.
 
 ### 2. Score Each Dimension
 
@@ -194,6 +242,13 @@ Produce a structured report at `/tmp/risk-assessment/<datestamp>/risk-report.md`
 - **Priority:** P<N>
 - **Justification:** <why this priority>
 - **Coverage recommendation:** <enforce at X% / exclude from enforcement / test specific branches only>
+- **Persisted-state invariant risk:**
+  - `invariant_description`: <new invariant description> or `none identified (signals checked: <list>)`
+  - `persisted_state_classes_examined`: <configuration files / environment variables / databases / other persisted artifacts examined>
+  - `existing_state_violations`: <old-valid/new-invalid evidence> or `none observed (surfaces searched: <list>)`
+  - `broken_invariant_test_refs`: <test refs proving handling> or `missing`
+  - `migration_path`: <migration/fallback/recoverable-error path>
+  - `breakage_acceptance_decision`: <accepted breakage decision with citation>
 
 ## Coverage Enforcement Recommendations
 
