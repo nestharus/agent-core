@@ -2,6 +2,16 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08d — ACR-63 Phase 6c Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: ACR-63 (Hoist Step 6c consumption-echo into orchestrator default). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind`.
+
+The Step 6c gpt-high agent (codex3 invocation 68466a2c-9c80-49eb-b3c3-33a8773c604a) produced a correct product-code edit (8/8 ACR-63 structural pytests pass; 848/848 full suite passes) but its captured stdout log lacks the FIRST LOG LINE REQUIREMENT consumption-echo. The agent's final-answer text begins with WROTE: instead of the two consumed: lines for `${scratch_dir}/phase6/step6b-output-index.md` and the Step 6b test file path.
+
+Per the orchestrator violation-detection rule "Step 6c log does not echo the Step 6b output paths it consumed", this is a process-tree-audit-#2 blocking violation. Resolution: revert `agents/implementation-pipeline-orchestrator.md` to HEAD (no commits had landed); preserve the Step 6b test file and output index unchanged; re-dispatch Step 6c with a strengthened prompt that requires the consumed: lines to be the LITERAL first content of the agent's final-answer text (before any narrative or WROTE: line).
+
+The recurrence is the exact watch-signal ACR-63 itself targets: agent-side compliance with the FIRST LOG LINE REQUIREMENT block is unreliable even when the requirement is templated into the dispatch prompt; the orchestrator-side template change still ships, and process-tree audit #2 retains its enforcement role for runtime evidence.
+
 ## D-2026-05-08c — ACR-5 Phase 8 rebase onto current master to clear stale-branch preservation-guard violation
 
 **WU**: ACR-5 (orchestrator-runtime integration-tests gate). **Phase**: 8 (PR-review gates). **Decision**: `Rebase the ACR-5 branch onto current master (138ca39) to clear the test-audit gate's HIGH verdict. The branch was forked from ecc18ca and master had advanced 5 commits since (3fe1b9e, 15ddf29, c5fd354, 2592a48, 138ca39), so git diff master..HEAD showed phantom reverts of those 5 commits in the master direction PLUS our 1 ACR-5 commit. The test-audit gate (justifiably) read this as a 24-file diff including unrelated operator/client/convention edits and pre-existing test deletions, breaking the anti-scope preservation guard. Resolution: rebased ACR-5's single commit onto master HEAD (resolved the DECISIONS.md conflict by keeping all entries D-2026-05-08a/b/c first, then D-2026-05-07m); the rebase auto-merged agents/implementation-pipeline-orchestrator.md cleanly. Post-rebase HEAD 2b5ccf1; git diff master..HEAD now shows exactly 3 files (DECISIONS.md, agents/implementation-pipeline-orchestrator.md, tests/test_implementation_pipeline_orchestrator_integration_tests_gate.py); 10/10 ACR-5 structural pytests still pass; full suite 1101 tests pass. Re-running the four Phase 8 gates against the rebased commit.`
