@@ -2,6 +2,18 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08c — ACR-5 Phase 8 rebase onto current master to clear stale-branch preservation-guard violation
+
+**WU**: ACR-5 (orchestrator-runtime integration-tests gate). **Phase**: 8 (PR-review gates). **Decision**: `Rebase the ACR-5 branch onto current master (138ca39) to clear the test-audit gate's HIGH verdict. The branch was forked from ecc18ca and master had advanced 5 commits since (3fe1b9e, 15ddf29, c5fd354, 2592a48, 138ca39), so git diff master..HEAD showed phantom reverts of those 5 commits in the master direction PLUS our 1 ACR-5 commit. The test-audit gate (justifiably) read this as a 24-file diff including unrelated operator/client/convention edits and pre-existing test deletions, breaking the anti-scope preservation guard. Resolution: rebased ACR-5's single commit onto master HEAD (resolved the DECISIONS.md conflict by keeping all entries D-2026-05-08a/b/c first, then D-2026-05-07m); the rebase auto-merged agents/implementation-pipeline-orchestrator.md cleanly. Post-rebase HEAD 2b5ccf1; git diff master..HEAD now shows exactly 3 files (DECISIONS.md, agents/implementation-pipeline-orchestrator.md, tests/test_implementation_pipeline_orchestrator_integration_tests_gate.py); 10/10 ACR-5 structural pytests still pass; full suite 1101 tests pass. Re-running the four Phase 8 gates against the rebased commit.`
+
+## D-2026-05-08b — ACR-5 Phase 6c Tier-1 rewind + retry to add Step 6c log-echo evidence
+
+**WU**: ACR-5 (orchestrator-runtime integration-tests gate). **Phase**: 6 (test/code separation + process-tree audit #2). **Decision**: `Tier-1 rewind: revert working-tree change to agents/implementation-pipeline-orchestrator.md (no commits had landed); preserve the Step 6b test file and output index unchanged; re-dispatch Step 6c with a prompt that requires explicit stdout echoing of a CONSUMED_FROM_STEP6B: header naming each Step 6b output path before any product-code edit; this satisfies workflow-doc line 395 ("Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes"); re-run process-tree audit #2 against the new run.`
+
+## D-2026-05-08a — ACR-5 Phase 4 Tier-1 retry on supported-surface gate (session-pool independence violation)
+
+**WU**: ACR-5 (orchestrator-runtime integration-tests gate). **Phase**: 4 (risk gates + process-tree audit #1). **Decision**: `Tier-1 retry on the supported-surface risk gate. Process-tree-auditor (a357558f-7e9f-4ceb-b279-c402779c0ee2) flagged a no-shared-session independence violation: scope (143c431d) and supported-surface (28bc216f) shared session ab907b8c-4d48-4062-968d-fbcb5792fdbb due to agents-CLI session pooling under concurrent claude-opus dispatches. Re-dispatched supported-surface as fresh invocation aa80f74d-bc1f-4aaf-8e36-97d4be5f327d with independent session 105d2c4c-a7ef-4821-b683-1fe39979beb7; verdict re-confirmed LOW; rewrote phase-4-join-manifest.json with replacement UUID + sha256 and recorded supersession in audit-history.md. No git ops required (no commits had landed). Re-running process-tree audit #1 against the refreshed trace.`
+
 ## D-2026-05-07m — ACR-120 Phase 6c worktree re-routing + test fixture portability fix
 
 **WU**: ACR-120 (work-manager-operator: drop NES hardcoding + multi-team routing + ticket-system pluggability). **Phase**: 6c. **Decision**: `Accept Phase 6c agent's operator content; relocate it from main checkout to WU worktree; correct test fixture path resolution to repo-relative.`
