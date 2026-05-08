@@ -2,6 +2,24 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-07m — ACR-120 Phase 6c worktree re-routing + test fixture portability fix
+
+**WU**: ACR-120 (work-manager-operator: drop NES hardcoding + multi-team routing + ticket-system pluggability). **Phase**: 6c. **Decision**: `Accept Phase 6c agent's operator content; relocate it from main checkout to WU worktree; correct test fixture path resolution to repo-relative.`
+
+The Phase 6c `gpt-high` code-writer interpreted the contract's absolute path `/home/nes/ai/agents/work-manager-operator.md` literally and edited the main checkout (master branch) instead of the WU worktree's copy at `/home/nes/projects/ai/worktrees/acr-120-work-manager-multi-team/agents/work-manager-operator.md`. The operator content itself satisfies every contract assertion (Phase 6b 26/26 tests pass; full suite 1005/1005). The misroute was a path-interpretation issue, not a content issue.
+
+Resolution (procedural, not synthesis):
+
+1. The orchestrator copied the modified operator content from `/home/nes/ai/agents/work-manager-operator.md` to the worktree's `agents/work-manager-operator.md`.
+2. The orchestrator restored the main checkout via `git -C /home/nes/ai restore agents/work-manager-operator.md`.
+3. The orchestrator corrected the new test file (`tests/test_work_manager_operator_structure.py`) to resolve the operator path via `Path(__file__).resolve().parents[1] / "agents" / "work-manager-operator.md"` — the repo-relative pattern used by sibling tests (`tests/test_release_orchestrator_operator.py:5-6`). The original test hardcoded the absolute master path, which would also have caused the change to appear on master rather than on the WU branch from CI's perspective.
+4. The Phase 6b output index was updated to note the path-resolution change.
+
+Re-verified after the fix: 26/26 new module tests pass; 1005/1005 full suite. No re-dispatch was needed — the change was a file-routing correction, not a content edit, and the agent's content was preserved verbatim.
+
+Evidence: `/home/nes/projects/ai/planning/acr-120-work-manager-multi-team/.scratch/logs/acr-120-phase-6c.log` (Phase 6c agent stdout), `/home/nes/projects/ai/planning/acr-120-work-manager-multi-team/.scratch/phase6/step6b-output-index.md` (post-correction note).
+
+
 ## D-2026-05-07l — NES-278 Phase 8 test-audit PARTIAL on `workflows/index.json` accepted as gate-policy residual
 
 **WU**: NES-278 (Author `~/ai/workflows/rca.md` workflow). **Phase**: 8 (Post-CodeRabbit gates). **Decision**: `Accept test-audit verdict PARTIAL as a documented residual; advance to Phase 9.`
