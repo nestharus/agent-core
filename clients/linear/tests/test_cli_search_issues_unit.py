@@ -207,7 +207,7 @@ def test_search_issues_preserves_rich_filter_command_contract(
             "routing",
             "--title-starts-with",
             "AST-",
-            "--labels",
+            "--label",
             "hardening,prereq",
             "--first",
             "20",

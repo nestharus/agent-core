@@ -56,7 +56,7 @@ The manager supports two ticket backends and dispatches to the matching operator
 - **Ticket backend selection**: `ticket_system: jira | linear` when supplied is authoritative. For existing WUs, `jira_issue_key` selects JIRA and `linear_issue_key` selects Linear. For cold-start/new-ticket filing, provide `ticket_system` or project policy sufficient to select one backend; if neither is available, ask before filing.
 - **Existing ticket key when dispatching an existing WU**: one of `jira_issue_key` OR `linear_issue_key`.
 - **JIRA inputs when `ticket_system=jira`**: `jira_url`, `jira_project`, `jira_account_email`; auth lives in `$JIRA_API_KEY`.
-- **Linear inputs when `ticket_system=linear`**: `linear_team_key` and optional `linear_project_id`; auth lives in `$LINEAR_API_KEY`.
+- **Linear inputs when `ticket_system=linear`**: `linear_team_key` and optional `linear_project_id`; auth lives in `$LINEAR_API_KEY`. For Linear CLI-backed queries and filing, use `PYTHONPATH=$HOME/ai python3 -m clients.linear.cli` through the canonical `linear-operator` surface with `--team`, optional `--project <UUID-or-slugId>`, and per-team singular repeatable `--label` routing for issue create/search/list paths.
 - **Repo set in scope**: e.g., `nestharus/agent-runner`, `nestharus/ai`, future `agent-*` repos.
 - **User authorization scope**: managed-but-don't-execute is the default; explicit overrides for destructive ops.
 
@@ -76,6 +76,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
 
 1. **Pre-dispatch:**
    - Verify `${ticket_id}` exists in the selected backend and has correct labels or fields; apply missing metadata through `${ticket_operator}` when that backend supports it and the user has authorized it.
+   - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
    - For JIRA, use `~/ai/agents/jira-operator.md` with `task=transition` when a configured workflow and user authorization call for **In Progress**. For Linear, status transitions are user-owned; do not present Linear state changes as pipeline-owned.
    - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`.
    - Run `agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt>` in background.
@@ -91,7 +92,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
 
 4. **New tickets** (filed by manager, by orchestrator, or by audit):
    - Use `${ticket_operator}` with `task=create`, `${ticket_system_inputs}`, and the active team/project selected by `## Ticket Management`.
-   - For JIRA, create into the active `jira_project` with fields/labels required by project policy. For Linear, create under the active `linear_team_key` and optional `linear_project_id`; any status placement remains user-owned unless explicit project policy says otherwise.
+   - For JIRA, create into the active `jira_project` with fields/labels required by project policy. For Linear, create under the active `linear_team_key` and optional `linear_project_id`; pass the route as `--team <team>`, optional `--project <UUID-or-slugId>`, and standard labels as singular repeatable `--label` values. Any Linear status placement remains user-owned unless explicit project policy says otherwise.
    - Apply correct labels or fields per filing discipline and backend policy.
 
 ## Dispatch Priority + Autonomy
@@ -166,11 +167,13 @@ After every batch of new tickets, or when the session task tracker is suspected 
 
 Update the session task tracker's manager-backlog entry with: Done count + keys, In Progress count + keys, Todo count + group breakdown.
 
-### Labels
+### Team, Project, And Labels
 
 Labels and fields come from the active team or active project routing policy. For Linear, use `~/ai/agents/linear-operator.md` with `task=list-labels` / `task=apply-labels` when label changes are authorized. For JIRA, use `~/ai/agents/jira-operator.md` create/comment/transition/search fields and project label policy.
 
 `legacy` marks pre-existing tickets the manager does not touch. Apply `legacy` only when importing or preserving old work; never to new work the manager is dispatching.
+
+For Linear filing, the route is `(team, project?, labels[])`: pass `--team <team-key>`, pass `--project <UUID-or-slugId>` only when the project is a known scope for that WU, and pass standard labels as singular repeatable `--label` values on create/search/list issue commands. Label names are per-team facts; if a label or project is ambiguous, stop and surface the ambiguity rather than defaulting to a workspace label.
 
 ### State transitions
 

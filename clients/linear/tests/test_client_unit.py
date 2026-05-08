@@ -1336,12 +1336,14 @@ class TestACR22LabelHelperContracts:
             "resolve_label_ids",
             return_value=["label-new", "label-existing"],
         )
+        mocker.patch.object(LinearClient, "_resolve_team_id", return_value="team-ast")
         run_graphql = mocker.patch.object(
             LinearClient,
             "_run_graphql",
             return_value={
                 "data": {
                     "issue": {
+                        "team": {"id": "team-ast", "key": "AST"},
                         "labels": {
                             "nodes": [
                                 {"id": "label-existing"},
@@ -1388,7 +1390,19 @@ class TestACR22LabelHelperContracts:
             "resolve_label_ids",
             return_value=["label-new", "label-new", "label-other"],
         )
-        run_graphql = mocker.patch.object(LinearClient, "_run_graphql")
+        mocker.patch.object(LinearClient, "_resolve_team_id", return_value="team-ast")
+        run_graphql = mocker.patch.object(
+            LinearClient,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issue": {
+                        "team": {"id": "team-ast", "key": "AST"},
+                        "labels": {"nodes": [{"id": "label-existing"}]},
+                    }
+                }
+            },
+        )
         update_issue = mocker.patch.object(
             LinearClient,
             "update_issue",
@@ -1403,7 +1417,10 @@ class TestACR22LabelHelperContracts:
             replace=True,
         )
 
-        run_graphql.assert_not_called()
+        run_graphql.assert_called_once_with(
+            run_graphql.call_args.args[0],
+            {"id": "AST-12"},
+        )
         update_issue.assert_called_once_with(
             "AST-12",
             label_ids=["label-new", "label-other"],

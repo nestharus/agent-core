@@ -102,8 +102,9 @@ service or CLI family.
 labels, filters, views, workflow branch scope, or local worktree location.
 
 Service example: Linear Project-conn = Linear System-conn + team key, with
-optional project id when the Linear-specific schema later makes that part
-of the scope.
+optional project UUID or `slugId` as a Linear scope element when the
+Linear-specific schema makes that part of the route. Labels remain filters
+or conventions; they do not define connection identity.
 
 CLI example: a `codex` Project-conn is the `codex` System-conn plus CLI
 scope facts such as working directory, model alias, and optional session id;
@@ -152,9 +153,10 @@ not specify per-service schemas, storage, discovery, or lookup.
 Linear: Client = the GraphQL client family at `clients/linear/`. Auth =
 `LINEAR_API_KEY`. System-conn = Client + key, reaching the whole Linear
 workspace available to that key. Project-conn = System-conn + team key, with
-optional project id only when a downstream Linear schema chooses to include
-it. Labels, views, and filters live on the underlying Linear space or
-Project (user layer) metadata, not Project-conn identity.
+optional project UUID or `slugId` only when a downstream Linear schema
+chooses to include it as scope. Labels, views, and filters live on the
+underlying Linear space or Project (user layer) metadata, not Project-conn
+identity.
 
 JIRA: Client = the JIRA REST/curl/API family. Auth = `jira_account_email`
 plus `JIRA_API_KEY`. System-conn = Client + Auth + site/base URL, reaching

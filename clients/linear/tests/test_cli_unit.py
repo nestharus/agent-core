@@ -592,7 +592,7 @@ Content
                     "T",
                     "--description",
                     "D",
-                    "--labels",
+                    "--label",
                     "x, y",
                     "--create-missing-labels",
                 ],

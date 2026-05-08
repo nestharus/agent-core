@@ -110,10 +110,22 @@ def split_plans(issue_id: str, output_dir: str) -> None:
     print(json.dumps({"ok": True, "data": {"plans": plans, "count": len(plans)}}, indent=2))
 
 
-def list_projects(team: str | None = None) -> None:
+def _split_values(values: list[str] | None) -> list[str] | None:
+    """Normalize repeatable comma-delimited CLI values."""
+    if not values:
+        return None
+    normalized = [part.strip() for value in values for part in value.split(",")]
+    normalized = [part for part in normalized if part]
+    return normalized or None
+
+
+def list_projects(team: str | None = None, include_archived: bool = False) -> None:
     """List and print projects as JSON."""
     client = LinearClient()
-    projects = client.list_projects(team_id=team)
+    kwargs = {"team_id": team}
+    if include_archived:
+        kwargs["include_archived"] = include_archived
+    projects = client.list_projects(**kwargs)
     print(json.dumps({"ok": True, "data": {"projects": projects}}, indent=2))
 
 
@@ -149,6 +161,9 @@ def create_issue(
     produce a half-labeled ticket.
     """
     client = LinearClient()
+    resolved_project_id: str | None = None
+    if project_id:
+        resolved_project_id = client.resolve_project_id(team, project_id)
     label_ids: list[str] | None = None
     if labels:
         label_ids = client.resolve_label_ids(team, labels, create_missing=create_missing_labels)
@@ -156,9 +171,24 @@ def create_issue(
         team=team,
         title=title,
         description=description,
-        project_id=project_id,
+        project_id=resolved_project_id,
         label_ids=label_ids,
     )
+    if labels and label_ids:
+        issue_id = issue.get("id") or issue.get("identifier")
+        if issue_id:
+            readback = client.get_issue(issue_id)
+            readback_label_ids = {
+                label.get("id") for label in readback.get("labels", []) if label.get("id")
+            }
+            if any(label_id not in readback_label_ids for label_id in label_ids):
+                client.apply_labels(
+                    issue_id=issue_id,
+                    team=team,
+                    label_names=labels,
+                    create_missing=create_missing_labels,
+                    replace=False,
+                )
     print(json.dumps({"ok": True, "data": issue}, indent=2))
 
 
@@ -293,36 +323,56 @@ def search_issues(
     team_id: str | None = None,
     title_contains: str | None = None,
     title_starts_with: str | None = None,
+    project: str | None = None,
     labels: list[str] | None = None,
     include_archived: bool = False,
     first: int = 50,
 ) -> None:
     """Search issues and print results as JSON."""
     client = LinearClient()
-    issues = client.search_issues(
-        team_key=team_key,
-        team_id=team_id,
-        title_contains=title_contains,
-        title_starts_with=title_starts_with,
-        label_names=labels,
-        include_archived=include_archived,
-        first=first,
-    )
+    kwargs = {
+        "team_key": team_key,
+        "team_id": team_id,
+        "title_contains": title_contains,
+        "title_starts_with": title_starts_with,
+        "label_names": labels,
+        "include_archived": include_archived,
+        "first": first,
+    }
+    if project is not None:
+        kwargs["project"] = project
+    issues = client.search_issues(**kwargs)
     print(json.dumps({"ok": True, "data": issues}, indent=2))
 
 
 def list_issues(
     *,
     team: str,
+    project: str | None = None,
+    labels: list[str] | None = None,
     include_archived: bool = False,
     first: int = 50,
 ) -> None:
-    """List issues for a team and print results as JSON."""
+    """List issues for a team and optional project/label tuple."""
     client = LinearClient()
+    kwargs = {
+        "team_key": team,
+        "include_archived": include_archived,
+        "first": first,
+    }
+    if project is not None or labels is not None:
+        kwargs.update(
+            {
+                "team_id": None,
+                "title_contains": None,
+                "title_starts_with": None,
+                "label_names": labels,
+            }
+        )
+    if project is not None:
+        kwargs["project"] = project
     issues = client.search_issues(
-        team_key=team,
-        include_archived=include_archived,
-        first=first,
+        **kwargs,
     )
     print(json.dumps({"ok": True, "data": issues}, indent=2))
 
@@ -358,9 +408,11 @@ def main() -> None:
 
     # list-projects command
     list_projects_parser = subparsers.add_parser("list-projects", help="List projects")
+    list_projects_parser.add_argument("--team", help="Team key/name/UUID to scope projects")
     list_projects_parser.add_argument(
-        "--team",
-        help="Optional team identifier (UUID, key, or name) used to scope projects",
+        "--include-archived",
+        action="store_true",
+        help="Include archived projects",
     )
 
     # list-teams command
@@ -377,9 +429,11 @@ def main() -> None:
     )
     create_issue_parser.add_argument("--title", required=True, help="Issue title")
     create_issue_parser.add_argument("--description", help="Issue description")
-    create_issue_parser.add_argument("--project", help="Project ID")
+    create_issue_parser.add_argument("--project", help="Project UUID or slugId")
     create_issue_parser.add_argument(
-        "--labels", help="Comma-separated label names (e.g. 'hardening,prereq')"
+        "--label",
+        action="append",
+        help="Label name; repeatable and accepts comma-delimited values",
     )
     create_issue_parser.add_argument(
         "--create-missing-labels",
@@ -430,8 +484,13 @@ def main() -> None:
         help="Title prefix to match",
     )
     search_issues_parser.add_argument(
-        "--labels",
-        help="Comma-separated label names; all supplied labels must be present",
+        "--project",
+        help="Project UUID or slugId to filter within the selected team",
+    )
+    search_issues_parser.add_argument(
+        "--label",
+        action="append",
+        help="Label name filter; repeatable and accepts comma-delimited values",
     )
     search_issues_parser.add_argument(
         "--include-archived",
@@ -448,12 +507,19 @@ def main() -> None:
     # list-issues command
     list_issues_parser = subparsers.add_parser(
         "list-issues",
-        help="List Linear issues for a team",
+        help="List Linear issues by team with optional project and label filters",
     )
     list_issues_parser.add_argument(
-        "--team",
-        required=True,
-        help="Team key or name to resolve before listing issues",
+        "--team", required=True, help="Team key, name, or UUID to list issues from"
+    )
+    list_issues_parser.add_argument(
+        "--project",
+        help="Project UUID or slugId to filter within the selected team",
+    )
+    list_issues_parser.add_argument(
+        "--label",
+        action="append",
+        help="Label name filter; repeatable and accepts comma-delimited values",
     )
     list_issues_parser.add_argument(
         "--include-archived",
@@ -464,7 +530,7 @@ def main() -> None:
         "--first",
         type=int,
         default=50,
-        help="Maximum issues to request (default: 50)",
+        help="Maximum issues to request, 1-100 (default: 50)",
     )
 
     # list-labels command
@@ -522,17 +588,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.command:
+        available_commands = ", ".join(subparsers.choices)
         print(
             json.dumps(
                 {
                     "ok": False,
                     "error": {
                         "code": "INVALID_INPUT",
-                        "message": "A command is required. Available commands: get-issue, "
-                        "get-issue-description, split-plans, list-issues, list-projects, "
-                        "list-teams, list-comments, create-issue, update-issue, "
-                        "create-comment, get-comment, search-issues, list-labels, "
-                        "create-label, apply-labels, upsert-comment",
+                        "message": f"A command is required. Available commands: {available_commands}",
                     },
                 }
             )
@@ -547,7 +610,7 @@ def main() -> None:
         elif args.command == "split-plans":
             split_plans(args.issue_id, args.output_dir)
         elif args.command == "list-projects":
-            list_projects(team=args.team)
+            list_projects(team=args.team, include_archived=args.include_archived)
         elif args.command == "list-teams":
             list_teams()
         elif args.command == "list-comments":
@@ -558,7 +621,7 @@ def main() -> None:
                 title=args.title,
                 description=args.description,
                 project_id=args.project,
-                labels=[s.strip() for s in args.labels.split(",") if s.strip()] if args.labels else None,
+                labels=_split_values(args.label),
                 create_missing_labels=args.create_missing_labels,
             )
         elif args.command == "update-issue":
@@ -584,15 +647,16 @@ def main() -> None:
                 team_id=args.team_id,
                 title_contains=args.title_contains,
                 title_starts_with=args.title_starts_with,
-                labels=[s.strip() for s in args.labels.split(",") if s.strip()]
-                if args.labels
-                else None,
+                project=args.project,
+                labels=_split_values(args.label),
                 include_archived=args.include_archived,
                 first=args.first,
             )
         elif args.command == "list-issues":
             list_issues(
                 team=args.team,
+                project=args.project,
+                labels=_split_values(args.label),
                 include_archived=args.include_archived,
                 first=args.first,
             )
