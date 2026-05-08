@@ -35,6 +35,35 @@ Delegated user questions follow `~/ai/conventions/agent-questions-and-session-gr
 
 Process-tree review uses `~/ai/agents/process-tree-auditor.md` and the violation taxonomy in `~/ai/conventions/workflow-execution-violations.md`.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+pr-review-operator
+
+### Inputs
+
+- actual branch diff or PR, approved proposal package, test evidence, and audit-history context
+- base branch or true stacked parent for comparison
+
+### Expectations
+
+- gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks
+- runs on the actual diff after CodeRabbit rather than judging the proposal alone
+- routes repeated fix or gate loops through audit-history and process-tree review
+
+### Outputs
+
+- gate verdicts and actionable findings for the next fix pass or decomposition
+- synthesized PR-review comment when posting is in scope
+- process-tree-auditor evidence before synthesis or downstream PR movement
+
+### Non-goals
+
+- does not review prototype work that lacks a proposal contract
+- does not treat human review as a substitute for model-owned gates
+- does not allow findings to remain optional commentary before the PR advances
+
 ## Gates
 
 | Gate | Model | Purpose |

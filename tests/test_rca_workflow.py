@@ -28,6 +28,7 @@ README_MD = REPO_ROOT / "README.md"
 
 EXPECTED_H2_HEADINGS = [
     "## Purpose",
+    "## Workflow Dispatch Surface",
     "## Use When",
     "## Do Not Use When",
     "## Required Inputs",

@@ -28,6 +28,37 @@ Define the project-agnostic release lifecycle for staged releases that flow from
 
 The workflow composes specialized release operators. It describes what the lifecycle must prove and where evidence lives; the future `release-orchestrator` dispatches the mechanics and project-local wrappers provide configuration.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+release-orchestrator
+
+### Inputs
+
+- repo_root, worktree_path, scratch_dir, and planning_dir for repository context and artifact layout
+- release_id, develop_branch_name, main_branch_name, release_branch_name, and optional hotfix_branch_name for branch topology
+- release_manifest_path, freeze_window, qa_evidence_path, required_checks_policy, settings_state_or_runbook_ticket, hotfix_policy, promotion_approval, and reconcile_obligations
+
+### Expectations
+
+- runs the release lifecycle in phase order: cut, freeze, hotfix-cherry-pick, promote, tag, reconcile
+- keeps settings and Tier-3 approvals human-owned while model-owned release operators handle documented release mechanics
+- records release evidence, hotfix exceptions, tags, and reconciliation closure state without project-specific configuration
+
+### Outputs
+
+- release branch, hotfix branch when used, promotion evidence, version tag, and updated release manifest
+- settings runbook tickets, QA evidence records, exception records, and reconcile closure evidence
+- NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when a human-owned gate or unresolved release risk halts the lifecycle
+
+### Non-goals
+
+- does not author release-orchestrator or release sub-operator files
+- does not edit AGENTS.md, project wrappers, conventions, repository settings, or live release infrastructure
+- does not replace implementation, PR review, audit, CodeRabbit, or tiered-approval workflows
+
+
 ## Use When
 
 - A project needs a staged release path with a real freeze window, QA evidence, promotion approval, version tagging, and post-release reconciliation.

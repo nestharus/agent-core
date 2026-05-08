@@ -23,6 +23,35 @@ workflow_dispatch_contract:
 
 Alternative review topology where the tracker ticket — not a draft PR — is the unit of review. The branch is reviewed locally on the reviewer's machine; a PR is only opened **after** review passes.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+implementation-pipeline-orchestrator with tickets_first_variant=true
+
+### Inputs
+
+- tracker ticket, origin branch name, branch head SHA, and local reviewer context
+- project AGENTS.md opt-in declaring the tickets-first review variant
+
+### Expectations
+
+- uses the tracker ticket and pushed branch as the review unit before a PR exists
+- requires ticket-prefixed branch and commit naming for new branches
+- inserts a human local-review gate between automated review gates and draft PR creation
+
+### Outputs
+
+- tracker ticket body with source, touched paths, branch summary, and local-review acceptance criteria
+- reviewer approval, revision request, or rejection before Phase 9 can draft a PR
+- eventual draft PR only after local review passes
+
+### Non-goals
+
+- does not replace the default draft-PR workflow for projects that have not opted in
+- does not delete branches when transitioning existing draft PRs
+- does not treat automated gates as the human local review
+
 ## When to use
 
 Projects opt into this variant when:

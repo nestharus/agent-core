@@ -29,6 +29,35 @@ cite it rather than restating the policy.
 
 Delegated questions about approval or visible actions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+root orchestrator before visible external actions
+
+### Inputs
+
+- candidate action, current state, audience visibility, reversal path, and any pre-authorized runbook
+- caller-supplied project_decisions_path or equivalent when pre-authorization is claimed
+
+### Expectations
+
+- classifies actions into read, confined-write, or visible-write tiers
+- requires explicit per-action approval before Tier 3 visible writes unless a runbook pre-authorizes the exact action
+- keeps approval questions root-owned when delegated agents need user input
+
+### Outputs
+
+- approval request with state, reversal path, and concrete action for Tier 3 work
+- execution log details for approved or pre-authorized visible actions
+- clear Tier 2 treatment for routine draft PR creation and maintenance
+
+### Non-goals
+
+- does not batch multiple visible actions into one approval
+- does not treat ambiguous user replies as approval
+- does not let one agent both propose and execute a Tier 3 action without human approval
+
 ## The three tiers
 
 | Tier | Examples | Authorization |

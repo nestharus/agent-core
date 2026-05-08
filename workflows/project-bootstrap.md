@@ -23,6 +23,35 @@ workflow_dispatch_contract:
 
 Operational workflow for converting stable project facts into a thin project-local operator wrapper, using `~/ai/conventions/bootstrap-pattern.md` as the lifecycle rule reference. This workflow is dispatched by Work Manager or the root coordinator when a project/category pair needs open-path analysis, wrapper emission, closed-path validation, or a re-bootstrap decision.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+Work Manager or root coordinator
+
+### Inputs
+
+- target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger
+- evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting
+
+### Expectations
+
+- runs the open path against shared operators before trusting a project-specific wrapper
+- emits or refreshes thin project-local wrappers only when stable project facts justify them
+- uses qualitative stale-wrapper signals to choose closed path or re-bootstrap
+
+### Outputs
+
+- project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions
+- optional project-local wrapper and optional project AGENTS routing/policy update
+- NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct
+
+### Non-goals
+
+- does not redefine bootstrap-pattern lifecycle vocabulary
+- does not implement category-specific linter, ticket, code-quality, alias, or routing bootstraps
+- does not migrate existing project-local wrappers
+
 ## Use When
 
 - First project/category WU needs stable project facts captured for a shared base operator or workflow.

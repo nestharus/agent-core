@@ -26,6 +26,35 @@ Step 7 of the implementation pipeline. Run until per-pass value drops to zero; d
 Delegated user questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
 CodeRabbit is a proposer/critic loop whose accept equivalent is value-zero / useful-finding convergence; see ~/ai/conventions/proposer-critic-pattern.md.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+coderabbit-operator
+
+### Inputs
+
+- branch under review, base branch, and project worktree path
+- current review commit and optional audit-history context for repeated passes
+
+### Expectations
+
+- runs CodeRabbit on the actual branch diff and applies useful findings in place
+- amends the reviewed commit between passes without pushing during the loop
+- stops when the latest pass has no remaining value worth another iteration
+
+### Outputs
+
+- amended local branch commit containing accepted CodeRabbit fixes
+- latest CodeRabbit pass output and optional audit-history entries for repeated loops
+- process-tree-auditor evidence before handoff to PR review gates
+
+### Non-goals
+
+- does not push or force-push during the loop
+- does not weaken tests, regenerate baselines, or relax assertions to converge
+- does not replace the post-CodeRabbit PR review gates
+
 ## Preconditions
 
 - Run the loop from the branch under review, not from `main`.

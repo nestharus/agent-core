@@ -26,6 +26,34 @@ The principle: when you don't know what to build, you can't run a pipeline that 
 
 This workflow does not replace the implementation pipeline. It precedes it. A prototype produces a **dossier** that drives the implementation pipeline, the roadmap workflow, or a scope-cut decision — not a draft PR ready for merge.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+prototype-orchestrator
+
+### Inputs
+
+- prototype question, project planning path, branch or worktree context, and any defer-source ticket
+- evidence that the implementation pipeline or roadmap layer is too unclear to scope directly
+
+### Expectations
+
+- uses unconstrained exploration to arrive at a concrete answer before imposing review discipline
+- stabilizes the demonstrable state and organizes findings into a prototype dossier
+- runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene
+
+### Outputs
+
+- dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md
+- recommended downstream tickets, roadmap revisions, or scope-cut decisions
+
+### Non-goals
+
+- does not bypass the implementation pipeline for ordinary well-scoped work
+- does not treat the prototype branch as the load-bearing deliverable
+- does not run proposal-based PR review gates during the hack phase
+
 ## When to use
 
 A prototype is the right tool when at least two of the following are true:

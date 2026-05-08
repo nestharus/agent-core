@@ -27,6 +27,35 @@ The principle: when implementation work runs in lean mode, it is paying down spe
 
 This workflow is **not** part of the implementation pipeline. It produces its own small ticket per item. Items are typically smaller than implementation WUs because the change is focused: write tests for one uncovered surface, consolidate two duplicate scripts, document one undocumented contract, etc.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+local risk-reduction orchestrator
+
+### Inputs
+
+- project planning risk-profile.md with evidence-backed MEDIUM or HIGH entries
+- one selected risk axis and surface to reduce through a small ticket
+
+### Expectations
+
+- picks one risk-reduction item from the aggregate project risk profile
+- chooses the narrowest lever that measurably lowers the named risk axis
+- re-scores the affected surface after the work lands
+
+### Outputs
+
+- hardening or risk-reduction ticket tied to one axis and one surface
+- tests, contract docs, consolidation, lifecycle documentation, or deprecation work
+- updated project risk profile showing removal or downgrade of the risk entry
+
+### Non-goals
+
+- does not run without an evidence-backed aggregate risk profile
+- does not run concurrently with an implementation WU on the same surface
+- does not claim success without re-scoring the original axis
+
 ## When to use
 
 - The project's `planning/risk-profile.md` has accumulated MEDIUM/HIGH entries the team has not addressed.
