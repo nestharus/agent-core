@@ -90,6 +90,7 @@ class TestLinearClientGetIssue:
                     "assignee": None,
                     "state": None,
                     "project": None,
+                    "labels": {"nodes": []},
                     "parent": None,
                     "comments": {"totalCount": 0},
                     "children": {"totalCount": 0},
@@ -169,6 +170,7 @@ class TestACR22KnownKeyReadContract:
                     "assignee": None,
                     "state": {"id": "state-uuid", "name": "Todo", "type": "unstarted"},
                     "project": None,
+                    "labels": {"nodes": []},
                     "parent": None,
                 }
             }
@@ -3116,6 +3118,123 @@ class TestACR113ReadbackAndProjectContracts:
         assert result["labels"] == issue["labels"]["nodes"]
         assert result["project"]["slugId"] == "acr-strategy"
         assert result["project"]["teams"] == issue["project"]["teams"]["nodes"]
+
+    @pytest.mark.parametrize(
+        ("include_labels", "labels"),
+        [(False, None), (True, None)],
+        ids=["omitted", "null"],
+    )
+    def test_get_issue_rejects_missing_labels_field(
+        self,
+        mocker: MockerFixture,
+        include_labels: bool,
+        labels: dict[str, Any] | None,
+    ) -> None:
+        """T5: missing labels field is invalid; empty labels.nodes is the empty case."""
+        issue = {
+            "id": "issue-uuid",
+            "identifier": "ACR-1",
+            "title": "Readback",
+            "description": "body",
+            "priority": 2,
+            "estimate": None,
+            "url": "https://linear.app/acme/issue/ACR-1",
+            "branchName": "acr-1-readback",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-02T00:00:00Z",
+            "completedAt": None,
+            "canceledAt": None,
+            "dueDate": None,
+            "team": {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"},
+            "assignee": None,
+            "state": None,
+            "project": None,
+            "parent": None,
+        }
+        if include_labels:
+            issue["labels"] = labels
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={"data": {"issue": issue}},
+        )
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.get_issue("ACR-1")
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert "labels" in exc_info.value.message
+
+    def test_get_issue_rejects_missing_project_field(self, mocker: MockerFixture) -> None:
+        """T5: missing project field is invalid; project null is the no-project case."""
+        issue = {
+            "id": "issue-uuid",
+            "identifier": "ACR-1",
+            "title": "Readback",
+            "description": "body",
+            "priority": 2,
+            "estimate": None,
+            "url": "https://linear.app/acme/issue/ACR-1",
+            "branchName": "acr-1-readback",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-02T00:00:00Z",
+            "completedAt": None,
+            "canceledAt": None,
+            "dueDate": None,
+            "team": {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"},
+            "assignee": None,
+            "state": None,
+            "labels": {"nodes": []},
+            "parent": None,
+        }
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={"data": {"issue": issue}},
+        )
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.get_issue("ACR-1")
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert "project" in exc_info.value.message
+
+    @pytest.mark.parametrize(
+        ("include_labels", "labels"),
+        [(False, None), (True, None)],
+        ids=["omitted", "null"],
+    )
+    def test_search_issues_rejects_missing_labels_field(
+        self,
+        mocker: MockerFixture,
+        include_labels: bool,
+        labels: dict[str, Any] | None,
+    ) -> None:
+        """T5: second readback path must not synthesize labels from missing fields."""
+        issue = {
+            "id": "issue-uuid",
+            "identifier": "ACR-1",
+            "title": "Readback",
+            "url": "https://linear.app/acme/issue/ACR-1",
+            "state": None,
+            "team": {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"},
+        }
+        if include_labels:
+            issue["labels"] = labels
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={"data": {"issues": {"nodes": [issue]}}},
+        )
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.search_issues(team_id=ACR113_TEAM_ID)
+
+        assert exc_info.value.code == "INVALID_RESPONSE"
+        assert "labels" in exc_info.value.message
 
     def test_list_projects_team_filter_uses_variables_and_returns_slug_and_teams(
         self, mocker: MockerFixture

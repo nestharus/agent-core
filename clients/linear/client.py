@@ -31,6 +31,7 @@ class LinearClientError(Exception):
         PARSE_ERROR: Failed to parse JSON response or non-UTF-8 response.
         GRAPHQL_ERROR: GraphQL-level errors returned by the API.
         NOT_FOUND: Requested resource (issue, team, etc.) not found.
+        INVALID_RESPONSE: Linear response is missing required query fields.
         INVALID_PRIORITY: Priority value not in valid range 0-4.
         NO_UPDATES: No fields provided to update an issue.
         PAGINATION_ERROR: Pagination did not advance properly.
@@ -355,16 +356,52 @@ query($issueId: String!) {
         if not issue:
             raise LinearClientError("NOT_FOUND", f"Issue not found: {issue_id}")
 
+        if "project" not in issue:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: project",
+            )
+
         project = issue.get("project")
         if isinstance(project, dict):
             teams = project.get("teams")
             if isinstance(teams, dict):
-                project = {**project, "teams": teams.get("nodes", []) or []}
+                team_nodes = teams.get("nodes")
+                if not isinstance(team_nodes, list):
+                    raise LinearClientError(
+                        "INVALID_RESPONSE",
+                        "Linear issue response missing required field: project.teams.nodes",
+                    )
+                project = {**project, "teams": team_nodes}
+            else:
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    "Linear issue response missing required field: project.teams",
+                )
+        elif project is not None:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response field project must be an object or null",
+            )
+
+        if "labels" not in issue or issue.get("labels") is None:
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: labels",
+            )
 
         labels = issue.get("labels")
-        label_nodes = labels.get("nodes", []) if isinstance(labels, dict) else []
+        if not isinstance(labels, dict):
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response field labels must be an object",
+            )
+        label_nodes = labels.get("nodes")
         if not isinstance(label_nodes, list):
-            label_nodes = []
+            raise LinearClientError(
+                "INVALID_RESPONSE",
+                "Linear issue response missing required field: labels.nodes",
+            )
 
         # Build the response with proper structure
         return {
@@ -1577,10 +1614,26 @@ query IssueUnresolvedComments($id: String!, $after: String) {
         for node in nodes:
             if not isinstance(node, dict):
                 continue
+            if "labels" not in node or node.get("labels") is None:
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response missing required field: labels for {identifier}",
+                )
             labels = node.get("labels")
-            label_nodes = labels.get("nodes", []) if isinstance(labels, dict) else []
+            if not isinstance(labels, dict):
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response field labels must be an object for {identifier}",
+                )
+            label_nodes = labels.get("nodes")
             if not isinstance(label_nodes, list):
-                label_nodes = []
+                identifier = node.get("identifier") or node.get("id") or "<unknown>"
+                raise LinearClientError(
+                    "INVALID_RESPONSE",
+                    f"Linear issue response missing required field: labels.nodes for {identifier}",
+                )
             issues.append(
                 {
                     "id": node.get("id"),

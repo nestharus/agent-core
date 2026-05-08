@@ -167,7 +167,7 @@ After every batch of new tickets, or when the session task tracker is suspected 
 
 Update the session task tracker's manager-backlog entry with: Done count + keys, In Progress count + keys, Todo count + group breakdown.
 
-### Team, Project, And Labels
+### Labels
 
 Labels and fields come from the active team or active project routing policy. For Linear, use `~/ai/agents/linear-operator.md` with `task=list-labels` / `task=apply-labels` when label changes are authorized. For JIRA, use `~/ai/agents/jira-operator.md` create/comment/transition/search fields and project label policy.
 
