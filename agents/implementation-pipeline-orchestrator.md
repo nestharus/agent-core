@@ -283,6 +283,20 @@ Before accepting the Phase 6 halt-state transition or advance to Phase 7, enforc
 
 ### Phase 7 — CodeRabbit Loop
 
+#### Pre-dispatch integration-tests gate
+
+Before dispatching `coderabbit-operator`, enforce NES-279 and the Phase 6 layer integration-tests rule from `~/ai/workflows/implementation-pipeline.md`. This gate runs before Phase 7 CodeRabbit dispatch and before the NES-273 swap-record gate.
+
+Trigger condition: run this gate when the current level produced a `LevelComponentSet` from post-prototype derivation. Levels where no derivation trigger fired and no `LevelComponentSet` is required are no-ops for this gate.
+
+1. Read `${planning_dir}/contracts/${wu_lower}-${slug}.md` from disk and locate the post-prototype `LevelComponentSet` subsection in the contract artifact.
+2. Verify presence and shape. When a `LevelComponentSet` is required, the subsection must contain a valid `LevelComponentSet`; missing, unreadable, blank, incomplete, or invalid content is not equivalent to non-applicability.
+3. Verify required field tokens are present in the `LevelComponentSet`: `layer_level_id`, `component_pair_refs[]`, `integration_test_refs`, and `coverage_summary`.
+4. Verify `coverage_summary` semantics. An explicit `coverage_summary` stating "no interacting pairs at this layer" may allow Phase 7 to proceed when `component_pair_refs[]` is empty or the `LevelComponentSet` is explicitly non-applicable; when pairs are listed in `component_pair_refs[]`, missing test refs or missing integration coverage for an interacting pair must halt with `integration_test_missing` regardless of `coverage_summary` text.
+5. For each component_pair_refs[] entry, verify corresponding `integration_test_refs` cover the pair. Per pair, this means each entry in `component_pair_refs[]` must have corresponding integration-test refs; a listed pair without corresponding integration-test refs is missing evidence, not non-applicability.
+6. On missing, unreadable, blank, incomplete, missing-field, invalid-shape, ambiguous no-pair state, or pair-uncovered `LevelComponentSet` evidence, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 7`, violation code `integration_test_missing`, canonical path, refused action `Phase 7 CodeRabbit dispatch`, failed checks including missing-pair evidence (name which pair and what expected coverage was missing), and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse Phase 7 CodeRabbit dispatch, write `${scratch_dir}/questions/q-<uuidv4>.question.json`, and halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
+7. On a valid `LevelComponentSet` with full pair coverage, an explicit `coverage_summary` of "no interacting pairs at this layer", or a level where no derivation trigger fired and no `LevelComponentSet` is required, allow the following Phase 7 CodeRabbit dispatch to proceed.
+
 #### Pre-dispatch swap-record gate
 
 Before dispatching `coderabbit-operator`, enforce the Phase 6 → Phase 7 `PrototypeSwapRecord` boundary from `~/ai/workflows/implementation-pipeline.md`.
