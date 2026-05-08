@@ -36,6 +36,35 @@ Market-research rules: `~/ai/workflows/research.md`
 Ticket handoff: `~/ai/workflows/implementation-pipeline.md`
 Proposer/critic pattern for layer proposal/risk loops: ~/ai/conventions/proposer-critic-pattern.md
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+roadmap-orchestrator
+
+### Inputs
+
+- problem, philosophy, proposal, DECISIONS, market research, and engineering research artifacts
+- current roadmap layer to expand or revise and scratch path for risk-gate outputs
+
+### Expectations
+
+- cascades from market framing through executive, engineering, AI, and ticket-generation layers
+- runs three fresh risk gates per roadmap layer and requires all LOW verdicts before advancing
+- routes prototype escape hatches when feasibility or decomposition cannot be proven by research alone
+
+### Outputs
+
+- market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files
+- generated implementation tickets for approved AI roadmap slices
+- risk-gate reports and process-tree-auditor evidence at each gated layer
+
+### Non-goals
+
+- does not bootstrap a first product pipeline from nothing
+- does not handle small features inside an existing product area
+- does not continue when product framing must reset through alignment
+
 ## When to use
 
 - The current ticket backlog is empty or will be within one cycle.

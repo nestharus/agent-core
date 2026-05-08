@@ -125,6 +125,7 @@ If a delegated sub-agent must ask the user, it follows [agent-questions-and-sess
 ## Workflow dispatch contract
 
 `workflow_dispatch_contract` is concise metadata for deciding whether a workflow is the right dispatch target. It is not the workflow procedure and does not replace the workflow body.
+Every workflow doc MUST contain exactly one `## Workflow Dispatch Surface` body section whose fields mirror the parsed `workflow_dispatch_contract` frontmatter; editors changing frontmatter MUST also update the body section.
 
 The block has a fixed key set. The only keys allowed are `orchestrator`, `inputs`, `expectations`, `outputs`, and `non_goals`; no other keys are allowed.
 

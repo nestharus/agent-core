@@ -26,6 +26,37 @@ workflow_dispatch_contract:
 End-to-end pipeline from triggering event to merged PR.
 Bugs start with RCA. Features, refactors, and other planned work skip RCA.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+implementation-pipeline-orchestrator
+
+### Inputs
+
+- ticket id and branch, worktree, scratch, and planning paths
+- non-empty ticket description from the configured Jira or Linear ticket system
+- optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them
+
+### Expectations
+
+- runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases
+- defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it
+- uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant
+- keeps tests and product code separated between Phase 6b and Phase 6c invocations
+
+### Outputs
+
+- planning artifacts under the per-WU planning directory
+- tested repository diff and draft PR URL when the work proceeds
+- ticket comments and audit-history closure evidence at PR and finalization points
+
+### Non-goals
+
+- does not use git-resident ticket files as the source of truth
+- does not skip phases implicitly
+- does not inline the orchestrator role into the root conversation
+
 ## Tickets live on the project's ticket system, not on disk
 
 Every Work Unit is an issue on the project's configured ticket system — currently either **JIRA** (Atlassian) or **Linear**, selected per project. The orchestrator dispatches the matching ticket operator at Phase 0 bootstrap (`~/ai/agents/jira-operator.md` for JIRA, `~/ai/agents/linear-operator.md` for Linear) to read (or first-draft) the ticket and renders the description into the per-WU `${scratch_dir}/ticket.md`. The ticket only needs a non-empty description; scope, code and test boundaries, acceptance criteria, and anti-scope are **derived** during Phase 2.5 (problem map), Phase 3 (proposal), and Step 6a (contract) — not pre-declared on the ticket. Pre-declared boundaries are brittle: real surface and scope are discovered during research, and forcing them upfront either creates inaccurate inputs the pipeline then trusts or blocks tickets that could otherwise proceed. There is **no** `plans/tickets/<phase>/<wu_id>.md` file in git for this pipeline. The orchestrator does not read from such a path. If a project's `AGENTS.md` still references the old git-resident ticket convention, treat the orchestrator's input contract (`~/ai/agents/implementation-pipeline-orchestrator.md`) as authoritative and update the project doc.

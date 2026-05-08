@@ -115,6 +115,15 @@ def test_dispatch_contract_has_fixed_key_set():
     )
 
 
+def test_convention_has_body_mirror_maintenance_sentence():
+    sentence = (
+        "Every workflow doc MUST contain exactly one `## Workflow Dispatch Surface` "
+        "body section whose fields mirror the parsed `workflow_dispatch_contract` "
+        "frontmatter; editors changing frontmatter MUST also update the body section."
+    )
+    assert sentence in _conv_text(), "missing maintenance sentence"
+
+
 def test_relative_markdown_links_resolve():
     """T5 risk: broken adjacent references; level: unit; source: proposal §7 T5."""
     text = _conv_text()

@@ -21,6 +21,35 @@ workflow_dispatch_contract:
 ---
 # Linter Bootstrap Workflow
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+root orchestrator or workflow operator invoking linter-bootstrap
+
+### Inputs
+
+- target project root or worktree path plus planning directory for linter-bootstrap artifacts
+- A1 code-quality convention path or pinned revision and optional per-language scope
+
+### Expectations
+
+- inventories existing target-project CI/linter coverage against A1 code-quality rules
+- researches existing ecosystem linters or rule packages for uncovered lint-enforceable A1 rules
+- writes a setup-PR proposal mapping proposed lint additions to A1 coverage and residual gaps
+
+### Outputs
+
+- linter coverage inventory artifact under ${planning_dir}/research/linter-bootstrap-inventory.md
+- per-rule ecosystem research artifact under ${planning_dir}/research/linter-bootstrap-research.md
+- setup-PR proposal artifact under ${planning_dir}/proposals/linter-bootstrap-setup-pr.md
+
+### Non-goals
+
+- does not bootstrap a concrete project's linters while running only the workflow definition
+- does not create or define the TBD linter-inventory-agent operator
+- does not enforce A1 rules that lack existing linter ecosystem coverage
+
 ## Purpose
 
 Use this workflow to turn A1 code-quality policy into a project-specific linter setup proposal. The workflow inventories what a target project already enforces, researches existing ecosystem tooling for uncovered lintable A1 rules, and writes a setup-PR proposal for a future implementation unit.

@@ -20,6 +20,34 @@ workflow_dispatch_contract:
 ---
 # Audit Workflow
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+root audit coordinator or implementation-pipeline-orchestrator
+
+### Inputs
+
+- target type, target paths or target manifest, target identity, repo/worktree context, scratch or audit work directory
+- design-pattern and operator-format references for design targets, runtime evidence for process targets, and merged-base/problem-map evidence for rebase-drift targets
+
+### Expectations
+
+- dispatches applicable audit/checker operators for one current target set and writes a durable audit bundle
+- aggregates source reports without replacing their procedures or verdict vocabularies
+- preserves audit-history ownership and process-tree topology boundaries
+
+### Outputs
+
+- dispatch manifest, child prompts/logs/reports, normalized findings, aggregate audit report
+- role outputs suitable for proposer revision or decision-encoder when the caller enters a revise/review loop
+
+### Non-goals
+
+- does not replace Phase 4 risk gates, PR review gates, workflow-reviewer, or process-tree topology audit
+- does not implement fixes, revise target artifacts, or run historical audits unless explicitly invoked
+- does not wire implementation-pipeline entry modes
+
 ## Purpose
 
 Coordinate target-typed audit dispatch across existing design, runtime-process, and rebase-drift auditors. The workflow owns routing, manifest shape, artifact layout, finding normalization, aggregate verdicts, currentness semantics, audit-history handoff, and process-tree handoff.

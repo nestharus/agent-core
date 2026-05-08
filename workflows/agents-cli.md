@@ -22,6 +22,33 @@ workflow_dispatch_contract:
 CLI reference: `/home/nes/projects/agent-runner/README.md`.
 That is the authoritative source for flags, options, named-agent resolution, TOML model config, and invocation shapes. This doc only covers the conventions layered on top for pipeline work.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+root orchestrator or workflow operator invoking agents CLI
+
+### Inputs
+
+- model name, worktree path, prompt file, and log path for an agent dispatch
+- sub-agent delegation, question-handling, or parallel-writer context
+
+### Expectations
+
+- standardizes agents CLI invocation and tee-based log capture for pipeline work
+- routes delegated user questions through the root-owned question artifact convention
+- requires separate git worktrees when concurrent writing agents run
+
+### Outputs
+
+- consistent agents command shape for prompts, logs, and long-running background work
+- stable prompt and log naming conventions for post-run review
+
+### Non-goals
+
+- does not replace the agent-runner README as the authoritative CLI reference
+- does not define model role selection beyond pointing to the model-role matrix
+
 ## Standard invocation shape
 
 ```bash

@@ -28,6 +28,37 @@ Coordinate a full incident-to-close root-cause analysis lifecycle. The workflow 
 
 RCA is an outer workflow. It dispatches existing operators for investigation, post-mortem authoring, and tracker side effects, then records enough manifest state for resume and process review without mutating source code or replacing implementation delivery gates.
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+Work Manager or root RCA coordinator
+
+### Inputs
+
+- incident handle or incident context, incident brief path or enough framing to create one, evidence directory, repo_root, scratch_dir, and planning_dir
+- ticket_system linear or jira with existing incident issue key or create context, plus Linear or Jira operator inputs for tracker filing and comments
+- action_item_policy file-only, file-and-handoff, or file-and-dispatch, plus action-item worktree/planning/scratch path policy when implementation WUs are dispatched
+
+### Expectations
+
+- runs the full RCA lifecycle from incident framing through evidence, tracker filing, investigation, post-mortem, action-item tickets, runbooks, tracker comments, and close-or-pending decision
+- dispatches incident-investigator and post-mortem-author as separate operator invocations and uses ticket operators for tracker side effects
+- wraps implementation-pipeline action-item WUs without replacing implementation review or PR review gates
+
+### Outputs
+
+- incident brief, evidence pack, findings, post-mortem, action-item index, runbooks, tracker comment/link evidence, and RCA close or pending record
+- created or identified incident tracker key and action-item ticket keys
+- NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot proceed
+
+### Non-goals
+
+- does not mutate source code, git state, applications, production, or external systems except documented tracker create/comment operations
+- does not edit incident-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator
+- does not replace implementation-pipeline Phase 4, Phase 7, Phase 8, CodeRabbit, or PR-review gates
+
+
 ## Use When
 
 - A caller needs the complete RCA path: incident framing, evidence pack assembly, tracker filing, investigation, post-mortem synthesis, severity-ordered action-item tickets, runbooks for unverifiable or customer-side factors, tracker comments, and a close-or-pending decision.

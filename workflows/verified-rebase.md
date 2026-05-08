@@ -27,6 +27,35 @@ This is the single rebase path. The plain `jj rebase` procedure is retired — s
 
 Model assignments: [`~/ai/models/roles.md`](../models/roles.md). CLI: [`~/ai/workflows/agents-cli.md`](agents-cli.md). Conventions: [`~/ai/conventions/no-backwards-compatibility.md`](../conventions/no-backwards-compatibility.md).
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+jj-operator
+
+### Inputs
+
+- BRANCH and TARGET refs for the rebase
+- optional SOURCE and PARENT_BUNDLE for scoped or stacked rebases
+
+### Expectations
+
+- produces a deterministic bundle for rebase review
+- computes mechanical provenance from predicted tree, actual tree, conflicts, and range-diff output
+- does not push and does not resolve conflicts
+
+### Outputs
+
+- bundle under .tmp/verified-rebase/<branch-slug>/<timestamp>/
+- stdout verdict CLEAN, DIRTY-EXPLAINED, DIRTY-UNPROVENANCED, or BLOCKED
+- local refs/pre-rebase/<branch> rollback anchor and rollback.sh helper
+
+### Non-goals
+
+- does not provide a plain rebase fallback
+- does not decide whether the caller should push
+- does not judge semantic correctness of conflict resolutions
+
 ## Inputs
 
 - `BRANCH` — branch to rebase (e.g. `feat/p2-version-parsing-unification`).

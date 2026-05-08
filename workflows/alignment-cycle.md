@@ -30,6 +30,37 @@ Operator routing is in [`~/ai/AGENTS.md`](../AGENTS.md) under "Strategic plannin
 Agent invocation: [`~/ai/workflows/agents-cli.md`](agents-cli.md).
 Agent Q&A and session graph convention: [`~/ai/conventions/agent-questions-and-session-graph.md`](../conventions/agent-questions-and-session-graph.md).
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+alignment-cycle-orchestrator
+
+### Inputs
+
+- project problem.md, philosophy.md, proposal.md, and axis reference table
+- scratch directory for problem, philosophy, classification, and run-report artifacts
+- project_root for resolving ${project_root}/DECISIONS.md decision records
+
+### Expectations
+
+- reviews proposal alignment against the problem definition and product philosophy
+- splits judgement from synthesis through classify and integrate stages
+- halts only when philosophy decisions require root-surfaced user input
+
+### Outputs
+
+- problem-review.md and optional problem-surfaces.md or problem-classification.md artifacts
+- updated problem.md and project axis reference table when Stage 1b-integrate runs
+- philosophy-review.md and optional philosophy-surfaces.md, philosophy-classification.md, or philosophy-decisions.md artifacts
+- updated philosophy.md when Stage 2b-integrate runs
+- run-report.md describing completed stages, skips, and open NEEDS_INPUT artifacts
+
+### Non-goals
+
+- does not author or update proposal.md as the proposer
+- does not re-run alignment stages inside the same cycle after integrations
+
 ## Purpose
 
 Verify that a project's current proposal still aligns with its problem definition and product philosophy. When alignment surfaces new problem axes or philosophical concerns, integrate the absorbable ones and surface the user-input ones.

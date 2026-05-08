@@ -45,7 +45,7 @@ WORKFLOW_CONVENTION_READ_REFERENCE_ALLOWLIST: dict[
     tuple[str, int], tuple[str, ...]
 ] = {
     ("workflows/tiered-approval.md", 8): ("pre-authorization",),
-    ("workflows/tiered-approval.md", 124): ("Pre-authorization",),
+    ("workflows/tiered-approval.md", 153): ("Pre-authorization",),
     ("conventions/gate-ownership.md", 125): (
         "DECISIONS.md",
         "project decisions path",
@@ -53,16 +53,16 @@ WORKFLOW_CONVENTION_READ_REFERENCE_ALLOWLIST: dict[
 }
 
 WORKFLOW_CONVENTION_CONTEXT_WRITE_REFERENCES: set[tuple[str, int]] = {
-    ("workflows/tiered-approval.md", 79),
-    ("workflows/tiered-approval.md", 127),
+    ("workflows/tiered-approval.md", 108),
+    ("workflows/tiered-approval.md", 156),
 }
 
 WORKFLOW_CONVENTION_CONTEXT_WRITE_EXPECTATIONS: dict[tuple[str, int], tuple[str, ...]] = {
-    ("workflows/tiered-approval.md", 79): (
+    ("workflows/tiered-approval.md", 108): (
         "${project_decisions_path}",
         "project equivalent",
     ),
-    ("workflows/tiered-approval.md", 127): (
+    ("workflows/tiered-approval.md", 156): (
         "${project_decisions_path}",
         "project equivalent",
     ),
@@ -314,7 +314,7 @@ def test_workflow_convention_decisions_read_references_stay_allowed() -> None:
 def test_workflow_convention_decisions_read_references_use_qualified_target() -> None:
     expected_references = {
         ("workflows/tiered-approval.md", 8): "project_decisions_path",
-        ("workflows/tiered-approval.md", 124): "project decisions path",
+        ("workflows/tiered-approval.md", 153): "project decisions path",
         ("conventions/gate-ownership.md", 125): "project decisions path",
     }
 

@@ -34,6 +34,35 @@ Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
 Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
 Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
 
+## Workflow Dispatch Surface
+
+### Orchestrator
+
+research coordinator or implementation-pipeline Phase 1
+
+### Inputs
+
+- focused research question, scope constraints, output location, and source requirements
+- optional decomposition into single-agent, parallel-fanout, or deep-reasoning shape
+
+### Expectations
+
+- collects primary-source evidence before forming options or recommendations
+- keeps research factual and separate from solution proposal design
+- synthesizes findings once into a traceable report with assumptions and tradeoffs
+
+### Outputs
+
+- planning research report with question, evidence, options, recommendation, and open risks
+- raw finding artifacts for parallel-fanout sub-questions when used
+- optional draft problem map and assumption register for downstream proposal work
+
+### Non-goals
+
+- does not design or implement the solution
+- does not cite derivative summaries when primary sources are available
+- does not advance past inconclusive evidence that needs user-owned reframing
+
 ## When to use
 
 - The question cannot be answered from the current codebase alone.
