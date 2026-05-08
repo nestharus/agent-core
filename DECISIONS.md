@@ -1085,3 +1085,14 @@ Phase 2.5 sub-step 2.5.1 (coverage inventory) and 2.5.4 (duplicates) revealed th
 - Round-1 stale-base reports: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/risk/acr-122-test-audit.md` (HIGH "Risk reduction" naming the deletion pattern) and `acr-122-justification.md` (HIGH "Drive-by changes" with `git log HEAD..master --oneline = f5aa689`).
 
 **Rationale:** Procedural per `~/ai/agents/implementation-pipeline-orchestrator.md` § NEEDS_INPUT Handling — orchestrator-resolvable, not user-bound. Same recurrence pattern as the prior stale-base entries at Phase 2.5 in this WU and Phase 8 in ACR-121 / ACR-127. Old Phase 8 round-1 reports are discarded; round-2 will re-dispatch all four gates against the rebased HEAD.
+
+## D-2026-05-08-ACR49a — ACR-49 Phase 2.5 risk profile rolled up HIGH; proceed exhaustive per pre-resolved gates
+
+- **Phase**: 2.5 (Existing-State Risk Profile)
+- **Decision**: Proceed to Phase 3 in `exhaustive` mode without invoking the routine problem-map human gate.
+- **Inputs**:
+  - `skip_problem_map_gate=true` (project-level override declared in the dispatch).
+  - Pre-resolved Phase 2.5 gates from work-manager-operator dispatch: narrow-vs-exhaustive → A (exhaustive); defer-to-prototype → A (proceed exhaustive); mid-pipeline drift → A (proceed + DECISIONS residual).
+- **Risk profile**: `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/risk/acr-49-risk-profile.md`. Rolled up HIGH because the per-surface "Duplicate-system count" axis was scored HIGH for every surface (operator frontmatter, AGENTS.md routing row, workflow body restatement). Coverage gap is HIGH because no existing test enforces workflow-body ↔ frontmatter agreement.
+- **Residual**: HIGH verdict is recorded as residual. The fix in this WU IS the closure for the gap — a structural test that converts drift from "documentation discipline" into a CI-enforced invariant. Anti-scope (operator file, AGENTS.md, models/roles.md) is preserved.
+- **Evidence**: `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/risk/acr-49-risk-profile.md`, `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/research/acr-49-duplicates.md`, `/home/nes/projects/ai/planning/acr-49-roadmap-orchestrator-model-routing-drift/research/acr-49-coverage-inventory.md`.

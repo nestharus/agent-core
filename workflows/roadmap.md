@@ -101,7 +101,7 @@ Do not use this workflow for:
 
 ### Layer 0 - Market research
 
-- **Orchestrator** (`gpt-high`): identifies which research questions need
+- **Orchestrator** (`claude-opus`): identifies which research questions need
   answering for the planned expansion or revision.
 - **Web research execution**: `gpt-high` researchers in parallel via Firecrawl
   MCP or equivalent.
