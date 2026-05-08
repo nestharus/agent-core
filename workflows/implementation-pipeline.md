@@ -189,6 +189,8 @@ The `implementation-pipeline-orchestrator` exposes `planning_dir` as a required 
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the orchestrator classifies it: procedural questions are answered by the orchestrator and the sub-agent is re-dispatched; only NEEDS_INPUT carrying a new-value question is surfaced to the root.
 - Gate: model. The orchestrator advances autonomously to Phase 2 (or Phase 2.5 if Phase 2 is skipped) once the framing artifact is non-empty and free of unresolved new-value questions.
 
+Phase 1 and the Phase 2.5 problem map consume inherited estimate metadata from `${scratch_dir}/ticket.md`, rendered by Phase 0 from the configured ticket system. The frontmatter shape is `story_point_estimate`, `estimate_source`, `estimate_rationale`, and `estimate_field`; `estimate_field` is Linear `estimate` or JIRA `customfield_10016`. When `estimate_source` is `backstop-spike` or `missing` and the user has not dispositioned that cold start, the orchestrator surfaces the root-bound `NEEDS_INPUT` new-value question at `${scratch_dir}/questions/q-<uuidv4>.question.json` with `single_choice` options `Run a small prototype first`, `Proceed without a baseline estimate`, and `Terminate WU`, then returns `NEEDS_INPUT:<absolute_artifact_path>`. Phase 1 outputs, the problem map, and sub-step research propagate the inherited estimate values verbatim so Phase 3 can compare against the same baseline.
+
 ## Phase 2 - Synthesize User Needs (optional; usually paired with Phase 1)
 
 - Use when research exists but still needs to be mapped onto the project's real context.
@@ -301,6 +303,22 @@ Deferring to prototype is not failure. It is the recognition that the implementa
 - Rules: include a short assumption register. Each assumption must name the evidence it relies on and what source or observation would invalidate it. If research already drafted a register for this touched surface, Phase 3 validates and narrows it into the approved assumption register in `proposals/NN-*.md`. Do not keep a competing second register.
 - Rules: include a test-intent track. For each expected test or test group, name the change risk or verification risk, intended behavior or acceptance condition, selected level (`unit`, `component`, `particular-integration`, or `end-to-end`), fixture source or fixture application point, assumption-register link if the behavior depends on an assumption, expected observable signal, and any residual risk the test will not verify.
 - Gate: no default human approval step. The proposal advances only by passing Phase 4.
+
+Phase 3 proposals MUST include a `## Estimate refinement` parse anchor with one fenced `yaml` block. The proposer's outputs contract includes `refined_story_point_estimate` and `estimate_delta_rationale`, and the fenced block is the only parse surface the orchestrator reads:
+
+```yaml
+refined_story_point_estimate: 13
+estimate_delta_rationale: "One sentence explaining the refinement."
+inherited_story_point_estimate: 5
+estimate_source: "layer-3-slice"
+estimate_delta_flag:
+  inherited: 5
+  refined: 13
+  over_2x: true
+  rationale: "13 is greater than 2 * 5, so Phase 4 receives the delta as a scope-risk signal."
+```
+
+After Phase 3 artifact verification and before Phase 4 prompt composition, the orchestrator dispatches `${ticket_operator}` with `task=update-estimate` and the parsed estimate inputs. The canonical prompt path is `${scratch_dir}/prompts/${wu_lower}-phase-3-update-estimate.md`; the canonical log path is `${scratch_dir}/logs/${wu_lower}-phase-3-update-estimate.log`. The Phase 4 scope-risk prompt receives `estimate_delta_flag`, including whether the refined value is `>2x` the inherited value (`true`, `false`, or `unknown`).
 
 ## Phase 4 - Risk Gates (required; parallel)
 

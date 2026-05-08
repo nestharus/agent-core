@@ -1010,3 +1010,78 @@ Phase 8 Round 1 returned HIGH on `justification` and `commit-hygiene` gates beca
 - Audit-history § Phase 8 — Round 1 (stale-base rebase)
 
 **Rationale:** Stale-base contamination is a known recurrence pattern (D-2026-05-08c ACR-5; D-2026-05-07-acr-88-phase-8-rebase-on-current-master ACR-88). Single feature commit rebased onto current master is the canonical fix. Re-dispatched all four Phase 8 gates from clean post-rebase state per the orchestrator's revise-loop rule.
+
+## D-2026-05-08-acr-122-phase-2.5-rebase-on-current-master
+
+Phase 2.5 sub-step 2.5.1 (coverage inventory) and 2.5.4 (duplicates) revealed that the WU worktree was branched from local stale `master@d42bc00` while `origin/master` was at `6957e8e` (ACR-121 #81 merge). ACR-122's stated upstream supply — story_point_estimate / estimate_source / estimate_rationale + Linear/JIRA operator estimate read/write — lived on `6957e8e` but not in the worktree. Coverage inventory therefore (correctly) flagged the ACR-121 plumbing as "uncovered" and duplicates inventory cited evidence at `6957e8e:` paths. Continuing to Phase 3 from this base would have produced a proposal grounded in non-existent upstream contracts.
+
+**Action:** `git fetch origin master && git -C <worktree> reset --hard origin/master`. WU branch had no commits yet, so this was a worktree-level branch-tip move, not a destructive rebase of authored commits. Local `master` ref was not updated (the `~/ai` worktree itself has master checked out and refused force-update); the WU branch now correctly points at `6957e8e` and will rebase forward from there at PR time. Quarantined the six stale Phase 2.5 research artifacts to `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/research/_stale_pre_rebase/` for audit, and re-dispatched 2.5.0–2.5.5 from the corrected base before continuing with 2.5.6.
+
+**Justifying evidence:**
+- Stale coverage inventory: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/research/_stale_pre_rebase/acr-122-coverage-inventory.md` § "ACR-121 estimate coverage note" ("ACR-121 Linear estimate read/write capability is effectively uncovered in this branch").
+- Stale duplicates inventory: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/research/_stale_pre_rebase/acr-122-duplicates.md` § "Cascade risk" ("If ACR-121 is rebased/ported into this branch...").
+- `git log master..origin/master` showed only `6957e8e` (PR #81).
+
+**Rationale:** Procedural per `~/ai/agents/implementation-pipeline-orchestrator.md` § NEEDS_INPUT Handling — orchestrator-resolvable, not user-bound. Same recurrence pattern as the prior three stale-base entries above; resolved earlier in the pipeline (Phase 2.5 vs Phase 8) because the coverage inventory surfaced it before any authored commits existed.
+
+## D-2026-05-08-acr-122-phase-2.5-sd1-acr-129-accept-as-residual
+
+**WU:** ACR-122 (Implementation pipeline Phase 1/3 estimate read + refine).
+**Phase:** 2.5 step 6 (drift-disposition gate).
+**Decision:** Option **A** — proceed with current ACR-122 scope; record SD1 (Linear ↔ JIRA Fibonacci-validation drift) as an accepted residual. ACR-129 stays open as a standalone follow-up.
+
+**Trigger:** Phase 2.5.4 (duplicates inventory) found a silent cross-backend drift in the story-point estimate write path. The Linear client enforces `ALLOWED_ESTIMATES = {1, 2, 3, 5, 8, 13, 21, 40, 100}` (`clients/linear/client.py:17-18` and `:262-275`) and the linear-operator + CLI repeat the constraint. The JIRA path documents only a worked example showing `customfield_10016: 5` with no allowed-values constraint and no Python client validation (`agents/jira-operator.md:185-229`). A WU could refine to a non-Fibonacci value (e.g., 4 or 7) on the JIRA path and silently submit it. Filed as **ACR-129** (`https://linear.app/neshq/issue/ACR-129/jira-operator-customfield-10016-estimate-write-path-lacks-fibonacci`).
+
+**Action:**
+- Continue ACR-122 with the current touched-surface enumeration; do NOT widen scope to fix `agents/jira-operator.md` allowed-values prose or add `tests/test_jira_operator_estimate_contract.py` in this WU.
+- Phase 3 will pick refined estimates from the documented Fibonacci set (`{1, 2, 3, 5, 8, 13, 21, 40, 100}`), so ACR-122's own correctness is unaffected.
+- ACR-129 closes separately; no `Blocks` cross-link from ACR-129 to ACR-122 (parallel concerns, not a true predecessor).
+
+**Justifying evidence:**
+- Drift report: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/research/acr-122-duplicates.md` § "Cross-backend Fibonacci-validation drift".
+- Question artifact: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/.scratch/questions/q-a8770b49-6fca-4e6a-9603-3f6ea1a3f40e.question.json` (status `answered`, `selected_option_id: A`, answered by `work-manager-operator` at `2026-05-08T17:35:00Z`).
+- Linear ALLOWED_ESTIMATES: `clients/linear/client.py:17-18`, `:262-275`.
+- JIRA worked example without validation: `agents/jira-operator.md:185-229`.
+
+**Rationale:** Drift is pre-existing (not introduced by ACR-122). Unlike AGE-32 vs AGE-42/43 (where drift bypassed AGE-32's boundary), ACR-129 does not bypass anything ACR-122 establishes — they are parallel concerns. Recording as accepted residual respects ACR-122's must-have RFQ-unblock priority and `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5 → Drift (file tracker, surface for disposition, accept-with-note is a permitted disposition).
+
+## D-2026-05-08-acr-122-phase-2.5-defer-to-prototype-A-proceed-exhaustive
+
+**WU:** ACR-122 (Implementation pipeline Phase 1/3 estimate read + refine).
+**Phase:** 2.5 step 6 (defer-to-prototype gate).
+**Decision:** Option **A** — proceed in exhaustive mode. Defer-signal pattern (signal 1 risk-profile majority HIGH; signal 5 cross-language change-path entropy HIGH on its own) is dominated by the nature of the touched surface (workflow + agent + Python client + tests), not by unknown-unknowns; ACR-121 (structurally homologous sibling) just shipped exhaustive in 518 turns.
+
+**Trigger:** Phase 2.5 step 6 detection counted ≥ 2 fired signals out of 5 (signal 1 = risk-profile majority HIGH at 11/13 surfaces; signal 5 = cross-language change-path entropy HIGH on its own with 6 implicit contracts and 8 cross-language change-pairs). Per `agents/implementation-pipeline-orchestrator.md` Phase 2.5 step 5, the gate must include the defer/proceed/terminate option even when `skip_problem_map_gate=true`.
+
+**Action:**
+- Resume the implementation pipeline at Phase 3 (proposal) without dispatching `prototype-orchestrator.md`.
+- Phase 3 / 4 / 5 / 6b run in **exhaustive mode** for the 11 HIGH surfaces named in `${planning_dir}/risk/acr-122-risk-profile.md` § "WU-level rolled-up verdict" (workflows/implementation-pipeline.md, agents/implementation-pipeline-orchestrator.md, agents/linear-operator.md, agents/jira-operator.md, clients/linear/client.py, clients/linear/cli.py, clients/linear/USAGE.yml, AGENTS.md, plus the three new ACR-122 test modules), and **lean** for the two LOW/MEDIUM surfaces.
+- Phase 4 audit-risk and scope-risk gates verify cross-language coupling and supported-surface boundaries. Phase 6b/6c verify each cross-language change-pair under the contract.
+- The corpus-shape question (and any other genuine new-value question) reaches root via `NEEDS_INPUT` per the dispatch's stated escalation contract.
+
+**Justifying evidence:**
+- Question artifact: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/.scratch/questions/q-e20eb4e3-b7d8-44bc-b0b6-4ddbc0e567f7.question.json` (status `answered`, `selected_option_id: A`, answered by `work-manager-operator` at `2026-05-08T18:25:00Z`).
+- Risk profile: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/risk/acr-122-risk-profile.md` § "WU-level rolled-up verdict".
+- Cross-language trace: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/research/acr-122-cross-language-trace.md` §§ "Implicit-vs-explicit contracts", "Cross-language change-pairs ACR-122 must keep in sync".
+- Sibling proof point: ACR-121 PR #81 (`6957e8e`) — same surface shape (workflows + agents + clients), same risk profile, shipped exhaustive.
+
+**Rationale:** RFQ-unblock priority + structural homology with ACR-121 + signal pattern dominated by the surface's nature (not unknown-unknowns) make exhaustive-mode the correct routing. A prototype dossier would re-discover what ACR-121 already proved at the cost of weeks; an exhaustive-mode pipeline can verify each cross-language change-pair in Phase 4 risk gates and Phase 6b/6c.
+
+## D-2026-05-08-acr-122-phase-8-rebase-on-current-master
+
+**WU:** ACR-122 (Implementation pipeline Phase 1/3 estimate read + refine).
+**Phase:** 8 (PR-review gates round 1).
+**Decision:** Procedural rebase. The Phase 8 round-1 test-audit gate (HIGH on "Risk reduction") and justification gate (HIGH on "Drive-by changes") both flagged stale-base contamination: master had moved forward with ACR-123 (#82, `f5aa689`) since the WU branched from `6957e8e`. The gate-visible "deletions" of `tests/test_acr123_prototype_dossier_estimates.py`, ACR-123 prose in `agents/prototype-orchestrator.md` and `workflows/build-prototype.md` were not authored ACR-122 changes — they were the diff's view of master moving past our base.
+
+**Trigger:** Phase 8 round-1 gate dispatch read `git diff master..HEAD` where `master` (post-fetch tip) was `f5aa689` and HEAD's merge-base was `6957e8e`. Both gates correctly identified the stale-base shape and explicitly named this same recurrence pattern from `D-2026-05-08-acr-122-phase-2.5-rebase-on-current-master`. ACR-121 had the same recurrence at Phase 8 (`D-2026-05-08c`).
+
+**Action:** `git fetch origin master && git rebase origin/master`. Rebase was conflict-free — ACR-122 authored hunks (`workflows/implementation-pipeline.md`, `agents/implementation-pipeline-orchestrator.md`, `agents/{linear,jira}-operator.md`, `clients/linear/*`, `AGENTS.md`, three new test files) do not collide with ACR-123's surface (`workflows/build-prototype.md`, `agents/prototype-orchestrator.md`, `tests/test_acr123_*`). Branch HEAD moved from `2254357` → `8023aec` (single authored commit, rebased cleanly). Force-pushed with `--force-with-lease`. Full repo test suite re-verified: 1182 passing (1171 + 11 ACR-123 tests now visible).
+
+**Justifying evidence:**
+- Pre-rebase HEAD: `2254357 ACR-122: implementation pipeline Phase 1/3 estimate read + refine`.
+- Pre-rebase merge-base with master: `6957e8e ACR-121: Roadmap Layer 4 ticket-generation-agent emits story-point estimates per SLICE (#81)`.
+- Master tip at audit time: `f5aa689 ACR-123: prototype dossier P3.3 produces per-spawned-ticket estimates with confidence (#82)`.
+- Post-rebase HEAD: `8023aec ACR-122: implementation pipeline Phase 1/3 estimate read + refine` (parent: `f5aa689`).
+- Round-1 stale-base reports: `~/projects/ai/planning/acr-122-pipeline-phase1-phase3-estimate-refine/risk/acr-122-test-audit.md` (HIGH "Risk reduction" naming the deletion pattern) and `acr-122-justification.md` (HIGH "Drive-by changes" with `git log HEAD..master --oneline = f5aa689`).
+
+**Rationale:** Procedural per `~/ai/agents/implementation-pipeline-orchestrator.md` § NEEDS_INPUT Handling — orchestrator-resolvable, not user-bound. Same recurrence pattern as the prior stale-base entries at Phase 2.5 in this WU and Phase 8 in ACR-121 / ACR-127. Old Phase 8 round-1 reports are discarded; round-2 will re-dispatch all four gates against the rebased HEAD.
