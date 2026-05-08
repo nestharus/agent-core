@@ -261,7 +261,13 @@ You (the orchestrator) own the contract. Compose `${planning_dir}/contracts/${wu
 
 #### Step 6c — Write code
 
-1. Compose `${scratch_dir}/prompts/${wu_lower}-phase-6c.md` listing the Step 6b output index path, the test file paths, the contract path, the proposal path, and the problem map path as inputs the agent must read before changing product code.
+1. Compose `${scratch_dir}/prompts/${wu_lower}-phase-6c.md` (canonical token: Compose ${scratch_dir}/prompts/${wu_lower}-phase-6c.md) listing the Step 6b output index path, the test file paths, the contract path, the proposal path, and the problem map path as inputs the agent must read before changing product code. The composed prompt MUST include this block before implementation instructions:
+
+   FIRST LOG LINE REQUIREMENT:
+   The orchestrator substitutes `${scratch_dir}` when composing the prompt; in that composed prompt, the first non-empty stdout line of the Step 6c agent MUST be exactly the resolved form of `consumed: ${scratch_dir}/phase6/step6b-output-index.md`.
+   Exact required first-line template:
+   consumed: ${scratch_dir}/phase6/step6b-output-index.md
+   Before any product-code change, the agent MUST echo each <step6b-test-file> it consumed from the Step 6b output index as `consumed: <step6b-test-file>`; each echo names the Step 6b test file path and is the required `before any product-code change` evidence. For recursive Phase 6 work, the echo MUST include the matching `level_id` or scoped artifact identifiers from the Step 6b output index, using `<level_id>:<local_artifact_id>` where the index uses string artifact identifiers.
 2. Dispatch as a **separate fresh** `agents -m gpt-high` invocation. This MUST be a different invocation UUID from Step 6b.
 3. Verify all gates: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `bun run lint`, `bun run typecheck`, `bun run test`. If any fail, re-dispatch the **code agent** with the failure output. Do NOT re-dispatch the test agent because the impl failed; if a test is wrong, revise the contract first then regenerate tests from the revised contract.
 
