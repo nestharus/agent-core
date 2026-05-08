@@ -420,7 +420,7 @@
         "orchestrator": "roadmap-orchestrator",
         "outputs": [
           "market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files",
-          "generated implementation tickets for approved AI roadmap slices",
+          "generated implementation tickets for approved AI roadmap slices, including story-point estimate/source/rationale per SLICE and unsized INIT tickets",
           "risk-gate reports and process-tree-auditor evidence at each gated layer"
         ]
       }

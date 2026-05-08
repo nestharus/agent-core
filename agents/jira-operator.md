@@ -210,6 +210,22 @@ curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
   "${jira_url}/rest/api/3/issue"
 ```
 
+Story points can be supplied through the configured Jira custom field inside the same `fields` object:
+
+```json
+{
+  "fields": {
+    "project": {"key": "${jira_project}"},
+    "summary": "WU summary line",
+    "issuetype": {"name": "Task"},
+    "customfield_10016": 5,
+    "description": {"type": "doc", "version": 1, "content": []}
+  }
+}
+```
+
+Layer 4 ticket generation decides when this field is populated. SLICE tickets may carry a story-point value plus `estimate_source` and `estimate_rationale` in the rendered description; INIT tickets remain unsized.
+
 A successful POST returns `{"id":"...","key":"${jira_project}-NNN","self":"..."}`. Print the new key + browse URL `${jira_url}/browse/${jira_project}-NNN` (the output contract). For any Jira REST 4xx response, follow `## Error Handling` for the `BLOCKED` envelope shape; surface `NEEDS_INPUT` only when the project's `Create` screen requires an unspecified field that the caller did not supply.
 
 **ADF description from a markdown brief.** When the caller passes a markdown brief path instead of ADF JSON, render the brief to ADF: H1/H2/H3 → `heading` nodes (level 1/2/3); paragraphs → `paragraph`; bullet/numbered → `bulletList`/`orderedList`; fenced code → `codeBlock` with the language attr; inline backticks → `code` mark; `[text](url)` → `text` with `link` mark. Preserve structural section headings verbatim so the orchestrator's read-back contract validation passes.

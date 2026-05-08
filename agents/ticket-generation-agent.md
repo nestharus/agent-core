@@ -86,7 +86,35 @@ Verify:
 - Does not combine multiple value slices into a single ticket
 - Does not combine multiple initiatives into a single ticket
 - Does not reorder or reprioritize — the ordering comes from the roadmap
-- Does not estimate effort independently — effort comes from the engineering roadmap
+- Does not invent independent estimates; story-point estimates are derived from the named source priority in `## Outputs`
+
+## Outputs
+
+Layer 4 remains markdown-only and emits ticket artifacts only. It does not file live Jira or Linear issues; downstream filer operators populate Jira `customfield_10016` or Linear `estimate` from the generated markdown using the worked examples in `jira-operator` and `linear-operator`.
+
+Each SLICE ticket includes these estimate fields:
+
+- `story_point_estimate`: integer story-point value chosen from `1, 2, 3, 5, 8, 13, 21, 40, 100`.
+- `estimate_source`: string enum `prototype-dossier | layer-2-magnitude | layer-3-slice | backstop-spike`.
+- `estimate_rationale`: one sentence naming the surface complexity signal that drove the selection.
+
+Source priority order: `prototype-dossier > layer-2-magnitude > layer-3-slice > backstop-spike`. Pick the highest-priority source that has a usable signal and record exactly that source.
+
+Selection-band rule:
+
+| Upstream signal | Allowed story-point band | Default selection rule |
+|---|---|---|
+| `S` / small | `1` or `2` | Pick `2` unless the surface is a trivially derivative one-line text edit; pick `1` only for that trivial case. |
+| `M` / medium | `3` or `5` | Pick `5` unless the SLICE has exactly one contract surface and one test. |
+| `L` / large | `8` or `13` | Pick `13` unless explicit prior-slice scaffolding materially reduces the surface. |
+| `XL` | `21` or `40` | Pick `40` unless explicit prior-slice scaffolding materially reduces the surface. |
+| cross-cutting / unbounded | `100` | Use only when the AI roadmap deliberately keeps one broad cross-cutting slice. |
+
+Layer-3 slice heuristic: when no T-shirt magnitude is usable, compute `points = max(2, min(40, round(2 * (entrypoints + data_shapes + dependencies))))`, snap to the nearest allowed fibonacci value, and justify the snap in `estimate_rationale`.
+
+Backstop-spike rule: when none of `prototype-dossier`, `layer-2-magnitude`, or `layer-3-slice` produces a usable signal, emit a Spike SLICE whose deliverable is to produce a real estimate; the Spike `story_point_estimate` is `1` or `2` and `estimate_source` is `backstop-spike`.
+
+INIT tickets remain unsized at Layer 4. They keep inherited engineering roadmap effort as informational initiative context, but they do not receive `story_point_estimate`, `estimate_source`, or `estimate_rationale`.
 
 ---
 
@@ -125,7 +153,7 @@ Verify:
 **Opportunity cost:** [From executive roadmap]
 
 ### Engineering Assessment
-**Effort:** [T-shirt from engineering roadmap]
+**Effort (inherited from engineering roadmap; informational only — sprint planning uses Story Point Estimate):** [T-shirt from engineering roadmap]
 **Risk:** [Level from engineering roadmap]
 **Risk factors:** [From engineering roadmap]
 **Foundation dependencies:** [From engineering roadmap]
@@ -201,7 +229,10 @@ Verify:
 
 ## Engineering Notes
 
-**Effort:** [T-shirt from engineering roadmap]
+**Story Point Estimate:** <int from {1, 2, 3, 5, 8, 13, 21, 40, 100}>
+**Estimate Source:** <prototype-dossier | layer-2-magnitude | layer-3-slice | backstop-spike>
+**Estimate Rationale:** <one sentence>
+**Effort (inherited from engineering roadmap; informational only — sprint planning uses Story Point Estimate):** [T-shirt from engineering roadmap]
 **Risk:** [Level with specific factors]
 **Existing code:** [What can be reused from engineering research]
 **Known challenges:** [Technical concerns from engineering assessment]
@@ -224,17 +255,18 @@ Verify:
 
 ## Phase 0: Foundations
 
-| Ticket | Name | Effort | Dependencies |
-|---|---|---|---|
-| SLICE-001 | [Name] | [S/M/L/XL] | none |
+| Ticket | Name | Effort | Story Points | Dependencies |
+|---|---|---|---|---|
+| SLICE-001 | [Name] | [S/M/L/XL] | [1/2/3/5/8/13/21/40/100] | none |
 
 ## Phase 1: [Phase name]
 
 ### INIT-001: [Initiative name]
 
-| Ticket | Name | Effort | Dependencies |
-|---|---|---|---|
-| SLICE-NNN | [Name] | [S/M/L/XL] | [SLICE-NNN, ...] |
+| Ticket | Name | Effort | Story Points | Dependencies |
+|---|---|---|---|---|
+| INIT-001 | [Initiative name] | [S/M/L/XL] | — | [INIT-NNN, ...] |
+| SLICE-NNN | [Name] | [S/M/L/XL] | [1/2/3/5/8/13/21/40/100] | [SLICE-NNN, ...] |
 
 [Continue for all phases and initiatives]
 

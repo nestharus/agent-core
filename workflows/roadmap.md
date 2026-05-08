@@ -12,7 +12,7 @@ workflow_dispatch_contract:
     - "routes prototype escape hatches when feasibility or decomposition cannot be proven by research alone"
   outputs:
     - "market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files"
-    - "generated implementation tickets for approved AI roadmap slices"
+    - "generated implementation tickets for approved AI roadmap slices, including story-point estimate/source/rationale per SLICE and unsized INIT tickets"
     - "risk-gate reports and process-tree-auditor evidence at each gated layer"
   non_goals:
     - "does not bootstrap a first product pipeline from nothing"
@@ -56,7 +56,7 @@ roadmap-orchestrator
 ### Outputs
 
 - market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files
-- generated implementation tickets for approved AI roadmap slices
+- generated implementation tickets for approved AI roadmap slices, including story-point estimate/source/rationale per SLICE and unsized INIT tickets
 - risk-gate reports and process-tree-auditor evidence at each gated layer
 
 ### Non-goals
@@ -180,7 +180,9 @@ Do not use this workflow for:
 
 - **Generator** (`gpt-high`): writes one ticket per AI slice.
 - **Each ticket includes**: scope, acceptance criteria, dependencies on earlier
-  slices, and revision rationale from the roadmap stage above it.
+  slices, revision rationale from the roadmap stage above it, and story-point estimate,
+  estimate source, and estimate rationale per SLICE ticket; INIT tickets remain unsized
+  at Layer 4.
 - **Constraint**: tickets are handoff artifacts, not mini-roadmaps. Keep them
   implementation-ready.
 - **Process-tree review**: when ticket generation used delegated operators, run `process-tree-auditor` on the delegated ticket-generation subtree before implementation handoff. The expected process includes each delegated operator prompt/log, generated ticket output, and handoff status. A blocking process violation prevents tickets from entering the implementation pipeline.

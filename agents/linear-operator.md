@@ -31,6 +31,7 @@ You read, comment on, and create Linear issues using the ported Linear GraphQL c
 - `summary` (for `create`): one-line title for the issue.
 - `parent_key` (for `create`, optional): parent Linear issue key when filing a child WU under an initiative.
 - `labels` (for `create`/`search`/`list-issues`, optional): list of label names resolved in the selected team.
+- `estimate=<int>` (for `create`, optional): story-point estimate; must be a fibonacci point value from `1, 2, 3, 5, 8, 13, 21, 40, 100`. Layer 4 ticket generation decides SLICE vs. INIT sizing; SLICE tickets may pass this value through, while INIT tickets remain unsized.
 - Search filters (optional for `search`): `title_contains`, `title_starts_with`, `linear_project_id`, and `labels`; the client translates these to a GraphQL `filter:` clause.
 - `linear_team_key` is required for `create`, `list-issues`, `list-projects` team scoping, `search`, `list-labels`, `create-label`, and `apply-labels`.
 - `linear_team_key` is not required for known-issue-key `read` and `comment`; the issue identifier already carries the team prefix.
@@ -152,8 +153,11 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-issue \
     --description "$(cat ${brief_path})" \
     ${linear_project_id:+--project "${linear_project_id}"} \
     ${labels:+--label "${labels}"} \
+    ${estimate:+--estimate "${estimate}"} \  # optional; story-point estimate
     ${create_missing_labels:+--create-missing-labels}
 ```
+
+For a concrete story-point value, the optional flag is `--estimate 5` (`--estimate <int>` in templates).
 
 `--label` is singular and repeatable, and each occurrence may contain comma-separated label names (e.g. `--label "hardening,segmentation" --label prereq`). Labels resolve inside `${linear_team_key}`. A team label wins over a workspace label with the same name; a same-tier duplicate raises `AMBIGUOUS_LABEL`. When `--create-missing-labels` is supplied, any name without an existing label on the team is created on the fly with a default color; otherwise unknown names raise `LinearClientError("NOT_FOUND", ...)` and the issue is NOT created (so partial-label state is impossible).
 
