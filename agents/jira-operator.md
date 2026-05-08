@@ -127,6 +127,12 @@ Used by `~/ai/agents/implementation-pipeline-orchestrator.md` after Phase 3 arti
 
 Required inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`.
 
+### Allowed estimate values
+
+Allowed estimate values: `1, 2, 3, 5, 8, 13, 21, 40, 100`.
+
+Cross-backend source of truth: `clients/linear/client.py` defines `ALLOWED_ESTIMATES` and `_validate_estimate` for the Linear validation source. The Jira operator must use the same set for `customfield_10016` writes and must reject any value outside that set before composing or submitting a REST payload.
+
 ```bash
 curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
   -X PUT \
@@ -135,7 +141,7 @@ curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
   "${jira_url}/rest/api/3/issue/{issueKey}"
 ```
 
-The request body uses `fields.customfield_10016` and trusts the orchestrator-supplied allowed value; JIRA allowed-values validation remains outside this operator task. After the numeric update succeeds, post a durable ADF note through `POST /rest/api/3/issue/{issueKey}/comment`. The ADF note must contain inherited estimate, refined estimate, source, and delta rationale, and may include the verbatim `estimate_delta_flag` for audit evidence. For any REST 4xx response, use the standard `BLOCKED` envelope. This task does not transition status/state.
+The request body uses `fields.customfield_10016`; reject values outside the allowed set before composing or submitting the PUT payload. After the numeric update succeeds, post a durable ADF note through `POST /rest/api/3/issue/{issueKey}/comment`. The ADF note must contain inherited estimate, refined estimate, source, and delta rationale, and may include the verbatim `estimate_delta_flag` for audit evidence. For any REST 4xx response, use the standard `BLOCKED` envelope. This task does not transition status/state.
 
 ## Procedure: Comment
 
@@ -244,6 +250,8 @@ Story points can be supplied through the configured Jira custom field inside the
   }
 }
 ```
+
+Before including `customfield_10016`, reject values outside the allowed estimate set before composing or submitting the REST payload. Jira may accept arbitrary numeric story-point values, so the operator must not defer this check to the REST endpoint.
 
 Layer 4 ticket generation decides when this field is populated. SLICE tickets may carry a story-point value plus `estimate_source` and `estimate_rationale` in the rendered description; INIT tickets remain unsized.
 
