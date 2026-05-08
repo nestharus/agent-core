@@ -453,26 +453,13 @@ The orchestrator surfaced this as a new-value scope question to the root per `~/
 
 ---
 
-## D-2026-05-05d - NES-154 brenner_bot and research-team coexist
+## D-2026-05-05d - ACR-69 correction: brenner_bot is reference-only
 
-**WU**: NES-154. **Phase**: 6c implementation of the Phase 3 decision-only proposal. **Decision**: `coexist`.
+**Correction.** `brenner_bot` is reference-only / design inspiration material for `/home/nes/ai`, not a deployed dependency, runtime target, backend, replacement workflow, or coexisting system in this repository. The actual research-workflow enhancement work remains owned by NES-151, which currently resolves through Linear as ACR-77.
 
-**Context.** NES-154 compared upstream `brenner_bot` with the planned NES-151 `research-team` workflow. Upstream `brenner_bot` is a scientific-method research system: its method centers on problem selection, parallel hypotheses, discriminative tests, Bayesian update, and iteration; its operator set is 17 scientific-method moves; its repo describes a product/runtime with Agent Mail, ntm, Bun CLI, Next.js web app, and lab-like artifacts. The closest landed `/home/nes/ai/` research workflow is a markdown/operator workflow for open-ended investigation, option analysis, external-source review, feasibility assessment, comparable-product study, and evidence-backed synthesis. NES-151 `research-team` has not yet landed a concrete workflow artifact under `/home/nes/ai/workflows/`.
+**Disposition.** PR #7 (`5eefea9`) recorded the misframed NES-154 coexist decision. ACR-69 is the corrective WU: preserve the stable `D-2026-05-05d` decision ID, replace the false coexist authority with this reference-only framing, and keep future NES-151/ACR-77 work from treating `brenner_bot` as an integration target unless a separate WU explicitly reopens that scope.
 
-**Decision.** Keep `brenner_bot` and `research-team` as separate research mechanisms. Route literature-shaped, scientific, hypothesis-evidence, methodology-driven questions to `brenner_bot` or a future explicitly chartered successor. Route design-pattern, best-practice, library, tool, implementation-approach, and comparable-product questions to `research-team` once NES-151 lands, with `/home/nes/ai/workflows/research.md` remaining the landed generic precursor until then. Do not treat `research-team` as replacing `brenner_bot`, and do not import or invoke `brenner_bot` from `research-team` without a later integration WU.
-
-**Anti-scope.** This decision does NOT include code changes to `/home/nes/ai/` workflows, operators, conventions, tests, or clients; upstream `brenner_bot` modifications; a fork or upstream PR; implementation of an integration; Linear status transitions; or resurrection of structural tests for `/home/nes/ai/DECISIONS.md` or `/home/nes/ai/AGENTS.md`.
-
-**Justifying evidence.**
-
-- NES-154 problem map: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/nes-154-problem-map.md`
-- Upstream method scrape: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/upstream/brennerbot-method.md` from `https://brennerbot.org/method` scraped 2026-05-05.
-- Upstream operators scrape: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/upstream/brennerbot-operators.md` from `https://brennerbot.org/operators` scraped 2026-05-05.
-- Upstream repo clone: `/tmp/brenner_bot_clone/README.md`, `/tmp/brenner_bot_clone/AGENTS.md`, and `/tmp/brenner_bot_clone/LICENSE`.
-- Duplicate inventory: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/research/nes-154-duplicates.md` found no prior `brenner_bot` decision and no landed NES-151 `research-team` workflow artifact.
-- Risk profile: `/home/nes/projects/ai/planning/nes-154-brenner-bot-disposition/risk/nes-154-risk-profile.md` scored both touched docs surfaces LOW.
-
-**Re-evaluation trigger.** Revisit this decision if NES-151 lands a `research-team` workflow with a stable downstream-researcher extension point, if a future WU is chartered to create a license-safe `brenner_bot` integration or successor, if upstream `brenner_bot` materially changes its method/runtime/licensing, or if a future scientific-literature WU demonstrates that the coexist boundary misroutes real work.
+**Accepted residual.** Downstream encodings of the old coexist boundary in `agents/research-router.md`, `conventions/proposer-research-integration.md`, and `tests/test_research_router_operator.py::test_brenner_bot_disclaimer` remain accepted by indirection until separately cleaned up. This is the accepted residual disposition for the DRIFT-FOUND finding from ACR-69 Phase 2.5.4: existing citations to `D-2026-05-05d` stay non-dangling, but this corrected entry is the governing interpretation.
 
 ## D-2026-05-06 — NES-138 Phase 6 Tier-1 rewind (Step 6c log evidence)
 
