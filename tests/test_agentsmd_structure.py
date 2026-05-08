@@ -96,6 +96,44 @@ def _routing_row(text, name):
     return match.group(0)
 
 
+def _bare_dispatch_input_name(token):
+    token = token.strip().strip("`").removeprefix("--input ").strip()
+    token = token.split("=", 1)[0].split(None, 1)[0].rstrip("?")
+    assert re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", token), (
+        f"unexpected dispatch input token: {token}"
+    )
+    return token
+
+
+def _routing_input_names(row):
+    match = re.search(r"Inputs:\s*(?P<inputs>.*?)(?:\s*\|\s*Model:|\Z)", row, re.S)
+    assert match, f"missing Inputs marker in row: {row}"
+    return {
+        _bare_dispatch_input_name(token)
+        for token in re.findall(r"`([^`]+)`", match.group("inputs"))
+    }
+
+
+def _declared_operator_input_names(repo_root, op_path, headings):
+    text = (repo_root / op_path).read_text(encoding="utf-8")
+    names = set()
+    for heading in headings:
+        section = _section_after_heading(text, heading)
+        for line in section.splitlines():
+            if not line.strip().startswith("- "):
+                continue
+            match = re.search(r"`([^`]+)`", line)
+            if not match:
+                continue
+            token = match.group(1)
+            if token.startswith("--input ") or re.fullmatch(
+                r"[A-Za-z][A-Za-z0-9_-]*\??", token
+            ):
+                names.add(_bare_dispatch_input_name(token))
+    assert names, f"missing declared dispatch inputs in {op_path}"
+    return names
+
+
 def test_new_section_headings_present():
     text = _agents_text()
     for heading in (
@@ -229,7 +267,7 @@ def test_routing_table_rows_preserved():
     # pr-writer: Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?`
     # coderabbit-operator: Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?`
     # implementation-pipeline-orchestrator: Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?`, `tickets_first_variant?`
-    # worktree-operator: Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`
+    # worktree-operator: Inputs: `task`, `name?`, `branch_name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `branch_policy?`
     # jira-operator: Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email`
     entries = {
         "agentsmd-curator": (
@@ -259,7 +297,7 @@ def test_routing_table_rows_preserved():
         ),
         "worktree-operator": (
             "agents/worktree-operator.md",
-            "Inputs: `task`, `name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `e2e_settings_zip?`",
+            "Inputs: `task`, `name?`, `branch_name?`, `base_branch?`, `repo_root`, `worktrees_root?`, `branch_policy?`",
             "gpt-high",
         ),
         "jira-operator": (
@@ -277,6 +315,36 @@ def test_routing_table_rows_preserved():
         assert file_link in row, f"missing file path for {name}: {path}"
         assert inputs_marker in row and f"Model: `{model}`" in row, (
             f"missing expected inputs or model marker for {name}: {inputs_marker}; {model}"
+        )
+
+
+def test_acr127_operator_dispatch_input_alignment(repo_root):
+    text = _agents_text_from(repo_root)
+    scoped_operators = {
+        "coderabbit-operator": (
+            "agents/coderabbit-operator.md",
+            ("## Required Inputs",),
+        ),
+        "pipeline-artifacts-operator": (
+            "agents/pipeline-artifacts-operator.md",
+            ("## Required Inputs", "## Inputs"),
+        ),
+        "worktree-operator": (
+            "agents/worktree-operator.md",
+            ("## Required Inputs", "## Inputs"),
+        ),
+    }
+
+    for name, (op_path, headings) in scoped_operators.items():
+        routing_names = _routing_input_names(_routing_row(text, name))
+        declared_names = _declared_operator_input_names(repo_root, op_path, headings)
+        only_in_agents = sorted(routing_names - declared_names)
+        only_in_operator = sorted(declared_names - routing_names)
+        assert routing_names == declared_names, (
+            f"{name} ACR-127 dispatch input drift: "
+            f"only_in_agents={only_in_agents}; "
+            f"only_in_operator={only_in_operator}; "
+            f"symmetric_difference={sorted(routing_names ^ declared_names)}"
         )
 
 

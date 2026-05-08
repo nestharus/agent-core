@@ -24,10 +24,10 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
 
 - `branch`: the branch to review (current branch by default)
 - `base`: review base, almost always `main`
-- `worktree-path`: directory where `coderabbit review --cwd` runs (the PR's worktree)
-- `test-command` (optional): how to run tests after fixes (e.g., `pytest <path> -q`). If absent, skip test-after-fix step.
-- `max-passes` (optional, default 8): hard cap on iterations to prevent infinite loops on flip-flop findings
-- `audit-history-path` (optional): canonical audit-history file for pass-loop findings, flip-flops, skipped rationales, and convergence determinations.
+- `worktree_path`: directory where `coderabbit review --cwd` runs (the PR's worktree)
+- `test_command` (optional): how to run tests after fixes (e.g., `pytest <path> -q`). If absent, skip test-after-fix step.
+- `max_passes` (optional, default 8): hard cap on iterations to prevent infinite loops on flip-flop findings
+- `audit_history_path` (optional): canonical audit-history file for pass-loop findings, flip-flops, skipped rationales, and convergence determinations.
 
 ## Non-Negotiables
 
@@ -44,8 +44,8 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
 ## Procedure: Single Pass
 
 ```bash
-cd <worktree-path>
-coderabbit review --plain --base <base> --cwd <worktree-path> > CODERABBIT_pass<N>.md 2>&1
+cd ${worktree_path}
+coderabbit review --plain --base <base> --cwd ${worktree_path} > CODERABBIT_pass<N>.md 2>&1
 ```
 
 Read the output. For each finding, classify:
@@ -72,7 +72,7 @@ The loop stops when ANY of:
 - Pass returns 0 findings
 - Pass returns ONLY skipped findings (all churn)
 - Pass returns findings ALL of which are flip-flops with prior passes
-- `max-passes` reached (return `MAX_PASSES_REACHED` — needs human review)
+- `max_passes` reached (return `MAX_PASSES_REACHED` — needs human review)
 
 Heuristic: typical convergence is 3–6 passes. If you're past pass 5 with new real findings each round, the underlying code is genuinely unstable — flag for human review rather than continuing.
 
@@ -95,7 +95,7 @@ Before pass 1:
 1. `git status` — confirm clean working tree
 2. `git fetch origin main && git update-ref refs/heads/main refs/remotes/origin/main`
 3. `git log --oneline main..HEAD` — confirm the diff base is right (only this branch's commits)
-4. Run tests (`<test-command>` if provided) — confirm green before CodeRabbit sees them
+4. Run tests (`${test_command}` if provided) — confirm green before CodeRabbit sees them
 
 If any check fails, return `NEEDS_INPUT` rather than starting the loop.
 
@@ -108,7 +108,7 @@ For each pass, write `CODERABBIT_pass<N>.md` to the worktree with:
 - Test result after amend (PASS/FAIL)
 - Decision: continue or converge
 
-If `audit-history-path` is supplied, update it after each pass with the pass finding count, real/skipped breakdown, flip-flop classifications, skipped rationales, watch signals, and the pass determination (`continue`, `apply`, or `decompose` if pass churn indicates the branch is no longer reviewable at this grain).
+If `audit_history_path` is supplied, update it after each pass with the pass finding count, real/skipped breakdown, flip-flop classifications, skipped rationales, watch signals, and the pass determination (`continue`, `apply`, or `decompose` if pass churn indicates the branch is no longer reviewable at this grain).
 
 When encoding pass findings into audit history, use `R<round>-F<NN>` IDs. Do not use bare letter prefixes such as `F`, `G`, `H`, or `I`.
 
@@ -129,13 +129,13 @@ After convergence, write `CODERABBIT_summary.md`:
 | Nitpicks only (all churn) | Converge (ALL_CHURN) |
 | Findings contradict prior pass | Converge (FLIP_FLOPS_ONLY) |
 | Rate-limited | Sleep until clear, re-run same pass |
-| `max-passes` reached | Return `MAX_PASSES_REACHED` to orchestrator |
+| `max_passes` reached | Return `MAX_PASSES_REACHED` to orchestrator |
 
 ## Stop Conditions
 
 - Return `BLOCKED` if: tests fail after applying a real finding AND the failure can't be resolved without changing the finding's intent (e.g., test was wrong AND CodeRabbit's fix would break unrelated functionality)
 - Return `NEEDS_INPUT` if: pre-pass sanity check fails (dirty tree, stale `main`, base disagreement)
-- Return `MAX_PASSES_REACHED` if: 8 passes (or configured `max-passes`) elapsed without convergence — likely indicates oscillating recommendations or genuinely unstable code
+- Return `MAX_PASSES_REACHED` if: 8 passes (or configured `max_passes`) elapsed without convergence — likely indicates oscillating recommendations or genuinely unstable code
 
 ## Output Contract
 

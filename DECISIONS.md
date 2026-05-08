@@ -980,3 +980,16 @@ The future-WU mitigation (NOT this WU's scope): make the orchestrator explicitly
 ## D-2026-05-07-acr-22-phase-6c-rewind
 
 Tier-1 rewind during ACR-22 Phase 6c. Process-tree audit #2 returned BLOCKING because Step 6c invocation `0edf49a3-d32c-49e1-b801-98f506cfa045` did not echo `READ_STEP6B_INDEX` / `READ_TEST_FILE` evidence (workflow rule: implementation-pipeline.md § Phase 6 step 6c log echo requirement). Empirical test pass + WROTE_CODE summary were context only, not sufficient evidence. Restored product files to pre-6c state via `git restore --staged --worktree`, retained Phase 6b test files, revised 6c prompt to force read echoes into stdout, re-dispatching Step 6c. Audit-history reference: `D-2026-05-07-02` in `~/projects/ai/planning/acr-22-linear-team-aware/audit-history.md`. Old audit report at `~/projects/ai/planning/acr-22-linear-team-aware/risk/acr-22-phase-6-process-tree-audit.md` superseded by next audit invocation.
+
+## D-2026-05-08-acr-127-phase-8-rebase-on-current-master
+
+Phase 8 Round 1 returned HIGH on `justification` and `commit-hygiene` gates because the WU branch was forked from `master@8a1f1cd`, one commit before `cd7cb49` (ACR-88 #79) merged. `git diff master..HEAD` therefore contained phantom reverts of ACR-88's 29-file changeset, in addition to the four authored ACR-127 files. The authored commit `de5bfe5` was clean and proposal-aligned; the gate failures targeted the merge-base contamination, not the authored work.
+
+**Action:** `git fetch origin master && git update-ref refs/heads/master refs/remotes/origin/master && git rebase master` from the WU worktree. Single-commit rebase, no conflicts. New commit hash: `01478fb` (was `de5bfe5`). Diff vs current master reduced to 4 files (84/16). Test suite (`PYTHONPATH=. pytest tests/test_agentsmd_structure.py -q`) re-verified at `23 passed`.
+
+**Justifying evidence:** Phase 8 Round 1 reports at:
+- `/home/nes/projects/ai/planning/acr-127-operator-dispatch-input-drift/risk/acr-127-justification.md` (Round 1, HIGH)
+- `/home/nes/projects/ai/planning/acr-127-operator-dispatch-input-drift/risk/acr-127-commit-hygiene.md` (Round 1, HIGH)
+- Audit-history § Phase 8 — Round 1 (stale-base rebase)
+
+**Rationale:** Stale-base contamination is a known recurrence pattern (D-2026-05-08c ACR-5; D-2026-05-07-acr-88-phase-8-rebase-on-current-master ACR-88). Single feature commit rebased onto current master is the canonical fix. Re-dispatched all four Phase 8 gates from clean post-rebase state per the orchestrator's revise-loop rule.
