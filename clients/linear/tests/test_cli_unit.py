@@ -14,6 +14,10 @@ from clients.linear.cli import (
 from clients.linear.client import LinearClientError
 
 
+def stdout_json(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    return json.loads(capsys.readouterr().out)
+
+
 class TestGetIssueDescription:
     def test_prints_description_when_present(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Should print issue description when it exists."""
@@ -728,3 +732,224 @@ Content
             assert result["ok"] is False
             assert result["error"]["code"] == "NOT_FOUND"
             assert result["error"]["message"] == "Issue not found"
+
+    def test_acr113_create_issue_resolves_project_and_labels_before_create(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T12: create-issue resolves the full (team, project, labels) tuple first."""
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.resolve_project_id.return_value = "project-uuid"
+            mock_client.resolve_label_ids.return_value = ["label-hardening", "label-bug"]
+            mock_client.create_issue.return_value = {
+                "id": "issue-uuid",
+                "identifier": "AST-1",
+                "title": "Tuple create",
+            }
+            mock_client.get_issue.return_value = {
+                "id": "issue-uuid",
+                "identifier": "AST-1",
+                "labels": [{"id": "label-hardening", "name": "hardening"}],
+            }
+            mock_client.apply_labels.return_value = {"id": "issue-uuid"}
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "create-issue",
+                    "--team",
+                    "AST",
+                    "--project",
+                    "acr-strategy",
+                    "--label",
+                    "hardening,Bug",
+                    "--title",
+                    "Tuple create",
+                ],
+            ):
+                main()
+
+            method_names = [call[0] for call in mock_client.method_calls]
+            assert method_names.index("resolve_project_id") < method_names.index(
+                "resolve_label_ids"
+            )
+            assert method_names.index("resolve_label_ids") < method_names.index("create_issue")
+            mock_client.resolve_project_id.assert_called_once_with("AST", "acr-strategy")
+            mock_client.resolve_label_ids.assert_called_once_with(
+                "AST", ["hardening", "Bug"], create_missing=False
+            )
+            mock_client.create_issue.assert_called_once_with(
+                team="AST",
+                title="Tuple create",
+                description=None,
+                project_id="project-uuid",
+                label_ids=["label-hardening", "label-bug"],
+            )
+            mock_client.get_issue.assert_called_once_with("issue-uuid")
+            mock_client.apply_labels.assert_called_once_with(
+                issue_id="issue-uuid",
+                team="AST",
+                label_names=["hardening", "Bug"],
+                create_missing=False,
+                replace=False,
+            )
+            assert stdout_json(capsys)["ok"] is True
+
+    def test_acr113_create_issue_label_resolution_failure_aborts_create(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T12: label resolution failure stops before issueCreate."""
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.resolve_project_id.return_value = "project-uuid"
+            mock_client.resolve_label_ids.side_effect = LinearClientError(
+                "NOT_FOUND", "Label not found on team AST: missing"
+            )
+            mock_client_class.return_value = mock_client
+
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "linear",
+                        "create-issue",
+                        "--team",
+                        "AST",
+                        "--project",
+                        "acr-strategy",
+                        "--label",
+                        "missing",
+                        "--title",
+                        "Tuple create",
+                    ],
+                ),
+                pytest.raises(SystemExit) as exc_info,
+            ):
+                main()
+
+            assert exc_info.value.code == 1
+            mock_client.create_issue.assert_not_called()
+            result = stdout_json(capsys)
+            assert result["ok"] is False
+            assert result["error"]["code"] == "NOT_FOUND"
+
+    def test_acr113_list_labels_command_returns_json_envelope(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T13: list-labels forwards team and returns the standard envelope."""
+        labels = [{"id": "label-hardening", "name": "hardening"}]
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.list_labels.return_value = labels
+            mock_client_class.return_value = mock_client
+
+            with patch.object(sys, "argv", ["linear", "list-labels", "--team", "ACR"]):
+                main()
+
+            mock_client.list_labels.assert_called_once_with(team="ACR")
+            assert stdout_json(capsys) == {"ok": True, "data": labels}
+
+    def test_acr113_create_label_command_returns_json_envelope(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T13: create-label forwards team/name/options and returns the standard envelope."""
+        label = {"id": "label-new", "name": "new-label"}
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.create_label.return_value = label
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "create-label",
+                    "--team",
+                    "ACR",
+                    "--name",
+                    "new-label",
+                    "--color",
+                    "#5e6ad2",
+                    "--description",
+                    "desc",
+                ],
+            ):
+                main()
+
+            mock_client.create_label.assert_called_once_with(
+                team="ACR", name="new-label", color="#5e6ad2", description="desc"
+            )
+            assert stdout_json(capsys) == {"ok": True, "data": label}
+
+    def test_acr113_apply_labels_command_preserves_plural_labels_flag(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T13: apply-labels keeps --labels plural and forwards merge options."""
+        result = {"id": "issue-uuid", "labels": [{"id": "label-hardening"}]}
+        with patch("clients.linear.cli.LinearClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.apply_labels.return_value = result
+            mock_client_class.return_value = mock_client
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "linear",
+                    "apply-labels",
+                    "ACR-1",
+                    "--team",
+                    "ACR",
+                    "--labels",
+                    "hardening,Bug",
+                    "--create-missing",
+                    "--replace",
+                ],
+            ):
+                main()
+
+            mock_client.apply_labels.assert_called_once_with(
+                issue_id="ACR-1",
+                team="ACR",
+                label_names=["hardening", "Bug"],
+                create_missing=True,
+                replace=True,
+            )
+            assert stdout_json(capsys) == {"ok": True, "data": result}
+
+    def test_acr113_no_command_error_lists_registered_command_inventory(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """T19: no-command error names every supported parser subcommand."""
+        with (
+            patch.object(sys, "argv", ["linear"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+        result = stdout_json(capsys)
+        message = result["error"]["message"]
+        for command in [
+            "get-issue",
+            "get-issue-description",
+            "split-plans",
+            "create-issue",
+            "update-issue",
+            "comment",
+            "create-comment",
+            "get-comment",
+            "upsert-comment",
+            "list-issues",
+            "list-projects",
+            "list-labels",
+            "create-label",
+            "apply-labels",
+            "search-issues",
+        ]:
+            assert command in message

@@ -8,6 +8,11 @@ from pytest_mock import MockerFixture
 from clients.linear.client import LinearClient, LinearClientError
 
 
+ACR113_TEAM_ID = "11111111-1111-1111-1111-111111111111"
+ACR113_PROJECT_ID = "22222222-2222-2222-2222-222222222222"
+ACR113_OTHER_PROJECT_ID = "33333333-3333-3333-3333-333333333333"
+
+
 def create_mock_response(data: dict[str, Any]) -> MagicMock:
     """Create a mock HTTP response with the given data.
 
@@ -2853,3 +2858,529 @@ class TestSetTicketState:
 
         assert exc_info.value.code == "API_ERROR"
         assert "Failed to update state" in exc_info.value.message
+
+
+class TestACR113LabelInventoryAndResolution:
+    def test_list_labels_queries_team_and_workspace_labels(self, mocker: MockerFixture) -> None:
+        """T1: list_labels resolves the team and retains team/workspace label shape."""
+        labels = [
+            {
+                "id": "label-team-hardening",
+                "name": "hardening",
+                "color": "#5e6ad2",
+                "description": "Team label",
+                "team": {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"},
+            },
+            {
+                "id": "label-workspace-bug",
+                "name": "Bug",
+                "color": "#e5484d",
+                "description": "Workspace label",
+                "team": None,
+            },
+        ]
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={"data": {"issueLabels": {"nodes": labels}}},
+        )
+
+        result = client.list_labels("ACR")
+
+        query, variables = run_graphql.call_args.args
+        assert "issueLabels" in query
+        assert "team: {id: {eq: $teamId}}" in query
+        assert "team: {null: true}" in query
+        assert "team { id key name }" in query
+        assert variables == {"teamId": ACR113_TEAM_ID}
+        assert result == labels
+        assert result[0]["team"]["id"] == ACR113_TEAM_ID
+        assert result[1]["team"] is None
+
+    def test_resolve_label_ids_prefers_team_label_over_workspace_label(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T2: a team-owned label wins over a same-name workspace label."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "list_labels",
+            return_value=[
+                {
+                    "id": "label-team-hardening",
+                    "name": "hardening",
+                    "team": {"id": ACR113_TEAM_ID, "key": "ACR"},
+                },
+                {"id": "label-workspace-hardening", "name": "hardening", "team": None},
+            ],
+        )
+
+        assert client.resolve_label_ids("ACR", ["hardening"]) == ["label-team-hardening"]
+
+    def test_resolve_label_ids_same_tier_duplicate_raises_ambiguous_label(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T2: duplicate exact names in the same precedence tier are forbidden."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "list_labels",
+            return_value=[
+                {
+                    "id": "label-team-hardening-a",
+                    "name": "hardening",
+                    "team": {"id": ACR113_TEAM_ID, "key": "ACR"},
+                },
+                {
+                    "id": "label-team-hardening-b",
+                    "name": "hardening",
+                    "team": {"id": ACR113_TEAM_ID, "key": "ACR"},
+                },
+            ],
+        )
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_label_ids("ACR", ["hardening"])
+
+        assert exc_info.value.code == "AMBIGUOUS_LABEL"
+
+    def test_resolve_label_ids_missing_label_without_create_fails_before_create(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T3: missing labels fail without invoking create_label."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "list_labels", return_value=[])
+        create_label = mocker.patch.object(client, "create_label")
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_label_ids("ACR", ["new-label"], create_missing=False)
+
+        assert exc_info.value.code == "NOT_FOUND"
+        create_label.assert_not_called()
+
+    def test_resolve_label_ids_create_missing_calls_create_label(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T3: create_missing creates the label and returns the created ID."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "list_labels", return_value=[])
+        create_label = mocker.patch.object(
+            client,
+            "create_label",
+            return_value={"id": "label-new", "name": "new-label"},
+        )
+
+        assert client.resolve_label_ids("ACR", ["new-label"], create_missing=True) == [
+            "label-new"
+        ]
+        create_label.assert_called_once_with("ACR", "new-label")
+
+
+class TestACR113ApplyLabelsContract:
+    def test_apply_labels_rejects_issue_team_mismatch_before_update(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T4: applying labels must verify the issue belongs to the supplied team."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        mocker.patch.object(client, "resolve_label_ids", return_value=["label-hardening"])
+        mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issue": {
+                        "team": {"id": "other-team-id", "key": "OTHER"},
+                        "labels": {"nodes": [{"id": "label-existing"}]},
+                    }
+                }
+            },
+        )
+        update_issue = mocker.patch.object(client, "update_issue")
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.apply_labels("ACR-1", "ACR", ["hardening"])
+
+        assert exc_info.value.code == "INVALID_INPUT"
+        update_issue.assert_not_called()
+
+    def test_apply_labels_merge_and_replace_send_full_replacement_ids(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T4/T10: merge de-duplicates current+resolved IDs, replace sends resolved IDs."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        mocker.patch.object(client, "resolve_label_ids", return_value=["label-new", "label-old"])
+        mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issue": {
+                        "team": {"id": ACR113_TEAM_ID, "key": "ACR"},
+                        "labels": {"nodes": [{"id": "label-old"}, {"id": "label-existing"}]},
+                    }
+                }
+            },
+        )
+        update_issue = mocker.patch.object(client, "update_issue", return_value={"id": "issue"})
+
+        client.apply_labels("ACR-1", "ACR", ["hardening"], replace=False)
+        client.apply_labels("ACR-1", "ACR", ["hardening"], replace=True)
+
+        assert update_issue.call_args_list[0].kwargs["label_ids"] == [
+            "label-old",
+            "label-existing",
+            "label-new",
+        ]
+        assert update_issue.call_args_list[1].kwargs["label_ids"] == [
+            "label-new",
+            "label-old",
+        ]
+
+
+class TestACR113ReadbackAndProjectContracts:
+    def test_get_issue_returns_real_labels_and_expanded_project(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T5: get_issue must query labels and project slug/team readback fields."""
+        issue = {
+            "id": "issue-uuid",
+            "identifier": "ACR-1",
+            "title": "Readback",
+            "description": "body",
+            "priority": 2,
+            "estimate": None,
+            "url": "https://linear.app/acme/issue/ACR-1",
+            "branchName": "acr-1-readback",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "updatedAt": "2026-01-02T00:00:00Z",
+            "completedAt": None,
+            "canceledAt": None,
+            "dueDate": None,
+            "team": {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"},
+            "assignee": None,
+            "state": None,
+            "project": {
+                "id": ACR113_PROJECT_ID,
+                "slugId": "acr-strategy",
+                "name": "ACR Strategy",
+                "teams": {"nodes": [{"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"}]},
+            },
+            "labels": {
+                "nodes": [
+                    {
+                        "id": "label-hardening",
+                        "name": "hardening",
+                        "color": "#5e6ad2",
+                        "team": {"id": ACR113_TEAM_ID, "key": "ACR"},
+                    }
+                ]
+            },
+            "parent": None,
+        }
+        client = LinearClient(api_key="test_key")
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={"data": {"issue": issue}},
+        )
+
+        result = client.get_issue("ACR-1")
+
+        query = run_graphql.call_args.args[0]
+        assert "labels" in query
+        assert "color" in query
+        assert "team {" in query
+        assert "slugId" in query
+        assert "teams {" in query
+        assert result["labels"] == issue["labels"]["nodes"]
+        assert result["project"]["slugId"] == "acr-strategy"
+        assert result["project"]["teams"] == issue["project"]["teams"]["nodes"]
+
+    def test_list_projects_team_filter_uses_variables_and_returns_slug_and_teams(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T6: list_projects pins team filter, includeArchived, first, slugId, and teams."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "projects": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        "nodes": [
+                            {
+                                "id": ACR113_PROJECT_ID,
+                                "name": "ACR Strategy",
+                                "slugId": "acr-strategy",
+                                "url": "https://linear.app/project/acr-strategy",
+                                "archivedAt": None,
+                                "teams": {
+                                    "nodes": [
+                                        {"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"}
+                                    ]
+                                },
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+
+        projects = client.list_projects(team_id="ACR", include_archived=True)
+
+        query, variables = run_graphql.call_args.args
+        assert "accessibleTeams: {id: {eq: $teamId}}" in query
+        assert "includeArchived" in query
+        assert "slugId" in query
+        assert "archivedAt" in query
+        assert "teams" in query
+        assert variables == {"teamId": ACR113_TEAM_ID, "includeArchived": True, "first": 100}
+        assert projects[0]["slugId"] == "acr-strategy"
+        assert projects[0]["teams"] == [{"id": ACR113_TEAM_ID, "key": "ACR", "name": "ACR"}]
+
+    def test_list_projects_without_team_omits_team_filter_and_team_variable(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T6: workspace project listing must not send teamId: null."""
+        client = LinearClient(api_key="test_key")
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "projects": {
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                        "nodes": [],
+                    }
+                }
+            },
+        )
+
+        client.list_projects(team_id=None)
+
+        query, variables = run_graphql.call_args.args
+        assert "accessibleTeams" not in query
+        assert "teamId" not in variables
+
+    def test_resolve_project_id_matches_uuid_and_slug_with_team_scope(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T7: project UUIDs and slugIds resolve only from team-accessible projects."""
+        client = LinearClient(api_key="test_key")
+        list_projects = mocker.patch.object(
+            client,
+            "list_projects",
+            return_value=[
+                {
+                    "id": ACR113_PROJECT_ID,
+                    "slugId": "acr-strategy",
+                    "name": "Do not match by name",
+                    "teams": [{"id": ACR113_TEAM_ID, "key": "ACR"}],
+                }
+            ],
+        )
+
+        assert client.resolve_project_id("ACR", ACR113_PROJECT_ID) == ACR113_PROJECT_ID
+        assert client.resolve_project_id("ACR", "acr-strategy") == ACR113_PROJECT_ID
+        list_projects.assert_called_with(team_id="ACR", include_archived=False)
+
+    def test_resolve_project_id_rejects_missing_names_urls_and_duplicate_slugs(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T7: no name/URL fallback; duplicate distinct projects are ambiguous."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(
+            client,
+            "list_projects",
+            return_value=[
+                {
+                    "id": ACR113_PROJECT_ID,
+                    "name": "ACR Strategy",
+                    "slugId": "acr-strategy",
+                    "url": "https://linear.app/project/acr-strategy",
+                    "teams": [{"id": ACR113_TEAM_ID, "key": "ACR"}],
+                },
+                {
+                    "id": ACR113_OTHER_PROJECT_ID,
+                    "name": "Other",
+                    "slugId": "acr-strategy",
+                    "url": "https://linear.app/project/other",
+                    "teams": [{"id": ACR113_TEAM_ID, "key": "ACR"}],
+                },
+            ],
+        )
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_project_id("ACR", "ACR Strategy")
+        assert exc_info.value.code == "NOT_FOUND"
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_project_id("ACR", "https://linear.app/project/acr-strategy")
+        assert exc_info.value.code == "NOT_FOUND"
+
+        with pytest.raises(LinearClientError) as exc_info:
+            client.resolve_project_id("ACR", "acr-strategy")
+        assert exc_info.value.code == "AMBIGUOUS_PROJECT"
+
+
+class TestACR113IssueMutationInputs:
+    def test_create_issue_sends_resolved_project_and_label_ids(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T9: IssueCreateInput carries teamId, projectId, labelIds, and scalars."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issueCreate": {
+                        "success": True,
+                        "issue": {
+                            "id": "issue-uuid",
+                            "identifier": "ACR-1",
+                            "title": "Tuple create",
+                            "url": "https://linear.app/acme/issue/ACR-1",
+                            "branchName": "acr-1-tuple-create",
+                        },
+                    }
+                }
+            },
+        )
+
+        client.create_issue(
+            team="ACR",
+            title="Tuple create",
+            description="body",
+            project_id=ACR113_PROJECT_ID,
+            label_ids=["label-hardening", "label-bug"],
+            priority=2,
+        )
+
+        variables = run_graphql.call_args.args[1]
+        assert variables == {
+            "input": {
+                "title": "Tuple create",
+                "teamId": ACR113_TEAM_ID,
+                "description": "body",
+                "projectId": ACR113_PROJECT_ID,
+                "priority": 2,
+                "labelIds": ["label-hardening", "label-bug"],
+            }
+        }
+
+    def test_create_issue_omits_absent_and_empty_optional_tuple_fields(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T9: absent project and absent or empty labels are omitted, never nulled."""
+        client = LinearClient(api_key="test_key")
+        mocker.patch.object(client, "_resolve_team_id", return_value=ACR113_TEAM_ID)
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issueCreate": {
+                        "success": True,
+                        "issue": {
+                            "id": "issue-uuid",
+                            "identifier": "ACR-1",
+                            "title": "No tuple",
+                            "url": "https://linear.app/acme/issue/ACR-1",
+                            "branchName": "acr-1-no-tuple",
+                        },
+                    }
+                }
+            },
+        )
+
+        client.create_issue(team="ACR", title="No tuple", project_id=None, label_ids=[])
+
+        issue_input = run_graphql.call_args.args[1]["input"]
+        assert issue_input == {"title": "No tuple", "teamId": ACR113_TEAM_ID}
+        assert "projectId" not in issue_input
+        assert "labelIds" not in issue_input
+
+    def test_update_issue_sends_combined_issue_update_input(
+        self, mocker: MockerFixture
+    ) -> None:
+        """T10: IssueUpdateInput carries projectId and labelIds with the issue id."""
+        client = LinearClient(api_key="test_key")
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issueUpdate": {
+                        "success": True,
+                        "issue": {
+                            "id": "issue-uuid",
+                            "identifier": "ACR-1",
+                            "title": "Updated",
+                            "url": "https://linear.app/acme/issue/ACR-1",
+                            "updatedAt": "2026-01-01T00:00:00Z",
+                        },
+                    }
+                }
+            },
+        )
+
+        client.update_issue(
+            issue_id="ACR-1",
+            project_id=ACR113_PROJECT_ID,
+            label_ids=["label-hardening", "label-bug"],
+        )
+
+        assert run_graphql.call_args.args[1] == {
+            "id": "ACR-1",
+            "input": {
+                "projectId": ACR113_PROJECT_ID,
+                "labelIds": ["label-hardening", "label-bug"],
+            },
+        }
+
+    def test_update_issue_omits_unchanged_tuple_fields(self, mocker: MockerFixture) -> None:
+        """T10: projectId and labelIds are independent optional update fields."""
+        client = LinearClient(api_key="test_key")
+        run_graphql = mocker.patch.object(
+            client,
+            "_run_graphql",
+            return_value={
+                "data": {
+                    "issueUpdate": {
+                        "success": True,
+                        "issue": {
+                            "id": "issue-uuid",
+                            "identifier": "ACR-1",
+                            "title": "Updated",
+                            "url": "https://linear.app/acme/issue/ACR-1",
+                            "updatedAt": "2026-01-01T00:00:00Z",
+                        },
+                    }
+                }
+            },
+        )
+
+        client.update_issue(issue_id="ACR-1", label_ids=["label-hardening"])
+        label_only_input = run_graphql.call_args.args[1]["input"]
+        assert label_only_input == {"labelIds": ["label-hardening"]}
+
+        client.update_issue(issue_id="ACR-1", project_id=ACR113_PROJECT_ID)
+        project_only_input = run_graphql.call_args.args[1]["input"]
+        assert project_only_input == {"projectId": ACR113_PROJECT_ID}
+
+
+def test_acr113_package_exports_remain_stable() -> None:
+    """T20: ACR-113 does not silently expand clients.linear.__all__."""
+    import clients.linear as linear_package
+
+    assert linear_package.__all__ == ["LinearClient", "LinearClientError"]
+    assert linear_package.LinearClient is LinearClient
+    assert linear_package.LinearClientError is LinearClientError

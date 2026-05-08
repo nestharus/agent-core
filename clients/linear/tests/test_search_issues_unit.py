@@ -12,6 +12,7 @@ from clients.linear.tests.test_client_unit import create_mock_response
 
 
 TEAM_ID = "11111111-1111-1111-1111-111111111111"
+PROJECT_ID = "22222222-2222-2222-2222-222222222222"
 
 SEARCH_ISSUES_QUERY = """query SearchIssues($filter: IssueFilter!, $first: Int!, $includeArchived: Boolean!) {
   issues(filter: $filter, first: $first, includeArchived: $includeArchived) {
@@ -77,9 +78,21 @@ def captured_graphql_body(mock_urlopen: MagicMock) -> dict[str, Any]:
 
 
 def run_search_and_capture_body(**kwargs: Any) -> dict[str, Any]:
+    def resolve_label_ids(
+        team: str,
+        label_names: list[str],
+        create_missing: bool = False,
+    ) -> list[str]:
+        assert create_missing is False
+        assert team in {"NES", TEAM_ID}
+        normalized = [name.strip() for name in label_names if name.strip()]
+        return [f"label-id-{index}" for index, _ in enumerate(normalized, start=1)]
+
     client = LinearClient(api_key="test_key")
     with (
         patch.object(LinearClient, "_resolve_team_id", return_value=TEAM_ID),
+        patch.object(LinearClient, "resolve_label_ids", side_effect=resolve_label_ids),
+        patch.object(LinearClient, "resolve_project_id", return_value=PROJECT_ID, create=True),
         patch("urllib.request.urlopen") as mock_urlopen,
     ):
         mock_urlopen.return_value = create_mock_response(issues_response([]))
@@ -309,23 +322,21 @@ def test_search_issues_filter_title_starts_with_uses_starts_with() -> None:
     assert body["variables"]["filter"]["title"]["startsWith"] == "NES-"
 
 
-def test_search_issues_label_names_produces_and_list_with_eq_filters() -> None:
+def test_search_issues_label_names_resolve_to_id_in_filter() -> None:
     body = run_search_and_capture_body(team_id=TEAM_ID, label_names=["a", "b", "c"])
 
-    assert body["variables"]["filter"]["and"] == [
-        {"labels": {"name": {"eq": "a"}}},
-        {"labels": {"name": {"eq": "b"}}},
-        {"labels": {"name": {"eq": "c"}}},
-    ]
+    assert body["variables"]["filter"]["labels"] == {
+        "id": {"in": ["label-id-1", "label-id-2", "label-id-3"]}
+    }
+    assert "and" not in body["variables"]["filter"]
 
 
 def test_search_issues_label_names_normalizes_whitespace_and_drops_empties() -> None:
     body = run_search_and_capture_body(team_id=TEAM_ID, label_names=[" a", "", "b ", "  "])
 
-    assert [item["labels"]["name"]["eq"] for item in body["variables"]["filter"]["and"]] == [
-        "a",
-        "b",
-    ]
+    assert body["variables"]["filter"]["labels"] == {
+        "id": {"in": ["label-id-1", "label-id-2"]}
+    }
 
 
 @pytest.mark.parametrize("label_names", [None, []])
@@ -466,10 +477,7 @@ def test_search_issues_docstring_lists_all_observable_codes() -> None:
             {
                 "team": {"id": {"eq": TEAM_ID}},
                 "title": {"containsIgnoreCase": "fragment", "startsWith": "NES-"},
-                "and": [
-                    {"labels": {"name": {"eq": "a"}}},
-                    {"labels": {"name": {"eq": "b"}}},
-                ],
+                "labels": {"id": {"in": ["label-id-1", "label-id-2"]}},
             },
             25,
             True,
@@ -482,14 +490,7 @@ def test_parameterized_filter_matrix(
     expected_first: int,
     expected_include_archived: bool,
 ) -> None:
-    client = LinearClient(api_key="test_key")
-
-    with patch("urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.return_value = create_mock_response(issues_response([]))
-        client.search_issues(**kwargs)
-
-    assert mock_urlopen.call_count == 1
-    body = captured_graphql_body(mock_urlopen)
+    body = run_search_and_capture_body(**kwargs)
     assert body["variables"] == {
         "filter": expected_filter,
         "first": expected_first,
@@ -502,15 +503,13 @@ def test_parameterized_filter_matrix(
     [
         ({"team_id": TEAM_ID, "title_contains": "abc-xyz-fragment"}, ["abc-xyz-fragment"]),
         ({"team_id": TEAM_ID, "title_starts_with": "NES-marker"}, ["NES-marker"]),
-        ({"team_id": TEAM_ID, "label_names": ["lbl-marker"]}, ["lbl-marker"]),
         (
             {
                 "team_id": TEAM_ID,
                 "title_contains": "contains-marker",
                 "title_starts_with": "starts-marker",
-                "label_names": ["label-marker-a", "label-marker-b"],
             },
-            ["contains-marker", "starts-marker", "label-marker-a", "label-marker-b"],
+            ["contains-marker", "starts-marker"],
         ),
     ],
 )
@@ -526,10 +525,45 @@ def test_graphql_query_uses_variables_not_string_interpolation(
         assert marker not in body["query"]
 
 
-def test_labels_filter_uses_all_semantics() -> None:
+def test_labels_filter_uses_any_resolved_id_semantics() -> None:
     body = run_search_and_capture_body(team_id=TEAM_ID, label_names=["a", "b"])
 
-    assert body["variables"]["filter"]["and"] == [
-        {"labels": {"name": {"eq": "a"}}},
-        {"labels": {"name": {"eq": "b"}}},
-    ]
+    assert body["variables"]["filter"]["labels"] == {
+        "id": {"in": ["label-id-1", "label-id-2"]}
+    }
+
+
+def test_acr113_search_issues_resolves_project_and_labels_before_filtering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T8: search emits resolved project/label ID filters, not raw slug or names."""
+    client = LinearClient(api_key="test_key")
+    run_graphql = MagicMock(return_value=issues_response([]))
+    monkeypatch.setattr(client, "_resolve_team_id", MagicMock(return_value=TEAM_ID))
+    monkeypatch.setattr(
+        client, "resolve_project_id", MagicMock(return_value=PROJECT_ID), raising=False
+    )
+    monkeypatch.setattr(client, "resolve_label_ids", MagicMock(return_value=["label-hardening"]))
+    monkeypatch.setattr(client, "_run_graphql", run_graphql)
+
+    client.search_issues(
+        team_key="ACR",
+        project="acr-strategy",
+        label_names=["hardening"],
+        first=25,
+    )
+
+    client.resolve_project_id.assert_called_once_with("ACR", "acr-strategy")
+    client.resolve_label_ids.assert_called_once_with(
+        "ACR", ["hardening"], create_missing=False
+    )
+    query, variables = run_graphql.call_args.args
+    assert query == SEARCH_ISSUES_QUERY
+    assert variables["filter"] == {
+        "team": {"id": {"eq": TEAM_ID}},
+        "project": {"id": {"eq": PROJECT_ID}},
+        "labels": {"id": {"in": ["label-hardening"]}},
+    }
+    variables_json = json.dumps(variables)
+    assert "acr-strategy" not in variables_json
+    assert "hardening" not in variables_json
