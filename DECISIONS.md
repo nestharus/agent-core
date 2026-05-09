@@ -61,6 +61,18 @@ Residual: gate-3 full-suite cleanliness depends on the user's separate WIP clean
 
 **Residual:** The orchestrator-doc consumption-echo rule presumes a model that can emit raw stdout before tool actions. The gpt-high model can't. Either the rule needs a different evidence form (e.g., a separate `${scratch_dir}/phase6/consumed.txt` file written by the agent as a tool action) or Step 6c must use a different model. Both are out of scope for ACR-14 anti-scope (no orchestrator-doc rule changes outside the procedural-handoff section; no model contract changes).
 
+## D-2026-05-09e — ACR-13 sibling residual: `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`
+
+**WU**: ACR-13. **Phase**: 6 (process-tree audit #2 routing). **Decision**: accept-and-continue residual; route to a separate follow-up WU.
+
+The pre-existing failure of `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` against the literal token `"claude-haiku"` at `tests/test_workflow_model_alignment.py:205` is out of scope for ACR-13. Same cause as D-2026-05-08i (ACR-125), D-2026-05-09a (ACR-12), and D-2026-05-09c (ACR-14): the token is part of an allowed-model name set in `test_workflow_model_alignment.py`, not a stale haiku reference. Aside from this DECISIONS.md entry, ACR-13's implementation diff is `agents/implementation-pipeline-orchestrator.md` + `tests/test_implementation_pipeline_contract_derivation.py` only and does not introduce any new haiku reference.
+
+Phase 6 process-tree audit's blocking finding `P6-AUDIT-003` is acknowledged as a sibling-gate routing question, not an ACR-13 implementation defect. Routed: leave for a follow-up WU that owns deciding whether the `test_no_claude_haiku_in_repo` predicate should ignore the legitimate constant in the model-alignment test allowed-set.
+
+Evidence:
+- `git diff master -- tests/test_workflow_model_alignment.py` is empty in this WU.
+- `tests/test_implementation_pipeline_contract_derivation.py` (this WU's only test file edit) does not reference haiku.
+
 ## D-2026-05-08j — ACR-125 rebase drift in `T-worked-example` marker
 
 **WU**: ACR-125. **Phase**: 8 (post-CodeRabbit gates). **Decision**: Inline test marker fix accepted as orchestrator-authored test correction for rebase drift, not a Tier-1 rewind. Original test used `lower.find("worked example")` which was unambiguous when Phase 6b ran (forked from master `ddc53a9`). Phase 8 test-audit gate flagged the diff because `git diff master..HEAD` showed unrelated diffs — caused by master moving forward to `18163c8` (ACR-126 + ACR-47 merged) during the WU run. Rebased the WU branch onto current master; one of the 16 tests then failed because ACR-126's commit added a different "worked example" prose paragraph at line 289 of `workflows/implementation-pipeline.md`, ahead of my Phase 8 fenced block at line 491 (tagged ` ```worked example `).
