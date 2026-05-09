@@ -20,6 +20,60 @@ Resolution: revert the five product-file edits (keep the Phase 6b tests) and re-
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08n — ACR-64 Phase 7 pre-CodeRabbit rebase onto current origin/master to pick up sibling ACR-125
+
+**WU**: ACR-64 (Mitigate pr-writer git diff base..HEAD symmetric-diff false positives). **Phase**: 7 (pre-CodeRabbit-loop preparation). **Decision**: `Refresh local master to origin/master and rebase the WU branch onto it before dispatching coderabbit-operator, applying the pre-resolved Mid-pipeline-drift=A residual policy to the sibling-merge that occurred during ACR-64's pipeline run`.
+
+**Trigger**: Between ACR-64's Phase 0 bootstrap (worktree forked from master at `18163c8`) and Phase 7 entry, sibling WU **ACR-125** (Phase 8 actual-vs-estimated capture, PR #90, commit `6f2dc14`) merged to `origin/master`. CodeRabbit's non-negotiable § "Local main must be up to date with origin/main before the first pass" requires the local master ref to track origin/master before the loop begins; otherwise CodeRabbit's `--base master` would compare a stale base and review unrelated files.
+
+**Resolution**: applied the precedent from ACR-5 (`D-2026-05-08c` Phase 8 stale-base rebase) and ACR-125 (`D-2026-05-08j` rebase drift handling). Steps: `git update-ref refs/heads/master refs/remotes/origin/master` then `git rebase master`. The rebase was a clean replay (no conflicts) — ACR-125's diff is in estimate-related test/operator surfaces that do not overlap ACR-64's three-file scope (`agents/pr-writer.md`, `tests/test_pr_writer_operator_spec.py`, `DECISIONS.md`). Note: the DECISIONS.md merge produced a small structural anomaly — an intro paragraph "Decisions taken at the `~/ai/`..." now sits inline after sibling decisions instead of immediately under the H1 — that is sibling-merge debris (ACR-125 and ACR-126 inserted at the top simultaneously) and is out of ACR-64 scope.
+
+**Verification**: post-rebase `pytest tests/test_pr_writer_operator_spec.py -v` shows 9/9 PASS, including the new `test_pr_writer_uses_three_dot_branch_contribution_diff`. The pre-existing master-state regression (`test_no_claude_haiku_in_repo`) carried over from before; see `D-2026-05-08m`.
+
+**Why this is consistent with pre-resolved Mid-pipeline-drift=A**: the work-manager dispatch's `Mid-pipeline drift: default A — proceed + note in DECISIONS as residual` directs the orchestrator to proceed with current state and document the drift. The rebase is the procedural action that makes "proceeding" feasible (it satisfies CodeRabbit's contract), and this decision is the residual note. ACR-64 itself is the structural fix that prevents this exact mid-pipeline-drift problem from polluting *future* PR bodies — but it cannot retroactively fix its own mid-pipeline drift; the rebase + residual note is the canonical handling.
+
+**Evidence**:
+- Pre-rebase commit: `ef435c5` (3 files, 71 +, 3 -; on top of `18163c8`).
+- Post-rebase commit: `33daef7` (same 3 files, replayed cleanly on top of `6f2dc14`).
+- Sibling commit: `6f2dc14 ACR-125: Phase 8 actual-vs-estimated capture (#NN) (#90)`.
+
+## D-2026-05-08m — ACR-64 Phase 6 pre-existing master regression accepted-as-residual
+
+**WU**: ACR-64 (Mitigate pr-writer git diff base..HEAD symmetric-diff false positives). **Phase**: 6 (post-Step-6c full-suite gate). **Decision**: `Accept the failing test_no_claude_haiku_in_repo as a pre-existing master-state regression that ACR-64 did not introduce and does not own; proceed without fixing within ACR-64 scope`.
+
+**Trigger**: After Step 6c applied the three approved `..` → `...` edits to `agents/pr-writer.md`, the focused `tests/test_pr_writer_operator_spec.py` gate passed clean (9/9, including the new `test_pr_writer_uses_three_dot_branch_contribution_diff`). The full-suite regression check (`pytest tests/ clients/`) then surfaced one failing test: `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`. The failing assertion finds the literal token `claude-haiku` in `tests/test_workflow_model_alignment.py:205` (an allowlist set in the alignment test author's `known_models` registry).
+
+**Provenance**: same sibling-PR conflict as `D-2026-05-08k`:
+- The forbidden-token rule was introduced by `464b3bc NES-263: eliminate claude-haiku across ~/ai (#49)`.
+- The conflicting allowlist entry was last edited by `68086d6 ACR-49: align roadmap workflow orchestrator model + alignment test (#84)`.
+- Verified pre-existing on clean master via `git stash --include-untracked; pytest tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo; git stash pop` — failure shape identical with or without ACR-64's WIP. 1 failed, 1246 passed (full suite) under ACR-64 WIP; same 1 failure on clean master.
+
+**Why this is not ACR-64's responsibility**:
+- ACR-64's per-surface mode list (proposal lines 1–5) names `agents/pr-writer.md` as the supported surface, with `implementation-pipeline-orchestrator.md` Phase 9 and `workflows/implementation-pipeline.md` Phase 9 as `untouched-by-this-WU`. `tests/test_agentsmd_structure.py` and `tests/test_workflow_model_alignment.py` are not in scope.
+- ACR-64's anti-scope (proposal § Anti-Scope) explicitly forbids broadening to other operator surfaces; the master-state regression sits in alignment-test territory.
+- ACR-64's actual diff (`agents/pr-writer.md`, `tests/test_pr_writer_operator_spec.py`, plus the project DECISIONS.md decision tail) does NOT modify `tests/test_workflow_model_alignment.py:205` or `tests/test_agentsmd_structure.py`.
+
+**Phase 8 follow-up**: when the test-audit gate inspects the diff, this DECISIONS entry is the citation; the failing test is not in ACR-64's diff (the diff does not modify either of the two implicated files).
+
+**Tracker note**: the canonical fix is to remove `"claude-haiku"` from `tests/test_workflow_model_alignment.py:205` — that is one line and belongs to a sibling cleanup ticket, not ACR-64. ACR-64 inherits this residual from ACR-126 (D-2026-05-08k); the open follow-up tracker remains user-owned.
+
+## D-2026-05-08l — ACR-64 Phase 2.5.4 duplicates discovery: stay narrow
+
+**WU**: ACR-64 (Mitigate pr-writer git diff base..HEAD symmetric-diff false positives). **Phase**: 2.5 (duplicates inventory, sub-step 2.5.4). **Decision**: `Apply pre-resolved gate "Narrow-vs-Exhaustive: A — single-file fix at most" + "Mid-pipeline drift: A — proceed + note in DECISIONS as residual". Do NOT expand ACR-64 scope to fix the duplicate-bug-class in ~/ai/workflows/pr-review.md and ~/ai/agents/prototype-orchestrator.md answer-trace step`.
+
+**Trigger**: Phase 2.5.4 duplicates research (`/home/nes/projects/ai/planning/acr-64-pr-writer-diff-rebase/research/acr-64-duplicates.md`) returned `NEEDS_INPUT` flagging two real-bug-class duplicates outside `pr-writer.md`:
+
+1. `~/ai/workflows/pr-review.md:53` — review gates default to `git diff main..HEAD` (two-dot). Same moving-base drift mode: if `main` advances mid-pipeline, review gates judge sibling deltas as branch contribution.
+2. `~/ai/agents/prototype-orchestrator.md:151,160` — answer-trace reviewer reads `git diff main..HEAD` (two-dot) while the same operator's risk-profile step at line 111 already uses `git diff main...HEAD` (three-dot). Internal silent drift.
+
+**Resolution**: procedural NEEDS_INPUT resolved by pre-resolved gates from work-manager-operator dispatch. Narrow-vs-Exhaustive=A explicitly says "single-file fix at most"; Mid-pipeline-drift=A says "proceed + note in DECISIONS as residual." The duplicates discovery surfaces a real bug class in two other operator surfaces but is out-of-WU-scope for ACR-64.
+
+**Residual carry-forward**: recommend follow-up tickets after ACR-64 lands to (a) cascade the fix into `pr-review.md` review-gate diff invocation, and (b) reconcile the internal drift in `prototype-orchestrator.md` (answer-trace two-dot vs risk-profile three-dot) — both belong to separate WUs. ACR-64 does NOT file those tickets here; user disposition determines whether/when they are filed.
+
+**Phase 3 input**: the proposer must NOT cascade the fix to those surfaces. Per the duplicates inventory's own classification, only the `pr-writer.md` surface is `cascade` for this WU; the others are tracked-as-residual.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-64-pr-writer-diff-rebase/research/acr-64-duplicates.md` (Inventory table + Consolidation Assessment).
+
 ## D-2026-05-08k — ACR-126 Phase 6 pre-existing master regression accepted-as-residual
 
 **WU**: ACR-126 (Phase 2.5 defer-to-prototype original-ticket disposition). **Phase**: 6 (post-Step-6c full-suite gate). **Decision**: `Accept the failing test_no_claude_haiku_in_repo as a pre-existing master-state regression that ACR-126 did not introduce and does not own; proceed without fixing within ACR-126 scope`.

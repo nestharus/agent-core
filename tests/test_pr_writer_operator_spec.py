@@ -44,6 +44,37 @@ def test_pr_writer_frontmatter_model_is_claude_opus():
     assert not re.search(r"(?m)^model:\s*gpt-high\s*$", frontmatter)
 
 
+def test_pr_writer_uses_three_dot_branch_contribution_diff():
+    text = _operator_text()
+    inputs = _section_after_heading(text, "## Inputs")
+    procedure = _section_after_heading(text, "## Procedure")
+    stop_conditions = _section_after_heading(text, "## Stop Conditions")
+
+    _assert_regex(
+        inputs,
+        re.escape("git diff base...branch"),
+        "Inputs section must describe the repo checkout as the source for the three-dot branch contribution diff",
+    )
+    _assert_regex(
+        procedure,
+        re.escape("git -C ${repo_root} diff ${base}...${branch} --stat"),
+        "Procedure must read the executable three-dot branch contribution diff",
+    )
+    _assert_regex(
+        stop_conditions,
+        re.escape("BLOCKED:diff-empty"),
+        "Stop Conditions section must retain the diff-empty blocked state",
+    )
+    _assert_regex(
+        stop_conditions,
+        re.escape("git diff base...branch"),
+        "Stop Conditions section must define diff-empty using the three-dot branch contribution diff",
+    )
+
+    assert "git -C ${repo_root} diff ${base}..${branch} --stat" not in text
+    assert "git diff base..branch" not in text
+
+
 def test_inputs_declares_linear_issue_keys_optional():
     inputs = _section_after_heading(_operator_text(), "## Inputs")
 
