@@ -483,6 +483,32 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: if those gates say the diff should be split, split it before opening PRs.
 - Rule: Process-tree review: after Phase 8 gates pass and before Phase 9, run `process-tree-auditor` on the delegated CodeRabbit and PR-review subtrees. A blocking process violation prevents draft PR creation until the affected subtree is rerun or repaired.
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
+- Phase 8 capture documentation: after Phase 8 gates and Process-tree audit #3 pass, the orchestrator dispatches the `claude-opus` closure judge and records `actual_story_points` and `actual_capture_method` as an orchestrator-owned closure artifact before Phase 9. The enum is `closer-best-effort | wall-time-derived | unmeasured`, the point set is `1, 2, 3, 5, 8, 13, 21, 40, 100`, and wall-time-derived is reserved as enum-only with no requirements for timers, durations, start/stop timestamps, or trace-derived time calculations.
+- Rule: ACR-125 capture must not dispatch `task=update-estimate` for actuals, must not write actuals to Linear `estimate`, and must not write actuals to Jira `customfield_10016`; live ticket estimate fields continue to hold the refined estimate.
+- Final verification-only behavior: Final does not recalculate the actual; it verifies the audit-history calibration block and `estimate_comparison_comment_ref`, then references the comparison in the close-comment.
+- Final halt-on-missing: on a missing/invalid/inconsistent calibration block or invalid `estimate_comparison_comment_ref`, Final halts and must not post the close-comment. Final verification accepts `<id | url | none>`, rejects `path`, and treats none valid only when `ticket_system: jira`. On success, Final close-comment includes inherited/refined/actual values inline on both backends.
+
+```worked example
+Phase 8 worked example
+
+inherited_story_point_estimate: 3
+refined_story_point_estimate: 5
+actual_story_points: 8
+actual_capture_method: closer-best-effort
+estimate_delta_narrative: inherited=3; refined=5; actual=8; delta_refined_to_actual=3; over_2x_inherited=true
+
+sample comment body
+
+Estimate calibration
+
+- inherited_story_point_estimate: 3
+- refined_story_point_estimate: 5
+- actual_story_points: 8
+- actual_capture_method: closer-best-effort
+- actual_estimate_rationale: closer-best-effort: closure scope landed broader than the refined estimate assumed.
+- estimate_delta_narrative: inherited=3; refined=5; actual=8; delta_refined_to_actual=3; over_2x_inherited=true
+- audit_history: ${planning_dir}/audit-history.md
+```
 
 ## Phase 8.5 - Human Local Review Gate (tickets-first variant only)
 
@@ -492,6 +518,7 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: while this gate is pending, the project's ticket (JIRA or Linear) is the unit of review and the **branch** is the artifact under review. No draft PR exists yet; the Phase 9 step that creates it does not run until this gate clears with `approve`.
 - Rule: revisions requested at this gate are **post-Phase-8** revisions: re-enter from the appropriate phase (typically Phase 7 if review-comment-shaped, Phase 6 if it requires test/code changes), re-run Phase 8 audits, and re-enter this gate.
 - Rule: rejection at this gate terminates the WU. Record in `${worktree_path}/DECISIONS.md`, comment closure on the ticket via the project's ticket operator, halt — do not open a PR.
+- tickets-first Phase 8.5 deferral: closure capture waits for local-review approval; until answer A/approve lands, write no calibration block, no comparison comment, no audit-history capture write.
 - Gate: human. **This is the second of the two human gates** in the tickets-first variant of the orchestrator's flow (the first being Phase 2.5 problem-map review).
 
 ## Phase 9 - Draft PR
