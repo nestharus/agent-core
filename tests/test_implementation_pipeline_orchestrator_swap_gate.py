@@ -73,6 +73,21 @@ def test_phase7_pre_dispatch_swap_record_gate_exists_and_precedes_coderabbit_dis
     )
 
 
+def test_integration_tests_gate_does_not_cite_stale_NES_273_swap_record_gate():
+    phase7 = _phase7_section()
+    integration_tests = _section(phase7, r"Pre-dispatch integration-tests gate")
+
+    assert not re.search(
+        r"(?is)before\s+the\s+NES-273\s+swap-record\s+gate",
+        integration_tests,
+    ), "unexpected stale 'before the NES-273 swap-record gate' phrase"
+    _assert_regex(
+        integration_tests,
+        r"(?is)before\s+the\s+Pre[- ]dispatch\s+swap[- ]record\s+gate",
+        "procedural reference to the operator-file pre-dispatch swap-record gate",
+    )
+
+
 def test_phase7_swap_gate_names_canonical_path_and_required_field_tokens():
     phase7 = _phase7_section()
 
