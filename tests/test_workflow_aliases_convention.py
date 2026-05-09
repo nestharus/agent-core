@@ -1,9 +1,11 @@
+import ast
 import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONV_PATH = REPO_ROOT / "conventions" / "workflow-aliases.md"
+SELF_PATH = Path(__file__).resolve()
 
 
 REQUIRED_SECTION_PATTERNS = (
@@ -69,6 +71,10 @@ REQUIRED_RELATIVE_LINK_TARGETS = (
 
 def _conv_text():
     return CONV_PATH.read_text(encoding="utf-8")
+
+
+def _self_text():
+    return SELF_PATH.read_text(encoding="utf-8")
 
 
 def _relative_markdown_targets(text):
@@ -144,3 +150,69 @@ def test_relative_markdown_links_resolve():
         if not (CONV_PATH.parent / target).resolve().exists()
     ]
     assert missing == [], f"relative Markdown links do not resolve: {missing}"
+
+
+def test_no_branch_diff_scope_guard_reintroduced():
+    """I1 risk: branch-diff scope guard reintroduced; level: component."""
+    forbidden_name_part = "ALLOWED_" + "DIFF"
+    tree = ast.parse(_self_text())
+    offending_names = [
+        target.id
+        for statement in tree.body
+        if isinstance(statement, ast.Assign)
+        for target in statement.targets
+        if isinstance(target, ast.Name) and forbidden_name_part in target.id
+    ]
+
+    assert offending_names == [], (
+        f"forbidden top-level assignment names contain {forbidden_name_part}: "
+        f"{offending_names}"
+    )
+
+
+def test_branch_diff_only_function_not_collected():
+    """I2 risk: deleted branch-diff test recollected; level: component."""
+    historical_name = (
+        "test_branch_diff_only" + "_contains_convention" + "_and_tests"
+    )
+    tree = ast.parse(_self_text())
+    offending_functions = [
+        statement.name
+        for statement in tree.body
+        if isinstance(statement, ast.FunctionDef)
+        and statement.name == historical_name
+    ]
+
+    assert offending_functions == [], (
+        f"forbidden top-level function definition reintroduced: "
+        f"{offending_functions}"
+    )
+
+
+def test_no_subprocess_git_diff_branch_scope_shellout():
+    """I3 risk: branch-diff shellout reintroduced; level: component."""
+    tree = ast.parse(_self_text())
+    imported_modules = []
+    for statement in tree.body:
+        if isinstance(statement, ast.Import):
+            imported_modules.extend(alias.name for alias in statement.names)
+        elif isinstance(statement, ast.ImportFrom) and statement.module is not None:
+            imported_modules.append(statement.module)
+
+    forbidden_module = "sub" + "process"
+    offending_imports = [
+        name
+        for name in imported_modules
+        if name == forbidden_module or name.startswith(f"{forbidden_module}.")
+    ]
+    assert offending_imports == [], (
+        f"forbidden module import reintroduced: {offending_imports}"
+    )
+
+    forbidden_command = (
+        "git" + " " + "diff" + " " + "--name-only" + " " + "master" + "..." + "HEAD"
+    )
+    assert forbidden_command not in _self_text(), (
+        f"forbidden branch-scope shell command literal reintroduced: "
+        f"{forbidden_command}"
+    )
