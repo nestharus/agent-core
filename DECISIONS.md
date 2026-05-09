@@ -1552,3 +1552,27 @@ The orchestrator's Step 6c prompt for ACR-130 round 1 omitted the FIRST LOG LINE
 - Step 6c: invocation `c51f61b4-ba59-4145-bbba-a5c7e5de0158` (separate root, distinct UUID). Wrote operator-file + workflow-doc Markdown edits per contract Sections A and B and proposal Sections 7-8. Echoed CONSUMED Step 6b output index + tests + contract paths. Did NOT modify Step 6b's test file `tests/test_implementation_pipeline_audit_placement.py`.
 
 **Project-level risk-profile aggregation**: `~/projects/ai/planning/risk-profile.md` appended with the ACR-6 round-2 entry naming the operator-file Phase 6 surface as HIGH on coverage-gap and the workflow-doc and structural-pytest surfaces as MEDIUM. WU-level verdict: HIGH, addressed by exhaustive Phase 6b token coverage.
+
+## D-2026-05-09h — ACR-11 Phase 6c verification: pre-existing test-suite failure out of scope
+
+- WU: ACR-11
+- Phase: 6 (Step 6c verification)
+- Decision: Treat the failure of `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` on the worktree as out of ACR-11 scope. Identical rationale to D-2026-05-09b (ACR-8), D-2026-05-09c/e (ACR-14, ACR-13), and D-2026-05-09g item 2 (ACR-6). The failure is triggered by `tests/test_workflow_model_alignment.py:205` containing the literal `"claude-haiku"`, but on master the file is in staged-deletion state (`D` in git status, uncommitted) so the test passes there. The worktree inherited the committed (present) state of the file. Master's pending deletion is unrelated to ACR-11 and not authored here.
+- Justifying evidence:
+  - `git -C /home/nes/ai status --short` shows `D  tests/test_workflow_model_alignment.py` (staged deletion, uncommitted on master).
+  - ACR-11 branch diff vs `origin/master..HEAD` after rebase contains only the new orchestrator subsection (`agents/implementation-pipeline-orchestrator.md`), the new structural pytest (`tests/test_implementation_pipeline_orchestrator_recursion_control.py`), and DECISIONS.md edits.
+  - Focused suite (`pytest tests/test_implementation_pipeline_orchestrator_recursion_control.py tests/test_implementation_pipeline_recursion_control.py`) is green: 18 passed.
+  - The Step 6c agent's NEEDS_INPUT artifact (`q-ee855a94-0757-4c69-a20d-2d2dcf0f6188.question.json`) is a procedural question the orchestrator resolves inline per `~/ai/agents/implementation-pipeline-orchestrator.md` § NEEDS_INPUT Handling.
+- Action: do NOT add the unrelated file deletion to ACR-11's PR. Master's separate workflow (a follow-up commit on master) will resolve the pending deletion. Phase 7 (CodeRabbit) reviews the branch diff, which is clean.
+
+## D-2026-05-09i — ACR-11 mid-pipeline rebase onto ACR-6
+
+- WU: ACR-11
+- Phase: 7 (pre-CodeRabbit rebase)
+- Decision: ACR-6 (`31d3b26`) merged into origin/master while ACR-11 was at Phase 6c. Per dispatcher pre-resolution "Mid-pipeline drift: A — proceed + note in DECISIONS as residual", ACR-11 was rebased onto origin/master. Merge conflicts in `agents/implementation-pipeline-orchestrator.md` and `DECISIONS.md` resolved manually: kept both ACR-6's `#### Per-component code-quality auditor fanout` subsection and ACR-11's `#### Child-recursion fire detection and child-level entry` subsection (in that order, both before `#### Process-tree audit #2`); kept both ACR-6's and ACR-11's DECISIONS entries (renamed ACR-11's collision-id from D-2026-05-09g to D-2026-05-09h).
+- Justifying evidence:
+  - `git fetch origin master` reported `840e98c..31d3b26  master`.
+  - Pre-rebase `git merge-tree` showed conflicts only in `agents/implementation-pipeline-orchestrator.md` (insertion-point overlap between ACR-6 and ACR-11 sub-step blocks) and `DECISIONS.md` (D-id collision).
+  - Post-rebase ACR-11 structural pytest still passes (10/10) and the existing recursion-control test still passes (8/8).
+  - ACR-11 wording was updated to chain after ACR-6's per-component fanout: the new subsection now says "After Step 6c, the post-derivation multi-layer acceptance check, AND the per-component code-quality auditor fanout pass for the current `level_id`". This preserves ACR-6's gate as a precondition for ACR-11's child-recursion fire detection.
+- Action: continue Phase 7 CodeRabbit on the rebased branch.
