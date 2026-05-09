@@ -1426,3 +1426,23 @@ The orchestrator's Step 6c prompt for ACR-130 round 1 omitted the FIRST LOG LINE
 - Replacement session: `cf05b6c3-9f1b-4938-a671-63620667c3c5`.
 - Updated artifact sha256: `cff0189d0dbec8bcec6e8a6e5b752c488d7e2fe4bf752e9e98ab1bc1acc1d134`.
 - Audit-history sync: this DECISIONS entry records the supersession in lieu of `${planning_dir}/audit-history.md` since the worktree DECISIONS.md is the canonical record for ACR-130.
+# ACR-8 decisions
+
+## D-2026-05-09a — Phase 4 supported-surface MEDIUM-with-Continue accepted
+
+- WU: ACR-8
+- Phase: 4
+- Decision: Accept supported-surface verdict MEDIUM-with-Continue as the stable Phase 4 outcome. Override the strict all-LOW rule because the gate's MEDIUM is rooted in intrinsic blast-radius of caller-facing workflow + operator surfaces (not a proposal defect), the supported-surface termination rule explicitly recommends Continue (assumptions hold, positive net value), and two consecutive revise loops did not move the verdict.
+- Justifying evidence: `/home/nes/projects/ai/planning/acr-8-cleanup-deferral-framing/risk/acr-8-supported-surface.md` (round 3 verdict + Continue conditions); `/home/nes/projects/ai/planning/acr-8-cleanup-deferral-framing/audit-history.md` (rounds 1-3); user-confirmed disposition via `${scratch_dir}/questions/q-phase4-stable-medium.question.json` selected option A.
+
+## D-2026-05-09b — Phase 6c verification: pre-existing test-suite failure out of scope
+
+- WU: ACR-8
+- Phase: 6 (Step 6c verification)
+- Decision: Treat the failure of `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` on the worktree as out of ACR-8 scope. The failure is triggered by `tests/test_workflow_model_alignment.py:205` containing the literal `"claude-haiku"`, but on master the file is in staged-deletion state (`D` in git status, uncommitted) so the test passes there. The worktree inherited the committed (present) state of the file. Master's pending deletion is unrelated to ACR-8 and not authored here.
+- Justifying evidence:
+  - `git -C /home/nes/ai status --short` shows `D  tests/test_workflow_model_alignment.py` (staged deletion, uncommitted).
+  - The branch diff for ACR-8 (`origin/master...HEAD`) contains only `tests/test_implementation_pipeline_orchestrator_integration_tests_gate.py` + `DECISIONS.md`.
+  - Focused suite per the contract (`pytest tests/test_implementation_pipeline_orchestrator_integration_tests_gate.py tests/test_implementation_pipeline_contract_derivation.py tests/test_halt_rule_structure.py`) is green: 44 passed.
+  - `test_integration_tests_gate_imports_only_re_and_pathlib` self-test passes.
+- Action: do NOT add the unrelated file deletion to ACR-8's PR. Master's separate workflow (a follow-up commit on master) will resolve the pending deletion. Phase 7 (CodeRabbit) reviews the branch diff, which is clean.

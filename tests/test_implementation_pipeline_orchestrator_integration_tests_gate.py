@@ -6,6 +6,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ORCHESTRATOR = (
     REPO_ROOT / ("age" + "nts") / "implementation-pipeline-orchestrator.md"
 )
+WORKFLOW = REPO_ROOT / "workflows" / "implementation-pipeline.md"
+MAX_WINDOW_SIZE = 15
 
 
 def _read(path):
@@ -14,6 +16,10 @@ def _read(path):
 
 def _orchestrator_text():
     return _read(ORCHESTRATOR)
+
+
+def _workflow_text():
+    return _read(WORKFLOW)
 
 
 def _section(text, heading_regex):
@@ -49,6 +55,141 @@ def _phase7_section():
 
 def _integration_tests_gate_section():
     return _section(_phase7_section(), r"Pre-dispatch integration-tests gate")
+
+
+def _workflow_acr8_rule_window() -> tuple[int, int, list[str]]:
+    lines = _workflow_text().splitlines()
+
+    step6c_index = -1
+    for index, line in enumerate(lines):
+        if re.search(r"^### Step 6c - Write code\s*$", line):
+            step6c_index = index
+            break
+    assert step6c_index != -1, "Step 6c anchor missing"
+
+    start_index = -1
+    for index in range(step6c_index, len(lines)):
+        if "LevelComponentSet" in lines[index]:
+            start_index = index
+            break
+    assert start_index != -1, "no LevelComponentSet after Step 6c heading"
+
+    end_index = -1
+    for index in range(start_index, len(lines)):
+        if "integration_test_missing" in lines[index]:
+            end_index = index
+            break
+    assert end_index != -1, "no integration_test_missing after first LevelComponentSet in Step 6c"
+
+    start_line = start_index + 1
+    end_line = end_index + 1
+    window_lines = lines[start_index : end_index + 1]
+
+    assert end_line >= start_line, "ACR-8 workflow window end precedes start"
+    assert end_line - start_line <= MAX_WINDOW_SIZE, (
+        f"ACR-8 workflow window spans {end_line - start_line} lines, "
+        f"exceeding {MAX_WINDOW_SIZE}"
+    )
+    assert any("LevelComponentSet" in line for line in window_lines), (
+        "ACR-8 workflow window missing LevelComponentSet bracket"
+    )
+    assert any("integration_test_missing" in line for line in window_lines), (
+        "ACR-8 workflow window missing integration_test_missing bracket"
+    )
+
+    return start_line, end_line, window_lines
+
+
+def test_workflow_and_operator_share_acr8_integration_test_tokens():
+    workflow = _workflow_text()
+    orchestrator = _orchestrator_text()
+    tokens = (
+        "LevelComponentSet",
+        "layer_level_id",
+        "component_pair_refs[]",
+        "integration_test_refs",
+        "coverage_summary",
+        "integration_test_missing",
+    )
+
+    _assert_contains_all(
+        workflow,
+        tokens,
+        where="workflow ACR-8 integration-test tokens",
+    )
+    _assert_contains_all(
+        orchestrator,
+        tokens,
+        where="operator ACR-8 integration-test tokens",
+    )
+
+
+def test_operator_gate_cross_binds_workflow_layer_integration_rule():
+    _, _, window_lines = _workflow_acr8_rule_window()
+    workflow_window = "\n".join(window_lines)
+    gate = _integration_tests_gate_section()
+    orchestrator = _orchestrator_text()
+
+    _assert_contains_all(
+        workflow_window,
+        (
+            "LevelComponentSet",
+            "component_pair_refs[]",
+            "integration_test_refs",
+            "coverage_summary",
+            "integration_test_missing",
+        ),
+        where="workflow ACR-8 rule window",
+    )
+    _assert_contains_all(
+        gate,
+        (
+            "Pre-dispatch integration-tests gate",
+            "Phase 6 layer integration-tests rule",
+            "workflows/implementation-pipeline.md",
+            "Phase 7 CodeRabbit dispatch",
+            "NEEDS_INPUT",
+        ),
+        where="operator integration-tests gate cross-binding",
+    )
+    _assert_ordered(
+        orchestrator,
+        (
+            "#### Pre-dispatch integration-tests gate",
+            "#### Pre-dispatch swap-record gate",
+        ),
+        where="operator integration-tests gate before swap-record gate",
+    )
+
+
+def test_workflow_acr8_rule_window_has_no_deferral_framing():
+    start_line, end_line, window_lines = _workflow_acr8_rule_window()
+    workflow_window = "\n".join(window_lines)
+
+    assert end_line - start_line <= MAX_WINDOW_SIZE, (
+        f"ACR-8 workflow window spans {end_line - start_line} lines, "
+        f"exceeding {MAX_WINDOW_SIZE}"
+    )
+    _assert_contains_all(
+        workflow_window,
+        (
+            "LevelComponentSet",
+            "integration_test_missing",
+        ),
+        where="workflow ACR-8 no-deferral window brackets",
+    )
+
+    forbidden_phrases = (
+        "tracked in a separate ticket",
+        "structural pytest plus operator review only",
+        "Orchestrator-runtime enforcement",
+        "orchestrator-runtime enforcement",
+        "separate enforcement WU",
+    )
+    for phrase in forbidden_phrases:
+        assert phrase not in workflow_window, (
+            f"workflow ACR-8 rule window contains forbidden deferral phrase: {phrase}"
+        )
 
 
 def test_integration_tests_gate_section_exists_and_ordered():
