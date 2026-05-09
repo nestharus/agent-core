@@ -1525,3 +1525,30 @@ The orchestrator's Step 6c prompt for ACR-130 round 1 omitted the FIRST LOG LINE
   - Focused suite per the contract (`pytest tests/test_implementation_pipeline_orchestrator_integration_tests_gate.py tests/test_implementation_pipeline_contract_derivation.py tests/test_halt_rule_structure.py`) is green: 44 passed.
   - `test_integration_tests_gate_imports_only_re_and_pathlib` self-test passes.
 - Action: do NOT add the unrelated file deletion to ACR-8's PR. Master's separate workflow (a follow-up commit on master) will resolve the pending deletion. Phase 7 (CodeRabbit) reviews the branch diff, which is clean.
+
+# ACR-6 decisions
+
+## D-2026-05-09g — ACR-6 round-2 pre-resolved gates + mid-pipeline-drift residuals
+
+**WU**: ACR-6 (re-opened from PR #69 round-1; round-1 shipped workflow doc declarations + structural pytest only with deferral framing for the three Phase 6 audit-position rules; round-2 ADDS operator-file procedural sub-steps for Surface 1 prototype risk review, Surface 2 tests/contracts alignment review, Surface 3 per-component code-quality auditor fanout). **Phase**: 2.5 → 6c.
+
+**Pre-resolved Phase 2.5 gates** (per dispatch):
+
+- Narrow-vs-exhaustive: A (proceed exhaustive). 0/5 defer-to-prototype signals fire per `planning/risk/acr-6-risk-profile.md` § 5.
+- Defer-to-prototype: A (proceed exhaustive).
+- Mid-pipeline drift: A (proceed + note residuals).
+- Stable-MEDIUM intrinsic blast radius (operator-file Phase 6 surface): accept-and-continue (precedent: ACR-8 v2).
+
+**Mid-pipeline-drift residuals**:
+
+1. **Stale baseline in `tests/test_workflow_metadata.py` `_T4_BASELINE`** (lines 146-147 on master `35d1708`): the round-1 baseline preserved the OLD deferral text for the Surface 1 prototype-risk-review and Surface 2 tests/contracts-alignment-review rules. The proposal Section 8 / contract Section B replaces those exact lines with operator-file-substep references; the round-1 baseline therefore locks in the framing the reopened ticket says to remove. Same class as the round-1 `test_new_audit_positions_declare_runtime_enforcement_followup_split` bug-discovery from `planning/research/acr-6-coverage-inventory.md`. Resolved by lockstep update of the two baseline string lines to the proposal's replacement text. The test logic (`test_workflow_doc_body_contract_lines_preserved`) is unchanged; only its baseline data is refreshed. This was outside the original Phase 6c file-edit allowlist and was applied directly by the orchestrator under the dispatch's pre-resolved Mid-pipeline-drift A policy. (Surface 3 per-component code-quality fanout did not appear in `_T4_BASELINE`.)
+2. **Pre-existing `claude-haiku` token in `tests/test_workflow_model_alignment.py:205`**: precedent D-2026-05-09a (ACR-12), D-2026-05-09c (ACR-14). The `test_no_claude_haiku_in_repo` failure reproduces on a clean fork of master and is not attributable to ACR-6. Out of scope for this WU. Recorded as residual; no action.
+
+**Bug discovery from `planning/research/acr-6-coverage-inventory.md`**: the round-1 `test_new_audit_positions_declare_runtime_enforcement_followup_split` test asserts that the workflow doc CONTAINS the deferral framing the reopened ticket says to remove. Phase 6b inverted this test (renamed to `test_workflow_audit_position_rules_reference_operator_substeps_without_deferral`) so it now positively asserts the operator-file-substep references and negatively asserts the absence of the three deferral phrases.
+
+**Phase 6 isolation evidence**:
+
+- Step 6b: invocation `f8aa1c23-91ea-47bb-8126-4cabf68c4f28` (separate root). Wrote `tests/test_implementation_pipeline_audit_placement.py` + `${scratch_dir}/phase6/step6b-output-index.md`. Did NOT see operator-file or workflow-doc edits. Test-first verification: 7 expected failures on round-1 state, 4 KEEP-AS-IS passes.
+- Step 6c: invocation `c51f61b4-ba59-4145-bbba-a5c7e5de0158` (separate root, distinct UUID). Wrote operator-file + workflow-doc Markdown edits per contract Sections A and B and proposal Sections 7-8. Echoed CONSUMED Step 6b output index + tests + contract paths. Did NOT modify Step 6b's test file `tests/test_implementation_pipeline_audit_placement.py`.
+
+**Project-level risk-profile aggregation**: `~/projects/ai/planning/risk-profile.md` appended with the ACR-6 round-2 entry naming the operator-file Phase 6 surface as HIGH on coverage-gap and the workflow-doc and structural-pytest surfaces as MEDIUM. WU-level verdict: HIGH, addressed by exhaustive Phase 6b token coverage.
