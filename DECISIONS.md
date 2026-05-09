@@ -8,6 +8,21 @@ Per the precedent at D-2026-05-07i (NES-273), D-2026-05-07j (NES-275), and D-202
 
 The single full-suite failure (`tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`) is **pre-existing on master HEAD `4386bc8`**, not a regression from ACR-12. Verified by detached-checkout of master HEAD: the failure reproduces from a clean fork of `4386bc8` with no ACR-12 edits applied. Same cause as D-2026-05-08i (ACR-125): `tests/test_workflow_model_alignment.py:205` contains the literal `"claude-haiku"` token that the structural anti-token test now forbids; master's working tree has the alignment test file deletion uncommitted, which is why running pytest in the master clone hides the failure but a clean worktree from master HEAD exposes it. Out of scope for ACR-12.
 
+## D-2026-05-09b — ACR-10 scope (cleanup-only re-implementation)
+
+**WU**: ACR-10. **Phase**: 2.5 (post-research, pre-Phase-3). **Decision**: Proceed with the two-drift cleanup as the actual scope.
+
+Phase 2.5 research confirmed the dispatch's premise was off: the workflow halt-rule paragraph (`workflows/implementation-pipeline.md:461-465`) carries no "Orchestrator-runtime enforcement" / "tracked in a separate ticket" / "structural pytest plus operator review only" / "ACR-112" deferral phrases. Those phrases live only on adjacent Phase 6 rules (lines 429, 430, 447, 450, 466) tied to different concerns (prototype risk review, alignment review, per-component code-quality fanout, multi-layer derivation, PrototypeSwapRecord/NES-273) — each with its own enforcement ticket.
+
+Two silent drifts WERE found between workflow and operator on the halt rule itself, surfaced by the duplicates inventory (`research/acr-10-duplicates.md:65-66`):
+
+1. **Halt-basis semantics drift.** Workflow line 461 says `halt_basis` "records option-level evidence showing why each listed option was unsatisfied"; operator step 4 (line 305) says "the field value is one of the allowed options". The procedural check is weaker than the declarative rule.
+2. **Canonical halt-record path drift.** Operator step 1 (line 302) and operator structural test pin `${planning_dir}/risk/${wu_lower}-halt-record.md`; workflow doc never declares this canonical path.
+
+User denied the AskUserQuestion scope-disambiguation question. Per the dispatch's three scope bullets — (1) audit-and-extend operator gate, **add any missing**; (2) workflow doc should reference operator-file sub-steps; (3) confirm structural pytest covers both surfaces — option A (fix the two drifts) is the natural reading of all three. Option B (expand to all five adjacent Phase 6 deferrals) conflicts with the orchestrator's "Do NOT modify ACR-112's gate beyond audit-and-extend" anti-scope and with the ticket's "Recursion entry / framing is the sibling WU; this WU does not redefine entry rules, only the halt rule" anti-scope. Option C (terminate as no-op) ignores the audit-and-extend instruction.
+
+Phase 3 proposer authorized to address both drifts plus a workflow-doc pointer to the operator-file gate as cleanup-grade editing.
+
 ## D-2026-05-08j — ACR-125 rebase drift in `T-worked-example` marker
 
 **WU**: ACR-125. **Phase**: 8 (post-CodeRabbit gates). **Decision**: Inline test marker fix accepted as orchestrator-authored test correction for rebase drift, not a Tier-1 rewind. Original test used `lower.find("worked example")` which was unambiguous when Phase 6b ran (forked from master `ddc53a9`). Phase 8 test-audit gate flagged the diff because `git diff master..HEAD` showed unrelated diffs — caused by master moving forward to `18163c8` (ACR-126 + ACR-47 merged) during the WU run. Rebased the WU branch onto current master; one of the 16 tests then failed because ACR-126's commit added a different "worked example" prose paragraph at line 289 of `workflows/implementation-pipeline.md`, ahead of my Phase 8 fenced block at line 491 (tagged ` ```worked example `).

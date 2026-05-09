@@ -30,6 +30,13 @@ HALTRECORD_REQUIRED_FIELDS = (
     "residual_risk_refs",
 )
 
+FORBIDDEN_DEFERRAL_PHRASES = (
+    "ACR-10 deferral framing",
+    "tracked in a separate ticket",
+    "Orchestrator-runtime enforcement",
+    "structural pytest plus operator review only",
+)
+
 
 def _workflow_text():
     global _WORKFLOW_TEXT
@@ -157,6 +164,34 @@ def test_haltrecord_required_fields_present():
     assert "HaltRecord" in halt_block
     for field in HALTRECORD_REQUIRED_FIELDS:
         assert field in halt_block
+
+
+def test_halt_rule_declares_canonical_halt_record_path():
+    halt_block = _step_6c_halt_block()
+
+    assert (
+        " The canonical halt record path is "
+        "`${planning_dir}/risk/${wu_lower}-halt-record.md`."
+    ) in halt_block
+
+
+def test_halt_rule_points_to_operator_procedural_check():
+    halt_block = _step_6c_halt_block()
+
+    assert (
+        " The implementation-pipeline orchestrator checks this rule procedurally "
+        "per `~/ai/agents/implementation-pipeline-orchestrator.md` § "
+        "`#### Phase 6 halt-state transition gate`."
+    ) in halt_block
+
+
+def test_halt_rule_omits_forbidden_deferral_framing_phrases():
+    halt_block = _step_6c_halt_block()
+
+    for phrase in FORBIDDEN_DEFERRAL_PHRASES:
+        assert phrase not in halt_block, (
+            f"halt block must not contain forbidden deferral phrase: {phrase!r}"
+        )
 
 
 def test_integration_test_missing_violation():
