@@ -143,7 +143,9 @@ def test_couplingdecision_level_id_and_levelcomponentset_link():
         "CouplingDecision",
         "level_id",
         "source_level_component_set_ref",
+        "candidate_component_inventory_ref",
         "LevelComponentSet",
+        "defer_to_prototype_risk",
     ):
         _assert_token(region, token, where="Step 6c CouplingDecision record")
 

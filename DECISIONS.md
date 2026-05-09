@@ -1610,3 +1610,60 @@ Per the precedent at those entries: removed the four R1 product files (`git chec
   - Pre-rebase `git diff --stat 31d3b26 origin/master` named DECISIONS.md, agents/implementation-pipeline-orchestrator.md, and tests/test_implementation_pipeline_orchestrator_recursion_control.py — only DECISIONS.md actually conflicts with ACR-144's diff.
   - Post-rebase ACR-144 structural pytest still passes (23/23) and the targeted suite carries no new regressions.
 - Action: continue Phase 7 CodeRabbit on the rebased branch.
+
+## D-2026-05-09m — ACR-114 mid-pipeline drift: rebase onto master after ACR-7/13/14 landed
+
+**WU**: ACR-114. **Phase**: 8 (post-CodeRabbit PR-review gates). **Decision**: Rebased branch from base `95a467d` (ACR-10 merge base at WU start) to current master `840e98c` (ACR-7 merge tip). Pre-resolved by dispatch as "Mid-pipeline drift: A — proceed + note in DECISIONS as residual."
+
+Detection: Phase 8 multi-concern critic (`SINGLE_CONCERN`) and justification critic (`MEDIUM_CONCERN`) both flagged that `master..HEAD` for the un-rebased branch contained ~660 lines of `-` hunks across `agents/implementation-pipeline-orchestrator.md`, `DECISIONS.md`, `workflows/implementation-pipeline.md`, and three test files because three sibling Step 6c WUs landed on master while this WU was running:
+
+- ACR-14 (`35d1708`) — Step 6c procedural-test handoff sub-steps 4–7
+- ACR-13 (`60d76d2`) — Step 6c post-prototype derivation sub-steps 8–13
+- ACR-7 (`840e98c`) — `#### Step 6c post-derivation multi-layer acceptance check` subsection (items 1–9)
+
+Per justification critic: "the WU's authored content is clean, scope-aligned, and traces every meaningful decision to AC, proposal Design items, hookpoint Reuse Points, or the audit-history Round-2 closure. There is zero drive-by drift inside `18c453e`." MEDIUM verdict was driven entirely by the un-rebased state.
+
+Resolution: `git fetch origin master && git rebase origin/master` produced one merge conflict in `agents/implementation-pipeline-orchestrator.md` Step 6c region. Resolved by:
+
+1. Keeping master's ACR-14 + ACR-13 sub-steps 4–13 verbatim.
+2. Renumbering my ACR-114 sub-steps from 4–9 to 14–19 and inserting them after item 13 and before the new `#### Step 6c post-derivation multi-layer acceptance check` subsection.
+3. Updating the `Non-applicability path` cross-reference in sub-step 19 to drop the now-stale `:302` / `:331` line numbers (line numbers shifted; references are now name-based).
+4. Updating the Process-tree audit #2 paragraph extension references from "sub-step 4" / "sub-step 6" / "sub-step 9" → "sub-step 14" / "sub-step 16" / "sub-step 19" to match the new numbering.
+5. Master's existing `#### Process-tree audit #2` paragraph is preserved verbatim; my ACR-114 paragraph extension follows it as an additive paragraph (not a replacement).
+
+Post-rebase: branch sits at `ced9e25` on top of `840e98c`. `git diff --stat master..HEAD` shows +431 lines, 0 deletions across the same three files as before. `python3 -m pytest` against the targeted scope (acr-114 + workflow-side coupling/cohesion + all orchestrator gate tests + halt-rule + contract-derivation) returns 124 passed, 0 failed.
+
+Phase 8 multi-concern + justification will be re-dispatched against the rebased diff to confirm `SINGLE_CONCERN` + `LOW_CONCERN`. test-audit and commit-hygiene are unaffected by the rebase (no diff to their inputs); they are not re-run.
+
+Residual: none. The rebase converts the residual to closed-by-rebase. The structural pytest's T15 ordering invariant ("ACR-114 token before Process-tree audit #2 before halt-state gate before Phase 7") still holds with the new numbering because sub-steps 14-19 still appear before the Process-tree audit #2 subsection break.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+## D-2026-05-09n — ACR-114 Phase 9 finish-only: skip Phase 8 audit #3 + 2nd rebase onto master after ACR-6/11/144 landed
+
+**WU**: ACR-114. **Phase**: 8 → 9 (finish-only orchestrator dispatch). **Decision**: Accept-as-residual the Phase 8 process-tree audit #3 (skipped); rebase a second time from base `840e98c` onto current master `fef8073` to absorb ACR-6 (`31d3b26`), ACR-11 (`c39cb88`), and ACR-144 (`fef8073`); proceed to Phase 9 draft PR + auto-merge.
+
+**Skip rationale (Phase 8 audit #3)**: The previous orchestrator's Phase 8 process-tree audit #3 dispatched a `codex2` subprocess that hung silently for 3+ hours with ~10s of CPU (subprocess deadlock; not a model output issue). Two resume attempts after the kill produced no on-disk effect on `${planning_dir}/risk/acr-114-process-tree-audit-phase-8.md`. The four PR-review gates themselves all returned green, evidence on disk and re-verified at fresh-dispatch start against `phase-8-join-manifest.json`:
+
+- `test-audit` — `LOW` (sha256 `d0784bdc9ee0df75855dee427fcf0ec3e5d89013859e1f6c8f3ea163e572d464`)
+- `multi-concern` — `SINGLE_CONCERN` (sha256 `19820a41a8b7613d0cbc84bb72ced817cc4890c6d036526f74506111b8b73f6c`)
+- `justification` — `LOW_CONCERN` (sha256 `e6bc376d32cc23ec3e8f60bd4adf5989d82ab2332d3327323f1dd6020063bfc6`)
+- `commit-hygiene` — `PASS` (sha256 `d2e045f52b6f5e012418694c51b2edb9bb0d7f3bbbc4d1e36f7b1204dbd34aa8`)
+
+Per the dispatch's pre-resolution: the audit subtree itself produces only a topology verdict over the four gate fanout — the gate verdicts on disk are sufficient to advance to Phase 9. Phase 4's process-tree audit #1 and Phase 6's audit #2 ran successfully and are recorded in `${planning_dir}/risk/acr-114-process-tree-audit-phase-{4,6}.md`. The skipped audit #3 is recorded as a residual for future workflow improvement (subprocess-hang detection in `process-tree-auditor` dispatch).
+
+**2nd-rebase resolution**: While ACR-114 sat at the Phase 8 hang, three sibling WUs landed on origin/master beyond the prior rebase base (`840e98c`):
+
+- ACR-6 (`31d3b26`) — round-2 operator-file Phase 6 audit-position sub-steps + DECISIONS entries `D-2026-05-09g`/`h`/`i`
+- ACR-11 (`c39cb88`) — Phase 6 child-recursion fire detection sub-step + DECISIONS entries (also `g`/`h`/`i` collisions resolved on its branch)
+- ACR-144 (`fef8073`) — light 2-agent RCA workflow + operator + structural pytest + DECISIONS entries `j`/`k`/`l`
+
+`git rebase origin/master` produced one merge conflict in `DECISIONS.md` only (the `agents/implementation-pipeline-orchestrator.md` Step 6c region auto-merged cleanly because ACR-6/11's sub-step 4-13 insertions and ACR-114's sub-step 14-19 insertions occupy disjoint regions — the prior rebase had already chosen the position-after-13 anchor). Conflict resolution: kept all of master's `D-2026-05-09g..l` entries verbatim (ACR-6 + ACR-11 + ACR-144) and renamed this WU's prior `D-2026-05-09g` entry to `D-2026-05-09m` (next free letter after `l`). This entry (`D-2026-05-09n`) records the second rebase plus the audit-#3 skip.
+
+Post-rebase: branch sits on top of `fef8073`. Branch diff `git diff --stat origin/master..HEAD` shows the same +459/-0 across `DECISIONS.md` (+86 with this entry), `agents/implementation-pipeline-orchestrator.md` (+8), `tests/test_acr114_coupling_decision_orchestrator.py` (+421), `tests/test_implementation_pipeline_coupling_cohesion_split.py` (+2). The Phase 8 commit-hygiene gate's PASS evidence (single-concern, single-commit, ≤500 LOC) is preserved across the rebase: the rebased commit is still a single commit, still ACR-114-attributed, still under threshold.
+
+**Anti-scope honored**: no product code changed, no existing tests changed, no risk/proposal/contract artifact changed. The DECISIONS.md edit is the only mutation made by this finish-only dispatch. Phase 4 / Phase 7 / Phase 8 gates were not re-run; their canonical reports' sha256s match the join manifests on entry to and exit from this dispatch.
+
+**Residual**: Phase 8 process-tree audit #3 skipped — accepted-as-residual; topology-level audit verdict not on file. Future workflow improvement: add subprocess-hang detection (timeout + watchdog) to `process-tree-auditor` dispatch path.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
