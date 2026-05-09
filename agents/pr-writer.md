@@ -28,7 +28,7 @@ The PR description's job is to explain **what this PR does**, **why it does it t
 
 - `--input branch=<name>` (required) — the branch the PR is/will be opened from.
 - `--input base=<name>` (required) — the PR's base branch (usually `main`, sometimes another open PR's head branch when stacked).
-- `--input repo_root=<path>` (required) — local checkout from which to read `git diff base..branch`.
+- `--input repo_root=<path>` (required) — local checkout from which to read `git diff base...branch`.
 - `--input output_path=<path>` (required) — where to write the final body markdown. Title goes to `<output_path>.title`.
 - `--input context_files=<comma-separated-paths>` (optional) — paths to artifacts that describe what the PR is supposed to accomplish: a problem statement, a contract, a Phase 6a contract file, an acceptance-criteria list, etc. Read these to understand intent; do NOT cite them in the body (they're scratch-only).
 - `--input stack_parent_pr=<num>` (optional) — when the base is another open PR's head branch, supply that PR number so it can be cited as the stack dependency.
@@ -135,7 +135,7 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
 
 ## Procedure
 
-1. Read the diff: `git -C ${repo_root} diff ${base}..${branch} --stat` then full diff for any non-trivial hunks. If the diff is huge, summarize per-file by reading the largest hunks plus the headers.
+1. Read the diff: `git -C ${repo_root} diff ${base}...${branch} --stat` then full diff for any non-trivial hunks. If the diff is huge, summarize per-file by reading the largest hunks plus the headers.
 2. Read each `context_files` path (if any) to understand intent. Don't cite them in the body.
 3. Verify any `merged_refs` inputs:
    - For a PR number `<n>`: `gh pr view <n> --json state,mergedAt` — must be `MERGED` with non-null `mergedAt`. If not, drop it.
@@ -171,7 +171,7 @@ gh api -X PATCH /repos/{owner}/{repo}/pulls/${existing_pr_number} \
 ## Stop Conditions
 
 - `BLOCKED:invalid-stack-parent` — the supplied `stack_parent_pr` doesn't exist, isn't OPEN, or its head branch isn't equal to `${base}`.
-- `BLOCKED:diff-empty` — `git diff base..branch` is empty.
+- `BLOCKED:diff-empty` — `git diff base...branch` is empty.
 - `BLOCKED:context-unreadable` — a `context_files` path was supplied but the file doesn't exist or is empty.
 - `NEEDS_INPUT:product-concept-name` — the diff touches a concept the operator can't describe in audience-safe terms without invented vocabulary. Surface a question with the candidate noun and ask the caller for the user-facing term.
 
