@@ -311,7 +311,7 @@ Before accepting the Phase 6 halt-state transition or advance to Phase 7, enforc
 
 #### Pre-dispatch integration-tests gate
 
-Before dispatching `coderabbit-operator`, enforce NES-279 and the Phase 6 layer integration-tests rule from `~/ai/workflows/implementation-pipeline.md`. This gate runs before Phase 7 CodeRabbit dispatch and before the NES-273 swap-record gate.
+Before dispatching `coderabbit-operator`, enforce NES-279 and the Phase 6 layer integration-tests rule from `~/ai/workflows/implementation-pipeline.md`. This gate runs before Phase 7 CodeRabbit dispatch and before the Pre-dispatch swap-record gate below.
 
 Trigger condition: run this gate when the current level produced a `LevelComponentSet` from post-prototype derivation. Levels where no derivation trigger fired and no `LevelComponentSet` is required are no-ops for this gate.
 

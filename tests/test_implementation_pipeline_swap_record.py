@@ -184,7 +184,6 @@ def test_swap_record_blocks_phase7_without_record_or_non_applicability():
     _assert_contains_all(
         boundary,
         (
-            "NES-273",
             "consumed",
             "non-applicable",
             "superseded",
@@ -228,10 +227,30 @@ def test_swap_record_test_scope_is_workflow_boundary_only():
         r"(?is)(overlay scheduling.{0,120}NES-270|NES-270.{0,120}overlay scheduling)",
         "overlay scheduling deferred to sibling NES-270",
     )
+    _assert_not_regex(
+        boundary,
+        r"(?is)(orchestrator-runtime|runtime enforcement|runtime refusal).{0,220}NES-273",
+        "stale orchestrator-runtime NES-273 deferral framing",
+    )
+    _assert_not_regex(
+        boundary,
+        r"(?is)structural pytest plus operator review only",
+        "stale 'structural pytest plus operator review only' deferral phrase",
+    )
+    _assert_not_regex(
+        boundary,
+        r"(?is)until\s+NES-273\s+lands",
+        "stale 'until NES-273 lands' deferral phrase",
+    )
     _assert_regex(
         boundary,
-        r"(?is)(orchestrator-runtime|runtime enforcement|runtime refusal).{0,220}NES-273.{0,220}after.{0,80}NES-270",
-        "orchestrator runtime enforcement deferred to NES-273 after NES-270",
+        r"(?is)Pre[- ]dispatch\s+swap[- ]record\s+gate",
+        "operator-file pre-dispatch swap-record gate cited from workflow rule",
+    )
+    _assert_regex(
+        boundary,
+        r"(?is)implementation-pipeline-orchestrator\.md",
+        "operator-file path cited from workflow rule",
     )
 
 
