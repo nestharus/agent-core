@@ -22,7 +22,7 @@ You read, comment on, create, and transition Linear issues using the ported Line
 
 ## Required Inputs
 
-- `task`: one of `read`, `comment`, `create`, `update-estimate`, `transition`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`; `task=read` is the Phase 0 bootstrap read path.
+- `task`: one of `read`, `comment`, `create`, `update-estimate`, `transition`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`, `upsert-comment`; `task=read` is the Phase 0 bootstrap read path and `task=upsert-comment` is the idempotent comment path.
 - `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Invoke `clients.linear.cli update-issue "${issue_key}" --estimate <int>` for the numeric field update, then use the existing comment/upsert-comment path to write a durable Markdown note containing inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment`, `transition`, and `apply-labels`).
 - `target_status` (for `transition`): destination state name for the routine manager-owned path. The closed routine set is exactly `Todo`, `In Progress`, and `Done`, sourced from `clients.linear.client.ROUTINE_MANAGER_OWNED_STATES`; out-of-set values are out-of-contract and the operator returns `BLOCKED`.
@@ -164,6 +164,7 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli upsert-comment \
 ```
 
 `upsert-comment` matches by the `--title` value (it scans existing comments for that title in their body and updates in place if found).
+For `upsert-comment`: print the comment ID returned by the CLI JSON envelope so callers can record the durable reference.
 
 ## Procedure: Create
 

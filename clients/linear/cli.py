@@ -250,7 +250,7 @@ def transition_issue(issue_id: str, target_status: str) -> None:
 
 
 def create_comment(issue_id: str, body: str) -> None:
-    """Create a comment on an issue and print result as JSON."""
+    """Create and print a comment."""
     client = LinearClient()
     comment = client.create_comment(issue_id=issue_id, body=body)
     print(json.dumps({"ok": True, "data": comment}, indent=2))
@@ -280,7 +280,9 @@ def get_comment(issue_id: str, title: str) -> None:
 def upsert_comment(
     issue_id: str, title: str, body: str | None = None, body_file: str | None = None
 ) -> None:
-    """Create or update a comment by title and print result as JSON.
+    """Create or update a comment by title and print an ok/data JSON envelope.
+
+    Uses client.upsert_comment and print(json.dumps({"ok": True, "data": comment})).
 
     Args:
         issue_id: The issue identifier (e.g., NES-24)

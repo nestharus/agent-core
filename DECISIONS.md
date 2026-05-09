@@ -1,5 +1,23 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-08j — ACR-125 rebase drift in `T-worked-example` marker
+
+**WU**: ACR-125. **Phase**: 8 (post-CodeRabbit gates). **Decision**: Inline test marker fix accepted as orchestrator-authored test correction for rebase drift, not a Tier-1 rewind. Original test used `lower.find("worked example")` which was unambiguous when Phase 6b ran (forked from master `ddc53a9`). Phase 8 test-audit gate flagged the diff because `git diff master..HEAD` showed unrelated diffs — caused by master moving forward to `18163c8` (ACR-126 + ACR-47 merged) during the WU run. Rebased the WU branch onto current master; one of the 16 tests then failed because ACR-126's commit added a different "worked example" prose paragraph at line 289 of `workflows/implementation-pipeline.md`, ahead of my Phase 8 fenced block at line 491 (tagged ` ```worked example `).
+
+The contract authored in Phase 6a explicitly named "fenced block tagged `worked example`" as one of two valid markers (Phase 6b chose the looser substring form, which became brittle under rebase drift). Updated `test_T_worked_example_workflow_phase8_worked_example_present` to search for `"```worked example"` (fence + language tag). No product Markdown change required; my Phase 8 fenced block already matches.
+
+This is an inline contract-grade correction (the contract already names the fence-tag marker as valid), not a behavior change. Justified as orchestrator-authority because: (1) Phase 6b ran correctly at the time (single occurrence of "worked example" in the workflow doc); (2) the mismatch is rebase drift, not a Phase 6b authoring error; (3) the fix uses an already-contracted alternative marker; (4) a Tier-1 rewind would re-spawn Phase 6b for a one-line marker change without producing different content.
+
+All 16 ACR-125 tests pass after the fix.
+
+## D-2026-05-08i — ACR-125 Phase 6c Tier-1 rewind for log-echo gate violation
+
+**WU**: ACR-125 (Phase 8 actual-vs-estimated capture). **Phase**: 6c (write code). **Decision**: Tier-1 rewind after Phase 6c r1 (`agents` codex `7958ad34-548a-42ed-9395-ca0292441a9e`) violated the consumption-echo gate (no `consumed:` lines opened the log) AND conservatively printed `BLOCKED:` over a pre-existing master regression. The 16 ACR-125 tests passed. The single regression failure is `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` flagging `tests/test_workflow_model_alignment.py:205` — a token in master HEAD `ddc53a9` (verified by `git show master:tests/test_workflow_model_alignment.py | sed -n '205p'`) that pre-dates ACR-125. Master's local working tree has the file deletion uncommitted; the failure reproduces only against the WU worktree's clean checkout from master HEAD.
+
+Resolution: revert the five product-file edits (keep the Phase 6b tests) and re-dispatch Phase 6c r2 with the failure pre-classified as a residual to acknowledge in WROTE rather than block on. Phase 6c r2 (`agents` codex `53f3ae50-0017-4fac-a073-98eb835b89b5`) again summarized at the end and again failed the consumption-echo gate (16/16 ACR-125 pass, 931/932 regression, but `consumed:` lines absent from log opening). Tier-1 rewind r2: revert + re-dispatch with the ACR-129 D-2026-05-08h round-3-retry prompt structure (top-of-prompt single-purpose ABSOLUTE FIRST LOG LINE REQUIREMENT directive, literal `consumed: <path>` prefix, no bullets/fences/links).
+
+
+
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
 ## D-2026-05-08k — ACR-126 Phase 6 pre-existing master regression accepted-as-residual

@@ -41,6 +41,27 @@ The file contains shared round summaries plus role-tagged sections:
 
 Only include role subsections that exist in the loop. A role consumes its own role subsection, the shared round summaries, the decision register, and active watch signals.
 
+## Final state
+
+When the implementation pipeline closes a Work Unit, its runtime `${planning_dir}/audit-history.md` final-state block is the durable calibration record. The block is YAML-style and contains these fields exactly once:
+
+```yaml
+ticket_id: <ACR-125 or backend issue key>
+ticket_system: <linear | jira | none>
+inherited_story_point_estimate: <1 | 2 | 3 | 5 | 8 | 13 | 21 | 40 | 100 | null>
+refined_story_point_estimate: <1 | 2 | 3 | 5 | 8 | 13 | 21 | 40 | 100>
+actual_story_points: <1 | 2 | 3 | 5 | 8 | 13 | 21 | 40 | 100 | null>
+actual_capture_method: <closer-best-effort | wall-time-derived | unmeasured>
+actual_estimate_rationale: <closer-best-effort:* | judge-output-invalid:* | unmeasured:*>
+estimate_comparison_comment_ref: <id | url | none>
+estimate_comparison_comment_skip_rationale: <jira-upsert-parity-deferred | none>
+estimate_delta_narrative: inherited=<v>; refined=<v>; actual=<v>; delta_refined_to_actual=<signed_int|null>; over_2x_inherited=<bool|unknown>
+```
+
+Validation vocabulary is part of the schema. `actual_story_points` uses the Fibonacci set `1, 2, 3, 5, 8, 13, 21, 40, 100` or `null`; `null` is null only for unmeasured. `actual_capture_method` is exactly `closer-best-effort | wall-time-derived | unmeasured`. `wall-time-derived` is a reserved enum value only and must not add timers, duration tracking, start/stop timestamps, or trace-derived time calculations. `actual_estimate_rationale` uses only `closer-best-effort:`, `judge-output-invalid:missing-file`, `judge-output-invalid:missing-fence`, `judge-output-invalid:missing-key:`, `judge-output-invalid:invalid-enum:`, `judge-output-invalid:invalid-fibonacci:`, `judge-output-invalid:value-mismatch:`, or `unmeasured:` prefixes. `estimate_comparison_comment_skip_rationale: <jira-upsert-parity-deferred | none>` is a separate field; `jira-upsert-parity-deferred` is not an actual-estimate rationale.
+
+ACR-118/ACR-121 calibration consumers MUST locate the unique `## Final state` section and parse the YAML-style block; consumers MUST treat `actual_estimate_rationale` as the estimate-choice rationale and `estimate_comparison_comment_skip_rationale` as the separate comparison-comment skip rationale; consumers MUST parse `estimate_comparison_comment_ref` as `<id|url|none>`; consumers MAY rely on exactly one `actual_story_points:` key per file.
+
 ## Required Schema
 
 Each round summary must record:
