@@ -73,6 +73,12 @@ Evidence:
 - `git diff master -- tests/test_workflow_model_alignment.py` is empty in this WU.
 - `tests/test_implementation_pipeline_contract_derivation.py` (this WU's only test file edit) does not reference haiku.
 
+## D-2026-05-09f — ACR-7 process-tree-auditor Phase 6 derivation drift accepted as residual
+
+**WU**: ACR-7 (NES-233 round-2 enhancement: one-layer-deep constraint on component derivation). **Phase**: 2.5.4 (duplicates inventory). **Decision**: ACR-7 will not modify `~/ai/agents/process-tree-auditor.md`'s Phase 6 expected-process manifest guidance. Pre-existing drift identified in `/home/nes/projects/ai/planning/acr-7-multi-layer-derivation-violation/research/acr-7-duplicates.md`: the workflow doc says the Phase 6 process-tree expected process must prove derivation record / no-split / rejection evidence and `HaltRecord` evidence when triggered, but the process-tree-auditor operator's built-in Phase 6 manifest guidance only requires Step 6b/6c independence and consumption evidence. ACR-7 mirrors the existing swap-record / halt-state / integration-tests procedural-gate shape into the orchestrator file; it does not re-author process-tree-auditor's Phase 6 manifest. Mid-pipeline drift disposition pre-resolved at dispatch time as `proceed + DECISIONS residual`. A separately scoped follow-up may update process-tree-auditor's Phase 6 manifest text to match the workflow doc's expectations.
+
+Note: rebase-time slug bumped from `D-2026-05-09a` (initial) to `D-2026-05-09e` (first rebase) to `D-2026-05-09f` (second rebase) to avoid collision with ACR-12 (a), ACR-10 (b), ACR-14 (c, d), and ACR-13 (e) entries that landed on master while ACR-7 was in flight.
+
 ## D-2026-05-08j — ACR-125 rebase drift in `T-worked-example` marker
 
 **WU**: ACR-125. **Phase**: 8 (post-CodeRabbit gates). **Decision**: Inline test marker fix accepted as orchestrator-authored test correction for rebase drift, not a Tier-1 rewind. Original test used `lower.find("worked example")` which was unambiguous when Phase 6b ran (forked from master `ddc53a9`). Phase 8 test-audit gate flagged the diff because `git diff master..HEAD` showed unrelated diffs — caused by master moving forward to `18163c8` (ACR-126 + ACR-47 merged) during the WU run. Rebased the WU branch onto current master; one of the 16 tests then failed because ACR-126's commit added a different "worked example" prose paragraph at line 289 of `workflows/implementation-pipeline.md`, ahead of my Phase 8 fenced block at line 491 (tagged ` ```worked example `).

@@ -5,12 +5,26 @@ from pathlib import Path
 WORKFLOW_PATH = (
     Path(__file__).resolve().parents[1] / "workflows" / "implementation-pipeline.md"
 )
+ORCHESTRATOR_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "agents"
+    / "implementation-pipeline-orchestrator.md"
+)
 
 PHASE_6_HEADING = "## Phase 6 - Implementation (required; test/code separation)"
 PHASE_7_HEADING = "## Phase 7 - CodeRabbit Loop"
 STEP_6A_HEADING = "### Step 6a - Define contract"
 STEP_6B_HEADING = "### Step 6b - Encode tests first"
 STEP_6C_HEADING = "### Step 6c - Write code"
+ORCHESTRATOR_PHASE_6_HEADING = (
+    "### Phase 6 — Implementation (test/code separation) + Process-tree Audit #2"
+)
+ORCHESTRATOR_PHASE_7_HEADING = "### Phase 7 — CodeRabbit Loop"
+ORCHESTRATOR_STEP_6C_HEADING = "#### Step 6c — Write code"
+PROCESS_TREE_AUDIT_2_HEADING = "#### Process-tree audit #2"
+STEP_6C_MULTI_LAYER_GATE_HEADING = (
+    "#### Step 6c post-derivation multi-layer acceptance check"
+)
 DEPTH_PHRASE = "precisely one layer deep at the current recursion level"
 MULTI_LAYER_VIOLATION = "multi_layer_derivation_violation"
 
@@ -30,6 +44,7 @@ HALTRECORD_REQUIRED_FIELDS = {
 }
 
 _WORKFLOW_TEXT = None
+_ORCHESTRATOR_TEXT = None
 
 
 def _load_workflow_text():
@@ -38,6 +53,16 @@ def _load_workflow_text():
         assert WORKFLOW_PATH.exists(), f"workflow file not found: {WORKFLOW_PATH}"
         _WORKFLOW_TEXT = WORKFLOW_PATH.read_text(encoding="utf-8")
     return _WORKFLOW_TEXT
+
+
+def _load_orchestrator_text():
+    global _ORCHESTRATOR_TEXT
+    if _ORCHESTRATOR_TEXT is None:
+        assert ORCHESTRATOR_PATH.exists(), (
+            f"orchestrator file not found: {ORCHESTRATOR_PATH}"
+        )
+        _ORCHESTRATOR_TEXT = ORCHESTRATOR_PATH.read_text(encoding="utf-8")
+    return _ORCHESTRATOR_TEXT
 
 
 def _section(text, start_heading, end_heading=None):
@@ -60,6 +85,47 @@ def _phase_6_section(text):
 
 def _step_6c_section(text):
     return _section(_phase_6_section(text), STEP_6C_HEADING)
+
+
+def _orchestrator_section(text, start_heading, end_heading=None):
+    return _section(text, start_heading, end_heading)
+
+
+def _orchestrator_phase_6_section(text):
+    return _orchestrator_section(
+        text,
+        ORCHESTRATOR_PHASE_6_HEADING,
+        ORCHESTRATOR_PHASE_7_HEADING,
+    )
+
+
+def _orchestrator_step_6c_to_audit_2_section(text):
+    return _orchestrator_section(
+        _orchestrator_phase_6_section(text),
+        ORCHESTRATOR_STEP_6C_HEADING,
+        PROCESS_TREE_AUDIT_2_HEADING,
+    )
+
+
+def _orchestrator_step_6c_multi_layer_gate(text):
+    phase_6 = _orchestrator_phase_6_section(text)
+    assert STEP_6C_MULTI_LAYER_GATE_HEADING in phase_6, (
+        f"heading not found: {STEP_6C_MULTI_LAYER_GATE_HEADING!r}"
+    )
+    return _orchestrator_section(
+        phase_6,
+        STEP_6C_MULTI_LAYER_GATE_HEADING,
+        PROCESS_TREE_AUDIT_2_HEADING,
+    )
+
+
+def _orchestrator_process_tree_audit_2_section(text):
+    phase_6 = _orchestrator_phase_6_section(text)
+    return _orchestrator_section(
+        phase_6,
+        PROCESS_TREE_AUDIT_2_HEADING,
+        "#### Phase 6 halt-state transition gate",
+    )
 
 
 def _line_window_containing(text, token, *, before=8, after=20):
@@ -217,15 +283,92 @@ def test_multi_layer_derivation_violation_declared_with_existing_halt_shape():
     _assert_regex_near(
         step_6c,
         MULTI_LAYER_VIOLATION,
-        r"(?is)(orchestrator-runtime|runtime detection|runtime enforcement|runtime refusal).{0,240}"
-        r"(separate enforcement WU|separate ticket|tracked in a separate ticket)"
-        r"|(separate enforcement WU|separate ticket|tracked in a separate ticket).{0,240}"
-        r"(orchestrator-runtime|runtime detection|runtime enforcement|runtime refusal)",
+        r"(?is)(?:agents/implementation-pipeline-orchestrator\.md|implementation-pipeline-orchestrator\.md)"
+        r".{0,240}(?:Step 6c|multi-layer derivation acceptance|orchestrator-runtime detection lives in|orchestrator owns)"
+        r"|(?:Step 6c|multi-layer derivation acceptance|orchestrator-runtime detection lives in|orchestrator owns)"
+        r".{0,240}(?:agents/implementation-pipeline-orchestrator\.md|implementation-pipeline-orchestrator\.md)",
         max_lines=20,
-        where="workflow declaration versus runtime enforcement split",
+        where="workflow non-deferral orchestrator ownership reference",
     )
     assert _haltrecord_required_fields(workflow) == HALTRECORD_REQUIRED_FIELDS
     assert _halt_basis_options(workflow) == HALT_BASIS_OPTIONS
+
+
+def test_orchestrator_step_6c_multi_layer_acceptance_gate_present():
+    """Risk: ACR-7 AC2/AC3. Level: structural pytest. Source: ACR-7 contract."""
+    gate = _orchestrator_step_6c_multi_layer_gate(_load_orchestrator_text())
+
+    required_tokens = (
+        "${planning_dir}/contracts/${wu_lower}-${slug}.md",
+        "LevelComponentSet",
+        MULTI_LAYER_VIOLATION,
+        "nested sub-components",
+        "grandchild components",
+        "multi-layer",
+        "${planning_dir}/audit-history.md",
+        "actor=implementation-pipeline-orchestrator",
+        "phase=Phase 6",
+        "step=Step 6c post-prototype derivation",
+        "violation_code=multi_layer_derivation_violation",
+        "failed checks",
+        "Phase 6 derivation acceptance / advance to Phase 7 / child-recursion handoff",
+        "stderr",
+        "${scratch_dir}/questions/q-",
+        "NEEDS_INPUT:<absolute_question_artifact_path>",
+        "blocking",
+        "NEEDS_INPUT",
+        "not a self-resolvable procedural question",
+        "must not generate or supply the missing artifact",
+    )
+
+    for token in required_tokens:
+        assert token in gate, f"Step 6c multi-layer gate missing token: {token!r}"
+
+
+def test_orchestrator_step_6c_multi_layer_gate_ordered_before_process_tree_audit_2():
+    """Risk: ACR-7 ordering. Level: structural pytest. Source: ACR-7 contract."""
+    orchestrator = _load_orchestrator_text()
+    phase_6 = _orchestrator_phase_6_section(orchestrator)
+    step_6c_to_audit = _orchestrator_step_6c_to_audit_2_section(orchestrator)
+
+    dispatch_verify_anchor = "Verify all gates"
+    assert dispatch_verify_anchor in step_6c_to_audit
+    assert STEP_6C_MULTI_LAYER_GATE_HEADING in phase_6
+    assert PROCESS_TREE_AUDIT_2_HEADING in phase_6
+
+    assert step_6c_to_audit.index(dispatch_verify_anchor) < step_6c_to_audit.index(
+        STEP_6C_MULTI_LAYER_GATE_HEADING
+    )
+    assert phase_6.index(STEP_6C_MULTI_LAYER_GATE_HEADING) < phase_6.index(
+        PROCESS_TREE_AUDIT_2_HEADING
+    )
+
+
+def test_orchestrator_step_6c_multi_layer_gate_distinct_from_adjacent_violation_codes():
+    """Risk: ACR-7 distinct halt code. Level: structural pytest. Source: ACR-7 contract."""
+    gate = _orchestrator_step_6c_multi_layer_gate(_load_orchestrator_text())
+
+    assert MULTI_LAYER_VIOLATION in gate
+    assert "violation_code=multi_layer_derivation_violation" in gate
+
+    adjacent_violation_codes = (
+        "integration_test_missing",
+        "halt_record_missing_or_invalid",
+        "prototype_swap_record_missing_or_invalid",
+    )
+    for violation_code in adjacent_violation_codes:
+        assert violation_code not in gate, (
+            "Step 6c multi-layer gate must not fold into adjacent violation code: "
+            f"{violation_code}"
+        )
+
+
+def test_process_tree_audit_2_expected_process_names_acr7_gate():
+    """Risk: ACR-7 audit visibility. Level: structural pytest. Source: ACR-7 contract."""
+    audit_2 = _orchestrator_process_tree_audit_2_section(_load_orchestrator_text())
+
+    assert "Step 6c multi-layer derivation acceptance check" in audit_2
+    assert MULTI_LAYER_VIOLATION in audit_2
 
 
 def test_anti_scope_remains_doc_structural_only():
