@@ -91,6 +91,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
   Inputs: findings_path, incident_brief_path, output_path
   Model: claude-opus
 
+- `prototype-rca-orchestrator` - Run the light two-agent prototype RCA loop for one failed behavior test or QA walkthrough observation, then hand back after targeted verification.
+  File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?`, `hard_cap?` | Model: `claude-opus`
+
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
@@ -261,6 +264,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
 - RCA workflow (full incident-to-close root-cause analysis): [`~/ai/workflows/rca.md`](workflows/rca.md)
+- Prototype RCA workflow (light two-agent root-cause/fix loop for one failed prototype trigger): [`~/ai/workflows/rca-prototype.md`](workflows/rca-prototype.md)
 - Release management (staged cut/freeze/hotfix/promote/tag/reconcile lifecycle): [`~/ai/workflows/release-management.md`](workflows/release-management.md)
 - Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)

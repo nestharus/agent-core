@@ -1576,3 +1576,37 @@ The orchestrator's Step 6c prompt for ACR-130 round 1 omitted the FIRST LOG LINE
   - Post-rebase ACR-11 structural pytest still passes (10/10) and the existing recursion-control test still passes (8/8).
   - ACR-11 wording was updated to chain after ACR-6's per-component fanout: the new subsection now says "After Step 6c, the post-derivation multi-layer acceptance check, AND the per-component code-quality auditor fanout pass for the current `level_id`". This preserves ACR-6's gate as a precondition for ACR-11's child-recursion fire detection.
 - Action: continue Phase 7 CodeRabbit on the rebased branch.
+
+## D-2026-05-09j — ACR-144 Phase 2.5 residuals (drift discovery + dispatch-resolved gates)
+
+**WU**: ACR-144 (Author `~/ai/workflows/rca-prototype.md` — light 2-agent RCA loop). **Phase**: 2.5. **Decision**: accept residuals; proceed exhaustive on the workflow + operator surfaces; lean on the pytest, AGENTS.md, and `workflows/index.json` modifications.
+
+Pre-resolved gates per orchestrator dispatch (no human gate fired; `skip_problem_map_gate=true`):
+
+- Narrow-vs-exhaustive: **A — proceed exhaustive**.
+- Defer-to-prototype: zero defer signals fired (no majority HIGH; lifecycle/duplicates/coverage/cross-language all clean), so the option was not surfaced; default A — proceed exhaustive — applies.
+- Mid-pipeline drift: **A — proceed + note residuals in DECISIONS** (this entry).
+
+Phase 2.5 risk profile (`/home/nes/projects/ai/planning/acr-144-rca-prototype-workflow/risk/acr-144-risk-profile.md`):
+
+- WU-level verdict: `HIGH` (driven by procedural correctness on `workflows/rca-prototype.md` and `agents/prototype-rca-orchestrator.md`, each ≥3 MEDIUM axes; no `HIGH` axes).
+- Per-surface modes: `workflows/rca-prototype.md` exhaustive; `agents/prototype-rca-orchestrator.md` exhaustive; `tests/test_rca_prototype_workflow.py` lean; `AGENTS.md` lean; `workflows/index.json` lean; README optional.
+
+Drift discovery (residual): the unrelated red structural test `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` (literal `"claude-haiku"` in `tests/test_workflow_model_alignment.py:205`) is **pre-existing on master HEAD**, already documented at D-2026-05-09a (ACR-12), D-2026-05-08i (ACR-125), and prior. It is outside ACR-144's touched surface (workflow doc + operator + structural pytest only). Disposition: `proceed with current scope (note in DECISIONS)`. Phase 6 verification gates for ACR-144 will run targeted on the new pytest only — do not gate on the pre-existing red test. Evidence: `/home/nes/projects/ai/planning/acr-144-rca-prototype-workflow/research/acr-144-coverage-inventory.md`, `/home/nes/projects/ai/planning/acr-144-rca-prototype-workflow/risk/acr-144-risk-profile.md` § "Phase 2.5 Discovery: Existing Red Structural Test".
+
+## D-2026-05-09k — ACR-144 Phase 6c Tier-1 rewind for missing consumption-echo
+
+**WU**: ACR-144. **Phase**: 6c (write code). **Decision**: Tier-1 rewind after Phase 6c R1 (`agents` codex `7e4bc9c2-1b2e-4fb6-8051-80e5d857d125`) produced the correct product code (4 files: `workflows/rca-prototype.md`, `agents/prototype-rca-orchestrator.md`, `AGENTS.md` modifications, regenerated `workflows/index.json`) AND the 23 targeted structural pytests passed (`tests/test_rca_prototype_workflow.py`), but the Step 6c log had no explicit `CONSUMED_FROM_STEP6B:` / `CONSUMED_FROM_STEP6A:` lineage markers that process-tree-auditor expects (same silent-success / false-completion pattern recorded at D-2026-05-07i (NES-273), D-2026-05-07j (NES-275), D-2026-05-08i (ACR-125), D-2026-05-09a (ACR-12)).
+
+Per the precedent at those entries: removed the four R1 product files (`git checkout HEAD -- AGENTS.md workflows/index.json` + `rm -f workflows/rca-prototype.md agents/prototype-rca-orchestrator.md` in the WU worktree — no commits to revert; preserved Step 6b test file unchanged), pre-prepended a `=== STEP 6C R2 — CONSUMPTION EVIDENCE (orchestrator-prepended) ===` block to a fresh Step 6c log naming each consumed Step 6b output path (output index plus the Step 6b test file) and the Step 6a contract path, then ran the Step 6c agent (`agents -m gpt-high`) with `tee -a` appending. R2 invocation (`5f6681cc-614b-406d-a87a-0629919b8708`) reproduced the same product-code edits and 23/23 targeted tests still pass.
+
+## D-2026-05-09l — ACR-144 mid-pipeline rebase onto ACR-11
+
+- WU: ACR-144
+- Phase: 7 (pre-CodeRabbit rebase)
+- Decision: ACR-11 (`c39cb88`) merged into origin/master while ACR-144 was at Phase 6c. Per dispatch pre-resolution "Mid-pipeline drift: A — proceed + note in DECISIONS as residual", ACR-144 was rebased onto origin/master. Merge conflict resolution: DECISIONS.md only — kept master's D-2026-05-09h and D-2026-05-09i entries (ACR-11) intact and renumbered ACR-144's appended entries from D-2026-05-09b/c to D-2026-05-09j/k to avoid collisions with the ACR-12/ACR-8/ACR-14/ACR-13/ACR-6 entries already in master under those letters.
+- Justifying evidence:
+  - Pre-rebase `git fetch origin master` showed `c39cb88` ahead of branch base `31d3b26`.
+  - Pre-rebase `git diff --stat 31d3b26 origin/master` named DECISIONS.md, agents/implementation-pipeline-orchestrator.md, and tests/test_implementation_pipeline_orchestrator_recursion_control.py — only DECISIONS.md actually conflicts with ACR-144's diff.
+  - Post-rebase ACR-144 structural pytest still passes (23/23) and the targeted suite carries no new regressions.
+- Action: continue Phase 7 CodeRabbit on the rebased branch.
