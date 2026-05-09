@@ -2,6 +2,59 @@
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08k — ACR-126 Phase 6 pre-existing master regression accepted-as-residual
+
+**WU**: ACR-126 (Phase 2.5 defer-to-prototype original-ticket disposition). **Phase**: 6 (post-Step-6c full-suite gate). **Decision**: `Accept the failing test_no_claude_haiku_in_repo as a pre-existing master-state regression that ACR-126 did not introduce and does not own; proceed without fixing within ACR-126 scope`.
+
+**Trigger**: After Step 6c (revision r2) made the seven approved markdown product edits, the focused-tests gate passed clean (30/30 ACR-126 + sibling status-ownership + jira scope-containment guards). The full-suite regression check then surfaced one failing test: `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`. The failing assertion finds the literal token `claude-haiku` in `tests/test_workflow_model_alignment.py:205`, where it appears inside an allowlist set in `known_models` (the alignment test author's allowed-model registry).
+
+**Provenance**:
+- The forbidden-token rule was introduced by `464b3bc NES-263: eliminate claude-haiku across ~/ai (#49)`, which deleted the haiku model entirely.
+- The conflicting allowlist entry was last edited by `68086d6 ACR-49: align roadmap workflow orchestrator model + alignment test (#84)`, which added the `claude-haiku` literal to the allowlist set.
+- Master is currently at `a946392 ACR-129` and the failing test fails on a clean `git stash` of all ACR-126 working-tree edits — verified via `git stash; pytest tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo; git stash pop` (one failure, then `git stash pop` restored ACR-126 edits without changing the failure shape).
+
+**Why this is not ACR-126's responsibility**:
+- ACR-126's per-surface mode list (proposal lines 4–22) does NOT include `tests/test_workflow_model_alignment.py` or `tests/test_agentsmd_structure.py`. Touching either file would be cross-cutting anti-scope creep.
+- ACR-126's anti-scope (proposal lines 24–32) explicitly forbids broadening to estimate-flow / model-routing surfaces.
+- The failure is a sibling-PR-conflict between NES-263 and ACR-49 — both shipped to master before ACR-126's branch was rebased. Removing `"claude-haiku"` from the alignment-test allowlist is the canonical fix and belongs to a sibling cleanup ticket, not ACR-126.
+- The prior orchestrator's git status header showed `D tests/test_workflow_model_alignment.py` (staged-for-deletion in the working tree). That deletion was anti-scope creep for ACR-126 and has been left as-is in the current resume — the file is restored by Step 6c r2's clean state and is not deleted in ACR-126's diff.
+
+**Pre-resolved disposition** (per work-manager-operator dispatch and `D-2026-05-08j` precedent for mid-pipeline drift): proceed + note in DECISIONS as residual. ACR-126 ships with the master-state regression intact; the Phase 8 test-audit gate must distinguish "pre-existing master failure" from "ACR-126-introduced failure" using the staged-vs-pristine evidence captured in the Phase 6c r2 log.
+
+**Tracker note**: a separate ticket should be filed to remove `"claude-haiku"` from `tests/test_workflow_model_alignment.py:205` — that is the correct fix and is one line. ACR-126 does NOT include that fix because it is out-of-scope.
+
+**Phase 8 follow-up**: when the test-audit gate inspects the diff, this DECISIONS entry is the citation; the failing test is not in ACR-126's diff (the diff does not modify `tests/test_workflow_model_alignment.py`).
+
+## D-2026-05-08j — ACR-126 Phase 2.5 mid-pipeline drift + uncovered-behavior pre-resolved residuals
+
+**WU**: ACR-126 (Phase 2.5 defer-to-prototype original-ticket disposition). **Phase**: 2.5 (existing-state risk profile, sub-steps 2.5.1 + 2.5.4). **Decision**: `Apply pre-resolved gate "Mid-pipeline drift: A — proceed + note in DECISIONS as residual" from work-manager-operator dispatch; skip the characterization-test-writer dispatch per sibling ACR-121/ACR-122/ACR-123/ACR-129 precedent for docs-only WUs; carry the surfaced residuals as Phase 3 inputs`.
+
+Sub-step 2.5.4 (duplicates inventory) recommended two trackers on the touched surface:
+
+- **ACR-126-DUP-STATUS-OWNERSHIP**: implementation-pipeline-orchestrator + prototype-orchestrator both currently disclaim status-ownership ("manager-owned"), while ACR-126 requires the implementation-pipeline-orchestrator to *execute* a deferred-state transition (or label fallback) at Phase 2.5 immediate-disposition and at Phase 4 disposition-execution. Pre-resolved disposition (per dispatch): proceed; document the ownership delta as a Phase 3 design input. Phase 3 must decide whether ACR-126 expands the implementation-pipeline-orchestrator's authority directly, or routes the transition through `work-manager-operator` (which already claims manager-owned routine transitions per `agents/work-manager-operator.md:50,77-90,178-180`). Sibling resolution precedent: ACR-129 D-2026-05-08g (work-manager status-transition cross-doc inconsistency tracked under ACR-130) — same drift, same disposition.
+- **ACR-126-DUP-BACKEND-LIFECYCLE-MUTATIONS**: Linear's routine `transition` set excludes `Backlog`; neither Linear nor JIRA exposes sprint/cycle/iteration removal. Pre-resolved disposition (per dispatch): proceed; treat as Phase 3 input. Phase 3 must specify backend fallbacks: for Linear, `apply-labels deferred-to-prototype` instead of routine-set transition (per problem-map finding `LINEAR-BACKLOG-NOT-IN-ROUTINE-TRANSITION`); sprint/cycle removal documented as operationally manual or out-of-scope unless a new operator/client surface is added.
+
+Sub-step 2.5.1 (coverage inventory) found the Phase 2.5 defer branch and prototype P4 hand-off are entirely uncovered by tests. Coverage agent proposed 12 characterization tests (`test_acr126_defer_prototype_disposition.py` etc.) that lock current "behavior absent" assertions. Decision: skip the separate characterization-test-writer dispatch per sibling docs-only-WU precedent (ACR-121/ACR-122/ACR-123/ACR-129 did not dispatch this step). Rationale: characterization tests for absent-behavior become inverted/replaced by Phase 6b's forward-direction tests immediately; Phase 6b will produce the new-contract tests directly. The coverage inventory's recommendations remain visible to Phase 6b as test-target enumeration.
+
+**Justifying evidence:**
+- `/home/nes/projects/ai/planning/acr-126-phase-2.5-defer-prototype-disposition/research/acr-126-duplicates.md` § "Tracker filings recommended"
+- `/home/nes/projects/ai/planning/acr-126-phase-2.5-defer-prototype-disposition/research/acr-126-coverage-inventory.md` § "Characterization-test recommendations"
+- `/home/nes/projects/ai/planning/acr-129-jira-operator-estimate-validation/.scratch/logs/` (sibling — no characterization-test dispatch)
+- Dispatch prompt for ACR-126 § "Pre-resolved Phase 2.5 gates": "Mid-pipeline drift: default A — proceed + note in DECISIONS as residual"
+
+## D-2026-05-08i — ACR-126 Phase 0 stale-base rebase onto origin/master to pick up ACR-130 prerequisite
+
+**WU**: ACR-126 (Phase 2.5 defer-to-prototype original-ticket disposition). **Phase**: 0 (Bootstrap). **Decision**: `Reset acr-126-phase-2.5-defer-prototype-disposition branch from local-master 68086d6 to origin/master a946392 to pick up ACR-130 (b3ea8f2) — the manager-owned linear-operator transition task that ACR-126's "transition the original ticket to a deferred state" behavior consumes`.
+
+Trigger: Phase 2.5.0 problem map flagged `LINEAR-TRANSITION-BRANCH-STALE` because the branch was created from local master (`68086d6` ACR-49) which predates the ACR-130 merge (`b3ea8f2` ACR-130, merged 2026-05-08T22:00:13Z). Local master had not been pulled, so `git worktree add ... master` produced a branch where `agents/linear-operator.md` still said "Status transitions are user-owned, not pipeline-owned" — exactly the constraint ACR-126 must remove.
+
+Resolution: `git -C <worktree> reset --hard origin/master`. New base: `a946392` (ACR-129 jira-estimate Fibonacci validation + ACR-130 manager-owned Linear transitions). The previous Phase 2.5.0 problem-map artifact is now stale on file:line citations and will be re-dispatched on the rebased base. The other three Phase 2.5.0 findings (`SPRINT-REMOVAL-NOT-IMPLEMENTED`, `BRANCH-DISPOSITION-CONTRACT-COLLISION`, `P4-JIRA-ONLY-DEFER-SOURCE`) remain valid Phase 3 inputs.
+
+**Justifying evidence:**
+- `/home/nes/projects/ai/planning/acr-126-phase-2.5-defer-prototype-disposition/.scratch/logs/acr-126-phase-2.5-problem-map.log` (Phase 2.5.0 r1 — flagged the stale finding)
+- `/home/nes/projects/ai/planning/acr-126-phase-2.5-defer-prototype-disposition/research/acr-126-problem-map.md` § "Findings For Phase 3" (LINEAR-TRANSITION-BRANCH-STALE)
+- `git -C ~/ai log origin/master --oneline -3` shows `a946392` ACR-129 / `b3ea8f2` ACR-130 / `68086d6` ACR-49
+
 ## D-2026-05-08h — ACR-129 Phase 6 Step 6b regex bug + Step 6c x2 consumption-echo Tier-1 rewinds
 
 **WU**: ACR-129 (jira-operator: customfield_10016 estimate write path lacks Fibonacci validation that Linear path enforces). **Phase**: 6 (test/code separation). **Decision**: `Three Tier-1 rewinds total — one for a Step 6b regex authoring bug, two more for Step 6c consumption-echo gate failures — before clean Step 6c r3 produced consumption-echo + 4/4 ACR-129 tests + 901/901 regression`.

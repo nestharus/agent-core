@@ -247,6 +247,8 @@ Default behavior **merges** with the issue's current labels. Pass `--replace` to
 
 The merge avoids the `update_issue` foot-gun where supplying `labelIds=[X]` would silently drop any other labels the issue already had — `apply-labels` queries the issue's current labels via direct GraphQL first and unions in the new ones. It also verifies the issue team before writing; an issue/team mismatch is `INVALID_INPUT` and must stop the operator before any label update.
 
+ACR-126 immediate deferral uses this existing `task=apply-labels` surface as the Linear deferred-state contract: `labels=deferred-to-prototype`, `create_missing=true`, and `replace=false` unless the caller explicitly documents a later cleanup operation.
+
 ## Procedure: Transition
 
 Use `task=transition` with required inputs `issue_key` and `target_status`. `target_status` must be one of `clients.linear.client.ROUTINE_MANAGER_OWNED_STATES`: `Todo`, `In Progress`, or `Done`.
@@ -254,6 +256,8 @@ Use `task=transition` with required inputs `issue_key` and `target_status`. `tar
 ```bash
 PYTHONPATH=$HOME/ai python3 -m clients.linear.cli transition-issue "ACR-130" --target-status "In Progress"
 ```
+
+ACR-126 does not expand this routine transition contract; P4 original-ticket disposition may use only these same `Todo`, `In Progress`, or `Done` targets when the approved disposition requires a routine Linear status.
 
 The CLI reads the issue, uses `issue.team.id`, lists that team's workflow states, exact-match checks `target_status`, and calls `issueUpdate` with `stateId`. Print `before-status -> after-status`.
 

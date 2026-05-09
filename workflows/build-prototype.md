@@ -84,8 +84,24 @@ Dossier structure (`<project>/planning/<prototype-id>/dossier/`):
 - `risk-profile.md` — per `~/ai/conventions/risk-profile.md`, scored at the end of the prototype, applied to the surfaces the prototype touched. The proper Phase-2.5-equivalent for prototypes happens HERE, not during.
 - `challenges.md` — what was hard, what blocked, what surprised. Often the most useful section for downstream consumers.
 - `spawned-tickets.md` — the list of tickets the prototype recommends filing: implementation tickets, hardening tickets, scope-cut decisions, additional prototype tickets if the answer surfaced new unknowns.
-- `branch-disposition.md` — what to do with the prototype branch: merge as-is (rare), cherry-pick into spawned tickets (common), keep for reference (small percentage), discard (when the answer was "this approach doesn't work").
+- `branch-disposition.md` — what to do with the prototype branch: merge as-is (rare), cherry-pick into spawned tickets (common), keep for reference (small percentage), discard (when the answer was "this approach doesn't work"). The branch disposition enum remains `merge | cherry-pick | keep | discard`.
 - `reading-list.md` (optional) — pointers to existing code/docs/tests that anyone implementing on the dossier's recommendation should read first.
+
+When the prototype was started with `defer_source`, `branch-disposition.md` also includes a separate section for the original deferred ticket. The existing branch disposition section and enum are preserved; the new section is only the original-ticket lifecycle recommendation:
+
+```markdown
+## Original ticket disposition
+
+Disposition: <close-as-superseded | keep-as-meta-tracker | re-defer>
+
+Rationale: <one or more sentences>
+
+Spawned ticket references:
+- <key1>: <one-line summary>
+- <key2>: <one-line summary>
+
+Backend caveats: <comment naming missing primitives, or n/a>
+```
 
 ## Phases
 
@@ -196,6 +212,14 @@ The prototype produces tickets and updates downstream artifacts. Then it's done.
   - **cherry-pick**: each spawned implementation ticket cherry-picks the relevant commits from the prototype branch into its own branch. The prototype branch becomes a reference, not a merge candidate.
   - **keep**: the prototype branch lives on origin under `prototype-*` for reference. Spawned tickets reference it.
   - **discard**: the prototype branch is deleted from origin. The dossier survives in `<project>/planning/<prototype-id>/`.
+- **Execute original-ticket disposition** when `defer_source` is set:
+  1. Parse the approved `## Original ticket disposition` section after P3 approval.
+  2. Reuse the keys from the prior **File spawned tickets** step; do not re-file tickets in this step.
+  3. Execute `close-as-superseded`, `keep-as-meta-tracker`, or `re-defer` mechanically and without a second human gate:
+     - `close-as-superseded` closes or supersedes the original ticket where the backend supports it and records spawned-ticket links/comments.
+     - `keep-as-meta-tracker` keeps or restores the original as the parent/meta tracker and relates spawned tickets.
+     - `re-defer` keeps the deferred marker, comments remaining unknowns, and queues the next prototype using existing dispatch conventions.
+  4. Write `${planning_dir}/dossier/original-ticket-disposition-execution.md` with the parsed disposition, spawned ticket keys, ticket-operator prompt/log paths, backend operations attempted, fallback reasons, created link evidence, final comment target, and `actor=prototype-orchestrator`.
 - **Update roadmap if applicable**: when the prototype was triggered by a roadmap-layer decision (Layer 2 substrate validation, Layer 3 WU decomposition gate), update the roadmap layer with the prototype's findings. The roadmap workflow's relevant proposer / risk operator re-runs against the updated layer artifacts.
 - **Gate policy**: no further gate. P4 is mechanical — the human-gate decision was P3.
 
