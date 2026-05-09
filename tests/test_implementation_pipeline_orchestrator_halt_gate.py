@@ -73,6 +73,20 @@ def test_phase6_halt_state_gate_exists_and_precedes_phase7():
     )
 
 
+def test_phase6_halt_gate_has_exact_seven_step_shape():
+    gate = _phase6_halt_gate_section()
+
+    for step_number in range(1, 8):
+        _assert_regex(
+            gate,
+            rf"(?m)^{step_number}\.",
+            f"Phase 6 halt gate step {step_number}",
+        )
+    assert re.search(r"(?m)^8\.", gate) is None, (
+        "Phase 6 halt gate must not define an eighth numbered step"
+    )
+
+
 def test_phase6_halt_gate_names_canonical_path_and_required_field_tokens():
     gate = _phase6_halt_gate_section()
 
@@ -102,6 +116,26 @@ def test_phase6_halt_gate_names_halt_basis_enum_values():
             "lower meaningful risk",
         ),
         where="Phase 6 halt_basis enum values",
+    )
+
+
+def test_phase6_halt_gate_requires_option_level_evidence_for_each_basis():
+    gate = _phase6_halt_gate_section()
+
+    _assert_contains_all(
+        gate,
+        (
+            "option-level",
+            "each listed option",
+            "unsatisfied",
+            "not valid halt evidence",
+            "clarify contracts",
+            "reduce accidental coupling",
+            "expose a design challenge",
+            "improve evidence",
+            "lower meaningful risk",
+        ),
+        where="Phase 6 halt gate option-level halt_basis evidence",
     )
 
 
