@@ -20,6 +20,113 @@ Resolution: revert the five product-file edits (keep the Phase 6b tests) and re-
 
 Decisions taken at the `~/ai/` (workflow + operator + client) layer. Distinct from per-project `DECISIONS.md` which records per-project narrowings, terminations, and accepted residuals.
 
+## D-2026-05-08q — ACR-138 Phase 8 stale-base rebase onto origin/master + DECISIONS letter renumbering (sibling-precedent of D-2026-05-08i / D-2026-05-08c / D-2026-05-08n)
+
+**WU**: ACR-138 (RCA agent: E2E frontend-element timeout — check element existence before assuming load time). **Phase**: 8 (post-CodeRabbit gates). **Decision**: `Rebase ACR-138 branch from base 18163c8 onto current origin/master 4386bc8 (twice — once to pick up ACR-125 PR #90 mid-Phase-8, then again to pick up ACR-64 PR #91 at Phase 9 PR-creation time); re-run the two stale-base-affected Phase 8 gates (test-audit + commit-hygiene) on the rebased commit; renumber the three ACR-138 DECISIONS entries from D-2026-05-08{l,m,n} to D-2026-05-08{o,p,q} after observing letter-collision with sibling ACR-64's already-merged entries D-2026-05-08{l,m,n}. Multi-concern (SINGLE_CONCERN) and justification (LOW_CONCERN) verdicts hold post-rebase because they evaluated content, not base lineage.`
+
+**Trigger sequence**:
+
+1. Phase 8 r1 test-audit (`/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/risk/acr-138-test-audit.md.r1-stale-base`, F1 HIGH) and Phase 8 r1 commit-hygiene (`/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/risk/acr-138-commit-hygiene.md.r1-stale-base`, F1 HIGH) both flagged that `git diff master..HEAD` showed phantom deletions of `tests/test_acr125_*` files because the branch's parent (`18163c8` — master at WU bootstrap) predates ACR-125's merge to origin/master (`6f2dc14`).
+2. First rebase onto `6f2dc14` (clean replay; no conflicts).
+3. Phase 8 r2 commit-hygiene then flagged Co-Authored-By trailer violation against `conventions/git.md` (MEDIUM); commit was amended to remove the trailer.
+4. At Phase 9 `gh pr create --draft` time, origin/master had advanced **again** to `4386bc8` (sibling ACR-64 PR #91 merged in the interim). Conflict on `DECISIONS.md` because both WUs added entries at letters `l/m/n`.
+5. Second rebase onto `4386bc8` resolved the DECISIONS.md conflict by keeping ACR-64's entries verbatim and renumbering ACR-138's to `o/p/q`.
+
+**Resolution**: Sibling-precedent: ACR-126 D-2026-05-08i (rebase to pick up ACR-130 mid-WU); ACR-5 D-2026-05-08c (rebase to clear stale-branch preservation-guard violation); ACR-64 D-2026-05-08n (Phase 7 pre-CodeRabbit rebase onto current origin/master). Letter-collision precedent: D-2026-05-08i and D-2026-05-08j already coexist with multiple WUs in this file (ACR-125 + ACR-126); ACR-138 chose forward letters `o/p/q` rather than perpetuating the collision pattern.
+
+**Rebase action**:
+- Pre-first-rebase HEAD: `7e805e6 ACR-138: incident-investigator page-state-first triage for E2E frontend-element timeouts` (parent `18163c8`)
+- Post-first-rebase HEAD: `f76833c` (parent `6f2dc14`)
+- Post-amend HEAD (Co-Authored-By trailer removed): `d8829fe` (parent `6f2dc14`)
+- Post-second-rebase HEAD: re-emitted onto parent `4386bc8` after this DECISIONS conflict resolution
+- Conflict-free reapply on the prompt/test files; the `DECISIONS.md` conflict was resolved by the renumbering above and by accepting both sides of the merge.
+
+**Post-rebase verification**:
+- `git diff master..HEAD --stat`: 4 files changed (only ACR-138 edits — no phantom ACR-64 / ACR-125 deletions).
+- `python -m pytest tests/test_incident_investigator_operator.py -q`: 20 passed.
+
+**Re-run scope**:
+- Re-dispatch test-audit gate against post-first-rebase HEAD `f76833c` (returned LOW; preserved at `risk/acr-138-test-audit.md.r1-stale-base`).
+- Re-dispatch commit-hygiene gate r2 (post-rebase pre-amend, returned MEDIUM on trailer; preserved at `risk/acr-138-commit-hygiene.md.r2-trailer-violation`) and r3 (post-amend, returned LOW). Final canonical reports stat/sha256-match the Phase 8 join manifest.
+- Multi-concern (SINGLE_CONCERN) and justification (LOW_CONCERN) verdicts are NOT re-run because their reports content-evaluated the four ACR-138 files individually and traced each hunk to a justifying source; the stale-base diff did not introduce phantom hunks into their per-file analysis. Their verdicts and reports remain authoritative for the post-rebase commit (the file-level edits are byte-identical pre and post rebase).
+
+**Renumbering details**:
+- D-2026-05-08l (ACR-138 Phase 2.5 defer-signals) → renumbered to **D-2026-05-08o**.
+- D-2026-05-08m (ACR-138 Phase 6 pre-existing master regression) → renumbered to **D-2026-05-08p**.
+- D-2026-05-08n (ACR-138 Phase 8 stale-base rebase) → this entry, now **D-2026-05-08q** (with this renumbering note appended).
+
+**Stale citation note**: ACR-138's pre-PR-creation artifacts (`risk/phase-8-join-manifest.json`, `risk/acr-138-process-tree-audit-3.md`, the commit message body, prompt files in `.scratch/prompts/`) were authored before the second rebase and reference the pre-renumbering letters `l/m/n`. Those references are historical-only at this point and do not need to be rewritten; the canonical file ordering in this `DECISIONS.md` controls.
+
+**Justifying evidence**:
+- D-2026-05-08c (ACR-5 sibling stale-base rebase precedent)
+- D-2026-05-08i (ACR-126 sibling stale-base rebase precedent)
+- D-2026-05-08n (ACR-64 sibling pre-CodeRabbit rebase precedent — same exact mechanism, two WUs apart)
+- ACR-125 PR #90 (`6f2dc14`) and ACR-64 PR #91 (`4386bc8`) — the merged work each rebase round picks up
+- Phase 8 test-audit + commit-hygiene gate reports (preserved-prior-round files at `.r1-stale-base` / `.r2-trailer-violation`)
+- Post-rebase test gate (`20 passed`)
+
+## D-2026-05-08p — ACR-138 Phase 6 pre-existing master regression accepted-as-residual (sibling-precedent of D-2026-05-08k and D-2026-05-08m)
+
+**WU**: ACR-138 (RCA agent: E2E frontend-element timeout — check element existence before assuming load time). **Phase**: 6 (post-Step-6c full-suite gate). **Decision**: `Accept the failing tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo as a pre-existing master-state regression that ACR-138 did not introduce and does not own; proceed without fixing within ACR-138 scope`.
+
+**Trigger**: After Step 6c made the three approved edits (`agents/incident-investigator.md`, `workflows/implementation-pipeline.md`, `tests/test_incident_investigator_operator.py`), the focused-test gate on `tests/test_incident_investigator_operator.py` passed clean (20/20). The full-suite regression check then surfaced one failing test: `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo`. The failing assertion finds the literal token `claude-haiku` in `tests/test_workflow_model_alignment.py:205`.
+
+**Provenance**: This is the same pre-existing master-state regression accepted under sibling-WU `D-2026-05-08k` (ACR-126) and `D-2026-05-08m` (ACR-64). ACR-138 inherits the disposition verbatim: ACR-138's diff does NOT modify `tests/test_workflow_model_alignment.py` or `tests/test_agentsmd_structure.py`; touching either is anti-scope creep. The canonical fix (remove `"claude-haiku"` from the alignment-test allowlist set on line 205) belongs to a separate sibling cleanup ticket per `D-2026-05-08k`'s "Tracker note" guidance.
+
+**ACR-138 diff scope** (cited so Phase 8 test-audit can verify):
+
+- `agents/incident-investigator.md` (Contract A — page-state-first sub-step + worked example)
+- `workflows/implementation-pipeline.md` (Contract B — Phase 0 one-line pointer)
+- `tests/test_incident_investigator_operator.py` (Contract C — 9 new structural-shape-guard tests)
+- `DECISIONS.md` (this entry + D-2026-05-08o + D-2026-05-08q)
+
+The pre-existing failing test is in `tests/test_agentsmd_structure.py` (NOT modified by ACR-138) and asserts on `tests/test_workflow_model_alignment.py:205` (NOT modified by ACR-138).
+
+**Phase 8 follow-up**: when the test-audit gate inspects the ACR-138 diff, this entry is the citation; the failing test is not in ACR-138's diff (the diff does not modify either file involved in the failure).
+
+**Justifying evidence**:
+
+- D-2026-05-08k (sibling-WU ACR-126 accepted-as-residual disposition for the same failure)
+- D-2026-05-08m (sibling-WU ACR-64 inheriting the same residual)
+- Step 6c log: `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/.scratch/logs/acr-138-phase-6c.log` (full-suite gate output: `1 failed, 101 passed`; failing test name; on-master verification by Step 6c writer)
+- ACR-138 diff (`git diff --stat` on the WU branch): four product files changed (per Contract A/B/C + this DECISIONS entry); pre-existing failing-test files NOT among them.
+
+## D-2026-05-08o — ACR-138 Phase 2.5 defer-signals pre-resolved + cross-repo + missing-shared-operator residuals
+
+**WU**: ACR-138 (RCA agent: E2E frontend-element timeout — check element existence before assuming load time). **Phase**: 2.5 (existing-state risk profile, sub-steps 2.5.0–2.5.6). **Decision**: `Apply the work-manager-operator pre-resolution "Defer-to-prototype: A — proceed exhaustive" + "Mid-pipeline drift: A — proceed + note in DECISIONS as residual" to the Phase 2.5 gate; proceed to Phase 3 in exhaustive mode for all eight scored surfaces; carry the surfaced residuals (RFQ cross-repo divergence, missing shared 'e2e-operator' reference, scope-boundary ambiguity) as Phase 3 inputs without filing tracker tickets in this WU`.
+
+**Trigger**: Phase 2.5.6 risk profile (`/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/risk/acr-138-risk-profile.md`) returned WU verdict `HIGH` with all 8 per-surface verdicts `HIGH` and 2 of 5 defer-to-prototype signals fired:
+
+1. FIRED — risk profile rolls up HIGH on a majority of touched surfaces (8/8).
+2. FIRED — duplicates inventory names a sprawling parallel-systems landscape outside WU scope (RFQ's live `/home/nes/projects/rfq/agents/e2e-operator.md` with a competing `Test timeout` decision branch + missing shared `~/ai/agents/e2e-operator.md`).
+3. NOT-FIRED — lifecycle visibility MEDIUM, not HIGH; artifact flows are repo/planning-derivable.
+4. NOT-FIRED — characterization-test gap = 0 for current shared-repo scope per coverage inventory.
+5. NOT-FIRED — cross-language-fragmentation MEDIUM; contracts are bounded/explicit.
+
+Per `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 2.5 step 5, ≥2 signals require the Phase 2.5 human-gate question to include the `defer to prototype` option. Per the dispatch prompt for ACR-138 (`/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/.scratch/dispatch-prompt.md` § "Pre-resolved Phase 2.5 gates"), the work-manager-operator pre-resolved this question as `A — proceed exhaustive` with rationale "Surface is bounded (handful of agent files)". The dispatch prompt also pre-resolved "Mid-pipeline drift: A — proceed + note in DECISIONS as residual". `skip_problem_map_gate=true` suppresses the routine problem-map approval; the orchestrator records the genuine value-decision evidence here in lieu of an unsolicited NEEDS_INPUT to the root.
+
+**Why the signals fired but the work is workable**:
+
+- Signal 1 (8/8 HIGH) is dominated by `change-path-entropy=HIGH` on every surface, which itself is driven by Signal 2 (the cascade-vs-consolidate-vs-accept-divergence question for the RFQ duplicate and the missing shared `e2e-operator` reference). The duplicates question is **out-of-WU-scope by construction**: ACR-138's dispatch prompt scopes the work to `nestharus/agent-core` (i.e., `~/ai`); cross-repo RFQ edits are not part of this WU.
+- Once the cross-repo and missing-shared-operator concerns are accepted-as-residual, the actual change surface narrows to two primary owners (`~/ai/agents/incident-investigator.md` for full-RCA dispatch + `~/ai/workflows/implementation-pipeline.md` Phase 0 for impl-pipeline bug RCA) plus optional structural-test additions and adjacent edits. That is bounded and workable in exhaustive mode without prototype deferral.
+- The lifecycle and coverage and cross-language signals NOT firing is the load-bearing evidence that this is *risk concentrated in a known scope question*, not *risk that genuinely requires a clarifying prototype*.
+
+**Residuals carried into Phase 3 (per "Mid-pipeline drift: proceed + note in DECISIONS as residual")**:
+
+- **ACR-138-RES-RFQ-E2E-DIVERGENCE** — RFQ's `/home/nes/projects/rfq/agents/e2e-operator.md:324-332` defaults `Test timeout` to Docker-stack-health and ML-training-completion, with no selector-existence/page-state branch. Phase 3 must explicitly state this WU does **not** cascade ACR-138's behavior to the RFQ operator; a separate cross-repo follow-up (filed against the RFQ project, not ACR) is recommended for that operator. ACR-138's PR carries no RFQ edits.
+- **ACR-138-RES-MISSING-SHARED-E2E-OPERATOR** — `~/ai/agents/worktree-operator.md:18-22` and `~/ai/agents/jj-operator.md:20-24` both reference a shared `e2e-operator` that does not exist in `~/ai/agents/`. Phase 3 must state ACR-138 does **not** create that shared operator (per anti-scope: "Do NOT introduce a new framework for snapshotting page state — use whatever the test runner already exposes" — this would be a new framework). A separate ticket is recommended to either create the shared operator or remove the dangling references.
+- **ACR-138-RES-SCOPE-BOUNDARY-AMBIGUITY** — Problem-map open-question 1 (shared-repo only vs cross-repo) is resolved by this DECISIONS entry: shared-repo only. No cross-repo edits.
+
+**Justifying evidence**:
+
+- `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/research/acr-138-problem-map.md` (touched-surface enumeration; ownership audit)
+- `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/research/acr-138-coverage-inventory.md` (no characterization-test gap for shared scope)
+- `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/research/acr-138-duplicates.md` § "Drift candidates (NEEDS_INPUT signals)" (RFQ + missing shared operator)
+- `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/risk/acr-138-risk-profile.md` § "Defer-to-prototype signal check" (2 fired, 3 not-fired)
+- `/home/nes/projects/ai/planning/acr-138-rca-e2e-element-existence-check/.scratch/dispatch-prompt.md` § "Pre-resolved Phase 2.5 gates" (work-manager-operator pre-resolution)
+
+**Phase 3 input**: Phase 3 reads `risk/acr-138-risk-profile.md` for the per-surface mode map (all 8 exhaustive); reads this DECISIONS entry for residual disposition; restricts the proposal scope to `~/ai/`-internal edits.
+
 ## D-2026-05-08n — ACR-64 Phase 7 pre-CodeRabbit rebase onto current origin/master to pick up sibling ACR-125
 
 **WU**: ACR-64 (Mitigate pr-writer git diff base..HEAD symmetric-diff false positives). **Phase**: 7 (pre-CodeRabbit-loop preparation). **Decision**: `Refresh local master to origin/master and rebase the WU branch onto it before dispatching coderabbit-operator, applying the pre-resolved Mid-pipeline-drift=A residual policy to the sibling-merge that occurred during ACR-64's pipeline run`.

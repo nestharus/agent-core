@@ -360,3 +360,130 @@ def test_test_module_stays_structural_and_local(repo_root):
         assert not re.search(rf"(?m)^\s*(?:import|from)\s+{re.escape(module_name)}\b", source)
     assert not re.search(r"(?m)^\s*pytest\.main\(", source)
     assert not re.search(r"(?m)^\s*agents\s+-", source)
+
+
+IMPLEMENTATION_PIPELINE_RELATIVE_PATH = Path("workflows/implementation-pipeline.md")
+
+
+def _implementation_pipeline_phase_0_section(repo_root):
+    path = repo_root / IMPLEMENTATION_PIPELINE_RELATIVE_PATH
+    assert path.exists(), f"missing {IMPLEMENTATION_PIPELINE_RELATIVE_PATH}"
+    return _section_after_h2(
+        path.read_text(encoding="utf-8"),
+        ("Phase 0 - RCA (bugs only)",),
+    )
+
+
+def test_operator_e2e_page_state_first_section_present(repo_root):
+    """Risk: T1 behavioral ambiguity; Contract C requires E2E/frontend/page-state-first tokens."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    assert re.search(r"\b(?:E2E|end-to-end)\b", procedure, re.IGNORECASE)
+    _assert_contains_literal_ci(procedure, "frontend element")
+    _assert_contains_literal(procedure, "page-state-first")
+
+
+def test_operator_e2e_capture_artifacts_named(repo_root):
+    """Risk: T1 coverage gap; Contract C requires DOM/screenshot/accessibility artifacts."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    _assert_contains_literal(procedure, "DOM snapshot")
+    _assert_contains_literal(procedure, "screenshot")
+    _assert_contains_literal(procedure, "accessibility tree")
+
+
+def test_operator_e2e_selector_search_clause(repo_root):
+    """Risk: T1 behavioral ambiguity; Contract C requires selector/locator search in state."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    assert re.search(
+        r"\bsearch\b.{0,200}\b(?:captured|page)\s+state\b.{0,200}"
+        r"\b(?:selector|locator)\b|"
+        r"\bsearch\b.{0,200}\b(?:selector|locator)\b.{0,200}"
+        r"\b(?:captured|page)\s+state\b",
+        procedure,
+        re.IGNORECASE | re.DOTALL,
+    ), "missing selector/locator search against captured page state"
+
+
+def test_operator_e2e_branch_exists_to_load_time(repo_root):
+    """Risk: T1 behavioral ambiguity; Contract C requires element-exists -> load-time branch."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    _assert_contains_literal_ci(procedure, "element exists")
+    assert re.search(
+        r"\belement exists\b.{0,240}\bload[- ]time\b|"
+        r"\bload[- ]time\b.{0,240}\belement exists\b",
+        procedure,
+        re.IGNORECASE | re.DOTALL,
+    ), "missing element-exists branch to load-time RCA"
+
+
+def test_operator_e2e_branch_missing_to_structural_change(repo_root):
+    """Risk: T1 behavioral ambiguity; Contract C requires missing element -> structural-change."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    assert re.search(
+        r"\belement is missing\b|\belement does not exist\b|\bthe element does not exist\b",
+        procedure,
+        re.IGNORECASE,
+    ), "missing negative element-existence branch"
+    assert re.search(
+        r"\b(?:element is missing|element does not exist|the element does not exist)\b"
+        r".{0,260}\bstructural[- ]change\b|"
+        r"\bstructural[- ]change\b.{0,260}"
+        r"\b(?:element is missing|element does not exist|the element does not exist)\b",
+        procedure,
+        re.IGNORECASE | re.DOTALL,
+    ), "missing missing-element branch to structural-change RCA"
+
+
+def test_operator_e2e_no_timeout_tuning_for_missing_element(repo_root):
+    """Risk: T1 wrong-fix regression; Contract C forbids timeout tuning for missing element."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    _assert_contains_literal_ci(procedure, "do not recommend timeout tuning")
+
+
+def test_operator_e2e_unverifiable_fallback_token(repo_root):
+    """Risk: T1 vocabulary compatibility; Contract C requires existing caveat token."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    _assert_contains_literal(procedure, "unverifiable from code alone")
+    assert re.search(
+        r"\b(?:page[- ]state|captured state)\b.{0,240}"
+        r"\bunverifiable from code alone\b|"
+        r"\bunverifiable from code alone\b.{0,240}"
+        r"\b(?:page[- ]state|captured state)\b",
+        procedure,
+        re.IGNORECASE | re.DOTALL,
+    ), "missing page-state no-evidence fallback"
+
+
+def test_operator_e2e_worked_example_has_both_branches(repo_root):
+    """Risk: T1 lifecycle visibility; Contract C requires worked example with both outcomes."""
+    procedure = _section_after_h2(_operator_text(repo_root), ("Procedure",))
+
+    example_match = re.search(r"\bExample\b", procedure)
+    assert example_match, "missing worked example"
+    example = procedure[example_match.start() :]
+    assert re.search(
+        r"(?:\[data-testid=\"[^\"]+\"\]|#[A-Za-z0-9_-]+|\.[A-Za-z0-9_-]+|"
+        r"[A-Za-z]+\[name=\"[^\"]+\"\])",
+        example,
+    ), "worked example must cite a concrete selector pattern"
+    assert re.search(r"\bload[- ]time\b|\bload/render\b", example, re.IGNORECASE)
+    assert re.search(r"\bstructural[- ]change\b", example, re.IGNORECASE)
+
+
+def test_implementation_pipeline_phase_0_e2e_pointer_present(repo_root):
+    """Risk: T2 lifecycle visibility; Contract C requires Phase 0 thin pointer."""
+    phase_0 = _implementation_pipeline_phase_0_section(repo_root)
+
+    rule_match = re.search(
+        r"(?im)^\s*-\s*Rule:\s+.*\bE2E\b.*frontend element.*"
+        r"page-state-first.*`agents/incident-investigator\.md`.*\bbefore\b.*"
+        r"load[- ]time",
+        phase_0,
+    )
+    assert rule_match, "missing Phase 0 E2E frontend-element page-state-first pointer"
