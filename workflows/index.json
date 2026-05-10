@@ -312,6 +312,28 @@
         ]
       }
     },
+    "rca-prototype": {
+      "path": "workflows/rca-prototype.md",
+      "workflow": {
+        "id": "rca-prototype"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs a light two-phase prototype RCA loop: root cause the already-observed failure, dispatch one narrow fix, verify only the same trigger, and hand back",
+          "treats the failing behavior test or QA observation/screenshot as the reproduction signal"
+        ],
+        "inputs": [
+          "failure_id, trigger_type test or qa, trigger_evidence_path, repo_root, worktree_path, planning_dir, scratch_dir, handback_callback, and the trigger-specific rerun or QA selector"
+        ],
+        "non_goals": [
+          "does not replace the full production RCA workflow and does not broaden the failing prototype trigger into unrelated validation work"
+        ],
+        "orchestrator": "prototype-rca-orchestrator",
+        "outputs": [
+          "per-iteration RCA and fix artifacts under ${planning_dir}/rca/, targeted rerun logs under ${scratch_dir}/logs/, and a handback envelope"
+        ]
+      }
+    },
     "release-management": {
       "path": "workflows/release-management.md",
       "workflow": {
