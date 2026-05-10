@@ -79,14 +79,14 @@ GATE_PHASE_SENTINELS = [
     "reconcile",
     "final closure",
 ]
-FORWARD_REFERENCE_PATHS = [
+WIRED_OPERATOR_PATHS = [
     "~/ai/agents/release-orchestrator.md",
     "~/ai/agents/release-cut-operator.md",
     "~/ai/agents/release-hotfix-operator.md",
     "~/ai/agents/release-promote-operator.md",
     "~/ai/agents/release-reconcile-operator.md",
 ]
-FORWARD_REFERENCE_TICKETS = ["NES-243", "NES-244", "NES-245", "NES-246", "NES-247"]
+WIRED_OPERATOR_TICKETS = ["NES-243", "NES-244", "NES-245", "NES-246", "NES-247"]
 PHILOSOPHY_SOURCE_PATH = (
     "/home/nes/work/rfqautomation-linux/tmp/scratch/release-pipeline/philosophy.md"
 )
@@ -358,25 +358,26 @@ def test_required_philosophy_principles_present(workflow_document):
     _contains_all(philosophy, REQUIRED_PHILOSOPHY_PRINCIPLES)
 
 
-def test_forward_reference_paths_present(workflow_document):
+def test_wired_operator_paths_present(workflow_document):
     body = _require_workflow_document(workflow_document)["body"]
     cross_references = _section_after_heading(body, "## Cross-references")
 
-    _contains_all(cross_references, FORWARD_REFERENCE_PATHS)
+    _contains_all(cross_references, WIRED_OPERATOR_PATHS)
 
 
-def test_forward_reference_marker_present(workflow_document):
+def test_wired_operator_marker_present(workflow_document):
     body = _require_workflow_document(workflow_document)["body"]
     cross_references = _section_after_heading(body, "## Cross-references")
 
-    assert "forward reference" in cross_references
+    assert "wired" in cross_references
+    assert "forward reference" not in cross_references
 
 
-def test_forward_reference_nes_ticket_numbers_present(workflow_document):
+def test_wired_operator_nes_ticket_numbers_present(workflow_document):
     body = _require_workflow_document(workflow_document)["body"]
     cross_references = _section_after_heading(body, "## Cross-references")
 
-    _contains_all(cross_references, FORWARD_REFERENCE_TICKETS)
+    _contains_all(cross_references, WIRED_OPERATOR_TICKETS)
 
 
 def test_anti_scope_section_encodes_required_boundaries(workflow_document):

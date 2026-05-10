@@ -427,7 +427,7 @@ def test_cq_t_14_anti_scope_lists_required_exclusions(workflow_document):
         r"does\s+not\s+redefine\s+A1|duplicate.*convention.*rule descriptions",
         r"does\s+not\s+edit.*child auditor",
         r"nesting.*inline.*duplicate|duplicate.*inline.*nesting",
-        r"does\s+not\s+wire.*implementation-pipeline.*Phase 4",
+        r"implementation-pipeline.*Phase 4.*wired.*implementation-pipeline-orchestrator",
         r"does\s+not\s+replace.*audit\.md.*PR-review.*process-tree-auditor",
     ]
     for pattern in exclusion_patterns:

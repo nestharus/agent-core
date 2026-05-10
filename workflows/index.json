@@ -132,7 +132,7 @@
         "non_goals": [
           "does not implement fixes, edit child auditors, or replace child auditor procedures",
           "does not redefine A1 or duplicate the convention's rule descriptions",
-          "does not wire implementation-pipeline Phase 4 entry - that is downstream WU work"
+          "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md § Phase 4 code-quality gate"
         ],
         "orchestrator": "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller",
         "outputs": [
@@ -216,7 +216,7 @@
         ],
         "non_goals": [
           "does not bootstrap a concrete project's linters while running only the workflow definition",
-          "does not create or define the TBD linter-inventory-agent operator",
+          "does not create or define a linter-inventory-agent operator; inventory runs inline unless caller supplies an external artifact",
           "does not enforce A1 rules that lack existing linter ecosystem coverage"
         ],
         "orchestrator": "root orchestrator or workflow operator invoking linter-bootstrap",

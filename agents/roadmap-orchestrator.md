@@ -319,6 +319,16 @@ Same pattern as Stage 1b. Construct three prompts from `roadmap-risk-types.md`, 
 2. **Drift** (`claude-opus`) — Does engineering add/drop/reinterpret executive priorities?
 3. **Feasibility** (`gpt-high`) — Are effort estimates realistic?
 
+**Prototype escape hatch for substrate feasibility.** Before accepting a non-LOW feasibility risk as a normal revision loop, check whether the engineering-feasibility report says the foundation substrate cannot be validated by document/code reading alone and needs running-code evidence. Treat either an explicit `PROTOTYPE_NEEDED` line or a HIGH/MEDIUM finding whose resolution path says "validate by building/running/integrating the substrate" as a prototype trigger.
+
+When the trigger fires:
+
+1. Set `roadmap_layer_slug=layer-2-engineering-${short_slug}` from the substrate or foundation-phase name and set `prototype_planning_dir=${planning_dir}/prototypes/${roadmap_layer_slug}`.
+2. Compose `${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-prototype.md` instructing `prototype-orchestrator` to answer the specific feasibility question. Inputs: `prototype_id=${roadmap_layer_slug}`, `question` from the engineering-feasibility risk finding, `repo_root`, `worktree_path=${repo_root}/worktrees/prototype-${roadmap_layer_slug}` or the umbrella equivalent, `planning_dir=${prototype_planning_dir}`, `scratch_dir=${prototype_planning_dir}/.scratch/`, and `roadmap_layer=Layer 2:${planning_dir}/engineering-roadmap.md`.
+3. Dispatch exactly one prototype sub-flow invocation: `agents -m claude-opus -a prototype-orchestrator -p ${repo_root}/worktrees/prototype-${roadmap_layer_slug} -f ${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-prototype.md 2>&1 | tee ${scratch_dir}/logs/roadmap-${roadmap_layer_slug}-prototype.log`.
+4. Refuse to pass Stage 2c until `${prototype_planning_dir}/dossier/answer.md` and `${prototype_planning_dir}/dossier/spawned-tickets.md` exist and are non-empty. If the dispatch fails or either dossier artifact is missing, write `${scratch_dir}/questions/q-<uuidv4>.question.json` and halt with `NEEDS_INPUT:<absolute_question_artifact_path>` naming the failed prototype handoff.
+5. Compose `${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-engineering-revision-from-prototype.md` instructing `engineering-roadmap-proposer` to revise `${planning_dir}/engineering-roadmap.md` using `${prototype_planning_dir}/dossier/answer.md`, `${prototype_planning_dir}/dossier/risk-profile.md`, and `${prototype_planning_dir}/dossier/spawned-tickets.md` as validation evidence. Dispatch `agents -m gpt-high -a engineering-roadmap-proposer -p ${worktree} -f ${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-engineering-revision-from-prototype.md 2>&1 | tee ${scratch_dir}/logs/roadmap-${roadmap_layer_slug}-engineering-revision-from-prototype.log`, then re-run the full Stage 2c risk gate.
+
 **All three must return LOW.** If any is not LOW, follow the resolution path in `roadmap-risk-types.md` and re-run the full gate.
 
 #### Stage 2d: Surface Check
@@ -366,6 +376,16 @@ Same pattern. Construct three prompts from `roadmap-risk-types.md`, section "AI 
 1. **Decomposition** (`claude-opus`) — Are work unit boundaries clean?
 2. **Dependency** (`claude-opus`) — Is the dependency graph acyclic?
 3. **Coverage** (`gpt-high`) — Is every engineering item decomposed?
+
+**Prototype escape hatch for WU decomposition.** Before accepting a non-LOW decomposition or dependency risk as a normal revision loop, check whether the report says a Work Unit contract, schema, hookpoint, or parallelization boundary cannot be named without trying the implementation. Treat either an explicit `PROTOTYPE_NEEDED` line or a HIGH/MEDIUM finding whose resolution path says "build a prototype to clarify decomposition" as a prototype trigger.
+
+When the trigger fires:
+
+1. Set `roadmap_layer_slug=layer-3-ai-${short_slug}` from the phase or WU name and set `prototype_planning_dir=${planning_dir}/prototypes/${roadmap_layer_slug}`.
+2. Compose `${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-prototype.md` instructing `prototype-orchestrator` to answer the decomposition question. Inputs: `prototype_id=${roadmap_layer_slug}`, `question` from the AI decomposition/dependency risk finding, `repo_root`, `worktree_path=${repo_root}/worktrees/prototype-${roadmap_layer_slug}` or the umbrella equivalent, `planning_dir=${prototype_planning_dir}`, `scratch_dir=${prototype_planning_dir}/.scratch/`, and `roadmap_layer=Layer 3:${planning_dir}/ai-roadmap.md`.
+3. Dispatch exactly one prototype sub-flow invocation: `agents -m claude-opus -a prototype-orchestrator -p ${repo_root}/worktrees/prototype-${roadmap_layer_slug} -f ${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-prototype.md 2>&1 | tee ${scratch_dir}/logs/roadmap-${roadmap_layer_slug}-prototype.log`.
+4. Refuse to pass Stage 3b until `${prototype_planning_dir}/dossier/answer.md` and `${prototype_planning_dir}/dossier/spawned-tickets.md` exist and are non-empty. If the dispatch fails or either dossier artifact is missing, write `${scratch_dir}/questions/q-<uuidv4>.question.json` and halt with `NEEDS_INPUT:<absolute_question_artifact_path>` naming the failed prototype handoff.
+5. Compose `${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-ai-revision-from-prototype.md` instructing `ai-roadmap-proposer` to revise `${planning_dir}/ai-roadmap.md` using `${prototype_planning_dir}/dossier/answer.md`, `${prototype_planning_dir}/dossier/risk-profile.md`, and `${prototype_planning_dir}/dossier/spawned-tickets.md` as validation evidence. Dispatch `agents -m gpt-high -a ai-roadmap-proposer -p ${worktree} -f ${scratch_dir}/prompts/roadmap-${roadmap_layer_slug}-ai-revision-from-prototype.md 2>&1 | tee ${scratch_dir}/logs/roadmap-${roadmap_layer_slug}-ai-revision-from-prototype.log`, then re-run the full Stage 3b risk gate.
 
 **All three must return LOW.** If any is not LOW, follow the resolution path and re-run the full gate.
 

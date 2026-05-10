@@ -83,21 +83,21 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem and § Composi
 - `pr-batch-poller` fetches the status of N in-flight PRs in **one** GraphQL call. It does not know about scheduling or session lifecycle.
 - `wu-session-resumer` agent wakes a single session given a merge event. It does not know about polling.
 
-This is intentionally NOT one binary that "polls hourly and wakes sessions" — that would entangle three concerns. The composition lives in a workflow doc (TBD) that describes wiring the three.
+This is intentionally NOT one binary that "polls hourly and wakes sessions" — that would entangle three concerns. Wired in `~/ai/workflows/wu-session-wake.md` § Procedure.
 
 The wake mechanism does NOT live in any application-layer project (e.g. `agent-runner`). Per `~/ai/VALUES.md` § Lean clients, ecosystem-wide infrastructure belongs in `~/ai/`, not in any single client repo.
 
-## TODO (open work)
+## Wiring Status
 
-This convention is **skeletal**. Several pieces are not yet implemented:
+The lifecycle rule is split across concrete operators, tools, and one composition workflow:
 
-- `~/ai/tools/scheduler/` — generic scheduled-task primitive. Skeleton at `~/ai/tools/scheduler/README.md`. No implementation.
-- `~/ai/tools/pr-batch-poller/` — batched GitHub PR status query. Skeleton at `~/ai/tools/pr-batch-poller/README.md`. No implementation.
-- `~/ai/agents/wu-session-resumer.md` — agent that wakes a single session given a merge event. Does not yet exist.
-- Workflow document wiring the three. Lives at `~/ai/workflows/wu-session-wake.md` (TBD).
-- The `successor_session_brief` field requires a way to chain WUs: the spawn of WU-N+1 reads its predecessor's session manifest to know it's downstream. The orchestrator's Phase 0 needs to learn this.
-- Storage location of the manifest. Per-project `~/projects/<name>/planning/<branch>/session.json` is the obvious place; an aggregate index at `~/projects/<name>/planning/sessions.index.json` would let the wake dispatcher find sessions by ticket key or branch.
-- Post-merge contract / drift check tooling overlap with `~/ai/conventions/rebase-verification.md`. Refactor the two so one operator handles both cases.
+- `~/ai/tools/scheduler/` — generic scheduled-task primitive. <!-- INTENTIONAL: scheduler runtime implementation is tool work, not an operator procedural sub-step; this convention only names the scheduling concern boundary. -->
+- `~/ai/tools/pr-batch-poller/` — batched GitHub PR status query. Wired in `~/ai/tools/pr-batch-poller/README.md` § CLI grammar and § Resumer-handoff shape.
+- `~/ai/agents/wu-session-resumer.md` — wakes a single session given a merge event. Wired in `~/ai/agents/wu-session-resumer.md` § Procedure.
+- Wake composition across scheduler, poller, and resumer. Wired in `~/ai/workflows/wu-session-wake.md` § Procedure.
+- `successor_session_brief` chaining. Wired in `~/ai/agents/wu-session-resumer.md` § Procedure steps 10-13 for handoff writing and `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 0 for predecessor manifest import during WU-N+1 spawn.
+- Manifest storage. Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 0 for `${planning_dir}/session.json` and `${planning_dir}/../sessions.index.json`, and updated in § Phase 9 before dormancy.
+- Post-merge contract and drift checks. Wired in `~/ai/agents/wu-session-resumer.md` § Procedure steps 7-8. <!-- INTENTIONAL: the remaining overlap with `~/ai/conventions/rebase-verification.md` is design consolidation work, not a missing lifecycle dispatch step. -->
 
 ## Cross-references
 

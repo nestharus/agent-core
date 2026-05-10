@@ -220,9 +220,11 @@ for resume/conversation targeting. It is not a synonym for Connection,
 System-conn, or Project-conn, and it does not replace the session vocabulary
 owned by adjacent session conventions.
 
-Detailed CLI schema is deferred to G6 (NES-187). G6 owns executable path,
+Detailed CLI schema belongs to G6 (NES-187). G6 owns executable path,
 prompt mode, session capture, quota, refresh, provider/model/session/cwd
 field identity, and any agent-runner-specific renaming.
+<!-- INTENTIONAL: This is schema-design ownership, not an operator runtime
+sub-step; no orchestrator wiring belongs in this G1 vocabulary convention. -->
 
 ## Lifecycle Vocabulary
 
@@ -268,9 +270,15 @@ contracts in G2..G6 can speak the same language.
 - Branch/worktree/local filesystem scope remains workflow or project-layout
   vocabulary unless a service Project-conn genuinely targets a
   repository/branch.
-- Storage, discovery, and lookup are deferred to G2 (NES-175).
-- Per-service schemas for Linear, JIRA, and GitHub are deferred to G3..G5.
-- Detailed CLI schema is deferred to G6 (NES-187).
+- Storage, discovery, and lookup belong to G2 (NES-175).
+  <!-- INTENTIONAL: G2 defines connection persistence/discovery mechanics;
+  this G1 convention does not introduce an operator procedural sub-step. -->
+- Per-service schemas for Linear, JIRA, and GitHub belong to G3..G5.
+  <!-- INTENTIONAL: G3..G5 define service-specific schema contracts;
+  this G1 convention does not introduce orchestrator dispatch wiring. -->
+- Detailed CLI schema belongs to G6 (NES-187).
+  <!-- INTENTIONAL: G6 defines CLI provider schema details; this G1
+  convention does not introduce runtime dispatch or enforcement wiring. -->
 
 ## Adjacent References
 

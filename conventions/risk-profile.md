@@ -12,6 +12,8 @@ A project that adopts this convention also maintains a **project-level risk prof
 
 Each touched surface (file, symbol, endpoint, job, workflow, contract) is scored on these axes. Score each `LOW` / `MEDIUM` / `HIGH`. Every `MEDIUM` or `HIGH` requires evidence — a path or symbol or query the next reader can verify.
 
+<!-- INTENTIONAL: `# TODO` / `FIXME` / `HACK` below are brittleness markers to score in touched code, not deferred wiring notes for this convention. -->
+
 | Axis | LOW | MEDIUM | HIGH |
 |---|---|---|---|
 | **Coverage gap** | The surface has **behavior tests** that exercise the surface's code paths and assert outputs against intended behavior. | Tests exist but are smoke-only or assertion-thin, OR the surface is a behavior-having component covered only by **structural shape-guards** (tests that read a config / YAML / schema and assert its shape rather than running the surface). Shape-guards catch deletion regressions but do not verify behavior; on a behavior-having surface they are not equivalent to behavior tests. | No tests, OR tests exist but encode the wrong behavior, OR the behavior is asserted only by integration tests that mask the unit-level contract. |

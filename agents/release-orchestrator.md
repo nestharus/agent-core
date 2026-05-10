@@ -82,9 +82,15 @@ Validate that every supplied path is absolute where the workflow requires a path
 
 ### Phase 1 - cut
 
-Validate `release_id`, branch names, manifest, required-checks policy, settings state, and readiness of `develop_branch_name`. Compose a prompt for `~/ai/agents/release-cut-operator.md` (forward reference; NES-244) and dispatch it with `agents -m gpt-high -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-cut.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-cut.log`.
+Validate `release_id`, branch names, manifest, required-checks policy, settings state, and readiness of `develop_branch_name`. Compose `${scratch_dir}/prompts/${release_id}-cut.md` for `~/ai/agents/release-cut-operator.md`. The prompt must pass the required inputs and require durable cut evidence at `${planning_dir}/release/${release_id}/cut-evidence.md`.
 
-Gate the returned evidence: `release_branch_name` under `release/*` must exist or be recorded as created, release scope/version readiness must be in `release_manifest_path` or `manifest_path`, and settings gaps must have `settings_state_or_runbook_ticket`. Advance to freeze only when the cut evidence is durable.
+Dispatch the cut mechanics with one bash invocation:
+
+```bash
+agents -m gpt-high -a release-cut-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-cut.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-cut.log
+```
+
+Gate the returned evidence: `${planning_dir}/release/${release_id}/cut-evidence.md` and `${scratch_dir}/logs/${release_id}-cut.log` must exist, `release_branch_name` under `release/*` must exist or be recorded as created, release scope/version readiness must be in `release_manifest_path` or `manifest_path`, and settings gaps must have `settings_state_or_runbook_ticket`. Refuse to advance with `BLOCKED:missing-required-input`, `BLOCKED:settings-runbook-required`, or the child operator's concrete `BLOCKED:` reason when the evidence is absent, malformed, or contradictory. Advance to freeze only when the cut evidence is durable.
 
 ### Phase 2 - freeze
 
@@ -92,25 +98,43 @@ Coordinate freeze directly. Require an active `freeze_window`, ready `qa_evidenc
 
 ### Phase 3 - hotfix-cherry-pick
 
-Dispatch `~/ai/agents/release-hotfix-operator.md` (forward reference; NES-245) when a release-blocking or customer-blocking defect appears and `hotfix_policy` permits. The prompt must require blast-radius classification, rehearsal or override evidence for high-risk paths, a manifest update, and a return recommendation to freeze, promote, or reconcile.
+When a release-blocking or customer-blocking defect appears and `hotfix_policy` permits, compose `${scratch_dir}/prompts/${release_id}-hotfix.md` for `~/ai/agents/release-hotfix-operator.md`. The prompt must pass the required inputs and require blast-radius classification, rehearsal or override evidence for high-risk paths, a manifest update, durable hotfix evidence at `${planning_dir}/release/${release_id}/hotfix-evidence.md`, and a return recommendation to freeze, promote, or reconcile.
 
-After dispatch, gate the hotfix evidence. Low-blast-radius fixes may return to freeze or promote when recorded. High-blast-radius or approval-sensitive paths require rehearsal and approval evidence; otherwise stop with `BLOCKED:hotfix-rehearsal-missing` or return `NEEDS_INPUT:<question_artifact_path>`.
+Dispatch the hotfix mechanics with one bash invocation:
+
+```bash
+agents -m gpt-high -a release-hotfix-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-hotfix.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-hotfix.log
+```
+
+After dispatch, gate the hotfix evidence. `${planning_dir}/release/${release_id}/hotfix-evidence.md` and `${scratch_dir}/logs/${release_id}-hotfix.log` must exist. Low-blast-radius fixes may return to freeze or promote when recorded. High-blast-radius or approval-sensitive paths require rehearsal and approval evidence; otherwise stop with `BLOCKED:hotfix-rehearsal-missing`, the child operator's concrete `BLOCKED:` reason, or return `NEEDS_INPUT:<question_artifact_path>` only for human-owned gates.
 
 ### Phase 4 - promote
 
-Dispatch `~/ai/agents/release-promote-operator.md` (forward reference; NES-246) after freeze evidence is complete, the release candidate is approved, hotfix records are reconciled enough for promotion, and Tier-3/customer-visible approval is present when required. The prompt must require promotion evidence to `main_branch_name`, manifest promotion state, and a clear handoff for tag mechanics.
+After freeze evidence is complete, the release candidate is approved, hotfix records are reconciled enough for promotion, and Tier-3/customer-visible approval is present when required, compose `${scratch_dir}/prompts/${release_id}-promote.md` for `~/ai/agents/release-promote-operator.md`. The prompt must pass the required inputs and require promotion evidence to `main_branch_name`, manifest promotion state, tag-ready evidence, and durable promote/tag evidence at `${planning_dir}/release/${release_id}/promote-tag-evidence.md`.
 
-Gate the result. Failures return to freeze or hotfix-cherry-pick when model-owned evidence can still be corrected; customer-visible approval gaps stop with `BLOCKED:promotion-approval-missing` or `NEEDS_INPUT:<question_artifact_path>`.
+Dispatch the promote mechanics with one bash invocation:
+
+```bash
+agents -m gpt-high -a release-promote-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-promote.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-promote.log
+```
+
+Gate the result. `${planning_dir}/release/${release_id}/promote-tag-evidence.md` and `${scratch_dir}/logs/${release_id}-promote.log` must exist. Failures return to freeze or hotfix-cherry-pick when model-owned evidence can still be corrected; customer-visible approval gaps stop with `BLOCKED:promotion-approval-missing`, the child operator's concrete `BLOCKED:` reason, or `NEEDS_INPUT:<question_artifact_path>` only for human-owned gates.
 
 ### Phase 5 - tag
 
-Keep tag as a distinct orchestrator phase even though `release-promote-operator.md` owns the tag mechanics under orchestrator control. Require verified promotion to `main_branch_name`, final version identity matching `tag_pattern`, finalized manifest state, and created or recorded release tag evidence. If the tag evidence is absent or inconsistent, stop before closure.
+Keep tag as a distinct orchestrator phase even though `release-promote-operator.md` owns the tag mechanics under orchestrator control. Read `${planning_dir}/release/${release_id}/promote-tag-evidence.md` from Phase 4 and require verified promotion to `main_branch_name`, final version identity matching `tag_pattern`, finalized manifest state, and created or recorded release tag evidence. If the tag evidence is absent or inconsistent, stop before closure with `BLOCKED:tag-pattern-mismatch`, `BLOCKED:manifest-tag-mismatch`, `BLOCKED:inconsistent-tag-evidence`, or the child operator's concrete `BLOCKED:` reason.
 
 ### Phase 6 - reconcile
 
-Dispatch `~/ai/agents/release-reconcile-operator.md` (forward reference; NES-247) after a tagged release or landed hotfix work exists and `reconcile_obligations` are explicit. The prompt must require carry-back to `develop_branch_name`, active release-line alignment, manifest closure fields, branch-diff evidence, residual exceptions, and final closure evidence.
+After a tagged release or landed hotfix work exists and `reconcile_obligations` are explicit, compose `${scratch_dir}/prompts/${release_id}-reconcile.md` for `~/ai/agents/release-reconcile-operator.md`. The prompt must pass the required inputs and require carry-back to `develop_branch_name`, active release-line alignment, manifest closure fields, branch-diff evidence, residual exceptions, and durable final closure evidence at `${planning_dir}/release/${release_id}/reconcile-evidence.md`.
 
-Gate the result. If hotfix divergence, release-line mismatch, or manifest discrepancy remains, stop with `BLOCKED:reconcile-open`. Close the lifecycle only when promotion, tag evidence, human-owned approvals, and reconciliation closure are all durable.
+Dispatch the reconcile mechanics with one bash invocation:
+
+```bash
+agents -m gpt-high -a release-reconcile-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-reconcile.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-reconcile.log
+```
+
+Gate the result. `${planning_dir}/release/${release_id}/reconcile-evidence.md` and `${scratch_dir}/logs/${release_id}-reconcile.log` must exist. If hotfix divergence, release-line mismatch, or manifest discrepancy remains, stop with `BLOCKED:reconcile-open` or the child operator's concrete `BLOCKED:` reason. Close the lifecycle only when promotion, tag evidence, human-owned approvals, and reconciliation closure are all durable.
 
 ## Output Contract
 
@@ -132,7 +156,7 @@ Gate the result. If hotfix divergence, release-line mismatch, or manifest discre
 
 ## Anti-Scope
 
-- Do NOT author sub-operators NES-244..247. The four sub-operators (NES-244..247) are intentional forward references: `release-cut-operator.md`, `release-hotfix-operator.md`, `release-promote-operator.md`, and `release-reconcile-operator.md`.
+- Do NOT author sub-operators NES-244..247. The four sub-operators (NES-244..247) are wired mechanics files: `release-cut-operator.md`, `release-hotfix-operator.md`, `release-promote-operator.md`, and `release-reconcile-operator.md`.
 - Do NOT retrofit implementation-pipeline-orchestrator.md or create shared infrastructure with it. It is a shape model, not a file to modify.
 - Do NOT execute releases. This orchestrator does not execute releases, mutate repository settings, publish customer-visible artifacts, or bypass human-owned approval gates.
 - Do NOT author project-specific wrappers, local release configuration, RFQ-specific manifest schemas, or worked release examples.

@@ -59,8 +59,8 @@ The disposition is recorded in `${planning_dir}/audit-history.md` and, when it c
 
 Treating the rebase as "git plumbing" and not running any of the four checks. A rebase is a code change as much as any line edit; it shifts the surrounding context without showing in the diff. The test suite passing pre-rebase says nothing about its passing post-rebase. The cost of the verification is bounded; the cost of skipping it is hidden bugs that surface days later.
 
-## TODO (open work)
+## Wiring Status
 
-- Check #4's operator now exists at `~/ai/agents/rebase-drift-checker.md`; manual drift `NEEDS_INPUT` is no longer the normal path.
-- Define the per-project coverage tooling adapter so check #2 is uniform across Rust / Python / TypeScript projects.
-- Decide whether contract / behavior verification (check #3) should produce a verdict artifact (e.g., `${planning_dir}/risk/<wu>-rebase-contract-verify.md`) for downstream auditing.
+- Check #2 coverage-adapter handling: Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Rebase Verification Gate step 3. The orchestrator dispatches `coverage-analyzer` with `task=regression-check`, requires `${planning_dir}/risk/${wu_lower}-rebase-coverage.md`, and blocks as `BLOCKED:coverage-adapter-missing` when the project has no usable coverage adapter.
+- Check #3 contract / behavior verification: Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Rebase Verification Gate step 4. The orchestrator dispatches `phase6-tests-contracts-alignment-reviewer`, requires `${planning_dir}/risk/${wu_lower}-rebase-contract-verify.md`, and blocks unless the verdict is `PASS`.
+- Check #4 drift detection: Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Rebase Verification Gate step 5. The orchestrator dispatches `rebase-drift-checker`, requires `${planning_dir}/risk/${wu_lower}-rebase-drift.md`, and blocks unless the final stdout verdict is `rebase-drift: no drift; report=${planning_dir}/risk/${wu_lower}-rebase-drift.md`.

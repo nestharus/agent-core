@@ -33,6 +33,7 @@ Critics in a pass are independent. Each critic sees the artifact and the relevan
 ## Proposers do not also critique
 
 A dispatch where the same agent creates and judges the artifact is not running the proposer/critic pattern. It may still be normal author diligence or a checklist pass, but it does not satisfy a required critic gate. This rule is normative, not syntactically enforced.
+<!-- INTENTIONAL: This convention states the review semantics only. Workflow-local operators own their own dispatch steps, and the no-machine-enforcement convention keeps this out of runtime/syntactic enforcement. -->
 
 ## What this pattern is NOT
 
@@ -60,6 +61,7 @@ Workflow-local verdict vocabulary, critic count, escalation rules, and oscillati
 
 These citations are read-only references to existing workflow authority. The convention names the shared meta-pattern; it does not rewrite any local workflow rule.
 
-## Cascade is a future-WU possibility
+## Cascade is out of scope
 
-NES-149 codifies the meta-pattern only. Cascade or consolidation across all instantiations is a future-WU possibility, not a NES-149 commitment.
+NES-149 codifies the meta-pattern only. It does not require cascade or consolidation across all instantiations.
+<!-- INTENTIONAL: There is no orchestrator step to wire here; this is an explicit boundary on NES-149 scope, not deferred procedure. -->

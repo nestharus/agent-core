@@ -87,6 +87,8 @@ Dossier structure (`<project>/planning/<prototype-id>/dossier/`):
 - `branch-disposition.md` — what to do with the prototype branch: merge as-is (rare), cherry-pick into spawned tickets (common), keep for reference (small percentage), discard (when the answer was "this approach doesn't work"). The branch disposition enum remains `merge | cherry-pick | keep | discard`.
 - `reading-list.md` (optional) — pointers to existing code/docs/tests that anyone implementing on the dossier's recommendation should read first.
 
+<!-- INTENTIONAL: "deferred ticket", "deferred marker", and "re-defer" below are ticket-lifecycle terms wired through prototype-orchestrator P4 defer_source handling, not deferred implementation notes. -->
+
 When the prototype was started with `defer_source`, `branch-disposition.md` also includes a separate section for the original deferred ticket. The existing branch disposition section and enum are preserved; the new section is only the original-ticket lifecycle recommendation:
 
 ```markdown
@@ -234,7 +236,7 @@ The implementation pipeline at `~/ai/workflows/implementation-pipeline.md` Phase
 - The lifecycle map (sub-step 2.5.2) cannot be drawn — too much of the touched process is operational knowledge, not repo-derivable.
 - The proposer in Phase 3 cannot stay within a coherent scope; the proposal keeps growing.
 
-When any of these fire, the orchestrator emits a `NEEDS_INPUT` to the root with options: `proceed in exhaustive mode (the WU is just big)`, `defer to prototype (framing is too unclear, prototype to clarify, then re-ticket)`, `terminate WU (the work is wrong-shaped, abandon)`. The user picks. If `defer to prototype` is picked, the orchestrator dispatches the prototype-orchestrator (`~/ai/agents/prototype-orchestrator.md`) with the WU's question as the prototype's question, and the implementation orchestrator halts. The prototype's dossier later spawns new tickets that re-enter the implementation pipeline with clearer scope.
+When any of these fire, the orchestrator emits a `NEEDS_INPUT` to the root with options: `proceed in exhaustive mode (the WU is just big)`, `defer to prototype (framing is too unclear, prototype to clarify, then re-ticket)`, `terminate WU (the work is wrong-shaped, abandon)`. The user picks. If `defer to prototype` is picked, the implementation orchestrator dispatches the prototype-orchestrator with an ACR-151 invocation and halts before Phase 3. Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 2.5 human gate step 7. The prototype's dossier later spawns new tickets that re-enter the implementation pipeline with clearer scope.
 
 ### Roadmap workflow
 
@@ -243,7 +245,7 @@ When any of these fire, the orchestrator emits a `NEEDS_INPUT` to the root with 
 - A Layer 2 engineering-roadmap names a substrate for foundation phases. If the substrate's feasibility is unclear (will this database/queue/runtime work for our load? does this third-party integrate at all?), a prototype validates it before the layer's risk gates pass. The prototype's dossier informs the engineering-roadmap revision.
 - A Layer 3 ai-roadmap decomposes a phase into Work Units. If a WU's contract / parallelizability / schema cannot be named without trying it, a prototype clarifies it. The dossier then drives the WU's eventual ticket and the WU's contract.
 
-The roadmap-orchestrator (when wired to recognize prototype-needs) can dispatch the prototype-orchestrator as a sub-flow. The prototype's dossier is then consumed by the roadmap proposer in the next revision round.
+The roadmap-orchestrator dispatches the prototype-orchestrator as a sub-flow when Layer 2 feasibility or Layer 3 decomposition/dependency risk findings require running-code evidence. Wired in `~/ai/agents/roadmap-orchestrator.md` § Stage 2c "Prototype escape hatch for substrate feasibility" and § Stage 3b "Prototype escape hatch for WU decomposition". The prototype's dossier is then consumed by the roadmap proposer in the next revision round.
 
 A prototype dispatched from a roadmap layer (Layer 2 or Layer 3 escape hatch) typically produces more spawned-tickets than an implementation-deferred prototype, and many of those tickets land at lower confidence because the surface was being explored, not characterized. That's expected. The dossier's job is to seed the implementation backlog with a coarse but honest estimate; later P3 refinement (Phase 3 of the consumed implementation pipeline) raises confidence per ticket.
 
