@@ -78,14 +78,15 @@ The work happens here. Your job is to dispatch, supervise loosely, and arbitrate
    - Says explicitly: "no gates, no hygiene, no commit discipline. Make it work. Capture what you learned in `${planning_dir}/dossier/challenges.md` (append; do not overwrite). Stop when you have an answer or you've hit a wall and need arbitration."
    - Names which evidence files to write under `${planning_dir}/dossier/evidence/` for any non-trivial finding.
    - Permits the agent to dispatch sub-agents (research, code-tracer, test-writer for proof tests).
-3. **Dispatch hack-agents in parallel.** `agents -m gpt-high -p ${worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. Background-execute. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from.
-4. **Worktree isolation**: if multiple hack agents will write tracked files concurrently, follow `~/ai/conventions/worktree-isolation.md` — give each agent its own worktree under `${repo_root}/worktrees/prototype-${prototype_id}-${vector_name}/`. Merge or cherry-pick into the main prototype worktree at the start of P2. For prototypes where vectors are read-only or write-disjoint, one shared worktree is fine.
-5. **Supervise loosely.** Read agent outputs as they land. Surface a `NEEDS_INPUT` to the root **only** when:
+3. **Resolve each vector's execution path.** For branch-work or tracked-file mutation vectors, create or use one dedicated vector worktree and set `${vector_worktree_path}` to that path. For read-only vectors, `${vector_worktree_path}` may point at shared read-state context.
+4. **Dispatch hack-agents in parallel.** `agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. Background-execute. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from.
+5. **Worktree isolation**: Each prototype vector that performs branch work or tracked-file mutation gets its own worktree per `~/ai/conventions/worktree-isolation.md`; read-only vectors may share read-state context only. Merge or cherry-pick into the main prototype worktree at the start of P2.
+6. **Supervise loosely.** Read agent outputs as they land. Surface a `NEEDS_INPUT` to the root **only** when:
    - An agent reports it cannot decide between two viable paths and needs arbitration.
    - An agent reports a finding that invalidates the prototype's question (e.g. "this is feasible, but only because Y, and Y is being deprecated next quarter").
    - A vector hits a hard external blocker (rate-limit, missing access, third-party outage).
    Do NOT surface NEEDS_INPUT for ordinary friction (failing builds, missing fixtures, type errors) — that's the agent's job to navigate.
-6. **Stop conditions for P1**:
+7. **Stop conditions for P1**:
    - The user (or the agents collectively) reports an answer that satisfies the exit condition. Move to P2.
    - The vectors have run for an unreasonable time (project-defined; default 4 hours of agent compute) without convergence. Surface a NEEDS_INPUT asking the user whether to keep going, re-frame, or terminate.
    - All vectors have hit walls. Surface a NEEDS_INPUT presenting the walls and asking whether to attempt a new vector or accept "no answer found" as the answer.

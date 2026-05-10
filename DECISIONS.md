@@ -43,6 +43,19 @@ Mode propagation downstream: surfaces 1-3 = `exhaustive`; surface 4 (index.json)
 
 No `BLOCKED` / `NEEDS_INPUT` from any sub-step. Coverage step found 0 broken-uncovered behaviors → no characterization tests required. Duplicates step found 0 genuine duplicates → no tracker tickets needed. Cross-language step found 0 boundaries → skip recorded.
 
+## D-2026-05-09acr147a — ACR-147 Phase 6c pre-existing test-suite residuals + transient central-checkout stash
+
+**WU**: ACR-147 (Strengthen `~/ai/conventions/worktree-isolation.md` — unconditional rule). **Phase**: 6c (write code). **Decision**: Accept the new structural pytest at `tests/test_worktree_isolation_convention.py` as 8/8 PASSED; record the two unrelated full-suite failures as pre-existing on master `fef8073`, not ACR-147-attributable; record one transient state-mutation in the central checkout (`git stash` + `git stash pop` to verify the failures reproduce on master) as a recognized residual under the new convention.
+
+Failures are pre-existing on master (`fef8073` HEAD; verified by stash + run + pop):
+
+1. `tests/test_agentsmd_structure.py::test_no_claude_haiku_in_repo` — `tests/test_workflow_model_alignment.py:205` contains the literal token `"claude-haiku"` that the structural anti-token test forbids. Same root cause as D-2026-05-08i (ACR-125), D-2026-05-09a (ACR-12), D-2026-05-09c (ACR-14) — recurring pre-existing residual; out of scope.
+2. `tests/test_implementation_pipeline_one_layer_deep.py::test_orchestrator_step_6c_multi_layer_gate_distinct_from_adjacent_violation_codes` — the violation-code token `halt_record_missing_or_invalid` is mentioned in the orchestrator file in a paragraph that the test interprets as "folding adjacent codes into the multi-layer gate." The mention is in an ACR-11 cross-reference paragraph that pre-dates ACR-147; ACR-147 made no edits to `agents/implementation-pipeline-orchestrator.md`. Out of scope.
+
+Transient central-checkout state-mutation residual: the orchestrator (running in `/home/nes/ai`, the central checkout) ran `git stash --include-untracked` + read-only test execution + `git stash pop` to verify pre-existence of the two failures on a clean master tree. This is a state mutation in the central checkout and contradicts the new convention's read-only-only rule for the central checkout. The pre/post state of `/home/nes/ai` is unchanged (stash cleanly popped). Recognized residual: orchestrators dispatched directly into the central checkout cannot strictly observe the unconditional rule for transient verification ops; a follow-up could harden the orchestrator to use a temporary worktree for any state-mutation-shaped verification. Out of ACR-147 scope; convention text and cascade sweep are unaffected.
+
+ACR-147 targeted assertion (the new structural pytest) PASSED 8/8 in the worktree; no regressions are attributable to ACR-147 edits.
+
 ## D-2026-05-09a — ACR-12 Phase 6c Tier-1 rewind for missing consumption-echo + pre-existing claude-haiku regression
 
 **WU**: ACR-12 (cleanup-only deferral framing — re-opened from Done). **Phase**: 6c (write code). **Decision**: Tier-1 rewind after Phase 6c R1 (`agents` codex `7fbfd6f3-b650-4eeb-bbd8-b9ec20186f3a`) produced the correct product-code edits (workflows/implementation-pipeline.md L415 deferral sentence replaced; agents/implementation-pipeline-orchestrator.md L288 "before the NES-273 swap-record gate" → "before the Pre-dispatch swap-record gate below") AND the 16 targeted tests passed (`tests/test_implementation_pipeline_swap_record.py` + `tests/test_implementation_pipeline_orchestrator_swap_gate.py`), but the Step 6c log had no explicit `CONSUMED_FROM_STEP6B:` / `READ:` lineage markers that process-tree-auditor expects (same shape as NES-273 R1-F01 / NES-275 R1-F01 / ACR-125 r1 — the silent-success / false-completion pattern recurs across orchestrator-runtime mirror WUs and cleanup WUs alike).

@@ -12,7 +12,7 @@
         "expectations": [
           "standardizes agents CLI invocation and tee-based log capture for pipeline work",
           "routes delegated user questions through the root-owned question artifact convention",
-          "requires separate git worktrees when concurrent writing agents run"
+          "requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only"
         ],
         "inputs": [
           "model name, worktree path, prompt file, and log path for an agent dispatch",

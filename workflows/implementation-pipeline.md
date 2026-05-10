@@ -71,7 +71,7 @@ Use it exactly, including the synthesis/audit-vs-judgment split and the rule tha
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
 Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
-Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
+Worktree isolation and central-checkout read-state rule: `~/ai/conventions/worktree-isolation.md`
 Git and PR conventions: `~/ai/conventions/git.md`
 Audit-history convention for revise/review loops: `~/ai/conventions/audit-history.md`
 Proposer/critic pattern for proposal risk gates: ~/ai/conventions/proposer-critic-pattern.md
@@ -360,7 +360,7 @@ The exact model assignments for these roles live in `~/ai/models/roles.md`.
 - Rule: identify anything parallel that should be merged into or removed instead of re-created. The Phase 2.5 duplicates inventory (`research/NN-duplicates.md`) is the input — Phase 5 confirms whether the planned change cascades, consolidates, or diverges per the proposal's decision.
 - Rule: in **exhaustive mode** for any surface scored HIGH on language-fragmentation or change-path-entropy, dispatch the `code-tracer` operator (`~/ai/agents/code-tracer.md`) to produce the cross-language readers/callers/contracts graph for that surface. Hookpoints derived from a single-language grep are insufficient when the surface crosses boundaries.
 - Rule: in **lean mode**, the four required sections (reuse / extension / conflicting / deletion candidates) are required as headers; sections may be one line or "none observed" but must be present.
-- Rule: if multiple implementation agents will work later, follow `~/ai/conventions/worktree-isolation.md`.
+- Rule: All implementation branch work follows `~/ai/conventions/worktree-isolation.md`; parallelism does not change the requirement.
 - Rule: if hookpoint research shows the approved `problem map` or assumption register is wrong, stop and return to research; resume at Phase 2.5 with an updated `problem map` before implementation continues. Returning to Phase 2.5 re-engages the problem-map human gate.
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the orchestrator classifies procedural vs new-value; only new-value questions reach the root.
 - Gate: model. The orchestrator advances autonomously to Phase 6 once the hookpoints artifact is non-empty, contains the four required sections (reuse points / extension points / conflicting systems / deletion candidates), and does not invalidate the approved problem map or assumption register.
@@ -443,7 +443,7 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: if contract intent truly changed, revise the contract explicitly and regenerate the affected tests from that revised contract.
 - Rule: Recursive Step 6c consumes the Step 6b output index at `${scratch_dir}/phase6/step6b-output-index.md`, emitted tests, test paths, and test-group identifiers for the matching `level_id`. Its log evidence must echo the scoped Step 6b output index and test paths it read before product-code changes.
 - Rule: The component cannot close until each implementation-discovered procedural obligation has either an authored procedural test linked from the Step 6b output index, or a recorded residual entry with residual class.
-- Operational note: parallel implementation is allowed only under `~/ai/conventions/worktree-isolation.md`.
+- Operational note: implementation happens in worktrees per `~/ai/conventions/worktree-isolation.md`; parallel implementation additionally requires disjoint worktrees.
 - Rule: Step 6c log output must echo which Step 6b test output paths and Step 6b output index paths it read before product-code changes.
 - Rule: per-component code-quality auditor fanout runs for each individual component after that component's Step 6c implementation and scoped tests pass, using `component_slug` to write `${planning_dir}/code-quality/${wu_lower}-${component_slug}/dispatch-manifest.md`, `${planning_dir}/code-quality/${wu_lower}-${component_slug}/reports/cohesion-auditor.md`, `${planning_dir}/code-quality/${wu_lower}-${component_slug}/reports/function-classification-auditor.md`, `${planning_dir}/code-quality/${wu_lower}-${component_slug}/reports/push-pull-auditor.md`, and `${planning_dir}/code-quality/${wu_lower}-${component_slug}/aggregate-code-quality.md`. The fanout dispatches `cohesion-auditor`, `function-classification-auditor`, and `push-pull-auditor`, uses verdict vocabulary `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT`, and `BLOCKED`, reuses `~/ai/workflows/code-quality.md` auditor-fanout vocabulary, and runs before that component closes into the aggregate diff consumed by Phase 7 CodeRabbit. The dispatch, artifact-bundle check, verdict/stop-state check, refusal behavior, audit-history append, and allow-advance condition live in the per-component code-quality auditor fanout sub-step in `agents/implementation-pipeline-orchestrator.md`. This per-component fanout does NOT replace Phase 7 CodeRabbit or Phase 8 PR-review aggregate gates.
 - Rule: Post-prototype internal contract derivation: after Step 6c produces a passing level prototype that passes level behavior tests, derive internal component contracts only when Phase 3 opened recursive or component-decomposition scope, or when candidate internal components emerge from the passing prototype.

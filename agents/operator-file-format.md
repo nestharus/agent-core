@@ -79,7 +79,7 @@ One paragraph describing what this operator does, why it exists, and who it is f
 
 - `--input <key>=<value>` pairs accepted by this operator, marked required or optional.
 - Expected stdin shape, if any.
-- Expected working directory, usually a worktree.
+- Expected working directory: a worktree for any branch work or tracked-file mutation; central-checkout use is read-state / branch-tracking only per `~/ai/conventions/worktree-isolation.md`.
 
 ## Procedure
 

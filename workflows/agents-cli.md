@@ -9,7 +9,7 @@ workflow_dispatch_contract:
   expectations:
     - "standardizes agents CLI invocation and tee-based log capture for pipeline work"
     - "routes delegated user questions through the root-owned question artifact convention"
-    - "requires separate git worktrees when concurrent writing agents run"
+    - "requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only"
   outputs:
     - "consistent agents command shape for prompts, logs, and long-running background work"
     - "stable prompt and log naming conventions for post-run review"
@@ -37,7 +37,7 @@ root orchestrator or workflow operator invoking agents CLI
 
 - standardizes agents CLI invocation and tee-based log capture for pipeline work
 - routes delegated user questions through the root-owned question artifact convention
-- requires separate git worktrees when concurrent writing agents run
+- requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only
 
 ### Outputs
 
@@ -56,7 +56,7 @@ agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
 - `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `claude-opus`, `claude-sonnet`, or similar. See `~/ai/models/roles.md` for selection guidance.
-- `-p <worktree-path>`: the agent's working directory. For parallel writers, this MUST be a git worktree. See `~/ai/conventions/worktree-isolation.md`.
+- `-p <worktree-path>`: the agent's working directory; for branch work or tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
 - `2>&1 | tee <log-path>`: capture stdout and stderr into a log file for review.
 
@@ -86,14 +86,13 @@ Sub-agents do not talk to the user directly. When a sub-agent needs user input, 
 
 The root orchestrator reads the artifact, presents the question and structured options to the user, writes the paired answer artifact, and continues the originating work through the feature-detected resume path or the session-files fallback from that convention. Downstream workflow steps that depend on the answer are blocked until continuation evidence exists.
 
-## Parallel writers
+## Worktree Isolation
 
-When multiple agents run concurrently and at least one writes tracked files, each agent MUST operate on its own git worktree.
+Every branch-work or tracked-file-mutating agent runs in a worktree, regardless of concurrency. Read-state operations may inspect the central checkout; single-writer branch work must not use the main checkout.
 
-- Use one worktree per writing agent.
-- Read-only agents can share the project root.
-- Single-writer runs can use the main checkout.
-- See `~/ai/conventions/worktree-isolation.md` for the rule and setup.
+- Use one worktree per branch-work or tracked-file-mutating agent.
+- Read-state agents can inspect the central checkout without tracked-file edits.
+- See `~/ai/conventions/worktree-isolation.md` for the rule, central-checkout limits, and setup.
 
 ## Long-running agents
 

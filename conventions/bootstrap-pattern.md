@@ -14,7 +14,7 @@ This convention is an integration point. It defers to these owner documents rath
 - `~/ai/agents/operator-file-format.md` owns operator frontmatter, body shape, and file-placement rules.
 - `~/ai/conventions/project-layout.md` owns the `~/projects/<name>/{trunk,planning,worktrees}/` layout and the single-repo versus multi-repo umbrella variants.
 - `~/ai/conventions/gate-ownership.md` owns human versus model gate ownership.
-- `~/ai/conventions/worktree-isolation.md` owns concurrent writer isolation.
+- `~/ai/conventions/worktree-isolation.md` owns unconditional branch-work isolation and central-checkout read-state limits.
 - `~/ai/conventions/workflow-routing.md` owns cue routing precedence and project-specific routing-table expectations.
 
 ## Lifecycle
@@ -77,7 +77,7 @@ If the open path discovers a new value, scope, or trade-off question, that quest
 
 Wrapper files are committed under `<project>/trunk/agents/` according to `~/ai/conventions/project-layout.md`. Planning notes, dispatch logs, and scratch artifacts stay in the project's planning tree, not in the product diff.
 
-When multiple agents may write wrappers concurrently, follow `~/ai/conventions/worktree-isolation.md` and give each writer its own git worktree.
+When agents write wrappers, follow `~/ai/conventions/worktree-isolation.md` and do branch work in a git worktree, regardless of concurrency.
 
 ## Non-Wrapper Outcomes
 
