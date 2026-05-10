@@ -145,16 +145,16 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `release-orchestrator` - Orchestrate a staged release lifecycle across cut, freeze, hotfix, promote, tag, and reconcile phases.
   File: [~/ai/agents/release-orchestrator.md](agents/release-orchestrator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `tag_pattern`, `qa_lane_id`, `manifest_path?`, `release_manifest_path?`, `freeze_window`, `qa_evidence_path`, `required_checks_policy`, `settings_state_or_runbook_ticket`, `hotfix_policy`, `promotion_approval`, `reconcile_obligations`, `ticket_system`, `jira_url?`, `jira_project?`, `jira_account_email?`, `jira_issue_key?`, `jira_release_key?`, `linear_team_key?`, `linear_project_id?`, `linear_issue_key?`, `linear_release_key?`, `release_ticket_key?` | Model: `claude-opus`
 
-- `release-cut-operator` - Forward-referenced NES-244 operator for release branch cut mechanics.
+- `release-cut-operator` - Release branch cut mechanics. Wired in `~/ai/agents/release-orchestrator.md` § Phase 1 - cut.
   File: [~/ai/agents/release-cut-operator.md](agents/release-cut-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `develop_branch_name`, `release_branch_name`, `manifest_path?`, `release_manifest_path?`, `required_checks_policy`, `settings_state_or_runbook_ticket` | Model: `gpt-high`
 
-- `release-hotfix-operator` - Forward-referenced NES-245 operator for release hotfix and cherry-pick mechanics.
+- `release-hotfix-operator` - Release hotfix and cherry-pick mechanics. Wired in `~/ai/agents/release-orchestrator.md` § Phase 3 - hotfix-cherry-pick.
   File: [~/ai/agents/release-hotfix-operator.md](agents/release-hotfix-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `release_branch_name`, `hotfix_branch_name?`, `manifest_path?`, `release_manifest_path?`, `hotfix_policy`, `qa_evidence_path`, `promotion_approval` | Model: `gpt-high`
 
-- `release-promote-operator` - Forward-referenced NES-246 operator for promotion and tag mechanics.
+- `release-promote-operator` - Promotion and tag mechanics. Wired in `~/ai/agents/release-orchestrator.md` § Phase 4 - promote and § Phase 5 - tag.
   File: [~/ai/agents/release-promote-operator.md](agents/release-promote-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `release_branch_name`, `main_branch_name`, `tag_pattern`, `manifest_path?`, `release_manifest_path?`, `qa_evidence_path`, `promotion_approval` | Model: `gpt-high`
 
-- `release-reconcile-operator` - Forward-referenced NES-247 operator for post-release reconciliation mechanics.
+- `release-reconcile-operator` - Post-release reconciliation mechanics. Wired in `~/ai/agents/release-orchestrator.md` § Phase 6 - reconcile.
   File: [~/ai/agents/release-reconcile-operator.md](agents/release-reconcile-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `manifest_path?`, `release_manifest_path?`, `reconcile_obligations` | Model: `gpt-high`
 
 ### Strategic planning / proposal alignment cycle
