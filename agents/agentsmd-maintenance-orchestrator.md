@@ -77,7 +77,8 @@ Output a triage list of finding IDs to address.
 ### Step 3: Plan Edits
 
 For each triaged finding, write the specific edit plan:
-- If procedural-drift → name the destination operator file. If the destination doesn't exist, flag as `NEEDS_NEW_OPERATOR` (this orchestrator does NOT create operators; defer to user for that decision).
+- If procedural-drift → name the destination operator file. If the destination doesn't exist, flag as `NEEDS_NEW_OPERATOR`.
+  <!-- INTENTIONAL: Creating a missing operator is a human-owned design decision, not an orchestrator-runtime wiring gap. This maintenance orchestrator may identify the missing operator and stop, but it must not author new operator procedures. -->
 - If orphan operator → propose routing entry text (cue, inputs, mode hint).
 - If model mismatch → state which side wins (usually the operator's frontmatter is authoritative).
 - If frontmatter inconsistency → state the field and corrected value.
