@@ -47,7 +47,7 @@ root orchestrator or workflow operator invoking linter-bootstrap
 ### Non-goals
 
 - does not bootstrap a concrete project's linters while running only the workflow definition
-- does not create or define the TBD linter-inventory-agent operator
+- does not create or define a linter-inventory-agent operator; inventory runs inline unless caller supplies an external artifact
 - does not enforce A1 rules that lack existing linter ecosystem coverage
 
 ## Purpose
