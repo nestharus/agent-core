@@ -77,7 +77,8 @@ Risk-reduction items map to specific axes from `~/ai/conventions/risk-profile.md
 | **Characterization tests** | `coverage-gap`, `behavioral-ambiguity` | small to medium | new tests on the worktree branch; uncovered behaviors now have captured assertions |
 | **Contract documentation** | `behavioral-ambiguity`, `language-fragmentation` (when contracts cross languages) | small | a markdown contract doc next to the surface; ambiguities resolved by writing them down |
 | **Duplicate consolidation** | `duplicate-system-count`, `change-path-entropy` | medium to large | one implementation; the duplicate's callers re-pointed; deletion of the dead path |
-| **Brittleness cleanup** | `brittleness-markers` | small to medium | TODO/FIXME/HACK addressed or converted to tracked tickets; xfail/skip resolved or tagged |
+<!-- INTENTIONAL: TODO/FIXME/HACK are literal brittleness marker names, not deferred workflow work. -->
+| **Brittleness cleanup** | `brittleness-markers` | small to medium | TODO/FIXME/HACK addressed or converted through follow-up issue references; xfail/skip resolved or tagged |
 | **Lifecycle documentation** | `lifecycle-visibility` | small | a lifecycle map for the surface, lives next to the code or in `planning/` |
 | **Cross-language schema unification** | `language-fragmentation`, `change-path-entropy` | medium | one schema definition; generated bindings across languages instead of mirrored hand-written types |
 | **Entrypoint deprecation** | `blast-radius` | small to medium | an entrypoint with no callers or replaced callers gets deleted; the surface shrinks |
@@ -103,6 +104,30 @@ For each item type, the lever is the same: narrow the work until it can be revie
 - **Lifecycle documentation**: dispatch a `gpt-high` researcher to draw the lifecycle map for the surface. Use the `code-tracer` operator (`~/ai/agents/code-tracer.md`) when the lifecycle crosses languages.
 - **Cross-language schema unification**: implementation work; goes through the full pipeline with scope = one schema and its mirrors.
 - **Entrypoint deprecation**: implementation work if the entrypoint has callers (the work is re-pointing them); a trivial deletion if it doesn't.
+
+#### Brittleness cleanup dispatch details
+
+When the selected item is a TODO/FIXME/HACK conversion, the local risk-reduction orchestrator writes `${scratch_dir}/prompts/risk-reduction-brittleness-todo.md` with the selected axis, surface, source marker locations, desired tracker project, and required output path `${planning_dir}/risk-reduction/${surface_slug}-brittleness-followups.md`. It then dispatches:
+
+```bash
+agents -m claude-opus -a jira-operator -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-brittleness-todo.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-brittleness-todo.log
+```
+
+The Jira operator must file or identify one follow-up issue per unresolved marker and write `${planning_dir}/risk-reduction/${surface_slug}-brittleness-followups.md` with the marker path, line, issue key, and replacement comment text. The orchestrator refuses to advance if the artifact is missing, if any unresolved marker lacks an issue key, or if the worktree diff does not replace each converted marker comment with a reference to its issue key. Wired in this section; no separate operator runtime wiring remains.
+
+When the selected item is an `xfail` or `skip` resolution, the local risk-reduction orchestrator writes `${scratch_dir}/prompts/risk-reduction-xfail-tests.md` and dispatches:
+
+```bash
+agents -m gpt-high -a test-writer -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-tests.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-test-writer.log
+```
+
+After the test-writer returns, the orchestrator records the new node IDs in `${scratch_dir}/risk-reduction-xfail-nodeids.txt`, writes `${scratch_dir}/prompts/risk-reduction-xfail-green-gate.md`, and dispatches:
+
+```bash
+agents -m gpt-high -a green-phase-gate -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-green-gate.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-green-gate.log
+```
+
+The green-phase report must land at `${planning_dir}/risk-reduction/${surface_slug}-xfail-green-gate.md`. The orchestrator refuses to advance if the report is missing, if the resolved marker still appears in the touched tests without an issue reference, or if the green-phase verdict is not pass/accepted-blocked according to `~/ai/agents/green-phase-gate.md`.
 
 ### Step 3 — Verify the axis improves
 
