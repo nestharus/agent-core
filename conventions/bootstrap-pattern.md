@@ -8,7 +8,7 @@ Project-wrapper bootstrap is different from implementation-pipeline Phase 0 tick
 
 ## Adjacent Owner Documents
 
-This convention is an integration point. It defers to these owner documents rather than restating their rules:
+This convention is an integration point. It uses these owner documents rather than restating their rules:
 
 - `~/ai/AGENTS.md` owns the shared routing layer, the Project Setup Pattern, How Projects Extend This, and Per-Project Policy knobs.
 - `~/ai/agents/operator-file-format.md` owns operator frontmatter, body shape, and file-placement rules.
@@ -57,7 +57,7 @@ Wrappers live at `<project>/trunk/agents/<name>.md` in the single-repo layout, o
 
 A wrapper carries frontmatter, an H1, a `Base procedure: ~/ai/agents/<name>.md` pointer, and project-specific defaults, examples, and overrides only. It does not re-inline the shared procedure.
 
-The operator-file contract remains in `~/ai/agents/operator-file-format.md`. A Project wrappers subsection may be added by a future WU; that format expansion is out of scope here.
+The operator-file contract remains in `~/ai/agents/operator-file-format.md`. Project-wrapper emission and validation are wired in `~/ai/workflows/project-bootstrap.md` § Emission steps 1-5; this convention does not expand the owner format file beyond that procedural back-reference.
 
 ## Stale-Wrapper Signals
 
@@ -65,7 +65,7 @@ Stale-wrapper signals are qualitative, not mechanical. Re-bootstrap should be co
 
 Other signals include project-specific defaults that changed, policies changed in `<project>/trunk/AGENTS.md`, or a new shared subcommand or input that the wrapper does not propagate.
 
-This convention does not prescribe an automated detection mechanism. A category-specific implementation may add checks later, but this pattern is usable without them.
+This convention does not prescribe an automated detection mechanism. Qualitative stale-wrapper evaluation and re-bootstrap routing are wired in `~/ai/workflows/project-bootstrap.md` § Closed Path Dispatch Contract and § Re-Bootstrap Trigger.
 
 ## Gate Ownership
 

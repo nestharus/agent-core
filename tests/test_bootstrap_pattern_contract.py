@@ -25,3 +25,26 @@ def test_acr113_bootstrap_parent_routing_remains_explicit() -> None:
     text = _bootstrap_text()
 
     assert re.search(r"(?is)parent.{0,80}(explicit|routing)", text)
+
+
+def test_bootstrap_pattern_has_no_ambiguous_future_wiring_deferrals() -> None:
+    """Project-bootstrap procedural wiring should be referenced, not punted."""
+    text = _bootstrap_text()
+
+    forbidden = (
+        "future WU",
+        "may add checks later",
+        "deferred",
+        "not yet wired",
+        "not yet implemented",
+        "not currently enforced",
+    )
+    for phrase in forbidden:
+        assert phrase not in text, f"ambiguous deferral remains: {phrase}"
+
+    assert (
+        "`~/ai/workflows/project-bootstrap.md` § Emission steps 1-5"
+        in text
+    )
+    assert "§ Closed Path Dispatch Contract" in text
+    assert "§ Re-Bootstrap Trigger" in text
