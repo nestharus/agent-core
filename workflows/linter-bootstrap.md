@@ -16,7 +16,7 @@ workflow_dispatch_contract:
     - "setup-PR proposal artifact under ${planning_dir}/proposals/linter-bootstrap-setup-pr.md"
   non_goals:
     - "does not bootstrap a concrete project's linters while running only the workflow definition"
-    - "does not create or define the TBD linter-inventory-agent operator"
+    - "does not create or define a linter-inventory-agent operator; inventory runs inline unless caller supplies an external artifact"
     - "does not enforce A1 rules that lack existing linter ecosystem coverage"
 ---
 # Linter Bootstrap Workflow
@@ -87,7 +87,8 @@ Run the stages in order. Keep evidence links close to every coverage claim, and 
 
 Read the target project `AGENTS.md`, manifests, CI workflow files, task runners, linter configs, formatter configs, pre-commit configs, and existing structural tests. Read the A1 source policy sections for function classification, nesting depth, inline functions, duplicate responsibility, push-vs-pull coupling, numerical thresholds, and failure modes.
 
-If a future `linter-inventory-agent` exists and the caller provides its output, consume it as supporting evidence. For this workflow definition, `linter-inventory-agent` remains TBD and is not defined here.
+<!-- INTENTIONAL: linter-bootstrap is a planning workflow; Stage 1 performs inventory inline and may consume externally supplied `linter-inventory-agent` output, but this workflow must not define or dispatch that optional operator. Guarded by `tests/test_linter_bootstrap_workflow.py::test_tbd_linter_inventory_operator_is_only_referenced_not_defined`. -->
+If the caller provides `linter-inventory-agent` output, consume it as supporting evidence.
 
 Write `${planning_dir}/research/linter-bootstrap-inventory.md` with:
 
@@ -137,7 +138,7 @@ Success is `SUCCESS_SETUP_PR_PROPOSED` when the setup-PR proposal artifact is wr
 - This workflow does NOT enforce A1 rules without existing linter coverage.
 - This workflow does NOT invent new linter tooling outside the language ecosystem.
 - This workflow does NOT modify a target project's CI / package configs while running only the workflow definition.
-- This workflow does NOT create or define the `linter-inventory-agent` operator; that operator is treated as TBD.
+- This workflow does NOT create, define, or dispatch the optional `linter-inventory-agent` operator; inventory is performed inline unless the caller supplies an external artifact.
 - This workflow does not replace behavior tests, implementation-pipeline gates, specialized A1 auditors, or human review for judgment-heavy rules.
 
 ## Adjacent References
