@@ -1,5 +1,48 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-09h — ACR-143 Phase 6c R1 path-mis-write recovery (orchestrator-side prompt drift, not Tier-1 rewind)
+
+**WU**: ACR-143. **Phase**: 6c R1. **Decision**: orchestrator-side path-recovery instead of Tier-1 rewind.
+
+Step 6c R1 (`agents` codex `5d0cd0d2-b73e-4082-ba0d-2f1b182b421c`) wrote the new workflow doc (`workflows/prototype-research-planning.md`), operator file (`agents/prototype-research-planner.md`), and regenerated `workflows/index.json` to `/home/nes/ai/` (the master worktree) instead of `/home/nes/projects/ai/worktrees/acr-143-prototype-research-planning/` (the WU branch worktree). Root cause: the orchestrator-authored Phase 6c prompt named `WROTE: /home/nes/ai/workflows/...` paths in its output template AND said `cd /home/nes/ai && python3 -m tools.workflow_index generate`. The agent followed the prompt verbatim. Step 6b had been dispatched correctly (`-p ${WU_branch_worktree}`) and wrote the test file to the WU branch correctly.
+
+This is orchestrator-side prompt drift (a single bad prompt template), NOT a sub-agent process-tree violation. The agent did exactly what the prompt asked. Per the violation-escalation policy, Tier-1 rewind applies when a sub-agent produces a non-compliant artifact in a way the orchestrator cannot recover from in-place. Here the artifacts themselves are correct; only their path placement was wrong. Recovery in-place is sufficient and avoided burning a fresh `gpt-high` invocation.
+
+Recovery executed by the orchestrator:
+
+1. `cp /home/nes/ai/workflows/prototype-research-planning.md /home/nes/projects/ai/worktrees/acr-143-prototype-research-planning/workflows/prototype-research-planning.md`
+2. `cp /home/nes/ai/agents/prototype-research-planner.md /home/nes/projects/ai/worktrees/acr-143-prototype-research-planning/agents/prototype-research-planner.md`
+3. `rm /home/nes/ai/tests/test_prototype_research_planning_workflow.py /home/nes/ai/workflows/prototype-research-planning.md /home/nes/ai/agents/prototype-research-planner.md` — remove the master-side stragglers that should never have been there.
+4. `git -C /home/nes/ai checkout HEAD -- workflows/index.json` — restore master's index.json to its prior state.
+5. `cd /home/nes/projects/ai/worktrees/acr-143-prototype-research-planning && python3 -m tools.workflow_index generate` — regenerate `workflows/index.json` on the WU branch (so the WU branch index includes the new prototype-research-planning entry).
+
+Step 6c R2 (`agents` codex `e478e09d-0087-4ed8-aac1-835e0423521e`) was then dispatched with explicit `WROTE: /home/nes/projects/ai/worktrees/acr-143-prototype-research-planning/workflows/...` paths to fix the missing `## Workflow Dispatch Surface` body section that the existing `tests/test_workflow_metadata.py::test_all_workflow_docs_have_normalized_body_dispatch_surface` requires of every workflow doc. R2 ran cleanly against the WU-branch-resident workflow doc.
+
+Process-tree audit #2 (codex `a0db29fd-2bd0-4369-a3b5-d07cfb5e26b5`) PASS — verified Step 6b/6c separation, consumption-echo, output-index presence, halt-record, swap-record, and the path recovery as orchestrator-side, not subtree-violation. Phase 4 join manifest re-verified PASS.
+
+Targeted pytest after recovery: 53/53 PASS (28 ACR-143 + 25 metadata/index). Full suite: 1026/1027 PASS, with the single failure being the pre-existing master-side `claude-haiku` token issue documented at D-2026-05-09a — unrelated to ACR-143.
+
+**Action item for the orchestrator file (separate ticket)**: the Phase 6c prompt template should always use `${worktree_path}/workflows/...` and `cd ${worktree_path}` rather than `/home/nes/ai/`. This is a template fix, not part of ACR-143.
+
+## D-2026-05-09i — ACR-143 Phase 2.5 risk-profile acceptance + mode propagation
+
+**WU**: ACR-143 (author `~/ai/workflows/prototype-research-planning.md` lighter prototype-research-planning workflow + operator + structural pytest). **Phase**: 2.5.6 (risk profile). **Decision**: Accept the WU-level `review-HIGH` rollup and proceed in exhaustive mode without surfacing the problem-map human gate (`skip_problem_map_gate=true` per orchestrator dispatch).
+
+Risk profile (`/home/nes/projects/ai/planning/acr-143-prototype-research-planning/risk/acr-143-risk-profile.md`) scored 3 surfaces `review-HIGH` and 1 surface `accept-MEDIUM`:
+
+- `~/ai/workflows/prototype-research-planning.md` — review-HIGH; coverage-gap HIGH (new file with no existing tests; the planned structural pytest IS the planned coverage), behavioral-ambiguity / blast-radius / change-path-entropy MEDIUM.
+- `~/ai/agents/prototype-research-planner.md` — review-HIGH; same shape.
+- `~/ai/tests/test_prototype_research_planning_workflow.py` — review-HIGH (3 MEDIUM axes — coverage-gap, blast-radius, change-path-entropy — no HIGH axis).
+- `~/ai/workflows/index.json` — accept-MEDIUM; mechanical regenerator (`tools.workflow_index.generator.write_index`) covers the entropy.
+
+Defer-to-prototype signal check: 1 of 5 signals fired (`HIGH on most surfaces`); below the 2-signal threshold, so the defer question is NOT surfaced. Pre-resolved gate `Defer-to-prototype: A — proceed exhaustive` confirmed by evidence.
+
+Stable-MEDIUM intrinsic-blast-radius accepted as residual per pre-resolved gate `Stable-MEDIUM intrinsic-blast-radius: accept-and-continue (precedent ACR-8 v2)`. The MEDIUM blast-radius scores reflect the new workflow's wide entrypoint surface (18 entrypoints per the entrypoints inventory) and are intrinsic to authoring a new workflow doc / operator file in `~/ai/`; they cannot be reduced without re-scoping the WU.
+
+Mode propagation downstream: surfaces 1-3 = `exhaustive`; surface 4 (index.json) = `lean-with-medium-callouts`. Phase 3 prompt will list the per-surface mode and the 7 Phase 2.5 artifacts as required reads.
+
+No `BLOCKED` / `NEEDS_INPUT` from any sub-step. Coverage step found 0 broken-uncovered behaviors → no characterization tests required. Duplicates step found 0 genuine duplicates → no tracker tickets needed. Cross-language step found 0 boundaries → skip recorded.
+
 ## D-2026-05-09a — ACR-12 Phase 6c Tier-1 rewind for missing consumption-echo + pre-existing claude-haiku regression
 
 **WU**: ACR-12 (cleanup-only deferral framing — re-opened from Done). **Phase**: 6c (write code). **Decision**: Tier-1 rewind after Phase 6c R1 (`agents` codex `7fbfd6f3-b650-4eeb-bbd8-b9ec20186f3a`) produced the correct product-code edits (workflows/implementation-pipeline.md L415 deferral sentence replaced; agents/implementation-pipeline-orchestrator.md L288 "before the NES-273 swap-record gate" → "before the Pre-dispatch swap-record gate below") AND the 16 targeted tests passed (`tests/test_implementation_pipeline_swap_record.py` + `tests/test_implementation_pipeline_orchestrator_swap_gate.py`), but the Step 6c log had no explicit `CONSUMED_FROM_STEP6B:` / `READ:` lineage markers that process-tree-auditor expects (same shape as NES-273 R1-F01 / NES-275 R1-F01 / ACR-125 r1 — the silent-success / false-completion pattern recurs across orchestrator-runtime mirror WUs and cleanup WUs alike).
