@@ -132,7 +132,7 @@
         "non_goals": [
           "does not implement fixes, edit child auditors, or replace child auditor procedures",
           "does not redefine A1 or duplicate the convention's rule descriptions",
-          "does not wire implementation-pipeline Phase 4 entry - that is downstream WU work"
+          "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md § Phase 4 code-quality gate"
         ],
         "orchestrator": "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller",
         "outputs": [

@@ -17,7 +17,7 @@ workflow_dispatch_contract:
   non_goals:
     - "does not implement fixes, edit child auditors, or replace child auditor procedures"
     - "does not redefine A1 or duplicate the convention's rule descriptions"
-    - "does not wire implementation-pipeline Phase 4 entry - that is downstream WU work"
+    - "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md § Phase 4 code-quality gate"
 ---
 # Code-Quality Workflow
 
@@ -48,7 +48,7 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 
 - does not implement fixes, edit child auditors, or replace child auditor procedures
 - does not redefine A1 or duplicate the convention's rule descriptions
-- does not wire implementation-pipeline Phase 4 entry - that is downstream WU work
+- does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § `#### Phase 4 code-quality gate`
 
 ## Purpose
 
@@ -213,6 +213,6 @@ Missing required evidence becomes `BLOCKED:<reason>` instead of an inferred pass
 - Does not implement any auditor or replace any auditor's procedure.
 - Does not redefine A1 or duplicate convention rule descriptions.
 - Does not edit child auditor operators; NES-235 captures cleanup of stale bundled A6 references.
-- Does not include nesting/inline/duplicate auditors; none exist, and future tickets file them.
-- Does not wire implementation-pipeline Phase 4 entry modes.
+- Does not include nesting/inline/duplicate auditors; no such child auditors exist in the current operator catalog, so this workflow cannot dispatch them. <!-- INTENTIONAL: this workflow coordinates existing child auditors only; new auditor creation belongs to a separate operator-design change before workflow fanout can include it. -->
+- Implementation-pipeline Phase 4 entry is wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § `#### Phase 4 code-quality gate`.
 - Does not replace `audit.md`, PR-review gates, or `process-tree-auditor`.
