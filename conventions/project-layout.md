@@ -29,8 +29,9 @@ Survives indefinitely as project memory; lives in user's home
 directory, not on the remote.
 
 ### `worktrees/`
-Git worktrees created for parallel-agent isolation per
-`~/ai/conventions/worktree-isolation.md`. Per-PR worktrees
+Git worktrees created for branch-work isolation per
+`~/ai/conventions/worktree-isolation.md`; central checkout/trunk stays
+read-state / branch-tracking only. Per-PR worktrees
 (`worktrees/<branch>/`), CodeRabbit/risk-gate isolated checkouts,
 etc. Listed in `trunk/.gitignore`'s `/worktrees/`. Often empty
 between active workflows.

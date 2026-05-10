@@ -1,18 +1,18 @@
 # Worktree Isolation
 
-**Rule**: any two agents running at the same time that both write files MUST operate on different git worktrees. No exceptions.
+**Unconditional rule**: every branch's work happens in its own git worktree, regardless of concurrency. The central checkout is read-only / branch-tracking only.
 
 ## Why
 
-Concurrent writes to the same working tree corrupt state:
+The central checkout is the directory the user ran `git clone` into or otherwise treats as the primary repository checkout. Examples include `/home/nes/ai`, `/home/nes/projects/agent-runner/trunk`, and a project's `trunk/` directory in the `~/projects/<name>/{trunk,planning,worktrees}/` layout.
 
-- Overlapping edits cause merge conflicts and lost changes.
-- Partial writes from one agent appear as uncommitted changes to another.
-- Git operations such as `git add`, `git commit`, and `git checkout` interleave unpredictably.
+Keeping branch work out of the central checkout protects the stable branch-tracking point and makes every working branch explicit. The rule is unconditional because a single writer can still leave hidden state behind, switch the primary checkout away from the expected branch, or blur which working tree owns a change.
 
-Worktree isolation gives each agent a clean, disjoint working directory backed by a dedicated branch. Merging the branches is the join step.
+Worktree isolation gives each branch a clean, disjoint working directory backed by a dedicated branch. Merging or stacking branches is the join step.
 
 ## Setup
+
+Use worktree-creation tooling or the direct Git command when a branch needs a working directory:
 
 ```bash
 # From the main repository checkout:
@@ -24,6 +24,61 @@ agents -m <model> -p worktrees/<branch-name> -f <prompt>.md
 
 Convention for worktree location: `worktrees/<branch-name>/` inside the repo root.
 
+## Central Checkout Use
+
+### Allowed in the central checkout (read-state only)
+
+The central checkout may be inspected and kept aware of remote branch state. These operations must not edit tracked files or move the checkout onto feature work:
+
+1. `git status`
+2. `git log`
+3. `git show`
+4. `git diff` for inspection only
+5. `git branch --show-current`
+6. `git branch --list`
+7. `git worktree list`
+8. `git remote -v`
+9. `git fetch`
+10. `gh pr view`
+11. `gh pr list`
+12. `gh run view`
+13. `gh run list`
+14. File reads and searches that do not edit tracked files
+
+### Disallowed in the central checkout (state-mutating)
+
+State-mutating work belongs in a git worktree. Do not use the central checkout for:
+
+1. `git checkout <branch>` or any feature-branch checkout
+2. `git switch <branch>`
+3. `git reset`, including `git reset --hard`
+4. `git commit`
+5. `git merge`
+6. `git rebase`
+7. `git cherry-pick`
+8. `git push`
+9. `git pull` on a non-default branch, or any pull that changes the central checkout working tree
+10. `git stash` used to manage central-checkout work
+11. `git add` or other staging operations
+12. Edits to tracked files or generated-file updates
+13. Branch construction, feature implementation, experiments, fixes, or review revisions
+
+## Recognized Carve-outs
+
+These are narrow topology exceptions. They do not permit ordinary branch work in the central checkout.
+
+### jj substrate maintenance
+
+[`jj-operator`](../agents/jj-operator.md) owns jj substrate maintenance. Its commands intentionally operate on the repository substrate from `${repo_root}`; treat that as topology maintenance, not feature implementation in the central checkout.
+
+### Worktree administration
+
+[`worktree-operator`](../agents/worktree-operator.md) owns worktree administration, including worktree creation, listing, removal, and sync. Creating or synchronizing worktrees from the repository root is allowed when it is topology administration for the branch worktree fleet.
+
+### Outside-repo scratch for read-only investigations
+
+[`pipeline-artifacts-operator`](../agents/pipeline-artifacts-operator.md) defines `Tasks Without a Worktree`. That outside-repo scratch carve-out is for read-only investigations and ad-hoc non-tracked artifacts only; it must not write tracked files or perform central-checkout branch work.
+
 ## Cleanup
 
 After the agent branch has been merged:
@@ -33,15 +88,3 @@ git worktree remove worktrees/<branch-name>
 # If the branch is still wanted elsewhere, keep it; otherwise:
 git branch -d <branch-name>
 ```
-
-## When worktrees are NOT required
-
-- A single agent writing alone.
-- Read-only agents.
-- Agents writing only outside the repo.
-
-## When they ARE required
-
-- Any two agents writing concurrently, even if they touch different files.
-- Parallel risk gates that may touch `plans/`, `.tmp/`, or other repo paths.
-- PR decomposition or branch-construction experiments run in parallel.

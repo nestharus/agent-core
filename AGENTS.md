@@ -258,7 +258,7 @@ Default shape: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee
 
 Use [`/home/nes/projects/agent-runner/README.md`](/home/nes/projects/agent-runner/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.
 
-For concurrent writers, route each writer to its own git worktree; see [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md).
+All branch work runs in a git worktree; the central checkout is read-only / branch-tracking only; see [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md).
 
 ## Workflow Topologies
 
@@ -284,7 +284,7 @@ For concurrent writers, route each writer to its own git worktree; see [`~/ai/co
 - [`~/ai/conventions/code-quality.md`](conventions/code-quality.md) - shared code-quality rules for function classification, max nesting depth, inline mini-function extraction, duplicate responsibility handling, and push-vs-pull system coupling
 - [`~/ai/conventions/design-patterns.md`](conventions/design-patterns.md) - shared design-pattern corpus consumed by workflow/agent design auditors
 - [`~/ai/conventions/git.md`](conventions/git.md) - branches, GPG, draft PR routine, no-attribution
-- [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md) - parallel-agent rule
+- [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md) - unconditional branch-work isolation and central-checkout read-state rule
 - [`~/ai/conventions/no-backwards-compatibility.md`](conventions/no-backwards-compatibility.md)
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners

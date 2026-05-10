@@ -30,7 +30,7 @@ This doc cites phase-level choices but does not restate the matrix.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
 Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
-Parallel-agent isolation: `~/ai/conventions/worktree-isolation.md`
+Worktree isolation and central-checkout read-state rule: `~/ai/conventions/worktree-isolation.md`
 Process-tree review operator: `~/ai/agents/process-tree-auditor.md`
 Workflow-execution violation taxonomy: `~/ai/conventions/workflow-execution-violations.md`
 
@@ -174,9 +174,7 @@ Any delegated question at this phase must be limited to accept, reframe, or foll
   to cited findings.
 - **No solution design in research.** Research produces facts. Proposal designs
   solutions.
-- **Parallel researchers work in isolation.** If they write tracked files, use
-  separate worktrees per `~/ai/conventions/worktree-isolation.md`. If they only
-  write to `.tmp/` or `.build/`, shared project root is acceptable.
+- **Parallel researchers work in isolation.** Parallel researchers each work in their own worktree per `~/ai/conventions/worktree-isolation.md`; tracked-file writes and branch work always run from a worktree, regardless of concurrency. Read-state inspection of the central checkout (no tracked-file edits) is acceptable. Outside-repo scratch (e.g. `/tmp/$(uuidgen)`) for non-tracked artifacts remains a recognized carve-out for read-only investigations.
 - **Synthesis happens once.** Do not synthesize the synthesis. If the result is
   wrong, fix the bad research output and re-synthesize from source findings.
 - **Use audit history for repeated review loops.** When research synthesis is revised and re-reviewed across rounds, follow `~/ai/conventions/audit-history.md` so prior findings, watch signals, and determinations remain visible.
