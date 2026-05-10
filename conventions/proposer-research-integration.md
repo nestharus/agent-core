@@ -27,11 +27,11 @@ Ordinary critic feedback is not enough. If the concern can be resolved by readin
 
 The proposer may identify that research is needed, but the workflow or orchestrator owns the actual dispatch mechanics, artifact paths, retry limits, and sequencing.
 
-## Current and Future Research Target
+## Current Research Target
 
-Until C2 / NES-151 lands a concrete `research-team` workflow, the current landed precursor is [../workflows/research.md](../workflows/research.md). Use that workflow's evidence discipline, synthesis shape, and thin-data handling for targeted proposer research.
+The current executable target for targeted proposer research is [../workflows/research.md](../workflows/research.md). Use that workflow's evidence discipline, synthesis shape, and thin-data handling for targeted proposer research.
 
-Once C2 lands, C2 owns the concrete `research-team` mechanics for this branch. This convention forward-references that target without claiming it exists today.
+<!-- INTENTIONAL: C2 / NES-151 owns any separate `research-team` workflow artifact. This convention has no deterministic operator sub-step to wire because only workflows that explicitly opt into this branch own dispatch mechanics, artifact paths, retry limits, and sequencing. -->
 
 The brenner_bot / research-team disposition boundary lives in [../DECISIONS.md](../DECISIONS.md) D-2026-05-05d. Design-pattern, best-practice, library, tool, implementation-approach, and comparable-product questions are research-team-shaped questions. Do not route those proposer/critic questions to `brenner_bot` under this convention.
 
@@ -86,9 +86,9 @@ Do not ask research to produce the answer the proposer already wants. The resear
 
 [proposer-critic-pattern.md](proposer-critic-pattern.md) owns the base proposer/critic semantics: fresh proposer dispatch after non-accept verdicts, fresh critic re-run after substantive revision, and acceptance only for the same current artifact.
 
-[../workflows/research.md](../workflows/research.md) is the current landed research precursor. C2 / NES-151 owns the future concrete `research-team` workflow once it lands.
+[../workflows/research.md](../workflows/research.md) is the current executable target for targeted proposer research.
 
-[../DECISIONS.md](../DECISIONS.md) D-2026-05-05d owns the brenner_bot / research-team routing boundary. C5 may later refine that disposition, but NES-150 does not.
+[../DECISIONS.md](../DECISIONS.md) D-2026-05-05d owns the brenner_bot / research-team routing boundary. Any change to that disposition is outside this convention.
 
 [audit-history.md](audit-history.md) owns loop memory, round representation, prior-finding closure, role histories, and decision-register mechanics. When audit history is active, targeted research artifacts may be recorded as round artifacts, role outputs, or deciding inputs, but this convention defines no new memory schema.
 
@@ -96,9 +96,11 @@ Do not ask research to produce the answer the proposer already wants. The resear
 
 [gate-ownership.md](gate-ownership.md) owns human versus model gate authority. This convention adds no new human gate and does not double-check model-owned proposal gates with the user.
 
-[../models/roles.md](../models/roles.md) owns model selection. This convention does not assign models to proposers, critics, researchers, or future research-team roles.
+[../models/roles.md](../models/roles.md) owns model selection. This convention does not assign models to proposers, critics, researchers, or research-team-shaped roles.
 
-C3 owns future critic-operator implementation changes. This convention does not change critic prompts, critic independence, verdict schemas, required critic counts, or acceptance equivalents.
+<!-- INTENTIONAL: critic-operator implementation belongs to the critic operator's own work, not this convention. -->
+
+This convention does not change critic prompts, critic independence, verdict schemas, required critic counts, or acceptance equivalents.
 
 ## Non-Goals
 
