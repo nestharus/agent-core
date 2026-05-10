@@ -30,7 +30,7 @@ def _section_with_heading_matching(text: str, heading_pattern: str) -> str:
     return following
 
 
-def _window_after(text: str, anchor: str, chars: int = 5000) -> str:
+def _window_after(text: str, anchor: str, chars: int = 9000) -> str:
     start = text.find(anchor)
     assert start >= 0, f"missing anchor: {anchor}"
     return text[start : start + chars]
@@ -101,6 +101,21 @@ def test_phase25_defer_branch_linear_uses_deferred_label_not_backlog() -> None:
     _assert_not_regex(
         window,
         r"linear-operator.{0,240}task\s*=\s*transition.{0,240}target_status\s*=\s*Backlog",
+    )
+
+
+def test_phase25_defer_branch_marker_and_comment_dispatches_are_acr151() -> None:
+    # risk: Phase 2.5 disposition can name backend tasks without a procedural agents dispatch; selected level structural.
+    window = _window_after(_read(IMPLEMENTATION_ORCHESTRATOR), "defer to prototype")
+
+    _assert_contains_all(
+        window,
+        (
+            "agents -m claude-opus -a linear-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-linear.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-linear.log",
+            "agents -m claude-opus -a jira-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira.log",
+            "agents -m claude-opus -a jira-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.log",
+            "agents -m claude-opus -a ${ticket_operator} -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-crosslink-comment.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-crosslink-comment.log",
+        ),
     )
 
 
