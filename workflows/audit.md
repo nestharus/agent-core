@@ -16,7 +16,7 @@ workflow_dispatch_contract:
   non_goals:
     - "does not replace Phase 4 risk gates, PR review gates, workflow-reviewer, or process-tree topology audit"
     - "does not implement fixes, revise target artifacts, or run historical audits unless explicitly invoked"
-    - "does not wire implementation-pipeline entry modes"
+    - "does not own implementation-pipeline entry-mode policy"
 ---
 # Audit Workflow
 
@@ -46,7 +46,7 @@ root audit coordinator or implementation-pipeline-orchestrator
 
 - does not replace Phase 4 risk gates, PR review gates, workflow-reviewer, or process-tree topology audit
 - does not implement fixes, revise target artifacts, or run historical audits unless explicitly invoked
-- does not wire implementation-pipeline entry modes
+- does not own implementation-pipeline entry-mode policy; caller procedure lives in `~/ai/agents/implementation-pipeline-orchestrator.md`
 
 ## Purpose
 
@@ -206,7 +206,7 @@ Pipeline-callable callers supply `planning_dir`, `scratch_dir`, WU identity, tar
 
 Prompts and logs are written under `${scratch_dir}/audit/${audit_slug}/`; reports, dispatch manifest, `findings.json`, `findings.md`, aggregate, and expected-process artifacts are written under `${planning_dir}/audit/${audit_slug}/`.
 
-Non-`LOW` aggregate or drift signal seeds proposer/revision work or blocks continuation according to the caller's mode. NES-223 documents this callable contract only; implementation-pipeline wiring is deferred to NES-224.
+Non-`LOW` aggregate or drift signal seeds proposer/revision work or blocks continuation according to the caller's mode. Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 2.5 entry-mode audit dispatch and § Entry-Mode Re-Audit, Audit History, And Termination.
 
 ## Stop Conditions And Escalation
 
@@ -226,4 +226,4 @@ Non-`LOW` aggregate or drift signal seeds proposer/revision work or blocks conti
 - Does not include implementing fixes.
 - Does not include revising target artifacts.
 - Does not run historical audits unless explicitly invoked.
-- Does not wire implementation-pipeline entry modes; `pipeline_entry_mode` remains NES-224 territory.
+- Does not own implementation-pipeline entry-mode policy; `pipeline_entry_mode` caller procedure is wired in `~/ai/agents/implementation-pipeline-orchestrator.md`.
