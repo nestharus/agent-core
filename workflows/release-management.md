@@ -24,9 +24,9 @@ workflow_dispatch_contract:
 
 ## Purpose
 
-Define the project-agnostic release lifecycle for staged releases that flow from `develop` through `release/*`, optional `hotfix/*`, `main`, and a customer-visible `tag`. The workflow gives future release operators a shared phase language, gate-ownership table, evidence surface, philosophy mapping, and forward-reference set before project wrappers bind local branch names or settings runbooks.
+Define the project-agnostic release lifecycle for staged releases that flow from `develop` through `release/*`, optional `hotfix/*`, `main`, and a customer-visible `tag`. The workflow gives wired release operators a shared phase language, gate-ownership table, evidence surface, and philosophy mapping before project wrappers bind local branch names or settings runbooks.
 
-The workflow composes specialized release operators. It describes what the lifecycle must prove and where evidence lives; the future `release-orchestrator` dispatches the mechanics and project-local wrappers provide configuration.
+The workflow composes specialized release operators. It describes what the lifecycle must prove and where evidence lives; `release-orchestrator` dispatches the mechanics and project-local wrappers provide configuration.
 
 ## Workflow Dispatch Surface
 
@@ -62,7 +62,7 @@ release-orchestrator
 ## Use When
 
 - A project needs a staged release path with a real freeze window, QA evidence, promotion approval, version tagging, and post-release reconciliation.
-- A future release orchestrator needs one workflow contract for cutting `release/*`, handling `hotfix/*` cherry-picks, promoting to `main`, creating the release `tag`, and closing reconcile obligations.
+- A release orchestrator needs one workflow contract for cutting `release/*`, handling `hotfix/*` cherry-picks, promoting to `main`, creating the release `tag`, and closing reconcile obligations.
 - A project wrapper wants to bind shared inputs such as `develop_branch_name` and `main_branch_name` to local branch names without changing the shared release lifecycle.
 - A review or audit needs to verify release gate ownership, human settings boundaries, hotfix override handling, and closure criteria against a single workflow document.
 
@@ -123,13 +123,13 @@ This table cascades from `~/ai/conventions/gate-ownership.md`: model-owned gates
 
 ## Cross-references
 
-Forward-referenced release operators:
+Wired release operators:
 
-- `~/ai/agents/release-orchestrator.md` (forward reference; NES-243)
-- `~/ai/agents/release-cut-operator.md` (forward reference; NES-244)
-- `~/ai/agents/release-hotfix-operator.md` (forward reference; NES-245)
-- `~/ai/agents/release-promote-operator.md` (forward reference; NES-246)
-- `~/ai/agents/release-reconcile-operator.md` (forward reference; NES-247)
+- `~/ai/agents/release-orchestrator.md` (wired dispatcher; NES-243)
+- `~/ai/agents/release-cut-operator.md` (wired mechanics operator; NES-244)
+- `~/ai/agents/release-hotfix-operator.md` (wired mechanics operator; NES-245)
+- `~/ai/agents/release-promote-operator.md` (wired mechanics operator; NES-246)
+- `~/ai/agents/release-reconcile-operator.md` (wired mechanics operator; NES-247)
 
 Existing sibling references:
 
@@ -173,9 +173,9 @@ A release lifecycle is done when promotion and tag evidence are durable, manifes
 
 ## Anti-Scope
 
-- No orchestrator authoring: `release-orchestrator.md` is owned by NES-243, not by this workflow.
-- No sub-operator authoring: `release-cut-operator.md`, `release-hotfix-operator.md`, `release-promote-operator.md`, and `release-reconcile-operator.md` are owned by NES-244 through NES-247.
-- No `AGENTS.md` routing edits: release operator routing and topology updates are deferred to NES-243.
+- No orchestrator authoring: `release-orchestrator.md` is wired as the NES-243 dispatcher; this workflow is the lifecycle contract.
+- No sub-operator authoring: `release-cut-operator.md`, `release-hotfix-operator.md`, `release-promote-operator.md`, and `release-reconcile-operator.md` are wired as the NES-244 through NES-247 mechanics operators.
+- No `AGENTS.md` routing edits: release operator routing and topology are wired in root `AGENTS.md` § Release management and `~/ai/agents/release-orchestrator.md` § Procedure.
 - No project-specific wrapper, project-local configuration, RFQ-specific manifest schema, or worked example wrapper is authored here.
 - No `conventions/*` primary deliverable: this workflow cites existing conventions and keeps release-specific rows local until a later convention WU exists.
-- No settings mutation or live release execution: the workflow describes gates and evidence; human runbooks, project wrappers, and future operators execute approved changes.
+- No settings mutation or live release execution: the workflow describes gates and evidence; human runbooks, project wrappers, and wired release operators execute approved changes.
