@@ -70,7 +70,7 @@ Work Manager or root RCA coordinator
 
 - The caller only needs an implementation bug fix with reproduction tests; use `~/ai/workflows/implementation-pipeline.md` and its bug-only RCA Phase 0.
 - The caller only needs an evidence-backed findings artifact; use `~/ai/agents/incident-investigator.md`.
-- The caller only needs one post-mortem from already-produced findings; use `~/ai/agents/post-mortem-author.md` now, and future `~/ai/workflows/post-mortem.md` after NES-283 lands.
+- The caller only needs one post-mortem from already-produced findings; use `~/ai/agents/post-mortem-author.md` directly. <!-- INTENTIONAL: the post-mortem-only workflow is a separate NES-283 workflow boundary, not an RCA orchestration sub-step. -->
 - The caller is asking for production mutation, source edits, deployment, direct status-transition ownership, or ticket-system protocol redesign.
 
 ## Required Inputs
@@ -175,6 +175,12 @@ The incident brief and evidence pack exist. `ticket_system` is `linear` or `jira
 
 Use `~/ai/agents/linear-operator.md` when `ticket_system=linear` and `~/ai/agents/jira-operator.md` when `ticket_system=jira`. If `incident_issue_key` exists, read or verify the issue and record it in the manifest. If no issue exists, dispatch the selected ticket operator with a create task carrying the incident title, brief summary, evidence pointers, and RCA artifact destination. Linear descriptions and comments stay Markdown-native through the Linear operator; Jira content is passed through the Jira operator so it can render REST/ADF details and preserve failure envelopes.
 
+The RCA coordinator writes `${scratch_dir}/prompts/rca-phase-3-incident-ticket.md` with `task=create` or `task=read`, the selected ticket backend inputs, incident brief path, evidence pointers, and `output_path=${planning_dir}/rca-run-manifest.md` update instructions. Dispatch exactly once per create/read attempt:
+
+`agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-3-incident-ticket.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-3-incident-ticket.log`
+
+Refuse to advance unless the log records a created or verified incident key and `${planning_dir}/rca-run-manifest.md` records the tracker key or URL. On missing key, missing manifest entry, or ticket operator failure, stop with `BLOCKED:tracker-filing-failed`.
+
 ### Outputs
 
 - Created or verified `incident_issue_key`.
@@ -194,6 +200,12 @@ The incident brief, evidence directory, repository root, and findings destinatio
 ### Actions
 
 Dispatch `~/ai/agents/incident-investigator.md` as a separate read-only operator invocation. Pass `incident_brief_path`, `evidence_dir`, `repo_root`, and `findings_path=${planning_dir}/findings.md` unless the caller supplied a different durable findings destination. The RCA coordinator stores the child prompt under `${scratch_dir}/prompts/`, captures the child log under `${scratch_dir}/logs/`, and records the child `WROTE: <path>` sentinel in `${planning_dir}/rca-run-manifest.md`.
+
+The RCA coordinator writes `${scratch_dir}/prompts/rca-phase-4-incident-investigator.md` with `incident_brief_path`, `evidence_dir`, `repo_root`, and `findings_path=${planning_dir}/findings.md`. Dispatch:
+
+`agents -m gpt-high -a incident-investigator -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-4-incident-investigator.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-4-incident-investigator.log`
+
+Refuse to advance unless `${planning_dir}/findings.md` exists, is readable, and the log contains `WROTE: ${planning_dir}/findings.md` or an equivalent caller-supplied findings path. Preserve `NEEDS_INPUT:<absolute_artifact_path>` from the child; otherwise stop with `BLOCKED:investigation-failed`.
 
 ### Outputs
 
@@ -215,6 +227,12 @@ Readable findings and incident brief artifacts exist. The post-mortem destinatio
 
 Dispatch `~/ai/agents/post-mortem-author.md` as a separate synthesis-only operator invocation. Pass `findings_path`, the same `incident_brief_path`, `output_path=${planning_dir}/post-mortem.md`, and optional `reference_paths` only for already-captured local references. The RCA coordinator captures prompt/log artifacts and records the post-mortem path, needs-input sidecar if any, and content identity in the run manifest.
 
+The RCA coordinator writes `${scratch_dir}/prompts/rca-phase-5-post-mortem-author.md` with `findings_path=${planning_dir}/findings.md`, `incident_brief_path`, `output_path=${planning_dir}/post-mortem.md`, and any already-captured `reference_paths`. Dispatch:
+
+`agents -m claude-opus -a post-mortem-author -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-5-post-mortem-author.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-5-post-mortem-author.log`
+
+Refuse to advance unless `${planning_dir}/post-mortem.md` exists, is readable, and the log contains `WROTE: ${planning_dir}/post-mortem.md` or an equivalent caller-supplied output path. Preserve `<output_path>.needs-input.md` or `NEEDS_INPUT:<absolute_artifact_path>` from the child; otherwise stop with `BLOCKED:post-mortem-failed`.
+
 ### Outputs
 
 - `${planning_dir}/post-mortem.md`.
@@ -235,7 +253,17 @@ Findings and post-mortem exist. `ticket_system` operator inputs are available. `
 
 Extract remediation, verification, monitoring, customer-side, and runbook-only action items from `${planning_dir}/findings.md` and `${planning_dir}/post-mortem.md`. Write `${planning_dir}/action-items.md` in severity order with each item assigned a disposition: no-ticket, runbook-only, filed-ticket, implementation handoff, or implementation dispatched. Use `~/ai/agents/linear-operator.md` or `~/ai/agents/jira-operator.md` to create or identify action-item tickets and to include the incident key or parent reference in the body when true parent linking is unavailable.
 
+For every ticket create/read, write `${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-ticket.md` with the action item text, severity, incident key, parent/reference request, selected backend inputs, and `${planning_dir}/action-items.md` update instructions. Dispatch one ticket operation at a time:
+
+`agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-ticket.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-6-action-item-<slug>-ticket.log`
+
 For implementation-worthy fix items, default `action_item_policy=file-and-dispatch` dispatches `~/ai/agents/implementation-pipeline-orchestrator.md` serially in severity order. `file-only` records the ticket without implementation handoff. `file-and-handoff` records the exact handoff input bundle without starting the child. Parallel dispatch is allowed only when `${planning_dir}/action-items.md` records independence plus disjoint `worktree_path`, `scratch_dir`, and `planning_dir` for every concurrent child.
+
+For each `file-and-dispatch` item, write `${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-implementation.md` with the created action-item key, `ticket_system`, backend inputs, `repo_root`, child `worktree_path`, child `scratch_dir`, child `planning_dir`, optional `branch_name`, and explicitly supplied implementation-pipeline variant inputs. Dispatch:
+
+`agents -m claude-opus -a implementation-pipeline-orchestrator -p ${child_worktree_path} -f ${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-implementation.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-6-action-item-<slug>-implementation.log`
+
+Refuse to advance unless `${planning_dir}/action-items.md` records each action item's disposition, ticket key when applicable, implementation handoff bundle or child dispatch log path when applicable, and any `NEEDS_INPUT:<absolute_artifact_path>` surfaced by a child. Stop with `BLOCKED:action-item-filing-failed` on ticket operator failure, unsafe mutation request, missing disposition, or missing child dispatch evidence.
 
 ### Outputs
 
@@ -277,6 +305,12 @@ The post-mortem exists, Phase 6 action items each have a filed ticket, no-ticket
 ### Actions
 
 Draft `${planning_dir}/tracker-comments/phase-8.md` with links or path references to the incident brief, evidence pack, findings, post-mortem, action-item index, action-item tickets, runbooks, and close-policy expectations. Use `~/ai/agents/linear-operator.md` for Linear comments or `~/ai/agents/jira-operator.md` for Jira comments. The comment is posted after RCA explanation and follow-through inventory exist; it does not wait for all implementation PRs unless Phase 9 policy requires that state before closure.
+
+When tracker side effects are enabled, write `${scratch_dir}/prompts/rca-phase-8-tracker-comment.md` with `task=comment`, `issue_key=${incident_issue_key}`, selected backend inputs, and `body_path=${planning_dir}/tracker-comments/phase-8.md`. Dispatch:
+
+`agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-8-tracker-comment.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-8-tracker-comment.log`
+
+Refuse to advance unless `${planning_dir}/tracker-comments/phase-8.md` exists and `${planning_dir}/rca-run-manifest.md` records the comment ID, URL, or explicit file-only comment disposition. Stop with `BLOCKED:tracker-comment-failed` on ticket operator failure or missing comment evidence.
 
 ### Outputs
 
@@ -334,7 +368,7 @@ Already-produced-findings and other later-phase entry modes are explicit, not si
 
 ## Anti-Scope
 
-- Workflow doc + structural test only; this workflow does not modify `incident-investigator`, `post-mortem-author`, ticket operators, or `implementation-pipeline-orchestrator`.
+- RCA child dispatch wiring is carried by this workflow's Phase 3, Phase 4, Phase 5, Phase 6, and Phase 8 procedural steps; those phases call existing operators without modifying their operator files.
 - It does not edit `~/ai/agents/incident-investigator.md`, `~/ai/agents/post-mortem-author.md`, `~/ai/agents/linear-operator.md`, `~/ai/agents/jira-operator.md`, or `~/ai/agents/implementation-pipeline-orchestrator.md`.
 - It does not redesign the incident-tracker filing protocol; it uses existing operator patterns through the Linear and Jira ticket operators.
 - It does not replace implementation-pipeline Phase 4, Phase 7, Phase 8, CodeRabbit, or PR-review gates.
@@ -343,9 +377,9 @@ Already-produced-findings and other later-phase entry modes are explicit, not si
 
 ## Distinction From Post-Mortem-Only Workflow
 
-`workflows/rca.md` owns the outer incident lifecycle: framing, evidence, tracker filing, investigation, post-mortem, action-item tickets, runbooks, tracker links, and close-or-pending decision. Future `workflows/post-mortem.md` is queued under NES-283 and should own only post-mortem synthesis from existing `findings_path` and `incident_brief_path`.
+`workflows/rca.md` owns the outer incident lifecycle: framing, evidence, tracker filing, investigation, post-mortem, action-item tickets, runbooks, tracker links, and close-or-pending decision. <!-- INTENTIONAL: `workflows/post-mortem.md` is a separate NES-283 workflow boundary and should own only post-mortem synthesis from existing `findings_path` and `incident_brief_path`; RCA dispatches `post-mortem-author` directly in Phase 5. -->
 
-Until NES-283 exists, callers that only need one post-mortem from existing findings should use `~/ai/agents/post-mortem-author.md` directly. Callers that need full incident-to-close RCA should use this workflow.
+Callers that only need one post-mortem from existing findings should use `~/ai/agents/post-mortem-author.md` directly. Callers that need full incident-to-close RCA should use this workflow.
 
 ## Cross-References
 
@@ -356,7 +390,7 @@ Until NES-283 exists, callers that only need one post-mortem from existing findi
 - `~/ai/agents/implementation-pipeline-orchestrator.md`: Phase 6 child implementation WU dispatch target.
 - `~/ai/workflows/implementation-pipeline.md`: downstream implementation lifecycle and review gates.
 - `~/ai/workflows/pr-review.md`: downstream PR review surface reached by implementation-pipeline Phase 8.
-- `~/ai/workflows/post-mortem.md`: queued future NES-283 post-mortem-only workflow, not a NES-278 dependency.
+- `~/ai/workflows/post-mortem.md`: intentional separate NES-283 post-mortem-only workflow boundary, not a NES-278 dependency.
 - `~/ai/conventions/workflow-routing.md`: routing precedence and project-specific cue table boundaries.
 - `~/ai/conventions/worktree-isolation.md`: disjoint worktree rule for any parallel action-item implementation WUs.
 - `~/ai/conventions/agent-questions-and-session-graph.md`: `NEEDS_INPUT:<absolute_artifact_path>` question envelope and surfacing convention.

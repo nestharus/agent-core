@@ -115,6 +115,38 @@ REFERENCED_OPERATOR_FILES = [
     "jira-operator.md",
     "implementation-pipeline-orchestrator.md",
 ]
+RCA_DISPATCH_WIRING = [
+    (
+        "Phase 3",
+        "agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-3-incident-ticket.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-3-incident-ticket.log",
+        "${planning_dir}/rca-run-manifest.md",
+    ),
+    (
+        "Phase 4",
+        "agents -m gpt-high -a incident-investigator -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-4-incident-investigator.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-4-incident-investigator.log",
+        "${planning_dir}/findings.md",
+    ),
+    (
+        "Phase 5",
+        "agents -m claude-opus -a post-mortem-author -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-5-post-mortem-author.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-5-post-mortem-author.log",
+        "${planning_dir}/post-mortem.md",
+    ),
+    (
+        "Phase 6",
+        "agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-ticket.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-6-action-item-<slug>-ticket.log",
+        "${planning_dir}/action-items.md",
+    ),
+    (
+        "Phase 6",
+        "agents -m claude-opus -a implementation-pipeline-orchestrator -p ${child_worktree_path} -f ${scratch_dir}/prompts/rca-phase-6-action-item-<slug>-implementation.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-6-action-item-<slug>-implementation.log",
+        "${planning_dir}/action-items.md",
+    ),
+    (
+        "Phase 8",
+        "agents -m claude-opus -a ${ticket_operator} -p ${repo_root} -f ${scratch_dir}/prompts/rca-phase-8-tracker-comment.md 2>&1 | tee ${scratch_dir}/logs/rca-phase-8-tracker-comment.log",
+        "${planning_dir}/tracker-comments/phase-8.md",
+    ),
+]
 
 
 def _read_required_file(path):
@@ -320,6 +352,19 @@ def test_phase_8_cites_ticket_operators(workflow_document):
     actions = _subsection_after_heading(phase, "### Actions")
 
     _contains_all(actions, TICKET_OPERATOR_PATHS)
+
+
+def test_rca_child_dispatches_are_wired(workflow_document):
+    body = _require_workflow_document(workflow_document)["body"]
+
+    for phase_name, dispatch_line, artifact_path in RCA_DISPATCH_WIRING:
+        phase_heading = next(
+            heading for heading in PHASE_HEADINGS if heading.startswith(f"## {phase_name} ")
+        )
+        phase = _section_after_heading(body, phase_heading)
+        assert dispatch_line in phase
+        assert artifact_path in phase
+        assert "Refuse to advance" in phase or "Refuse to advance unless" in phase
 
 
 def test_wrap_section_contains_wrap_statement(workflow_document):
