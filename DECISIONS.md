@@ -1705,6 +1705,18 @@ Residual: none. The rebase converts the residual to closed-by-rebase. The struct
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
+## D-2026-05-11b — ACR-156 counter-decision: D-2026-05-09i quarantined as not-policy precedent
+
+**Context.** `D-2026-05-09i` (`ACR-143 Phase 2.5 risk-profile acceptance + mode propagation`) recorded an ACR-143 residual doctrine that allowed `Stable-MEDIUM intrinsic-blast-radius` to advance when the risk was treated as intrinsic to the supported surface. Note: a separate `D-2026-05-09i` entry exists for `ACR-11 mid-pipeline rebase onto ACR-6` — this counter-decision targets the ACR-143 entry by title, not the ACR-11 one.
+
+**Decision.** That doctrine is retracted and is not policy precedent for implementation-pipeline code-quality, model, or prototype-risk verdicts. The LOW-only rule shipped under the ACR-156 family supersedes any reading that would treat stable MEDIUM or HIGH residuals as advanceable implementation-pipeline policy.
+
+**Reason.** ACR-156 is the parent reversal of residual-acceptance precedent. ACR-158 codified orchestrator decompose-on-oscillation behavior, ACR-159 codified the code-quality convention and workflow LOW-only rule, and ACR-160 mirrored the LOW-only and autonomous-decompose rule into the implementation-pipeline workflow.
+
+**Recovery audit.** Any prior workflow run that cited `D-2026-05-09i` as authority for advancing on stable-MEDIUM intrinsic-blast-radius is subject to a recovery audit retroactively re-running the relevant gate from current evidence.
+
+**Cross-link.** ACR-156 family on Linear.
+
 ## D-2026-05-11-acr157 — ACR-157 Work Manager flavor split + tightened manager-max rule + coupling-auditor Required=false framing
 
 **Context.** Manager-layer sessions previously had no explicit flavor declaration, causing implicit-flavor drift across NEEDS_INPUT answers, dispatch prompts, and DECISIONS entries. The first Phase 8 user-review pass identified that `agents/work-manager-operator-max.md` contained MEDIUM-residual loopholes ("stable disposition", "non-blocking", "evidence proves") that contradicted the stated rule "Always choose the LEAST risk / MOST thorough / NEVER choose a shortcut" — the orchestrator's own dogfood pass accepted Phase 4 + Phase 6 code-quality MEDIUM-stable on intrinsic doc-coupling, exactly the pattern the file was supposed to forbid.
