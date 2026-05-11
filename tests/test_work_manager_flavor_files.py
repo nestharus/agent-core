@@ -127,3 +127,21 @@ def test_overview_file_lists_three_flavors():
     assert "work-manager-operator-max.md" in content
     assert "work-manager-operator-pragmatic.md" in content
     assert "work-manager-operator-hackerman.md" in content
+
+
+def test_max_flavor_file_forbids_medium_residual_qualifiers():
+    content = MAX_FLAVOR.read_text(encoding="utf-8")
+
+    assert (
+        "Always decompose or revise. MEDIUM is never accepted as residual under manager-max"
+        in content
+    )
+    assert "Block. Require LOW verdict on the supported-surface dimension" in content
+    assert "For MEDIUM or HIGH, block and decompose before advancement" in content
+    assert "accepting MEDIUM or HIGH residuals" in content
+
+    assert "stable disposition only when evidence proves" not in content
+    assert "Continue only with explicit evidence that the surface is supported" not in content
+    assert "decompose if the residual is not stable" not in content
+    assert "explicitly accepted non-blocking verdict" not in content
+    assert "only if the advisory is proven non-blocking" not in content

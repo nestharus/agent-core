@@ -52,16 +52,16 @@ Acceptable shortcuts: NONE.
 | Shape | Canonical `manager-max` answer |
 |---|---|
 | Phase 4 code-quality HIGH | Halt or decompose. Do not accept residual. Require a smaller WU, targeted fix, or risk-reduction ticket before advancement. |
-| Phase 4 code-quality MEDIUM with stable disposition available | Choose the stable disposition only when evidence proves it is non-blocking; otherwise decompose or revise. Record the rationale in DECISIONS. |
+| Phase 4 code-quality MEDIUM with stable disposition available | Always decompose or revise. MEDIUM is never accepted as residual under manager-max — there is no "stable disposition" qualifier. Record the decompose/revise decision in DECISIONS. |
 | Phase 4 scope-risk MEDIUM (estimate over-2x) | Prefer split/decompose. Do not advance with an oversized WU unless the user explicitly reauthorizes the larger scope. |
 | Phase 4 shortcut-risk MEDIUM | Reject the shortcut. Require the non-shortcut path or split the shortcut into a separately reviewed follow-up. |
-| Phase 4 supported-surface MEDIUM-with-Continue | Continue only with explicit evidence that the surface is supported and the continuation does not add risk. Preserve the callout. |
+| Phase 4 supported-surface MEDIUM-with-Continue | Block. Require LOW verdict on the supported-surface dimension before advancement. Decompose the WU if LOW is structurally unreachable. |
 | Phase 6 code-quality HIGH oscillation (component fanout) | Decompose by component or return to research. Never accept residual HIGH oscillation. |
-| Phase 6 / process-tree-auditor blast-radius MEDIUM/HIGH | For MEDIUM, require residual evidence and decompose if the residual is not stable; for HIGH, block and decompose before advancement. |
-| Phase 6 alignment NEEDS_REVISION or MISALIGNED | Revise. Do not advance until the alignment reviewer returns a passing or explicitly accepted non-blocking verdict. |
+| Phase 6 / process-tree-auditor blast-radius MEDIUM/HIGH | For MEDIUM or HIGH, block and decompose before advancement. No stable-residual qualifier under manager-max. |
+| Phase 6 alignment NEEDS_REVISION or MISALIGNED | Always revise. Do not advance until the alignment reviewer returns a passing verdict. No "explicitly accepted non-blocking" qualifier under manager-max. |
 | Phase 6 prototype-risk HIGH | Defer to prototype or split. Do not force the implementation pipeline through HIGH prototype-risk uncertainty. |
 | Phase 6 derivation multi-layer violation | Block and re-derive one layer deep. Do not proceed with multi-layer inferred contracts. |
-| Phase 7 CodeRabbit non-trivial advisory | Address or file a narrowly scoped follow-up only if the advisory is proven non-blocking; default to addressing before Phase 8. |
+| Phase 7 CodeRabbit non-trivial advisory | Always address before Phase 8. No "proven non-blocking" qualifier under manager-max; file a narrowly scoped follow-up only when the user explicitly authorizes the deferral and record the authorization in DECISIONS. |
 | Phase 8 PR-review test-audit FAIL | Block. Write or fix tests, then re-run the gate. Do not proceed to PR finalization. |
 | Phase 8 PR-review commit-hygiene split signal | Split or rebuild commits. Do not merge a history the gate says is not reviewable. |
 | Auto-merge unavailable / merge conflict | Rebase on current main, run the full relevant gate battery, then require manual merge evidence. |
@@ -73,7 +73,7 @@ Acceptable shortcuts: NONE.
 
 - Stop when the manager-layer answer is selected from the table and cites `manager-max`.
 - If a NEEDS_INPUT shape is not pre-enumerated here, halt and ask the user.
-- Stop before accepting HIGH residuals, accepting unreviewed shortcut risk, advancing after FAIL or blocking verdicts, skipping required audits, bypassing Phase 8 user review, force-merging, auto-merging without user-review confirmation, silently choosing a non-enumerated NEEDS_INPUT answer, or prioritizing speed over accuracy.
+- Stop before accepting MEDIUM or HIGH residuals, accepting unreviewed shortcut risk, advancing after FAIL or blocking verdicts, skipping required audits, bypassing Phase 8 user review, force-merging, auto-merging without user-review confirmation, silently choosing a non-enumerated NEEDS_INPUT answer, or prioritizing speed over accuracy.
 
 ## Escalation
 
