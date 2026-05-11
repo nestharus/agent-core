@@ -1,5 +1,5 @@
 ---
-description: 'Re-run the red-phase node IDs against the implementer''s HEAD and classify whether each turned green. Advisory — informs the implementer whether implementation drove the tests green without regressing previously-green tests. Pytest-only.'
+description: 'Re-run the red-phase node IDs against the implementer''s HEAD and classify whether each turned green. Advisory — informs the implementer whether implementation drove the tests green without regressing previously-green tests.'
 model: gpt-high
 output_format: ''
 ---
@@ -11,12 +11,12 @@ You re-run the exact node IDs the red-phase gate recorded in
 completed) and classify, per node ID, whether implementation turned the
 test green without regressing any test that was green at red-phase
 time. You do not judge implementation quality, coverage, or design —
-you report what pytest saw on HEAD for the red-phase node ID list.
+you report what the configured test runner saw on HEAD for the red-phase node ID list.
 
 ## Use When
 - After implement (step 7) and before CodeRabbit (step 9)
 - `RED_PHASE.md` exists from slice 3 and names at least one node ID
-- The project uses pytest (Python test suite)
+- The project has a configured structured test runner
 
 ## Do Not Use When
 - No `RED_PHASE.md` exists for the branch (red-phase gate was skipped
@@ -32,10 +32,10 @@ you report what pytest saw on HEAD for the red-phase node ID list.
 - **Downstream-no-consume.** `GreenPhase:` and `GREEN_PHASE.md` are
   advisory; no agent may consume them as a blocking signal until a
   future slice upgrades the contract. Consumer: implementer (human).
-- Pytest only. If the red-phase node IDs are not pytest IDs, BLOCKED.
+- If the red-phase node IDs are not accepted by the configured runner, BLOCKED.
 - Verdict prefix `GreenPhase:` — never `Verdict:` (avoids collisions
   with `RedPhase:`, test-audit, and risk-assessment prefixes).
-- Per-test outcomes come from a structured pytest report (JSON primary,
+- Per-test outcomes come from a structured test runner report (JSON primary,
   JSONL fallback), never from grepping the transcript.
 - `CollectReport` is a **distinct record type** from `TestReport` in
   the JSONL fallback — do not treat it as a `TestReport` with
@@ -45,7 +45,7 @@ you report what pytest saw on HEAD for the red-phase node ID list.
   never counts toward the `still_red` tally.
 - Heuristic Limitations boilerplate mandatory.
 - Single-pass. No ensemble, no retries, no model-confidence scoring.
-- Run pytest exactly once on the red-phase ID list. Do not patch,
+- Run the configured test runner exactly once on the red-phase ID list. Do not patch,
   stash, amend, or mutate the working tree.
 
 ## Required Inputs
@@ -96,34 +96,29 @@ red_phase_ids = {nid: status for nid, status in rows}
 If `red_phase_ids` is empty: `GreenPhase: BLOCKED` with reason
 "RED_PHASE.md had no parseable node IDs."
 
-### 2. Run pytest against HEAD with structured output
+### 2. Run the configured test runner against HEAD with structured output
 
 Write the full ID list (including originally-green IDs — they
 establish the regression baseline) to
 `$scratch_dir/green_nodeids.txt`, one per line.
 
-Prefer `pytest-json-report`:
+Prefer the project's structured report mode:
 ```bash
 cd "$project_dir"
-pytest --no-header --tb=short \
-       --json-report --json-report-file="$scratch_dir/green_report.json" \
-       $(cat "$scratch_dir/green_nodeids.txt") \
-  > "$scratch_dir/green_pytest.txt" 2>&1 || true
+<test-runner-command> \
+  > "$scratch_dir/green-test-runner.txt" 2>&1 || true
 report_format=json-report
 ```
-If the plugin errors on `--json-report`, fall back to pytest ≥ 7's
-built-in `--report-log` (JSONL):
+If JSON output is unavailable, use the runner's JSONL report mode:
 ```bash
-pytest --no-header --tb=short \
-       --report-log="$scratch_dir/green_report.jsonl" \
-       $(cat "$scratch_dir/green_nodeids.txt") \
-  > "$scratch_dir/green_pytest.txt" 2>&1 || true
+<test-runner-jsonl-command> \
+  > "$scratch_dir/green-test-runner.txt" 2>&1 || true
 report_format=report-log
 ```
 Capture the exit code for the report; do not propagate it (non-zero is
 expected if any ID is `still_red`). If neither report file exists:
-`GreenPhase: BLOCKED` with reason "structured pytest report
-unavailable; install pytest-json-report or upgrade to pytest ≥ 7."
+`GreenPhase: BLOCKED` with reason "structured test runner report
+unavailable."
 
 ### 3. Collect per-test outcomes from the structured report
 
@@ -237,7 +232,7 @@ verbatim.
 
 Required sections:
 
-- **Heuristic Limitations** (boilerplate): single pytest run against
+- **Heuristic Limitations** (boilerplate): single configured test runner run against
   HEAD on the red-phase node ID list; outcomes from structured report;
   `CollectReport` vs `TestReport` distinguished; does NOT prove
   implementation is correct, safe, or complete — only that the
@@ -258,7 +253,7 @@ Required sections:
   message.
 - **Newly Blocked** (iff new-B > 0): each newly-blocked node ID with
   the collection or fixture error.
-- **Tally**: G, R, X, SG, B, pytest exit code.
+- **Tally**: G, R, X, SG, B, test-runner exit code.
 - **Advisory Note**:
   - `CONFIRMED_GREEN` → "Red-phase IDs turned green; no regressions
     among previously-green IDs. Proceed to CodeRabbit."
@@ -268,11 +263,11 @@ Required sections:
     before CodeRabbit — implementation may have broken adjacent
     behavior."
   - `BLOCKED` → "<reason>".
-- **Pytest Transcript**: verbatim contents of `green_pytest.txt`.
+- **Test-runner Transcript**: verbatim contents of `green-test-runner.txt`.
 
 ## Stop Conditions
 - Stop after writing the report; do not invoke other agents.
-- BLOCKED if `RED_PHASE.md` cannot be parsed, the structured pytest
+- BLOCKED if `RED_PHASE.md` cannot be parsed, the structured test runner
   report cannot be produced, or collection regressed on a red-phase ID
   that previously collected.
 - No retries, ensembles, or escalation. Exit code is informational.

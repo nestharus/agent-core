@@ -362,7 +362,7 @@ handling, logging consistency.
    `httpx.AsyncClient` with `ASGITransport(app)`. Not mixed, not homegrown.
 2. **Dependency overrides in tests**: tests replace DB / auth / external deps via
    `app.dependency_overrides[dep] = ...`, NOT by monkeypatching globals.
-3. **Fixtures**: pytest fixtures for app, client, DB, user. `scope=` chosen
+3. **Fixtures**: test runner fixtures for app, client, DB, user. `scope=` chosen
    deliberately. Teardown cleans `app.dependency_overrides`.
 4. **Captured-behavior tests**: tests should encode the **documented intended behavior**,
    not snapshot whatever the code currently returns. If you can't tell what's intended

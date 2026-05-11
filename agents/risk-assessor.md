@@ -129,7 +129,7 @@ In-scope persisted state includes:
 - databases, including existing rows and table contents written under prior schema or invariant rules
 - other persisted artifacts such as lock files, cache stores, state files, registry entries, generated artifacts, and prior-run outputs
 
-Out of scope: logical or in-memory state, runtime invariant enforcement, tests/docs-only changes with no persisted surface, and planning-only invariants.
+Out of scope: logical or in-memory state, runtime invariant enforcement, test-only or docs-only changes with no persisted surface, and planning-only invariants.
 
 Treat an uncovered area, proposal, diff, or invariant candidate as introducing a persisted-state invariant when it newly rejects, requires, narrows, normalizes, or constrains values that were previously legal or unvalidated. Check these six signal categories:
 

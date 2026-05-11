@@ -321,7 +321,7 @@ def get_service(_: object = Depends(get_repo)):
 - Convention observed in `ai-workflow`: settings are cached with `@lru_cache(maxsize=1)`.
   File reference: `app/core/dependencies.py:1-9`.
 - Convention observed in `ai-workflow`: tests override settings and service providers through `app.dependency_overrides`.
-  File reference: `tests/unit/test_error_handler_integration.py:69-80`, `tests/unit/test_error_handler_integration.py:145-147`.
+  File reference: `unit test file test_error_handler_integration.py:69-80`, `unit test file test_error_handler_integration.py:145-147`.
 
 ## 4. State Management & Singletons
 
@@ -421,7 +421,7 @@ async def status() -> dict[str, bool]:
 - Convention observed in `ai-workflow`: settings provider is cached, but DB and search clients are not.
   File reference: `app/core/dependencies.py:1-9`, `app/core/factory.py:147-166`.
 - Convention observed in `ai-workflow`: tests build fresh apps or override providers instead of mutating module globals.
-  File reference: `tests/conftest.py:81-111`, `tests/unit/test_error_handler_integration.py:69-80`.
+  File reference: `shared fixture module:81-111`, `unit test file test_error_handler_integration.py:69-80`.
 
 ## 5. Async / Sync Handler Choice
 
@@ -912,7 +912,7 @@ DEBUG = os.getenv("DEBUG") == "1"
 - Convention observed in `ai-workflow`: comments explicitly call out permissive dev defaults that must be tightened in production.
   File reference: `app/core/settings.py:80-105`.
 - Convention observed in `ai-workflow`: tests inject deterministic credentials through fixtures and `setdefault`.
-  File reference: `tests/conftest.py:64-78`, `tests/conftest.py:126-135`.
+  File reference: `shared fixture module:64-78`, `shared fixture module:126-135`.
 - Convention observed in `ai-workflow`: settings retrieval is centralized in `get_settings()`.
   File reference: `app/core/dependencies.py:1-9`.
 
@@ -1202,17 +1202,17 @@ def test_mutates_global_overrides() -> None:
 
 ### Convention Observed in ai-workflow
 - Convention observed in `ai-workflow`: tests define explicit `Settings` fixtures with safe credentials.
-  File reference: `tests/conftest.py:64-78`.
+  File reference: `shared fixture module:64-78`.
 - Convention observed in `ai-workflow`: sync HTTP tests use `with TestClient(app)`.
-  File reference: `tests/conftest.py:87-101`.
+  File reference: `shared fixture module:87-101`.
 - Convention observed in `ai-workflow`: async integration tests use `httpx.AsyncClient` plus `ASGITransport`.
-  File reference: `tests/conftest.py:104-111`, `tests/integration/test_example_endpoints.py:119-129`.
+  File reference: `shared fixture module:104-111`, `integration test file test_example_endpoints.py:119-129`.
 - Convention observed in `ai-workflow`: provider overrides are applied through `app.dependency_overrides`.
-  File reference: `tests/unit/test_error_handler_integration.py:77-80`, `tests/unit/test_error_handler_integration.py:145-147`.
+  File reference: `unit test file test_error_handler_integration.py:77-80`, `unit test file test_error_handler_integration.py:145-147`.
 - Convention observed in `ai-workflow`: external resources are replaced with small fakes at the app factory boundary.
-  File reference: `tests/integration/test_example_endpoints.py:81-91`.
+  File reference: `integration test file test_example_endpoints.py:81-91`.
 - Convention observed in `ai-workflow`: tests assert error-envelope structure, not just status.
-  File reference: `tests/unit/test_error_handler_integration.py:89-114`, `tests/unit/test_error_handler_integration.py:153-204`.
+  File reference: `unit test file test_error_handler_integration.py:89-114`, `unit test file test_error_handler_integration.py:153-204`.
 
 ## 13. Security & Auth
 
@@ -1581,18 +1581,18 @@ Important:
   File reference: `app/core/factory.py:209-211`.
 
 ### Testing Style
-- Convention observed in `ai-workflow`: `tests/conftest.py` acts as a composition root for common fixtures.
-  File reference: `tests/conftest.py:1-12`, `tests/conftest.py:61-111`.
+- Convention observed in `ai-workflow`: `shared fixture module` acts as a composition root for common fixtures.
+  File reference: `shared fixture module:1-12`, `shared fixture module:61-111`.
 - Convention observed in `ai-workflow`: tests supply explicit safe credentials to satisfy settings validation.
-  File reference: `tests/conftest.py:64-78`.
+  File reference: `shared fixture module:64-78`.
 - Convention observed in `ai-workflow`: async integration tests use in-process ASGI transport.
-  File reference: `tests/conftest.py:104-111`.
+  File reference: `shared fixture module:104-111`.
 - Convention observed in `ai-workflow`: app-boundary dependencies are replaced with dummy resources via monkeypatch in integration tests.
-  File reference: `tests/integration/test_example_endpoints.py:81-91`.
+  File reference: `integration test file test_example_endpoints.py:81-91`.
 - Convention observed in `ai-workflow`: error-path tests validate both status and envelope shape.
-  File reference: `tests/unit/test_error_handler_integration.py:89-204`.
+  File reference: `unit test file test_error_handler_integration.py:89-204`.
 - Convention observed in `ai-workflow`: settings overrides may use `model_copy(update=...)` for isolation.
-  File reference: `tests/conftest.py:94-101`.
+  File reference: `shared fixture module:94-101`.
 
 ### Auth Gap
 - Convention observed in `ai-workflow`: auth infrastructure is not yet fleshed out in `app/`.

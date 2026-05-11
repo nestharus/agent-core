@@ -71,7 +71,7 @@ Use these entries as report citations for `workflow-design-auditor` and `agent-d
 ### DP-011 - AGENTS.md as routing and topology
 - Short statement: AGENTS.md is the routing and topology catalog; detailed procedure belongs in the linked operator, workflow, or convention file.
 - Canonical authority: `~/ai/AGENTS.md`
-- Exemplars: `~/ai/agents/agentsmd-curator.md`; `~/ai/conventions/workflow-routing.md`; `~/ai/tests/test_agentsmd_structure.py`
+- Exemplars: `~/ai/agents/agentsmd-curator.md`; `~/ai/conventions/workflow-routing.md`
 - Auditor use: Cite when routing rows contain procedure detail, linked operators are missing, or catalog changes trespass on operator design.
 
 ### DP-012 - Explicit anti-scope and stop conditions

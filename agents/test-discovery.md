@@ -46,7 +46,7 @@ cover the change semantically. You do one grep pass and report.
 - `base_ref` (default `origin/main`): merge-base target
 - `spec_dir` (default `${planning_root}/coverage`): spec directory (recorded, not consumed)
 - `product_globs` (default `['backend/**/*.py', 'frontend/src/**/*.{js,jsx,ts,tsx}']`)
-- `test_roots` (default `['test/', 'tests/', 'frontend/src/__tests__/']`)
+- `test_roots` (default: project-specific test roots)
 
 ## Inputs
 

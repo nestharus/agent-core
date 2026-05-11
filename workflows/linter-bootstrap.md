@@ -87,7 +87,7 @@ Run the stages in order. Keep evidence links close to every coverage claim, and 
 
 Read the target project `AGENTS.md`, manifests, CI workflow files, task runners, linter configs, formatter configs, pre-commit configs, and existing structural tests. Read the A1 source policy sections for function classification, nesting depth, inline functions, duplicate responsibility, push-vs-pull coupling, numerical thresholds, and failure modes.
 
-<!-- INTENTIONAL: linter-bootstrap is a planning workflow; Stage 1 performs inventory inline and may consume externally supplied `linter-inventory-agent` output, but this workflow must not define or dispatch that optional operator. Guarded by `tests/test_linter_bootstrap_workflow.py::test_tbd_linter_inventory_operator_is_only_referenced_not_defined`. -->
+<!-- INTENTIONAL: linter-bootstrap is a planning workflow; Stage 1 performs inventory inline and may consume externally supplied `linter-inventory-agent` output, but this workflow must not define or dispatch that optional operator. -->
 If the caller provides `linter-inventory-agent` output, consume it as supporting evidence.
 
 Write `${planning_dir}/research/linter-bootstrap-inventory.md` with:

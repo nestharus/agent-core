@@ -285,7 +285,7 @@ agents -m gpt-high -p <worktree> -f product-strategy/engineering\ research\ agen
 **Inputs provided to agent:**
 - `executive-roadmap.md`
 - `proposal.md`
-- The full codebase (agent reads `services/`, `daemon/`, `tests/`, `migrations/`, etc.)
+- The full codebase (agent reads service code, daemon code, test trees, migrations, etc.)
 - `DECISIONS.md`
 - Existing research in `plans/research/`
 

@@ -31,7 +31,7 @@ should FAIL — that's a feature, not a bug.
 - **NEVER read the current implementation to determine expected values.** Expected values come from the behavior spec, not the code.
 - **NEVER write `assert result == <value I got from running the code>`.** That's capturing current behavior. Expected values must be derived from the spec.
 - **Tests that pass against buggy code are worse than no tests.** A test must fail if the behavior is wrong, even if the current implementation happens to pass.
-- **Confirmed discovered bugs use strict xfail.** A test that correctly fails against a confirmed bug must use `@pytest.mark.xfail(strict=True)` with a reason that cites the behavior-source commit hash.
+- **Confirmed discovered bugs use strict expected-failure markers.** A test that correctly fails against a confirmed bug must use the project runner's strict expected-failure mechanism with a reason that cites the behavior-source commit hash.
 - **Reports follow `~/ai/conventions/test-reports.md`.** UI-touching behavior needs screenshot evidence; non-UI behavior needs the relevant artifact evidence; every code claim needs `file_path:line_number` plus an exact fenced code block.
 - **One behavior per test.** Don't bundle multiple behaviors into one test function.
 - **Test names describe the behavior, not the implementation.** `test_markup_applies_percentage_to_base_price` not `test_calculate_markup_function`.
@@ -70,15 +70,15 @@ find <worktree_path>/tests -name "test_*.py" | head -20
 # Read a representative test file to match patterns
 cat <worktree_path>/test/unit/<nearest_test_file>.py | head -60
 
-# Check conftest.py for available fixtures
-find <worktree_path> -name "conftest.py" | xargs head -50
+# Check shared fixture module for available fixtures
+find <worktree_path> -name "shared fixture module" | xargs head -50
 ```
 
 Match:
 - Import style
 - Test class vs function style
 - Fixture patterns
-- Assert style (plain assert vs pytest.raises vs assertEqual)
+- Assert style (plain assert vs exception assertion vs assertEqual)
 - File naming and location conventions
 
 ### 3. Design Test Cases from Spec
@@ -154,7 +154,7 @@ Common failure modes:
 ```bash
 cd <worktree_path>
 # Python
-python3 -m pytest <test_file> -v --no-header --tb=short 2>&1
+<test-runner-command> <test_file> 2>&1
 
 # Frontend
 cd frontend && npx jest <test_file> --verbose 2>&1
@@ -166,7 +166,7 @@ If tests FAIL: check whether the failure indicates a BUG in the code (behavior d
 - Do NOT change the test to match current behavior
 - Note the failure as a confirmed bug
 - The test is CORRECT — the code is wrong
-- Mark the bug test with `@pytest.mark.xfail(strict=True)` and an xfail reason citing the behavior-source commit hash
+- Mark the bug test with the project runner's strict expected-failure mechanism and a reason citing the behavior-source commit hash
 - Add a bug-discovery report entry with expected vs actual behavior, failing test code, production code, screenshot or non-UI evidence, and plain-English impact
 
 ### Output Format
@@ -222,6 +222,6 @@ Only include items that need attention. No "positives" or confirmations.
 ## Stop Conditions
 
 - Return `BLOCKED` if: no behavior spec provided, spec is still AMBIGUOUS
-- Return `BLOCKED` if: test infrastructure is broken (pytest not installed, frontend build fails)
+- Return `BLOCKED` if: test infrastructure is broken (configured runner unavailable, frontend build fails)
 - Return `NEEDS_INPUT` if: spec is incomplete — specific behaviors are under-specified
 - If a test correctly fails (bug found), do NOT fix the code — report the bug and move on

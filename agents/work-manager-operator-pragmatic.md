@@ -63,7 +63,7 @@ Acceptable shortcuts: targeted test runs instead of full suite when blast radius
 | Phase 8 PR-review commit-hygiene split signal | Split only the commits required for reviewability; avoid polishing history beyond the gate's concern. |
 | Phase 8 user-review gate (proceed-to-Phase-9 approval) | Auto-approve option A IFF: all four PR-review gates PASS, aggregate code-quality LOW OR stable-MEDIUM with documented disposition, no HIGH residuals, all process-tree audits PASS or skipped-with-evidence, diff stays within declared surfaces. Halt only when a HIGH residual or unexplained gate-FAIL is present. |
 | Phase 8 user-review with self-referential fixed-point | Self-referential fixed-point fixes auto-approve when Phase 6 LOW under refined metric is documented, regardless of Phase 4 MEDIUM. |
-| Auto-merge unavailable / merge conflict | Rebase, run targeted tests/smoke relevant to the conflict, then use manual merge evidence. |
+| Auto-merge unavailable / merge conflict | Rebase, run targeted verification relevant to the conflict, then use manual merge evidence. |
 | Schema-rebuild (Linear/Jira state required) | Re-read the selected backend and rebuild only the stale schema/state portion. |
 | cwd-resolution / current-working-directory drift | Rebuild the child invocation from the session manifest cwd and preserve the WU worktree path as the authority. |
 | Process-tree audit blocking verdict | Fix the blocking finding with the smallest rewind/split/shrink that restores trust; do not rerun unrelated phases. |
