@@ -1695,6 +1695,34 @@ Residual: none. The rebase converts the residual to closed-by-rebase. The struct
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
+## D-2026-05-11-acr157 — ACR-157 Work Manager flavor split + tightened manager-max rule + coupling-auditor Required=false framing
+
+**Context.** Manager-layer sessions previously had no explicit flavor declaration, causing implicit-flavor drift across NEEDS_INPUT answers, dispatch prompts, and DECISIONS entries. The first Phase 8 user-review pass identified that `agents/work-manager-operator-max.md` contained MEDIUM-residual loopholes ("stable disposition", "non-blocking", "evidence proves") that contradicted the stated rule "Always choose the LEAST risk / MOST thorough / NEVER choose a shortcut" — the orchestrator's own dogfood pass accepted Phase 4 + Phase 6 code-quality MEDIUM-stable on intrinsic doc-coupling, exactly the pattern the file was supposed to forbid.
+
+**Decision.** Three coupled decisions:
+
+1. **Flavor split.** Split the manager flavor system into three sibling operator files (`manager-max | manager-pragmatic | manager-hackerman`), retain `agents/work-manager-operator.md` as the overview, default undeclared sessions to `manager-max`, and gate auto-merge behind a Phase 8 user-review step.
+
+2. **manager-max rule tightening (Phase 8 revision).** Tighten `agents/work-manager-operator-max.md` to forbid all MEDIUM-residual qualifiers. Five rows updated plus the Stop Conditions line:
+   - `Phase 4 code-quality MEDIUM with stable disposition available` → `Always decompose or revise. MEDIUM is never accepted as residual under manager-max — there is no "stable disposition" qualifier. Record the decompose/revise decision in DECISIONS.`
+   - `Phase 4 supported-surface MEDIUM-with-Continue` → `Block. Require LOW verdict on the supported-surface dimension before advancement. Decompose the WU if LOW is structurally unreachable.`
+   - `Phase 6 / process-tree-auditor blast-radius MEDIUM/HIGH` → `For MEDIUM or HIGH, block and decompose before advancement. No stable-residual qualifier under manager-max.`
+   - `Phase 6 alignment NEEDS_REVISION or MISALIGNED` → `Always revise. Do not advance until the alignment reviewer returns a passing verdict. No "explicitly accepted non-blocking" qualifier under manager-max.`
+   - `Phase 7 CodeRabbit non-trivial advisory` → `Always address before Phase 8. No "proven non-blocking" qualifier under manager-max; file a narrowly scoped follow-up only when the user explicitly authorizes the deferral and record the authorization in DECISIONS.`
+   - Stop Conditions: `accepting HIGH residuals` → `accepting MEDIUM or HIGH residuals`.
+
+   `agents/work-manager-operator-pragmatic.md` and `agents/work-manager-operator-hackerman.md` are intentionally NOT touched — their MEDIUM-acceptance rows are correctly permissive for their flavors.
+
+3. **Coupling-auditor Required=false for markdown-only WUs (option B, this WU specifically).** The prior Phase 4 + Phase 6 code-quality MEDIUM verdicts came from `coupling-auditor` scoring inter-document markdown cross-references against the A1 metric `Coupling by distinct external symbols/modules referenced` (LOW 0-2, MEDIUM >= 3, HIGH >= 6) in `conventions/code-quality.md:81-88`. The A1 metric is explicitly function-level review calibration per `conventions/code-quality.md:78` ("review calibration: they identify where a function is likely doing too many kinds of work or depending on too many external surfaces"). ACR-157 is a markdown-only WU adding no product functions; markdown cross-references between operator/convention documents are documentation cross-link discipline, not A1-coupling. Under the tightened `manager-max` rule, the option-B applicability correction is preferred over mechanical decomposition because per-file decomposition cannot reduce the intrinsic cross-reference count of a 3-flavor design (each flavor file independently references AGENTS.md + overview + 2 siblings = 4 markdown modules). Round 5 (Phase 4) and Round 2 (Phase 6) re-dispatch coupling-auditor with `Required=false` and the cited reason. cohesion-auditor remains `Required=true`. Expected aggregate `LOW`.
+
+**Parallel coupling-applicability ticket.** The question of whether markdown cross-reference coupling deserves its own metric (distinct from A1's function-level scope) is out of scope for ACR-157 and is filed separately as [ACR-172](https://linear.app/neshq/issue/ACR-172/coupling-auditor-markdown-applicability-metric-refinement). That ticket examines whether `conventions/code-quality.md` should add a doc-coupling axis, or whether `coupling-auditor.md` should explicitly scope itself to product-code via an applicability gate. ACR-157 takes the per-WU applicability route (manifest `Required=false` with written reason); ACR-172 decides whether to move the gate upstream.
+
+**Source of truth for the full surface enumeration and rollback file set.** See `/home/nes/projects/ai/planning/acr-157-work-manager-flavors/audit-history.md` § Round 3 final state and § Artifact lineage. The Round 5 (Phase 4) and Round 2 (Phase 6) code-quality artifacts under `/home/nes/projects/ai/planning/acr-157-work-manager-flavors/code-quality/acr-157-phase-4.round5/` and `.../acr-157-work-manager-flavor-system.round2/` are the canonical evidence for the LOW verdict under tightened-rule framing.
+
+**Cross-link.** ACR-157 (this WU).
+
+**Manager flavor at decision time.** `manager-max` (this decision was authored under the default safest-derisking flavor per the AGENTS.md startup rule introduced by this WU, with the tightened rule applied to the WU's own dogfood pass).
+
 ## D-2026-05-09n — ACR-114 Phase 9 finish-only: skip Phase 8 audit #3 + 2nd rebase onto master after ACR-6/11/144 landed
 
 **WU**: ACR-114. **Phase**: 8 → 9 (finish-only orchestrator dispatch). **Decision**: Accept-as-residual the Phase 8 process-tree audit #3 (skipped); rebase a second time from base `840e98c` onto current master `fef8073` to absorb ACR-6 (`31d3b26`), ACR-11 (`c39cb88`), and ACR-144 (`fef8073`); proceed to Phase 9 draft PR + auto-merge.
