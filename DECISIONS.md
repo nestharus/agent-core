@@ -1765,3 +1765,13 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 Also add a `manager-max` clarification that the Phase 8 user-review gate is not an unconditional halt under max mode. It is a table-backed approval gate for clean LOW/PASS pipeline output and remains a human halt only for uncovered value/scope changes or failing evidence.
 
 **Cross-link.** ACR-157, parent WU for the Work Manager flavor system.
+
+## D-2026-05-11-acr157-fixed-point-row — Phase 8 self-referential fixed-point auto-approval
+
+**Context.** ACR-171 exposed a gap in the `manager-max` Phase 8 user-review row added in PR #109 / commit `6414bd0`: self-referential metric-refinement WUs can be guaranteed to surface a Phase 4 MEDIUM when the un-refined metric evaluates the WU's own refinement surfaces. ACR-171 refined the cohesion-auditor metric; Phase 4 reported MEDIUM because the old cohesion rule scored its own refinement surfaces poorly, while Phase 6 returned LOW under the refined rule. The old strict "LOW for every required round" clause treated that mathematical artifact as a residual and halted even though the dogfood proof was dispositive.
+
+**Decision.** Add a dedicated Phase 8 user-review fixed-point row to `manager-max`: auto-approve option A only when (a) the WU's stated goal is refining the metric/rule/auditor that produced the Phase 4 MEDIUM, (b) Phase 6 or a later post-fix round returned LOW under the refined metric/rule, (c) all four Phase 8 PR-review gates PASS, (d) all process-tree audits PASS, and (e) the diff is confined to declared surfaces. In this narrow case, the Phase 4 MEDIUM is the expected result of running the un-refined metric against its own refinement surfaces, not a real residual. Otherwise halt with NEEDS_INPUT and cite the failed condition.
+
+**Flavor consistency.** `manager-pragmatic` and `manager-hackerman` already allow broader MEDIUM/HIGH-stable dispositions, but they now carry the same explicit fixed-point note so future Work Manager answers do not have to rediscover the exception.
+
+**Cross-links.** ACR-157 (flavor system parent), PR #109 (Phase 8 user-review row), and ACR-171 (cohesion-auditor metric refinement that triggered the gap).

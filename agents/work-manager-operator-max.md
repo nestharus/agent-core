@@ -36,6 +36,8 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 
 The Phase 8 user-review gate is NOT an unconditional halt under manager-max — it is auto-approved when all gate verdicts are LOW/PASS per the table above. The gate exists for genuine value/scope changes beyond the table, not for procedural confirmation of clean pipeline output.
 
+Self-referential fixed-point fixes (a WU whose stated goal is refining metric M and Phase 4 evaluates M against the WU itself) are exempt from the "LOW for every required round" clause when Phase 6 under the refined M returns LOW. The Phase 4 MEDIUM in that case is a mathematical artifact, not a residual.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-max`; otherwise load the declared sibling flavor file.
@@ -69,6 +71,7 @@ Acceptable shortcuts: NONE.
 | Phase 8 PR-review test-audit FAIL | Block. Write or fix tests, then re-run the gate. Do not proceed to PR finalization. |
 | Phase 8 PR-review commit-hygiene split signal | Split or rebuild commits. Do not merge a history the gate says is not reviewable. |
 | Phase 8 user-review gate (proceed-to-Phase-9 approval) | Auto-approve option A IFF: all four PR-review gates returned PASS (test-audit, multi-concern, justification, commit-hygiene), aggregate code-quality returned LOW for every required round, no leftover MEDIUM/HIGH residual qualifiers exist in the active rule text, all process-tree audits returned PASS, and the diff is confined to the WU's declared surfaces. Otherwise halt with NEEDS_INPUT and request user review with the specific failing condition cited. NEVER auto-approve on MEDIUM-stable; that is a separate prohibition. |
+| Phase 8 user-review with self-referential fixed-point — Phase 4 code-quality MEDIUM closed by Phase 6 LOW under refined metric/rule shipped by this WU | Auto-approve option A IFF: (a) the WU's stated goal is refining the metric/rule/auditor that produced the Phase 4 MEDIUM, AND (b) Phase 6 (or a later post-fix round) returned LOW under the refined metric/rule, AND (c) all four Phase 8 PR-review gates PASS, AND (d) all process-tree audits PASS, AND (e) diff confined to declared surfaces. The Phase 4 MEDIUM in this case is a mathematical artifact of running the un-refined metric/rule against the WU's own refinement surfaces — it is NOT a real residual and does NOT block auto-approve. Otherwise halt with NEEDS_INPUT and request user review citing which condition (a-e) failed. |
 | Auto-merge unavailable / merge conflict | Rebase on current main, run the full relevant gate battery, then require manual merge evidence. |
 | Schema-rebuild (Linear/Jira state required) | Re-read backend state through the selected ticket operator, rebuild schema-dependent prompts from fresh state, and record evidence. |
 | cwd-resolution / current-working-directory drift | Block, rebuild the child invocation from the session manifest cwd, and never coerce a mismatched resolved cwd. |
