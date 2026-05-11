@@ -48,17 +48,15 @@ Produces a full coverage inventory for the codebase.
    ```bash
    cat pyproject.toml | grep -A 20 "\[tool.coverage"
    cat .coveragerc 2>/dev/null
-   cat pytest.ini 2>/dev/null
-   cat setup.cfg 2>/dev/null | grep -A 10 "\[tool:pytest\]"
+   find . -maxdepth 3 -type f -name "*coverage*" -o -name "setup.cfg"
    ```
 
-2. Run pytest with branch coverage:
+2. Run the configured Python coverage command with branch coverage:
    ```bash
    cd <worktree_path>
-   python3 -m pytest --cov=. --cov-branch --cov-report=json:/tmp/coverage-backend.json \
-     --cov-report=term-missing -v --no-header --tb=no 2>&1 | tee /tmp/coverage-backend-stdout.txt
+   <python-coverage-command> 2>&1 | tee /tmp/coverage-backend-stdout.txt
    ```
-   If pytest-cov is not installed, note that as a gap.
+   If the backend has no configured branch-coverage command, note that as a gap.
 
 3. Parse the JSON coverage report:
    ```bash
@@ -191,6 +189,6 @@ A low-value test is one that:
 
 ## Stop Conditions
 
-- Return `BLOCKED` if: pytest-cov not installed and can't measure coverage, frontend test runner broken
+- Return `BLOCKED` if: backend coverage cannot be measured and frontend test runner is also broken
 - Return `PARTIAL` if: some coverage data collected but not all (e.g., backend works, frontend broken)
 - Always produce whatever data you CAN collect, even if some measurements fail

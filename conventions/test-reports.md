@@ -147,10 +147,10 @@ Use the landed behavior verdicts without inventing new disposition tokens:
 - `AMBIGUOUS`
 - `OBVIOUSLY_BROKEN`
 
-A confirmed bug with verified intended behavior must be represented in pytest as:
+A confirmed bug with verified intended behavior must be represented as an expected-failure test:
 
 ```python
-@pytest.mark.xfail(
+@expected_failure(
     strict=True,
     reason="Confirmed bug: intended behavior from commit <hash>; see <spec path>#<section>",
 )

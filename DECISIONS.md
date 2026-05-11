@@ -1,5 +1,15 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-11-pytest-removal — ACR-174 delete structural markdown tests and pytest infrastructure
+
+**Decision.** Delete pytest entirely from `~/ai` per the user directive: "delete pytest entirely. I don't want tests on markdown files. those tests are not useful. delete them."
+
+**Rationale.** The deleted structural-test pattern parsed markdown files and asserted string or regex shape. Testing file shape is not testing behavior; it is brittle against harmless prose changes while missing the unwanted workflow or agent behavior the project actually cares about.
+
+**Surface deleted.** Removed the top-level `tests/` tree, client-library test directories under `clients/*/tests/`, tracked `conftest.py` files inside those trees, and any active pytest/structural-test acceptance references discovered in workflow, operator, convention, and startup docs. No runtime `clients/linear/` CLI source was deleted.
+
+**Follow-up.** Regression-guard responsibility shifts to the ACR-175 eval framework. This entry does not rewrite or retract older past-tense DECISIONS entries that recorded pytest evidence at the time those WUs ran.
+
 ## D-2026-05-09h — ACR-143 Phase 6c R1 path-mis-write recovery (orchestrator-side prompt drift, not Tier-1 rewind)
 
 **WU**: ACR-143. **Phase**: 6c R1. **Decision**: orchestrator-side path-recovery instead of Tier-1 rewind.

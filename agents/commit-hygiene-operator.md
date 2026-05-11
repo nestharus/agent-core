@@ -99,7 +99,7 @@ git log --oneline <base>..<branch>
 #    - type (refactor / behavior / test / chore)
 #    - concerns count (how many distinct things does this commit do?)
 #    - message quality (specific or vague?)
-#    - test pass/fail at this commit (git checkout <sha> && pytest -q && git checkout <branch>)
+#    - test pass/fail at this commit (check out <sha>, run the configured test command, then return to <branch>)
 
 # 3. Output a structured report:
 #    PASS or NEEDS_WORK
@@ -190,7 +190,7 @@ After reorganizing, every commit on the branch must have green tests:
 git rebase --exec '<test-command>' <base>
 
 # Example for windows tests:
-git rebase --exec '${python_bin} -m pytest test/unit/main/test_windows_update_manager.py --no-cov -q' <base>
+git rebase --exec '<configured-test-command>' <base>
 ```
 
 If a commit fails tests:

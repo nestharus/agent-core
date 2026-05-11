@@ -25,7 +25,7 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
 - `branch`: the branch to review (current branch by default)
 - `base`: review base, almost always `main`
 - `worktree_path`: directory where `coderabbit review --cwd` runs (the PR's worktree)
-- `test_command` (optional): how to run tests after fixes (e.g., `pytest <path> -q`). If absent, skip test-after-fix step.
+- `test_command` (optional): how to run tests after fixes (e.g., `test runner <path> -q`). If absent, skip test-after-fix step.
 - `max_passes` (optional, default 8): hard cap on iterations to prevent infinite loops on flip-flop findings
 - `audit_history_path` (optional): canonical audit-history file for pass-loop findings, flip-flops, skipped rationales, and convergence determinations.
 

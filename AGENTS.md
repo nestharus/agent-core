@@ -68,7 +68,7 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `test-audit-gate` - Produce a blocking `PASS | PARTIAL | FAIL` from existing spec, test, and CI coverage evidence.
   File: [~/ai/agents/test-audit-gate.md](agents/test-audit-gate.md) | Inputs: `mode`, `repo_root`, `scratch_dir`, `planning_root?`, `spec_dir?`, `agents_dir?`, `repo?`, `ci_workflow_name?`, `coverage_reports_root?`, `pr_number?` | Model: `gpt-high`
 
-- `red-phase-gate` - Run newly authored pytest tests against pre-implementation `HEAD` to confirm whether they are genuinely red.
+- `red-phase-gate` - Run newly authored tests against pre-implementation `HEAD` to confirm whether they are genuinely red.
   File: [~/ai/agents/red-phase-gate.md](agents/red-phase-gate.md) | Inputs: `project_dir`, `scratch_dir`, `base_ref?`, `new_test_nodeids?` | Model: `gpt-high`
 
 - `green-phase-gate` - Re-run the red-phase node IDs after implementation to classify what turned green and what stayed blocked or red.

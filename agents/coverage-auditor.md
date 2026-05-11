@@ -73,7 +73,7 @@ For each test file, classify into one of:
 
 ```bash
 # What CI runs
-cat <worktree_path>/.github/workflows/*.yml | grep -A 10 "pytest\|jest\|vitest\|playwright"
+cat <worktree_path>/.github/workflows/*.yml | grep -A 10 "test runner\|jest\|vitest\|playwright"
 
 # What tests exist but aren't in CI
 # Cross-reference test directories against CI commands

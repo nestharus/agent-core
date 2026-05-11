@@ -131,7 +131,7 @@ Operator files are versioned with their host repository. Do not add filename suf
 Operators can be exercised with a dry-run prompt file:
 
 ```bash
-agents -m <default-model> -p <test-project> -f tests/<operator>-smoke.md
+agents -m <default-model> -p <test-project> -f prompts/<operator>-smoke.md
 ```
 
 Critical operators should have smoke tests that verify the core procedure against a known repo state.

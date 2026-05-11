@@ -63,7 +63,7 @@ prototype-rca-orchestrator
 - `failure_id`: stable slug for artifact naming and handback.
 - `trigger_type`: exactly `test` or `qa`.
 - `trigger_evidence_path`: absolute path to the failing behavior test output or QA observation/screenshot evidence.
-- `trigger_command?`: required for `trigger_type: test`; the smallest command that re-runs the failing signal. `pytest <node-id>` is the canonical Python shape.
+- `trigger_command?`: required for `trigger_type: test`; the smallest command that re-runs the failing signal. `test runner <node-id>` is the canonical Python shape.
 - `qa_use_case_id?`: required for `trigger_type: qa`; a targeted selector for the single QA use case to re-walk.
 - `repo_root`: absolute repository root for investigation context.
 - `worktree_path`: absolute writable worktree where the Phase 2 fix dispatch may apply code changes.
@@ -102,7 +102,7 @@ If intended behavior is ambiguous or the failing surface cannot be narrowed from
 
 Phase 2 composes one inline `gpt-high` fix dispatch. The fix dispatch must read the RCA artifact, inspect only the necessary local surface, apply code changes in `${worktree_path}`, and record the changed files plus rationale in `${planning_dir}/rca/<failure-id>-iter<N>-fix.md`.
 
-For a test trigger, Phase 2 re-runs only `trigger_command` or the supplied `pytest <node-id>` equivalent. For a QA trigger, Phase 2 re-walks only one use case through `qa_use_case_id` and `handback_callback`. Full regression remains the upstream caller responsibility after this workflow hands back.
+For a test trigger, Phase 2 re-runs only `trigger_command` or the supplied `test runner <node-id>` equivalent. For a QA trigger, Phase 2 re-walks only one use case through `qa_use_case_id` and `handback_callback`. Full regression remains the upstream caller responsibility after this workflow hands back.
 
 `${planning_dir}/rca/<failure-id>-fixed.md` is written only on targeted pass. If the targeted signal still fails, the fix artifact records the failure and the loop returns to Phase 1 for the next iteration with the new evidence attached.
 

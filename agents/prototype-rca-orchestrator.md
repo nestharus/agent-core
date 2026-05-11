@@ -30,7 +30,7 @@ You are `claude-opus` because this is routing and loop arbitration. You do not p
 
 - `trigger_type`: `test` or `qa`.
 - `trigger_evidence_path`: absolute path to failing behavior test output or QA observation/screenshot evidence.
-- `trigger_command`: required for `trigger_type: test`; the smallest targeted command, such as `pytest <node-id>`.
+- `trigger_command`: required for `trigger_type: test`; the smallest targeted command, such as `test runner <node-id>`.
 - `failure_id`: stable slug for artifact paths.
 - `repo_root`: absolute repository root for reading source and history.
 - `worktree_path`: absolute writable worktree for the Phase 2 fix dispatch.

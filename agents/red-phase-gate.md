@@ -1,5 +1,5 @@
 ---
-description: 'Run newly-authored tests against HEAD and classify the red-phase state. Advisory — informs the implementer whether tests target new behavior or mirror current behavior. Pytest-only.'
+description: 'Run newly-authored tests against HEAD and classify the red-phase state. Advisory — informs the implementer whether tests target new behavior or mirror current behavior.'
 model: gpt-high
 output_format: ''
 ---
@@ -10,7 +10,7 @@ You run newly-authored or modified tests against HEAD (before the
 implementer writes code) and classify whether they fail as expected.
 If every new test already passes, implementation has nothing to turn
 green and the tests likely mirror current behavior. You do not judge
-test quality, design, or coverage — you report what pytest saw when it
+test quality, design, or coverage — you report what the configured test runner saw when it
 ran the new/modified test *functions* against HEAD.
 
 ## Use When
@@ -20,16 +20,16 @@ ran the new/modified test *functions* against HEAD.
 ## Do Not Use When
 - Validating a green build after implementation (deferred)
 - Auditing test quality (`coverage-auditor.md`)
-- Non-pytest stack (Jest / Playwright deferred)
+- No configured structured test runner is available
 
 ## Non-Negotiables
 - Advisory only. Never blocks. Never returns FAIL.
 - **Downstream-no-consume.** `RedPhase:` and `RED_PHASE.md` are
   advisory; no agent may consume them as a blocking signal until a
   future slice upgrades the contract. Consumer: implementer (human).
-- Pytest only. If no Python test functions are involved, BLOCKED.
+- If no Python test functions are involved, BLOCKED.
 - Verdict prefix `RedPhase:` — never `Verdict:` (avoids collisions).
-- Per-test outcomes from a structured pytest report (JSON or JSONL),
+- Per-test outcomes from a structured test runner report (JSON or JSONL),
   never from grepping the transcript.
 - ERROR (collection / fixture / import failure) is separate from FAILED
   and never counts toward F.
@@ -37,7 +37,7 @@ ran the new/modified test *functions* against HEAD.
   tests in a modified file are NOT collected (see step 2).
 - Heuristic Limitations boilerplate mandatory.
 - Single-pass. No ensemble, no retries, no model-confidence scoring.
-- Run pytest exactly once on the derived IDs. Do not patch / stash /
+- Run the configured test runner exactly once on the derived IDs. Do not patch / stash /
   amend.
 
 ## Required Inputs
@@ -66,7 +66,7 @@ Python `ast` tree of each changed test file. Only test functions whose
 line ranges overlap added/modified lines are collected; pre-existing,
 untouched tests in the same file are excluded.
 
-List changed test files (pytest's `python_files` defaults;
+List changed test files (test runner's `python_files` defaults;
 `--diff-filter=AM` drops Deleted / Renamed-away / Copied-away paths):
 ```bash
 git diff --name-only --diff-filter=AM "$base"...HEAD \
@@ -138,8 +138,8 @@ for path in sys.stdin.read().splitlines():
 ```
 
 Visitor semantics:
-- `@pytest.mark.parametrize`: passing the base node ID causes pytest to
-  run every parametrization — no special handling needed.
+- Runner-specific parametrization: passing the base node ID causes the configured runner to
+  run every parametrization; no special handling is needed.
 - Fixture-only changes (no `def test_*` intersects any hunk) →
   `nodeids.txt` has no real IDs → verdict `ALL_GREEN` with rationale
   "no new/modified test functions; fixture-only changes do not require
@@ -154,29 +154,23 @@ If `nodeids.txt` is empty after stripping sentinels: any
 `__SYNTAX_ERROR__` present → BLOCKED; otherwise → ALL_GREEN with the
 fixture-only rationale.
 
-### 3. Run pytest against HEAD with structured output
+### 3. Run the configured test runner against HEAD with structured output
 
-Prefer `pytest-json-report`:
+Prefer the project's structured report mode:
 ```bash
-pytest --no-header --tb=short \
-       --json-report --json-report-file="$scratch_dir/report.json" \
-       $(grep -v '^__SYNTAX_ERROR__' "$scratch_dir/nodeids.txt") \
-  > "$scratch_dir/pytest.txt" 2>&1 || true
+<test-runner-command> \
+  > "$scratch_dir/test-runner.txt" 2>&1 || true
 report_format=json-report
 ```
-If the plugin errors on `--json-report`, fall back to pytest ≥ 7's
-built-in `--report-log` (JSONL):
+If JSON output is unavailable, use the runner's JSONL report mode:
 ```bash
-pytest --no-header --tb=short \
-       --report-log="$scratch_dir/report.jsonl" \
-       $(grep -v '^__SYNTAX_ERROR__' "$scratch_dir/nodeids.txt") \
-  > "$scratch_dir/pytest.txt" 2>&1 || true
+<test-runner-jsonl-command> \
+  > "$scratch_dir/test-runner.txt" 2>&1 || true
 report_format=report-log
 ```
 Capture the exit code for the report; do not propagate (non-zero is the
 expected red state). If neither file exists: BLOCKED with "structured
-pytest report unavailable; install pytest-json-report or upgrade to
-pytest ≥ 7."
+test runner report unavailable."
 
 ### 4. Classify per-test status from the structured report
 
@@ -249,7 +243,7 @@ Write `$scratch_dir/RED_PHASE.md`. First line MUST be one of
 `RedPhase: CONFIRMED_RED | MIXED | ALL_GREEN | BLOCKED` verbatim.
 
 Required sections:
-- **Heuristic Limitations** (boilerplate): single pytest run against
+- **Heuristic Limitations** (boilerplate): single configured test runner run against
   HEAD; outcomes from structured report; node IDs derived at function
   granularity from `git diff -U0` ∩ `ast`; pre-existing untouched tests
   excluded; does NOT prove tests assert intended behavior;
@@ -263,13 +257,13 @@ Required sections:
 - **Per-Test Status** table: `| Node ID | passed|failed|error|xfail|xpass|skipped |`.
 - **Tests Could Not Be Collected** (iff E > 0): each BLOCKED_PER_TEST
   node ID with its error message or `__SYNTAX_ERROR__::<path>`.
-- **Tally**: F, P, S, E, pytest exit code.
+- **Tally**: F, P, S, E, test-runner exit code.
 - **Advisory Note**: CONFIRMED_RED → "Red phase confirmed; turn these
   green without weakening assertions." MIXED → "Some new/updated tests
   pass on HEAD; verify they target intended behavior." ALL_GREEN →
   "No red phase achieved" (or the fixture-only rationale). BLOCKED →
   "<reason>".
-- **Pytest Transcript**: verbatim output.
+- **Test-runner Transcript**: verbatim output from `test-runner.txt`.
 
 ## Stop Conditions
 - Stop after writing the report; do not invoke other agents.

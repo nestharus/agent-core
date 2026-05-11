@@ -30,7 +30,7 @@ operators into one auditable sequence and produce the report bundle required by
 - Do not change the risk-assessor priority rules. This operator only consumes the priority output and picks the next P0 target.
 - Do not flatten behavior verdicts into test-quality labels. `VERIFIED`, `SUSPICIOUS`, `AMBIGUOUS`, and `OBVIOUSLY_BROKEN` remain behavior-investigation verdicts. `VERIFIED_BEHAVIOR`, `CAPTURED_BEHAVIOR`, `STRUCTURAL`, `DEAD`, and `HARMFUL` remain test-quality classifications.
 - Tests are written only from `VERIFIED` behavior specs or human-confirmed behavior. `SUSPICIOUS` and `AMBIGUOUS` findings are reported, not silently converted into assertions.
-- A discovered bug that has a verified intended behavior is represented with `@pytest.mark.xfail(strict=True)` and an xfail reason citing the behavior source commit hash.
+- A discovered bug that has a verified intended behavior is represented with a strict expected-failure marker and a reason citing the behavior source commit hash.
 - Produce Product, Engineering, and Investigative reports for every completed run. The PDF artifacts are canonical; PR comments are pointers.
 - Follow `~/ai/conventions/test-reports.md` for screenshots, non-UI evidence, file:line citations, exact fenced code blocks, and report bundle layout.
 
@@ -214,7 +214,7 @@ The test-writer prompt must require:
 For Python tests that expose a confirmed bug, use:
 
 ```python
-@pytest.mark.xfail(
+@expected_failure(
     strict=True,
     reason="Confirmed bug: intended behavior from commit <hash>; see <spec path>#<section>",
 )
