@@ -32,6 +32,10 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 - The selected ticket backend and WU context when the answer affects an implementation-pipeline dispatch.
 - `AGENTS.md` Quick Activation routing and `work-manager-operator.md` overview context.
 
+## Max Mode Rules
+
+The Phase 8 user-review gate is NOT an unconditional halt under manager-max — it is auto-approved when all gate verdicts are LOW/PASS per the table above. The gate exists for genuine value/scope changes beyond the table, not for procedural confirmation of clean pipeline output.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-max`; otherwise load the declared sibling flavor file.
@@ -64,6 +68,7 @@ Acceptable shortcuts: NONE.
 | Phase 7 CodeRabbit non-trivial advisory | Always address before Phase 8. No "proven non-blocking" qualifier under manager-max; file a narrowly scoped follow-up only when the user explicitly authorizes the deferral and record the authorization in DECISIONS. |
 | Phase 8 PR-review test-audit FAIL | Block. Write or fix tests, then re-run the gate. Do not proceed to PR finalization. |
 | Phase 8 PR-review commit-hygiene split signal | Split or rebuild commits. Do not merge a history the gate says is not reviewable. |
+| Phase 8 user-review gate (proceed-to-Phase-9 approval) | Auto-approve option A IFF: all four PR-review gates returned PASS (test-audit, multi-concern, justification, commit-hygiene), aggregate code-quality returned LOW for every required round, no leftover MEDIUM/HIGH residual qualifiers exist in the active rule text, all process-tree audits returned PASS, and the diff is confined to the WU's declared surfaces. Otherwise halt with NEEDS_INPUT and request user review with the specific failing condition cited. NEVER auto-approve on MEDIUM-stable; that is a separate prohibition. |
 | Auto-merge unavailable / merge conflict | Rebase on current main, run the full relevant gate battery, then require manual merge evidence. |
 | Schema-rebuild (Linear/Jira state required) | Re-read backend state through the selected ticket operator, rebuild schema-dependent prompts from fresh state, and record evidence. |
 | cwd-resolution / current-working-directory drift | Block, rebuild the child invocation from the session manifest cwd, and never coerce a mismatched resolved cwd. |
@@ -73,7 +78,7 @@ Acceptable shortcuts: NONE.
 
 - Stop when the manager-layer answer is selected from the table and cites `manager-max`.
 - If a NEEDS_INPUT shape is not pre-enumerated here, halt and ask the user.
-- Stop before accepting MEDIUM or HIGH residuals, accepting unreviewed shortcut risk, advancing after FAIL or blocking verdicts, skipping required audits, bypassing Phase 8 user review, force-merging, auto-merging without user-review confirmation, silently choosing a non-enumerated NEEDS_INPUT answer, or prioritizing speed over accuracy.
+- Stop before accepting MEDIUM or HIGH residuals, accepting unreviewed shortcut risk, advancing after FAIL or blocking verdicts, skipping required audits, bypassing the Phase 8 user-review table row, force-merging, auto-merging without table-backed Phase 8 approval, silently choosing a non-enumerated NEEDS_INPUT answer, or prioritizing speed over accuracy.
 
 ## Escalation
 

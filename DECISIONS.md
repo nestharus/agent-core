@@ -1751,3 +1751,17 @@ Post-rebase: branch sits on top of `fef8073`. Branch diff `git diff --stat origi
 **Residual**: Phase 8 process-tree audit #3 skipped — accepted-as-residual; topology-level audit verdict not on file. Future workflow improvement: add subprocess-hang detection (timeout + watchdog) to `process-tree-auditor` dispatch path.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+## D-2026-05-11-acr157-phase8-row — ACR-157 Phase 8 user-review prescription rows
+
+**Context.** After ACR-157 merged the Work Manager flavor system, the Phase 8 user-review gate still lacked a corresponding row in each active flavor's NEEDS_INPUT prescription table. Dispatch prompts therefore had to halt at "Phase 8 user-review gate (REQUIRED under manager-max)" even when all pipeline evidence was clean, because the active flavor file did not enumerate an answer the Work Manager could apply. That defeated ACR-157's intended rule that every orchestrator-surfaced NEEDS_INPUT shape should be answerable from the selected flavor table unless it represents a genuine value/scope change.
+
+**Decision.** Add explicit `Phase 8 user-review gate (proceed-to-Phase-9 approval)` rows to all three flavor files:
+
+1. `manager-max`: auto-approve option A only when all four PR-review gates returned PASS, every required aggregate code-quality round is LOW, no MEDIUM/HIGH residual qualifiers remain in active rule text, all process-tree audits PASS, and the diff is confined to the WU's declared surfaces. Otherwise halt with the failing condition cited. MEDIUM-stable remains prohibited.
+2. `manager-pragmatic`: auto-approve option A when all four PR-review gates PASS, aggregate code-quality is LOW or stable-MEDIUM with documented disposition, no HIGH residuals remain, process-tree audits PASS or are skipped-with-evidence, and the diff stays within declared surfaces. Halt only for HIGH residuals or unexplained gate-FAIL.
+3. `manager-hackerman`: auto-approve option A unless a PR-review gate has a hard FAIL or the diff is wildly out-of-scope. Stable HIGH residuals with documented disposition are acceptable for speed; halt only for catastrophic regressions.
+
+Also add a `manager-max` clarification that the Phase 8 user-review gate is not an unconditional halt under max mode. It is a table-backed approval gate for clean LOW/PASS pipeline output and remains a human halt only for uncovered value/scope changes or failing evidence.
+
+**Cross-link.** ACR-157, parent WU for the Work Manager flavor system.
