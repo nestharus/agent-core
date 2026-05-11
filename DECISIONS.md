@@ -1813,3 +1813,9 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 ACR-163's process-tree audit found that ACR-158 missed one live orchestrator reference allowing `approved residual MEDIUM` for the Phase 4 code-quality expected verdict. Remove that residual allowance so Phase 4 canonical expected-process rows require LOW for proposal-risk rows and LOW for the code-quality row.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+## D-2026-05-11-acr177-gitignore-pycache — Python bytecode ignore hygiene
+
+Add repository-level ignores for `__pycache__/`, `*.pyc`, and `*.pyo`, and untrack existing Python bytecode artifacts so local CLI invocations do not dirty working trees.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
