@@ -74,6 +74,16 @@ Pulling from a source you do not control is high-coupling. Either control the so
 
 The failure mode is an **uncontrolled-source coupler**. The important question is ownership: if a consumer must know another system's private storage shape, private file layout, unstable generated output, or incidental naming convention, the consumer is coupled to a source it does not control. A common interface can be a contract, schema, API boundary, generated artifact with a declared owner, or another explicit agreement that both sides treat as stable.
 
+## Disposition policy
+
+Only LOW passes pipeline-callable code-quality gates. `MEDIUM` and `HIGH` block advance, trigger remediation/revise, and require a rerun from current evidence. Neither severity is ever a residual, a `NEEDS_INPUT` user choice, or a "stable" allow-advance state for code-quality / risk-gate / prototype-risk verdicts.
+
+This rule is the ACR-156 parent regression disposition and is enforced across all four canonical surfaces: `~/ai/agents/implementation-pipeline-orchestrator.md`, `~/ai/workflows/implementation-pipeline.md`, this convention, and `~/ai/workflows/code-quality.md`.
+
+### Oscillation signals WU-too-large
+
+After two consecutive rounds that do not converge to `LOW`, the Work Unit is too large for the current grain and must decompose instead of attempting a third remediation pass. Decompose is autonomous, not `NEEDS_INPUT`-mediated; the caller records the oscillation evidence and opens the smaller WU path required by the owning workflow.
+
 ## Numerical thresholds
 
 These are starting calibration points for downstream auditors A4 / A5 / A6 (NES-140 / NES-141 / NES-148). Those auditors may refine measurement details, but they should treat these thresholds as the initial shared baseline.
@@ -104,6 +114,7 @@ It also does not replace project-local architecture rules. A project may have st
 ## Cross-references
 
 - `~/ai/workflows/code-quality.md` - composite dispatch workflow for existing A1 auditors; this is an operational pointer only and does not change this convention's rule text, failure modes, numerical thresholds, or policy-only status.
+- `~/ai/workflows/code-quality.md` § `Stop Conditions And Escalation` - separates standalone advisory use from pipeline-callable blocking use; pipeline-callable blocking enforces this disposition policy, including LOW-only passage and autonomous decomposition after oscillation.
 - `~/ai/agents/function-classification-auditor.md` - A5 / NES-141 enforcement surface for the `Function categories per function` threshold and `multi-classifier function` findings; this is a forward pointer only and does not change this convention's categories, rule, failure modes, thresholds, or policy-only status.
 - `~/ai/conventions/risk-profile.md` § Scoring axes - duplicate-system count, change-path entropy, and risk scoring mechanics.
 - `~/ai/workflows/implementation-pipeline.md` § Step 2.5.4 and § Phase 3 - duplicate-systems inventory plus cascade/consolidate/accept handling.
