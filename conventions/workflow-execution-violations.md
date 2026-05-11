@@ -117,6 +117,20 @@ A sub-agent emitted a question artifact that the root did not surface, the workf
 
 Default severity: `blocking` when the unanswered or unapplied question affects any downstream workflow input, gate, user-facing output, branch mutation, PR action, or approval. `needs_input` when required question, answer, or continuation evidence is absent. `advisory` only for non-blocking display metadata defects that do not affect the answer contract or continuation target.
 
+### Named anti-pattern: Non-LOW gate residual acceptance
+
+Pattern: a manager session, implementation-pipeline orchestrator, or review loop treats a pipeline-callable LOW-only gate result of `HIGH` or `MEDIUM` as an accepted `residual`, answers a `NEEDS_INPUT` halt with accept-and-advance language, records the answer as a `D-AGE-*`, `DECISIONS.md`, or similar policy decision, and advances downstream. Canonical example: the `D-AGE-*` decision family retracted or downgraded by ACR-156 in the ACR-162 retraction lane, including `D-AGE-54`, `D-AGE-61`, `D-AGE-62`, `D-AGE-59` / `D-019`, `D-AGE-28`, `D-AGE-15`, and `D-AGE-4`.
+
+Classification: this is a blocking gate/termination violation under `### 3. Gate/termination violation`. It is also a history/liveness violation under `### 8. History/liveness violation` when oscillation or repeated non-convergence is converted into accepted residual risk, and a question/answer handling violation under `### 11. Question/answer handling violation` when a model-owned remediation/decomposition decision is turned into a manager or root question. It also triggers `### 5b. Implicit manager-flavor drift` when the answer relies on undeclared or unloaded manager flavor policy.
+
+Why it is wrong: the LOW-only advance rule is the mechanism that forces decomposition when LLM evaluation capacity is exceeded. `HIGH` and `MEDIUM` verdicts from pipeline-callable gates are not residuals to accept; they require remediation/revise from current evidence and rerun, then `autonomous decompose` when the owning workflow's convergence rule fires. The manager never accepts a non-LOW pipeline-callable gate residual. Treating one as a residual undermines the LOW-only safety net and ships work that should have been split into smaller WUs.
+
+What to do instead: follow `conventions/code-quality.md` § `Disposition policy` and § `Oscillation signals WU-too-large`, `workflows/code-quality.md` pipeline-callable mode, and `workflows/implementation-pipeline.md` Phase 4 / Phase 6 prototype-risk / per-component code-quality LOW-only rules. Use `conventions/review-convergence.md` for the hard decomposition signal after repeated non-convergence. Manager flavor rows from PR #108, PR #109, and PR #112 (`agents/work-manager-operator-max.md`, `agents/work-manager-operator-pragmatic.md`, `agents/work-manager-operator-hackerman.md`) may route valid manager-layer answers, but loading a flavor file does not override LOW-only pipeline-callable gate semantics; manager never accepts `HIGH` or `MEDIUM` from those gates as residual.
+
+Recovery direction: work already shipped through this pattern requires a separate recovery audit ticket. The prior residual-acceptance decision is evidence of the violation, not current policy authority — treat the ACR-156 / ACR-162 retraction lane and the `D-AGE-*` family above as exemplars of decisions that must not be cited as authorization for non-LOW gate residual acceptance. Durable detection of this pattern is owned by the ACR-175 eval framework once shipped; until then, the manager flavor tables and process-tree-auditor enforce.
+
+Default severity: `blocking`.
+
 ## Reporting Requirements
 
 Each finding records:
