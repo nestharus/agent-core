@@ -82,6 +82,14 @@ workflow_aliases:
       path: "workflows/verified-rebase.md"
 ```
 
+## Manager-flavor aliases
+
+This bounded exception declares Work Manager flavor aliases even though normal workflow aliases are scoped to workflow docs. The convention's alias target tuple and alias normalization rules apply to this section.
+
+- `manager-max` -> `~/ai/agents/work-manager-operator-max.md`
+- `manager-pragmatic` -> `~/ai/agents/work-manager-operator-pragmatic.md`
+- `manager-hackerman` -> `~/ai/agents/work-manager-operator-hackerman.md`
+
 Ambiguous example:
 
 ```yaml

@@ -283,3 +283,38 @@ def test_anti_scope_preserves_no_inline_code_and_pipeline_orchestration_rules():
 
     assert "no code edits" in text
     assert "no inline orchestration" in text
+
+
+def test_overview_points_at_three_flavor_files():
+    text = _operator_text()
+
+    _assert_contains(text, "Work Manager operator", "work-manager-operator-max.md")
+    _assert_contains(
+        text,
+        "Work Manager operator",
+        "work-manager-operator-pragmatic.md",
+    )
+    _assert_contains(
+        text,
+        "Work Manager operator",
+        "work-manager-operator-hackerman.md",
+    )
+
+
+def test_dispatch_discipline_requires_active_flavor_citation():
+    text = _operator_text()
+
+    assert "cite the active flavor" in text
+
+
+def test_acr157_overview_declares_flavor_system_authority_and_gates():
+    text = _operator_text()
+    text_lower = text.lower()
+
+    assert "Flavor System" in text
+    assert "first-read" in text
+    assert "last-authority" in text
+    assert "Phase 8" in text
+    assert "user-review" in text or "acceptance" in text
+    assert "auto-merge" in text
+    assert "bypass" in text_lower or "gate" in text_lower

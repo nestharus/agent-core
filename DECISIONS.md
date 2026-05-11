@@ -1695,6 +1695,18 @@ Residual: none. The rebase converts the residual to closed-by-rebase. The struct
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
+## D-2026-05-11-acr157 — ACR-157 Work Manager flavor split + review gate
+
+**Context.** Manager-layer sessions previously had no explicit flavor declaration, causing implicit-flavor drift across NEEDS_INPUT answers, dispatch prompts, and DECISIONS entries.
+
+**Decision.** Split the manager flavor system into three sibling operator files (`manager-max | manager-pragmatic | manager-hackerman`), retain `agents/work-manager-operator.md` as the overview, default undeclared sessions to `manager-max`, and gate auto-merge behind a Phase 8 user-review step.
+
+**Source of truth for the full surface enumeration and rollback file set.** See `/home/nes/projects/ai/planning/acr-157-work-manager-flavors/audit-history.md` § Round 3 final state and § Artifact lineage.
+
+**Cross-link.** ACR-157 (this WU).
+
+**Manager flavor at decision time.** `manager-max` (this decision was authored under the default safest-derisking flavor per the AGENTS.md startup rule introduced by this WU).
+
 ## D-2026-05-09n — ACR-114 Phase 9 finish-only: skip Phase 8 audit #3 + 2nd rebase onto master after ACR-6/11/144 landed
 
 **WU**: ACR-114. **Phase**: 8 → 9 (finish-only orchestrator dispatch). **Decision**: Accept-as-residual the Phase 8 process-tree audit #3 (skipped); rebase a second time from base `840e98c` onto current master `fef8073` to absorb ACR-6 (`31d3b26`), ACR-11 (`c39cb88`), and ACR-144 (`fef8073`); proceed to Phase 9 draft PR + auto-merge.

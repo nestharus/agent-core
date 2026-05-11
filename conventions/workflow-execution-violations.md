@@ -63,6 +63,16 @@ Wrong workflow/operator selected for the cue, ambiguity not escalated, or work d
 
 Default severity: `blocking` for material drift or wrong routing; `advisory` for incidental polish that the workflow permits.
 
+### 5b. Implicit manager-flavor drift
+
+Manager-layer answer selection used flavor-specific behavior without declaring or loading the active manager flavor policy.
+
+Default severity: `blocking`.
+
+Canonical example: a manager session answers a Phase 4 code-quality HIGH halt with "accept residual + advance" as a speed shortcut without declaring `manager-hackerman`, loading `work-manager-operator-hackerman.md`, or recording active flavor evidence.
+
+Resolution: declare the flavor explicitly (`manager-max | manager-pragmatic | manager-hackerman`); when no flavor is declared, default to `manager-max`; load the matching flavor file; re-answer the affected manager-layer question from that file's prescription table. Wrong or unapplied manager-layer NEEDS_INPUT answers may also trigger `### 11. Question/answer handling violation`.
+
 ### 6. Evidence/grounding violation
 
 Required citations, primary-source evidence, evidence traces, grounding steps, inspected files, or research artifacts are absent.

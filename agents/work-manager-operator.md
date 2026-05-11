@@ -28,6 +28,20 @@ You do NOT:
 - Single-WU work that the user could just dispatch the implementation-pipeline-orchestrator for directly. This operator is overhead for that case.
 - Pure research / one-shot questions. Dispatch `~/ai/workflows/research.md` (or research-team workflow when it ships) directly.
 
+## Flavor System
+
+This file is the Work Manager overview and compatibility entrypoint. Flavor-specific NEEDS_INPUT answer policy lives in the selected flavor file, which is first-read and last-authority for that flavor:
+
+- `work-manager-operator-max.md` — `manager-max`, the default maximum-derisking flavor.
+- `work-manager-operator-pragmatic.md` — `manager-pragmatic`, the minimum-change correctness-preserving flavor.
+- `work-manager-operator-hackerman.md` — `manager-hackerman`, the maximum-speed flavor with explicit residual risk.
+
+Activation is routed by `AGENTS.md` Quick Activation. When no flavor is declared, default to `manager-max`. When the manager dispatches a child agent or answers a NEEDS_INPUT, the dispatch prompt and answer cite the active flavor (`manager-max | manager-pragmatic | manager-hackerman`).
+
+Phase 8 includes a user-review acceptance gate for the three flavor files before Phase 9 or auto-merge. Do not bypass that gate by treating overview approval as flavor-file approval.
+
+See also: ACR-153 (implementation-pipeline flavors), ACR-156 (decompose-enforcement companion work).
+
 ## Ticket System Pluggability
 
 The manager supports two ticket backends and dispatches to the matching operator:
