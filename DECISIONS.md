@@ -1807,3 +1807,9 @@ Also add a `manager-max` clarification that the Phase 8 user-review gate is not 
 **Residual**: `tests/test_code_quality_convention.py::test_code_quality_required_headings_present_in_order` is a pre-existing structural-order residual and is out of ACR-171 scope. ACR-171 records the residual but does not expand scope to rewrite the existing heading-order test.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+## D-2026-05-11-acr158-followup-orchestrator-line-282 — ACR-158 residual regression cleanup
+
+ACR-163's process-tree audit found that ACR-158 missed one live orchestrator reference allowing `approved residual MEDIUM` for the Phase 4 code-quality expected verdict. Remove that residual allowance so Phase 4 canonical expected-process rows require LOW for proposal-risk rows and LOW for the code-quality row.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
