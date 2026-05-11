@@ -159,6 +159,21 @@ def test_max_flavor_file_has_phase_8_user_review_row():
     assert "NOT an unconditional halt under manager-max" in content
 
 
+def test_max_flavor_file_has_self_referential_fixed_point_row():
+    content = MAX_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review with self-referential fixed-point" in content
+    assert "Phase 4 code-quality MEDIUM closed by Phase 6 LOW" in content
+    assert "(a) the WU's stated goal is refining the metric/rule/auditor" in content
+    assert "(b) Phase 6 (or a later post-fix round) returned LOW" in content
+    assert "(c) all four Phase 8 PR-review gates PASS" in content
+    assert "(d) all process-tree audits PASS" in content
+    assert "(e) diff confined to declared surfaces" in content
+    assert "mathematical artifact of running the un-refined metric/rule" in content
+    assert "Self-referential fixed-point fixes" in content
+    assert '"LOW for every required round" clause' in content
+
+
 def test_pragmatic_flavor_file_has_phase_8_user_review_row():
     content = PRAGMATIC_FLAVOR.read_text(encoding="utf-8")
 
@@ -170,6 +185,15 @@ def test_pragmatic_flavor_file_has_phase_8_user_review_row():
     assert "Halt only when a HIGH residual or unexplained gate-FAIL is present" in content
 
 
+def test_pragmatic_flavor_file_has_self_referential_fixed_point_row():
+    content = PRAGMATIC_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review with self-referential fixed-point" in content
+    assert "Self-referential fixed-point fixes auto-approve" in content
+    assert "Phase 6 LOW under refined metric is documented" in content
+    assert "regardless of Phase 4 MEDIUM" in content
+
+
 def test_hackerman_flavor_file_has_phase_8_user_review_row():
     content = HACKERMAN_FLAVOR.read_text(encoding="utf-8")
 
@@ -178,3 +202,12 @@ def test_hackerman_flavor_file_has_phase_8_user_review_row():
     assert "diff is wildly out-of-scope" in content
     assert "Stable HIGH residuals with documented disposition are acceptable" in content
     assert "Halt only for catastrophic regressions" in content
+
+
+def test_hackerman_flavor_file_has_self_referential_fixed_point_row():
+    content = HACKERMAN_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review with self-referential fixed-point" in content
+    assert "Self-referential fixed-point fixes auto-approve" in content
+    assert "Phase 6 LOW under refined metric is documented" in content
+    assert "regardless of Phase 4 MEDIUM" in content
