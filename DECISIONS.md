@@ -1,5 +1,33 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-11-acr176-feature-development-workflow
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr176-feature-development-workflow
+
+**Linear ticket**: ACR-176
+
+**Decision**: Adopt the feature-development workflow as the canonical multi-ticket feature strategy on `~/ai/`. New artifacts: `conventions/feature-development-workflow.md`, `workflows/feature-development.md`, `agents/feature-orchestrator.md`. Routing additions: AGENTS.md decision tree + `## Strategy selection` in each manager-flavor operator.
+
+**Rationale**: Closes a documented workflow gap (ACR-156 multi-ticket precedent predates this pattern). Strategy layer above flavors; manager flavors remain valid for single-ticket work.
+
+**Branch baseline**: trunk for `nestharus/ai` is `master`; feature branches start from `master`, not `dev`.
+
+**Evidence pack**: universal PR-body rule, sized to PR type. Enforced by manager flavor + PR-review discipline. NOT CI.
+
+**QA placeholder**: Playwright-driven QA agent is the long-run plan; not operational in this WU. Operational wiring is a downstream ticket.
+
+**Eval placeholder**: ACR-175 eval framework will detect workflow-strategy regressions when shipped. Eval wiring for feature-development is downstream.
+
+**Orchestrator boundary**: `agents/feature-orchestrator.md` is standalone; it invokes `agents/implementation-pipeline-orchestrator.md` once per ticket. The implementation-pipeline-orchestrator is NOT modified for feature-branch mode.
+
+**Anti-scope**: no flavor redesign; no CI hooks; no QA agent operational wiring; no ACR-175 implementation; no pytest; no structural markdown tests; no edits to `conventions/workflow-aliases.md`.
+
+**Cross-references**: ACR-156, ACR-157, ACR-171, ACR-172, ACR-173, ACR-174, ACR-175.
+
+**Mid-pipeline drift disposition**: proceed; residual recorded here per pre-resolved orchestrator policy.
+
 ## D-2026-05-11-pytest-removal — ACR-174 delete structural markdown tests and pytest infrastructure
 
 **Decision.** Delete pytest entirely from `~/ai` per the user directive: "delete pytest entirely. I don't want tests on markdown files. those tests are not useful. delete them."

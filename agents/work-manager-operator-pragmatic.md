@@ -32,6 +32,12 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 - The selected ticket backend and WU context when the answer affects an implementation-pipeline dispatch.
 - `AGENTS.md` Quick Activation routing and `work-manager-operator.md` overview context.
 
+## Strategy selection
+
+`manager-pragmatic` is a flavor (bounded single-ticket, low blast radius, no user-facing surface). Route through feature-development (the strategy) regardless of pragmatic-flavor preferences when ANY of these is true: (1) the work decomposes into 2+ tickets, (2) the work has a user-facing surface, or (3) the work ships behavioral change.
+
+Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. Direct-to-trunk remains valid only for bounded single-ticket work that does not require feature-level integration.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-pragmatic`; otherwise load the declared sibling flavor file or default route from `AGENTS.md`.

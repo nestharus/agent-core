@@ -32,6 +32,12 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 - The selected ticket backend and WU context when the answer affects an implementation-pipeline dispatch.
 - `AGENTS.md` Quick Activation routing and `work-manager-operator.md` overview context.
 
+## Strategy selection
+
+`manager-hackerman` is a flavor (speed-biased, throwaway, internal-only). Feature-development is REQUIRED for shipped feature work whenever ANY of these is true: (1) the work decomposes into 2+ tickets, (2) the work has a user-facing surface, or (3) the work ships behavioral change. Hackerman does not waive evidence-pack or feature-branch requirements in those cases.
+
+Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. Hackerman speed policy remains available for explicitly throwaway or internal-only work that is not being shipped as a feature.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-hackerman`; otherwise load the declared sibling flavor file or default route from `AGENTS.md`.
