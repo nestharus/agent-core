@@ -202,11 +202,21 @@ Missing required evidence becomes `BLOCKED:<reason>` instead of an inferred pass
 
 ## Stop Conditions And Escalation
 
-- `LOW`: all required children completed at `LOW`; caller may continue through a blocking code-quality gate.
-- `MEDIUM`: no required child returned `HIGH`, coupling returned `MEDIUM`, and caller policy decides whether advisory or blocking handling applies.
-- `HIGH`: at least one required child returned `HIGH`; caller revises the target or escalates through the owning review loop.
-- `NEEDS_INPUT:<absolute_artifact_path>`: caller surfaces the artifact to the root user or owning gate and preserves partial artifacts from children that already ran.
-- `BLOCKED:<reason>`: caller fixes unreadable, unwritable, malformed, or missing evidence/report conditions and preserves partial artifacts from children that already ran.
+### Standalone mode (advisory)
+
+Standalone callers own whether the aggregate result is advisory or blocking for their local workflow. `LOW` means all required children completed at `LOW`. `MEDIUM` means no required child returned `HIGH` and coupling returned `MEDIUM`; standalone callers may record it as advisory risk or choose to block locally. `HIGH` means at least one required child returned `HIGH` and should drive local revision or escalation.
+
+For standalone use, `NEEDS_INPUT:<absolute_artifact_path>` means the caller surfaces the artifact to the root user or owning gate, and `BLOCKED:<reason>` means the caller fixes unreadable, unwritable, malformed, or missing evidence/report conditions. In both stop states, preserve partial artifacts from children that already ran.
+
+### Pipeline-callable mode (blocking)
+
+Pipeline-callable callers use `~/ai/conventions/code-quality.md` § `Disposition policy` and § `Oscillation signals WU-too-large` as the disposition rule reference. Only LOW passes a pipeline-callable code-quality gate.
+
+`MEDIUM` and `HIGH` block advance, trigger remediation/revise, and require rerun from current evidence. Neither severity is accepted as residual, converted into `NEEDS_INPUT`, or treated as stable allow-advance.
+
+After two consecutive non-converging remediation rounds, the WU decomposes autonomously per `~/ai/conventions/code-quality.md` § `Oscillation signals WU-too-large` instead of attempting a third remediation pass.
+
+`NEEDS_INPUT:<absolute_artifact_path>` and `BLOCKED:<reason>` are stop states the caller surfaces for evidence repair. The caller preserves partial artifacts from children that already ran, repairs the named evidence/report condition, and reruns the gate from current evidence before any advance decision.
 
 ## Anti-Scope
 
