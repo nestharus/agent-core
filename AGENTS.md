@@ -240,6 +240,25 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 - `jira-operator` - Read, comment on, transition, search, or create Jira issues through the Atlassian REST API.
   File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email` | Model: `claude-opus`
 
+### Writing / document authoring
+
+Imported verbatim from their source projects, then distributed into the existing `~/ai/` directories. Filenames preserved exactly (including spaces). The agent-runner CLI is not wired to these yet; they are reference assets that other operators or human authors can read.
+
+Writing pipeline (from `~/projects/server-manager/product-strategy/`):
+
+- Orchestrator: [`workflows/writing pipeline orchestrator.md`](workflows/writing%20pipeline%20orchestrator.md) — Phase A-J pipeline (content revision, skeleton + non-negotiable scan, mechanical ban fixes per category, story beats, flow and cohesion, adversarial robustness, editorial, restart check, quality gate, PDF render).
+- Sub-agents: [`agents/writing content agent.md`](agents/writing%20content%20agent.md), [`agents/writing editorial agent.md`](agents/writing%20editorial%20agent.md), [`agents/writing quality gate agent.md`](agents/writing%20quality%20gate%20agent.md), [`agents/writing rubric agent.md`](agents/writing%20rubric%20agent.md), [`agents/writing rubric reviewer agent.md`](agents/writing%20rubric%20reviewer%20agent.md), [`agents/pitch deck agent.md`](agents/pitch%20deck%20agent.md).
+- Craft reference: [`conventions/WRITING_SKILL_MASTER.md`](conventions/WRITING_SKILL_MASTER.md).
+- Communication research: [`research/exec-roadmap-communication.md`](research/exec-roadmap-communication.md), [`research/pitch-deck-communication.md`](research/pitch-deck-communication.md).
+- Renderer: [`tools/render-pitch-deck.py`](tools/render-pitch-deck.py).
+
+Book authoring (from `~/projects/agent-implementation-skill/execution-philosophy/`):
+
+- Master: [`workflows/book-authoring/AGENTS.md`](workflows/book-authoring/AGENTS.md) — 800-line orchestration doc with 4 core tenets, content authoring workflow, communication values V1-V7, quality workflows QW1-QW13, four visual creation tiers, and the model assignment matrix. Lives in its own subdir to avoid colliding with the master `~/ai/AGENTS.md`.
+- Conventions: [`conventions/art-direction.md`](conventions/art-direction.md), [`conventions/structural-editing-guide.md`](conventions/structural-editing-guide.md).
+- Tools: [`tools/md_to_pdf.py`](tools/md_to_pdf.py), [`tools/svg_to_png.py`](tools/svg_to_png.py), [`tools/review_svg.sh`](tools/review_svg.sh).
+- Research reference: [`research/figure-best-practices.md`](research/figure-best-practices.md).
+
 ## Ecosystem Map
 
 The `~/ai/` ecosystem composes operators, clients, tools, workflows, and conventions. The discoverability map:
@@ -283,6 +302,8 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 - Roadmap (4-layer strategic pipeline): [`~/ai/workflows/roadmap.md`](workflows/roadmap.md)
 - Tiered approval (3-tier action safety): [`~/ai/workflows/tiered-approval.md`](workflows/tiered-approval.md)
 - Verified rebase (deterministic residual bundle + rollback; single rebase path): [`~/ai/workflows/verified-rebase.md`](workflows/verified-rebase.md)
+- Writing pipeline (Phase A-J: orchestrator in [`workflows/writing pipeline orchestrator.md`](workflows/writing%20pipeline%20orchestrator.md))
+- Book authoring (QW1-QW13 quality workflows + four visual creation tiers in [`workflows/book-authoring/AGENTS.md`](workflows/book-authoring/AGENTS.md))
 
 ## Conventions
 
