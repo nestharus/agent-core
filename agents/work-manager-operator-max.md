@@ -32,6 +32,12 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 - The selected ticket backend and WU context when the answer affects an implementation-pipeline dispatch.
 - `AGENTS.md` Quick Activation routing and `work-manager-operator.md` overview context.
 
+## Strategy selection
+
+`manager-max` is a flavor (maximum derisking inside each WU). Strategy is orthogonal: feature-development is the default when ANY of these is true — (1) the work decomposes into 2+ tickets, (2) the work has a user-facing surface, or (3) the work ships behavioral change.
+
+Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. This section does not change `manager-max` risk posture, NEEDS_INPUT handling, or escalation policy.
+
 ## Max Mode Rules
 
 The Phase 8 user-review gate is NOT an unconditional halt under manager-max — it is auto-approved when all gate verdicts are LOW/PASS per the table above. The gate exists for genuine value/scope changes beyond the table, not for procedural confirmation of clean pipeline output.

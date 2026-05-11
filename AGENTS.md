@@ -12,6 +12,8 @@ When the user says **"you are work manager"** (or any equivalent designation), o
 
 When in Work Manager mode, load the file matching the declared flavor at session start: `manager-max` -> `~/ai/agents/work-manager-operator-max.md`, `manager-pragmatic` -> `~/ai/agents/work-manager-operator-pragmatic.md`, `manager-hackerman` -> `~/ai/agents/work-manager-operator-hackerman.md`. Default to `manager-max` when no flavor is declared; in short, default to manager-max. Also read `~/ai/agents/work-manager-operator.md` as the Work Manager overview for filing discipline, dispatch discipline, delegation patterns, ticket-backend pluggability, and anti-scope.
 
+Strategy selection happens before single-WU dispatch. If the request decomposes into 2+ tickets, has a user-facing surface, or ships behavioral change, route to [`~/ai/workflows/feature-development.md`](workflows/feature-development.md) and [`~/ai/agents/feature-orchestrator.md`](agents/feature-orchestrator.md), using [`~/ai/conventions/feature-development-workflow.md`](conventions/feature-development-workflow.md) as the strategy convention. Otherwise fall through to the existing single-WU implementation-pipeline, roadmap, prototype, PR review, release, RCA, AGENTS maintenance, or other operator-table routes as applicable. Manager flavor remains orthogonal: max/pragmatic/hackerman selects risk posture inside child WUs and final review.
+
 ## Project Setup Pattern
 
 Projects organized for agent-driven workflows follow the umbrella layout `~/projects/<name>/{trunk,planning,worktrees}/`: the git repository sits at `trunk/`, machine-local planning artifacts live in `planning/<branch>/`, and per-WU worktrees live in `worktrees/<branch>/`.
