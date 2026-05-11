@@ -145,3 +145,36 @@ def test_max_flavor_file_forbids_medium_residual_qualifiers():
     assert "decompose if the residual is not stable" not in content
     assert "explicitly accepted non-blocking verdict" not in content
     assert "only if the advisory is proven non-blocking" not in content
+
+
+def test_max_flavor_file_has_phase_8_user_review_row():
+    content = MAX_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review gate (proceed-to-Phase-9 approval)" in content
+    assert "all four PR-review gates returned PASS" in content
+    assert "aggregate code-quality returned LOW for every required round" in content
+    assert "no leftover MEDIUM/HIGH residual qualifiers" in content
+    assert "all process-tree audits returned PASS" in content
+    assert "NEVER auto-approve on MEDIUM-stable" in content
+    assert "NOT an unconditional halt under manager-max" in content
+
+
+def test_pragmatic_flavor_file_has_phase_8_user_review_row():
+    content = PRAGMATIC_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review gate (proceed-to-Phase-9 approval)" in content
+    assert "all four PR-review gates PASS" in content
+    assert "aggregate code-quality LOW OR stable-MEDIUM" in content
+    assert "no HIGH residuals" in content
+    assert "all process-tree audits PASS or skipped-with-evidence" in content
+    assert "Halt only when a HIGH residual or unexplained gate-FAIL is present" in content
+
+
+def test_hackerman_flavor_file_has_phase_8_user_review_row():
+    content = HACKERMAN_FLAVOR.read_text(encoding="utf-8")
+
+    assert "Phase 8 user-review gate (proceed-to-Phase-9 approval)" in content
+    assert "unless a PR-review gate returned a hard FAIL" in content
+    assert "diff is wildly out-of-scope" in content
+    assert "Stable HIGH residuals with documented disposition are acceptable" in content
+    assert "Halt only for catastrophic regressions" in content

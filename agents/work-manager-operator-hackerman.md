@@ -61,6 +61,7 @@ Acceptable shortcuts: targeted smoke tests only, minimal conflict resolution, ac
 | Phase 7 CodeRabbit non-trivial advisory | Ignore unless it blocks function, build, or merge. Record residual if necessary. |
 | Phase 8 PR-review test-audit FAIL | Add or fix the smallest functional test that proves the immediate behavior; do not expand coverage. |
 | Phase 8 PR-review commit-hygiene split signal | Keep history as-is unless the platform or reviewer blocks merge. |
+| Phase 8 user-review gate (proceed-to-Phase-9 approval) | Auto-approve option A unless a PR-review gate returned a hard FAIL or the diff is wildly out-of-scope. Stable HIGH residuals with documented disposition are acceptable for speed. Halt only for catastrophic regressions. |
 | Auto-merge unavailable / merge conflict | Resolve conflict minimally, run a smoke/functional test, and proceed to manual merge if allowed by user and branch policy. |
 | Schema-rebuild (Linear/Jira state required) | Re-read only the required field/state and patch the prompt/artifact enough to continue. |
 | cwd-resolution / current-working-directory drift | Use the session manifest cwd if available; otherwise halt instead of guessing the WU worktree path. |
