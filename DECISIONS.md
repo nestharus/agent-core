@@ -1,5 +1,23 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-11-acr179-refactoring-workflow
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr179-refactoring-workflow
+
+**Linear ticket**: ACR-179
+
+**Decision**: ship the refactoring strategy specification — new `~/ai/conventions/refactoring-workflow.md` (canonical convention), new `~/ai/workflows/refactoring.md` (operational workflow with phases 0-5), new `~/ai/agents/refactoring-orchestrator.md` (per-PR cycle dispatch surface), new `~/ai/conventions/active-shims.md` (shim registry doc), AGENTS.md startup routing addition, `## Strategy selection` row in `~/ai/agents/work-manager-operator-{max,pragmatic,hackerman}.md`.
+
+**Rationale**: refactoring has different constraints than feature-development (small targeted PRs, integration-buffer staging, contract-bounded slicing, encapsulate-first for unsafe surfaces, shim lifecycle). ACR-176 added the sibling feature-development workflow; ACR-179 completes the strategy table by adding refactoring. The standalone `refactoring-orchestrator.md` surface was preferred over an add-mode in `implementation-pipeline-orchestrator.md` because the risk profile scored the add-mode candidate HIGH (load-bearing existing orchestrator modification) and the standalone MEDIUM.
+
+**Anti-scope**: no cross-file auditor analysis implementation; no shim inventory for `agent-runner` or other repos; no integration-branch lifecycle cadence policy; no Python heredocs / shell-script wrapping in dispatches; no machine enforcement framing; no pytest, no structural markdown tests (pytest removed per ACR-174).
+
+**Tension resolution**: `active-shims.md` carves out authorized refactoring shims (labeled, registry-tracked, milestone-bound) as a narrow exception. Silent backwards-compatibility shims remain forbidden under `~/ai/conventions/no-backwards-compatibility.md`. Cross-links between active-shims.md, refactoring-workflow.md, and no-backwards-compatibility.md make the boundary explicit.
+
+**Cross-references**: ACR-176 (sibling strategy), ACR-157 (manager flavor system), ACR-156 chain (LOW-only / decompose-on-oscillation discipline), ACR-175 (future eval-driven detection, deprioritized), AGE-58 (ETL-style encapsulation example).
+
 ## D-2026-05-11-acr176-feature-development-workflow
 
 **Date**: 2026-05-11
