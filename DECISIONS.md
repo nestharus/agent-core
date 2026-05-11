@@ -1775,3 +1775,13 @@ Also add a `manager-max` clarification that the Phase 8 user-review gate is not 
 **Flavor consistency.** `manager-pragmatic` and `manager-hackerman` already allow broader MEDIUM/HIGH-stable dispositions, but they now carry the same explicit fixed-point note so future Work Manager answers do not have to rediscover the exception.
 
 **Cross-links.** ACR-157 (flavor system parent), PR #109 (Phase 8 user-review row), and ACR-171 (cohesion-auditor metric refinement that triggered the gap).
+
+## D-2026-05-11a — ACR-171 declared-role-match cohesion metric refinement
+
+**WU**: ACR-171. **Decision**: refine the A1 `Cohesion by classifications touched` metric from count-only scoring to `declared-role-match` scoring. Actual classifications are LOW when they are a subset of the declared role set, and HIGH when they exceed that set or include classifications outside it.
+
+**Default-by-path rule**: `agents/*-orchestrator.md` supplies declared roles `orchestration`, `parser` only when the file has no file-local declared-role section. This keeps orchestrator coordination plus input parsing from being misclassified as inherent cohesion failure while still failing closed for undeclared classifications.
+
+**Residual**: `tests/test_code_quality_convention.py::test_code_quality_required_headings_present_in_order` is a pre-existing structural-order residual and is out of ACR-171 scope. ACR-171 records the residual but does not expand scope to rewrite the existing heading-order test.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>

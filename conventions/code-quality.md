@@ -74,6 +74,21 @@ Pulling from a source you do not control is high-coupling. Either control the so
 
 The failure mode is an **uncontrolled-source coupler**. The important question is ownership: if a consumer must know another system's private storage shape, private file layout, unstable generated output, or incidental naming convention, the consumer is coupled to a source it does not control. A common interface can be a contract, schema, API boundary, generated artifact with a declared owner, or another explicit agreement that both sides treat as stable.
 
+## Declared roles
+
+Declared role set tokens must come from the A1 category vocabulary: `orchestration`, `filter`, `validator`, `predicate`, `mapper`, `accessor`, `formatter`, `parser`.
+
+For cohesion scoring, compare the actual classification set to the declared role set before applying count-only fallback.
+
+The default declared role set for `agents/*-orchestrator.md` is `orchestration`, `parser`.
+
+A documented path default supplies declared roles only when the file has no `## Declared roles` section. File-local `## Declared roles` content overrides the documented path default for that file.
+
+## Declared-role examples
+
+- LOW: `agents/implementation-pipeline-orchestrator.md` may touch `orchestration` and `parser` work because `agents/*-orchestrator.md` defaults to declared roles `orchestration`, `parser`.
+- HIGH: an orchestrator surface with actual classifications outside the declared role set fails the declared-role-match metric.
+
 ## Disposition policy
 
 Only LOW passes pipeline-callable code-quality gates. `MEDIUM` and `HIGH` block advance, trigger remediation/revise, and require a rerun from current evidence. Neither severity is ever a residual, a `NEEDS_INPUT` user choice, or a "stable" allow-advance state for code-quality / risk-gate / prototype-risk verdicts.
@@ -92,7 +107,7 @@ These are starting calibration points for downstream auditors A4 / A5 / A6 (NES-
 |---|---|---|---|
 | `Nesting depth` | 0-1 | n/a | >= 2 |
 | `Function categories per function` | 1 | n/a | >= 2 |
-| `Cohesion by classifications touched` | 1 classification | n/a | >= 2 classifications |
+| `Cohesion by classifications touched` | actual classifications are a subset of the declared role set; for files without declared roles or a documented path default, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for files without declared roles or a documented path default, 2 or more classifications |
 | `Coupling by distinct external symbols/modules referenced` | 0-2 | >= 3 | >= 6 |
 
 The first two rows are hard code-shape thresholds in this convention. The cohesion and coupling rows are review calibration: they identify where a function is likely doing too many kinds of work or depending on too many external surfaces.

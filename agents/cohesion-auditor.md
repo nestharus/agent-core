@@ -53,9 +53,9 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 
 A1 is the metric source. The bound A1 row is:
 
-- `Cohesion by classifications touched`: LOW = 1 classification; MEDIUM = n/a; HIGH = >= 2 classifications.
+- `Cohesion by classifications touched`: LOW = actual classifications are a subset of the declared role set, or exactly 1 classification for files without declared roles or a documented path default; MEDIUM = n/a; HIGH = actual classifications exceed the declared role set or include classifications outside the declared role set, or >= 2 classifications for files without declared roles or a documented path default.
 
-Identify candidate component boundaries from the touched-surface enumeration, module/crate/package layout, and A1 function-classification evidence. Count the classifications touched inside each component's touched or planned functions. A component that touches 1 classification is LOW; a component that touches >= 2 classifications is HIGH.
+Identify candidate component boundaries from the touched-surface enumeration, module/crate/package layout, and A1 function-classification evidence. Resolve each component's declared role set from file-local declarations or documented path defaults, then compare the actual classification set before using the count-only fallback for files without declared roles or a documented path default.
 
 The overall verdict is the worst applicable per-component verdict. If required evidence is absent or malformed, use the stop conditions instead of guessing.
 
