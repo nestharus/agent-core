@@ -8,6 +8,8 @@ Use this strategy when the work is primarily internal structure reshape, the int
 
 Use it for refactors that benefit from many small PRs against a shared buffer, for slices identified from auditor outputs, and for cleanup where the hard problem is preserving contracts while changing the implementation behind them.
 
+The receiver-side boundary cites `conventions/feature-development-workflow.md` `## Refactoring out of scope`; feature-spawned refactor tickets are valid intake only under no-behavior-shipping.
+
 ## Do Not Use When
 
 Do not use refactoring for work that ships behavioral change, adds a user-facing surface, or decomposes as a feature lifecycle. Route that work through `~/ai/conventions/feature-development-workflow.md`, `~/ai/workflows/feature-development.md`, and `~/ai/agents/feature-orchestrator.md`.

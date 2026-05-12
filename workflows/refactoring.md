@@ -34,6 +34,7 @@ Coordinate one refactoring lifecycle above individual per-PR implementation-pipe
 - Use when the work is internal structure reshape with no intended external behavior change.
 - Use when the work needs integration-buffer staging, contract-bounded slicing, encapsulate-first handling, or shim lifecycle tracking.
 - Use when refactoring targets come from auditor outputs and need one coordinated target-map, encapsulation, verify, and buffer-PR cycle.
+- Receiver-side intake follows `conventions/feature-development-workflow.md` `## Refactoring out of scope`: separate existing-code structural refactor tickets are valid intake only when behavior does not ship.
 
 ## Do Not Use When
 
