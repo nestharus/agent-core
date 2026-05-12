@@ -2298,3 +2298,50 @@ Phase: 2.5
 Decision: Problem-map approval gate skipped per `skip_problem_map_gate=true` dispatch input. Defer-to-prototype detection still ran (1/5 signals → trigger NOT fired). Per Work Manager pre-resolutions, no NEEDS_INPUT escalation is required and the WU proceeds to mode propagation (Step 8) with all surfaces in exhaustive mode.
 
 Evidence: `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forward-to-solution/risk/acr-135-risk-profile.md`.
+
+## D-2026-05-12-acr185-process-tree-audit-environment-caveat
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr185-process-tree-audit-environment-caveat
+
+**Linear ticket**: ACR-185
+
+**Phase**: Phase 4 process-tree audit #1 (also applies to Phase 6 and Phase 8 process-tree audits in this WU)
+
+**Decision**: Allow `process-tree-auditor` to emit terminal verdict `PASS` when the only failing topology assertion is "top-level child placement under an orchestrator parent UUID", because the implementation-pipeline-orchestrator for ACR-185 runs from a Claude Code conversation rather than from `agents -a implementation-pipeline-orchestrator`. The five Phase 4 child invocations each have distinct OULIPOLY invocation UUIDs (recorded in `${planning_dir}/risk/phase-4-join-manifest.json`) and follow the ACR-151 dispatch shape, but they have no shared agents-side parent UUID linking them to a single tree.
+
+**Rationale**: This is the same runtime topology variant as ACR-184 (see `D-2026-05-12-acr184-process-tree-audit-environment-caveat` in `/home/nes/projects/ai/worktrees/acr-184-forbid-mutable-ops-in-central-ai-checkout/DECISIONS.md`). It is authorized by the WU dispatch's pre-resolved `mid_pipeline_drift=proceed-with-decision-residual`. The caveat is narrowly scoped: only topology assertion #1 (parent UUID) is non-verifiable under this runtime. Every other assertion — UUID distinctness, ACR-151 dispatch shape, proposal-not-diff (Phase 4 gates score the proposal), canonical-evidence (sha256, verdict_line, on-disk presence) — MUST still be verified.
+
+**Action**:
+- Each process-tree audit prompt for ACR-185 (Phase 4 / Phase 6 / Phase 8) references this decision in its `## Runtime topology variant` section and cites the per-phase join manifest as the binding evidence.
+- If any canonical-evidence row fails (sha256 mismatch, missing artifact, wrong verdict), or any non-#1 topology assertion fails, the auditor emits `FAIL`/`BLOCKED`, not `PASS`.
+- The auditor MUST verify the runtime variant matches reality before invoking the caveat — topology unavailability must be for the same Claude-Code-orchestrator reason, not for a different (genuinely violating) reason like a malformed dispatch.
+
+**Residual risk**: Loss of single-tree topology evidence on this WU. Mitigated by per-child OULIPOLY UUID capture in the join manifest and the per-phase dispatch logs.
+
+## D-2026-05-12-acr185-phase6c-tier1-rewind
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr185-phase6c-tier1-rewind
+
+**Linear ticket**: ACR-185
+
+**Phase**: Phase 6, Step 6c
+
+**Decision**: Tier-1 rewind under the implementation-pipeline-orchestrator violation-escalation policy. Same class as `D-2026-05-12-acr183-phase6c-tier1-rewind`.
+
+**Rationale**: The first Step 6c agent invocation (`agents trace --json` invocation UUID `7b14021b-a1bc-4a18-9e87-d07a4db596bf`) produced the correct product diff for `agents/work-manager-operator.md` but went directly from the OULIPOLY headers to a freeform "Implemented ACR-185 ..." line without echoing the mandated `consumed: <step6b-output-index-path>` first stdout line nor the per-Step-6b-artifact `consumed: <path>` echoes. This violates the Phase 6 Step 6c consumption-echo rule in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 6 Step 6c (FIRST LOG LINE REQUIREMENT). The product content was correct but the trace evidence required by the rule (proof Step 6c read Step 6b's output index + eval-spec + residuals artifact before mutating product code) is absent. Policy is Tier-1 rewind: revert the product file to the master state, then re-dispatch Step 6c with a stricter wrapper that emits `consumed:` lines via explicit Bash echo as the very first product-shell actions.
+
+**Action**:
+- Revert `agents/work-manager-operator.md` to its master state (no commits yet on the WU branch, so `git checkout -- agents/work-manager-operator.md` suffices).
+- Leave Step 6b artifacts (eval spec at `evals/acr-185-stash-reset-provenance-discipline/eval.md`, output index at `${scratch_dir}/phase6/step6b-output-index.md`, residuals record at `${planning_dir}/risk/acr-185-test-residuals.md`) untouched; they predate the violating Step 6c invocation.
+- Re-dispatch Step 6c as a fresh `agents` invocation with a new invocation UUID and a stricter prompt requiring the agent's final stdout to begin with the three `consumed:` lines before any product-code edit.
+
+**Violating evidence**:
+- Violating log: `/home/nes/projects/ai/planning/acr-185-stash-reset-provenance-discipline/.scratch/logs/acr-185-phase-6c.log`
+- Violating invocation UUID: `7b14021b-a1bc-4a18-9e87-d07a4db596bf`
+- Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
+
+**Re-dispatch evidence (Tier-1 retry)**: will be captured at `${scratch_dir}/prompts/acr-185-phase-6c-v2.md` + `${scratch_dir}/logs/acr-185-phase-6c-v2.log` with the new invocation UUID after re-dispatch.
