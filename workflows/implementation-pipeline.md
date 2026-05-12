@@ -27,6 +27,10 @@ workflow_dispatch_contract:
 End-to-end pipeline from triggering event to merged PR.
 Bugs start with RCA. Features, refactors, and other planned work skip RCA.
 
+## Declared roles
+
+`orchestration`, `validator`
+
 ## Workflow Dispatch Surface
 
 ### Orchestrator
