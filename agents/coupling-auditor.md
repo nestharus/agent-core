@@ -78,11 +78,13 @@ Do not claim the current implementation pipeline already dispatches this operato
 2. Read the four required references: `code-quality.md`, `proposer-critic-pattern.md`, `risk-profile.md`, and `implementation-pipeline.md`.
 3. Verify that A1 still contains `Coupling by distinct external symbols/modules referenced`.
 4. Resolve touched surfaces into candidate component boundaries using module/crate/package layout and any explicit labels in the touched-surface enumeration.
-5. Extract touched functions, symbols, external references, and dependency edges from the proposal, problem map, touched-surface enumeration, optional diff, and optional code-trace reports.
-6. Score per-pair coupling using the A1 coupling row.
-7. Assign the overall verdict as the worst applicable score.
-8. Attach evidence for every non-LOW component-pair score.
-9. Write the report to `output_path`.
+5. Extract touched functions, symbols, external references, and dependency edges from supplied WU-owned change evidence, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
+6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and cite `workflows/auditor-surface-expansion.md`: coupling component-pair references are blocking only when diff-owned.
+7. If pair-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
+8. Score per-pair coupling using the A1 coupling row.
+9. Assign the overall verdict as the worst applicable score.
+10. Attach evidence for every non-LOW component-pair score.
+11. Write the report to `output_path`.
 
 ## Output Format
 

@@ -37,6 +37,7 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels.
 - `diff_path=<path>` (optional) - diff evidence for ad-hoc or later PR/diff invocations.
+- `contract_path=<path>` (optional) - Phase 6a contract. When present and the invocation scope is a multi-file WU component, read the `## Component declared roles` section for a component-level declared role set per `~/ai/conventions/code-quality.md` § Declared roles § Component declared roles (multi-file WU components).
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-cohesion.md`) - report destination.
 
 ## Non-Negotiables
@@ -53,9 +54,9 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 
 A1 is the metric source. The bound A1 row is:
 
-- `Cohesion by classifications touched`: LOW = actual classifications are a subset of the declared role set, or exactly 1 classification for files without declared roles or a documented path default; MEDIUM = n/a; HIGH = actual classifications exceed the declared role set or include classifications outside the declared role set, or >= 2 classifications for files without declared roles or a documented path default.
+- `Cohesion by classifications touched`: LOW = actual classifications are a subset of the declared role set (file-local, path default, or component-level Phase 6a contract), or exactly 1 classification for components and files without any declared roles; MEDIUM = n/a; HIGH = actual classifications exceed the declared role set or include classifications outside the declared role set, or >= 2 classifications for components and files without any declared roles.
 
-Identify candidate component boundaries from the touched-surface enumeration, module/crate/package layout, and A1 function-classification evidence. Resolve each component's declared role set from file-local declarations or documented path defaults, then compare the actual classification set before using the count-only fallback for files without declared roles or a documented path default.
+Identify candidate component boundaries from the touched-surface enumeration, module/crate/package layout, and A1 function-classification evidence. Resolve each component's declared role set in this order: (a) when the invocation scope is a multi-file WU component and `contract_path` names a Phase 6a contract with a `## Component declared roles` section, use the component declared role set for the component-level subset check; (b) otherwise resolve per-file declared roles from file-local declarations or documented path defaults; (c) only when neither is present, use the count-only fallback. Compare the actual classification set to the resolved declared role set before applying any count-only fallback.
 
 The overall verdict is the worst applicable per-component verdict. If required evidence is absent or malformed, use the stop conditions instead of guessing.
 
@@ -77,11 +78,13 @@ Do not claim the current implementation pipeline already dispatches this operato
 2. Read the four required references: `code-quality.md`, `proposer-critic-pattern.md`, `risk-profile.md`, and `implementation-pipeline.md`.
 3. Verify that A1 still contains `Cohesion by classifications touched`.
 4. Resolve touched surfaces into candidate component boundaries using module/crate/package layout and any explicit labels in the touched-surface enumeration.
-5. Extract touched functions and A1 classifications from the proposal, problem map, touched-surface enumeration, optional diff, and optional code-trace reports.
-6. Score per-component cohesion using the A1 cohesion row.
-7. Assign the overall verdict as the worst applicable score.
-8. Attach evidence for every non-LOW component score.
-9. Write the report to `output_path`.
+5. Extract touched functions and A1 classifications from the supplied WU-owned change evidence, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
+6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary`: cohesion classifications are blocking only when diff-owned; existing whole-file cohesion concerns are residuals under that convention.
+7. If cohesion-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` and keep the expanded context out of the cohesion verdict target.
+8. Score per-component cohesion using the A1 cohesion row.
+9. Assign the overall verdict as the worst applicable score.
+10. Attach evidence for every non-LOW component score.
+11. Write the report to `output_path`.
 
 ## Output Format
 

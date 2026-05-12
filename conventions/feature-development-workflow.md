@@ -13,6 +13,14 @@ Use feature-development by default when the work decomposes into 2+ tickets, has
 | feature-development | 2+ tickets, user-facing surface, or shipped behavioral change. | Strategy layer above the active manager flavor; the flavor decides risk posture, while this strategy decides branch topology, evidence expectations, prototype payload, and QA record. | Universal PR-body evidence on every ticket PR plus the final feature-to-trunk PR. |
 | hackerman | Throwaway, internal-only, speed-biased work where the user explicitly accepts narrow proof and residual risk. | `manager-hackerman` does not waive feature-development when the result is a shipped multi-ticket feature. | Immediate functional proof for internal throwaway work; universal PR-body evidence for shipped feature work. |
 
+## Refactoring out of scope
+
+In this section, feature work owns new-code decomposition: a feature ticket may decompose, reorganize, or refactor its own new code when necessary to deliver accepted behavior.
+
+An existing-code structural refactor discovered while reading context or satisfying auditors is not automatic feature scope unless the active manager flavor explicitly keeps a tiny directly-unblocking change in scope.
+
+Broader existing-code refactor discovered by a feature WU becomes residual, follow-up, or pause/file/refactor under ACR-180 and ACR-179.
+
 ## The 12-step pipeline
 
 1. Roadmap: start from a feature brief, market/product roadmap, or strategy record; output the feature problem, candidate shapes, acceptance criteria, and open questions; gate on whether the feature is clear enough to prototype, scope, or terminate.

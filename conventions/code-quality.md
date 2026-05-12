@@ -12,6 +12,33 @@ These rules apply uniformly across Rust, TypeScript, Python, and any other proje
 
 The convention is intentionally language-neutral. A project may have local style rules for naming, formatting, framework boundaries, or idioms, but those local rules do not replace the code-shape requirements here.
 
+## Declared roles
+
+`validator`, `mapper`
+
+## Auditor Scope Boundary
+
+For every A1 auditor, the diff, or an equivalent WU-owned corpus when a literal diff is unavailable, is the judgment target; auditors may inspect other evidence only to decide whether a finding is owned by the current Work Unit.
+
+The context set includes broader files, traces, proposals, risks, callers, and callees; these are context evidence that may inform the judgment but are not the target.
+
+Residual records use this schema: `id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`. A finding is blocking when it is introduced, worsened, or made gate-relevant by the current diff or WU-owned corpus; otherwise it is recorded as residual through the `blocking-or-residual` field and preserved without raising the current gate severity.
+
+ACR-180 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, and ACR-156 oscillation handling remain authoritative in their existing sections.
+
+## Auditor Set
+
+The canonical A1 auditor inventory for composite fanout routing is:
+
+This section is an inventory catalog of the four A1 auditor modules that make up the composite fanout set; the bullets below declare catalog membership for routing and do not make this convention a coupling target with four module dependencies.
+
+- `agents/cohesion-auditor.md` - A6 cohesion.
+- `agents/coupling-auditor.md` - A6 coupling.
+- `agents/function-classification-auditor.md` - A5.
+- `agents/push-pull-auditor.md` - A4.
+
+Workflows dispatch by reference to this list rather than by maintaining a separate canonical auditor inventory.
+
 ## Function classification
 
 ### Single-classification rule
@@ -84,6 +111,14 @@ The default declared role set for `agents/*-orchestrator.md` is `orchestration`,
 
 A documented path default supplies declared roles only when the file has no `## Declared roles` section. File-local `## Declared roles` content overrides the documented path default for that file.
 
+### Component declared roles (multi-file WU components)
+
+When the cohesion auditor scores a multi-file WU component as a single component, per `~/ai/workflows/implementation-pipeline.md` Phase 6 per-component code-quality fanout, the component itself may have a declared role set living in the Phase 6a contract under a `## Component declared roles` heading. The cohesion auditor MUST read this section before falling back to per-file declared roles, path defaults, or count-only scoring when the diff or WU-owned corpus is the target of a component-level invocation.
+
+When a component declared role set is present, the same subset-check semantic applies at the component level: LOW when the diff-owned classifications touched by the component are a subset of the component declared role set; HIGH when the diff-owned classifications exceed the component declared role set or include classifications outside it. The count-only fallback (LOW = exactly 1 classification; HIGH = 2 or more) applies only when no file-local, path-default, or component declared roles cover the touched classifications.
+
+A component declared role set is the union of per-file roles the component legitimately covers as part of one coordinated change; it does not extend the A1 vocabulary, alter LOW/MEDIUM/HIGH semantics, or replace per-file declared roles where those exist for the files in the component.
+
 ## Declared-role examples
 
 - LOW: `agents/implementation-pipeline-orchestrator.md` may touch `orchestration` and `parser` work because `agents/*-orchestrator.md` defaults to declared roles `orchestration`, `parser`.
@@ -107,7 +142,7 @@ These are starting calibration points for downstream auditors A4 / A5 / A6 (NES-
 |---|---|---|---|
 | `Nesting depth` | 0-1 | n/a | >= 2 |
 | `Function categories per function` | 1 | n/a | >= 2 |
-| `Cohesion by classifications touched` | actual classifications are a subset of the declared role set; for files without declared roles or a documented path default, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for files without declared roles or a documented path default, 2 or more classifications |
+| `Cohesion by classifications touched` | actual classifications are a subset of the declared role set (file-local, path default, or component-level declared roles in a Phase 6a contract); for components and files without any declared roles, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for components and files without any declared roles, 2 or more classifications |
 | `Coupling by distinct external symbols/modules referenced` | 0-2 | >= 3 | >= 6 |
 
 The first two rows are hard code-shape thresholds in this convention. The cohesion and coupling rows are review calibration: they identify where a function is likely doing too many kinds of work or depending on too many external surfaces.

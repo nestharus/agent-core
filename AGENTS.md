@@ -18,6 +18,8 @@ Strategy selection happens before single-WU dispatch. If the request decomposes 
 
 If the request is internal structure reshape with no intended external behavior change and requires refactoring-specific safety topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), route to [`~/ai/workflows/refactoring.md`](workflows/refactoring.md) and [`~/ai/agents/refactoring-orchestrator.md`](agents/refactoring-orchestrator.md), using [`~/ai/conventions/refactoring-workflow.md`](conventions/refactoring-workflow.md). This refactoring rule takes precedence over the 2+ tickets heuristic above: a multi-PR refactor that ships no behavioral change still routes here, not to feature-development. Behavior-shipping work routes to feature-development regardless of ticket count. Manager flavor remains orthogonal.
 
+For startup routing, use [`~/ai/conventions/feature-development-workflow.md`](conventions/feature-development-workflow.md) `## Refactoring out of scope` as the feature/refactoring boundary reference.
+
 ## Project Setup Pattern
 
 Projects organized for agent-driven workflows follow the umbrella layout `~/projects/<name>/{trunk,planning,worktrees}/`: the git repository sits at `trunk/`, machine-local planning artifacts live in `planning/<branch>/`, and per-WU worktrees live in `worktrees/<branch>/`.

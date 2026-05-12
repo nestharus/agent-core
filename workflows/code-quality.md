@@ -8,7 +8,7 @@ workflow_dispatch_contract:
     - "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, and wu_id"
     - "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
   expectations:
-    - "dispatches A4/A5/A6a/A6b auditors as four parallel children and writes a durable code-quality bundle"
+    - "dispatches each auditor named in conventions/code-quality.md ## Auditor Set and writes a durable code-quality bundle"
     - "aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states"
     - "preserves the convention as the single rule reference; does not redefine A1"
   outputs:
@@ -35,7 +35,7 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 
 ### Expectations
 
-- dispatches A4/A5/A6a/A6b auditors as four parallel children and writes a durable code-quality bundle
+- dispatches each auditor named in `conventions/code-quality.md` `## Auditor Set` and writes a durable code-quality bundle
 - aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states
 - preserves the convention as the single rule reference; does not redefine A1
 
@@ -52,7 +52,11 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 
 ## Purpose
 
-Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/conventions/code-quality.md` as the rule reference and the existing child auditors as the executable procedures. The workflow owns dispatch, artifact layout, finding normalization, aggregate verdicts, currentness semantics, audit-history handoff, and process-tree handoff for callers that need one code-quality result.
+Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/conventions/code-quality.md` as the rule reference and the existing child auditors as the executable procedures. The workflow applies `conventions/code-quality.md` `## Auditor Scope Boundary` and dispatches each auditor named in `conventions/code-quality.md` `## Auditor Set`. The workflow owns dispatch, artifact layout, finding normalization, aggregate verdicts, currentness semantics, audit-history handoff, and process-tree handoff for callers that need one code-quality result.
+
+## Declared roles
+
+`orchestration`, `validator`, `mapper`
 
 ## Declared roles (mirror)
 
@@ -91,6 +95,8 @@ Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/c
 - `code_trace_paths=<paths>`: optional evidence for coupling review when traces or symbol maps exist.
 - `code_quality_ref=<path>`: optional reference override; defaults to `~/ai/conventions/code-quality.md`.
 
+Dispatch prompts separate target evidence from context evidence under `conventions/code-quality.md` `## Auditor Scope Boundary`: `diff_path` or equivalent WU-owned change evidence is target evidence for implemented-work review, while proposal, problem-map, risk-profile, touched-surface, trace, and inventory paths are context evidence.
+
 ## Output Paths
 
 Default slug: caller-supplied `${slug}` or `code-quality-workflow`.
@@ -113,6 +119,8 @@ Standalone mode uses one root:
 ## Dispatch Manifest
 
 Write `dispatch-manifest.md` before child dispatch where possible. Every selected child row defaults to required.
+
+Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; the table below is the operational manifest for the current canonical set.
 
 | Concern | Auditor | Model | Prompt path | Log path | Report path | Required |
 |---|---|---|---|---|---|---:|
@@ -143,15 +151,15 @@ Auditor path: `~/ai/agents/function-classification-auditor.md`. Model: `gpt-high
 
 Auditor path: `~/ai/agents/cohesion-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `touched_surfaces_path`.
-- Optional inputs: `diff_path`, `output_path`.
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent WU-owned change evidence.
+- Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `output_path`.
 
 ### A6 - Coupling
 
 Auditor path: `~/ai/agents/coupling-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `touched_surfaces_path`.
-- Optional inputs: `diff_path`, `code_trace_paths`, `output_path`.
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent WU-owned change evidence.
+- Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_trace_paths`, `output_path`.
 
 ## Aggregate Verdict
 
@@ -165,6 +173,8 @@ The aggregate verdict uses these outcomes:
 
 Completed severity rollup is worst-case: `HIGH > MEDIUM > LOW`. Coupling is the only child whose native vocabulary currently includes MEDIUM. `NEEDS_INPUT` and `BLOCKED` are stop states, not severity values, and native child report paths and source verdicts remain visible in the aggregate report.
 
+Under `conventions/code-quality.md` `## Auditor Scope Boundary`, current severity is raised by diff-owned findings; residuals are preserved separately and do not change the current severity rollup.
+
 Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOCKED` before downstream gate consumption.
 
 ## Finding Normalization
@@ -172,6 +182,8 @@ Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOC
 `findings.json` and `findings.md` are both required. `findings.json` is the canonical machine-readable artifact; `findings.md` is the human-readable rendering of the same normalized records.
 
 Each normalized finding records `id`, `source_auditor`, `source_id`, `severity` or stop-state, `metric` / `failure_mode`, `path`, optional location anchors (`function`, `component`, `source_component`, `target_component`, `line_span_or_diff_hunk`), `evidence`, `closure_expectation`, `report_path`, and `blocks_pipeline`.
+
+Residual normalization cites the residual-output schema in `conventions/code-quality.md` `## Auditor Scope Boundary`; record residuals by reference to that schema without duplicating it here.
 
 Stable IDs use `CQ-<round?>-F<NN>` for canonical pipeline use and `CQ-F<NN>` for standalone bundles. Original child IDs remain in `source_id`.
 

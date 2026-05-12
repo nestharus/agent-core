@@ -73,9 +73,11 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
 2. Read A1 from `code_quality_ref` before scoring, defaulting to `~/ai/conventions/code-quality.md`.
 3. Verify Push-vs-pull system coupling text, the session-graph Pull-vs-Push Policy disambiguator, the `uncontrolled-source coupler` failure mode, and numerical thresholds before scoring. Return `BLOCKED:A1-metric-source` if the metric source is missing or contradictory.
 4. Parse the diff and changed evidence to identify every new or modified code-level pull/read site visible in change evidence, plus every deployment-level pull site involving service, database, cache, filesystem, private endpoint, or service-topology reads.
-5. Classify each pull site by evidence: source-control proof, common-interface proof, or neither. Source-control proof means the consumer controls the source or a declared owner inside the same controlled boundary controls it. Common-interface proof means the producer pushes into a common interface and the consumer pulls from that interface.
-6. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
-7. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
+5. Keep the review diff-first under `conventions/code-quality.md` `## Auditor Scope Boundary` and cite `workflows/auditor-surface-expansion.md` for bounded context: prior pull-site concerns are residuals unless changed by the diff.
+6. If ownership, topology, or interface context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
+7. Classify each pull site by evidence: source-control proof, common-interface proof, or neither. Source-control proof means the consumer controls the source or a declared owner inside the same controlled boundary controls it. Common-interface proof means the producer pushes into a common interface and the consumer pulls from that interface.
+8. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
+9. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
 
 ## Output Contract
 
