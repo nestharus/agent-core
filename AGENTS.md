@@ -284,6 +284,25 @@ Use the shared wrapper conventions in [`~/ai/workflows/agents-cli.md`](workflows
 
 Default shape: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>`.
 
+### AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. A child dispatch stays as one parent-visible bash invocation:
+
+```bash
+agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
+```
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; capture the full stream with `2>&1 | tee <log-path>` and parse the completed log afterward. Do not combine N independent dispatches into a single shell script; each dispatch is its own bash invocation, and ticket or setup commands run separately before or after it.
+
+Wrong shape:
+
+```bash
+bash -c "python << EOF
+print('ticket update or setup call here')
+EOF
+agents -m claude-opus -p /repo -f /tmp/prompt.md | head -3"
+```
+
 Use [`/home/nes/projects/agent-runner/README.md`](/home/nes/projects/agent-runner/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.
 
 All branch work runs in a git worktree; the central checkout is read-only / branch-tracking only; see [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md).

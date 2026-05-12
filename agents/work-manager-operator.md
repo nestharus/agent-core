@@ -86,6 +86,25 @@ Per the audit `bnlhkh982` (2026-05-05): the manager's filing patterns systematic
 
 ## Dispatch Discipline
 
+### AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. The ticket update and the implementation-orchestrator launch are separate completed shell invocations; the dispatch itself stays direct:
+
+```bash
+agents -m claude-opus -p <repo_root> -f <prompt.md> 2>&1 | tee <log-path>
+```
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; capture the full stream with `2>&1 | tee <log-path>` and derive short status snippets from the completed log afterward. Do not combine N independent dispatches into a single shell script; parallel WUs are separate parent-visible dispatches.
+
+Wrong shape:
+
+```bash
+bash -c "python << EOF
+print('Linear or JIRA status update here')
+EOF
+agents -m claude-opus -p /repo -f /tmp/wu.md | head -3"
+```
+
 For every WU dispatched via implementation-pipeline-orchestrator:
 
 1. **Pre-dispatch:**
@@ -93,10 +112,10 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
    - Use `${ticket_operator}` with `task=transition` to move the selected ticket to **In Progress** immediately after dispatch. For Linear, pass `target_status="In Progress"` and let `linear-operator` resolve the issue team's workflow state.
    - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`.
-   - Run `agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt>` in background.
+   - Run `agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt> 2>&1 | tee <log> &` in background.
 
 2. **During dispatch:**
-   - The orchestrator's stdout is buffered through `tee | tail -50`; per-phase progress lives in `${scratch_dir}/logs/`. Inspect those for live progress, not stdout.
+   - The orchestrator's stdout/stderr is captured through `2>&1 | tee <log>`; per-phase progress lives in `${scratch_dir}/logs/`. Inspect those logs for progress, and derive any short parent-transcript snippet after the dispatch finishes.
    - Multiple background dispatches can run in parallel. The manager remains lean; the orchestrator does the work.
 
 3. **Post-merge (when the orchestrator's auto-merge or the user's manual merge confirms):**
@@ -225,7 +244,7 @@ The manager keeps the following in working-context awareness; reads on demand ra
 2. **Bundling concerns in operator names.** A combined cohesion/coupling auditor was filed as one ticket; the resulting bundled operator violates single-concern. File single-concern siblings.
 3. **Inline orchestration of multi-WU initiatives.** Initial multi-WU programs were inline-coordinated from the manager seat without `agents trace --json` provenance, leading to unverifiable shipped work and a full rewind. Always dispatch the implementation-pipeline-orchestrator per WU.
 4. **Mass session task tracker without backend refresh.** Stale task #32 referenced ticket numbers that no longer matched filed reality. Refresh from the selected ticket backend before referencing the queue.
-5. **Treating orchestrator stdout as primary signal.** Background dispatches buffer through `tee | tail -50`; per-phase logs in `${scratch_dir}/logs/` are the truth. Diagnose dispatch health from logs, not from stdout-tail.
+5. **Treating orchestrator stdout as primary signal.** Background dispatches capture the full stream through `2>&1 | tee <log>`; per-phase logs in `${scratch_dir}/logs/` are the truth. Diagnose dispatch health from logs, not from a live stdout snippet.
 
 ## Stop Conditions
 

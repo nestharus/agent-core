@@ -37,6 +37,12 @@ You read, comment on, and transition JIRA issues on `${jira_url}`. Auth uses HTT
 - `--input jira_project=<key>` (required) — default Jira project key for examples and search defaults.
 - `--input jira_account_email=<email>` (required) — Jira account email used with `$JIRA_API_KEY`.
 
+## AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source for any caller that performs Jira work and then dispatches an agent. Jira REST calls, JSON payload shaping, and `curl` helpers are ticket-client operations; they must finish as separate commands before or after the later `agents` dispatch.
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; the later dispatch uses full `2>&1 | tee` capture from the canonical CLI convention. Do not combine N independent dispatches into a single shell script; Jira work and child dispatches remain sibling operations.
+
 ## Auth
 
 ```bash

@@ -73,6 +73,25 @@ Validate that every supplied path is absolute where the workflow requires a path
 
 ## Procedure
 
+### AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Release cut, hotfix, promote, tag, and reconcile mechanics are dispatched one phase at a time:
+
+```bash
+agents -m gpt-high -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-phase.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-phase.log
+```
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; preserve full release evidence with `2>&1 | tee` and read the completed log afterward. Do not combine N independent dispatches into a single shell script; each release phase dispatch has its own prompt, log, and gate evidence.
+
+Wrong shape:
+
+```bash
+bash -c "python << EOF
+print('release ticket evidence update here')
+EOF
+agents -m gpt-high -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-cut.md | head -3"
+```
+
 ### Preflight
 
 1. Read `~/ai/workflows/release-management.md` and use its `## Required Inputs`, `## Phase Map`, `## Gate Ownership Table`, `## Stop Conditions And Escalation`, and `## Anti-Scope` as the lifecycle source of truth.

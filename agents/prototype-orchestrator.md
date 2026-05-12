@@ -47,6 +47,25 @@ Per `~/ai/models/roles.md` you are `claude-opus`: the judge. You route, dispatch
 
 ## Non-Negotiables
 
+### AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Prototype speed comes from multiple separate dispatches, each with full capture:
+
+```bash
+agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log
+```
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; keep the complete `2>&1 | tee` log and inspect it after dispatch. Do not combine N independent dispatches into a single shell script with hidden `&` and `wait`; each vector dispatch is its own parent-visible invocation.
+
+Wrong shape:
+
+```bash
+bash -c "python << EOF
+print('prepare vector metadata here')
+EOF
+agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} | head -3"
+```
+
 - **No mid-flight gates.** P1 has no risk gates, audit gates, scope gates, code-review, or process-tree audits. Build agents do not need to pass `cargo test` / `bun typecheck` during P1. The orchestrator does not block on lint.
 - **Risk assessment is P3-only.** The risk profile per `~/ai/conventions/risk-profile.md` is authored after stabilization, against the surfaces the prototype actually touched (which may be different from what was anticipated). Do not score risk during P1.
 - **The dossier is the deliverable.** The branch may be merged, cherry-picked, retained, or discarded — that's a `branch-disposition.md` decision. The prototype is not "done" when the branch lands; it is done when the dossier lands and the spawned tickets are filed.

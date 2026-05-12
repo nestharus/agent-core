@@ -98,6 +98,25 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 
 ## Non-Negotiables
 
+### AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Every phase, gate, audit, remediation, and ticket-operator dispatch remains a fresh parent-visible invocation:
+
+```bash
+agents -m <model> -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}
+```
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; complete `OULIPOLY_*` markers, `agents trace --json`, join manifests, and process-tree audits depend on full `2>&1 | tee` capture. Do not combine N independent dispatches into a single shell script; each child phase or risk gate is its own invocation with its own prompt and log.
+
+Wrong shape:
+
+```bash
+bash -c "python << EOF
+print('ticket read or status update here')
+EOF
+agents -m gpt-high -p ${worktree_path} -f ${prompt} | head -3"
+```
+
 - **Every phase dispatch is a fresh `agents` invocation.** No in-process synthesis. No shortcut where you "just write the proposal yourself because it's small." Each artifact must be produced by the operator named for that phase, in its own process, with its own prompt and log.
 - **Test writer and code writer are different invocations** in Phase 6b vs Phase 6c. The Step 6b agent never sees the implementation; the Step 6c agent reads the tests + the Step 6b output index. If the same `agents` invocation produced both, Phase 6 is a violation.
 - **Risk gates run on the proposal, not the diff.** Phase 4 is gated against `proposals/NN-*.md`, not against `git diff`. Post-implementation review is Phase 7/8.
