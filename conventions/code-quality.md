@@ -12,6 +12,10 @@ These rules apply uniformly across Rust, TypeScript, Python, and any other proje
 
 The convention is intentionally language-neutral. A project may have local style rules for naming, formatting, framework boundaries, or idioms, but those local rules do not replace the code-shape requirements here.
 
+## Declared roles
+
+`validator`, `mapper`
+
 ## Auditor Scope Boundary
 
 For every A1 auditor, the diff, or an equivalent WU-owned corpus when a literal diff is unavailable, is the judgment target; auditors may inspect other evidence only to decide whether a finding is owned by the current Work Unit.
