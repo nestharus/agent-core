@@ -368,6 +368,36 @@
         ]
       }
     },
+    "refactoring-commit-history": {
+      "path": "workflows/refactoring-commit-history.md",
+      "workflow": {
+        "id": "refactoring-commit-history"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "finds the last refactor milestone for the target surface",
+          "analyzes commits since that milestone for structural degradation",
+          "packages corrective refactors into independently reviewable PR plans that inherit the base refactoring and implementation-pipeline gates"
+        ],
+        "inputs": [
+          "target surface (accepts either target or target_surface), repo_root, worktree_path, planning_dir, scratch_dir, integration_branch_ref, history_base_ref",
+          "milestone_search_policy, degradation_signal_sources, package_bounds, manager_flavor, and optional package_size_override"
+        ],
+        "non_goals": [
+          "does not modify the base ACR-179 refactoring substrate",
+          "does not design incident-driven or seed-and-fan-out sibling strategies",
+          "does not introduce behavior or feature changes",
+          "does not add scheduler or ticket-automation hooks"
+        ],
+        "orchestrator": "refactoring-commit-history-orchestrator",
+        "outputs": [
+          "last-refactor milestone evidence",
+          "history degradation inventory",
+          "bounded package plan with gate obligations",
+          "handoff inputs for ACR-179 per-package execution"
+        ]
+      }
+    },
     "release-management": {
       "path": "workflows/release-management.md",
       "workflow": {

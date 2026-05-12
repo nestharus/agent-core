@@ -149,6 +149,11 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
   File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
 
+### Refactoring strategies
+
+- `refactoring-commit-history-orchestrator` - Strategic incremental refactoring by commit-history since last refactor milestone; use when scoping is derived from milestone-to-HEAD degradation evidence rather than incident-triggered or seed-and-fan-out initiation.
+  File: [~/ai/agents/refactoring-commit-history-orchestrator.md](agents/refactoring-commit-history-orchestrator.md) | Workflow: [~/ai/workflows/refactoring-commit-history.md](workflows/refactoring-commit-history.md) | Convention: [~/ai/conventions/refactoring-commit-history-scoping.md](conventions/refactoring-commit-history-scoping.md) | Inputs: `target`, `target_surface?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `integration_branch_ref`, `history_base_ref`, `milestone_search_policy`, `degradation_signal_sources`, `package_bounds`, `manager_flavor`, `package_size_override?` | Model: `claude-opus`
+
 ### Release management
 
 - `release-orchestrator` - Orchestrate a staged release lifecycle across cut, freeze, hotfix, promote, tag, and reconcile phases.

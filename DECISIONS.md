@@ -1875,3 +1875,95 @@ Evidence: ACR-151, incident 2026-05-09 - wedged orchestrators held `state.db` lo
 Fix: `AGENT DISPATCH SHAPE` subsections were added to AGENTS.md and the in-scope smart-agent operator files: work-manager, implementation-pipeline, prototype, release, jira, and linear. Regression-guard responsibility is deferred to the ACR-175 eval framework per `D-2026-05-11-pytest-removal` (ACR-174 deleted all structural markdown tests and removed pytest infrastructure project-wide). The original ticket AC named a structural pytest, but that approach was retired by ACR-174 between when ACR-151 was scoped (2026-05-09) and when implementation reached Phase 7 (2026-05-12).
 
 Anti-scope: no runtime interceptor, no shell-command linter, no `agents` binary changes, and no `~/ai/workflows/implementation-pipeline.md` edits.
+
+## D-2026-05-12-acr-182-phase-2.5-mid-pipeline-drift-residual
+
+WU: ACR-182 (refactoring-strategy-commit-history)
+Phase: 2.5
+Decision: Accept the pre-existing `workflows/index.json` / `workflows/feature-development.md` frontmatter drift as a residual, do not expand scope to fix.
+
+Why: Pre-resolved by work-manager-operator: Mid-pipeline drift default A — proceed + note in DECISIONS as residual. Phase 2.5.1 / 2.5.4 surfaced (a) `python3 -m tools.workflow_index check` fails on `workflows/feature-development.md` (`workflow_dispatch_contract must be a mapping`) on this worktree's master baseline, and (b) `workflows/index.json` lacks an entry for the existing `workflows/refactoring.md` from ACR-179. Both are pre-existing drift, not caused by ACR-182. ACR-182's anti-scope forbids modifying ACR-179 substrate or implementation-pipeline behavior, so repairing existing index/frontmatter for unrelated workflows belongs to a separate tracker (likely a roadmap entry under workflow-index hygiene).
+
+How: ACR-182 will only add a single new `workflows/index.json` entry for its own `workflows/refactoring-commit-history.md`. If the regenerator surfaces additional drift while running, the regenerator's output is not relied on for Phase 4 LOW. Structural-test assertions are deferred to ACR-186 under the active decomposition rule recorded in `D-2026-05-12-acr-182-phase-4-coupling-medium-residual-RETRACTED`.
+
+Evidence: `${planning_dir}/research/acr-182-coverage-inventory.md` (Bug-discovery posture), `${planning_dir}/research/acr-182-duplicates.md` (Bug / drift discovery).
+
+## D-2026-05-12-acr-182-phase-2.5-inherited-estimate-cold-start
+
+WU: ACR-182 (refactoring-strategy-commit-history)
+Phase: 2.5 (sub-step 4a)
+Decision: Proceed without a baseline estimate (per work-manager-operator pre-resolution: "Defer-to-prototype: default A — proceed exhaustive"). Inherited estimate is `missing`; refined estimate will be set in Phase 3 based on the proposal's surface count and complexity.
+
+Why: The Phase 2.5 step 4a check fires because `${scratch_dir}/ticket.md` carries `estimate_source: missing`. The manager pre-resolved this disposition upstream by treating defer-to-prototype as default A (proceed exhaustive). The orchestrator records the pre-resolution here rather than emitting a fresh NEEDS_INPUT.
+
+How to apply: Phase 3's `## Estimate refinement` block writes `inherited_story_point_estimate: null` and `estimate_source: missing`; the refined estimate is recorded as a fresh value with `estimate_delta_flag.over_2x: unknown`.
+
+Evidence: `${scratch_dir}/ticket.md` (estimate_source frontmatter), `${scratch_dir}/dispatch-prompt.md` (manager pre-resolutions).
+
+## D-2026-05-12-acr-182-phase-2.5-defer-signal-evaluation
+
+WU: ACR-182 (refactoring-strategy-commit-history)
+Phase: 2.5 (sub-step 5)
+Decision: Proceed in exhaustive mode (defer-to-prototype NOT triggered).
+
+Why: Of the five defer-to-prototype signals, only one fires for this WU:
+1. Risk profile rolls up HIGH on a majority of touched surfaces — TRUE (6/6 HIGH; see `${planning_dir}/risk/acr-182-risk-profile.md`).
+2. Duplicates inventory names a sprawling parallel-systems landscape outside scope — FALSE (siblings ACR-154/ACR-180 are bounded and named; no current implementations to consolidate).
+3. Lifecycle map is largely "operational knowledge, not repo-derivable" — FALSE (dispatch lifecycle is fully repo-derivable from existing workflow/orchestrator patterns).
+4. Coverage inventory names so many uncovered behaviors that characterization tests are themselves multi-WU work — FALSE (characterization-test posture N/A for a docs WU; structural-test scope later superseded by `D-2026-05-12-acr-182-phase-4-coupling-medium-residual-RETRACTED`).
+5. Cross-language trace shows implicit contracts in so many sites that change-path entropy is HIGH on its own — FALSE (single Markdown→Python frontmatter contract; entropy MEDIUM at worst).
+
+Two or more defer-signals must fire to include the `defer to prototype` option in the human gate. Only one fires, so the orchestrator proceeds in exhaustive mode per the manager's pre-resolved disposition.
+
+How to apply: Phases 3-8 run in exhaustive mode for every touched surface per the risk-profile mode propagation table.
+
+Evidence: `${planning_dir}/risk/acr-182-risk-profile.md` (mode propagation table); `${scratch_dir}/dispatch-prompt.md` (manager pre-resolution).
+
+## D-2026-05-12-acr-182-phase-4-coupling-medium-residual
+
+WU: ACR-182 (refactoring-strategy-commit-history)
+Phase: 4 (code-quality gate after R3 revision)
+Status: RETRACTED (superseded by `D-2026-05-12-acr-182-phase-4-coupling-medium-residual-RETRACTED`)
+Decision: Historical record only. Do not apply.
+
+Why: The Phase 4 code-quality aggregate is MEDIUM (cohesion LOW, coupling MEDIUM, no pair reaching the `≥6` HIGH threshold). The MEDIUM verdict comes from several structural-test→surface pairs at exactly the `≥3` distinct-external-symbols MEDIUM threshold. The orchestrator spec `~/ai/agents/implementation-pipeline-orchestrator.md` § "Phase 4 code-quality gate" step 5 and step 7 (Allow-advance condition) explicitly permit a stable MEDIUM with cited audit-history or DECISIONS evidence. The manager pre-resolution applies to HIGH only ("If HIGH verdicts are intrinsic structural, do the architectural refactor; do not seek to extend residual."); MEDIUM acceptance is on policy.
+
+Audit-history trajectory:
+- Round 1 (initial proposal): code-quality HIGH (cohesion + coupling). Architecturally refactored: moved `mapper` out of orchestrator, declared role sets, split tests per surface.
+- Round 2 (post-architectural revision): coupling LOW, but audit-risk HIGH because narrowing dropped AC #2 (packaged outputs) and AC #3 (worked example) coverage. Scope-risk MEDIUM for compressions.
+- Round 3 (re-added focused per-AC tests): all four Phase 4 risk gates LOW; code-quality cohesion LOW; code-quality coupling MEDIUM (multiple test→surface pairs at exactly the `≥3` MEDIUM threshold). No HIGH pair.
+
+The MEDIUM is intrinsic to docs-authoring structural tests: every test that verifies cross-references AND section presence AND frontmatter must reference 3+ distinct symbols against its target doc. Further splitting (one test per assertion) would multiply test files without changing the per-pair count math; further shrinking would compress AC coverage again.
+
+Superseded by: `D-2026-05-12-acr-182-phase-4-coupling-medium-residual-RETRACTED`. All operational guidance in this entry is invalid.
+
+Evidence:
+- `${planning_dir}/code-quality/acr-182-phase-4/aggregate-code-quality.md` (Round 3 aggregate)
+- `${planning_dir}/code-quality/acr-182-phase-4/reports/coupling-auditor.md`
+- `${planning_dir}/audit-history.md` Rounds 1-3
+- `${scratch_dir}/dispatch-prompt.md` (manager pre-resolution applied to HIGH only)
+
+## D-2026-05-12-acr-182-phase-4-coupling-medium-residual-RETRACTED
+
+WU: ACR-182 (refactoring-strategy-commit-history)
+Phase: 4 (code-quality gate after R3)
+Status: ACTIVE RETRACTION. The prior decision `D-2026-05-12-acr-182-phase-4-coupling-medium-residual` is overridden by `~/ai/conventions/workflow-execution-violations.md` § "Named anti-pattern: Non-LOW gate residual acceptance" and `~/ai/conventions/code-quality.md` § "Disposition policy" (LOW-only pipeline-callable gates; MEDIUM/HIGH are never residuals). Process-tree audit #1 verdict `FAIL` for Phase 4 (P4-001 / P4-002) confirms.
+
+Decision: Decompose the WU per `~/ai/conventions/review-convergence.md`. The Phase 4 code-quality loop has run three rounds (R1 HIGH → R2 audit/scope MEDIUM/HIGH → R3 code-quality MEDIUM); the irreducible MEDIUM is from structural-test→doc coupling that is intrinsic to docs-authoring tests. Further iteration is more expensive than the split.
+
+Why: The ticket bundles three docs-authoring concerns (workflow + orchestrator + convention + AGENTS + index) AND a structural test that asserts all of those. The structural test is the ONLY surface that drives code-quality coupling MEDIUM/HIGH (every other surface is pure markdown content). Splitting the structural test into a follow-up WU makes ACR-182's Phase 4 code-quality LOW immediately (no test surface), and the follow-up WU's structural test is then a tiny, focused PR with its own Phase 4 cycle.
+
+How: 
+1. Drop the structural-test surface from this WU's Phase 3 proposal (Round 4 revision).
+2. Drop AC #2 ("structural test verifying packaged outputs") + AC #3 ("worked example or fixture") test-bearing portion from ACR-182's acceptance set; satisfy them via:
+   - AC #2: the convention doc's `## Package descriptor` section IS the strategy's specification of packaged-output shape. The follow-up WU's structural test verifies that specification programmatically.
+   - AC #3: the convention's inline `## Worked example` section satisfies "worked example OR fixture" — the worked example stays in this WU. The structural test verifying the worked-example section lives in the follow-up WU.
+3. File follow-up Linear ticket ACR-186 ("ACR-182 follow-up: refactoring-commit-history structural test") with the dependency set so the follow-up is blocked by ACR-182 (the follow-up cannot land until ACR-182 lands). The follow-up's scope is exactly the seven structural test modules from ACR-182 R3's test-intent track.
+4. Re-run Phase 4 gates (all four risk gates + code-quality) on the smaller proposal.
+
+Evidence:
+- `${planning_dir}/risk/acr-182-phase-4-process-tree-audit.md` (FAIL verdict + P4-001 / P4-002 violations)
+- `${planning_dir}/audit-history.md` Rounds 1-3
+- `~/ai/conventions/review-convergence.md` (decomposition convention)
+- `~/ai/conventions/workflow-execution-violations.md` § "Non-LOW gate residual acceptance"
+- `~/ai/conventions/code-quality.md` § "Disposition policy"
