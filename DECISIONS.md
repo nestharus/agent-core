@@ -16,6 +16,42 @@
 
 **Residual risk**: future readers may continue to encounter the numbering mismatch between the two documents and need to cross-reference by section name; this is a known-acceptable cost relative to the scope-creep cost of fixing it inside this WU.
 
+## D-2026-05-12-acr132-step6c-tier1-rewind
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr132-step6c-tier1-rewind
+
+**Linear ticket**: ACR-132
+
+**WU phase**: Phase 6 Step 6c → Process-tree audit #2
+
+**Violation**: Step 6c log (`acr-132-phase-6c.log`) did not echo the FIRST LOG LINE REQUIREMENT `consumed: <step6b-output-index>` line, nor the per-residual `consumed: acr-132-root:T<n> -> .../acr-132-test-residuals.md` echoes. Process-tree audit #2 returned `FAIL` (blocking). Per orchestrator § Violation Detection and Escalation: "Step 6c log does not echo the Step 6b output paths it consumed" is a Tier-1 violation.
+
+**Decision**: Tier-1 rewind and retry. Revert the uncommitted Step 6c edits on the 5 touched surfaces (no commits exist yet on this branch so the rewind is a working-tree restore, not `git reset --hard`). Re-dispatch Step 6c with a strengthened prompt emphasizing the FIRST LOG LINE REQUIREMENT. Re-dispatch Process-tree audit #2 from clean state. The Step 6b output index and test-residuals are preserved (Step 6b is compliant); only Step 6c reruns.
+
+**Rationale**: Tier-1 is the standard remedy for a missing process-tree audit evidence echo. The Step 6b output is correct; the Step 6c agent simply omitted the required log preamble. A re-dispatch with a clearer prompt is the autonomous remedy. Tier-2 (split) and Tier-3 (shrink) are not warranted for a single missing-echo violation.
+
+**Cross-references**: ACR-132 (this WU), `~/ai/conventions/workflow-execution-violations.md`.
+
+## D-2026-05-12-acr132-inherited-estimate-cold-start
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr132-inherited-estimate-cold-start
+
+**Linear ticket**: ACR-132
+
+**WU phase**: Phase 2.5 human gate (step 4a inherited-estimate cold-start check)
+
+**Decision**: Proceed without an inherited baseline estimate. Phase 3 proposer will produce a refined estimate from scratch (`estimate_source` will move from `missing` to a Phase-3-derived source).
+
+**Rationale**: Ticket frontmatter shows `estimate_source: missing` (cold start). The work-manager dispatch pre-resolutions explicitly authorize "Defer-to-prototype: default A — proceed exhaustive," which procedurally rejects the "Run a small prototype first" option in the cold-start choice set. The remaining authorized choice is "Proceed without a baseline estimate"; "Terminate WU" is not authorized by any pre-resolution. The WU is small (docs-only, 5 markdown files), so running a prototype solely to backfill an estimate baseline would be disproportionate; the Phase 3 estimate refinement section will produce the refined estimate that Phase 4 scope-risk consumes.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-132-clarify-reproduce-terminology/.scratch/ticket.md` (estimate_source: missing); the dispatch invocation's "Pre-resolved Phase 2.5 gates" block; `/home/nes/projects/ai/planning/acr-132-clarify-reproduce-terminology/research/acr-132-problem-map.md` § Inherited Estimate Block.
+
+**Cross-references**: ACR-132 (this WU), ACR-126 (defer-to-prototype mechanism).
+
 ## D-2026-05-11-acr179-refactoring-workflow
 
 **Date**: 2026-05-11

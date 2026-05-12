@@ -6,6 +6,8 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+Dispatch terminology: in RCA and bug workflows, "reproduce" means create a deterministic failure signal only when the input is symptom-only. When a failing test command, node ID, CI log, red-phase report, or structured failure already exists, that signal is the reproduction; carry it forward and run the same failing signal with the candidate fix instead of dispatching redundant reproduction work.
+
 ## Quick Activation: Work Manager Mode
 
 When the user says **"you are work manager"** (or any equivalent designation), or otherwise places you in a long-running session managing a backlog of work units across multiple repos / dispatching orchestrators / surfacing frictions to the user — **operate as the Work Manager** per [`~/ai/agents/work-manager-operator.md`](agents/work-manager-operator.md). Read that file in full and follow its filing discipline, dispatch discipline, delegation patterns, and anti-scope. The default rule once activated: keep the user's context clean by delegating execution; do not perform multi-WU work inline.
