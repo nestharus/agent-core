@@ -34,7 +34,7 @@ This table is cited by
 | Phase | Gate owner | What the gate does |
 |---|---|---|
 | **Implementation pipeline** | | |
-| RCA (bugs) | Model - orchestrator advances when each named root cause is reproduced or documented `Hypothesis (unreproduced)` | No default human gate. Surface a NEEDS_INPUT new-value-question only if the reproduced cause invalidates the original framing. |
+| RCA (bugs) | Model - orchestrator advances when each named root cause has a newly created reproduction test, an existing failing test accepted as the reproduction signal, or documented `Hypothesis (unreproduced)` | No default human gate. Surface a NEEDS_INPUT new-value-question only if the reproduced or accepted cause invalidates the original framing. |
 | Problem research (optional) | Model - orchestrator advances when framing artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Synthesize user needs (optional) | Model - orchestrator advances when synthesis artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Existing-state risk profile (Phase 2.5) | **Human** | User confirms the `problem map` names the right current terrain. **First of the two surviving human gates** in the implementation pipeline. |

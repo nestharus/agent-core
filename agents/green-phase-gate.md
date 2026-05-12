@@ -238,7 +238,9 @@ Required sections:
   implementation is correct, safe, or complete — only that the
   specific red-phase IDs transitioned; `CONFIRMED_GREEN` does not
   imply full-suite green (that is step 10's test-audit gate);
-  `REGRESSIONS` may be flakes — implementer must reproduce;
+  `REGRESSIONS` already name concrete node IDs — implementer should
+  perform targeted confirmation/rerun and investigate unless the signal
+  is nondeterministic or insufficient;
   `BLOCKED_PER_TEST` IDs that were already blocked in red-phase
   excluded from the transition tally; advisory,
   downstream-no-consume.
@@ -259,9 +261,9 @@ Required sections:
     among previously-green IDs. Proceed to CodeRabbit."
   - `INCOMPLETE` → "Implementation did not drive all red-phase IDs
     green. Review the Still Red section before CodeRabbit."
-  - `REGRESSIONS` → "Previously-green tests now fail. Investigate
-    before CodeRabbit — implementation may have broken adjacent
-    behavior."
+  - `REGRESSIONS` → "Previously-green tests now fail. Perform targeted
+    confirmation/rerun of the regressed node IDs and investigate before
+    CodeRabbit unless the signal is nondeterministic or insufficient."
   - `BLOCKED` → "<reason>".
 - **Test-runner Transcript**: verbatim contents of `green-test-runner.txt`.
 
