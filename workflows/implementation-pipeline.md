@@ -568,6 +568,18 @@ Practical default:
 - opening **draft** PRs is not Tier-3
 - public promotion and other outward-facing actions follow the tiered-approval workflow
 
+## Pause For Refactor
+
+This section owns the pause state model for existing-code refactor work discovered during an implementation WU. For the strategy boundary, cite `conventions/feature-development-workflow.md` `## Refactoring out of scope`; do not restate that rule elsewhere in this workflow.
+
+- trigger: an auditor, reviewer, or implementation step identifies existing-code structural refactor work that is outside the current WU but material to continuing safely.
+- pause evidence: record the current ticket id, branch, head SHA, worktree path, dirty status, failing or residual report paths, and the reason the refactor is outside the current WU.
+- ticket/backend action: use the selected ticket backend to comment the pause evidence on the current ticket and apply the available pause/blocking status or label; if no status exists, use a clear blocking comment plus link relation.
+- refactor-ticket filing: file a linked refactor-ticket with the bounded structural target, preserved-behavior requirement, evidence paths, and relationship to the paused WU.
+- ACR-179 routing: run the refactor-ticket through the ACR-179 refactoring route, using `workflows/refactoring.md` and `agents/refactoring-orchestrator.md`.
+- resume: resume the paused WU only after the refactor-ticket is closed, superseded, or explicitly dispositioned by the active manager flavor with recorded evidence.
+- diff-owned gate failures: this pause path does not alter diff-owned gate failures; current-WU `MEDIUM` or `HIGH` code-quality findings still revise, remediate, or decompose under the existing LOW-only rules.
+
 ## Decision Recording
 
 <!-- INTENTIONAL: "deferred" here is a decision-recording state category, not an unwired workflow stub. -->

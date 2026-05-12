@@ -61,6 +61,10 @@ Phase 8 includes a user-review acceptance gate for the three flavor files before
 
 See also: ACR-153 (implementation-pipeline flavors), ACR-156 (decompose-enforcement companion work).
 
+## Out-of-scope refactor request
+
+When a child WU surfaces an existing-code refactor request outside the current ticket's scope, pause the current WU, file a linked refactor ticket, preserve state evidence, and resume only after the refactor is closed, superseded, or explicitly dispositioned. Use `workflows/implementation-pipeline.md` `## Pause For Refactor` for the state model; the active flavor file decides only whether to accept pause/file/refactor or carry a bounded residual.
+
 ## Ticket System Pluggability
 
 The manager supports two ticket backends and dispatches to the matching operator:
