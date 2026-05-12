@@ -17,10 +17,11 @@ specification or flag the behavior as ambiguous for human review.
 - A risk-assessor flagged a high-priority area and we need to understand what it should do before writing tests
 - Suspicious behavior was observed and we need to determine if it's a bug or intentional
 - A trace-recorder captured a workflow and we need to research whether the recorded behavior is correct
+- Failing-test context already exists, and the caller needs intended-behavior or root-cause research from that failure signal before writing or changing code
 
 ## Do Not Use When
 
-- Behavior is obviously broken (crash, exception, clear malfunction) — file as bug directly
+- Behavior is obviously broken (crash, exception, clear malfunction) and no intended-behavior or root-cause research is needed — file as bug directly. If the caller supplies a failing test command, node ID, CI log, red-phase report, assertion diff, or structured failure context and asks for research, treat that evidence as the reproduction signal and investigate it.
 - Writing tests (use test-writer after this agent produces a spec)
 - Measuring coverage (use coverage-analyzer)
 - The code has clear, unambiguous documentation explaining its purpose
@@ -37,7 +38,7 @@ specification or flag the behavior as ambiguous for human review.
 
 - `target`: File path + function/class/block to investigate (e.g., `src/api/pricing.py:calculate_markup`)
 - `repo_root`: Path to the codebase
-- `context` (optional): What triggered this investigation (risk-assessor output, suspicious trace, etc.)
+- `context` (optional): What triggered this investigation (risk-assessor output, suspicious trace, failing test command, node ID, CI log, red-phase report, assertion diff, structured failure evidence, etc.). When context already contains a deterministic failing signal, do not ask for a second reproduction artifact; proceed to intended-behavior or root-cause investigation from that signal.
 
 ## Inputs
 
