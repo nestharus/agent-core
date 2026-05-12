@@ -113,6 +113,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `prototype-pr-writer` - Author a proof-focused draft PR body for a shippable-prototype PR, centered on shipped use-cases, behavior-test evidence, QA screenshots, observed-vs-expected notes, and deliverable bring-up material; this PR writer does not replace `pr-writer` for production implementation PRs.
   File: [~/ai/agents/prototype-pr-writer.md](agents/prototype-pr-writer.md) | Inputs: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, `deliverable_paths` | Model: `claude-opus`
 
+- `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for test-contract review (NOT production implementation, NOT shippable-prototype proof bundles).
+  File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `claude-opus`
+
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
 
@@ -348,6 +351,7 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
 - [`~/ai/conventions/prototype-review.md`](conventions/prototype-review.md) - prototype review focus: E2E + outcomes + dossier verdict, not source code
+- [`~/ai/conventions/prototype-pending-tests.md`](conventions/prototype-pending-tests.md) - prototype-pending marker reason and runner mapping for fail-expected prototype-test PRs
 - [`~/ai/conventions/proposer-critic-pattern.md`](conventions/proposer-critic-pattern.md) - proposer/critic decomposition for risk-gated implementation
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence
 - [`~/ai/conventions/agent-questions-and-session-graph.md`](conventions/agent-questions-and-session-graph.md) - sub-agent question envelope, root surfacing, session graph, and resume/fallback convention
