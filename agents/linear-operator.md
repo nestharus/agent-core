@@ -42,6 +42,12 @@ You read, comment on, create, and transition Linear issues using the ported Line
 - `--input linear_team_key=<key>` (required for create, search, list-issues, list-projects, list-labels, create-label, and apply-labels) — Linear team key (e.g. `AST` or `NES`). Used to scope issue routing and the label namespace. Known-key read/comment operations do not need it because the issue identifier already carries the team prefix.
 - `--input linear_project_id=<id-or-slugId>` (optional) — Linear project UUID or `slugId`; when supplied, created issues and issue queries are scoped to that existing project. Distinct from labels.
 
+## AGENT DISPATCH SHAPE
+
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source for any caller that updates Linear and then dispatches an agent. Linear client commands are ticket-client operations; they must finish as separate commands before or after the later `agents` dispatch.
+
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; the later dispatch uses full `2>&1 | tee` capture from the canonical CLI convention. Do not combine N independent dispatches into a single shell script; Linear work and child dispatches remain sibling operations.
+
 ## Auth
 
 ```bash

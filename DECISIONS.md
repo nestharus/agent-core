@@ -1865,3 +1865,13 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 Add repository-level ignores for `__pycache__/`, `*.pyc`, and `*.pyo`, and untrack existing Python bytecode artifacts so local CLI invocations do not dirty working trees.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+## 2026-05-12 - ACR-151 - AGENT DISPATCH SHAPE rules
+
+Lesson: smart-agent dispatches of the `agents` binary MUST NOT be wrapped in Python heredocs, MUST NOT pipe stdout through truncating filters (`| head -N`, `| awk 'NR<=N'`, `| tail -N`), and MUST NOT collapse N independent dispatches into a single shell script. Each `agents` invocation is its own bash command; sibling operations such as Linear or JIRA status updates are separate bash commands run before or after, never composed in the same parent-shell line.
+
+Evidence: ACR-151, incident 2026-05-09 - wedged orchestrators held `state.db` locks after Python-heredoc and shell-script wrapping hid invocation/session markers through truncating filters and merged ticket updates with child dispatches.
+
+Fix: `AGENT DISPATCH SHAPE` subsections were added to AGENTS.md and the in-scope smart-agent operator files: work-manager, implementation-pipeline, prototype, release, jira, and linear. Regression-guard responsibility is deferred to the ACR-175 eval framework per `D-2026-05-11-pytest-removal` (ACR-174 deleted all structural markdown tests and removed pytest infrastructure project-wide). The original ticket AC named a structural pytest, but that approach was retired by ACR-174 between when ACR-151 was scoped (2026-05-09) and when implementation reached Phase 7 (2026-05-12).
+
+Anti-scope: no runtime interceptor, no shell-command linter, no `agents` binary changes, and no `~/ai/workflows/implementation-pipeline.md` edits.
