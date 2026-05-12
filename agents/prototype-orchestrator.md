@@ -188,9 +188,15 @@ After 3.5 + 3.6 + 3.7 clear:
 1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-branch-disposition.md` instructing a `gpt-high` writer to author `${planning_dir}/dossier/branch-disposition.md`: recommend `merge` / `cherry-pick` / `keep` / `discard` with rationale. Inputs: `answer.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `commit-hygiene` operator's report. When `defer_source` is set, also consume the P3.3 original-ticket disposition recommendation evidence and write this parseable section without changing the branch enum: `## Original ticket disposition`, `Disposition: <close-as-superseded | keep-as-meta-tracker | re-defer>`, `Rationale: <one or more sentences>`, `Spawned ticket references:`, and `Backend caveats: <comment or n/a>`.
 2. Dispatch.
 
+#### P3.10 — Author test publication manifest
+
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-test-publication-manifest.md` instructing a `gpt-high` writer to create `${planning_dir}/dossier/test-publication-manifest.md`.
+2. Require fields for the prototype-test branch/ref, test file paths, node IDs, pending marker reason format, expected fail-if-unmasked command when available, and provisional spawned-ticket mapping placeholders to finalize in P4.
+3. Dispatch and verify `${planning_dir}/dossier/test-publication-manifest.md` exists and is non-empty before P3 human gate packaging.
+
 #### P3 verify + human gate
 
-1. Verify dossier completeness: `answer.md`, `risk-profile.md`, `challenges.md`, `spawned-tickets.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `branch-disposition.md` all present and non-empty. `evidence/` has at least the P2 proof-test output. Optional: `reading-list.md`.
+1. Verify dossier completeness: `answer.md`, `risk-profile.md`, `challenges.md`, `spawned-tickets.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `branch-disposition.md`, and `dossier/test-publication-manifest.md` all present and non-empty. `evidence/` has at least the P2 proof-test output. Optional: `reading-list.md`.
 2. Verify no halting verdicts remain — P3.5 not HIGH, P3.6 not MULTI_QUESTION (without resolution), P3.7 not HIGH_DEBRIS.
 3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options. Package the payload per `~/ai/conventions/prototype-review.md`: point the reviewer at proof-test evidence, demonstrated outcomes, cost, breakage, analog-gate verdicts, and support for `answer.md`, `spawned-tickets.md`, branch disposition, and original-ticket disposition when present. When `defer_source` is set, include the original-ticket disposition in the gate payload for review; the user `approve` action authorizes P4 mechanical execution of that original-ticket disposition.
    - `approve` — proceed to P4 and file the spawned tickets as recommended.
@@ -207,14 +213,26 @@ Mechanical. Do not gate.
    - Capture the new key + URL.
    - For each link the entry specifies (`Blocks` to `${jira_issue_key}`, `Relates` to `${defer_source}`, etc.), call the JIRA `/issueLink` API. The `jira-operator` doesn't have a native link task — make the API call directly per `~/projects/<name>/AGENTS.md` § Link types reference.
    - Append the new key + URL back into `${planning_dir}/dossier/spawned-tickets.md` so the dossier is self-referential.
-2. **Update project risk profile.** For each MEDIUM/HIGH entry in `${planning_dir}/dossier/risk-profile.md`, append a row to `<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile. Cite the prototype as the originating WU; cite the spawned hardening ticket(s).
-3. **Apply branch disposition** per `${planning_dir}/dossier/branch-disposition.md`:
+2. **P4 prototype-test PR publication.**
+   - Resolve `prototype_test_branch_ref` from `dossier/test-publication-manifest.md`; resolve `base` from the manifest when present, otherwise from the declared repo default. Validate both are non-empty before any git or PR command.
+   - Update `dossier/test-publication-manifest.md` (authored during P3) to finalize the prototype-test branch, test paths/node IDs, pending marker reason format, expected fail-if-unmasked command when available, and spawned-ticket mapping.
+   - Update prototype-test branch markers to cite real spawned-ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md`; this is the required update prototype-test branch markers step before publication.
+   - Push the prototype-test branch: `git push origin ${prototype_test_branch_ref}`.
+   - Compose the `prototype-test-pr-writer` prompt with `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, and `output_path`.
+   - Dispatch prototype-test-pr-writer with `agents -m claude-opus -a ~/ai/agents/prototype-test-pr-writer.md -p ${worktree_path} -f ${scratch_dir}/prompts/${prototype_id}-prototype-test-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-prototype-test-pr-writer.log`.
+   - Verify `${output_path}.title` and `${output_path}` exist and are non-empty.
+   - Create the draft PR: `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`.
+   - Verify the parsed draft PR URL is non-empty and begins with `https://`; otherwise halt with `BLOCKED:prototype-test-pr-url-missing`.
+   - Capture PR URL into a scratch evidence file, then append PR URL, branch, test paths/node IDs, marker reason, and ticket mapping into `dossier/answer.md` and `dossier/spawned-tickets.md`.
+   - Comment on each spawned implementation ticket with the prototype-test PR URL via the selected ticket operator (`jira-operator` or `linear-operator` per `ticket_system`) with `task=comment`.
+3. **Update project risk profile.** For each MEDIUM/HIGH entry in `${planning_dir}/dossier/risk-profile.md`, append a row to `<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile. Cite the prototype as the originating WU; cite the spawned hardening ticket(s).
+4. **Apply branch disposition** per `${planning_dir}/dossier/branch-disposition.md`:
    - `merge`: dispatch the implementation-pipeline-orchestrator on the prototype branch starting at Phase 6 (the test-and-code structure already exists). The dossier is the proposal-equivalent. Pass `defer_source=${prototype_id}` so the implementation orchestrator knows the prototype origin.
    - `cherry-pick`: leave the prototype branch on origin under `prototype-${prototype_id}`. Each spawned implementation ticket cherry-picks the relevant commits; the cherry-pick happens at implementation time, not here.
    - `keep`: `git push origin prototype-${prototype_id}` (if not already pushed). Update spawned tickets to reference the branch by name.
    - `discard`: `git push origin --delete prototype-${prototype_id}`; remove the local worktree (`git worktree remove ${worktree_path}`). The dossier survives in `${planning_dir}/`.
-4. **If `roadmap_layer` was set**: dispatch a roadmap-orchestrator update against the layer's artifact, supplying the dossier as the validation evidence the layer's risk gate was waiting on. The roadmap orchestrator decides whether the layer's risk-gate now clears or whether the dossier surfaces a layer-revision instead.
-5. **If `defer_source` was set**:
+5. **If `roadmap_layer` was set**: dispatch a roadmap-orchestrator update against the layer's artifact, supplying the dossier as the validation evidence the layer's risk gate was waiting on. The roadmap orchestrator decides whether the layer's risk-gate now clears or whether the dossier surfaces a layer-revision instead.
+6. **If `defer_source` was set**:
    1. Parse `${planning_dir}/dossier/branch-disposition.md#Original ticket disposition` and extract the `Disposition:` enum value.
    2. Validate the approved disposition data before executing it. If approved disposition data is missing or malformed, an invalid enum value, spawned keys absent, ambiguous parse, or a backend workflow guard that needs human choice, emit `NEEDS_INPUT:<absolute_question_artifact_path>` per `~/ai/conventions/agent-questions-and-session-graph.md`; P4 MUST NOT guess and MUST NOT re-ask the value question already approved at P3.
    3. Reuse the spawned ticket keys from step 1; do not re-file tickets in this step. Then execute the parsed disposition:
@@ -223,7 +241,7 @@ Mechanical. Do not gate.
       - For `re-defer`, keep the deferred marker, comment remaining unknowns, and dispatch the next prototype using existing prototype dispatch conventions.
    4. Write `${planning_dir}/dossier/original-ticket-disposition-execution.md` with required field names `parsed_disposition`, `source_dossier_hash_or_mtime`, `spawned_ticket_keys`, `ticket_operator_prompt_paths`, `ticket_operator_log_paths`, `backend_operations_attempted`, `fallback_reasons`, `created_link_evidence`, `final_comment_target`, and `actor=prototype-orchestrator`.
    5. ACR-126 defines a narrow P4 defer_source original-ticket disposition-execution exception to the normal rule that prototype-orchestrator does not move ticket status; the exception is only for the approved original-ticket disposition, not for the prototype ticket. Also comment on the deferring WU's ticket with the dossier summary + spawned-ticket keys + branch disposition and original-ticket disposition. Use the selected ticket operator (`task=comment`). Ticket status transitions are manager-owned; the prototype-orchestrator does not move ticket status.
-6. **If the prototype's own ticket is set**: comment on it with the dossier summary + final answer + spawned-ticket keys using the selected ticket operator (`task=comment`). Ticket status transitions remain manager-owned; do not transition the prototype ticket here.
+7. **If the prototype's own ticket is set**: comment on it with the dossier summary + final answer + spawned-ticket keys using the selected ticket operator (`task=comment`). Ticket status transitions remain manager-owned; do not transition the prototype ticket here.
 
 ### Final — Wrap
 

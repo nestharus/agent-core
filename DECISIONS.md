@@ -1,5 +1,55 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-12-acr137-inherited-estimate-cold-start
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr137-inherited-estimate-cold-start
+
+**Linear ticket**: ACR-137
+
+**Phase**: Phase 2.5 (pre-gate inherited-estimate check)
+
+**Decision**: proceed-without-baseline (exhaustive mode).
+
+**Justification**: dispatch from `work-manager-operator` pre-resolved the Phase 2.5 gates as `Narrow-vs-exhaustive: default A — proceed exhaustive` and `Defer-to-prototype: default A — proceed exhaustive`. The Linear ticket carries `story_point_estimate: null`, `estimate_source: missing` (per `.scratch/ticket.md` frontmatter); the pre-resolution maps to "proceed without a baseline estimate" on the inherited-estimate cold-start question (per `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 2.5 step 4a).
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-137-prototype-outcomes-as-reviewable-pr/.scratch/dispatch-prompt.md`; `/home/nes/projects/ai/planning/acr-137-prototype-outcomes-as-reviewable-pr/.scratch/ticket.md`.
+
+## D-2026-05-12-acr137-mid-pipeline-discoveries-residual
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr137-mid-pipeline-discoveries-residual
+
+**Linear ticket**: ACR-137
+
+**Phase**: Phase 2.5 (steps 2.5.1 coverage discovery and 2.5.4 duplicates drift discovery)
+
+**Decision**: proceed with current scope; record both discoveries as residuals; do NOT file separate tracker tickets and do NOT expand ACR-137's scope to fix them.
+
+**Justification**: dispatch from `work-manager-operator` pre-resolves `Mid-pipeline drift: default A — proceed + note in DECISIONS as residual`. Supersedes the `~/ai/conventions/risk-profile.md` § Discoveries-during-Phase-2.5 default of filing a tracker.
+
+**Discoveries**: (1) `tools.workflow_index check` HEAD-broken on master @ `43ea603` because `workflows/eval-runtime.md` lacks YAML frontmatter; ACR-137 did not introduce this. (2) Multi-way xfail/skip semantics drift across `test-reports.md` / `coverage-expansion-operator.md` / `test-audit-gate.md` / `red-phase-gate.md` / `green-phase-gate.md`; ACR-137 defines its own narrow `prototype-pending-tests` semantics; broader reconciliation is out of scope per ticket. (3) CodeRabbit step-numbering drift (Step 7 vs step 9); opportunistic-fix-only.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-137-prototype-outcomes-as-reviewable-pr/research/acr-137-coverage-inventory.md`; `/home/nes/projects/ai/planning/acr-137-prototype-outcomes-as-reviewable-pr/research/acr-137-duplicates.md`; `/home/nes/projects/ai/planning/acr-137-prototype-outcomes-as-reviewable-pr/risk/acr-137-risk-profile.md`.
+
+## D-2026-05-12-acr137-tier1-rewind-step6c
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr137-tier1-rewind-step6c
+
+**Linear ticket**: ACR-137
+
+**Phase**: Phase 6 (Process-tree audit #2 violations V-ACR137-P6-001 and V-ACR137-P6-002)
+
+**Decision**: Tier-1 rewind via `git reset --hard HEAD~1` and re-dispatch Step 6b + Step 6c. The product changes themselves were sound (`verify.py --all` returned `OVERALL: PASS`), but Step 6c's log lacked the required `consumed:` first-line + per-test echoes, blocking Phase 7 advance per the orchestrator's violation policy.
+
+**Root cause**: the original Step 6c prompt asked for the `consumed:` lines as the FIRST stdout, but the agents wrapper compresses agent output into the result message; intermediate stdout echoes were not preserved in the captured log. The fix is to require the agent to put the `consumed:` lines at the START of its FINAL RESULT message (not as intermediate stdout), achievable through the agents wrapper.
+
+**Affected commits removed by rewind**: `849c387` ("ACR-137: publish prototype outcomes as a reviewable draft PR"). The verifier and expected-process manifest were removed from the worktree by the rewind; Step 6b will re-run before Step 6c.
+
 ## D-2026-05-11-acr134-residual-prototype-doc-drift
 
 **Date**: 2026-05-11
