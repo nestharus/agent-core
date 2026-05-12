@@ -1,5 +1,40 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-12-acr180-process-tree-audit-systemic-residuals
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr180-process-tree-audit-systemic-residuals
+
+**Linear ticket**: ACR-180
+
+**Phase**: Phase 6 Process-tree audit #2
+
+**Decision**: Accept the 4 residual violations from Process-tree audit #2 round 2 (`P6-AUD-001`, `P6-AUD-003`, `P6-AUD-005`, `P6-AUD-006`) as systemic, NOT Tier-1-fixable, and continue Phase 7–9. Filed a separate tracker ticket **ACR-190** ("Process-tree audit: handle orchestrator-session-topology + agents-CLI stdout-capture systemic gaps") that captures the auditor-contract gaps these residuals expose.
+
+**Rationale**:
+- `P6-AUD-001` (root trace lacks early Phase 6 child invocations as children) and `P6-AUD-006` (root trace stale-running, `terminal_reason=tracing_timeout`) are architectural consequences of the implementation-pipeline-orchestrator running as a Claude Code session outside `agents -a implementation-pipeline-orchestrator`. Each `agents -m gpt-high` child invocation has its own invocation UUID but no shared agents-side parent UUID. Tier-1 rewind cannot synthesize a parent UUID that doesn't exist.
+- `P6-AUD-003` (Step 6c logs lack `consumed:` echo lines) is a uniform agents-CLI stdout-capture behavior. The Tier-1 r3 re-dispatch (commit `4729fc9`, invocation `3cb1a349-...`) included an explicit FIRST LOG LINE REQUIREMENT in the prompt; the agent's final report ack'd the requirement but the line still did not appear in the captured log. The historical Step 6c-r1/r2 logs cannot be re-captured without dropping 10+ commits.
+- `P6-AUD-005` (one accidental bare-`agents` verification grep in a historical r2 log) is a one-line capture artifact in a committed-history-adjacent log; the agent re-ran the check with safe quoting and the rerun is recorded in the same log. Rewriting the log file is not Tier-1-fixable without dropping the affected commits.
+- Substantive work is verifiably correct: Round 4 Phase 4 risk gates LOW, Phase 4 code-quality aggregate LOW, Phase 6c-r4/r5 code-quality aggregate LOW (post-rebase), all 30 witnesses verified (`T1`-`T28`, `T4a`, `T21a`), contract complete, rebase verification PASS / no drift.
+- This is a different category from the ACR-156/162/163 retracted-precedent class: those retractions concerned policy/threshold edits to the auditor judgment surface. ACR-180's residuals concern auditor-contract gaps for runtime topology cases the auditor never modeled. Resolution is to harden the `process-tree-auditor` contract (ACR-190), not to retract the canonical-anchor architecture this WU lands.
+
+**Action**:
+- Append this entry; cross-link ACR-190 below.
+- Continue Phase 7 CodeRabbit, Phase 8 PR-review fanout, Phase 8.X closure judge, Phase 9 draft PR + auto-merge per dispatch input `auto_merge_after_phase_9=true`.
+- Phase 9 rebase onto current `origin/master` before push; use jj-operator when colocated, otherwise plain `git rebase origin/master` from the worktree (the prior r3 rebase used the plain-git deviation for the same reason).
+
+**Tracker cross-link**: ACR-190 — `https://linear.app/neshq/issue/ACR-190/process-tree-audit-handle-orchestrator-session-topology-agents-cli`. Covers orchestrator-session topology + agents-CLI stdout-capture systemic gaps in the `process-tree-auditor` contract; labels `Bug`, `hardening`, `auditor`, `framework`; status `Todo`.
+
+**Question artifact**: `/home/nes/projects/ai/planning/acr-180-auditor-scope-boundary-diff-based-review/.scratch/questions/q-bc39b941-a07b-4a25-b2a4-16e300c0e924.question.json` — answered A.
+
+**Evidence**:
+- `/home/nes/projects/ai/planning/acr-180-auditor-scope-boundary-diff-based-review/risk/acr-180-phase-6-process-tree-audit-r2.md` — terminal verdict `blocking-tier1-exhausted`.
+- `/home/nes/projects/ai/planning/acr-180-auditor-scope-boundary-diff-based-review/audit-history.md` § Process-tree audit #2 (r1/r2) + Phase 6c-r4/r5.
+- `/home/nes/projects/ai/planning/acr-180-auditor-scope-boundary-diff-based-review/risk/acr-180-rebase-verification.md` — PASS / no drift.
+
+**Residual risk**: The 4 systemic violations remain visible in the Phase 6 process-tree audit report and the audit-history Round r2 entry. ACR-190 is the destination for hardening the auditor contract so future WUs do not need this DECISIONS entry.
+
 ## D-2026-05-12-acr180-auditor-scope-boundary
 
 **Date**: 2026-05-12
@@ -8,15 +43,19 @@
 
 **Linear ticket**: ACR-180
 
-**decision**: adopt canonical anchors for diff-scoped auditor judgment, bounded auditor surface expansion, pause-for-refactor coordination, and the feature/refactoring strategy boundary.
+**Decision**: adopt canonical anchors for diff-scoped auditor judgment, bounded auditor surface expansion, pause-for-refactor coordination, and the feature/refactoring strategy boundary.
 
-**rationale**: ACR-180 keeps strict auditing while preventing context-only findings from turning feature or implementation WUs into emergent existing-code refactors; enforcement lives in the workflow and convention anchors rather than this decision log.
+**Rationale**: ACR-180 keeps strict auditing while preventing context-only findings from turning feature or implementation WUs into emergent existing-code refactors; enforcement lives in the workflow and convention anchors rather than this decision log.
 
-**flavor variation**: `manager-max` accepts pause/file/refactor; `manager-pragmatic` may keep tiny direct unblockers but pauses broader refactors; `manager-hackerman` rejects broad pause by default when functional proof holds and records residual debt.
+**Flavor variation**: `manager-max` accepts pause/file/refactor; `manager-pragmatic` may keep tiny direct unblockers but pauses broader refactors; `manager-hackerman` rejects broad pause by default when functional proof holds and records residual debt.
 
-**anti-scope**: no research sub-agent implementation, verdict-threshold redesign, ACR-156 oscillation change, or pytest/structural Markdown tests.
+**Anti-scope**: no research sub-agent implementation, verdict-threshold redesign, ACR-156 oscillation change, or pytest/structural Markdown tests.
 
-**Canonical pointer**: `workflows/implementation-pipeline.md` `## Pause For Refactor`.
+**Canonical pointers**:
+- `conventions/code-quality.md` `## Auditor Scope Boundary`.
+- `workflows/auditor-surface-expansion.md`.
+- `workflows/implementation-pipeline.md` `## Pause For Refactor`.
+- `conventions/feature-development-workflow.md` `## Refactoring out of scope`.
 
 ## D-2026-05-12-acr137-inherited-estimate-cold-start
 
