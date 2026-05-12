@@ -324,25 +324,25 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "runs the full RCA lifecycle from incident framing through evidence, tracker filing, investigation, post-mortem, action-item tickets, runbooks, tracker comments, and close-or-pending decision",
-          "dispatches incident-investigator and post-mortem-author as separate operator invocations and uses ticket operators for tracker side effects",
-          "wraps implementation-pipeline action-item WUs without replacing implementation review or PR review gates"
+          "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, then verify-or-return",
+          "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work",
+          "returns to root-cause analysis on red verification until the hard cap is reached, then surfaces human review through NEEDS_INPUT instead of starting another cycle"
         ],
         "inputs": [
-          "incident handle or incident context, incident brief path or enough framing to create one, evidence directory, repo_root, scratch_dir, and planning_dir",
-          "ticket_system linear or jira with existing incident issue key or create context, plus Linear or Jira operator inputs for tracker filing and comments",
-          "action_item_policy file-only, file-and-handoff, or file-and-dispatch, plus action-item worktree/planning/scratch path policy when implementation WUs are dispatched"
+          "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, ticket_system, and tracker operator inputs when downstream filing is needed",
+          "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis",
+          "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly"
         ],
         "non_goals": [
-          "does not mutate source code, git state, applications, production, or external systems except documented tracker create/comment operations",
-          "does not edit incident-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
-          "does not replace implementation-pipeline Phase 4, Phase 7, Phase 8, CodeRabbit, or PR-review gates"
+          "does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
+          "does not introduce machine-enforcement framing or replace implementation-pipeline, CodeRabbit, PR-review, or ticket-system gates",
+          "does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+"
         ],
-        "orchestrator": "Work Manager or root RCA coordinator",
+        "orchestrator": "rca-orchestrator",
         "outputs": [
-          "incident brief, evidence pack, findings, post-mortem, action-item index, runbooks, tracker comment/link evidence, and RCA close or pending record",
-          "created or identified incident tracker key and action-item ticket keys",
-          "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot proceed"
+          "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, cap-hit artifact when needed, and Phase 7+ downstream RCA artifacts",
+          "post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds",
+          "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed"
         ]
       }
     },

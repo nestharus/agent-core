@@ -89,6 +89,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 
 ### Incident / RCA
 
+- `rca-orchestrator` - Orchestrate the full RCA workflow from trigger classification through reproduction, split root-cause/fix/application dispatches, verify-or-return, and downstream incident lifecycle handoff.
+  File: [~/ai/agents/rca-orchestrator.md](agents/rca-orchestrator.md) | Inputs: `incident_id?`, `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `trigger_command?`, `ticket_system?` | Model: `claude-opus`
+
 - `incident-investigator` - Investigate an incident from a brief, evidence directory, and read-only repository, then write evidence-backed findings without mutating code or external systems.
   File: [~/ai/agents/incident-investigator.md](agents/incident-investigator.md) | Inputs: `incident_brief_path`, `evidence_dir`, `repo_root`, `findings_path?` | Model: `gpt-high`
 
@@ -310,7 +313,7 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 ## Workflow Topologies
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
-- RCA workflow (full incident-to-close root-cause analysis): [`~/ai/workflows/rca.md`](workflows/rca.md)
+- RCA workflow (full reproduction-first root-cause analysis with four-agent split, verify-or-return, and incident-to-close downstream lifecycle): [`~/ai/workflows/rca.md`](workflows/rca.md)
 - Prototype RCA workflow (light two-agent root-cause/fix loop for one failed prototype trigger): [`~/ai/workflows/rca-prototype.md`](workflows/rca-prototype.md)
 - Release management (staged cut/freeze/hotfix/promote/tag/reconcile lifecycle): [`~/ai/workflows/release-management.md`](workflows/release-management.md)
 - Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)
