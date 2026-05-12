@@ -30,6 +30,8 @@ ACR-180 changes judgment scope only. The existing A1 categories, numerical thres
 
 The canonical A1 auditor inventory for composite fanout routing is:
 
+This section is an inventory catalog of the four A1 auditor modules that make up the composite fanout set; the bullets below declare catalog membership for routing and do not make this convention a coupling target with four module dependencies.
+
 - `agents/cohesion-auditor.md` - A6 cohesion.
 - `agents/coupling-auditor.md` - A6 coupling.
 - `agents/function-classification-auditor.md` - A5.
