@@ -1,5 +1,23 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-12-acr180-auditor-scope-boundary
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr180-auditor-scope-boundary
+
+**Linear ticket**: ACR-180
+
+**decision**: adopt canonical anchors for diff-scoped auditor judgment, bounded auditor surface expansion, pause-for-refactor coordination, and the feature/refactoring strategy boundary.
+
+**rationale**: ACR-180 keeps strict auditing while preventing context-only findings from turning feature or implementation WUs into emergent existing-code refactors; enforcement lives in the workflow and convention anchors rather than this decision log.
+
+**flavor variation**: `manager-max` accepts pause/file/refactor; `manager-pragmatic` may keep tiny direct unblockers but pauses broader refactors; `manager-hackerman` rejects broad pause by default when functional proof holds and records residual debt.
+
+**anti-scope**: no research sub-agent implementation, verdict-threshold redesign, ACR-156 oscillation change, or pytest/structural Markdown tests.
+
+**Canonical pointer**: `workflows/implementation-pipeline.md` `## Pause For Refactor`.
+
 ## D-2026-05-12-acr137-inherited-estimate-cold-start
 
 **Date**: 2026-05-12
