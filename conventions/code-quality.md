@@ -111,6 +111,14 @@ The default declared role set for `agents/*-orchestrator.md` is `orchestration`,
 
 A documented path default supplies declared roles only when the file has no `## Declared roles` section. File-local `## Declared roles` content overrides the documented path default for that file.
 
+### Component declared roles (multi-file WU components)
+
+When the cohesion auditor scores a multi-file WU component as a single component, per `~/ai/workflows/implementation-pipeline.md` Phase 6 per-component code-quality fanout, the component itself may have a declared role set living in the Phase 6a contract under a `## Component declared roles` heading. The cohesion auditor MUST read this section before falling back to per-file declared roles, path defaults, or count-only scoring when the diff or WU-owned corpus is the target of a component-level invocation.
+
+When a component declared role set is present, the same subset-check semantic applies at the component level: LOW when the diff-owned classifications touched by the component are a subset of the component declared role set; HIGH when the diff-owned classifications exceed the component declared role set or include classifications outside it. The count-only fallback (LOW = exactly 1 classification; HIGH = 2 or more) applies only when no file-local, path-default, or component declared roles cover the touched classifications.
+
+A component declared role set is the union of per-file roles the component legitimately covers as part of one coordinated change; it does not extend the A1 vocabulary, alter LOW/MEDIUM/HIGH semantics, or replace per-file declared roles where those exist for the files in the component.
+
 ## Declared-role examples
 
 - LOW: `agents/implementation-pipeline-orchestrator.md` may touch `orchestration` and `parser` work because `agents/*-orchestrator.md` defaults to declared roles `orchestration`, `parser`.
@@ -134,7 +142,7 @@ These are starting calibration points for downstream auditors A4 / A5 / A6 (NES-
 |---|---|---|---|
 | `Nesting depth` | 0-1 | n/a | >= 2 |
 | `Function categories per function` | 1 | n/a | >= 2 |
-| `Cohesion by classifications touched` | actual classifications are a subset of the declared role set; for files without declared roles or a documented path default, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for files without declared roles or a documented path default, 2 or more classifications |
+| `Cohesion by classifications touched` | actual classifications are a subset of the declared role set (file-local, path default, or component-level declared roles in a Phase 6a contract); for components and files without any declared roles, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for components and files without any declared roles, 2 or more classifications |
 | `Coupling by distinct external symbols/modules referenced` | 0-2 | >= 3 | >= 6 |
 
 The first two rows are hard code-shape thresholds in this convention. The cohesion and coupling rows are review calibration: they identify where a function is likely doing too many kinds of work or depending on too many external surfaces.
