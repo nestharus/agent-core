@@ -55,7 +55,7 @@ Reusable process docs.
 
 - [`workflows/project-bootstrap.md`](workflows/project-bootstrap.md) — Open-path, wrapper-emission, closed-path, and re-bootstrap workflow for project-specific operator wrappers.
 
-- [`workflows/rca.md`](workflows/rca.md) — Full incident-to-close RCA workflow that frames incidents, dispatches investigation and post-mortem authoring, files action-item tickets, and records close-or-pending status.
+- [`workflows/rca.md`](workflows/rca.md) — Full reproduction-first RCA workflow with split root-cause, fix-decision, application-plan, and apply phases, a verify-or-return gate, and downstream incident lifecycle handoff.
 
 - [`workflows/research.md`](workflows/research.md) — Research process for open-ended investigation, option analysis, and externally sourced scoping.
 
