@@ -27,7 +27,7 @@ Fixture path: `workflows/build-prototype.md` section `#### P3 gate`
 - [ ] Required clause: the `#### P3 gate` section directs the human reviewer to outcomes, including what the prototype demonstrates, cost, what broke, and what worked.
 - [ ] Required clause: the `#### P3 gate` section directs the human reviewer to dossier verdict support, including whether `answer.md`, `branch-disposition.md`, and `spawned-tickets.md` are supportable by the evidence.
 - [ ] Required negative clause: the `#### P3 gate` section does not present prototype source-code review as the human task.
-- [ ] Required preservation clause: existing P3 sub-step descriptions `P3.1` through `P3.7` remain untouched in wording, order, and numbering.
+- [ ] Required preservation clause: existing P3 sub-step descriptions `P3.1` through `P3.7` (or `P3.8` if already present) remain untouched in wording, order, and numbering.
 - [ ] Observable signal: a reviewer can inspect only the `#### P3 gate` section and confirm the convention citation plus proof-test, outcome, and verdict-support review focus without seeing a source-review instruction.
 
 ### A3 - Prototype-orchestrator cites the convention and the role plus P3 gate payload direct reviewers to outcomes
