@@ -86,6 +86,30 @@ ACR-183's process-tree audit PASSED for the same Phase 4 fanout pattern because 
 
 **Residual risk**: future tooling work could add a way to expose Claude-Code-as-orchestrator topology to `agents trace --json` (e.g., a wrapper). Until then, Phase 4/6/8 process-tree audits run under this WU's runtime have the documented topology caveat and the canonical-evidence verifications remain in force.
 
+## D-2026-05-12-acr184-phase6c-tier1-rewind
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr184-phase6c-tier1-rewind
+
+**Linear ticket**: ACR-184
+
+**WU phase**: Phase 6, Step 6c
+
+**Decision**: Tier-1 rewind per implementation-pipeline-orchestrator § "Violation Detection and Escalation".
+
+**Rationale**: The first Step 6c agent invocation (`agents trace --json` invocation UUID `a3f830e8-82ad-47de-a715-24b23adab4b2`) produced product diffs for the five target policy files but its log went directly from OULIPOLY headers to a summary line without emitting the mandated `consumed:` lines per ACR-63 (Phase 6 Step 6c consumption-echo rule). The product content was correct (verification confirmed exactly five files modified, all content assertions PASS, small additive diffs), but the trace evidence required by the rule — proof Step 6c read Step 6b's output index + test artifacts before mutating product code — is absent. Mirrors the ACR-183 / ACR-132 precedent for the same violation class (`step_6c_log_does_not_echo_step_6b_outputs`).
+
+**Action**:
+- Reverted the five product files (`agents/work-manager-operator.md`, `agents/work-manager-operator-{pragmatic,max,hackerman}.md`, `agents/implementation-pipeline-orchestrator.md`) to their pre-Step-6c state via `git -C <worktree> checkout -- agents/`. No commit existed for the violating diff, so no `git reset` was required.
+- Preserved the legitimate `D-2026-05-12-acr184-process-tree-audit-environment-caveat` and `D-2026-05-12-acr184-decompose-eval-spec-to-acr188` decisions commit `5a1ad2b` (these are orchestrator-owned residuals, not Step 6c product code).
+- Re-dispatched Step 6c as a fresh `agents` invocation with a new invocation UUID and a stricter prompt that requires explicit `echo "consumed: ..."` shell stdout calls before any product-code edit.
+
+**Violating evidence**:
+- Violating log: `${planning_dir}/.scratch/logs/acr-184-phase-6c.log` (pre-rewind tail: OULIPOLY headers + `Done. Verification passed: ...` with no `consumed:` lines and no `WROTE:` per-file lines).
+- Violating invocation UUID: `a3f830e8-82ad-47de-a715-24b23adab4b2`.
+- Violation class: `step_6c_log_does_not_echo_step_6b_outputs` per `~/ai/conventions/workflow-execution-violations.md`.
+
 ## D-2026-05-12-acr184-decompose-eval-spec-to-acr188
 
 **Date**: 2026-05-12
