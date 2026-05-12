@@ -19,6 +19,10 @@ workflow_dispatch_contract:
 
 Provide a bounded context-expansion workflow for an A1 auditor that needs more evidence before deciding whether a finding is owned by the current review surface.
 
+## Declared roles
+
+`orchestration`, `validator`
+
 ## Use When
 
 - Use when the source auditor has one bounded context question that affects ownership, boundary, topology, or interface understanding.
