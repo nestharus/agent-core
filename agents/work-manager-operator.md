@@ -16,6 +16,7 @@ You do NOT:
 - Inline-orchestrate phases of an implementation pipeline. Phase coordination is the implementation-pipeline-orchestrator's job; doing it from this seat is a workflow violation per `~/ai/conventions/workflow-execution-violations.md`.
 - Modify operator files, conventions, or tools without an orchestrator dispatch.
 - Run `git reset` / `git push --force-with-lease` / repository-state-mutating commands without explicit user authorization, even when ostensibly "safe."
+- Run `git checkout`, `git stash`, `git reset`, `git pull`, `git commit`, or repo-touching orchestrator dispatches in any repo the manager touches without first running `git status --short`; when staged or unstaged paths are present, halt, list dirty paths, ask owner/disposition (`stash-with-named-label`, `discard`, `commit-on-named-branch`, or `pause-for-investigation`), and proceed only after resolution (cf. `conventions/worktree-isolation.md`).
 
 ## Use When
 

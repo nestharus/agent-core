@@ -2086,3 +2086,33 @@ Evidence:
 - `~/ai/conventions/review-convergence.md` (decomposition convention)
 - `~/ai/conventions/workflow-execution-violations.md` § "Non-LOW gate residual acceptance"
 - `~/ai/conventions/code-quality.md` § "Disposition policy"
+
+## D-2026-05-12-acr183-phase6c-tier1-rewind
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr183-phase6c-tier1-rewind
+
+**Linear ticket**: ACR-183
+
+**Phase**: Phase 6, Step 6c
+
+**Decision**: Tier-1 rewind under the implementation-pipeline-orchestrator violation-escalation policy.
+
+**Rationale**: The first Step 6c agent invocation (`agents trace --json` invocation UUID `6b18d478-1bb5-40e3-9154-a940b0cfd2ce`) produced the correct product diff for `agents/work-manager-operator.md` but went directly from the OULIPOLY headers to `WROTE:` without echoing the mandated `consumed: <step6b-output-index-path>` first stdout line nor the per-test-artifact `consumed: <path>` echoes. This violates the Phase 6 Step 6c consumption-echo rule in `~/ai/workflows/implementation-pipeline.md`. The product content was correct but the trace evidence required by the rule (proof Step 6c read Step 6b's output index + test artifacts before mutating product code) is absent. Policy is Tier-1 rewind: revert the product file to the master state, then re-dispatch Step 6c with a stricter wrapper that emits `consumed:` lines via explicit Bash echo before any product-code edit.
+
+**Action**:
+- Revert `agents/work-manager-operator.md` to its master state (no commits yet on the WU branch, so `git checkout -- agents/work-manager-operator.md` suffices).
+- Leave Step 6b artifacts (eval spec at `evals/acr-183-dirty-index-preflight/eval.md`, output index at `${scratch_dir}/phase6/step6b-output-index.md`, residual record at `${planning_dir}/risk/acr-183-test-residuals.md`) untouched; they predate the violating Step 6c invocation.
+- Re-dispatch Step 6c as a fresh `agents` invocation with a new invocation UUID and a stricter prompt requiring the agent's final stdout to begin with the three `consumed:` lines before `WROTE:`.
+
+**Re-dispatch evidence (Tier-1 retry that succeeded)**:
+- Re-dispatch prompt: `/home/nes/projects/ai/planning/acr-183-hard-stop-dirty-index-preflight/.scratch/prompts/acr-183-phase-6c-v2.md`
+- Re-dispatch log: `/home/nes/projects/ai/planning/acr-183-hard-stop-dirty-index-preflight/.scratch/logs/acr-183-phase-6c-v2.log`
+- Re-dispatch invocation UUID: `30180441-d9b2-41c7-9181-5c7f8a515caf`
+- Re-dispatch outcome: the log emits the three required `consumed:` lines for the Step 6b output index, the eval spec, and the residual record before `WROTE:`, and produces exactly one new bullet in `agents/work-manager-operator.md`.
+
+**Violating evidence**:
+- Violating log: `/home/nes/projects/ai/planning/acr-183-hard-stop-dirty-index-preflight/.scratch/logs/acr-183-phase-6c.log`
+- Violating invocation UUID: `6b18d478-1bb5-40e3-9154-a940b0cfd2ce`
+- Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
