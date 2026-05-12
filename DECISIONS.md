@@ -52,6 +52,40 @@
 
 **Cross-references**: ACR-132 (this WU), ACR-126 (defer-to-prototype mechanism).
 
+## D-2026-05-11-acr175-inherited-estimate-cold-start
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr175-inherited-estimate-cold-start
+
+**Linear ticket**: ACR-175
+
+**Decision**: Proceed without a baseline estimate. ACR-175's Linear `estimate` field reads 13 but the ticket description carries `Refined estimate: 8`, and the operator flagged `estimate_source: missing` because the inherited value's lineage is not traceable. Per work-manager pre-resolution "Defer-to-prototype: default A — proceed exhaustive", the equivalent disposition for the Phase 2.5 step 4a inherited-estimate cold-start is "Proceed without a baseline estimate"; the WU continues into exhaustive Phase 2.5/3 without spawning a prototype.
+
+**Rationale**: ACR-175 ships a framework (`conventions/evals.md`, `workflows/eval-runtime.md`, `agents/eval-runner.md`, ten seed `evals/<eval-id>/eval.md` files, DECISIONS entry). The scope is markdown specification, not implementation; the baseline-estimate disagreement does not change the planned change surface or risk envelope. Phase 3's `## Estimate refinement` will reconcile inherited=13 vs refined value evidence at that point.
+
+**Anti-scope**: not deferring to prototype; not terminating the WU; not editing Linear's estimate field at this step.
+
+**Cross-references**: implementation-pipeline-orchestrator Phase 2.5 step 4a; work-manager pre-resolution "Defer-to-prototype: default A — proceed exhaustive".
+
+## D-2026-05-11-acr175-eval-framework
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr175-eval-framework
+
+**Linear ticket**: ACR-175
+
+**Decision**: Adopt the eval framework as the behavior-detection replacement path after ACR-174 removed structural markdown pytest coverage. ACR-175 ships `conventions/evals.md`, `workflows/eval-runtime.md`, `agents/eval-runner.md`, ten seed `evals/<eval-id>/eval.md` behavior specifications, and this decision record.
+
+**Rationale**: The removed pytest layer asserted markdown file shape, not the workflow and agent behavior the project cares about. The new framework defines trace-consuming evals, finding schema, lifecycle state, runtime modes, runner boundaries, and seed unwanted-behavior specs so downstream implementation can build runnable detectors against `agents trace --json` and companion artifacts instead of reviving structural assertions.
+
+**Anti-scope**: no runtime wiring, no pipeline hook, no `agents eval-run` implementation, no eval Python or Rust code, no fixtures, no CLI implementation, no CI, no cron, no backend ticket automation, no `workflows/index.json` discoverability, no `AGENTS.md` routing row, no pytest revival, and no structural markdown test replacement. The markdown specs describe future behavior detection but do not enforce behavior themselves.
+
+**Tension resolution**: ACR-175 intentionally records design contracts before executable enforcement. That leaves behavior detection advisory/specification-only for now, but avoids rebuilding the deleted structural-test pattern and gives future runnable eval tickets stable identities, evidence-source boundaries, finding fields, and lifecycle obligations.
+
+**Cross-references**: ACR-175; ACR-174 pytest removal / deletion contract; `conventions/evals.md`; `workflows/eval-runtime.md`; `agents/eval-runner.md`; seed specs under `evals/residual-acceptance-regression/eval.md`, `evals/manager-flavor-drift/eval.md`, `evals/workflow-override/eval.md`, `evals/self-shortcut/eval.md`, `evals/phase-skip-without-authorization/eval.md`, `evals/decomposition-refusal/eval.md`, `evals/surface-drift/eval.md`, `evals/coupling-auditor-over-application/eval.md`, `evals/cohesion-auditor-over-application/eval.md`, and `evals/hardcoded-model/eval.md`.
+
 ## D-2026-05-11-acr179-refactoring-workflow
 
 **Date**: 2026-05-11
