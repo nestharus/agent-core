@@ -208,6 +208,7 @@ The test-writer prompt must require:
 - one behavior per test
 - each emitted test listed with its behavior verdict classification (`VERIFIED`, `SUSPICIOUS`, `AMBIGUOUS`, or `OBVIOUSLY_BROKEN`); tests may only be written from `VERIFIED` or human-confirmed behavior
 - existing local test patterns
+- a citation to `~/ai/conventions/testing.md` so setup stays external and swappable
 - strict xfail markers for discovered bugs with verified intended behavior
 - report sections conforming to `~/ai/conventions/test-reports.md`
 

@@ -129,6 +129,7 @@ The hacking phase ends with the prototype branch in a messy state. P2 puts a kno
 - **What to fix**: actual breakage that prevents the answer from being demonstrated — failing imports, missing fixtures, missing config files, environment variables that exist in the prototyper's shell but not in the dossier.
 - **What NOT to fix**: stylistic issues, lint warnings, suboptimal code, missing tests for code that wasn't part of the answer, refactor opportunities. Those land later.
 - **Tests**: write the minimum tests that **demonstrate the answer**. Not characterization tests, not regression tests — proof tests. "Run this test, it passes, that's the evidence the answer is correct." Prototype proof tests include E2E tests when the proved behavior is end-to-end, and they are durable handoff artifacts under `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`, not throwaway prototype evidence. These tests go into the dossier's `evidence/` and, when published through the prototype-test PR, carry forward into the spawned implementation tickets.
+- Proof-test authors follow `~/ai/conventions/testing.md` so the carried-forward contract survives downstream setup changes.
 - **Branch state**: at end of P2, the prototype branch is at a commit you'd be willing to share for someone else to reproduce the answer. It is NOT necessarily a commit you'd merge.
 - **Gate policy**: still none. P2 is a stabilization step, not a review.
 

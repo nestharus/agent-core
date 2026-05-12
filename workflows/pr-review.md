@@ -154,6 +154,7 @@ Audit rules:
 - Route firstness gaps per risk, selected level, and test group. Complete cells continue to ordinary Test Audit checks. Missing, contradicted, stale, or post-code cells are `blocking`; repairable semantic test defects are `ordinary fix-pass findings`; invalidated framing routes to `return to research`; value collapse routes through a `Supported-Surface Verification finding`.
 - Do not treat process-provenance uncertainty as a new residual class. If the uncertainty is truly unverifiable and does not collapse the approved net-value case, it can only be recorded through Decision Recording as `accepted with a named unverifiable residual risk`.
 - Do not require retroactive firstness for pre-existing code without prior tests. Require mapping to existing-state risk or supported-surface context, and require current-work firstness for current-work behavior changes.
+- Flag test setup violations against `~/ai/conventions/testing.md`: setup external, swappable, and allowed to live in cross-module setup surfaces.
 - For test-infrastructure-only changes, apply fixture externality, assertion-weakening, captured-behavior, baseline-update, and documented-reason checks. If the same diff changes product behavior, firstness applies to the behavior tests for that product change.
 
 Firstness routing cases:
