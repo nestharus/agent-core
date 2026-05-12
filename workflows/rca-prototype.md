@@ -169,4 +169,5 @@ The loop does not run full regression, full QA, post-mortem authoring, incident 
 - Phase 1 root-cause agent: `~/ai/agents/behavior-investigator.md`.
 - Production incident investigator, intentionally separate: `~/ai/agents/incident-investigator.md`.
 - Prototype-family sibling workflow: `~/ai/workflows/build-prototype.md`.
+- Passive handback pointer: `~/ai/workflows/prototype-validation-shipping.md` may be a caller for one failing behavior-test or QA signal and consumes only the stable handback envelope; RCA internals remain private to this workflow.
 - Forward-defined handback callers: future `~/ai/workflows/prototype-validation-shipping.md`, future `~/ai/workflows/prototype-research-planning.md`, or a direct caller.

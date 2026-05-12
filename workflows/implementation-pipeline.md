@@ -31,6 +31,8 @@ Bugs start with RCA. Features, refactors, and other planned work skip RCA.
 
 `orchestration`, `validator`
 
+Passive alternative pointer: when the intended deliverable is a validated prototype PR rather than production implementation work, `~/ai/workflows/prototype-validation-shipping.md` owns the prototype-as-deliverable handoff; this workflow remains the production implementation route.
+
 ## Workflow Dispatch Surface
 
 ### Orchestrator

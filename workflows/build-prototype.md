@@ -26,6 +26,8 @@ The principle: when you don't know what to build, you can't run a pipeline that 
 
 This workflow does not replace the implementation pipeline. It precedes it. A prototype produces a **dossier** that drives the implementation pipeline, the roadmap workflow, or a scope-cut decision — not a draft PR ready for merge.
 
+Passive cross-reference: when a stabilized prototype is later selected as a shippable prototype-as-deliverable, `~/ai/workflows/prototype-validation-shipping.md` is the bounded handoff consumer for the truth branch plus dossier/proposal evidence; this does not change the default build-prototype lifecycle.
+
 ## Workflow Dispatch Surface
 
 ### Orchestrator

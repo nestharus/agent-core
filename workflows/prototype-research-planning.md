@@ -156,4 +156,5 @@ Write a handoff summary that packages the research-plan bundle, proposal, approv
 - `~/ai/workflows/roadmap.md` -- heavier product-strategy roadmap; use it for market, philosophy, layered planning, risk gates, and ticket regeneration.
 - `~/ai/workflows/research.md` -- sibling factual research workflow; use it when there is no prototype proposal or approval gate.
 - `~/ai/workflows/build-prototype.md` -- downstream prototype execution workflow that starts its build work at Phase P1.
+- `~/ai/workflows/prototype-validation-shipping.md` -- passive later consumer when an approved and stabilized prototype is promoted to a shippable prototype deliverable; research-planning only hands off behavior, UX, contract, approval, and behavior-test evidence.
 - `~/ai/agents/prototype-orchestrator.md` -- downstream operator that consumes prototype input context at Phase P0.

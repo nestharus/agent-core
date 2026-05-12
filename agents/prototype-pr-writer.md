@@ -12,6 +12,8 @@ Author the title and body for a draft PR that ships a validated prototype. The a
 
 This operator consumes prepared proof assets from the validation/shipping workflow. It does not create those assets, upload screenshots, package deliverables, or replace the production PR writer.
 
+Validation-shipping adapter handoff: `prototype-validation-shipping.md` prepares `screenshot_url_manifest_path`, then `proof_bundle_path`, then dispatches `prototype-validation-proof-bundle-adapter.md` to translate the proof bundle into this writer's existing seven required inputs. This writer still consumes those seven inputs directly and does not accept `proof_bundle_path` as a replacement input.
+
 ## Use When
 
 - A prototype validation/shipping workflow has already produced a truth branch and needs a proof-focused draft PR body for that prototype.
