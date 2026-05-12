@@ -167,6 +167,7 @@ Every prompt must require deterministic parsing:
 - List changed product files, changed test files, and discovered spec candidates
 - Ask `coverage-auditor.md` to review only the changed test files plus whether those tests provide evidence for the changed behavior
 - When report artifacts are present or required, ask `coverage-auditor.md` to verify `~/ai/conventions/test-reports.md`: canonical PDF, UI screenshots, non-UI evidence, `file_path:line_number` citations, and exact fenced code blocks for code claims
+- Ask `coverage-auditor.md` to apply `~/ai/conventions/testing.md` when auditing new tests
 - Require `PASS | PARTIAL | FAIL` using this mapping:
   - `PASS`: changed tests are `VERIFIED_BEHAVIOR` and cited against changed behavior
   - `PARTIAL`: missing changed tests, only `STRUCTURAL` / `DEAD`, or insufficient evidence

@@ -164,7 +164,8 @@ For newly written tests (from test-writer), verify:
 3. **Failure sensitivity:** Would this test fail if the behavior was wrong? (mentally mutate the code)
 4. **Completeness:** Are all behaviors in the spec covered? Any gaps?
 5. **No over-testing:** Are there tests for behaviors NOT in the spec? (scope creep)
-6. **Report artifact evidence:** When `report_bundle_dir` is supplied, verify canonical PDFs, UI screenshots, non-UI evidence, `file_path:line_number` citations, exact fenced code blocks, and strict-xfail bug stories per `~/ai/conventions/test-reports.md`.
+6. **Setup convention:** Apply `~/ai/conventions/testing.md`: setup stays external, setup variants stay swappable, and cross-module setup is allowed.
+7. **Report artifact evidence:** When `report_bundle_dir` is supplied, verify canonical PDFs, UI screenshots, non-UI evidence, `file_path:line_number` citations, exact fenced code blocks, and strict-xfail bug stories per `~/ai/conventions/test-reports.md`.
 
 ```markdown
 ## New Test Validation: <test_file>

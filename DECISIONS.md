@@ -2345,3 +2345,27 @@ Evidence: `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forw
 - Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
 
 **Re-dispatch evidence (Tier-1 retry)**: will be captured at `${scratch_dir}/prompts/acr-185-phase-6c-v2.md` + `${scratch_dir}/logs/acr-185-phase-6c-v2.log` with the new invocation UUID after re-dispatch.
+
+## D-2026-05-12-acr136-inherited-estimate-cold-start-auto-resolved
+
+WU: ACR-136
+Phase: 0/2.5
+Decision: Auto-resolve the Phase 2.5 step 4a inherited-estimate cold-start to "Proceed without a baseline estimate" — no prototype detour. The Linear ticket has `story_point_estimate: null` and `estimate_source: missing`. The work-manager-operator dispatch pre-resolved the defer-to-prototype family of gates with default A ("proceed exhaustive"); the cold-start question is the same family. Phase 3 will emit a refined estimate.
+
+Evidence: `/home/nes/projects/ai/planning/acr-136-test-setup-external-to-test/.scratch/ticket.md`, `/home/nes/projects/ai/planning/acr-136-test-setup-external-to-test/.scratch/dispatch-prompt.md` (Pre-resolved Phase 2.5 gates section).
+
+## D-2026-05-12-acr136-phase-2.5-gate-skipped-no-defer
+
+WU: ACR-136
+Phase: 2.5
+Decision: Problem-map approval gate skipped per `skip_problem_map_gate=true` dispatch input. Defer-to-prototype detection ran: only 1/5 signals fire (risk profile HIGH on majority of surfaces). Other signals (sprawling duplicates, operational-only lifecycle, multi-WU characterization tests, multi-site implicit cross-language contracts) did not fire. The trigger requires two or more signals; defer-prompt is NOT emitted. All MEDIUM/HIGH surfaces propagate as `exhaustive` mode per the work-manager-operator pre-resolution (Narrow-vs-exhaustive: default A). WU proceeds to Phase 3.
+
+Evidence: `/home/nes/projects/ai/planning/acr-136-test-setup-external-to-test/risk/acr-136-risk-profile.md` (WU-level rollup verdict + Mode propagation map).
+
+## D-2026-05-12-acr136-test-writer-contradiction-residual-noted
+
+WU: ACR-136
+Phase: 2.5
+Decision: The duplicates inventory found that `~/ai/agents/test-writer.md:38` currently states "Inline test data only. Python dicts inline, no fixture files," which directly contradicts the ACR-136 rule and the existing `workflows/implementation-pipeline.md` allowance for dedicated fixture modules. Disposition: do not block the pipeline (Work Manager pre-resolution: mid-pipeline drift = "proceed + note in DECISIONS as residual"). Phase 3 will reconcile the wording in `test-writer.md` as part of the proposal — replacing the "no fixture files" line with the canonical distinction between inline behavior-specific input data and external setup/harness state, cited from `conventions/testing.md`.
+
+Evidence: `/home/nes/projects/ai/planning/acr-136-test-setup-external-to-test/research/acr-136-duplicates.md` (Contradictions section, citing `agents/test-writer.md:38`).

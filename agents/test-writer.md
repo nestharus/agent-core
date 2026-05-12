@@ -35,7 +35,7 @@ should FAIL — that's a feature, not a bug.
 - **Reports follow `~/ai/conventions/test-reports.md`.** UI-touching behavior needs screenshot evidence; non-UI behavior needs the relevant artifact evidence; every code claim needs `file_path:line_number` plus an exact fenced code block.
 - **One behavior per test.** Don't bundle multiple behaviors into one test function.
 - **Test names describe the behavior, not the implementation.** `test_markup_applies_percentage_to_base_price` not `test_calculate_markup_function`.
-- **Inline test data only.** Python dicts inline, no fixture files.
+- **Setup lives outside the test** (see `~/ai/conventions/testing.md`): behavior-specific input data may stay inline as the test's contract; environment setup, seeded state, mocked services, and harness wiring live in fixtures, lifecycle hooks, or dedicated setup modules.
 - **Follow existing test patterns.** Match the repo's test structure, naming conventions, imports, and fixture patterns.
 
 ## Required Inputs
