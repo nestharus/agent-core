@@ -201,7 +201,7 @@ Write `dossier/branch-disposition.md` with the recommendation: merge / cherry-pi
 
 #### P3 gate
 
-ONE human gate at the end of P3 — the user reviews the dossier (`answer.md` + `risk-profile.md` + `spawned-tickets.md` + the three analog-gate verdicts + `branch-disposition.md`) and either approves or asks for revisions. Revisions are handled like Phase 2.5 in the implementation pipeline: dispatch a revision pass against the specific dossier section, do not re-do P1-P2. If P3.4 / P3.5 / P3.6 returned a halting verdict, the gate cannot present "approve" as an option until the halting condition is resolved.
+ONE human gate at the end of P3 — per [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md), the user reviews proof tests in `dossier/evidence/`, demonstrated outcomes (what the prototype demonstrates, cost, what worked, and what broke), and dossier verdict support: whether `answer.md`, `branch-disposition.md`, and `spawned-tickets.md` are supportable by the evidence. The human is not reviewing prototype source code. The user either approves or asks for revisions. Revisions are handled like Phase 2.5 in the implementation pipeline: dispatch a revision pass against the specific dossier section, do not re-do P1-P2. If P3.4 / P3.5 / P3.6 returned a halting verdict, the gate cannot present "approve" as an option until the halting condition is resolved.
 
 ### Phase P4 — Hand-off
 

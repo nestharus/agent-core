@@ -1,5 +1,21 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-11-acr134-residual-prototype-doc-drift
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr134-residual-prototype-doc-drift
+
+**Linear ticket**: ACR-134
+
+**Decision**: proceed with the ACR-134 doc/convention update without consolidating the pre-existing drift between `~/ai/workflows/build-prototype.md` (P3 sub-steps numbered P3.1–P3.8 with a separate `#### P3 gate`) and `~/ai/agents/prototype-orchestrator.md` (procedure references P3 sub-steps by name rather than the workflow's enumerated numbering). Carry as residual.
+
+**Rationale**: Phase 2.5 duplicates inventory flagged P3-step numbering as a silent drift candidate. The work-manager-operator pre-resolved Mid-pipeline drift gate is "default A — proceed + note in DECISIONS as residual"; consolidating the numbering would expand scope beyond the ticket's documentation/convention clarification anti-scope (which forbids refactoring build-prototype.md or prototype-orchestrator.md beyond the review-focus clarification). The new `~/ai/conventions/prototype-review.md` rule cites the human gate by role (the P3 dossier review) rather than by numbered step, so the rule does not bind itself to either numbering scheme.
+
+**Anti-scope**: no renumbering of P3 sub-steps; no procedural restructure of prototype-orchestrator.md P3 procedure; no fix to the pre-existing `git diff main..HEAD` vs `git diff main...HEAD` answer-trace / risk-profile inconsistency (also recorded prior in D-2026-05-08l).
+
+**Residual risk**: future readers may continue to encounter the numbering mismatch between the two documents and need to cross-reference by section name; this is a known-acceptable cost relative to the scope-creep cost of fixing it inside this WU.
+
 ## D-2026-05-12-acr132-step6c-tier1-rewind
 
 **Date**: 2026-05-12
