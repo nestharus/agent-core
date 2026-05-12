@@ -54,6 +54,10 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 
 Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/conventions/code-quality.md` as the rule reference and the existing child auditors as the executable procedures. The workflow applies `conventions/code-quality.md` `## Auditor Scope Boundary` and dispatches each auditor named in `conventions/code-quality.md` `## Auditor Set`. The workflow owns dispatch, artifact layout, finding normalization, aggregate verdicts, currentness semantics, audit-history handoff, and process-tree handoff for callers that need one code-quality result.
 
+## Declared roles
+
+`orchestration`, `validator`, `mapper`
+
 ## Declared roles (mirror)
 
 `~/ai/conventions/code-quality.md` remains the canonical rule source for declared-role cohesion scoring.
