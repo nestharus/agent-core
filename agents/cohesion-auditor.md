@@ -77,11 +77,13 @@ Do not claim the current implementation pipeline already dispatches this operato
 2. Read the four required references: `code-quality.md`, `proposer-critic-pattern.md`, `risk-profile.md`, and `implementation-pipeline.md`.
 3. Verify that A1 still contains `Cohesion by classifications touched`.
 4. Resolve touched surfaces into candidate component boundaries using module/crate/package layout and any explicit labels in the touched-surface enumeration.
-5. Extract touched functions and A1 classifications from the proposal, problem map, touched-surface enumeration, optional diff, and optional code-trace reports.
-6. Score per-component cohesion using the A1 cohesion row.
-7. Assign the overall verdict as the worst applicable score.
-8. Attach evidence for every non-LOW component score.
-9. Write the report to `output_path`.
+5. Extract touched functions and A1 classifications from the supplied WU-owned change evidence, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
+6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary`: cohesion classifications are blocking only when diff-owned; existing whole-file cohesion concerns are residuals under that convention.
+7. If cohesion-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` and keep the expanded context out of the cohesion verdict target.
+8. Score per-component cohesion using the A1 cohesion row.
+9. Assign the overall verdict as the worst applicable score.
+10. Attach evidence for every non-LOW component score.
+11. Write the report to `output_path`.
 
 ## Output Format
 

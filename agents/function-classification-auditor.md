@@ -79,12 +79,13 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 2. Read A1 from `code_quality_ref`, defaulting to `~/ai/conventions/code-quality.md`.
 3. Verify A1 preservation: confirm the category list, the single-classification rule, the `Function categories per function` threshold row, and the `multi-classifier function` failure mode are present and not contradictory.
 4. Parse `diff_path` to identify changed functions, including every new or modified function visible in the diff. Use language-neutral diff tracing first, then file context under `repo_root` and optional `changed_functions_path` to resolve partial hunks.
-5. Classify each new or modified function against the convention categories.
-6. Score each changed function using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
-7. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
-8. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
-9. Assign the overall verdict as HIGH if any changed function is HIGH; otherwise LOW.
-10. Write the report to `output_path`.
+5. Apply `conventions/code-quality.md` `## Auditor Scope Boundary`: unmodified function concerns in touched files are residuals unless changed by the diff.
+6. Classify each new or modified function against the convention categories.
+7. Score each changed function using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
+8. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
+9. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
+10. Assign the overall verdict as HIGH if any changed function is HIGH; otherwise LOW.
+11. Write the report to `output_path`.
 
 ## Output Contract
 

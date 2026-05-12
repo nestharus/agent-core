@@ -12,6 +12,27 @@ These rules apply uniformly across Rust, TypeScript, Python, and any other proje
 
 The convention is intentionally language-neutral. A project may have local style rules for naming, formatting, framework boundaries, or idioms, but those local rules do not replace the code-shape requirements here.
 
+## Auditor Scope Boundary
+
+For every A1 auditor, the diff, or an equivalent WU-owned corpus when a literal diff is unavailable, is the judgment target; auditors may inspect other evidence only to decide whether a finding is owned by the current Work Unit.
+
+The context set includes broader files, traces, proposals, risks, callers, and callees; these are context evidence that may inform the judgment but are not the target.
+
+Residual records use this schema: `id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`. A finding is blocking when it is introduced, worsened, or made gate-relevant by the current diff or WU-owned corpus; otherwise it is recorded as residual through the `blocking-or-residual` field and preserved without raising the current gate severity.
+
+ACR-180 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, and ACR-156 oscillation handling remain authoritative in their existing sections.
+
+## Auditor Set
+
+The canonical A1 auditor inventory for composite fanout routing is:
+
+- `agents/cohesion-auditor.md` - A6 cohesion.
+- `agents/coupling-auditor.md` - A6 coupling.
+- `agents/function-classification-auditor.md` - A5.
+- `agents/push-pull-auditor.md` - A4.
+
+Workflows dispatch by reference to this list rather than by maintaining a separate canonical auditor inventory.
+
 ## Function classification
 
 ### Single-classification rule
