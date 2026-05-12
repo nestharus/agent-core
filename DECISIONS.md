@@ -2265,3 +2265,36 @@ Evidence:
 - Violating log: `/home/nes/projects/ai/planning/acr-183-hard-stop-dirty-index-preflight/.scratch/logs/acr-183-phase-6c.log`
 - Violating invocation UUID: `6b18d478-1bb5-40e3-9154-a940b0cfd2ce`
 - Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
+
+## D-2026-05-12-acr135-phase-2.5-duplicates-drift-handling
+
+WU: ACR-135 — prototype-e2e-tests-carry-forward-to-solution
+Phase: 2.5
+Decision: Proceed exhaustive; treat the three drift discoveries from Phase 2.5.4 as in-scope drift resolved by ACR-135's own edits.
+
+Drift inventory (from Phase 2.5.4 duplicates research):
+1. Spawned-ticket carry-forward language exists in `prototype-pending-tests.md`, `implementation-pipeline.md`, and `prototype-test-pr-writer.md`, but producer mechanics in `prototype-orchestrator.md` and `build-prototype.md` do not explicitly update spawned tickets with the full test-path/node-ID acceptance payload.
+2. Terminology alternates between "E2E proof tests", "proof tests", "production-tree proof tests", "pending prototype tests", and "prototype-pending tests" without a single umbrella definition.
+3. Phase 7 readiness currently gates internal prototype swap / integration-test evidence, but inherited prototype-pending test passage is only explicit in Phase 3 test intent and not explicit as a pre-CodeRabbit readiness condition.
+
+Disposition: All three drifts are in-scope per Phase 2.5.4 verdict `DUPLICATES_IN_SCOPE`. No separate tracker ticket required. Mid-pipeline-drift gate default A was pre-resolved by Work Manager (proceed + note in DECISIONS); because ACR-135 addresses the drift directly, the lifecycle state is resolved-now rather than accepted-residual. Drifts are addressed by ACR-135's supported-surface track.
+
+Evidence: `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forward-to-solution/research/acr-135-duplicates.md`.
+
+## D-2026-05-12-acr135-phase-2.5-inherited-estimate-cold-start
+
+WU: ACR-135
+Phase: 2.5
+Decision: Proceed without a baseline estimate. Phase 3 will produce a refined story-point estimate from work analysis.
+
+Rationale: The ticket frontmatter records `story_point_estimate: null` and `estimate_source: missing`. The Phase 2.5 inherited-estimate cold-start gate offers three options: `Run a small prototype first`, `Proceed without a baseline estimate`, `Terminate WU`. The "Run a small prototype first" option does not apply because the work is bounded documentation/convention edits on six explicitly enumerated surfaces with a clear acceptance-criterion set; the defer-to-prototype gate fired only 1/5 signals and Work Manager pre-resolved "exhaustive mode" rather than "defer". "Terminate WU" does not apply because Phase 2.5.4 verdict `DUPLICATES_IN_SCOPE` confirms positive net value (resolves three named drift discoveries). "Proceed without a baseline estimate" is the only sensible disposition; this is procedurally resolvable given the Work Manager's pre-resolutions and the bounded scope.
+
+Evidence: `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forward-to-solution/risk/acr-135-risk-profile.md`, `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forward-to-solution/research/acr-135-duplicates.md`.
+
+## D-2026-05-12-acr135-phase-2.5-problem-map-gate-skipped
+
+WU: ACR-135
+Phase: 2.5
+Decision: Problem-map approval gate skipped per `skip_problem_map_gate=true` dispatch input. Defer-to-prototype detection still ran (1/5 signals → trigger NOT fired). Per Work Manager pre-resolutions, no NEEDS_INPUT escalation is required and the WU proceeds to mode propagation (Step 8) with all surfaces in exhaustive mode.
+
+Evidence: `/home/nes/projects/ai/planning/acr-135-prototype-e2e-tests-carry-forward-to-solution/risk/acr-135-risk-profile.md`.
