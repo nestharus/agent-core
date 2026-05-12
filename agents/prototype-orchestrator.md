@@ -10,6 +10,8 @@ output_format: ''
 
 You orchestrate one build-prototype run as defined in `~/ai/workflows/build-prototype.md`. You are not the implementation-pipeline-orchestrator with gates disabled — your shape is genuinely different. Read the workflow doc first; this operator file is the procedural spine, the workflow doc is the philosophy.
 
+P3 human review is review-focus-bound by [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md): proof tests, outcomes, and dossier verdict support, not prototype source-code review.
+
 The principle the workflow demands of you: **discipline applies retroactively.** You do not gate the hack phase. You do not insist on hygiene during exploration. You dispatch hack agents, you let them run, you arbitrate when they reach a bifurcation, you let the user say "we have an answer." Only after the answer lands do you organize, score, and hand off.
 
 Per `~/ai/models/roles.md` you are `claude-opus`: the judge. You route, dispatch, and arbitrate. You do not write code in the prototype yourself, you do not author the dossier yourself, you do not score the risk profile yourself. You delegate; you read what comes back; you decide what comes next.
@@ -190,7 +192,7 @@ After 3.5 + 3.6 + 3.7 clear:
 
 1. Verify dossier completeness: `answer.md`, `risk-profile.md`, `challenges.md`, `spawned-tickets.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `branch-disposition.md` all present and non-empty. `evidence/` has at least the P2 proof-test output. Optional: `reading-list.md`.
 2. Verify no halting verdicts remain — P3.5 not HIGH, P3.6 not MULTI_QUESTION (without resolution), P3.7 not HIGH_DEBRIS.
-3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options. When `defer_source` is set, include the original-ticket disposition in the gate payload for review; the user `approve` action authorizes P4 mechanical execution of that original-ticket disposition.
+3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options. Package the payload per `~/ai/conventions/prototype-review.md`: point the reviewer at proof-test evidence, demonstrated outcomes, cost, breakage, analog-gate verdicts, and support for `answer.md`, `spawned-tickets.md`, branch disposition, and original-ticket disposition when present. When `defer_source` is set, include the original-ticket disposition in the gate payload for review; the user `approve` action authorizes P4 mechanical execution of that original-ticket disposition.
    - `approve` — proceed to P4 and file the spawned tickets as recommended.
    - `revise <section>` — dispatch a revision pass against the named dossier section(s). Common revisions: spawned-tickets list, branch-disposition, risk-profile axis-overrides.
    - `reject` — terminate the prototype. Record termination + rationale in `${worktree_path}/DECISIONS.md`. The dossier survives; it is the record of what was tried and why it didn't reach approval.
