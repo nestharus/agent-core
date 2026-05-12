@@ -38,6 +38,8 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 
 Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. Direct-to-trunk remains valid only for bounded single-ticket work that does not require feature-level integration.
 
+For internal structure reshape with no intended external behavior change that needs refactoring topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), use `~/ai/conventions/refactoring-workflow.md`, `~/ai/workflows/refactoring.md`, and `~/ai/agents/refactoring-orchestrator.md`. This refactoring routing takes precedence over the 2+ tickets / user-facing / behavioral-change heuristic above: a multi-PR refactor that ships no behavioral change still routes to refactoring, not to feature-development. For this refactoring strategy, enforce the ACR-156 LOW-only / decompose-on-oscillation discipline in `~/ai/conventions/code-quality.md`; pragmatic stable-MEDIUM allowances available elsewhere in this file do not apply inside refactoring. Behaviorally-shipped work still routes feature-development.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-pragmatic`; otherwise load the declared sibling flavor file or default route from `AGENTS.md`.

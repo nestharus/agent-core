@@ -38,6 +38,8 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 
 Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. This section does not change `manager-max` risk posture, NEEDS_INPUT handling, or escalation policy.
 
+For internal structure reshape with no intended external behavior change that needs refactoring topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), use `~/ai/conventions/refactoring-workflow.md`, `~/ai/workflows/refactoring.md`, and `~/ai/agents/refactoring-orchestrator.md`. This refactoring routing takes precedence over the 2+ tickets / user-facing / behavioral-change heuristic above: a multi-PR refactor that ships no behavioral change still routes to refactoring, not to feature-development. This preserves `manager-max` risk posture, NEEDS_INPUT handling, escalation policy, and the ACR-156 LOW-only / decompose-on-oscillation discipline in `~/ai/conventions/code-quality.md`; behaviorally-shipped work still routes feature-development.
+
 ## Max Mode Rules
 
 The Phase 8 user-review gate is NOT an unconditional halt under manager-max — it is auto-approved when all gate verdicts are LOW/PASS per the table above. The gate exists for genuine value/scope changes beyond the table, not for procedural confirmation of clean pipeline output.

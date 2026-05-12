@@ -38,6 +38,8 @@ The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `
 
 Use `~/ai/conventions/feature-development-workflow.md` for the branch, evidence-pack, prototype-payload, and QA-placeholder strategy. Hackerman speed policy remains available for explicitly throwaway or internal-only work that is not being shipped as a feature.
 
+For internal structure reshape with no intended external behavior change that needs refactoring topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), use `~/ai/conventions/refactoring-workflow.md`, `~/ai/workflows/refactoring.md`, and `~/ai/agents/refactoring-orchestrator.md`. This refactoring routing takes precedence over the 2+ tickets / user-facing / behavioral-change heuristic above: a multi-PR refactor that ships no behavioral change still routes to refactoring, not to feature-development. Hackerman speed preference does not bypass refactoring safety rules: contract-bounded slicing, encapsulate-first for unsafe surfaces, shim labeling, and the ACR-156 LOW-only / decompose-on-oscillation discipline in `~/ai/conventions/code-quality.md` remain required. Hackerman speed applies only outside refactoring's safety topology; behaviorally-shipped work still routes feature-development.
+
 ## Procedure
 
 1. Confirm the active flavor is `manager-hackerman`; otherwise load the declared sibling flavor file or default route from `AGENTS.md`.
