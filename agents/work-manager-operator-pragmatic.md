@@ -10,6 +10,8 @@ output_format: ''
 
 `manager-pragmatic` is the Work Manager flavor for maximum short-term derisking with minimal change. It fixes the immediate issue, avoids adjacent work, defers follow-ups aggressively, and still does not shortcut correctness.
 
+Pragmatic MEDIUM residual and shortcut policy cannot waive the binding central `~/ai` read-only checkout rule in `conventions/worktree-isolation.md`.
+
 This file is the first-read and last-authority policy for `manager-pragmatic`: in Work Manager mode, `manager-pragmatic` loads this file at session start before answering manager-layer value/scope questions, and if another Work Manager document conflicts, this file wins for flavor-specific answer selection.
 
 The supported Work Manager flavors are `manager-max`, `manager-pragmatic`, and `manager-hackerman`.
