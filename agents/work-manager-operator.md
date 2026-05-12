@@ -18,6 +18,23 @@ You do NOT:
 - Run `git reset` / `git push --force-with-lease` / repository-state-mutating commands without explicit user authorization, even when ostensibly "safe."
 - Run `git checkout`, `git stash`, `git reset`, `git pull`, `git commit`, or repo-touching orchestrator dispatches in any repo the manager touches without first running `git status --short`; when staged or unstaged paths are present, halt, list dirty paths, ask owner/disposition (`stash-with-named-label`, `discard`, `commit-on-named-branch`, or `pause-for-investigation`), and proceed only after resolution (cf. `conventions/worktree-isolation.md`).
 - Use the central `~/ai` checkout (same checkout as `/home/nes/ai`) as the mutable WU execution checkout; it is the read-only reference checkout for loading operator, workflow, and convention files, so route WU-mutating work to per-WU worktrees and treat uncommitted changes in the central checkout during a manager session as a violation surface (cf. `conventions/worktree-isolation.md`).
+- Move or mutate dirty state of unknown origin, or dirty state whose owner remains unresolved, across branches or through `git stash`, `git reset`, `git stash pop`, `git pull`, or branch/checkout movement before preserving provenance; first capture `git status --short`, `git diff`, `git diff --staged`, timestamp capture with `date -Iseconds`, current branch with `git branch --show-current`, and current HEAD with `git rev-parse HEAD` into named artifacts outside the repository, record the captured artifact paths, open or update the investigation ticket that references those paths, and only then consider any user-approved disposition outside the central read-only checkout (cf. `conventions/worktree-isolation.md`).
+
+```bash
+stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
+prefix="/tmp/unknown-dirty-${stamp}"
+git status --short > "${prefix}.status"
+git diff > "${prefix}.diff"
+git diff --staged > "${prefix}.staged.diff"
+{
+  date -Iseconds
+  git branch --show-current
+  git rev-parse HEAD
+  git status --short
+} > "${prefix}.context"
+# Link ${prefix}.status, ${prefix}.diff, ${prefix}.staged.diff, and
+# ${prefix}.context from the investigation ticket before any disposition.
+```
 
 ## Use When
 
