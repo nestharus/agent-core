@@ -1,5 +1,21 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-11-acr134-residual-prototype-doc-drift
+
+**Date**: 2026-05-11
+
+**Identifier**: D-2026-05-11-acr134-residual-prototype-doc-drift
+
+**Linear ticket**: ACR-134
+
+**Decision**: proceed with the ACR-134 doc/convention update without consolidating the pre-existing drift between `~/ai/workflows/build-prototype.md` (P3 sub-steps numbered P3.1–P3.8 with a separate `#### P3 gate`) and `~/ai/agents/prototype-orchestrator.md` (procedure references P3 sub-steps by name rather than the workflow's enumerated numbering). Carry as residual.
+
+**Rationale**: Phase 2.5 duplicates inventory flagged P3-step numbering as a silent drift candidate. The work-manager-operator pre-resolved Mid-pipeline drift gate is "default A — proceed + note in DECISIONS as residual"; consolidating the numbering would expand scope beyond the ticket's documentation/convention clarification anti-scope (which forbids refactoring build-prototype.md or prototype-orchestrator.md beyond the review-focus clarification). The new `~/ai/conventions/prototype-review.md` rule cites the human gate by role (the P3 dossier review) rather than by numbered step, so the rule does not bind itself to either numbering scheme.
+
+**Anti-scope**: no renumbering of P3 sub-steps; no procedural restructure of prototype-orchestrator.md P3 procedure; no fix to the pre-existing `git diff main..HEAD` vs `git diff main...HEAD` answer-trace / risk-profile inconsistency (also recorded prior in D-2026-05-08l).
+
+**Residual risk**: future readers may continue to encounter the numbering mismatch between the two documents and need to cross-reference by section name; this is a known-acceptable cost relative to the scope-creep cost of fixing it inside this WU.
+
 ## D-2026-05-11-acr179-refactoring-workflow
 
 **Date**: 2026-05-11
@@ -1863,6 +1879,39 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 ## D-2026-05-11-acr177-gitignore-pycache — Python bytecode ignore hygiene
 
 Add repository-level ignores for `__pycache__/`, `*.pyc`, and `*.pyo`, and untrack existing Python bytecode artifacts so local CLI invocations do not dirty working trees.
+
+## D-2026-05-09o — ACR-145 Phase 2.5 risk-profile acceptance + mode propagation
+
+**WU**: ACR-145 (refactor `~/ai/workflows/rca.md` into 7-phase 4-agent split + reproduction-test loop). **Phase**: 2.5.6 (risk profile). **Decision**: Accept the WU-level `HIGH` rollup and proceed in exhaustive mode for every touched surface. Pre-resolved orchestrator-input gates apply: narrow-vs-exhaustive=A (proceed exhaustive), defer-to-prototype=A (proceed exhaustive), mid-pipeline drift=A (proceed + note residuals), stable-MEDIUM intrinsic-blast-radius=accept-and-continue. `skip_problem_map_gate=true` per dispatch — routine problem-map approval suppressed; defer-detection still ran.
+
+**Supersession note (historical context)**: The stable-MEDIUM acceptance posture recorded here was later quarantined as non-precedential by D-2026-05-11b and must not be used as active policy.
+
+**Defer-to-prototype signals fired: 2 of 5** (HIGH-majority surfaces; lifecycle-map document-driven). Threshold of 2+ would normally surface a defer option; suppressed by the user's pre-resolution `proceed exhaustive` in the dispatch inputs. Recorded as a residual: should the proposal Phase reveal new evidence of unresolvability in code, re-evaluate.
+
+**Per-surface mode (downstream)**:
+
+- `workflows/rca.md`: HIGH → exhaustive
+- `agents/rca-orchestrator.md`: HIGH → exhaustive
+- `tests/test_rca_workflow.py`: HIGH → exhaustive
+- `AGENTS.md`: HIGH → exhaustive
+- `workflows/index.json`: HIGH → exhaustive
+- `README.md`: MEDIUM → exhaustive (per global pre-resolution)
+
+Risk profile artifact: `${planning_dir}/risk/acr-145-risk-profile.md` (11781 bytes). Phase 2.5 complete; Phase 3 proposal proceeds with `risk_profile_path` and per-surface mode map injected.
+
+## D-2026-05-09p — ACR-145 Phase 6 accepted-residual HIGH on code-quality A5 findings (mid-pipeline drift)
+
+**WU**: ACR-145 (Refactor `~/ai/workflows/rca.md` — split into 4 agents + reproduction-test loop).
+**Phase**: 6 (code-quality fanout / per-component aggregate).
+**Decision**: Accept HIGH aggregate verdict on Phase 6 code-quality as accepted-residual under the dispatch context's pre-resolved "mid-pipeline drift: default A — proceed + note residual in DECISIONS" disposition.
+
+**Mid-pipeline drift evidence**: ACR-174 (`17a765d` on origin/master) deletes the entire structural pytest infrastructure including `tests/test_rca_workflow.py`. After the planned pre-Phase-9 rebase, the surface targeted by 14 of the 15 A5 findings ceases to exist; the findings are moot. CQ-F15 targets a 1-line claude-haiku removal that the existing `test_no_claude_haiku_in_repo` test forced; the underlying helper-function structure existed before ACR-145 and is out-of-scope for this WU's contract.
+
+**Residual flagged**: this WU does not refactor pre-existing test-helper multi-classifier function shape; the project-level disposition deferred such refactors to test-infrastructure-cleanup work (now subsumed by ACR-174).
+
+**Scope of acceptance**: Phase 6 code-quality A5 findings CQ-F01..CQ-F15. Phase 6 advances to Process-tree audit #2 and Phase 7 (CodeRabbit) on this acceptance. PR-review gates in Phase 8 are not waived; they will re-evaluate against the post-rebase diff.
+
+**Cross-references**: audit-history Round 2 entry; D-2026-05-09o (ACR-145 Phase 2.5 risk-profile acceptance); origin/master `17a765d ACR-174`.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
 
