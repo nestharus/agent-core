@@ -191,7 +191,7 @@ After 3.5 + 3.6 + 3.7 clear:
 #### P3.10 — Author test publication manifest
 
 1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-test-publication-manifest.md` instructing a `gpt-high` writer to create `${planning_dir}/dossier/test-publication-manifest.md`.
-2. Require fields for the prototype-test branch/ref, test file paths, node IDs, pending marker reason format, expected fail-if-unmasked command when available, and provisional spawned-ticket mapping placeholders to finalize in P4.
+2. Require fields for the durable carry-forward payload from `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`: `prototype_test_pr_url` when known, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`. `test_paths_or_node_ids` is the manifest source for test file paths and node IDs, and the provisional spawned-ticket mapping placeholders are finalized in P4.
 3. Dispatch and verify `${planning_dir}/dossier/test-publication-manifest.md` exists and is non-empty before P3 human gate packaging.
 
 #### P3 verify + human gate
@@ -215,7 +215,7 @@ Mechanical. Do not gate.
    - Append the new key + URL back into `${planning_dir}/dossier/spawned-tickets.md` so the dossier is self-referential.
 2. **P4 prototype-test PR publication.**
    - Resolve `prototype_test_branch_ref` from `dossier/test-publication-manifest.md`; resolve `base` from the manifest when present, otherwise from the declared repo default. Validate both are non-empty before any git or PR command.
-   - Update `dossier/test-publication-manifest.md` (authored during P3) to finalize the prototype-test branch, test paths/node IDs, pending marker reason format, expected fail-if-unmasked command when available, and spawned-ticket mapping.
+   - Update `dossier/test-publication-manifest.md` (authored during P3) to finalize the prototype-test branch, test paths/node IDs, pending marker reason format, expected fail-if-unmasked command when available, spawned-ticket mapping, and the implementation acceptance criterion.
    - Update prototype-test branch markers to cite real spawned-ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md`; this is the required update prototype-test branch markers step before publication.
    - Push the prototype-test branch: `git push origin ${prototype_test_branch_ref}`.
    - Compose the `prototype-test-pr-writer` prompt with `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, and `output_path`.
@@ -223,8 +223,9 @@ Mechanical. Do not gate.
    - Verify `${output_path}.title` and `${output_path}` exist and are non-empty.
    - Create the draft PR: `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`.
    - Verify the parsed draft PR URL is non-empty and begins with `https://`; otherwise halt with `BLOCKED:prototype-test-pr-url-missing`.
-   - Capture PR URL into a scratch evidence file, then append PR URL, branch, test paths/node IDs, marker reason, and ticket mapping into `dossier/answer.md` and `dossier/spawned-tickets.md`.
-   - Comment on each spawned implementation ticket with the prototype-test PR URL via the selected ticket operator (`jira-operator` or `linear-operator` per `ticket_system`) with `task=comment`.
+   - Capture PR URL into a scratch evidence file, then append PR URL, branch, test paths/node IDs, marker reason, ticket mapping, and implementation acceptance criterion into `dossier/answer.md` and `dossier/spawned-tickets.md`.
+   - Comment on each spawned implementation ticket with the full carry-forward payload via the selected ticket operator (`jira-operator` or `linear-operator` per `ticket_system`) with `task=comment`: `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`. The ticket update must cite `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation` and state that the spawned ticket must remove `prototype-pending:` markers, make the inherited tests pass, and preserve original assertions unless a strictly stronger equivalent supersession is recorded in the manifest, spawned ticket payload, or Phase 6 Step 6b output index.
+   - Record the P4 evidence trail naming which spawned ticket comment or description update carried the carry-forward payload.
 3. **Update project risk profile.** For each MEDIUM/HIGH entry in `${planning_dir}/dossier/risk-profile.md`, append a row to `<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile. Cite the prototype as the originating WU; cite the spawned hardening ticket(s).
 4. **Apply branch disposition** per `${planning_dir}/dossier/branch-disposition.md`:
    - `merge`: dispatch the implementation-pipeline-orchestrator on the prototype branch starting at Phase 6 (the test-and-code structure already exists). The dossier is the proposal-equivalent. Pass `defer_source=${prototype_id}` so the implementation orchestrator knows the prototype origin.

@@ -29,7 +29,7 @@ This operator constrains that base flow to prototype-test PRs: fail-expected or 
 
 ## Use When
 
-Use this operator when a prototype has produced reviewable production-tree proof tests that are intentionally fail-expected or pending until spawned implementation tickets complete. The PR is a prototype-test PR: a commentable test contract linked to the dossier and implementation tickets, not a production-ready implementation branch.
+Use this operator when a prototype has produced reviewable production-tree proof tests that are intentionally fail-expected or pending until spawned implementation tickets complete. The PR is a prototype-test PR: a commentable test contract linked to the dossier and implementation tickets, not a production-ready implementation branch. It publishes durable implementation coverage for the spawned tickets, not throwaway prototype artifacts.
 
 ## Do Not Use When
 
@@ -80,11 +80,11 @@ State that review follows `~/ai/conventions/prototype-review.md`: reviewers shou
 
 ### Test manifest
 
-List each test file and node ID published in this PR, copied from `test_manifest_path`. Include the prototype-test branch/ref and the expected fail-if-unmasked command when the manifest provides one.
+List each published test identifier from `test_manifest_path` (test file path and/or node ID), copied exactly. Include the prototype-test branch/ref, the expected fail-if-unmasked command when the manifest provides one, and the spawned ticket each test maps to.
 
 ### Pending markers
 
-Point to `~/ai/conventions/prototype-pending-tests.md`. Include the marker reason format from that convention and explain that the markers are traceable implementation handoff debt, not generic skip/xfail permission.
+Point to `~/ai/conventions/prototype-pending-tests.md`. Include the marker reason format from that convention and explain that the markers are traceable implementation handoff debt, not generic skip/xfail permission. The implementation must remove the marker or supersede the test with a traceable strictly stronger equivalent; the marker is not permission to discard the original assertions.
 
 ### Dossier link
 
@@ -94,7 +94,7 @@ Link or name the dossier evidence, including `answer.md`, `risk-profile.md`, and
 
 List the implementation ticket URLs/keys from `implementation_ticket_urls` and the mapping from `spawned_tickets_path`. For each ticket, include this acceptance line exactly:
 
-Remove the `prototype-pending:` markers in the listed test files and make these tests pass.
+Remove the `prototype-pending:` markers in the listed test files, make these tests pass, and preserve the original assertions unless the manifest, spawned ticket payload, or Phase 6 Step 6b output index records a strictly stronger equivalent supersession.
 
 Do not omit the marker token colon; wording such as "Remove the prototype-pending markers in the listed test files and make these tests pass." is invalid.
 
