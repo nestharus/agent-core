@@ -82,13 +82,17 @@ workflow_aliases:
       path: "workflows/verified-rebase.md"
 ```
 
-## Manager-flavor aliases
+Complete workflow-frontmatter example:
 
-This bounded exception declares Work Manager flavor aliases even though normal workflow aliases are scoped to workflow docs. The convention's alias target tuple and alias normalization rules apply to this section.
-
-- `manager-max` -> `~/ai/agents/work-manager-operator-max.md`
-- `manager-pragmatic` -> `~/ai/agents/work-manager-operator-pragmatic.md`
-- `manager-hackerman` -> `~/ai/agents/work-manager-operator-hackerman.md`
+```yaml
+workflow:
+  id: regression-investigation
+workflow_aliases:
+  - alias: "flavor: regression-investigation"
+    target:
+      workflow_id: regression-investigation
+      path: "workflows/regression-investigation.md"
+```
 
 Ambiguous example:
 
@@ -114,6 +118,14 @@ workflow_aliases:
             path: "workflows/risk-reduction.md"
         fallback_question: "Do you mean RCA inside the implementation pipeline, or a separate risk-reduction workflow?"
 ```
+
+## Manager-flavor aliases
+
+This bounded exception declares Work Manager flavor aliases even though normal workflow aliases are scoped to workflow docs. The convention's alias target tuple and alias normalization rules apply to this section.
+
+- `manager-max` -> `~/ai/agents/work-manager-operator-max.md`
+- `manager-pragmatic` -> `~/ai/agents/work-manager-operator-pragmatic.md`
+- `manager-hackerman` -> `~/ai/agents/work-manager-operator-hackerman.md`
 
 ## Per-context disambiguation
 

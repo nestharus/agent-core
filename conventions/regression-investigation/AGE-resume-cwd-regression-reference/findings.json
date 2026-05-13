@@ -1,0 +1,47 @@
+[
+  {
+    "id": "RI-AGE-CWD-001",
+    "incident_id": "AGE-resume-cwd-regression",
+    "surface_path": "agent_runner/session_resume.py",
+    "risk_category": "unwritten invariant",
+    "severity": "HIGH",
+    "evidence_paths": [
+      "incident-context.md",
+      "pattern-findings.md#pf-001"
+    ],
+    "gap_in_understanding": "The resume path does not state which cwd source wins after handoff, so callers can assume different roots.",
+    "suggested_remediation": "Document and enforce one cwd precedence rule for resume flows.",
+    "disposition": "follow-up ticket",
+    "note": "canonical illustrative example, not live"
+  },
+  {
+    "id": "RI-AGE-CWD-002",
+    "incident_id": "AGE-resume-cwd-regression",
+    "surface_path": "agent_runner/dispatch.py",
+    "risk_category": "implicit coupling",
+    "severity": "MEDIUM",
+    "evidence_paths": [
+      "commit-history.md",
+      "pattern-findings.md#pf-002"
+    ],
+    "gap_in_understanding": "Dispatch and restore logic jointly determine cwd behavior but are reviewed as separate surfaces.",
+    "suggested_remediation": "Create a shared cwd resolution helper and regression tests covering launch, resume, and prompt-file dispatch.",
+    "disposition": "follow-up ticket",
+    "note": "canonical illustrative example, not live"
+  },
+  {
+    "id": "RI-AGE-CWD-003",
+    "incident_id": "AGE-resume-cwd-regression",
+    "surface_path": "agent_runner/tests/test_resume.py",
+    "risk_category": "test accompaniment",
+    "severity": "MEDIUM",
+    "evidence_paths": [
+      "commit-history.md",
+      "pattern-findings.md#pf-004"
+    ],
+    "gap_in_understanding": "Existing tests demonstrate resume mechanics but do not pin effective cwd under the regression window.",
+    "suggested_remediation": "Add a regression fixture asserting effective cwd for resumed noninteractive dispatch.",
+    "disposition": "follow-up ticket",
+    "note": "canonical illustrative example, not live"
+  }
+]
