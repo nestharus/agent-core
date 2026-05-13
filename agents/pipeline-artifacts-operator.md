@@ -1,5 +1,5 @@
 ---
-description: 'Manage pipeline scratch artifact naming and gitignore in worktrees. Standard filenames inside a configured worktree for prompts, responses, runner scripts, logs, and per-phase outputs. Prevents cross-session collisions on /tmp.'
+description: 'Manage pipeline scratch artifact naming and gitignore in worktrees. Standard filenames inside a configured worktree for prompts, responses, logs, and per-phase outputs. Prevents cross-session collisions on /tmp.'
 model: gpt-high
 output_format: ''
 ---
@@ -34,7 +34,7 @@ You enforce the pipeline-artifact naming convention in a worktree, and you ensur
 - **Use the standard filename catalogue** below. Do not invent new patterns; ask the orchestrator to extend this operator's catalogue if you need a new artifact type.
 - **`.gitignore` patterns are scoped (e.g. `PROPOSAL.log`, NOT `*.log`).** Broad patterns hide legitimate test fixtures or example logs.
 - **Read existing files before overwriting.** A `.prompt.md` in the worktree may contain context from a previous iteration that should inform the next pass.
-- **The wrapper script lives in the worktree, not `/tmp`.** When kicking off background model runs, write the wrapper inside the worktree and pass worktree-relative paths to it.
+- **Do not generate dispatch wrapper scripts.** When kicking off background model runs, use the direct `agents ... 2>&1 | tee ...` shape and Bash-background tool execution from `~/ai/workflows/agents-cli.md`; prompts, outputs, and logs still live in the worktree.
 
 ## Standard Filename Catalogue
 
@@ -58,7 +58,6 @@ These filenames live inside `${worktree_path}`. The `.prompt.md` is the input; t
 | Implementation blockers | (n/a) | `IMPLEMENT.blockers.md` (or `IMPLEMENT_<phase>.blockers.md`) | (n/a) |
 | CodeRabbit | (n/a) | `CODERABBIT_pass<N>.md`, `CODERABBIT_summary.md` | `CODERABBIT_*.log`, `CODERABBIT_*.attempt` |
 | Workflow review | `WORKFLOW_REVIEW.prompt.md` | `WORKFLOW_REVIEW.report.md` | `WORKFLOW_REVIEW.log` |
-| Wrapper script | (n/a) | (n/a) | `.run-<phase>.sh` |
 
 For per-phase implementation files (when the implementer is split into A/B/C/etc), use `IMPLEMENT_<PHASE>.prompt.md` / `IMPLEMENT_<PHASE>.summary.md` / `IMPLEMENT_<PHASE>.log`. Keep the phase identifier short (one letter or short word).
 
@@ -82,7 +81,6 @@ IMPLEMENT*.blockers.md
 IMPLEMENT_PHASES.md
 CODERABBIT_*.md
 WORKFLOW_REVIEW.report.md
-.run-*.sh
 PROPOSAL.log
 RISK_*.log
 RESEARCH.log
@@ -101,7 +99,6 @@ Patterns are intentionally specific: `PROPOSAL.log`, NOT `*.log`. The broad patt
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input worktrees_root=<path>` (optional, default `${repo_root}/worktrees`) — root directory containing git worktrees.
 - `--input worktree_path=<path>` (required) — worktree whose scratch artifacts and `.gitignore` should be managed.
-- `--input agents_bin=<path>` (optional, default `agents`) — CLI used for background sub-agent wrapper scripts.
 
 ## Procedure: Setup Mode
 
@@ -133,7 +130,7 @@ For a fresh worktree:
 
 For a worktree that's about to start a new pipeline pass:
 
-1. **Identify stale artifacts.** A "stale" artifact is older than the most-recent commit on the branch by more than 1 hour AND not currently being read (no associated `.run-<phase>.sh` actively running).
+1. **Identify stale artifacts.** A "stale" artifact is older than the most-recent commit on the branch by more than 1 hour AND not currently being read by an active Bash-background task from `~/ai/workflows/agents-cli.md`.
 2. **For each stale artifact**, check if it's referenced by any active prompt file. If yes, preserve. If no, archive (don't delete) into `<worktree>/.pipeline-archive/<timestamp>/`.
 3. **Re-run audit** to confirm clean state.
 
@@ -141,19 +138,17 @@ NEVER delete the .pipeline-archive — it's the historical record of prior runs.
 
 ## Procedure: Background-Task Naming
 
-When kicking off a background model run, the wrapper script also lives in the worktree, not `/tmp`:
+When kicking off a background model run, do not create a wrapper script. Use the direct invocation convention from `~/ai/workflows/agents-cli.md` and keep the prompt, output, and log paths worktree-scoped:
 
-```bash
-WT=${worktree_path}
-cat > "$WT/.run-<phase>.sh" << 'EOF'
-#!/bin/bash
-${agents_bin} --model gpt-xhigh --file "$1" > "$2" 2>&1
-EOF
-chmod +x "$WT/.run-<phase>.sh"
-"$WT/.run-<phase>.sh" "$WT/<PHASE>.prompt.md" "$WT/<PHASE>.md"
+```python
+Bash(
+    command='agents -m gpt-xhigh -p "${worktree_path}" -f "${worktree_path}/<PHASE>.prompt.md" 2>&1 | tee "${worktree_path}/<PHASE>.log"',
+    run_in_background=True,
+    description="Run <PHASE> operator"
+)
 ```
 
-Pass worktree-relative paths to the wrapper rather than embedding `/tmp` paths in the heredoc.
+The operator prompt names `${worktree_path}/<PHASE>.md` as the authoritative output. The `.log` is stdout/stderr capture for inspection after the Bash task notification.
 
 ## Procedure: Read-Before-Write
 
@@ -189,7 +184,7 @@ Never put a bare `<phase>.md` directly in `/tmp/`. The collision class is real.
 ## Stop Conditions
 
 - Return `BLOCKED` if: `worktree_path` doesn't exist or isn't a git worktree
-- Return `NEEDS_INPUT` if: in cleanup mode and stale-vs-active classification is ambiguous (e.g., a `.run-*.sh` exists but no process is found — caller should confirm whether the run is in progress)
+- Return `NEEDS_INPUT` if: in cleanup mode and stale-vs-active classification is ambiguous (e.g., a log is still being written but no Bash task notification has arrived — caller should confirm whether the run is in progress)
 
 ## Output Contract
 

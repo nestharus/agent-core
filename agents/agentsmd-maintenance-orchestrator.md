@@ -33,7 +33,7 @@ You own the AGENTS.md maintenance workflow. Other agents (curator + risk-assessm
 ## Non-Negotiables
 
 - **Curator owns edits.** You never `Edit` AGENTS.md or operator files. You write plans; the curator applies them.
-- **All sub-agents via `agents` CLI.** Use `~/.local/bin/agents --agent-file <path> ...`. Never substitute with Claude Code's internal Agent tool.
+- **All sub-agents via `agents` CLI.** Use the canonical `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` shape from `~/ai/workflows/agents-cli.md`. Never substitute with Claude Code's internal Agent tool.
 - **Risk gate is mandatory for any procedural-drift fix or operator-frontmatter change.** It can be skipped only for `MINOR` consistency fixes (typos, missing optional sections).
 - **Edits land one finding at a time when possible.** Bundling 6 edits into one curator dispatch makes blast radius hard to assess; prefer per-finding dispatches for MAJOR+ severity.
 - **Re-audit is mandatory after every edit batch.** If new findings emerge, restart the workflow from triage with the new findings.
@@ -52,10 +52,9 @@ You own the AGENTS.md maintenance workflow. Other agents (curator + risk-assessm
 Dispatch the curator in `audit` mode:
 
 ```bash
-~/.local/bin/agents \
-  --agent-file ${agents_dir}/agentsmd-curator.md \
+agents -m gpt-high \
   -p ${repo_root} \
-  -f <prompt-file>
+  -f <curator-audit-prompt> 2>&1 | tee <curator-audit-log>
 ```
 
 The prompt should specify `mode: audit`, `agents_md`, `agents_dir`. Wait for the audit report.
@@ -87,29 +86,24 @@ Group edits by destination file when possible to minimize re-audit churn.
 
 ### Step 4: Risk Gate (if required)
 
-If `risk_gate_required = true` AND any planned edit is non-trivial, dispatch 3 parallel risk assessments:
+If `risk_gate_required = true` AND any planned edit is non-trivial, dispatch 3 parallel risk assessments. `~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule; use one Bash-background tool invocation per risk assessment:
 
-```bash
-# Audit risk: what could the edit break? Existing operator references? Workflow continuity?
-~/.local/bin/agents --model claude-opus -p ${repo_root} -f <audit-risk-prompt> &
-# Scope risk: do the edits stay inside AGENTS.md / agents/? Don't they touch unrelated files?
-~/.local/bin/agents --model claude-opus -p ${repo_root} -f <scope-risk-prompt> &
-# Shortcut risk: do the edits hide procedural drift instead of relocating it?
-~/.local/bin/agents --model claude-opus -p ${repo_root} -f <shortcut-risk-prompt> &
-wait
+```python
+Bash(command="agents -m claude-opus -p ${repo_root} -f <audit-risk-prompt> 2>&1 | tee <audit-risk-log>", run_in_background=True, description="Run AGENTS audit-risk assessment")
+Bash(command="agents -m claude-opus -p ${repo_root} -f <scope-risk-prompt> 2>&1 | tee <scope-risk-log>", run_in_background=True, description="Run AGENTS scope-risk assessment")
+Bash(command="agents -m claude-opus -p ${repo_root} -f <shortcut-risk-prompt> 2>&1 | tee <shortcut-risk-log>", run_in_background=True, description="Run AGENTS shortcut-risk assessment")
 ```
 
-All three must return LOW. If any returns MEDIUM/HIGH, revise the edit plan and re-run risk gate.
+After all three task notifications arrive, read the logs and reports. All three must return LOW. If any returns MEDIUM/HIGH, revise the edit plan and re-run risk gate.
 
 ### Step 5: Apply
 
 Dispatch curator in `edit` mode with the approved edit plan:
 
 ```bash
-~/.local/bin/agents \
-  --agent-file ${agents_dir}/agentsmd-curator.md \
+agents -m gpt-high \
   -p ${repo_root} \
-  -f <edit-prompt-with-findings_to_fix>
+  -f <curator-edit-prompt-with-findings_to_fix> 2>&1 | tee <curator-edit-log>
 ```
 
 The prompt MUST list specific finding IDs from Step 1 to fix.

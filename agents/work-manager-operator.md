@@ -111,7 +111,7 @@ Per the audit `bnlhkh982` (2026-05-05): the manager's filing patterns systematic
 
 ### AGENT DISPATCH SHAPE
 
-`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. The ticket update and the implementation-orchestrator launch are separate completed shell invocations; the dispatch itself stays direct:
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source and the canonical long-running/background dispatch rule. The ticket update and the implementation-orchestrator launch are separate completed shell invocations; the dispatch itself stays direct:
 
 ```bash
 agents -m claude-opus -p <repo_root> -f <prompt.md> 2>&1 | tee <log-path>
@@ -135,7 +135,14 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
    - Use `${ticket_operator}` with `task=transition` to move the selected ticket to **In Progress** immediately after dispatch. For Linear, pass `target_status="In Progress"` and let `linear-operator` resolve the issue team's workflow state.
    - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`.
-   - Run `agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt> 2>&1 | tee <log> &` in background.
+   - Run the implementation-pipeline-orchestrator as one Bash-background dispatch:
+     ```python
+     Bash(
+         command="agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt> 2>&1 | tee <log>",
+         run_in_background=True,
+         description="Run implementation pipeline for <ticket_id>"
+     )
+     ```
 
 2. **During dispatch:**
    - The orchestrator's stdout/stderr is captured through `2>&1 | tee <log>`; per-phase progress lives in `${scratch_dir}/logs/`. Inspect those logs for progress, and derive any short parent-transcript snippet after the dispatch finishes.

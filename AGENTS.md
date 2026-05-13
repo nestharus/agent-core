@@ -252,7 +252,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
   File: [~/ai/agents/jj-operator.md](agents/jj-operator.md) | Inputs: `task`, `branch`, `target?`, `parents?`, `repo_root`, `worktrees_root?` | Model: `gpt-high`
 
 - `pipeline-artifacts-operator` - Standardize scratch artifact naming and `.gitignore` handling inside a worktree so pipeline outputs do not collide.
-  File: [~/ai/agents/pipeline-artifacts-operator.md](agents/pipeline-artifacts-operator.md) | Inputs: `worktree_path`, `mode`, `repo_root`, `worktrees_root?`, `agents_bin?` | Model: `gpt-high`
+  File: [~/ai/agents/pipeline-artifacts-operator.md](agents/pipeline-artifacts-operator.md) | Inputs: `worktree_path`, `mode`, `repo_root`, `worktrees_root?` | Model: `gpt-high`
 
 ### External integration
 
@@ -298,6 +298,7 @@ Source-of-truth repository: <https://github.com/nestharus/ai>.
 Use the shared wrapper conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
 
 Default shape: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>`.
+For long-running or parallel child dispatch, [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md) is also the canonical dispatch/wait rule: use one Bash-background tool invocation per child, not shell `&`, bundled wrapper scripts, shell `wait`, PID waits, or trace-polling loops.
 
 ### AGENT DISPATCH SHAPE
 

@@ -135,18 +135,23 @@ git worktree add worktrees/research-tickets -b research-tickets
 git worktree add worktrees/research-activity -b research-activity
 git worktree add worktrees/research-permissions -b research-permissions
 git worktree add worktrees/research-platforms -b research-platforms
+```
 
-# Run in parallel — each agent uses Firecrawl for web research
-agents -m gpt-high -p worktrees/research-general -f .tmp/research-general.md &
-agents -m gpt-high -p worktrees/research-applications -f .tmp/research-applications.md &
-agents -m gpt-high -p worktrees/research-tickets -f .tmp/research-tickets.md &
-agents -m gpt-high -p worktrees/research-activity -f .tmp/research-activity.md &
-agents -m gpt-high -p worktrees/research-permissions -f .tmp/research-permissions.md &
-agents -m gpt-high -p worktrees/research-platforms -f .tmp/research-platforms.md &
-wait
+```python
+# Run in parallel — each agent uses Firecrawl for web research.
+# Use one Bash-background dispatch per child per ~/ai/workflows/agents-cli.md:
+Bash(command="agents -m gpt-high -p worktrees/research-general -f .tmp/research-general.md 2>&1 | tee .tmp/research-general.log", run_in_background=True, description="Run general market research")
+Bash(command="agents -m gpt-high -p worktrees/research-applications -f .tmp/research-applications.md 2>&1 | tee .tmp/research-applications.log", run_in_background=True, description="Run applications market research")
+Bash(command="agents -m gpt-high -p worktrees/research-tickets -f .tmp/research-tickets.md 2>&1 | tee .tmp/research-tickets.log", run_in_background=True, description="Run tickets market research")
+Bash(command="agents -m gpt-high -p worktrees/research-activity -f .tmp/research-activity.md 2>&1 | tee .tmp/research-activity.log", run_in_background=True, description="Run activity market research")
+Bash(command="agents -m gpt-high -p worktrees/research-permissions -f .tmp/research-permissions.md 2>&1 | tee .tmp/research-permissions.log", run_in_background=True, description="Run permissions market research")
+Bash(command="agents -m gpt-high -p worktrees/research-platforms -f .tmp/research-platforms.md 2>&1 | tee .tmp/research-platforms.log", run_in_background=True, description="Run platforms market research")
 
-# Collect outputs into market-data/ and merge into three structured files:
+# After all task notifications arrive, collect outputs into market-data/ and merge into three structured files:
 # market-data/competitors.md, market-data/user-reviews.md, market-data/value-signals.md
+```
+
+```bash
 # Clean up worktrees
 ```
 
@@ -229,14 +234,18 @@ Write the constructed prompts to `.tmp/` and run all three in parallel:
 git worktree add worktrees/exec-risk-market -b exec-risk-market
 git worktree add worktrees/exec-risk-dependency -b exec-risk-dependency
 git worktree add worktrees/exec-risk-completeness -b exec-risk-completeness
+```
 
-# Run in parallel
-agents -m claude-opus -p worktrees/exec-risk-market -f .tmp/executive-risk-market-misread.md &
-agents -m claude-opus -p worktrees/exec-risk-dependency -f .tmp/executive-risk-dependency-trap.md &
-agents -m gpt-high -p worktrees/exec-risk-completeness -f .tmp/executive-risk-completeness.md &
-wait
+```python
+# Run in parallel with one Bash-background dispatch per child per ~/ai/workflows/agents-cli.md
+Bash(command="agents -m claude-opus -p worktrees/exec-risk-market -f .tmp/executive-risk-market-misread.md 2>&1 | tee .tmp/executive-risk-market-misread.log", run_in_background=True, description="Run executive market risk review")
+Bash(command="agents -m claude-opus -p worktrees/exec-risk-dependency -f .tmp/executive-risk-dependency-trap.md 2>&1 | tee .tmp/executive-risk-dependency-trap.log", run_in_background=True, description="Run executive dependency risk review")
+Bash(command="agents -m gpt-high -p worktrees/exec-risk-completeness -f .tmp/executive-risk-completeness.md 2>&1 | tee .tmp/executive-risk-completeness.log", run_in_background=True, description="Run executive completeness risk review")
 
-# Collect outputs to plans/risk/
+# After all task notifications arrive, collect outputs to plans/risk/
+```
+
+```bash
 # Clean up worktrees
 ```
 

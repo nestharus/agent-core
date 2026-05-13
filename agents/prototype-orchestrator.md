@@ -51,7 +51,7 @@ Per `~/ai/models/roles.md` you are `claude-opus`: the judge. You route, dispatch
 
 ### AGENT DISPATCH SHAPE
 
-`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Prototype speed comes from multiple separate dispatches, each with full capture:
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source and the canonical long-running/background dispatch rule. Prototype speed comes from multiple separate dispatches, each with full capture:
 
 ```bash
 agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log
@@ -272,7 +272,7 @@ Sub-agents and the prototype workflow itself emit `NEEDS_INPUT:<question_artifac
 
 - **Multi-repo umbrellas**: a prototype that touches more than one repo (e.g. `rfqautomation` + `rfqinstallation`) creates a worktree per repo. The dossier remains single — the answer is one answer, even if it touched two repos. Branch disposition is per-repo (the prototype may merge in one repo and discard in another).
 - **Cost discipline**: P1's parallel dispatches can run up cost quickly. Default to 2-3 vectors; expand only if the question genuinely has more independent paths to test.
-- **Background execution**: every `agents` dispatch in P1 and P3 is background-executed. The orchestrator polls log paths and waits for completion notifications rather than blocking serially.
+- **Background execution**: every `agents` dispatch in P1 and P3 is background-executed using the Bash task-notification shape from `~/ai/workflows/agents-cli.md`. Completion comes from the background task notification; logs and saved traces are inspected after notification, not polled as the completion detector.
 - **Audit-history**: prototypes don't run process-tree audits (no gates to audit). They DO maintain `${audit_history_path}` if a P3 revision loop runs — the loop is the audit-able event.
 - **Project label conventions**: P4 ticket creation reads `<project>/AGENTS.md` § Label conventions for the project's hardening label (e.g. `hardening` on the rfqautomation umbrella). Apply consistently.
 - **Reference**: when in doubt about scope or shape, re-read `~/ai/workflows/build-prototype.md`. The workflow doc is the philosophy; this operator file is the spine.

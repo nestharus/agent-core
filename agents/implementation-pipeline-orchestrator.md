@@ -100,13 +100,13 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 
 ### AGENT DISPATCH SHAPE
 
-`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Every phase, gate, audit, remediation, and ticket-operator dispatch remains a fresh parent-visible invocation:
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source and the canonical long-running/background dispatch rule. Every phase, gate, audit, remediation, and ticket-operator dispatch remains a fresh parent-visible invocation:
 
 ```bash
 agents -m <model> -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}
 ```
 
-Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; complete `OULIPOLY_*` markers, `agents trace --json`, join manifests, and process-tree audits depend on full `2>&1 | tee` capture. Do not combine N independent dispatches into a single shell script; each child phase or risk gate is its own invocation with its own prompt and log.
+Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; complete `OULIPOLY_*` markers, `agents trace --json`, join manifests, and process-tree audits depend on full `2>&1 | tee` capture. Do not combine N independent dispatches into a single shell script; each child phase or risk gate is its own invocation with its own prompt and log. Parallel gates use separate parent-visible Bash tool-background dispatches per `~/ai/workflows/agents-cli.md`, not shell fanout.
 
 Wrong shape:
 

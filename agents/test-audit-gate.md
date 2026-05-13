@@ -204,19 +204,12 @@ fallback baseline.
 
 ### 7. Launch Three Parallel Sub-Agent Invocations
 
-Run exactly these commands in parallel, then `wait` for all three:
+`~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule. Run exactly these as three separate Bash-background tool invocations, then collect the result files after all task notifications arrive:
 
-```bash
-agents -m gpt-high -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_SPEC.prompt.md" > "$scratch_dir/TEST_AUDIT_SPEC.md" 2>&1 &
-SPEC_PID=$!
-
-agents -a ${agents_dir}/coverage-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_QUALITY.prompt.md" > "$scratch_dir/TEST_AUDIT_QUALITY.md" 2>&1 &
-QUALITY_PID=$!
-
-agents -a ${agents_dir}/coverage-analyzer.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_COVERAGE.prompt.md" > "$scratch_dir/TEST_AUDIT_COVERAGE.md" 2>&1 &
-COVERAGE_PID=$!
-
-wait "$SPEC_PID" "$QUALITY_PID" "$COVERAGE_PID"
+```python
+Bash(command='agents -m gpt-high -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_SPEC.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_SPEC.md"', run_in_background=True, description="Run test-audit spec review")
+Bash(command='agents -a ${agents_dir}/coverage-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_QUALITY.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_QUALITY.md"', run_in_background=True, description="Run test-audit quality review")
+Bash(command='agents -a ${agents_dir}/coverage-analyzer.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_COVERAGE.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_COVERAGE.md"', run_in_background=True, description="Run test-audit coverage review")
 ```
 
 Every sub-audit prompt must explicitly say: the first line of your output must

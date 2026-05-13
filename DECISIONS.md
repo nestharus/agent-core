@@ -2523,3 +2523,120 @@ Evidence:
 - `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/audit-history.md` (round-7 entry).
 - `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/proposals/acr-142-ACR-142.md` (round-7 revised proposal lines 14, 17, 161, 178–180, 183).
 - ACR-192 (follow-up tracker ticket for the coupling-auditor adapter-pattern metric gap).
+
+---
+
+## D-2026-05-12-acr150-phase-2.5-drift-discovery-disposition
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr150-phase-2.5-drift-discovery-disposition
+
+**Linear ticket**: ACR-150
+
+**Phase**: Phase 2.5.4 duplicates inventory
+
+Phase 2.5.4 duplicates inventory surfaced HIGH-severity drift in operator files that actively prescribe shell `&` + `wait` fanout — the exact antipattern ACR-150 targets:
+
+- `agents/work-manager-operator.md:138` (`tee <log> &` for orchestrator background)
+- `agents/roadmap-orchestrator.md:139-146` and `:233-237` (`agents … &` + `wait` fanout)
+- `agents/test-audit-gate.md:207-219` (`agents … &` + PID waits)
+- `agents/fastapi-review-operator.md:395-404` (`agents … &` + `wait`)
+- `agents/agentsmd-maintenance-orchestrator.md:90-99` (`agents … &` + `wait`)
+- `agents/prototype-orchestrator.md:275` (re-introduces polling language beside notification language)
+
+Disposition per work-manager-operator's dispatch pre-resolution: **Mid-pipeline drift: default A — proceed + note in DECISIONS as residual.** Phase 3 decides which surfaces to fold into scope; any left out becomes residual drift carried by ACR-150 and tracked downstream.
+
+No tracker ticket filed at this point. The "Policy-retracted residual-acceptance: max-alignment, no shortcuts" caveat applies: HIGH drift on operator files that *are* the bug surface should be consolidated rather than residualized. Phase 3's net-value statement will weigh consolidation effort against ticket scope. If Phase 3 chooses to consolidate, the WU expands; if it residualizes any, the Final-state DECISIONS entry enumerates the residual paths.
+
+Evidence: `${planning_dir}/research/acr-150-duplicates.md` § Drift Discoveries D1–D4.
+
+## D-2026-05-12-acr150-phase-2.5-cold-start-estimate-disposition
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr150-phase-2.5-cold-start-estimate-disposition
+
+**Linear ticket**: ACR-150
+
+**Phase**: Phase 2.5 inherited-estimate check
+
+Inherited estimate: `story_point_estimate: null`, `estimate_source: missing`. No layer-2 magnitude, layer-3 slice, or backstop-spike reference exists for ACR-150.
+
+Per dispatch pre-resolution (`Defer-to-prototype: default A — proceed exhaustive`), the cold-start question (run prototype first / proceed without baseline / terminate WU) is resolved as **proceed without baseline**. Phase 3 derives the refined estimate from the problem map + Phase 2.5 research alone and records the cold-start delta from `missing`.
+
+Evidence: `${planning_dir}/risk/acr-150-risk-profile.md`; dispatch prompt § Pre-resolved Phase 2.5 gates.
+
+## D-2026-05-12-acr150-phase-2.5-problem-map-risk-profile-gate-disposition
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr150-phase-2.5-problem-map-risk-profile-gate-disposition
+
+**Linear ticket**: ACR-150
+
+**Phase**: Phase 2.5 problem-map / risk-profile gate
+
+`skip_problem_map_gate=true` per dispatch. Defer-to-prototype detection: only one of five signals fires (HIGH on majority of touched surfaces); duplicates-as-sprawling-parallel-systems, operational-knowledge-lifecycle, multi-WU-characterization-tests, and cross-language-implicit-contracts do not fire. Defer option therefore NOT surfaced; routine problem-map approval skipped per project override.
+
+Effective outcome: **proceed in exhaustive mode** with per-surface modes propagated from `${planning_dir}/risk/acr-150-risk-profile.md` § Per-surface Mode Propagation.
+
+WU-level verdict: **HIGH** (drives Phase 3 exhaustive handling; ties back to D1–D4 drift residuals above).
+
+## D-2026-05-13-acr150-step6c-consumed-echo-capture-limitation
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr150-step6c-consumed-echo-capture-limitation
+
+**Linear ticket**: ACR-150
+
+**Phase**: Phase 6c Step 6c
+
+ACR-150 Phase 6c Step 6c invocation (`c5d7518b-0ea0-47d1-82b8-575ba0189a5b`,
+codex3-backed `gpt-high`) completed correctly (`success: true`, 11 in-scope
+Markdown files edited per the Step 6a contract § Code surface, forbidden
+patterns removed, cross-references to `workflows/agents-cli.md` added,
+`evals/agents-cli-dispatch-hygiene/eval.md` untouched). However, the tee-
+captured stdout log at `${scratch_dir}/logs/acr-150-phase-6c.log` does NOT
+contain `consumed: <path>` echo lines that the orchestrator prompt required.
+
+Root cause: `agents trace --json <uuid>` reports `transcript_state: no_locator`
+for this codex3 session, indicating the provider session transcript was not
+captured at the trace layer. The agent's intermediate stdout (tool-call echoes,
+"consumed:" announcements) is not piped through `tee` for codex3 sessions —
+only the final-result message is. This is a structural capture limitation of
+the codex3 provider integration, not a non-compliance of the Step 6c agent.
+
+Substantive consumption verified by filesystem inspection:
+
+- Step 6b output index at `${scratch_dir}/phase6/step6b-output-index.md` is
+  present and unchanged.
+- Step 6b eval-spec markdown at
+  `evals/agents-cli-dispatch-hygiene/eval.md` is present, untouched by Step 6c,
+  and conforms to the Step 6a contract § Verification surface (Step 6b).
+- Step 6a contract is present and was the basis for Step 6c's 11 file edits:
+  `git diff` shows the cross-cutting acceptance signals (D1-D4 grep zero;
+  every operator file cites `workflows/agents-cli.md`; no wrapper-script /
+  `disown` / shell-`wait` / trace-poll teaching) satisfied.
+
+Decision: record the codex3-side stdout-capture limitation, do NOT Tier-1
+rewind. Phase 6 advances to Process-tree audit #2 with this DECISIONS entry
+attached. If Process-tree audit #2 marks the missing-echo as `blocking`, the
+orchestrator will Tier-1 rewind and re-dispatch Step 6c.
+
+Bounded exception rule: this applies only to ACR-150 Step 6c invocation
+`c5d7518b-0ea0-47d1-82b8-575ba0189a5b` where `agents trace --json` reports
+`transcript_state: no_locator` and the committed filesystem evidence verifies
+the required Step 6b consumption. It expires at Process-tree audit #2: a
+`blocking` verdict reactivates the normal Tier-1 rewind requirement, while a
+PASS leaves no reusable precedent. The platform hardening destination for the
+stdout/transcript-capture class is ACR-190; no additional ACR-150-specific
+successor ticket is filed unless the audit gate identifies a new systemic
+capture-policy gap outside ACR-190's scope.
+
+Evidence: `${scratch_dir}/logs/acr-150-phase-6c.log` (truncated to final-
+result message); `agents trace --json c5d7518b-0ea0-47d1-82b8-575ba0189a5b`
+(reports `transcript_state: no_locator`); `git status` showed the 11 expected
+guidance files modified during Step 6c; the review commit tracks
+`evals/agents-cli-dispatch-hygiene/eval.md` as the durable eval-spec artifact.

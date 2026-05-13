@@ -177,9 +177,8 @@ Format:
 ```
 
 Launch:
-```bash
-agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" \
-  > "$WORK_DIR/result-framework.md" 2>&1 &
+```python
+Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" 2>&1 | tee "$WORK_DIR/result-framework.md"', run_in_background=True, description="Run FastAPI framework facet")
 ```
 
 #### 1b. Service / Controller / Repository Architecture (`claude-opus`)
@@ -230,9 +229,8 @@ Format:
 ```
 
 Launch:
-```bash
-agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" \
-  > "$WORK_DIR/result-architecture.md" 2>&1 &
+```python
+Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" 2>&1 | tee "$WORK_DIR/result-architecture.md"', run_in_background=True, description="Run FastAPI architecture facet")
 ```
 
 #### 1c. State & Concurrency (`claude-opus`)
@@ -284,9 +282,8 @@ Format:
 ```
 
 Launch:
-```bash
-agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" \
-  > "$WORK_DIR/result-state.md" 2>&1 &
+```python
+Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" 2>&1 | tee "$WORK_DIR/result-state.md"', run_in_background=True, description="Run FastAPI state facet")
 ```
 
 #### 1d. Pydantic & API Contracts (`claude-opus`)
@@ -339,9 +336,8 @@ Format:
 ```
 
 Launch:
-```bash
-agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" \
-  > "$WORK_DIR/result-pydantic.md" 2>&1 &
+```python
+Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" 2>&1 | tee "$WORK_DIR/result-pydantic.md"', run_in_background=True, description="Run FastAPI Pydantic facet")
 ```
 
 #### 1e. Testing & Observability (`claude-opus`)
@@ -393,14 +389,12 @@ Format:
 ```
 
 Launch:
-```bash
-agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" \
-  > "$WORK_DIR/result-testing.md" 2>&1 &
+```python
+Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" 2>&1 | tee "$WORK_DIR/result-testing.md"', run_in_background=True, description="Run FastAPI testing facet")
 ```
 
-**Wait for all five** to finish:
+`~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule for these facet launches. After all five task notifications arrive, collect the result files:
 ```bash
-wait
 ls -la "$WORK_DIR"/result-*.md
 ```
 

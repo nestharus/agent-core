@@ -217,7 +217,7 @@ Format:
 
 Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
 
-**Run all three in parallel** (background bash commands or parallel Agent tool calls). Wait for all to complete before proceeding.
+**Run all three in parallel** as separate Bash tool invocations with `run_in_background=True`, following `~/ai/workflows/agents-cli.md`. Collect the three results after their task notifications arrive.
 
 ### Phase 2: Research Verification (`gpt-high`, parallel with Phase 1)
 
@@ -285,16 +285,13 @@ report to \`$WORK_DIR/TEST_AUDIT_GATE.md\` with the first line being
 \`Verdict: PASS\`, \`Verdict: PARTIAL\`, or \`Verdict: FAIL\`.
 EOF
 
-agents -a ${agents_dir}/test-audit-gate.md -p "$PROJECT_DIR" \
-  -f "$WORK_DIR/test-audit-kickoff.md" \
-  > "$WORK_DIR/TEST_AUDIT_GATE.md" 2>&1 &
-TEST_AUDIT_PID=$!
+Bash(command='agents -a ${agents_dir}/test-audit-gate.md -p "$PROJECT_DIR" -f "$WORK_DIR/test-audit-kickoff.md" 2>&1 | tee "$WORK_DIR/TEST_AUDIT_GATE.md"', run_in_background=True, description="Run PR test-audit gate")
 ```
 
 The gate writes its own per-audit prompt/result files into `$WORK_DIR`
 (`TEST_AUDIT_SPEC.*`, `TEST_AUDIT_QUALITY.*`, `TEST_AUDIT_COVERAGE.*`) and a
-synthesized `TEST_AUDIT_GATE.md`. Wait for the PID alongside the three risk
-PIDs.
+synthesized `TEST_AUDIT_GATE.md`. Collect it alongside the three risk sibling
+results only after Bash task notifications arrive.
 
 `PASS | FAIL | PARTIAL` verdict appears at the top of `TEST_AUDIT_GATE.md`.
 Both `FAIL` and `PARTIAL` block the gate — combined with Phase 1 they
