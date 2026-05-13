@@ -2640,3 +2640,45 @@ result message); `agents trace --json c5d7518b-0ea0-47d1-82b8-575ba0189a5b`
 (reports `transcript_state: no_locator`); `git status` showed the 11 expected
 guidance files modified during Step 6c; the review commit tracks
 `evals/agents-cli-dispatch-hygiene/eval.md` as the durable eval-spec artifact.
+
+## D-2026-05-13-acr187-phase-2.5-pre-resolutions
+
+**Date**: 2026-05-13
+**WU**: ACR-187 (pr-writer plain-terms product summary)
+**Phase**: 2.5
+
+Per work-manager-operator dispatch instructions for ACR-187, the routine Phase 2.5 gates were pre-resolved:
+
+- Narrow-vs-exhaustive (`skip_problem_map_gate=true`): proceed exhaustive.
+- Defer-to-prototype: proceed exhaustive. WU-level risk verdict is HIGH (5 of 8 touched surfaces), but the HIGH scoring is driven entirely by `Coverage gap=HIGH` for the new prompt-contract rules and the new structural verifier — both implemented directly in Phase 6. Only 1 of 5 defer signals fired; the 2-of-5 mandate for offering the defer option was not met.
+- Mid-pipeline drift: proceed + note as residual.
+- Policy-retracted residual-acceptance: HIGH verdicts here are not intrinsic structural; the verifier returns `Coverage gap` to LOW post-implementation.
+- Inherited-estimate cold-start (`estimate_source=missing`): proceed without baseline. Phase 3 refines estimate explicitly; Phase 8.X calibrates actual.
+
+**Evidence**:
+- `/home/nes/projects/ai/planning/acr-187-pr-writer-plain-terms-product-summary/risk/acr-187-risk-profile.md`
+- `/home/nes/projects/ai/planning/acr-187-pr-writer-plain-terms-product-summary/audit-history.md`
+
+## D-2026-05-13-acr187-tier-1-rewind-step6c
+
+**Date**: 2026-05-13
+**WU**: ACR-187
+**Phase**: 6c
+
+**Decision**: Tier-1 rewind. Reset worktree to master (= origin/master). Re-do Step 6b + Step 6c.
+
+**Why**: Phase 6 process-tree audit #2 returned FAIL with blocking violation `PTA-ACR187-P6-001` — the initial Step 6c code-writer log (`acr-187-phase-6c-code-writer.log`, invocation `2d2b3906-5114-4597-be26-5e46f5130a8f`) is missing the required first-line `consumed:` echoes for the Step 6b output index and the Step 6b test file. Per `~/ai/conventions/workflow-execution-violations.md`, this is a Tier-1 violation. Per the orchestrator's escalation policy, the autonomous remedy is to rewind and re-attempt the failed phase from clean state.
+
+**Evidence preserved**:
+- `${planning_dir}/.scratch/pre-rewind-snapshot/` — pre-rewind copies of `tools/acr-187-verify/{verify.py, test_verify.py, anchors.json}`, `agents/pr-writer.md`, and `DECISIONS.md`. These are historical-evidence-only and MUST NOT be restored as canonical state.
+- `${planning_dir}/audit-history.md` — Rounds 1-7 documented.
+- `${planning_dir}/code-quality/acr-187-component.round1..5-snapshot/` — historical CQ rounds.
+
+**Post-rewind plan**:
+1. `git reset --hard master` on the branch (no remote push needed; branch was never pushed).
+2. Restore `DECISIONS.md` after the reset (this file IS tracked + intentional + product of Phase 2.5 decisions before Phase 6c).
+3. Re-dispatch Step 6b test-writer; preserved test contract anchors.
+4. Re-dispatch Step 6c code-writer with stricter prompt enforcing the first-line `consumed:` echoes.
+5. Re-run per-component CQ + process-tree audit #2.
+
+This rewind preserves planning artifacts (contracts, proposals, problem map, audit history) which were correctly produced under full compliance.

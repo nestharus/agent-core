@@ -41,6 +41,13 @@ This remains the production implementation PR writer. Prototype proof-bundle PRs
 
 These are not preferences; violations will be rejected.
 
+### What this means
+
+Every PR body must start with `## What this means` as the first content section.
+Write 1-3 sentences in plain language for a non-technical reviewer with zero technical context.
+This section must not include code references, code paths, agent names, phase numbers, planning phases, auditor verdicts, gate language, scratch or planning paths, or internal jargon.
+For routine refactor work, use plain framing such as routine refactor or no user-visible change rather than inventing product value.
+
 ### No internal jargon
 
 Forbidden vocabulary in the description (the body and the title):
@@ -82,6 +89,10 @@ Pointing at code files in the repo (e.g., `backend/main/windows_update_manager.p
 Most PRs read well with this skeleton (use only the sections that apply):
 
 ```markdown
+## What this means
+
+(1-3 sentences in plain language.)
+
 ## What's broken
 
 (One or two short paragraphs describing the actual failure or gap a user/operator/CI would observe. Concrete: error messages, log lines, page elements, observable symptoms. Avoid handwaves. Avoid "wave-N integration shows ..." framing.)
@@ -107,12 +118,29 @@ Most PRs read well with this skeleton (use only the sections that apply):
 (Explicit anti-scope. Helps reviewers stop pulling on adjacent threads.)
 ```
 
-Stack PRs add one section near the top:
+Stack PRs add `## Stacking` only after `## What this means`, so the plain-terms section remains first:
 
 ```markdown
 ## Stacking
 
 This PR's review base is **#<num>**. Merge that first; this PR's diff is a clean delta against `main` afterward.
+```
+
+### Worked example
+
+```markdown
+## What this means
+
+This PR makes generated pull request descriptions easier for reviewers to understand before they reach technical details.
+It keeps the opening short and focused on the product outcome.
+
+## What this PR does
+
+- Adds a required opening section to the production PR body guidance.
+
+## Verification
+
+- Ran the structural verifier.
 ```
 
 ### Linear close-keyword footer
@@ -144,10 +172,14 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
    - For a commit SHA: `git -C ${repo_root} merge-base --is-ancestor <sha> origin/main` — must succeed. If not, drop it.
 4. Verify any `stack_parent_pr`:
    - `gh pr view <stack_parent_pr> --json state,headRefName` — must be `OPEN`, and `headRefName` must equal the value of `${base}`. If not, return `BLOCKED:invalid-stack-parent`.
-5. Compose the title and body following the rules above. Use the recommended skeleton or skip sections that don't apply. If `linear_issue_keys` is supplied, normalize the explicit input, drop JIRA-shaped keys, deduplicate accepted Linear keys, and append the close-keyword footer only after the reviewer-facing prose sections.
+5. Compose the title and body following the rules above. Compose the `## What this means` section before all technical content, including stack, verification, out-of-scope, and footer content. Use the recommended skeleton or skip sections that don't apply. If `linear_issue_keys` is supplied, normalize the explicit input, drop JIRA-shaped keys, deduplicate accepted Linear keys, and append the close-keyword footer only after the reviewer-facing prose sections.
 6. Self-audit before writing the output:
    - Title: scan for forbidden vocabulary. Reject and rewrite.
    - Title: scan for `Closes <KEY>` or any close-keyword form. Reject and rewrite.
+   - Body: the first Markdown heading, first content section, and first H2 must be `## What this means`.
+   - Body: the `## What this means` section must be 1-3 sentences.
+   - Body: the `## What this means` section must contain no code references, code paths, agent names, phase numbers, planning phases, auditor verdicts, gate language, internal jargon, scratch paths, or planning paths.
+   - Body: for a routine refactor, use routine refactor or no user-visible change framing instead of inventing product value.
    - Body: scan for `wave`, `Slot`, `Cluster`, `WU-`, `phase`, `integration`, `pipeline`, `gate`, `audit`, `DECISIONS`, `RCA` — each must be either absent or used as a literal product-concept noun with an inline definition.
    - Body: scan for `planning/` and `~/projects/` and `${scratch_dir}` paths. Reject and rewrite.
    - Body: scan for any PR number that isn't `${stack_parent_pr}` or a verified `merged_refs` member. Reject the unverified citation.

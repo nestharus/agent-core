@@ -1,0 +1,132 @@
+{
+  "operator_path": "agents/pr-writer.md",
+  "regions": {
+    "audience_rules": {
+      "start_pattern": "^## Required Audience Rules\\s+[\\-\\u2014]+\\s+ABSOLUTE\\s*$",
+      "end_pattern": "^## Recommended Body Structure\\s*$"
+    },
+    "audience_what_this_means_subsection": {
+      "start_pattern": "^### What this means\\s*$",
+      "end_pattern": "^### No internal jargon\\s*$",
+      "within": "audience_rules"
+    },
+    "recommended_body_structure": {
+      "start_pattern": "^## Recommended Body Structure\\s*$",
+      "end_pattern": "^### Linear close-keyword footer\\s*$"
+    },
+    "procedure": {
+      "start_pattern": "^## Procedure\\s*$",
+      "end_pattern": "^### Existing-PR title/body edit\\s*$"
+    },
+    "worked_example": {
+      "start_pattern": "^### Worked example\\s*$",
+      "end_pattern": "^(?:### Linear close-keyword footer|## Procedure)\\s*$",
+      "within": "recommended_body_structure"
+    }
+  },
+  "checks": [
+    {
+      "name": "audience_rule_what_this_means",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_all",
+      "needles": ["`## What this means`"]
+    },
+    {
+      "name": "audience_rule_first_content_section",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_all",
+      "needles": ["first content section"]
+    },
+    {
+      "name": "audience_rule_one_to_three_sentences",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_all",
+      "needles": ["1-3 sentences"]
+    },
+    {
+      "name": "audience_rule_plain_language",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_any",
+      "needles": ["plain language", "non-technical reviewer", "zero technical context"]
+    },
+    {
+      "name": "audience_rule_forbidden_content",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_all",
+      "needles": ["code references", "code paths", "agent names", "phase numbers", "planning phases", "auditor verdicts", "gate language", "scratch or planning paths", "internal jargon"]
+    },
+    {
+      "name": "audience_rule_routine_refactor",
+      "region": "audience_what_this_means_subsection",
+      "operator": "contains_all",
+      "needles": ["routine refactor", "no user-visible change", "inventing product value"]
+    },
+    {
+      "name": "body_structure_first_section",
+      "region": "recommended_body_structure",
+      "operator": "first_fenced_block_starts_with",
+      "heading": "## What this means"
+    },
+    {
+      "name": "body_structure_technical_sections_follow",
+      "region": "recommended_body_structure",
+      "operator": "regex",
+      "pattern": "```markdown\\s*\\n## What this means[\\s\\S]*## What's broken[\\s\\S]*## What this PR does"
+    },
+    {
+      "name": "body_structure_stacking_after",
+      "region": "recommended_body_structure",
+      "operator": "regex",
+      "pattern": "`## Stacking`[\\s\\S]{0,160}after[\\s\\S]{0,160}`## What this means`"
+    },
+    {
+      "name": "worked_example_present",
+      "region": "worked_example",
+      "operator": "contains_all",
+      "needles": ["### Worked example", "```markdown"]
+    },
+    {
+      "name": "worked_example_starts_with_chosen_heading",
+      "region": "worked_example",
+      "operator": "first_fenced_block_starts_with",
+      "heading": "## What this means"
+    },
+    {
+      "name": "worked_example_no_internal_jargon",
+      "region": "worked_example",
+      "operator": "not_contains_all",
+      "forbidden_needles": ["planning/", "~/projects/", "${scratch_dir}", "phase", "audit", "gate", "DECISIONS", "WU-", "wave"],
+      "forbidden_patterns": ["#[0-9]{3,}"]
+    },
+    {
+      "name": "procedure_compose_first",
+      "region": "procedure",
+      "operator": "contains_all",
+      "needles": ["Compose the `## What this means` section before all technical content", "stack", "verification", "out-of-scope", "footer"]
+    },
+    {
+      "name": "procedure_self_audit_first_heading",
+      "region": "procedure",
+      "operator": "contains_all",
+      "needles": ["first Markdown heading", "first content section", "first H2", "`## What this means`"]
+    },
+    {
+      "name": "procedure_self_audit_length",
+      "region": "procedure",
+      "operator": "contains_all",
+      "needles": ["the `## What this means` section must be 1-3 sentences"]
+    },
+    {
+      "name": "procedure_self_audit_forbidden_content",
+      "region": "procedure",
+      "operator": "contains_all",
+      "needles": ["code references", "code paths", "agent names", "phase numbers", "planning phases", "auditor verdicts", "gate language", "internal jargon", "scratch paths", "planning paths"]
+    },
+    {
+      "name": "procedure_self_audit_routine_refactor",
+      "region": "procedure",
+      "operator": "contains_all",
+      "needles": ["routine refactor", "no user-visible change", "inventing product value"]
+    }
+  ]
+}
