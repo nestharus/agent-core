@@ -107,6 +107,23 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `prototype-rca-orchestrator` - Run the light two-agent prototype RCA loop for one failed behavior test or QA walkthrough observation, then hand back after targeted verification.
   File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?`, `hard_cap?` | Model: `claude-opus`
 
+### Regression Investigation
+
+- `regression-investigator` — Orchestrate one regression-investigation run from incident artifact through commit-history analysis, A1 comparison, pattern audit, synthesis, and ticket handoff.
+  File: [~/ai/agents/regression-investigator.md](agents/regression-investigator.md)
+  Inputs: `incident_artifact_path`, `incident_id`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `ticket_system`, `surface_scope_path`, `investigation_window`, `linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email`
+  Model: `claude-opus`
+
+- `pattern-auditor` — Read-only per-file pattern auditor for regression-enabling code shapes.
+  File: [~/ai/agents/pattern-auditor.md](agents/pattern-auditor.md)
+  Inputs: `surface_path`, `surface_context`, `repo_root`, `planning_dir`, `incident_id`, `incident_artifact_path`, `output_path`
+  Model: `gpt-high`
+
+- `commit-history-analyzer` — Read-only commit-window analyzer for pressure, test accompaniment, review path, shortcut merges, and regression-introduction context.
+  File: [~/ai/agents/commit-history-analyzer.md](agents/commit-history-analyzer.md)
+  Inputs: `investigation_window`, `repo_root`, `planning_dir`, `surface_scope_path`, `regression_introduction_sha`, `fix_sha`, `output_path`
+  Model: `gpt-high`
+
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
@@ -327,6 +344,7 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 
 - Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
 - RCA workflow (full reproduction-first root-cause analysis with four-agent split, verify-or-return, and incident-to-close downstream lifecycle): [`~/ai/workflows/rca.md`](workflows/rca.md)
+- Regression investigation (post-incident codebase-risk archaeology): [`~/ai/workflows/regression-investigation.md`](workflows/regression-investigation.md)
 - Prototype RCA workflow (light two-agent root-cause/fix loop for one failed prototype trigger): [`~/ai/workflows/rca-prototype.md`](workflows/rca-prototype.md)
 - Release management (staged cut/freeze/hotfix/promote/tag/reconcile lifecycle): [`~/ai/workflows/release-management.md`](workflows/release-management.md)
 - Project bootstrap (project-specific operator wrapper open/closed path): [`~/ai/workflows/project-bootstrap.md`](workflows/project-bootstrap.md)

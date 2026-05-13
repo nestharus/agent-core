@@ -132,7 +132,7 @@
         "non_goals": [
           "does not implement fixes, edit child auditors, or replace child auditor procedures",
           "does not redefine A1 or duplicate the convention's rule descriptions",
-          "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md § Phase 4 code-quality gate"
+          "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md \u00a7 Phase 4 code-quality gate"
         ],
         "orchestrator": "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller",
         "outputs": [
@@ -395,6 +395,34 @@
           "history degradation inventory",
           "bounded package plan with gate obligations",
           "handoff inputs for ACR-179 per-package execution"
+        ]
+      }
+    },
+    "regression-investigation": {
+      "path": "workflows/regression-investigation.md",
+      "workflow": {
+        "id": "regression-investigation"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "investigates the codebase conditions around one known regression without replacing RCA, code-quality, audit, or risk-reduction workflows",
+          "dispatches read-only commit-history and pattern-audit children, compares A1 coupling/cohesion evidence at incident commit and trunk, and synthesizes findings",
+          "files or prepares remediation ticket payloads only after findings.json and findings.md are complete"
+        ],
+        "inputs": [
+          "incident_artifact_path, incident_id, surface_scope_path, investigation_window, repo_root, worktree_path, planning_dir, scratch_dir, and ticket_system",
+          "Linear fields linear_team_key and linear_project_id or Jira fields jira_url, jira_project, and jira_account_email",
+          "optional regression_introduction_sha, fix_sha, evidence_dir, current_ref, historical_ref, and max_followup_tickets"
+        ],
+        "non_goals": [
+          "does not run application code, mutate source under audit, redefine A1, replace RCA, replace code-quality, replace audit, or replace risk-reduction",
+          "does not implement remediation tickets inline"
+        ],
+        "orchestrator": "regression-investigator",
+        "outputs": [
+          "regression-investigation artifacts under ${planning_dir}/regression-investigation/<incident_id>/",
+          "child prompt and log artifacts under ${scratch_dir}/prompts/ and ${scratch_dir}/logs/",
+          "NEEDS_INPUT question artifacts under ${scratch_dir}/questions/ or BLOCKED stop-state evidence when required inputs are absent"
         ]
       }
     },
