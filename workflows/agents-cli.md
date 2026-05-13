@@ -98,9 +98,20 @@ Every branch-work or tracked-file-mutating agent runs in a worktree, regardless 
 
 For agents expected to run longer than about 30 seconds:
 
-- Dispatch with the orchestrator's background-execution mode.
-- Do not poll continuously; wait for the completion notification.
-- Capture the task or process id so the output can be retrieved afterward.
+- Dispatch with the orchestrator's background-execution mode, one Bash tool call per child.
+- Canonical long-running shape:
+  ```python
+  Bash(
+      command="agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>",
+      run_in_background=True,
+      description="Run <child role>"
+  )
+  ```
+- Do not use shell job control or custom watcher machinery for `agents` dispatches. Forbidden patterns: trailing shell `&`, `disown`, bundled wrapper scripts around multiple `agents` calls, shell `wait` after `agents` fanout, PID-capture plus PID waits around `agents` invocations, trace polling loops as the waiting primitive, and piping live `agents` stdout through truncating filters such as `head -N` or `grep -m1`.
+- The forbidden trace-loop class includes repeated `agents trace --json` inspection used to decide when a child is complete.
+- Do not poll continuously; use the Bash task completion notification.
+- Capture the Bash tool task id so the output can be retrieved afterward; do not capture shell `$!` PIDs around `agents` invocations.
 - Keep the `tee` log path stable so post-mortem inspection does not depend on terminal scrollback.
+- `agents trace --json` is for post-run inspection, audit evidence, session topology, and eval input. It is not the active completion-wait primitive for a running child.
 
-For parallel risk gates, dispatch all rounds in parallel, then collect outputs sequentially.
+For parallel risk gates, dispatch all rounds as separate Bash-background tool calls, then collect outputs sequentially after their task notifications arrive.
