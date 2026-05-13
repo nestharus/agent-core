@@ -2426,3 +2426,100 @@ Phase: 2.5
 Decision: The duplicates inventory found that `~/ai/agents/test-writer.md:38` currently states "Inline test data only. Python dicts inline, no fixture files," which directly contradicts the ACR-136 rule and the existing `workflows/implementation-pipeline.md` allowance for dedicated fixture modules. Disposition: do not block the pipeline (Work Manager pre-resolution: mid-pipeline drift = "proceed + note in DECISIONS as residual"). Phase 3 will reconcile the wording in `test-writer.md` as part of the proposal — replacing the "no fixture files" line with the canonical distinction between inline behavior-specific input data and external setup/harness state, cited from `conventions/testing.md`.
 
 Evidence: `/home/nes/projects/ai/planning/acr-136-test-setup-external-to-test/research/acr-136-duplicates.md` (Contradictions section, citing `agents/test-writer.md:38`).
+
+## D-2026-05-12-acr142-phase-0-pre-resolutions
+
+WU: ACR-142
+Phase: 0
+Decision: Apply work-manager-operator pre-resolutions for Phase 2.5 gates:
+- Narrow-vs-exhaustive: default A — proceed exhaustive.
+- Defer-to-prototype: default A — proceed exhaustive (no prototype detour).
+- Mid-pipeline drift: default A — proceed + note residual in DECISIONS.
+- Residual-acceptance policy: max-alignment, no shortcuts. Architectural refactor over extended residuals if HIGH verdicts are intrinsic structural.
+
+Evidence: /home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/.scratch/dispatch-prompt.md.
+
+## D-2026-05-12-acr142-inherited-estimate-cold-start-auto-resolved
+
+WU: ACR-142
+Phase: 0/2.5
+Decision: Auto-resolve the Phase 2.5 step 4a inherited-estimate cold-start to "Proceed without a baseline estimate" — no prototype detour. The Linear ticket has `story_point_estimate: null` and `estimate_source: missing`. The work-manager-operator dispatch pre-resolved the defer-to-prototype family of gates with default A ("proceed exhaustive"); the cold-start question is the same family. Phase 3 will emit a refined estimate with `inherited_story_point_estimate: null`.
+
+Evidence: `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/.scratch/ticket.md` (frontmatter `estimate_source: missing`).
+
+## D-2026-05-12-acr142-phase-2.5-gate-skipped
+
+WU: ACR-142
+Phase: 2.5
+Decision: Problem-map approval gate skipped per `skip_problem_map_gate=true`. Defer-to-prototype detection ran: only 1/5 signals fires (risk profile rolls up HIGH on all 8/8 touched surfaces; the other four signals — sprawling duplicates, operational-only lifecycle, multi-WU characterization tests, multi-site implicit cross-language contracts — do not fire). The defer prompt is NOT emitted (requires 2+ signals). These are Phase 2.5 risk-profile HIGHs intrinsic to the nature of this WU (authoring a new workflow / new operator / new structural verifier from scratch, plus cross-references in seven existing workflow/agent surfaces) and do not, by themselves, imply a Phase 4 architectural-refactor mandate. Phase 3 will resolve each HIGH by producing the workflow, the operator, and the structural verifier surfaces; the residual policy (max-alignment, no shortcuts) is honored by Phase 3 designing a single coherent surface rather than seeking to defer the structural test or the operator.
+
+All surfaces propagate as `exhaustive` mode per the work-manager pre-resolution. WU proceeds to Phase 3.
+
+Evidence: `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/risk/acr-142-risk-profile.md` (Per-surface verdicts table, WU-level rollup verdict, Mode propagation map).
+
+## D-2026-05-12-acr142-phase-4-scope-risk-medium-accepted
+
+WU: ACR-142
+Phase: 4 (round 6)
+Decision: Accept Phase 4 scope-risk MEDIUM as documented residual. The strict "all four risk gates must return LOW" rule is relaxed for this WU by user authorization (answer A on `q-d7b7d550-4034-4d86-a63f-25d6eef8d10f`).
+
+Policy chain:
+1. Round-1 Phase 4 code-quality returned HIGH with 3 cohesion + 6 coupling HIGH findings (CQ-F01–CQ-F09).
+2. User policy "max-alignment, no shortcuts; if HIGH verdicts are intrinsic structural, do the architectural refactor" required architectural decomposition rather than residual acceptance of the code-quality HIGH.
+3. The refactor split the singular ticket-named "operator file" into orchestrator + 4 children (contract-validator, screenshot-uploader, packager, proof-bundle-adapter) and the singular "structural test" into 9 module files under `tools/acr-142-verify/`.
+4. The decomposition closes CQ-F01–CQ-F09 but raises operator and verifier surface count above the literal ticket Acceptance plain text — scope-risk MEDIUM with F1 (operator expansion) and F2 (verifier expansion).
+5. The scope-risk auditor explicitly validates every expansion as functionally justified by the architectural-refactor mandate; no anti-scope breached, no sibling behavior changed, no new test framework demanded, every ticket Acceptance bullet remains satisfied at the user-facing level (`risk/acr-142-scope.md` F3, F4, F5, F7).
+6. Shrinking to reduce scope-risk MEDIUM re-introduces CQ-F01–CQ-F09 HIGH (mutually exclusive with policy 1+2).
+7. Tier-2 split is rejected: 23 SP is a single-WU magnitude, not the AGE-4 80 SP split precedent. Splitting would add coordination overhead without reducing surface count.
+
+Category distinction from ACR-156/162/163 retracted residual-acceptance precedents: those retractions targeted code-quality (cohesion/coupling/function-classification/push-pull) MEDIUM verdicts accepted instead of remediated. Scope-risk is a different category — proposal scope vs literal ticket-acceptance text. The Phase 4 code-quality aggregate for this WU is the live signal for residual-acceptance posture, and remains to be re-run after the round-6 LOW reports replace the round-1 HIGH.
+
+Disposition: scope-risk MEDIUM is accepted as documented residual. Proceed to Phase 4 code-quality gate, then Phase 4 join manifest, Process-tree audit #1, and Phase 5+.
+
+Evidence:
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/.scratch/questions/q-d7b7d550-4034-4d86-a63f-25d6eef8d10f.question.json` (answer A with rationale).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/risk/acr-142-scope.md` (round-6 MEDIUM with F1/F2 findings and structural-irreducibility rationale).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/audit-history.md` lines 31–43 (round-1 code-quality HIGH) and lines 95–109 (round-5/6 scope MEDIUM origin).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/proposals/acr-142-ACR-142.md` (round-6 proposal Anti-scope tightening and audit-traceability annotations).
+
+## D-2026-05-12-acr142-phase-4-code-quality-high-external-contract-residual-accepted
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr142-phase-4-code-quality-high-external-contract-residual-accepted
+
+**Linear ticket**: ACR-142 (this WU)
+
+**Cross-linked follow-up tracker**: ACR-192 — `coupling-auditor A1 does not model the adapter pattern (metric-gap follow-up)` — https://linear.app/neshq/issue/ACR-192/coupling-auditor-a1-does-not-model-the-adapter-pattern-metric-gap
+
+**Phase**: Phase 4 round 7 (post-question `q-816148ed-8c38-442d-9c54-7193500c8c66` answer A)
+
+**Decision**: Accept the eight Phase 4 round-7 code-quality HIGH coupling findings (CQ-F03, CQ-F04, CQ-F05, CQ-F07, CQ-F12, CQ-F13, CQ-F15, CQ-F17) as a **new documented-residual category — external-contract-driven coupling on adapter and contract-enforcement surfaces**. The strict "Phase 4 code-quality LOW required" gate threshold is relaxed for this WU by user authorization. CQ-F01 and CQ-F02 were fixed in the round-7 proposal-revision pass (adapter declared roles tightened to `parser, orchestration`; `verify.py` reduced to orchestration-only with CLI parsing moved into `parse.py`); cohesion is now LOW.
+
+Policy chain extending `D-2026-05-12-acr142-phase-4-scope-risk-medium-accepted`:
+1. Round-6 architectural refactor closed the round-1 cohesion/coupling HIGH set by isolating writer + RCA contracts behind adapter/envelope boundaries (per proposal `### prototype-validation-proof-bundle-adapter.md` and `### tools/acr-142-verify/`).
+2. Round-7 code-quality re-measurement returned LOW cohesion but HIGH coupling on every adapter / contract-enforcement surface in the refactor. Auditor's own caveat (`code-quality/acr-142-phase-4/reports/coupling-auditor.md:86`): *"The proposal intentionally isolates high-count writer and RCA contracts behind adapter/envelope boundaries. That improves top-level architecture, but A1 is a per-pair external-reference count. Adapter-to-writer and orchestrator-to-RCA remain HIGH under the bound metric."*
+3. The eight HIGH findings are driven by externally defined contracts the ticket Anti-scope forbids changing:
+   - CQ-F03 + CQ-F07 (RCA): workflow→RCA and orchestrator→RCA reference counts equal the size of the existing `~/ai/workflows/rca-prototype.md` six-field handback envelope (`outcome, failure_id, iterations, fix_artifact_path, evidence_paths, handback_callback{workflow_id, phase_to_resume, parent_run_id}`). Reducing them re-introduces round-2 AR-F01 (RCA envelope contradiction) HIGH.
+   - CQ-F13 (PR writer): adapter→prototype-pr-writer count equals the existing `~/ai/agents/prototype-pr-writer.md` 7-input requirement. The adapter exists precisely to translate `proof_bundle_path` into those 7 inputs (round-4 AR-F06 + round-6 architectural decision). Reducing it re-introduces round-2 AR-F02 (proof-bundle-vs-7-inputs contradiction) HIGH.
+   - CQ-F04, CQ-F05 (handoff manifests): workflow→screenshot-uploader and workflow→proof-bundle-adapter reference counts are the manifest field shapes the workflow declares to its child operators. The standard A1 reduction is to introduce a smaller named contract per pair, but every smaller name is itself an externally named contract surface; reduction is possible only by adding more named contract surfaces.
+   - CQ-F12 (packager): the packager owns image tag, zip path, eval branch, package manifest, proof bundle, screenshot URL manifest, cleanup report, and cleanup scope (8 anchors). Splitting the packager re-introduces CQ-F01/F02-class cohesion HIGH.
+   - CQ-F15, CQ-F17 (structural verifier): `check_child_operators.py` and `check_writer_links.py` exhaustively enumerate the four child-operator surfaces and the seven writer-input mapping anchors. These verifiers exist to enforce those external contracts as the ticket Acceptance demands; reducing their reference count means dropping the structural enforcement the ticket requires.
+4. The auditor metric (A1, per-pair external-reference count) does not model the adapter pattern. The same metric gap was observed on ACR-180 (cohesion-auditor adapter modeling) and is now filed as a separate metric-gap follow-up tracker ticket: **ACR-192**. Filing the follow-up captures the design requirements for a future `coupling-auditor` revision without blocking this WU.
+
+**Category distinction from prior precedents**:
+- ACR-156/162/163 retracted residual-acceptance precedents: those retractions targeted code-quality MEDIUM/HIGH where the surface boundary was **inside the WU**; the residual could be remediated by additional WU work and was withdrawn precisely because remediation was in-scope.
+- ACR-142 Phase 4 round-7 code-quality HIGH: the surface boundary is **across an external contract** (RCA, prototype-pr-writer, packager artifact surfaces, child-operator enforcement). Remediation requires changing those external contracts, which the ticket's own Anti-scope explicitly forbids ("Do not change sibling workflow behavior; preserve prototype-pr-writer's 7 required inputs; the workflow does not replace the implementation-pipeline for production code"). Residual acceptance here is not a withdrawal of the discipline that closed ACR-156/162/163; it is a category the prior precedents did not address.
+- `D-2026-05-12-acr142-phase-4-scope-risk-medium-accepted` (scope-risk MEDIUM): different category again — proposal-scope vs literal ticket-acceptance text. The code-quality HIGH here is a third distinct category.
+
+Disposition: Phase 4 round-7 code-quality HIGH is accepted as documented residual. Cohesion is LOW. Proceed to Phase 4 join manifest, Process-tree audit #1, and Phase 5+. The strict gate threshold is relaxed for this WU only and only against the enumerated eight findings; any new HIGH that arises later (Phase 6 per-component fanout, Phase 8 PR-review, etc.) gets evaluated on its own merits and is NOT pre-accepted by this entry.
+
+Evidence:
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/.scratch/questions/q-816148ed-8c38-442d-9c54-7193500c8c66.question.json` (answer A with rationale).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/code-quality/acr-142-phase-4/aggregate-code-quality.md` (round-7 HIGH with cleared CQ-F01/F02 and structural HIGH set named).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/code-quality/acr-142-phase-4/findings.md` (per-finding residual-acceptance flags).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/code-quality/acr-142-phase-4/reports/coupling-auditor.md:86` (auditor's own caveat that A1 does not credit the adapter pattern).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/code-quality/acr-142-phase-4.round6-snapshot/` (frozen round-6 evidence for comparison).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/audit-history.md` (round-7 entry).
+- `/home/nes/projects/ai/planning/acr-142-prototype-validation-shipping-workflow/proposals/acr-142-ACR-142.md` (round-7 revised proposal lines 14, 17, 161, 178–180, 183).
+- ACR-192 (follow-up tracker ticket for the coupling-auditor adapter-pattern metric gap).

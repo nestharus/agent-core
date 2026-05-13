@@ -12,6 +12,8 @@ Author the title and body of a draft pull request given the branch's diff and a 
 
 The PR description's job is to explain **what this PR does**, **why it does it that way**, and **how to review it** — nothing else. Not the workflow that produced it. Not the chain of prior attempts. Not the local planning trail.
 
+This remains the production implementation PR writer. Prototype proof-bundle PRs use the separate prototype writer path; that distinction does not change this operator's inputs or audience rules.
+
 ## Use When
 
 - A pipeline workflow (e.g., implementation-pipeline-orchestrator's Phase 9) needs to author the body for `gh pr create --draft --body-file ...`.
