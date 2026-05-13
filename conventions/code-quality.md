@@ -130,6 +130,17 @@ Only LOW passes pipeline-callable code-quality gates. `MEDIUM` and `HIGH` block 
 
 This rule is the ACR-156 parent regression disposition and is enforced across all four canonical surfaces: `~/ai/agents/implementation-pipeline-orchestrator.md`, `~/ai/workflows/implementation-pipeline.md`, this convention, and `~/ai/workflows/code-quality.md`.
 
+### Bootstrap exception
+
+A Work Unit whose primary deliverable is itself a change to the code-quality metric, convention, verifier, or auditor surface may, narrowly, advance past a pipeline-callable code-quality gate that scores `MEDIUM` or `HIGH` on the intrinsic lockstep elements that the WU's own change is rewriting. The exception applies only when ALL of the following conditions are met:
+
+1. The WU's primary deliverable fixes or extends the code-quality metric or rule currently scoring the WU non-LOW.
+2. The non-LOW finding is on intrinsic lockstep elements required by the metric / convention / verifier / auditor change itself, not on collateral product code.
+3. The post-merge codebase satisfies the new rule under the new metric — i.e. once the WU lands, the same audit on the new tree returns LOW.
+4. The exception is declared in Phase 3 of `~/ai/workflows/implementation-pipeline.md` and ratified in the Phase 4 join manifest as a `bootstrap-exception` row marked `RATIFIED`, with a corresponding `### <ticket-id> — Bootstrap exception ratification` entry in `${worktree_path}/DECISIONS.md` citing this subsection.
+
+This is the ONLY local carve-out from the LOW-only rule above. Ordinary residual acceptance, `NEEDS_INPUT` user choice, stable-allow-advance, or any manager-flavor / root / DECISIONS-only acceptance of a non-LOW pipeline-callable code-quality verdict remains forbidden under `~/ai/conventions/workflow-execution-violations.md` § `Named anti-pattern: Non-LOW gate residual acceptance`. Missing the Phase 3 declaration, missing the DECISIONS ratification entry, missing the citation to this subsection, or missing the Phase 4 join-manifest `bootstrap-exception` row marked `RATIFIED` falls through to the LOW-only blocking rule above.
+
 ### Oscillation signals WU-too-large
 
 After two consecutive rounds that do not converge to `LOW`, the Work Unit is too large for the current grain and must decompose instead of attempting a third remediation pass. Decompose is autonomous, not `NEEDS_INPUT`-mediated; the caller records the oscillation evidence and opens the smaller WU path required by the owning workflow.
@@ -170,3 +181,4 @@ It also does not replace project-local architecture rules. A project may have st
 - `~/ai/workflows/implementation-pipeline.md` § Step 2.5.4 and § Phase 3 - duplicate-systems inventory plus cascade/consolidate/accept handling.
 - `~/ai/conventions/agent-questions-and-session-graph.md` § Pull-vs-Push Policy - terminology disambiguation only.
 - `~/ai/agents/push-pull-auditor.md` - A4 / NES-140 enforcement surface for the `Push-vs-pull system coupling` rule and `uncontrolled-source coupler` findings; this is a forward pointer only and does not change this convention's rule text, failure modes, numerical thresholds, or policy-only status.
+- `~/ai/conventions/workflow-execution-violations.md` § `Named anti-pattern: Non-LOW gate residual acceptance` - the forbidden baseline this convention's `### Bootstrap exception` is narrowly carved from; manager / root / DECISIONS-only acceptance of a non-LOW pipeline-callable code-quality verdict remains a blocking gate/termination violation outside the four-condition path declared and ratified per § `Bootstrap exception`.
