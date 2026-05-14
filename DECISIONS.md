@@ -3245,3 +3245,45 @@ Same precedent the user has accepted across WU history:
 ### Process-tree audit #2 consumption
 
 The Phase 6 process-tree audit #2 reads this DECISIONS entry, the question artifact (with status `answered`, option `A`), and the synthetic consumed-evidence artifact as companion evidence. The audit treats the Step 6c stdout echo gap as documented residual under this disposition rather than as a fresh BLOCKING finding.
+
+## D-2026-05-14-acr149-phase7-coderabbit-pr-first-reorder
+
+**Date**: 2026-05-14
+**WU**: ACR-149
+**Phase**: Phase 7 (CodeRabbit loop) → Phase 9 (reordered)
+
+### Observation
+
+Phase 7 CodeRabbit CLI is in extended outage. Two `coderabbit-operator` dispatch sessions (R1 invocation `1449a91c-f01e-4563-8bbf-3b87dada1336`; R2 invocation `5ab88f13-270c-4c7f-8789-f011de48745b`) cumulatively recorded 6 setup-stage timeouts across pass-1 attempts — every `coderabbit review --plain --base master` invocation hangs at "Setting up" and returns `❌ TIMEOUT ERROR: Review timed out` before any findings emit. Direct probes from the orchestrator (`timeout 480 coderabbit review --plain --base master`) confirm the persistent hang. `coderabbit auth status` returns clean (logged in as github/nestharus). The CodeRabbit endpoints respond at the HTTPS layer; the failure is specifically at the review-setup stage of the CLI path.
+
+### Decision
+
+**Apply the ACR-193 same-day option-D precedent**: reorder Phase 9 steps 1-6 early (push branch, dispatch `pr-writer`, `gh pr create --draft`, update session manifest, post ticket cross-link comment) so the GitHub-App CodeRabbit can run on the PR diff. Phase 7 is NOT skipped — option D only reorders the dispatch path. Resume the Phase 7 review loop against the GitHub-App's PR-side findings before Phase 8.X / Phase 9 finish.
+
+### Rationale
+
+1. The CLI `coderabbit review --plain` and the GitHub-App CodeRabbit run on different code paths; the CLI outage does not necessarily mean the App is down. ACR-193 D-2026-05-14 (earlier today) documented this distinction and the user resolved it with option D under manager-max disposition.
+2. Same-day WUs ACR-205 PR #142 and AGE-93 PR #88 shipped with CodeRabbit converging successfully — the outage is intermittent at the CLI surface, not total across CodeRabbit. ACR-193 PR-side path is also a precedent for App-side success after CLI failure.
+3. Skipping Phase 7 entirely before confirming the App path is also broken would be a shortcut; the dispatch's "Policy-retracted residual-acceptance: max-alignment, no shortcuts" forbids it.
+4. The Phase 6c work is correct (Phase 6 alignment ALIGNED, Phase 6 per-component code-quality LOW × 4, all 12 pytests pass, `workflow_index check` exits 0); the GitHub-App CodeRabbit run on PR diff is the appropriate substitute review surface.
+
+### Procedural sequencing
+
+- Phase 9 steps 1-6 (draft-PR open + ticket cross-link comment) run before Phase 7 / Phase 8 / Phase 8.X.
+- Wait for GitHub-App CodeRabbit to comment on the PR.
+- Phase 7 resumes as a manual review loop against the App's PR-side findings; apply findings per the loop rules (no force-push, no commit weakening, accepted-residual entries untouched).
+- Phase 8 four PR-review gates + join manifest + process-tree audit #3 run after Phase 7 PR-side review converges.
+- Phase 8.X closure judge runs after Phase 8 clears.
+- Phase 9 finish (`gh pr ready` + `gh pr merge --squash` — master has no branch protection, so direct merge per dispatch policy) waits for Phase 7 + 8 + 8.X to clear.
+- If GitHub-App CodeRabbit also fails to emit comments within a bounded wait, the orchestrator halts with a new NEEDS_INPUT for an outage-skip disposition citing both CLI + App failures.
+
+### Evidence
+
+- Phase 7 R1 BLOCKED audit-history record: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/audit-history.md` § "CodeRabbit loop — Phase 7" / "Pass 1 — BLOCKED (review service unavailable)"
+- Phase 7 R2 BLOCKED log: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/logs/acr-149-phase-7-coderabbit-r2.log`
+- ACR-193 same-day precedent: `/home/nes/projects/ai/worktrees/acr-193-phase9-no-protection-fallback/DECISIONS.md § D-2026-05-14-acr193-phase7-coderabbit-pr-first-reorder` and answered question `q-6855a94e-685d-4b70-8018-1a5846c83e96` (option D, manager-max)
+- Direct service probe: orchestrator-side `timeout 480 coderabbit review --plain --base master` exit code 143 (SIGTERM at 8-min timeout), no findings emitted.
+
+### Effect on Phase 9 contract
+
+Phase 9 step 6 (record draft PR URL in `${scratch_dir}/pr-url.txt` + session manifest update) is the early-entry point. Phase 9 step 7 (ticket cross-link comment) is the early-exit point. The "draft PR is the WU's terminal artifact" contract is preserved; auto-merge remains gated on Phase 7 + 8 + 8.X completion. Per dispatch input `auto_merge_after_phase_9=true` plus `~/ai` master having no branch protection, Phase 9 finish uses direct `gh pr merge --squash <pr_url>` (no `--auto` flag) per the ACR-193 / ACR-191 / ACR-198 / ACR-186 / ACR-205 same-day shipping pattern.
