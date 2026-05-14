@@ -170,8 +170,6 @@ For every WU dispatched via implementation-pipeline-orchestrator:
 
 When ambiguous whether a feature is must-have vs nice-to-have, ask the user explicitly which bucket. Don't strictly serialize — dispatch in parallel where slots allow — but newly-Todo items in a higher priority bucket should jump the queue ahead of already-Todo lower-priority items.
 
-**Memory note.** The manager updates this operator file when the user's prioritization or dispatch rules change. Do not encode operating rules in `~/.claude*/projects/.../memory/` — those are session-local; this file is the canonical, version-controlled source of truth.
-
 ## Delegation Patterns
 
 ### WU-shaped work (code change, operator authoring, workflow authoring)
