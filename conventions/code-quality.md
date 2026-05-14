@@ -124,6 +124,41 @@ A component declared role set is the union of per-file roles the component legit
 - LOW: `agents/implementation-pipeline-orchestrator.md` may touch `orchestration` and `parser` work because `agents/*-orchestrator.md` defaults to declared roles `orchestration`, `parser`.
 - HIGH: an orchestrator surface with actual classifications outside the declared role set fails the declared-role-match metric.
 
+## Adapter declarations
+
+Adapter declarations are the explicit carrier for coupling-aware translation components. They do not extend the declared-role vocabulary above; `adapter` is a coupling role, not a function-classification token.
+
+Carrier shape:
+
+```yaml
+adapter_declarations:
+  - component: path/or/component-name
+    role: adapter
+    Translates:
+      - stable-external-contract-surface
+```
+
+Each `adapter_declarations:` entry names `component`, requires `role: adapter`, and lists `Translates:` as stable external contract surfaces. `Translates:` must contain at least one contract surface; an empty list is malformed. A valid declaration may live inside a `## Adapter declarations` section of a `proposal_path` or `contract_path` artifact.
+
+For declared adapter components, A1 coupling counts distinct external CONTRACTS in `Translates:`, not field references within those contracts. A component declared as translating two stable contracts bridges 2 contracts even if each contract has many fields.
+
+The default adapter threshold is `N = 5` distinct contracts: LOW when the adapter bridges `<= N` named contracts and all external references are subordinate to the declared `Translates:` surfaces; HIGH when it bridges `> N` contracts, when the declaration is malformed, or when the component reaches undeclared external contracts not subordinate to `Translates:`.
+
+A reference is subordinate to a declared `Translates:` contract when it is a field, method, type, symbol, section, or documented operation directly defined by that contract surface. References to contracts not listed in `Translates:` are not subordinate.
+
+Non-adapter coupling keeps the existing raw threshold: LOW `0-2`, MEDIUM `>= 3`, HIGH `>= 6` distinct external symbols/modules. The adapter rule is an opt-in branch for explicitly declared adapter components only; it does not weaken the non-adapter coupling row in `## Numerical thresholds`.
+
+Use adapter declarations for explicit translation components, such as an operator bridging stable contracts. Do not use them for components reaching many unrelated external surfaces dressed up as "adapter"; that is sprawl masquerading as adapter and remains HIGH.
+
+Adapter status MUST be explicit. The component must be named under an `adapter_declarations:` carrier with `role: adapter`; auto-declared or inferred adapters are HIGH.
+
+This convention is canonical for adapter declarations. `~/ai/agents/coupling-auditor.md` mirrors and applies this rule, and edits to the convention and auditor rule must land in lockstep.
+
+## Adapter-declaration examples
+
+- LOW: `agents/prototype-validation-proof-bundle-adapter.md` is declared with `role: adapter` and `Translates:` containing `prototype-validation-proof-bundle` and `agents/prototype-pr-writer.md`. The component bridges 2 stable contracts, and all external references are subordinate to those surfaces.
+- HIGH: `agents/release-and-ticket-sync.md` declares `role: adapter` but lists 6 unrelated contracts in `Translates:`, or reaches Slack, Jira, CI, release manifests, code-quality reports, and workflow internals without declaring those surfaces. The adapter declaration does not apply as LOW because the declaration exceeds `N = 5` or because undeclared external contracts are reached.
+
 ## Disposition policy
 
 Only LOW passes pipeline-callable code-quality gates. `MEDIUM` and `HIGH` block advance, trigger remediation/revise, and require a rerun from current evidence. Neither severity is ever a residual, a `NEEDS_INPUT` user choice, or a "stable" allow-advance state for code-quality / risk-gate / prototype-risk verdicts.

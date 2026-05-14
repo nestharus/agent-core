@@ -2796,3 +2796,142 @@ This is the same systemic stdout-capture limitation ACR-150 recorded for its cod
 - Question artifact (answered C): `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/questions/q-ee677572-fc14-48ef-a46c-58eace794192.question.json`
 - Audit-history rounds 2/3/4 narrative: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/audit-history.md`
 - ACR-154 precedent: PR #138 (commit `8cb380e`), `~/ai/planning/acr-154-regression-investigation-workflow/.scratch/phase6/step6c-consumed-evidence.md` (same file shape).
+
+## D-2026-05-13-acr191-phase-2.5-dispositions
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr191-phase-2.5-dispositions
+
+**Linear ticket**: ACR-191
+
+**Phase**: Phase 2.5 (existing-state risk profile)
+
+### 1. Coverage: 44 named behaviors of `coupling-auditor.md` are entirely uncovered today
+
+**Evidence:** `planning/research/acr-191-coverage-inventory.md`.
+
+**Disposition (historical at Phase 2.5):** proceed without generating redundant characterization tests for the current prompt content before Phase 3 rewrites it. The Phase 6b structural verifier under `~/ai/tools/acr-191-verify/` was originally selected as the canonical test home to pin the new specified state of `coupling-auditor.md` (adapter-aware A1 plus the existing thresholds).
+
+**Superseded by:** `D-2026-05-13-acr191-eval-seed-replaces-verifier-scripts`. The verifier-script path was replaced with `evals/coupling-auditor-adapter/eval.md` as a WRITE-state eval seed. The original characterization-test skip remains valid because the eval seed now records the future behavior contract without reintroducing structural verifier scripts.
+
+**Policy reference:** mid-pipeline-drift pre-resolved as "proceed + note in DECISIONS as residual" by work-manager-operator.
+
+**Residual risk:** if Phase 3 narrows scope such that the existing A1 threshold rule is left untouched, the eval seed must still name the existing 0-2 / >=3 / >=6 row in addition to any new adapter clauses, so the existing behavior is not regressed silently. Phase 4 risk-gate evaluation will re-check this from the proposal.
+
+### 2. Stale Phase 4 integration prose in `coupling-auditor.md:69-73`
+
+**Evidence:** `acr-191-coverage-inventory.md` § Bug-discovery notes. `/home/nes/ai/agents/coupling-auditor.md:69-73` ("ready to be wired … do not claim the current implementation pipeline already dispatches this operator") contradicts `/home/nes/ai/workflows/code-quality.md:123-130` and `/home/nes/ai/workflows/implementation-pipeline.md:354-355`, which DO wire it.
+
+**Disposition:** in-scope for ACR-191 to clean up. Phase 3 may fold a brief update into the proposal because the file is already on the change-path and the prose sits adjacent to the adapter-pattern extension target. No separate tracker ticket; this is "expand scope to fix in this WU" applied without NEEDS_INPUT because the fix is a single-paragraph documentation correction within the WU's existing change-surface.
+
+### 3. Phase 6 per-component code-quality fanout currently excludes `coupling-auditor`
+
+**Evidence:** `acr-191-entrypoints.md`, `acr-191-lifecycle-map.md`. The Phase 6 per-component fanout in `workflows/implementation-pipeline.md` selects cohesion / function-classification / push-pull as required children but not `coupling-auditor`.
+
+**Disposition:** out-of-scope for ACR-191. The Phase 4 code-quality gate DOES include `coupling-auditor` so the A1 metric still runs every WU. The Phase 6 fanout's choice of required children is a separate convention question outside ACR-191's anti-scope. Phase 3 must not enlarge scope to re-wire Phase 6 fanout.
+
+### 4. A1 thresholds duplicated between auditor prompt and convention, not drifted
+
+**Evidence:** `acr-191-duplicates.md`. LOW `0-2`, MEDIUM `>= 3`, HIGH `>= 6` is identical in `agents/coupling-auditor.md:57-59` and `conventions/code-quality.md:141-146`.
+
+**Disposition:** Phase 3 must update BOTH sources of truth in lockstep when adding any adapter-aware clause; the eval seed at `evals/coupling-auditor-adapter/eval.md` MUST assert both. No separate consolidation effort.
+
+### 5. Cross-language trace skipped per workflow rule
+
+**Evidence:** `acr-191-cross-language-trace.md`. No runtime API/file/IPC contract crosses out of the Markdown auditor surface; the later eval-seed pivot also keeps the regression-detection surface markdown-only. Skip recorded explicitly per Phase 2.5 step 2.5.5 skip-recording requirement.
+
+### 6. Inherited estimate: `missing` (cold-start)
+
+**Evidence:** `.scratch/ticket.md` frontmatter `estimate_source: missing`.
+
+**Disposition:** pre-resolved as `proceed-without-baseline-estimate` per work-manager-operator. Phase 3 will produce a refined estimate without inherited baseline; closure judge captures actuals against the refined estimate only.
+
+## D-2026-05-13-acr191-phase-4-coupling-bootstrap-exception
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr191-phase-4-coupling-bootstrap-exception
+
+**Linear ticket**: ACR-191
+
+**Phase**: Phase 4 (code-quality gate adjudication, round 4 against proposal r3 + early Phase 6a contract)
+
+**Status**: RETRACTED. Superseded by `D-2026-05-13-acr191-eval-seed-replaces-verifier-scripts`.
+
+**Decision**: Accept bootstrap-exception. Proceed past the Phase 4 code-quality gate with disposition `bootstrap_exception_recommended` and continue to Phase 4 join manifest, supported-surface termination check, Process-tree audit #1, and Phase 5. No further proposal churn for these intrinsic-structural lockstep pairs.
+
+### Intrinsic-structural lockstep pairs covered by this exception
+
+- `~/ai/agents/coupling-auditor.md` -> `~/ai/conventions/code-quality.md` (HIGH; 8 distinct external symbols/modules; mirror/apply lockstep between the canonical A1 rule source and the auditor that applies it)
+- `~/ai/tools/acr-191-verify/` -> `~/ai/agents/coupling-auditor.md` (HIGH; 9 distinct verifier anchors over the auditor prompt regions)
+- `~/ai/tools/acr-191-verify/` -> `~/ai/conventions/code-quality.md` (HIGH; 6 distinct verifier anchors over the convention adapter-declaration section)
+
+### Citations
+
+- Gate self-recommendation: `planning/code-quality/acr-191-phase-4/aggregate-code-quality.md` Disposition: `bootstrap_exception_recommended`; Recommendation: "Do not churn the proposal again for these HIGH findings. Record bootstrap-exception documentation for the three named intrinsic structural pairs, citing the coupling report and early Phase 6a contract."
+- Coupling report classification: `planning/code-quality/acr-191-phase-4/reports/coupling-auditor.md` § Residual Ambiguity / Stop-Condition Notes "Reducible-pair classification: no reducible HIGH pair remains in the r3 proposal-time corpus. All remaining HIGH pairs are intrinsic structural lockstep/verification pairs required to bootstrap the adapter-aware coupling rule."
+- Question artifact: `planning/acr-191-coupling-auditor-adapter-pattern/.scratch/questions/q-3915e011-9ed6-4fe9-b84c-c8c5444f0c1d.question.json` (answer A, work-manager-operator, 2026-05-13T08:30:00Z).
+- Audit-history Round 4 entry naming the three pairs and the post-merge LOW expectation: `planning/audit-history.md`.
+- Round-3 scope reduction evidence: dropped `workflows/code-quality.md` and `workflows/implementation-pipeline.md` edits from supported-surface (proposal r3 lines 17-19, 148-152) so the previous workflow pass-through HIGH pattern is no longer scored.
+
+### Why this is intrinsic and not reducible
+
+The three lockstep pairs are exactly the ACR-142 false-positive pattern that ACR-191 is being introduced to fix. The convention is the canonical A1 rule source; the auditor mirrors and applies it. The structural verifier exists to enforce the convention <-> auditor mirror and to assert the adapter-aware A1 anchors. Removing or weakening any pair would either drop the canonical rule (no fix possible), drop the auditor enforcement (fix not enforced), or drop the verifier (drift not detected). Splitting the WU into fragments cannot achieve the ticket goal because the lockstep is the WU's purpose.
+
+### Post-merge expectation
+
+Once ACR-191 lands, the new adapter-aware A1 rule scores these three pairs LOW: the Phase 6a contract already declares `agents/coupling-auditor.md` as `role: adapter` translating two named external contracts (`conventions/code-quality.md` and `tools/acr-191-verify/anchors.json`) - 2 contracts, under the proposed adapter threshold N=5. The post-merge re-run of the Phase 4 code-quality gate (and any subsequent WU's code-quality gate that touches this surface) is expected to score these pairs LOW under the adapter-aware metric. If after merge the gate still scores them non-LOW under the new rule, that is a follow-up bug ticket on `coupling-auditor.md` adapter detection, not a residual ACR-191 acceptance.
+
+### Policy alignment
+
+- Pre-resolved policy `residual-acceptance: max-alignment, no shortcuts` is honored because the architectural refactor (proposal r2 -> r3) was already performed to eliminate every reducible HIGH pair; the workflow pass-through edits were dropped, file-local declared roles were added, and the Phase 6a contract was written early to feed the cohesion-auditor. What remains is not residual acceptance of avoidable risk; it is bootstrap unavoidability of the WU's own lockstep purpose, certified by the gate's own child auditor as intrinsic.
+- Pre-resolved policy `narrow-vs-exhaustive: exhaustive` and `defer-to-prototype: proceed-exhaustive` are unaffected: the bootstrap-exception applies only to the three named intrinsic pairs and does not narrow any acceptance criterion or test-intent track item.
+
+## D-2026-05-13-acr191-eval-seed-replaces-verifier-scripts
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr191-eval-seed-replaces-verifier-scripts
+
+**Linear ticket**: ACR-191
+
+**Phase**: Phase 4 (resume after Process-tree audit #1 FAIL on bootstrap-exception path)
+
+**Decision**: Retract the bootstrap-exception entry `D-2026-05-13-acr191-phase-4-coupling-bootstrap-exception` and the prior answer to `q-066d8412-e726-4b9e-91ed-fc68f29ee876` (option C / spawn-meta-WU). Replace `~/ai/tools/acr-191-verify/` (verifier scripts + `anchors.json` + `test_verify.py`) with `evals/coupling-auditor-adapter/eval.md`, a `WRITE`-state behavior-detection eval seed per `~/ai/conventions/evals.md`. Re-run Phase 4 from a revised proposal r4 that drops the verifier supported-surface entirely.
+
+**Rationale**:
+
+- Root cause re-diagnosis: Process-tree audit #1 (FAIL, P4-001 + P4-002) correctly flagged that the bootstrap-exception path matches the named anti-pattern `Non-LOW gate residual acceptance` (`~/ai/conventions/code-quality.md` § Disposition policy, `~/ai/conventions/workflow-execution-violations.md` § Named anti-pattern). The structural HIGH on the three pairs was real.
+- However, two of the three intrinsic HIGH pairs (`verifier -> auditor`, `verifier -> convention`) are caused by the verifier code's anchor-by-anchor lockstep with the auditor prompt and convention text. The third pair (`auditor -> convention`) is the convention/auditor mirror that ACR-191 explicitly preserves.
+- ACR-174 deleted pytest + structural-markdown-tests. ACR-175 created the eval framework (`conventions/evals.md`, `workflows/eval-runtime.md`, `agents/eval-runner.md`) as the replacement path for behavior detection. Any `tools/<wu>-verify/` script with `test_*.py` and `verify.py` reintroduces the pattern ACR-174 deleted. A separate regression ticket **ACR-199** captures the `tools/<wu>-verify/` smuggling pattern across the repo.
+- Replacing the verifier with an eval seed at `evals/coupling-auditor-adapter/eval.md` (`WRITE` state, no runnable code, no `anchors.json`, no Python) makes the regression-detection asset markdown-only. The eval describes the adapter-aware A1 metric expected behavior (components with explicit `role: adapter` + named external surfaces score LOW under the new metric; sprawl components remain HIGH). With no verifier code, the two verifier-coupling pairs cease to exist as code-level coupling; markdown↔markdown documentation cross-reference is not A1-coupling per `coupling-auditor.md`'s metric binding.
+- The remaining `auditor -> convention` pair is the canonical-rule/mirror relationship the WU intentionally adds. With adapter-aware A1 LOW because both files are markdown that mirror the same rule (low distinct symbol/module count), Phase 4 code-quality gate is expected to score LOW without any residual acceptance.
+
+**Action**:
+
+1. Append this DECISIONS entry retracting `D-2026-05-13-acr191-phase-4-coupling-bootstrap-exception` and re-routing from option C-of-q-066d8412 to option D.
+2. Update `q-066d8412-e726-4b9e-91ed-fc68f29ee876.question.json` with a `supersession` block recording the resume-directive answer (option D content).
+3. Append `audit-history.md` Round 7 recording the supersession and the proposal r3 → r4 revision plan.
+4. Dispatch `gpt-high` to write proposal r4: drop the entire `~/ai/tools/acr-191-verify/` supported-surface section, drop verifier-related test-intent track rows, add `evals/coupling-auditor-adapter/eval.md` as the regression-detection seed (`WRITE` state, no runnable code), keep all auditor + convention markdown edits (file-local `## Declared roles`, optional `contract_path` input, `## Adapter declarations` rule, threshold `N=5`, worked examples, stale Phase 4 integration prose cleanup).
+5. Re-run all four Phase 4 risk gates against proposal r4.
+6. Re-run the Phase 4 code-quality gate. Expectation: LOW. With no verifier code, two of the three previously-HIGH pairs no longer exist as code-coupling.
+7. Write Phase 4 join manifest with no bootstrap-exception flag.
+8. Re-dispatch Process-tree audit #1. Expectation: PASS, since `P4-001` (HIGH→LOW) and `P4-002` (no residual acceptance path) are both resolved by the eval-seed re-architecture.
+9. Resume Phase 5+ normally.
+
+**Cross-link**: `ACR-198` is now unblocked from ACR-191 (the prior dependency was on the bootstrap-exception path landing; with eval-seed replacement, no shared workflow-policy change is needed). Update the Linear `Blocks` relation when convenient (work-manager-owned, not orchestrator-owned).
+
+**Evidence**:
+
+- Resume-dispatch directive from work-manager-operator dated 2026-05-13.
+- Convention authority: `~/ai/conventions/evals.md` (eval seed format + `WRITE` state).
+- Anti-pattern authority: `~/ai/conventions/workflow-execution-violations.md` § Named anti-pattern: Non-LOW gate residual acceptance.
+- Process-tree audit #1 report: `${planning_dir}/.scratch/process-tree/phase-4/process-tree-audit-1.report.md` (verdict `FAIL`, blocking findings `P4-001`, `P4-002`).
+- Audit-history Round 6 entry recording the FAIL and the q-066d8412 escalation.
+- Question artifact: `${scratch_dir}/questions/q-066d8412-e726-4b9e-91ed-fc68f29ee876.question.json` (will be updated with `supersession` block).
+
+**Residual risk**:
+
+- The convention/auditor mirror (`agents/coupling-auditor.md` ↔ `conventions/code-quality.md`) remains a structural drift surface. The eval seed `evals/coupling-auditor-adapter/eval.md` describes the expected adapter-aware A1 behavior, so future eval-runtime runs (when implementation tickets follow up) will catch convention/auditor divergence as a behavior finding. This is the long-term replacement for the verifier's lockstep check.
+- ACR-199 is the umbrella for cleaning up other smuggled `tools/<wu>-verify/` scripts; ACR-191 itself is now compliant with ACR-174/ACR-175 by not authoring one.
