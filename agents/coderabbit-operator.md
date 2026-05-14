@@ -1,5 +1,5 @@
 ---
-description: 'Run CodeRabbit review loop on a branch. Iterate until value drops to zero (typically 3-6 passes). Distinguish real findings from churn; track per-pass value; never push during the loop.'
+description: 'Run CodeRabbit review loop on a branch, including bounded timeout/outage retries. Iterate until value drops to zero (typically 3-6 passes). Distinguish real findings from churn; track per-pass value; never push during the loop.'
 model: gpt-high
 output_format: ''
 ---
@@ -59,6 +59,7 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
 - **Stop when value drops to zero, not when the report is empty.** A pass that returns only churn (design-preference flip-flops, nitpicks the prior pass already addressed, defensive code for impossible scenarios) is the convergence signal.
 - **Skip findings with documented rationale.** Two valid skip reasons: (a) a finding contradicts a previously-accepted pass (flip-flop), (b) a finding contradicts the proposal's gated design (don't re-litigate the design). Document the skip rationale in the pass log.
 - **Do not chase flip-flops.** When CodeRabbit oscillates between two recommendations across passes, pick the one consistent with the proposal and stop.
+- **Retry transient CodeRabbit timeout/outage signals internally, never as completed passes.** A timeout, service-unavailable, upstream-unavailable, temporary 5xx, gateway-timeout, or retry-later outage signal without a concrete retry-after duration waits 30 minutes in the live dispatch and re-runs the same pass attempt, up to the 48-attempt / 24h ceiling. Deterministic non-transient failures block immediately and are never retried.
 
 ## Procedure: Single Pass
 
@@ -79,6 +80,8 @@ Read the output. For each finding, classify:
 | Defensive code for impossible scenario | Skip, document |
 | Contradicts proposal's gated design | Skip, document |
 | False positive (CodeRabbit misread the code) | Skip, document with code-line citation |
+
+Only usable CodeRabbit review output completes pass `<N>`. A timeout/outage result is not a completed review pass: follow `## Procedure: Timeout / Outage Retry Handling`, re-run the same pass attempt after the retry wait, and do not advance the completed pass count, consume `max_passes`, assign finding IDs, trigger `MAX_PASSES_REACHED`, or contribute to convergence.
 
 After amending, repeat the pass. Track:
 - Findings count per pass
@@ -107,6 +110,35 @@ until [ "$(date -u +%H%M)" -ge "$TARGET_HHMM" ]; do sleep 60; done
 ```
 
 Do NOT poll every 2 minutes — wastes API calls and ignores the precise wait time given.
+
+## Procedure: Timeout / Outage Retry Handling
+
+Classify CodeRabbit CLI stdout/stderr by the emitted text, not by speculation. This policy is separate from `## Procedure: Rate-Limit Handling`: explicit rate-limit messages with concrete retry-after durations stay under the precise wait-until-clear behavior above and are not folded into the fixed 30-minute outage loop.
+
+Transient signals to retry:
+
+- CodeRabbit CLI timeout, including text equivalent to `TIMEOUT ERROR: Review timed out`
+- Service-unavailable, upstream-unavailable, or outage-style messages
+- Temporary 5xx, gateway-timeout, timeout, unavailable, or retry-later wording when no concrete retry-after duration is given
+- Any signal where branch, auth, invocation shape, and diff shape remain valid, but CodeRabbit did not produce usable review output because the external service was temporarily unavailable
+
+Non-transient signals to block immediately and never retry:
+
+- Authentication or authorization failure
+- Branch-missing, base-missing, or invalid branch/base selection
+- Diff-shape mismatch or wrong review target
+- Invocation-shape error, malformed CLI args, missing `--cwd`, or invalid working directory
+- Existing pre-pass sanity failures: dirty tree, stale `main`, or base disagreement
+- Test failure after applying a real finding when the failure cannot be resolved without changing the finding's intent
+- Any deterministic local/configuration problem where waiting cannot change the outcome
+
+On a transient signal, wait 30 minutes with a bounded sleep owned by the active operator invocation, then re-run the same pass attempt. Continue at 30-minute intervals while the same transient failure shape persists. The hard ceiling is 48 attempts, equal to 24h of retries. The retry loop exits when CodeRabbit produces usable review output, a non-transient signal appears, or the 48-attempt / 24h ceiling is reached.
+
+The sustained-outage ceiling must use the existing final stdout prefix shape: `BLOCKED:<reason>`, for example `BLOCKED:coderabbit-transient-outage-ceiling`. Do not introduce a new top-level terminal token such as `SUSTAINED_OUTAGE`, `OUTAGE_RETRY_EXHAUSTED`, or `TIMEOUT_RETRY_EXHAUSTED`.
+
+The retry sleep is bounded, signal-driven, and owned by the live operator dispatch. Do not use idle timeouts, orphan/background sleep loops, polling workers, or per-invocation persistence such as `state.db` retry counts. Retry state lives only inside the current operator dispatch.
+
+Timeout/outage retries are not value-bearing CodeRabbit review passes. They do not increment the completed pass count, consume `max_passes`, assign finding IDs, trigger `MAX_PASSES_REACHED`, or participate in review-convergence semantics.
 
 ## Procedure: Pre-Pass Sanity Check
 
@@ -148,15 +180,20 @@ After convergence, write `CODERABBIT_summary.md`:
 | Mix real + nitpicks | Apply real, skip nitpicks, amend, next pass |
 | Nitpicks only (all churn) | Converge (ALL_CHURN) |
 | Findings contradict prior pass | Converge (FLIP_FLOPS_ONLY) |
-| Rate-limited | Sleep until clear, re-run same pass |
+| Transient timeout/outage with no concrete retry-after and fewer than 48 attempts | Wait 30 minutes in the live dispatch, re-run the same pass attempt, and do not count it as a completed pass |
+| Sustained transient timeout/outage reaches 48 attempts / 24h | Return `BLOCKED:<reason>` such as `BLOCKED:coderabbit-transient-outage-ceiling` |
+| Explicit rate-limit message with concrete retry-after duration | Use `## Procedure: Rate-Limit Handling`: sleep until the precise clear time, then re-run the same pass |
+| Non-transient failure (auth, branch/base, invocation shape, diff shape, pre-pass sanity, unresolvable post-fix test failure) | Return `BLOCKED:<reason>` or the existing pre-pass `NEEDS_INPUT:<reason>` immediately; do not retry |
 | `max_passes` reached | Return `MAX_PASSES_REACHED` to orchestrator |
 
 ## Stop Conditions
 
-- Return `BLOCKED` if: tests fail after applying a real finding AND the failure can't be resolved without changing the finding's intent (e.g., test was wrong AND CodeRabbit's fix would break unrelated functionality)
+- Return `BLOCKED:<reason>` if: tests fail after applying a real finding AND the failure can't be resolved without changing the finding's intent (e.g., test was wrong AND CodeRabbit's fix would break unrelated functionality)
+- Return `BLOCKED:coderabbit-transient-outage-ceiling` or another `BLOCKED:<reason>` if: a transient timeout/outage signal without a concrete retry-after duration persists through the 48-attempt / 24h ceiling
+- Return `BLOCKED:<reason>` immediately if: a non-transient failure appears, including authentication/authorization failure, branch/base missing, invalid branch/base selection, diff-shape mismatch, wrong review target, invocation-shape error, malformed CLI args, missing `--cwd`, invalid working directory, or an unresolvable post-fix test failure; these are not retried
 - Return `NEEDS_INPUT` if: pre-pass sanity check fails (dirty tree, stale `main`, base disagreement)
 - Return `MAX_PASSES_REACHED` if: 8 passes (or configured `max_passes`) elapsed without convergence — likely indicates oscillating recommendations or genuinely unstable code
 
 ## Output Contract
 
-`CODERABBIT_pass<N>.md` per pass + `CODERABBIT_summary.md` on convergence. Final stdout: `CONVERGED:<reason>` | `BLOCKED:<reason>` | `NEEDS_INPUT:<reason>` | `MAX_PASSES_REACHED`.
+`CODERABBIT_pass<N>.md` per completed usable CodeRabbit review pass + `CODERABBIT_summary.md` on convergence. Timeout/outage retries should leave evidence of the transient signal, 30-minute bounded wait, retry attempt ordinal, same-pass re-run, and any 48-attempt / 24h ceiling result, but retries are not completed passes and must not change pass numbering or final stdout prefix vocabulary. Final stdout: `CONVERGED:<reason>` | `BLOCKED:<reason>` | `NEEDS_INPUT:<reason>` | `MAX_PASSES_REACHED`.

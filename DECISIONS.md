@@ -3405,3 +3405,86 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
 - Branch base: `f3d4c69` (pre-retirement; this WU's branch was created BEFORE PRs #146 and #147 landed). The squash-merge into master will carry the orchestrator + workflow changes ACR-206 makes; the squash commit reconciles against the post-retirement master HEAD.
 - Outage evidence in worktree: `CODERABBIT_pass1.md` + `CODERABBIT_pass1_attempt{1..6}_stalled.md`.
 - Failed Phase 7 dispatch log: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/.scratch/logs/acr-206-phase-7-coderabbit.log` (codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`, exit 144 after 6 retry attempts).
+
+## D-2026-05-14-acr207-phase25-coldstart-estimate-disposition
+
+**WU**: ACR-207. **Phase**: Phase 2.5 human gate (step 4a inherited-estimate cold-start check). **Decision**: Proceed without a baseline estimate (option A).
+
+ACR-207's Linear ticket carries no story-point estimate (`estimate_source: missing`, `story_point_estimate: null`). Per the implementation-pipeline-orchestrator Phase 2.5 human gate step 4a, a cold-start estimate is a root-owned value/scope/trade-off decision; `skip_problem_map_gate=true` does not weaken it. The orchestrator emitted `NEEDS_INPUT` with question artifact `q-7a35d931-d7a1-477a-ba01-17e06e3b635f` and halted.
+
+work-manager-operator (manager-max) answered **A — Proceed without baseline** at 2026-05-14T22:32:46Z: procedural cold-start, narrow markdown-only scope (one operator section + one WRITE-state eval), WU risk verdict MEDIUM (one lifecycle-visibility axis; all other axes LOW), zero defer-to-prototype signals, precedent ACR-205 same-day cold-start. Phase 3 authors the refined estimate from scratch; `estimate_source` stays `missing`.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-207-coderabbit-retry-30min/.scratch/questions/q-7a35d931-d7a1-477a-ba01-17e06e3b635f.question.json` (status: answered, selected_option_id: A).
+
+## D-2026-05-14-acr207-halt-resume-split-root
+
+**WU**: ACR-207. **Phase**: Phase 2.5 → Phase 3 boundary. **Decision**: the orchestration trace is split across two roots by the halt/resume cycle; this is expected halt/resume behavior, not a violation. Process-tree audits are scoped to the resumed root.
+
+The ACR-207 pipeline halted at the Phase 2.5 human gate (step 4a inherited-estimate cold-start) with `NEEDS_INPUT`. That halt closed the original orchestrator root invocation `d7a9607d-b270-41f5-a471-091f478fbb50` (recorded `status=succeeded`). When the manager answered, the pipeline resumed under a new root invocation `b14be71c-d4c7-45a6-8bb0-b789fd027c56` (`status=running`).
+
+The orchestration tree is therefore split across two roots:
+- `d7a9607d` — Phase 0 + Phase 2.5: 9 correctly-linked children (ticket-read ×2, problem-map, coverage, lifecycle, entrypoints, duplicates, cross-language re-dispatch, risk-profile).
+- `b14be71c` — Phase 3 onward: children correctly linked under it. `agents trace --json b14be71c` confirms 7 children so far (Phase 3 proposal `0a2fd32a`, update-estimate `58af3878`, the four Phase 4 risk gates `fd5d0bef` / `a972b30d` / `88a9bf6e` / `8bf11f2f`, and the Phase 4 code-quality gate `1fe3090b`), all `status=succeeded`.
+
+**Note on an earlier mis-reading (corrected here):** `agents trace --json <child_uuid>` re-roots the displayed tree at the requested UUID and shows that node's `parent_id` as `null` — a display convention, not orphaning. The authoritative check is `agents trace --json b14be71c`, which shows every post-resume child correctly linked. There is no broken parent linkage and no dispatch-shape violation: every phase dispatch was a fresh parent-visible `agents` invocation with its own prompt file and log captured via `2>&1 | tee`.
+
+**Disposition**: the three required process-tree audits (Phase 4 join, Phase 6 join, Phase 8 join) all cover post-resume phases, so all three are dispatched against root `b14be71c` with the relevant subtree. The Phase 4 / 6 / 8 join manifests record the real producing invocation UUIDs (from each dispatch's `OULIPOLY_INVOCATION` stdout line, all individually trace-verifiable and confirmed as children of `b14be71c`). `session.json` retains `session_id: d7a9607d` as the originating root and additionally records `resume_root_invocation_uuid: b14be71c`.
+
+**Evidence**: `agents trace --json d7a9607d-b270-41f5-a471-091f478fbb50` (9 children, Phase 0+2.5, status succeeded); `agents trace --json b14be71c-d4c7-45a6-8bb0-b789fd027c56` (status running, 7 children Phase 3+); saved trace JSONs under `/home/nes/projects/ai/planning/acr-207-coderabbit-retry-30min/.scratch/traces/`.
+
+## D-2026-05-14-acr207-step6c-stdout-capture-residual
+
+**WU**: ACR-207. **Phase**: 6c. **Cross-link**: D-2026-05-13-acr198-step6c-stdout-capture-residual; D-2026-05-12a (ACR-154, PR #138); D-2026-05-13-acr150 codex precedent; ACR-190 (systemic agent-runner stdout-capture fix destination).
+
+**Decision**: Accept the systemic agent-runner stdout-capture residual for ACR-207 Step 6c. Do NOT Tier-1 rewind. The canonical Step 6c consumption-of-Step-6b-outputs evidence is the agent-authored pre-edit evidence artifact at `${scratch_dir}/phase6/step6c-consumed-evidence.md`, in the same format ACR-154 (PR #138) and ACR-198 shipped under.
+
+**Why**: The Step 6c prompt explicitly required a leading `Bash echo` of the two `consumed:` lines as the first action, and required writing the pre-edit consumption-evidence artifact. The captured `${scratch_dir}/logs/acr-207-phase-6c.log` does not contain the leading `consumed:` echo lines — the same systemic limitation recorded for ACR-150 / ACR-154 / ACR-198, where the agent runner does not surface pre-tool-use / tool-call stdout into the captured log envelope. The agent DID write `${scratch_dir}/phase6/step6c-consumed-evidence.md` before any product-code edit, and the mtime ordering proves it: step6b-output-index.md (16:02:25) < eval.md (16:06:50) < step6c-consumed-evidence.md (16:11:17) < agents/coderabbit-operator.md edit (16:12:22).
+
+**Bounded exception**: Applies only to ACR-207 Step 6c invocation `09811b32-c1a1-4ae9-a9c5-3a20fcca2e8c` (the canonical invocation UUID from the dispatch log's `OULIPOLY_INVOCATION` line; the agent's self-reported `0c295210-...` in the evidence artifact is a return-channel-path mis-derivation — the trace-recorded child of `b14be71c` is `09811b32-...`). The evidence artifact records both `consumed:` lines and the input mtimes. The exception expires at Process-tree audit #2: a PASS verdict closes it with no reusable precedent (ACR-190 is the durable destination); a `blocking` verdict reactivates Tier-1 rewind.
+
+**Substantive consumption verified**: the Step 6c diff touches exactly the surface the Step 6a contract § Code-intent and the Step 6b output index name — `agents/coderabbit-operator.md` (new `## Procedure: Timeout / Outage Retry Handling` section + lockstep edits to `## Non-Negotiables`, `## Procedure: Single Pass`, `## Decision Table`, `## Stop Conditions`, `## Output Contract`) — and nothing outside it. The eval (`evals/coderabbit-operator-retry/eval.md`) was added by Step 6b and is untouched by Step 6c. `~/ai/workflows/coderabbit-loop.md` is byte-unchanged.
+
+**Evidence pointers**:
+- Consumption-evidence artifact: `/home/nes/projects/ai/planning/acr-207-coderabbit-retry-30min/.scratch/phase6/step6c-consumed-evidence.md`
+- Step 6c log: `/home/nes/projects/ai/planning/acr-207-coderabbit-retry-30min/.scratch/logs/acr-207-phase-6c.log`
+- Step 6c prompt (specifies the leading `Bash echo` requirement): `/home/nes/projects/ai/planning/acr-207-coderabbit-retry-30min/.scratch/prompts/acr-207-phase-6c.md`
+
+## D-2026-05-15-acr207-coderabbit-retired-during-flight
+
+**WU**: ACR-207. **Phase**: Phase 7 (originally CodeRabbit loop). **Decision**: Phase 7 bypassed via the disabled-tombstone path; ACR-207 ships its retry-policy spec and WRITE-state eval as **forward-ready** behavior contracts sitting under the post-retirement tombstone.
+
+**Context (background reference)**: CodeRabbit credits exhausted on the project account 2026-05-15. The CLI hangs at "Setting up" indefinitely (the Phase 7 dispatch for this WU on 2026-05-14 16:29 logged five 30-minute timeout retries between 17:30 and 23:34 before the background task was killed at exit code 144 around 00:05). Two retirement PRs landed in master between this WU's branch base (`4358ad7`) and the current master tip (`df6309e`):
+
+- **PR #145** (`f3d4c69`): hotpatch — coderabbit-operator pre-pass sanity now requires the branch to be pushed to origin (CodeRabbit only reviews remote-visible commits; a local-only feature branch was the proximate cause of the "Setting up" hang on the 2026-05-14 ACR-207 dispatch).
+- **PR #146** (`ac58d35`): DISABLED short-circuit — `agents/coderabbit-operator.md` returns `CONVERGED:disabled-no-credits-2026-05-15` on any dispatch, with no CLI invocation, no pass loop, no sanity check, no rate-limit/outage logic.
+- **PR #147** (`df6309e`): workflow + orchestrator removal — `workflows/coderabbit-loop.md` deleted; `coderabbit-loop` removed from `workflows/index.json`; `workflows/implementation-pipeline.md` Phase 7 → "SKIPPED (CodeRabbit retired 2026-05-15)"; `agents/implementation-pipeline-orchestrator.md` Phase 7 dispatch line removed (section reframed as "Pre-Phase-8 Readiness Gates (CodeRabbit retired)").
+
+**Phase 7 outcome**: per work-manager-operator (manager-max) note 2026-05-15, the canonical Phase 7 outcome for in-flight WUs whose orchestrator context pre-dates PR #147 is the disabled-tombstone path: dispatch returns `CONVERGED:disabled-no-credits-2026-05-15` immediately and Phase 8 proceeds. ACR-207 takes that path. The 2026-05-14 dispatch's five timeout retries (`CODERABBIT_pass1_attempt{1..5}_timeout.md` + `CODERABBIT_retry_log.md`) are preserved in the worktree as evidence of the outage that motivated PR #145/#146/#147 — but they are NOT the convergence; convergence is the disabled-tombstone path.
+
+**Pre-dispatch readiness gates** (now Phase 8 readiness checks per PR #147): all three were already evaluated non-applicable in Phase 6 records and remain so:
+
+- Inherited-prototype-tests gate: no `${scratch_dir}/predecessor-prototype-evidence.md` and no `${scratch_dir}/ticket-prototype-evidence.md` → trigger does not fire.
+- Integration-tests gate: no `LevelComponentSet` (markdown-only WU) → no-op.
+- Swap-record gate: `${planning_dir}/risk/acr-207-prototype-swap-record.md` carries an explicit `non-applicable` statement → passes.
+
+**Value-statement reconciliation**: the proposal's qualitative net-value statement ("removes a NEEDS_INPUT halt class for transient outages — the ACR-193 incident") is operationally moot for as long as the tombstone is in place (the operator never reaches retry logic). The shipped value reframes to forward-ready specification: if/when the tombstone is lifted, the documented retry policy + the WRITE-state eval govern the operator's transient-outage behavior; until then they are dormant text and a dormant behavior contract. The manager's 2026-05-15 directive ("continue Phase 8 → Phase 9 normally") authorizes ship under that reframing rather than terminating the WU.
+
+**Rebase plan**: rebase `acr-207-coderabbit-retry-30min` on `origin/master` (`df6309e`). Reconcile conflicts in `agents/coderabbit-operator.md` against PR #145's branch-pushed sanity step (orthogonal to ACR-207's new section; preserve both) and PR #146's DISABLED short-circuit at the top of the file (preserve the tombstone as the operator's effective behavior; ACR-207's `## Procedure: Timeout / Outage Retry Handling` section sits under it as a forward-ready spec). Reconcile `DECISIONS.md` by replaying ACR-207's WU entries on top of master's current tail.
+
+**Phase 9 override**: per the manager note, Phase 9 uses `gh pr merge <PR> --squash` (no `--auto`), since master has no branch protection (the ACR-193 pattern shipped earlier).
+
+## D-2026-05-15-acr207-second-halt-resume-split-root
+
+**WU**: ACR-207. **Phase**: Phase 7 → Phase 8 boundary. **Decision**: second halt/resume cycle; orchestration tree now split across THREE roots — d7a9607d (Phase 0 + 2.5), b14be71c (Phase 3 + 4 + 5 + 6 + Phase 7 CodeRabbit dispatch attempt), 9b8c4057 (Phase 8 onward). This is expected halt/resume behavior, not a violation.
+
+The Phase 7 CodeRabbit-operator background dispatch (invocation `f784a1c2-f2e0-41e9-896b-dec15884b89e`, run as a child of root `b14be71c`) failed with exit code 144 around 2026-05-15T00:05Z after CodeRabbit hung at "Setting up" through 5 timeout retries (2026-05-14T17:30/19:00/20:31/22:03/23:34, evidence preserved in worktree at `CODERABBIT_pass1_attempt{1..5}_timeout.md` and `CODERABBIT_retry_log.md`). The root cause was the unpushed-branch hang that PR #145 hotpatched and the credit exhaustion that PR #146 + #147 retired the operator for.
+
+When the manager resume note arrived 2026-05-15, the orchestrator session resumed under a new root invocation `9b8c4057-1a70-4401-bac2-b6f2fa1fd9ea` (root b14be71c was marked succeeded at the prior halt). All Phase 8 children — the four PR-review gates `c27c0540` (test-audit, gpt-high), `256d4fe2` (multi-concern, claude-opus), `bea66e0b` (justification, claude-opus), `42fee9ff` (commit-hygiene, gpt-high) — are correctly recorded as children of `9b8c4057` per `agents trace --json 9b8c4057-1a70-4401-bac2-b6f2fa1fd9ea`.
+
+**Disposition**: Process-tree audit #3 is dispatched against root `9b8c4057` (the Phase 8 subtree). Phase 7 evidence (the CodeRabbit dispatch attempt + timeouts + retry log) is preserved in the worktree and referenced from the Phase 8 expected-process manifest, but Phase 7 itself is bypassed via the disabled-tombstone path per the manager directive (`D-2026-05-15-acr207-coderabbit-retired-during-flight`). The session.json now records both `resume_root_invocation_uuid: b14be71c` and the second resume root `9b8c4057` for cross-reference.
+
+**Evidence**:
+- `agents trace --json d7a9607d-b270-41f5-a471-091f478fbb50` (succeeded, 9 children, Phase 0 + 2.5)
+- `agents trace --json b14be71c-d4c7-45a6-8bb0-b789fd027c56` (succeeded, 18 children, Phase 3 + 4 + 5 + 6 + Phase 7 CodeRabbit dispatch attempt `f784a1c2`)
+- `agents trace --json 9b8c4057-1a70-4401-bac2-b6f2fa1fd9ea` (running, 4+ children, Phase 8 onward)
+- Saved trace JSONs at `${planning_dir}/.scratch/traces/`
