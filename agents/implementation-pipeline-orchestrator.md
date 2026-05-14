@@ -94,7 +94,7 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 - `predecessor_session_manifest_path` — absolute path to a predecessor WU's `${planning_dir}/session.json` when this WU is spawned from a post-merge successor handoff. When supplied, Phase 0 validates the predecessor manifest and its `successor_session_brief`, imports carried context into `${scratch_dir}/predecessor-session.md`, and records the predecessor pointer in this WU's session manifest. Missing, unreadable, mismatched, or ambiguous predecessor evidence is `BLOCKED:invalid-predecessor-session`.
 - `models_dir` — passed through to `agents` invocations; usually omitted.
 - `skip_problem_map_gate` — boolean (default `false`). When `true`, Phase 2.5 step 6 (the problem-map human gate) is skipped and the orchestrator proceeds directly to step 8 (mode propagation). Project-level override; declare in the project's `AGENTS.md` (e.g., `~/ai/` itself opts out for its bootstrap flow). The defer-to-prototype detection (Phase 2.5 step 5) still runs and can still surface as a NEEDS_INPUT new-value question; this override only removes the routine "approve the problem map" step, not the genuine value-question escalation.
-- `auto_merge_after_phase_9` — boolean (default `false`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then `gh pr merge --auto --squash <pr_url>` so the PR auto-merges once branch protection / CI clears. Project-level override; declare in the project's `AGENTS.md`. Default-off to preserve the "draft PR is the WU's terminal artifact" contract for projects that want a human PR review.
+- `auto_merge_after_phase_9` — boolean (default `false`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>`, detects base-branch protection, uses `gh pr merge --auto --squash <pr_url>` for protected bases, uses direct `gh pr merge --squash <pr_url>` for unprotected bases, and keeps a narrow no-protection fallback when structural protection detection itself fails. Project-level override; declare in the project's `AGENTS.md`. Default-off to preserve the "draft PR is the WU's terminal artifact" contract for projects that want a human PR review.
 
 ## Non-Negotiables
 
@@ -580,8 +580,47 @@ The draft PR is the WU's terminal artifact for projects that want a human PR rev
 **Auto-merge override.** When `auto_merge_after_phase_9=true` (project-level opt-in via `AGENTS.md`), the orchestrator additionally executes after step 7:
 
 1. `gh pr ready ${pr_url}` — flip the PR from draft to ready-for-review.
-2. `gh pr merge --auto --squash ${pr_url}` — enable auto-merge so the PR merges once branch protection / required CI clears.
-3. If either command fails (e.g., merge conflicts, CI red), surface the failure as a NEEDS_INPUT new-value question to the root and halt; do not retry blindly.
+
+Step 9-Auto.A — Build `phase9-protection-decision`.
+
+2. Resolve merge target:
+   - `base_branch=$(gh pr view ${pr_url} --json baseRefName --jq '.baseRefName')`.
+   - `base_repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)`, run from the WU worktree.
+3. URL-encode the branch path segment before constructing the `gh api` URL, then detect protection with an output-and-status capture around `gh api`:
+   - Canonical recommendation: `encoded_base_branch=$(printf %s "${base_branch}" | jq -sRr @uri)`.
+   - Equivalent fallback when `jq` is unavailable: `encoded_base_branch=$(python -c "import urllib.parse, sys; sys.stdout.write(urllib.parse.quote(sys.argv[1], safe=''))" "${base_branch}")`; `encoded_base_branch=$(python3 -c "import urllib.parse, sys; sys.stdout.write(urllib.parse.quote(sys.argv[1], safe=''))" "${base_branch}")` is equivalent where Python is exposed only as `python3`.
+   - If neither encoder is available, halt as a detection failure rather than querying a raw branch path.
+   - Recommended detection command shape: `protection_output=$(gh api -X GET --include --silent "/repos/${base_repo}/branches/${encoded_base_branch}/protection" 2>&1); protection_exit=$?`
+   - `--include` is required so the captured stdout contains the `HTTP/... <status>` line. `--silent` may suppress the response body/request log, but must not suppress the status line; if a local `gh` version suppresses the status line with `--silent`, drop `--silent` and keep `--include`.
+   - Capture both stdout/stderr and the exit code. Do not let a nonzero `gh api` exit short-circuit the branch classifier.
+4. Classify detection by parsing the captured `HTTP/... <status>` line first, before consulting `protection_exit`:
+   - parseable `200` -> protected.
+   - parseable `404` -> unprotected, even when `protection_exit` is nonzero.
+   - unparseable or missing status -> detection failure.
+   - parseable status other than `200` or `404` -> detection failure.
+   - The exit code is diagnostic context only after status parsing. A nonzero exit with parseable `404` is the normal no-protection signal, not a detection failure.
+   - A `404` classifies the correctly encoded target branch as unprotected; a `404` from a wrongly encoded path is not a valid no-protection signal, and the encoding requirement above prevents that case from arising.
+5. Construct `phase9-protection-decision`:
+   - `kind=protected`, `detection_status=200`, `base_repo=<owner/repo>`, and `base_branch=<branch-name>` for parseable `200`.
+   - `kind=unprotected`, `detection_status=404`, `base_repo=<owner/repo>`, and `base_branch=<branch-name>` for parseable `404`.
+   - `kind=detection-failed`, `detection_status=<other-integer-status>` for any other parseable status.
+   - `kind=detection-failed`, `detection_status=null` for missing or unparseable status.
+   - This step orchestrates GitHub CLI/API detection calls and constructs the workflow-owned `phase9-protection-decision` contract.
+
+Step 9-Auto.B — Select merge command from contract `kind`.
+
+6. `kind=protected`: run `gh pr merge --auto --squash ${pr_url}` and capture stdout/stderr. If exit is `0`, the override is complete. If it fails for merge conflict, auto-merge disabled on the repo, permission errors, CLI errors, or unexpected GitHub state, do not retry. Hand the failure to Step 9-Auto.C with `path=protected`, `selected_command=gh pr merge --auto --squash ${pr_url}`, and the captured command output.
+7. `kind=unprotected`: run `gh pr merge --squash ${pr_url}` and capture stdout/stderr. If exit is `0`, the override is complete. If it fails, hand the failure to Step 9-Auto.C with `path=unprotected`, `selected_command=gh pr merge --squash ${pr_url}`, and the captured command output.
+8. `kind=detection-failed`: run `first_output=$(gh pr merge --auto --squash ${pr_url} 2>&1); first_exit=$?` and capture both stdout/stderr and exit code.
+   - **If `first_exit` is 0**: the override is complete. Do not run the fallback retry. Continue to Phase 9 step 5 / Phase 9 ticket cross-link as normal.
+   - **If `first_exit` is nonzero and `first_output` contains the exact case-sensitive substring `Protected branch rules not configured for this branch`**: retry once with `retry_output=$(gh pr merge --squash ${pr_url} 2>&1); retry_exit=$?`. If `retry_exit` is 0, the override is complete. If `retry_exit` is nonzero, hand the failure to Step 9-Auto.C with `path=detection-failure-specific-fallback`, `selected_command=gh pr merge --squash ${pr_url}`, and `captured_output=<first_output>\n---retry---\n<retry_output>`.
+   - **If `first_exit` is nonzero and `first_output` does not contain that substring**: hand the failure to Step 9-Auto.C with `path=detection-failure`, `selected_command=gh pr merge --auto --squash ${pr_url}`, and `captured_output=<first_output>`.
+9. This step orchestrates merge-command selection from the workflow-owned `phase9-protection-decision` contract.
+
+Step 9-Auto.C — Halt contract.
+
+10. This step orchestrates emission of the root-facing `NEEDS_INPUT:phase9-auto-merge-failed` halt.
+11. On any failed selected merge command or fallback retry, emit `NEEDS_INPUT:phase9-auto-merge-failed` and halt with exactly these structured fields: `path`, `selected_command`, `detection_status=<phase9-protection-decision.detection_status>`, and `captured_output`.
 
 This override does NOT replace the Phase 8 audit gates — those still run and a `blocking` verdict still halts the pipeline. It only collapses the post-Phase-9 human review/merge step into an automated one for projects whose `AGENTS.md` declares the opt-in.
 

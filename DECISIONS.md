@@ -2682,3 +2682,120 @@ Per work-manager-operator dispatch instructions for ACR-187, the routine Phase 2
 5. Re-run per-component CQ + process-tree audit #2.
 
 This rewind preserves planning artifacts (contracts, proposals, problem map, audit history) which were correctly produced under full compliance.
+
+## D-2026-05-13-acr193-inherited-estimate-cold-start
+
+**Date**: 2026-05-13
+**WU**: ACR-193
+**Phase**: Phase 0 / Phase 2.5 step 4a precheck
+
+**Decision**: Proceed without a baseline estimate.
+
+**Why**: `${scratch_dir}/ticket.md` records `estimate_source: missing` and `estimate_rationale: missing`. Dispatch pre-resolves `defer-to-prototype` as "default A — proceed exhaustive", so the inherited-estimate cold-start question collapses to "Proceed without a baseline estimate" (vs. "Run a small prototype first" or "Terminate WU"). The WU is a scope-clear workflow-doc edit (Phase 9 protection-detection + fallback) plus one structural test — a baseline magnitude estimate adds no value.
+
+**Evidence**:
+- `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/ticket.md`
+- Dispatch `Pre-resolved Phase 2.5 gates` block in the orchestrator prompt.
+
+## D-2026-05-13-acr193-test-format-eval-spec
+
+**Date**: 2026-05-13
+**WU**: ACR-193
+**Phase**: Phase 2.5 / Phase 3 contract framing
+
+**Decision**: Satisfy the ticket's "Structural test covering both paths" acceptance criterion by writing a current-convention eval spec (`evals/phase9-no-protection-auto-merge/eval.md`), not by reviving the ACR-174-deleted pytest structural-markdown layer.
+
+**Why**:
+- `~/ai/conventions/evals.md` explicitly states evals replace brittle structural markdown tests; "No pytest revival and no structural markdown tests."
+- ACR-174 deleted `tests/test_implementation_pipeline_*.py` and `tests/test_implementation_pipeline_orchestrator_*.py` as the *deliberate convention shift*.
+- Dispatch pre-resolution: max-alignment, no shortcuts. Max-alignment with current convention is the eval-spec path.
+- The Surface-1 Coverage gap HIGH is intrinsic systemic — eval runtime not yet ready to execute orchestrator-text behavior tests; this is tracked separately and is NOT this WU's scope to fix.
+- Adding the new Phase 9 behavior with an eval spec maintains parity with the rest of the orchestrator's coverage posture and does not extend residual.
+
+**Evidence**:
+- `/home/nes/ai/conventions/evals.md`
+- `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/risk/acr-193-risk-profile.md`
+- `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/research/acr-193-coverage-inventory.md`
+
+**Effect on downstream phases**:
+- Phase 3 proposal MUST cite this DECISIONS entry and propose an eval spec, not a pytest revival.
+- Phase 6 Step 6a contract names the eval spec as the test boundary.
+- Phase 6 Step 6b "test writer" authors the eval spec (WRITE-state Markdown), since the project's "test layer" for orchestrator behavior IS eval specs.
+- Phase 6 Step 6c "code writer" applies the Phase 9 protection-detection logic to the orchestrator markdown.
+
+## D-2026-05-13-acr193-pp007-ticket-prescribed-residual
+
+**Date**: 2026-05-13
+**WU**: ACR-193
+**Phase**: Phase 4 — code-quality gate (round 4 aggregate HIGH; round 5 closure)
+
+**Decision**: Accept the Phase 9 detection-failed fallback's case-sensitive substring match on the GitHub CLI diagnostic text `Protected branch rules not configured for this branch` (push-pull-auditor finding PP-007, HIGH) as a ticket-prescribed intrinsic residual. PP-007 will remain HIGH in the push-pull auditor's view and is accepted under the WU's approved risk disposition. Follow-up Linear ticket ACR-197 tracks investigation of a less-coupled mechanism. Round-5 proposal revision closed all *other* HIGH/MEDIUM findings (F1 URL-encoding, F2 first-command exit-status gate, COH-001/002/003 role-framing).
+
+**Why**:
+- Ticket lines 25-30 explicitly prescribe this fallback: "Fallback path if the protection-detection fails or returns unexpected: try `--auto`; on the specific 'Protected branch rules not configured' error, retry once with direct `--squash`."
+- The primary protection-detection path is structural (`gh api .../protection` HTTP-status classification). The diagnostic-string fallback is bounded defense-in-depth for the case where structural detection itself cannot classify.
+- GitHub CLI does not currently expose "no branch protection rules configured" as a structured error category (exit-code class, JSON error field, etc.). A stable common-interface replacement does not exist within GitHub's current public CLI/API.
+- The dispatch's pre-resolution forbids extending residual on intrinsic-structural HIGH; the ticket itself prescribes the residual. Root answered question `q-f5b58f4d-11fd-4ffe-9934-086798ce203f` with option A: accept PP-007 as ticket-prescribed residual + file follow-up + revise other findings.
+
+**Evidence**:
+- Answered question artifact: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/questions/q-f5b58f4d-11fd-4ffe-9934-086798ce203f.question.json` (option A, answered by `work-manager-operator` at 2026-05-13T08:15:00Z).
+- Ticket: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/ticket.md` lines 25-30.
+- Push-pull report (round 3, HIGH): `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/code-quality/acr-193-phase-4/reports/push-pull-auditor.md` PP-007.
+- Follow-up Linear ticket: ACR-197 — "Phase 9 no-protection detection: less-coupled mechanism (replace diagnostic-string fallback)" — https://linear.app/neshq/issue/ACR-197/phase-9-no-protection-detection-less-coupled-mechanism-replace.
+
+**Effect on downstream phases**:
+- Phase 4 round-5 code-quality gate is expected to find push-pull-auditor HIGH (PP-007 only). The orchestrator advances Phase 4 with PP-007 explicitly recorded as accepted residual, citing this DECISIONS entry and the answered question.
+- Phase 6 Step 6a contract names the diagnostic-string fallback as ticket-prescribed residual and cites ACR-197.
+- Phase 7 CodeRabbit / Phase 8 PR-review may still flag PP-007; reviewers should be pointed to this DECISIONS entry and ACR-197.
+
+## D-2026-05-13-acr193-step9-auto-a-coupling-residual
+
+**Date**: 2026-05-13
+**WU**: ACR-193
+**Phase**: Phase 4 — code-quality gate (round 4 aggregate HIGH; round 6 closure)
+
+**Decision**: Accept the Phase 9 Step 9-Auto.A → GitHub CLI/API coupling HIGH (9 distinct symbols: `gh pr view`, `baseRefName`, `gh repo view`, `nameWithOwner`, `jq -sRr @uri`, `urllib.parse.quote`, `gh api`, `/repos/.../protection`, `HTTP/... <status>`) as a second ticket-prescribed intrinsic residual contiguous with PP-007 within the same intrinsic gh-CLI-surface category. Step 9-Auto.A coupling remains HIGH in the coupling auditor's view and is accepted under the WU's approved risk disposition.
+
+**Why**:
+- The 7-8 irreducible symbols are structurally required by ticket goal #1 (detect base branch protection via `gh api /repos/<owner>/<repo>/branches/<branch>/protection`). The remaining encoder symbols (`jq -sRr @uri` + optional `urllib.parse.quote` Python fallback) come from F1 — itself an audit-risk-required closure (slash-containing branch names must be URL-encoded before interpolation).
+- Best plausible reduction (drop python3 fallback, collapse encoder, consolidate `gh repo view`+`nameWithOwner` and `gh pr view`+`baseRefName`): ~6 symbols, still at the HIGH threshold. The auditor's verdict would not change.
+- **Contiguous-category reasoning**: this residual is in the same intrinsic gh-CLI-surface category as PP-007 (which was accepted under question `q-f5b58f4d-11fd-4ffe-9934-086798ce203f`) within the same WU. ACR-191's bootstrap-exception retraction shape requires THREE residuals across DIFFERENT structural categories. ACR-193 exits Phase 4 with TWO residuals in ONE category (intrinsic gh-CLI-surface) — not the ACR-191 prohibited shape.
+- Manager-max disposition: the prior PP-007 residual was accepted on identical "intrinsic to ticket-prescribed gh-CLI surface" grounds; Step 9-Auto.A coupling is contiguous with that precedent. The previous answer's cited precedents (ACR-180 / ACR-142 / ACR-150/154) include "ACR-142 coupling-auditor adapter gap" — the same shape.
+- Option B (force one more reduction pass) would still end HIGH per the user's own estimate. Option C (split WU; defer URL-encoding + fallback to follow-up) reopens audit-risk F1 MEDIUM and conflicts with ticket goal #2. Option D (terminate + rewrite) throws away Phases 3-5 work for an issue that needs solving.
+
+**Evidence**:
+- Answered question artifact: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/questions/q-ed632ea4-c259-4679-ae86-3e3e822d7880.question.json` (option A, answered by `work-manager-operator` manager-max, 2026-05-14).
+- Ticket goal #1: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/ticket.md` lines 25-29 (detection step).
+- Audit-risk F1 closure (URL-encoding): `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/risk/acr-193-audit.md` (round 5, LOW).
+- Coupling report (round 4, HIGH): `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/code-quality/acr-193-phase-4/reports/coupling-auditor.md` Step 9-Auto.A pair.
+- Contiguous-category precedent: `D-2026-05-13-acr193-pp007-ticket-prescribed-residual` (PP-007 residual, same intrinsic gh-CLI-surface category).
+- ACR-191: bootstrap-exception retraction shape (THREE residuals across DIFFERENT structural categories) does not apply.
+- Follow-up Linear ticket: `ACR-197` — long-term gh-CLI surface reduction; covers both PP-007 and Step 9-Auto.A coupling.
+
+**Effect on downstream phases**:
+- Phase 4 round-5 code-quality gate will continue to find coupling-auditor HIGH on Step 9-Auto.A. The orchestrator advances Phase 4 with both PP-007 and Step 9-Auto.A coupling explicitly recorded as accepted residuals, citing this DECISIONS entry and the answered question.
+- Phase 6 Step 6a contract names the gh-CLI-surface coupling (PP-007 + Step 9-Auto.A) as ticket-prescribed residual and cites ACR-197.
+- Phase 7 CodeRabbit / Phase 8 PR-review may still flag these; reviewers should be pointed to this DECISIONS entry, the PP-007 entry, and ACR-197.
+
+## D-2026-05-14-acr193-step6c-first-log-line-not-emitted
+
+**Date**: 2026-05-14
+**WU**: ACR-193
+**Phase**: Phase 6 Step 6c
+
+**Decision**: Record that the Step 6c agent (invocation `31e96ac1-7b40-414d-907b-3b4931c75fd0`) did not emit the FIRST-LOG-LINE `consumed:` echoes required by the orchestrator's Step 6c prompt template. The substantive Step 6c product (the round-6 orchestrator-doc edit) was produced correctly: both edit locations match the round-6 proposal verbatim, and the agent's stdout confirms it read but did not edit the Step 6b eval spec or output index.
+
+**Why**:
+- The FIRST-LOG-LINE rule (`first non-empty stdout line MUST be exactly...`) is tracked under ACR-206 as structurally unenforceable for gpt-high agents under the current agents CLI. The Codex source produces a single result-payload stdout line; the agent cannot guarantee that the first non-empty line of its model output becomes the first non-empty stdout line of the subprocess.
+- The user's resume guidance explicitly cross-referenced ACR-206 ("FIRST-LOG-LINE rule structurally unenforceable (relevant if Phase 6 hits same Step 6c echo issue)") — anticipating this.
+- The substantive product is intact: `git diff agents/implementation-pipeline-orchestrator.md` shows exactly the two edit locations the proposal requires (optional-input description + 11-item Auto-merge override block). The agent's text confirms consumption of the eval spec and output index.
+
+**Evidence**:
+- ACR-206 (cross-referenced in user's resume): FIRST-LOG-LINE rule structurally unenforceable.
+- Step 6c log: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/logs/acr-193-phase-6c.log` — invocation `31e96ac1-7b40-414d-907b-3b4931c75fd0`.
+- Step 6b output index: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/phase6/step6b-output-index.md` — lists the eval spec; Step 6c's narrative output confirms it did not edit the eval spec, which is the substantive consumption-evidence requirement (read-without-modifying).
+- Diff verification: `git diff agents/implementation-pipeline-orchestrator.md` matches round-6 proposal §Proposed change item 1 + item 2 verbatim.
+
+**Effect on downstream phases**:
+- Process-tree audit #2's expected-process manifest will record the FIRST-LOG-LINE non-emission as ACR-206-known and treat substantive consumption evidence (correct edit shape matching the round-6 proposal + agent narrative confirming read-without-modify of Step 6b outputs) as the closure-equivalent.
+- No re-dispatch of Step 6c needed; the product is correct.
