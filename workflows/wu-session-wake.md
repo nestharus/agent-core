@@ -13,6 +13,10 @@ workflow_dispatch_contract:
     - "does not batch post-merge session work inside the poller or scheduler"
   outputs:
     - "one wu-session-resumer log per merged session"
+  non_goals:
+    - "does not implement the scheduler runtime"
+    - "does not change pr-batch-poller schema"
+    - "does not inline post-merge checks or spawn successor WUs"
 ---
 # WU Session Wake
 

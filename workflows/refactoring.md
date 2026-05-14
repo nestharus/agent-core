@@ -2,7 +2,10 @@
 workflow:
   id: refactoring
 workflow_aliases:
-  - refactor
+  - alias: refactor
+    target:
+      workflow_id: refactoring
+      path: workflows/refactoring.md
 workflow_dispatch_contract:
   orchestrator: refactoring-orchestrator
   inputs:

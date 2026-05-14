@@ -3097,3 +3097,151 @@ Once ACR-191 lands, the new adapter-aware A1 rule scores these three pairs LOW: 
 - R3 prompt: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/prompts/acr-186-phase-6c-r3.md` (specifies the two REQUIRED leading `Bash echo` commands).
 - Supplementary consumption-evidence: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/phase6/step6c-consumption-evidence.md`.
 - Precedent: `/home/nes/ai/DECISIONS.md` § `D-2026-05-13-acr150-step6c-consumed-echo-capture-limitation`.
+
+## D-2026-05-12-acr149-phase-2.5-discoveries
+
+**Date**: 2026-05-12
+**WU**: ACR-149 (`acr-149-adversarial-qa-stage-workflow`)
+**Phase**: 2.5 (existing-state risk profile)
+
+Two discoveries surfaced in Phase 2.5 sub-steps. Per dispatch pre-resolution "Mid-pipeline drift: default A — proceed + note in DECISIONS as residual", both are recorded here as residual; Phase 3 proposer must address consolidate-vs-cascade-vs-accept-divergence for the drift, and pick a disposition for the pre-existing workflow-index generator failure.
+
+### D1 — Coverage 2.5.1 bug-discovery: workflow-index generator currently fails on master
+
+Observation: `python3 -m tools.workflow_index check` fails before ACR-149 implementation because `workflows/eval-runtime.md` lacks opening workflow frontmatter while the generator expects every `workflows/*.md` to parse as workflow metadata. Failure exists on master at HEAD `8618633bac1784b95c0ed72637c91c25959c2ce6` and is not introduced by this WU.
+
+Evidence:
+- `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/research/acr-149-coverage-inventory.md` § "Adjacent uncovered executable behavior"
+
+Phase 3 proposer must choose:
+
+- (a) bundle a fix for `workflows/eval-runtime.md` frontmatter into this WU so `tools.workflow_index check` clears and `workflows/index.json` can be regenerated to include the new `adversarial-qa-stage` entry;
+- (b) hand-edit `workflows/index.json` for the new entry without running the generator and document the residual generator failure as out-of-WU-scope;
+- (c) skip the index.json update entirely in this WU and document why discoverability lives in `AGENTS.md` for now.
+
+No separate tracker ticket is filed from this WU because the bug-discovery rule fires on failing characterization tests, and no characterization tests were authored (the Phase 6 structural pytest is the new coverage, not characterization).
+
+### D2 — Duplicates 2.5.4 drift-discovery: bug-report / evidence shape drift
+
+Observation: three silent-drift candidates between existing evidence and bug-shape surfaces.
+
+Evidence:
+- `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/research/acr-149-duplicates.md` § "Silent-drift observations"
+
+Drift candidates:
+
+1. **Attachment-shape drift.** `~/ai/conventions/test-reports.md` prefers one per-finding PDF as the canonical tracker attachment; ACR-149's ticket asks for inline uploaded screenshots/videos in the Linear bug body.
+2. **Bug-ticket minimum-field drift.** `~/ai/conventions/risk-profile.md` § Discoveries-during-Phase-2.5 names a smaller bug-ticket shape than ACR-149's required-fields list (no required visual evidence, no required logs).
+3. **Prototype-QA placeholder drift.** ACR-142 (`prototype-validation-shipping.md`, Phase 3 expectation-driven QA) is not yet built; when it lands it must consciously distinguish its evidence shape from this WU's stage-adversarial shape.
+
+Phase 3 disposition: per implementation-pipeline Phase 3 rule "duplicates inventory names parallel implementations on the touched surface → proposer MUST address consolidate-vs-cascade-vs-accept-divergence", the Phase 3 proposal must explicitly relate the new operator's bug-report schema to the existing shapes in `test-reports.md` and `risk-profile.md`. Per dispatch policy "Policy-retracted residual-acceptance: max-alignment, no shortcuts" — if Phase 2.5.6 risk profile returns HIGH on the duplicates surface, Phase 3 performs architectural alignment, not extends residual.
+
+## D-2026-05-12-acr149-phase-2.5-gates-disposition
+
+**Date**: 2026-05-12
+**WU**: ACR-149
+**Phase**: 2.5 (human-gate disposition + mode propagation)
+
+### Inherited-estimate cold-start (orchestrator step 4a)
+
+Trigger: `${scratch_dir}/ticket.md` has `story_point_estimate: null` and `estimate_source: missing`. Orchestrator step 4a would normally halt with `NEEDS_INPUT` and three options (`Run a small prototype first` / `Proceed without a baseline estimate` / `Terminate WU`).
+
+Disposition: **Proceed without a baseline estimate.**
+
+Rationale:
+1. The dispatch's work-manager pre-resolutions explicitly cover Phase 2.5 gates: "Defer-to-prototype: default A — proceed exhaustive" and "Narrow-vs-exhaustive: default A — proceed exhaustive". The inherited-estimate cold-start's "Run a small prototype first" option is the same prototype-first choice these pre-resolutions disposed of.
+2. The Phase 2.5.0 problem map explicitly recorded `inherited_estimate_disposition: missing` with rationale: "the acceptance surface is concrete enough for Phase 3 sizing from this problem-map evidence: one workflow doc, one operator doc, one structural pytest, and discoverability/index updates. A backstop prototype is not needed to size the WU."
+3. Phase 3 proposer will refine the estimate per its own `## Estimate refinement` section using risk-profile + problem-map evidence.
+
+### Defer-to-prototype detection (orchestrator step 5)
+
+Defer-signal count from `${planning_dir}/risk/acr-149-risk-profile.md`: **1 of 5** (HIGH-on-most-surfaces fires, all others do not fire). Below the 2-signal threshold for surfacing the defer option. Plus pre-resolution authorized exhaustive regardless.
+
+Disposition: **Proceed in exhaustive mode.**
+
+### Problem-map approval (orchestrator step 6)
+
+`skip_problem_map_gate=true` per dispatch inputs (ACR project-level override). Routine problem-map approval is skipped.
+
+### Mode propagation (orchestrator step 8)
+
+Per-surface mode from `${planning_dir}/risk/acr-149-risk-profile.md` § "Per-Surface Mode List": uniformly **exhaustive** across all six touched surfaces. Phase 3, Phase 4, Phase 5, Phase 6b will operate exhaustively per the dispatch's "Narrow-vs-exhaustive: default A — proceed exhaustive" pre-resolution and the HIGH per-surface verdicts that policy-retracted residual-acceptance forbids being narrowed-out.
+
+## D-2026-05-12-acr149-phase-6c-d1-extension-batch
+
+**Date**: 2026-05-12
+**WU**: ACR-149
+**Phase**: 6c (Step 6c code-writer R2 → R3 → R4)
+
+### Observation
+
+Step 6c first invocation (codex3 invocation `11932fbb-ef93-40a2-966e-2b9462d33fa5`) repaired `workflows/eval-runtime.md` opening frontmatter per the approved D1 disposition (option (a)). After that repair, `python3 -m tools.workflow_index check` then failed on a second adjacent file:
+
+```
+workflow-index: workflows/feature-development.md: workflow_dispatch_contract must be a mapping
+```
+
+Step 6c R2 (`63b064d5-b585-4d2e-9849-0faa716990d0`) repaired that file's frontmatter. The check then failed on a third file (`workflows/refactoring.md`), then on `workflows/wu-session-wake.md` and `workflows/writing pipeline orchestrator.md`. A direct workflow-file scan confirmed only those three additional files have generator-parse issues; all other 25 workflow files conform.
+
+### Decision
+
+**Expand the Step 6c product write set to include all five workflow files needing narrow opening-frontmatter repairs**: `workflows/eval-runtime.md`, `workflows/feature-development.md`, `workflows/refactoring.md`, `workflows/wu-session-wake.md`, `workflows/writing pipeline orchestrator.md`. Each is touched **only** in opening YAML frontmatter; bodies are preserved verbatim.
+
+Step 6c R4 (`b35f896a-ec1e-4b1d-a07e-3f1063064885`) executed the batch under this expanded scope; `python3 -m tools.workflow_index check` exits 0; 12/12 structural pytests pass.
+
+### Rationale
+
+Same architectural alignment logic as D1 (the original `workflows/eval-runtime.md` repair). The five affected files are all stale-frontmatter cases that the canonical generator catches now that ACR-149 introduces a new workflow file and forces a fresh `workflow_index check`. The dispatch's "Mid-pipeline drift: default A — proceed + note in DECISIONS as residual" pre-resolution authorizes batch expansion, and "max-alignment, no shortcuts" forbids accepting these as residual when each is a narrow architectural repair.
+
+### Bounded scope
+
+This residual extension is bounded to opening YAML frontmatter on the five named workflow files. If a sixth workflow file ALSO fails the workflow-index check after this batch, the orchestrator would treat that as evidence of a broader project-wide cleanup WU (out of ACR-149 scope) — none was observed.
+
+### Evidence
+
+- Step 6c R1 NEEDS_INPUT: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/phase6/step6c-needs-input.md`
+- Step 6c R2 log: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/logs/acr-149-phase-6c-r2.log`
+- Step 6c R4 log (gates pass): `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/logs/acr-149-phase-6c-r4.log`
+- Original D1 disposition: D-2026-05-12-acr149-phase-2.5-discoveries § D1
+- Mid-pipeline drift pre-resolution: dispatch input "Mid-pipeline drift: default A — proceed + note in DECISIONS as residual"
+
+## D-2026-05-12-acr149-phase-6c-consumption-echo-residual
+
+**Date**: 2026-05-14 (resolved); 2026-05-12 (originally surfaced)
+**WU**: ACR-149
+**Phase**: 6c (Step 6c code-writer) / 6 (process-tree audit #2 boundary)
+
+### Observation
+
+Step 6c rounds R3 (initial completion) and R4 (Tier-1 rewind retry with strict `ABSOLUTE FIRST LOG LINE REQUIREMENT` prompt prefix) both produced correct product code on every dimension the Step 6a contract enforces — 12 of 12 structural pytests pass, `python3 -m tools.workflow_index check` exits 0, the operator file enumerates the exact two-abstract-task `create` / `comment-write` external-surface contract — but the captured stdout log skips the literal `consumed: <path>` echoes the ACR-63 Step 6c log-echo rule requires. The `gpt-high` agent runs through `codex` / `codex3` providers whose stdout-capture surface elides the prompt-mandated first-line echo regardless of how strictly the prompt declares the requirement.
+
+### Decision
+
+**Accept the Step 6c log-echo gap as documented residual; proceed to Phase 6 process-tree audit #2 and Phase 7 / 8 / 9.**
+
+Same precedent the user has accepted across WU history:
+
+- ACR-63 § `D-2026-05-08d` (Step 6c log-echo Tier-1 rewind) and § `D-2026-05-08e` (Phase 8 PT-audit #3 BLOCKING accepted as residual + ship after user Option A)
+- ACR-129 § Step 6c rounds 1-3
+- ACR-183 § `D-2026-05-12` (visible in this DECISIONS.md history)
+- ACR-154 PR #138 (synthetic consumed-evidence bridge convention)
+- ACR-198 § `D-2026-05-13`
+
+### Rationale
+
+1. **Product correctness is verified independently of the stdout echo.** Structural pytests pass; `workflow_index check` clears; operator content matches contract content. If Step 6c had not consumed Step 6b's contract-driven test shape, the assertions would not pass. The synthetic consumed-evidence artifact at `${planning_dir}/.scratch/phase6/step6c-consumed-evidence.md` captures the mtime ordering proof and the content-based contract-mapping proof.
+2. **The dispatch's `Policy-retracted residual-acceptance: max-alignment, no shortcuts` rule targets HIGH structural verdicts on code-quality / risk-gate / prototype-risk gates** (the gate classes ACR-156 / ACR-162 / ACR-163 govern). The Step 6c log-echo gap is on the process-tree-audit class — procedural evidence — not a substantive quality verdict. The dispatch policy does not retract residual acceptance on this class.
+3. **Tier-1 already retried (R4) and reproduced the failure.** The gap is intrinsic to the codex stdout-capture surface, not a prompt-quality issue. ACR-206 (filed 2026-05-14) is the permanent fix track; ACR-190 tracks the systemic agent-runner stdout-capture defect.
+4. **Tier-2 split is destructive** of Phase 3 / 4 / 5 / 6 work that is already correct and merge-ready, and does not address the model-level echo issue.
+
+### Disposition
+
+- Manager: work-manager-operator (manager-max)
+- Answered at: 2026-05-14T03:14:17+00:00
+- Question artifact: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/questions/q-acr149-step6c-consumption-echo.question.json` (status `answered`, selected option `A`)
+- Synthetic consumed-evidence artifact: `/home/nes/projects/ai/planning/acr-149-adversarial-qa-stage-workflow/.scratch/phase6/step6c-consumed-evidence.md`
+- Systemic fix track: ACR-206, ACR-190
+
+### Process-tree audit #2 consumption
+
+The Phase 6 process-tree audit #2 reads this DECISIONS entry, the question artifact (with status `answered`, option `A`), and the synthetic consumed-evidence artifact as companion evidence. The audit treats the Step 6c stdout echo gap as documented residual under this disposition rather than as a fresh BLOCKING finding.

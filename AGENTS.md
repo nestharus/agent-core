@@ -88,6 +88,9 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `trace-recorder` - Capture Playwright traces and frame-by-frame workflow evidence when behavior is ambiguous and needs human review.
   File: [~/ai/agents/trace-recorder.md](agents/trace-recorder.md) | Inputs: `workflow`, `worktree_path`, `app_url`, `ambiguity`, `questions` | Model: `gpt-high`
 
+- `adversarial-qa-driver` - Run the stage-only adversarial QA workflow for normal-regression and adversarial probing, then file complete evidence-backed bugs without absorbing prototype QA or RCA.
+  Workflow: [~/ai/workflows/adversarial-qa-stage.md](workflows/adversarial-qa-stage.md) | File: [~/ai/agents/adversarial-qa-driver.md](agents/adversarial-qa-driver.md) | Inputs: `stage_url`, `health_check_url`, `use_case_dossier_path`, `run_id`, `planning_dir`, `ticket_system`, `${ticket_operator}` routing inputs, browser identity, credentials/roles, `feature_flags`, `local_log_paths?` | Model: `gpt-high`
+
 - `push-pull-auditor` - Audit changed code-level and deployment-level pull sites for A1 push-vs-pull system coupling and report `uncontrolled-source coupler` findings with decoupling direction.
   File: [~/ai/agents/push-pull-auditor.md](agents/push-pull-auditor.md) | Inputs: `repo_root`, `diff_path`, `output_path`, `base_ref?`, `head_ref?`, `changed_files_path?`, `proposal_path?`, `problem_map_path?`, `risk_profile_path?`, `code_quality_ref?` | Model: `gpt-high`
 
