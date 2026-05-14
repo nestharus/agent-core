@@ -2756,3 +2756,43 @@ Per work-manager-operator dispatch instructions for ACR-187, the routine Phase 2
 5. Re-run per-component CQ + process-tree audit #2.
 
 This rewind preserves planning artifacts (contracts, proposals, problem map, audit history) which were correctly produced under full compliance.
+
+### ACR-198 — Bootstrap exception canonical entry (2026-05-13)
+
+- Authority: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+- ACR-198 itself did not need to invoke the bootstrap-exception path: the Round-2 Phase 4 code-quality aggregate landed `LOW` after dropping the verifier surface and reframing the orchestrator's Phase 4 work as procedural Markdown. Evidence: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/code-quality/acr-198-phase-4/aggregate-code-quality.md` (verdict LOW); `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/risk/phase-4-join-manifest.json`.
+- The four condition booleans, listed for documentation only (informational; not invoked because no non-LOW aggregate advanced):
+  - `primary_deliverable_fixes_or_extends_metric: true` — ACR-198 adds the convention text that defines the metric exception.
+  - `non_low_finding_is_intrinsic_lockstep: n/a` — Round 1's verifier-induced lockstep was dropped before Round 2; Round 2 returned LOW with no remaining intrinsic-lockstep finding.
+  - `post_merge_satisfies_new_rule_under_new_metric: true` — once merged, the documented exception is the policy and the WU's own Phase 4 LOW is consistent with it.
+  - `declared_for_phase_4_ratification: false` — not declared in the proposal because the LOW aggregate made declaration unnecessary; future metric-fixing WUs that hit non-LOW Phase 4 code-quality will use the path.
+- This entry is the canonical reference shape for future WUs that DO need to invoke the bootstrap-exception path; it must not retroactively re-classify ACR-198's Round-1 HIGH as residual-accepted.
+
+## D-2026-05-13-acr198-step6c-stdout-capture-residual
+
+**Date**: 2026-05-13
+**WU**: ACR-198
+**Phase**: 6c
+**Cross-link**: ACR-190 (systemic agent-runner stdout-capture fix); ACR-154 (PR #138) precedent; ACR-180 prior occurrence; ACR-150 codex3 precedent.
+
+**Decision**: Accept the systemic agent-runner stdout-capture residual for ACR-198 Step 6c. Do NOT Tier-1 rewind. The canonical Step 6c consumption-of-Step-6b-outputs evidence is the orchestrator-authored synthetic-evidence artifact at `${scratch_dir}/phase6/step6c-consumed-evidence.md`, written in the same format ACR-154 shipped under in PR #138.
+
+**Why**: Four consecutive Step 6c dispatches (gpt-high×3 then claude-opus×1) all produced correct work products (round-4 diff: +46/-8 across four files exactly matching the Step 6a contract surface boundaries and the Step 6b eval-spec failure-mode catalog) but none emitted `consumed:` lines in the captured `${log}` envelope. Inspection of `agents trace --json --inline-transcript` for the round-4 claude-opus invocation (`0f248422-ac45-4485-bccc-61c1e00767ac`) confirmed the agent's tool-call inputs/outputs (Bash, Read, Edit) are NOT surfaced into the assistant message stream that the runner captures into `${log}`. The 5 `consumed:` matches in the transcript JSON are all from the user-prompt content embedded in record 0; no assistant turn emitted them.
+
+This is the same systemic stdout-capture limitation ACR-150 recorded for its codex3 Step 6c invocation, and the same limitation ACR-154 (PR #138) shipped under by authoring a synthetic consumed-evidence file. The platform hardening destination is ACR-190; the bounded exception applied here MUST NOT become a precedent for waiving Step 6c consumption evidence in general — it applies only when the runtime cannot surface `consumed:` echoes and the substantive consumption is verifiable from the produced diff plus an orchestrator-authored manifest.
+
+**Bounded exception**: Applies only to ACR-198 Step 6c invocation `0f248422-ac45-4485-bccc-61c1e00767ac` (claude-opus round 4), where the synthetic-evidence artifact at `${scratch_dir}/phase6/step6c-consumed-evidence.md` records the Step 6b output index (`${scratch_dir}/phase6/step6b-output-index.md`, mtime 16:13:18) and the Step 6b eval-spec artifact (`${worktree_path}/evals/bootstrap-exception/eval.md`, mtime 16:22:30) as the consumed inputs, both with mtimes BEFORE the Step 6c product-file mtimes (16:33:45–16:36:07) per the ACR-154 PR #138 ordering pattern. The exception expires at Process-tree audit #2: a PASS verdict closes it with no reusable precedent (ACR-190 is the durable destination); a `blocking` verdict reactivates Tier-1 rewind.
+
+**Substantive consumption verified**:
+- The four worktree product files (`DECISIONS.md`, `agents/implementation-pipeline-orchestrator.md`, `conventions/code-quality.md`, `conventions/workflow-execution-violations.md`) plus the Step 6b–authored `evals/bootstrap-exception/eval.md` are exactly the surface-boundary list named in `${scratch_dir}/phase6/step6b-output-index.md`. No file outside the index's named boundaries was modified.
+- Each of the five eval-spec failure modes (a)–(e) maps to a specific Step 6c edit: Phase 3 `## Bootstrap exception declaration` parse anchor; `### <ticket-id> — Bootstrap exception ratification` DECISIONS heading shape; `~/ai/conventions/code-quality.md § Bootstrap exception` Authority citation; Phase 4 join-manifest `bootstrap-exception` row with `verdict_line=RATIFIED`; manager-flavor / root-residual distinction in `conventions/workflow-execution-violations.md`.
+- The longer-form content-overlap evidence and round-by-round narrative are preserved at `${scratch_dir}/phase6/step6c-consumption-evidence.md` (the prior sidecar) and `${planning_dir}/audit-history.md` § Phase 6 Step 6c rounds.
+
+**Evidence pointers**:
+- Synthetic evidence file: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/phase6/step6c-consumed-evidence.md`
+- Sidecar evidence (long-form): `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/phase6/step6c-consumption-evidence.md`
+- Round-4 transcript: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/trace/phase-6c-round-4-transcript.json`
+- Round-4 log envelope: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/logs/acr-198-phase-6c.log`
+- Question artifact (answered C): `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/.scratch/questions/q-ee677572-fc14-48ef-a46c-58eace794192.question.json`
+- Audit-history rounds 2/3/4 narrative: `/home/nes/projects/ai/planning/acr-198-bootstrap-exception-convention/audit-history.md`
+- ACR-154 precedent: PR #138 (commit `8cb380e`), `~/ai/planning/acr-154-regression-investigation-workflow/.scratch/phase6/step6c-consumed-evidence.md` (same file shape).
