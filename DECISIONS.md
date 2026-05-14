@@ -130,6 +130,39 @@ The Phase 7 process-tree audit is NOT one of the implementation-pipeline orchest
 - `workflows/auditor-surface-expansion.md`.
 - `workflows/implementation-pipeline.md` `## Pause For Refactor`.
 - `conventions/feature-development-workflow.md` `## Refactoring out of scope`.
+## D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 6 per-component code-quality gate (round 2; halted on aggregate HIGH)
+
+**Decision**: Drop the seven `tests/test_refactoring_commit_history_*.py` Python machine-test files. Ship ACR-186 with only the WRITE-state `evals/acr-186-refactoring-commit-history-structural-test/eval.md` (markdown-only behavior specification).
+
+**Rationale**: The seven Python test files each open a shipped Markdown doc and regex-check for exact-text headers / frontmatter keys / cross-reference tokens, then exit non-zero on missing anchors. That is the exact pytest-on-markdown anti-pattern that ACR-174 deleted from the codebase. ACR-175 created the eval framework (`conventions/evals.md`, `workflows/eval-runtime.md`, `agents/eval-runner.md`) as its replacement. The eval.md in this worktree is the correct artifact under that replacement. The Python tests are a regression — same shape ACR-199 captures for the `tools/<wu>-verify/` variant, here surfaced under `tests/test_*.py` instead.
+
+This is the same closure ACR-191 executed when it hit identical findings: replace the verifier scripts with a markdown-only eval seed, the structural HIGH residuals evaporate because the diff surface ceases to exist for the auditors to score. (ACR-191 PR #139 D-2026-05-13-acr191-eval-seed-replaces-verifier-scripts retraction precedent.)
+
+The user explicitly rejected the Python tests under max-mode "no shortcuts": *"these tests add no value and are thus rejected."* (2026-05-13).
+
+**Acceptance reconciliation**: The original ACR-186 acceptance path that named seven executable Python structural-test modules is superseded for this branch by the answered Round 2 question artifact `q-2129585f-1a8e-4732-8b24-55b379d53174`, audit-history Round 3, and the Phase 6 round-3 LOW code-quality result. The active local acceptance artifact is the WRITE-state eval-spec at `evals/acr-186-refactoring-commit-history-structural-test/eval.md`; the retracted `tests/test_refactoring_commit_history_*.py` files must not be restored as a condition of this WU.
+
+**Action**:
+1. Delete `tests/test_refactoring_commit_history_*.py` (7 files) from the worktree.
+2. Keep `evals/acr-186-refactoring-commit-history-structural-test/eval.md` as the binding Step 6c output.
+3. Re-dispatch the orchestrator from Phase 6 against the reduced scope; expect A1 LOW (markdown-only diff), A5 NON_APPLICABLE (no executable code), push-pull LOW.
+4. Update ACR-199 to expand its regression scope to include `tests/test_*.py` smuggling alongside the existing `tools/<wu>-verify/` variant.
+
+**Evidence**:
+- Phase 6 round-2 aggregate-code-quality (HIGH): `planning/code-quality/acr-186-structural-tests/aggregate-code-quality.md`
+- Question artifact (halt point): `planning/.scratch/questions/q-2129585f-1a8e-4732-8b24-55b379d53174.question.json`
+- ACR-174 / ACR-175 / ACR-199 conventions + tickets.
+- Parent merge reference: `https://github.com/nestharus/agent-core/pull/127` (ACR-182 merged PR)
+
+**Bounded**: This reasoning applies only when the dropped Python files were pytest-on-markdown structural-anchor scrapers (ACR-174 anti-pattern). Genuine product-code or behavior-detection executable code is NOT covered by this decision.
 
 ## D-2026-05-12-acr137-inherited-estimate-cold-start
 
@@ -2935,3 +2968,132 @@ Once ACR-191 lands, the new adapter-aware A1 rule scores these three pairs LOW: 
 
 - The convention/auditor mirror (`agents/coupling-auditor.md` ↔ `conventions/code-quality.md`) remains a structural drift surface. The eval seed `evals/coupling-auditor-adapter/eval.md` describes the expected adapter-aware A1 behavior, so future eval-runtime runs (when implementation tickets follow up) will catch convention/auditor divergence as a behavior finding. This is the long-term replacement for the verifier's lockstep check.
 - ACR-199 is the umbrella for cleaning up other smuggled `tools/<wu>-verify/` scripts; ACR-191 itself is now compliant with ACR-174/ACR-175 by not authoring one.
+## D-2026-05-12-acr186-inherited-estimate-cold-start
+
+**Status**: Historical pre-retraction scope note only; active ACR-186 implementation path superseded by `D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction`.
+
+**Note**: Retained for chronology and inherited-estimate evidence. The "seven structural test modules" phrase describes the original ticket scope before the user-driven eval-only reduction.
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr186-inherited-estimate-cold-start
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 2.5 (pre-gate inherited-estimate check)
+
+**Decision**: proceed-without-baseline (exhaustive mode).
+
+**Justification**: dispatch from `work-manager-operator` pre-resolved Phase 2.5 gates as `Narrow-vs-exhaustive: default A — proceed exhaustive` and `Defer-to-prototype: default A — proceed exhaustive`. The Linear ticket carries `story_point_estimate: null`, `estimate_source: missing` (per `.scratch/ticket.md` frontmatter); the pre-resolution maps to "proceed without a baseline estimate" on the inherited-estimate cold-start question (per `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 2.5 step 4a). Scope is concrete and enumerated by the ticket (seven structural test modules); terminate-WU is not applicable.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/dispatch-prompt.md`; `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/ticket.md`.
+
+## D-2026-05-12-acr186-mid-pipeline-drift-residual
+
+**Status**: Historical pre-retraction scope note only; active ACR-186 implementation path superseded by `D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction`.
+
+**Note**: Retained for chronology and drift-discovery evidence. The seven-test routing/index wording describes the original ticket scope before the user-driven eval-only reduction.
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr186-mid-pipeline-drift-residual
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 2.5 (steps 2.5.1 coverage discovery and 2.5.4 duplicates drift discovery)
+
+**Decision**: proceed with current scope; record both discoveries as residuals; do NOT file separate tracker tickets and do NOT expand ACR-186's scope. The seven ACR-186 routing/index assertions use direct JSON parsing of `/home/nes/ai/workflows/index.json` and direct frontmatter parsing of `/home/nes/ai/workflows/refactoring-commit-history.md`, not the broken `python3 -m tools.workflow_index check` global validator.
+
+**Justification**: dispatch from `work-manager-operator` pre-resolves `Mid-pipeline drift: default A — proceed + note in DECISIONS as residual`. Supersedes `~/ai/conventions/risk-profile.md` § Discoveries-during-Phase-2.5 default of filing a tracker. ACR-182 already accepted broader workflow-index/frontmatter drift as a documented residual (`/home/nes/ai/DECISIONS.md:2151-2155`), explicitly deferring ACR-186 to the new entry only.
+
+**Discoveries**:
+1. `python3 -m tools.workflow_index check --repo-root /home/nes/ai` exits non-zero on `workflows/eval-runtime.md: missing opening frontmatter delimiter`. Pre-existing; not introduced by ACR-186; outside the seven structural-test modules; ACR-175 explicitly opted `eval-runtime.md` out of workflow metadata wiring.
+2. `python3 /home/nes/ai/tools/acr-137-verify/verify.py --check workflows_index_noop` fails with frozen `workflows/index.json` baseline hash. Historical-snapshot drift in a WU-specific verifier; not a reusable validator; not invoked by ACR-186.
+
+**Evidence**: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/research/acr-186-coverage-inventory.md`; `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/research/acr-186-duplicates.md`.
+
+## D-2026-05-12-acr186-tier1-rewind-step6c-missing-consumed-echo
+
+**Status**: Historical execution trace only; active ACR-186 implementation path superseded by `D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction`.
+
+**Note**: Retained for chronology and process-audit evidence. It does not reactivate the seven Python structural-test files.
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr186-tier1-rewind-step6c-missing-consumed-echo
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 6 (Step 6c R1)
+
+**Decision**: Tier-1 rewind. The first Step 6c invocation (UUID `81ae5f6a-7616-45ec-beeb-1c1a5ade9ff5`) wrote the seven shipped tests correctly and all seven exit 0, but the Step 6c stdout log did NOT emit the required `consumed: <step6b-test-file>` echo lines per the orchestrator's FIRST LOG LINE REQUIREMENT. This is a Tier-1 workflow-execution-violation per `~/ai/conventions/workflow-execution-violations.md` § "Step 6c log does not echo the Step 6b output paths it consumed".
+
+**Action**: deleted `/home/nes/projects/ai/worktrees/acr-186-refactoring-commit-history-structural-test/tests/` (uncommitted; HEAD still at `8618633bac1784b95c0ed72637c91c25959c2ce6`). Re-dispatched Step 6c (UUID will be recorded in `D-...-acr186-step6c-r2`) with stronger framing on the consumed-echo requirement.
+
+**Violating evidence**:
+- Violating log: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/logs/acr-186-phase-6c.log`
+- Violating invocation UUID: `81ae5f6a-7616-45ec-beeb-1c1a5ade9ff5`
+- Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
+
+## D-2026-05-12-acr186-tier1-rewind-step6c-r2-missing-consumed-echo
+
+**Status**: Historical execution trace only; active ACR-186 implementation path superseded by `D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction`.
+
+**Note**: Retained for chronology and process-audit evidence. It does not reactivate the seven Python structural-test files.
+
+**Date**: 2026-05-12
+
+**Identifier**: D-2026-05-12-acr186-tier1-rewind-step6c-r2-missing-consumed-echo
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 6 (Step 6c R2)
+
+**Decision**: second Tier-1 rewind. The R2 invocation (UUID `03ccdaba-de8f-41a0-81ba-0a5eba1d18ef`) produced correct tests (all seven exit 0; py_compile clean) but again suppressed the required `consumed:` echo lines from its stdout — the captured log shows only the runtime metadata and the final WROTE: line. The first Step 6c instruction to echo `consumed:` as first stdout was honored verbatim by the agent in some runs (e.g. ACR-185 v3 log) but suppressed by codex2 in this WU's R1 and R2. R3 will instruct the agent to emit each `consumed:` via an explicit Bash tool call (`bash -c "echo consumed: ..."`) which forces the line into the captured log regardless of the model's summary preferences.
+
+**Action**: deleted `/home/nes/projects/ai/worktrees/acr-186-refactoring-commit-history-structural-test/tests/` (uncommitted; HEAD still at `8618633bac1784b95c0ed72637c91c25959c2ce6`). Re-dispatching Step 6c R3.
+
+**Tier escalation note**: the per-WU policy permits two Tier-1 rewinds before Tier-2 split. R3 is the second Tier-1 rewind for the same procedural class. If R3 also fails the consumed-echo requirement, escalate to Tier-2 split (per-test-file decomposition).
+
+**Violating evidence**:
+- Violating log: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/logs/acr-186-phase-6c-r2.log`
+- Violating invocation UUID: `03ccdaba-de8f-41a0-81ba-0a5eba1d18ef`
+- Violation class: `step_6c_log_does_not_echo_step_6b_outputs` (per `~/ai/conventions/workflow-execution-violations.md`).
+
+## D-2026-05-13-acr186-step6c-r3-codex-stdout-capture-limitation
+
+**Status**: Historical capture-limitation precedent only; active ACR-186 implementation path superseded by `D-2026-05-13-acr186-reject-pytest-on-markdown-scope-reduction`.
+
+**Note**: Retained for chronology and process-audit evidence. It does not reactivate the seven Python structural-test files.
+
+**Date**: 2026-05-13
+
+**Identifier**: D-2026-05-13-acr186-step6c-r3-codex-stdout-capture-limitation
+
+**Linear ticket**: ACR-186
+
+**Phase**: Phase 6 (Step 6c R3)
+
+**Decision**: record the codex stdout-capture limitation per the ACR-150 D-2026-05-13 precedent and advance to Phase 6 Process-tree audit #2 with this DECISIONS entry attached as the bounded exception. Do NOT Tier-2 split (the per-WU tier-policy note in `D-2026-05-12-acr186-tier1-rewind-step6c-r2-missing-consumed-echo` was written before the ACR-150 D-2026-05-13 capture-limitation precedent was settled; that precedent supersedes the R3-fails-as-Tier-2-trigger framing for the codex stdout-capture failure class).
+
+**Rationale**: Step 6c R3 invocation `faf294df-67d6-423c-aa0a-b9df4f885f93` (codex `gpt-high`, finished `2026-05-12T17:15:03Z`, `success: true`, `exit_code: 0`) produced the seven shipped tests under `tests/`; all seven `py_compile` clean and all seven exit 0. The R3 prompt instructed two explicit Bash echo tool calls before any other action. However, `agents trace --json faf294df-67d6-423c-aa0a-b9df4f885f93` reports `transcript_state: no_locator` and `capture_method: turn_script`, identical to the ACR-150 case. The tee log at `${scratch_dir}/logs/acr-186-phase-6c-r3.log` contains only the two `OULIPOLY_*` metadata lines and the final `WROTE: 7 test files ...` line — the Bash-tool stdout was not piped through `tee` for this codex session.
+
+**Substantive consumption verified by filesystem inspection**:
+
+- Step 6a contract present at `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/contracts/acr-186-refactoring-commit-history-structural-test.md` (16535 bytes, mtime 2026-05-12T09:32 UTC) — precedes Step 6c product writes.
+- Step 6b output index present and unchanged at `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/phase6/step6b-output-index.md` (8917 bytes, mtime 2026-05-12T09:48 UTC) — precedes Step 6c product writes.
+- Step 6b eval-spec markdown present and unchanged at `/home/nes/projects/ai/worktrees/acr-186-refactoring-commit-history-structural-test/evals/acr-186-refactoring-commit-history-structural-test/eval.md` (20022 bytes, mtime 2026-05-12T09:48 UTC) — precedes Step 6c product writes.
+- Seven Step 6c-emitted test files under `/home/nes/projects/ai/worktrees/acr-186-refactoring-commit-history-structural-test/tests/` (mtimes 2026-05-12T10:12-10:13 UTC, all AFTER the three input artifacts above) — bounded ordering evidence: input-read mtimes < product-write mtimes.
+- Seven test files match the seven test-intent mapping rows in the Step 6b output index (workflow_shape, orchestrator_shape, convention_shape, routing, package_output, worked_example, cross_references) one-to-one.
+- All seven test files import / read fixtures from the source paths named in the Step 6b output index (`/home/nes/ai/workflows/refactoring-commit-history.md`, `/home/nes/ai/agents/refactoring-commit-history-orchestrator.md`, `/home/nes/ai/conventions/refactoring-commit-history-scoping.md`, `/home/nes/ai/AGENTS.md`, `/home/nes/ai/workflows/index.json`).
+
+**Supplementary consumption-evidence artifact**: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/phase6/step6c-consumption-evidence.md` records the same filesystem inspection as durable, audit-consumable evidence, modeled on the ACR-88 D-2026-05-07 `step6c-consumption-evidence.md` precedent and the ACR-150 D-2026-05-13 capture-limitation precedent. This artifact is the orchestrator's filesystem-inspection summary, not fabricated agent stdout; it satisfies the Step 6c "evidence of consuming Step 6b outputs" spec requirement that the codex stdout-capture limitation prevented from landing in the tee log.
+
+**Bounded exception scope**: applies only to ACR-186 Step 6c R3 invocation `faf294df-67d6-423c-aa0a-b9df4f885f93` where `agents trace --json` reports `transcript_state: no_locator` AND the committed filesystem evidence verifies the required Step 6b consumption AND the seven test files match the seven Step 6b output index rows one-to-one. Expires at Phase 6 Process-tree audit #2: a `blocking` verdict reactivates Tier-2 split (per the R2 escalation note); a PASS verdict leaves no reusable precedent. The platform hardening destination for the codex stdout-capture class remains ACR-190 / ACR-204 (rate-limit silent-hang) per the dispatch-context references.
+
+**Evidence**:
+- Trace: `agents trace --json faf294df-67d6-423c-aa0a-b9df4f885f93` reports `transcript_state: no_locator`, `capture_method: turn_script`, `success: true`, `exit_code: 0`.
+- R3 log: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/logs/acr-186-phase-6c-r3.log` (3 lines: OULIPOLY_INVOCATION + OULIPOLY_SESSION + WROTE).
+- R3 prompt: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/prompts/acr-186-phase-6c-r3.md` (specifies the two REQUIRED leading `Bash echo` commands).
+- Supplementary consumption-evidence: `/home/nes/projects/ai/planning/acr-186-refactoring-commit-history-structural-test/.scratch/phase6/step6c-consumption-evidence.md`.
+- Precedent: `/home/nes/ai/DECISIONS.md` § `D-2026-05-13-acr150-step6c-consumed-echo-capture-limitation`.
