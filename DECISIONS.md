@@ -2799,3 +2799,27 @@ This rewind preserves planning artifacts (contracts, proposals, problem map, aud
 **Effect on downstream phases**:
 - Process-tree audit #2's expected-process manifest will record the FIRST-LOG-LINE non-emission as ACR-206-known and treat substantive consumption evidence (correct edit shape matching the round-6 proposal + agent narrative confirming read-without-modify of Step 6b outputs) as the closure-equivalent.
 - No re-dispatch of Step 6c needed; the product is correct.
+
+## D-2026-05-14-acr193-phase7-coderabbit-pr-first-reorder
+
+**Date**: 2026-05-14
+**WU**: ACR-193
+**Phase**: Phase 7 (CodeRabbit loop) → Phase 9 (reordered)
+
+**Decision**: The CLI `coderabbit review` returned `BLOCKED:coderabbit-service-timeout` (3 attempts × ~1hr, all stuck in "Setting up"). Per answered question `q-6855a94e-685d-4b70-8018-1a5846c83e96` option D: open the draft PR now (Phase 9 steps 1-6 early), let the GitHub-App CodeRabbit run on the PR diff, and resume the Phase 7 review loop against PR-side findings before promote+merge. Phase 7 is NOT skipped — option D only reorders the dispatch path; an outage-skip (option B) would require a separate explicit authorization and is only on the table if the GitHub-App path also fails.
+
+**Why**:
+- The CLI `coderabbit review --plain` and the GitHub-App CodeRabbit run on different code paths; the CLI outage does not necessarily mean the App is down.
+- Same-day WUs ACR-205 PR #142 and AGE-93 PR #88 both shipped with CodeRabbit converging successfully — the outage is intermittent, not total.
+- Skipping Phase 7 before confirming the App path is also broken would be a shortcut; the dispatch's no-shortcuts posture forbids it.
+
+**Evidence**:
+- Answered question: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/.scratch/questions/q-6855a94e-685d-4b70-8018-1a5846c83e96.question.json` (option D, manager-max, 2026-05-14).
+- CodeRabbit loop evidence: `/home/nes/projects/ai/planning/acr-193-phase9-no-protection-fallback/coderabbit/acr-193-coderabbit-loop-evidence.md`.
+- Same-day successful CodeRabbit invocations: ACR-205 PR #142, AGE-93 PR #88.
+
+**Effect on downstream phases**:
+- Phase 9 steps 1-6 (push + pr-writer + `gh pr create --draft` + session manifest update) run before Phase 7 completes.
+- Phase 7 resumes as a review loop against the GitHub-App CodeRabbit's PR-side findings; applies findings per the loop rules (no force-push, no commit weakening, accepted-residual entries untouched).
+- If the GitHub-App CodeRabbit also fails within a bounded wait, the orchestrator halts with a new NEEDS_INPUT for an outage-skip disposition citing both CLI + App failures.
+- Phase 9 finish (promote to ready + `gh pr merge --squash`) waits for Phase 7 + Phase 8 + Phase 8.X to clear. Master has no branch protection → direct `gh pr merge --squash`, not `--auto`.
