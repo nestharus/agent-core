@@ -41,11 +41,11 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels.
 - `diff_path=<path>` (optional) - diff evidence for ad-hoc or later PR/diff invocations.
-- `contract_path=<path>` (optional) - Phase 6a contract. When present, read the `## Adapter declarations` section for the adapter-declaration set per `~/ai/conventions/code-quality.md` § Adapter declarations.
+- `contract_path=<path>` (optional) - Phase 6a contract. When present, read exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections for declaration carriers per `~/ai/conventions/code-quality.md`.
 - `code_trace_paths=<paths>` (optional) - existing trace reports that identify dependency edges.
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-coupling.md`) - report destination.
 
-When `contract_path` is not supplied, the auditor may look for `## Adapter declarations` or an equivalent proposal-time adapter-declaration section in `proposal_path` before falling back to ordinary non-adapter coupling scoring.
+When `contract_path` is not supplied, the auditor may look for exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections in `proposal_path` before falling back to ordinary non-declared coupling scoring. Section-name lookup is exact; aliases do not apply.
 
 ## Non-Negotiables
 
@@ -61,15 +61,19 @@ When `contract_path` is not supplied, the auditor may look for `## Adapter decla
 
 A1 is the metric source. The bound A1 row is:
 
-- `Coupling by distinct external symbols/modules referenced`: LOW = 0-2; MEDIUM = >= 3; HIGH = >= 6.
+- `Coupling by distinct external symbols/modules referenced`: LOW = 0-2; MEDIUM = 3-5; HIGH = >= 6.
 
-Count distinct external symbols/modules referenced across a component pair or from one component into another. A pair at 0-2 references is LOW, a pair at >= 3 references is MEDIUM, and a pair at >= 6 references is HIGH.
+Count distinct external symbols/modules referenced across a component pair or from one component into another. A pair at 0-2 references is LOW, a pair at 3-5 references is MEDIUM, and a pair at >= 6 references is HIGH.
 
-For declared adapter components, apply the adapter rule from `~/ai/conventions/code-quality.md` § Adapter declarations. A component is a declared adapter only when its component name appears under `adapter_declarations:` with `role: adapter` in the resolved declaration carrier. For that component, A1 counts distinct external CONTRACTS in `Translates:`, not distinct field references within those contracts. Score LOW when the adapter bridges <= 5 distinct named external contracts and all external references are subordinate to the declared `Translates:` surfaces. Score HIGH when the adapter bridges > 5 contracts, when the declaration is malformed, or when the component reaches undeclared external contracts that are not subordinate to `Translates:`.
+For declared adapter components, apply the adapter rule from `~/ai/conventions/code-quality.md` § Adapter declarations. A component is a declared adapter only when its component name appears under `adapter_declarations:` with `role: adapter` in the resolved declaration carrier. For that component, A1 counts distinct external CONTRACTS in `Translates:`, not distinct field references within those contracts. Score LOW when the adapter bridges <= 5 distinct named external contracts and all external references are subordinate to the declared `Translates:` surfaces. Score HIGH when the adapter bridges > 5 contracts or when the component reaches undeclared external contracts that are not subordinate to `Translates:`. Malformed adapter declarations emit `BLOCKED:malformed-adapter-declaration:<component>:<reason>`.
 
 A reference is subordinate to a declared `Translates:` contract when it is a field, method, type, symbol, section, or documented operation directly defined by that contract surface. References to contracts not listed in `Translates:` are not subordinate.
 
-Non-adapter pairs preserve the raw symbol/module threshold: LOW `0-2`, MEDIUM `>= 3`, HIGH `>= 6` distinct external symbols/modules. Adapter status MUST be explicit; auto-declaration or inferred adapter status is forbidden and scores HIGH.
+For declared intrinsic-surface components, apply the intrinsic-surface rule from `~/ai/conventions/code-quality.md` § Intrinsic-surface declarations after adapter scoring and before raw non-declared scoring. A component is a declared intrinsic surface only when its component name appears under `intrinsic_surface_declarations:` with `role: intrinsic-surface`, exactly one `Domain:`, and a non-empty `Owns:` list in the resolved declaration carrier. For that component, A1 counts named `Domain:` entries as one boundary per declared domain, not distinct field references within those domains. Score LOW when the declared component covers <= 5 named domains and all external references are subordinate to the declared `Owns:` set. Score HIGH when the declared component covers > 5 domains or when external references reach symbols, operations, contracts, or modules outside the declared `Owns:` set. Malformed intrinsic-surface declarations emit `BLOCKED:malformed-intrinsic-surface-declaration:<component>:<reason>`.
+
+A reference is subordinate to a declared `Owns:` set when it is a field, method, type, symbol, section, or documented operation directly named by, or directly belonging to, that domain-owned symbol or operation set. References outside `Owns:` are not subordinate.
+
+Non-declared pairs preserve the raw symbol/module threshold: LOW `0-2`, MEDIUM `3-5`, HIGH `>= 6` distinct external symbols/modules. Adapter and intrinsic-surface status MUST be explicit; auto-declaration or inferred declaration status is forbidden and scores HIGH.
 
 The overall verdict is the worst applicable per-pair verdict. If required evidence is absent or malformed, use the stop conditions instead of guessing.
 
@@ -90,15 +94,17 @@ Phase 4 runs through `~/ai/workflows/code-quality.md`. Phase 6 current-layer cou
 3. Verify that A1 still contains `Coupling by distinct external symbols/modules referenced`.
 4. Resolve touched surfaces into candidate component boundaries using module/crate/package layout and any explicit labels in the touched-surface enumeration.
 5. Extract touched functions, symbols, external references, and dependency edges from supplied WU-owned change evidence, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
-6. Load and validate adapter declarations:
-   - Load candidate adapter declarations from `contract_path` `## Adapter declarations` when `contract_path` is present, otherwise from `proposal_path` `## Adapter declarations` or an equivalent proposal-time adapter-declaration section when present.
+6. Load and validate adapter and intrinsic-surface declarations:
+   - Load candidate adapter declarations from `contract_path` exact `## Adapter declarations` when `contract_path` is present, otherwise from `proposal_path` exact `## Adapter declarations` when present.
+   - Load candidate intrinsic-surface declarations from `contract_path` exact `## Intrinsic-surface declarations` when `contract_path` is present, otherwise from `proposal_path` exact `## Intrinsic-surface declarations` when present.
    - Validate each declaration shape: an `adapter_declarations:` entry must name `component`, set `role: adapter`, and provide a non-empty `Translates:` list of stable external contract surfaces.
-   - On malformed entries, emit a stop condition naming the offending entry.
-   - Resolve matching declarations to the component boundaries from step 4.
-   - Do not infer adapter status for undeclared components.
+   - Validate each intrinsic-surface declaration shape: an `intrinsic_surface_declarations:` entry must name `component`, set `role: intrinsic-surface`, provide exactly one `Domain:`, and provide a non-empty `Owns:` list of domain-owned symbols or operations.
+   - On malformed entries in either declaration family, emit a fail-closed stop condition naming the offending entry.
+   - Resolve matching declarations from both declaration families to the component boundaries from step 4.
+   - Do not infer adapter or intrinsic-surface status for undeclared components.
 7. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and cite `workflows/auditor-surface-expansion.md`: coupling component-pair references are blocking only when diff-owned.
 8. If pair-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
-9. Score per-pair coupling using the A1 coupling row, applying the adapter-aware distinct-contract rule only to components with a valid matching adapter declaration.
+9. Score per-pair coupling using the A1 coupling row, applying the adapter-aware distinct-contract rule first to components with a valid matching adapter declaration, the intrinsic-surface domain rule second to components with a valid matching intrinsic-surface declaration, and the raw non-declared rule otherwise.
 10. Assign the overall verdict as the worst applicable score.
 11. Attach evidence for every non-LOW component-pair score.
 12. Write the report to `output_path`.
@@ -113,7 +119,7 @@ Report shape:
 - Inputs Read.
 - References Read.
 - Component Boundaries table with component, evidence, and notes.
-- Per-Pair Coupling table with source component, target component, distinct external symbols/modules referenced, declaration artifact path, declared adapter component, `Translates:` contracts, contract count, adapter verdict, verdict, and evidence.
+- Per-Pair Coupling table with source component, target component, distinct external symbols/modules referenced, adapter declaration artifact path, declared adapter component, `Translates:` contracts, contract count, adapter verdict, intrinsic declaration artifact path, declared intrinsic component, `Domain:`, `Owns:` set or summary, domain count, intrinsic-surface verdict, final verdict, and evidence.
 - Evidence For Non-LOW Scores table with score, evidence, and why it supports the verdict.
 - Residual Ambiguity / Stop-Condition Notes.
 - Final verdict line: LOW, MEDIUM, or HIGH.
@@ -123,13 +129,14 @@ Final stdout: `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT:<question_artifact>`, or `BL
 ## Stop Conditions
 
 - Success: report written with an overall verdict of `LOW`, `MEDIUM`, or `HIGH`.
-- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, the A1 metric row is absent, or an adapter declaration is malformed. Name the offending adapter declaration entry in the reason.
+- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, the A1 metric row is absent, or a declaration is malformed. Name the offending declaration entry in the reason.
 - `BLOCKED:malformed-adapter-declaration:<component>:<reason>`: an `adapter_declarations:` entry is malformed, including missing `component`, missing or non-`adapter` role, missing or empty `Translates:`, or a component name that cannot be resolved to the candidate component boundaries.
-- `NEEDS_INPUT:<question_artifact>`: only for a genuine new value, scope, or trade-off question, such as multiple plausible component boundaries, conflicting adapter declarations, or malformed adapter declaration evidence whose intended correction materially changes the verdict and cannot be resolved from evidence. Name the offending adapter declaration entry in the question artifact.
+- `BLOCKED:malformed-intrinsic-surface-declaration:<component>:<reason>`: an `intrinsic_surface_declarations:` entry is malformed, including missing `component`, missing or non-`intrinsic-surface` role, missing `Domain:`, more than one `Domain:`, missing or empty `Owns:`, or a component name that cannot be resolved to the candidate component boundaries.
+- `NEEDS_INPUT:<question_artifact>`: only for a genuine new value, scope, or trade-off question, such as multiple plausible component boundaries, conflicting declarations, or malformed declaration evidence whose intended correction materially changes the verdict and cannot be resolved from evidence. Name the offending declaration entry in the question artifact.
 
 ## Worked Examples
 
-These examples apply `~/ai/conventions/code-quality.md` § Adapter declarations.
+These examples apply `~/ai/conventions/code-quality.md` § Adapter declarations and § Intrinsic-surface declarations.
 
 ### Legitimate adapter (LOW)
 
@@ -176,6 +183,56 @@ Per-pair table entry:
 | source component | target component | distinct external symbols/modules referenced | declaration artifact path | declared adapter component | `Translates:` contracts | contract count | adapter verdict | verdict | evidence |
 |---|---|---|---|---|---|---|---|---|---|
 | `~/ai/agents/release-ticket-sync.md` | unrelated external surfaces | 12 raw references | `proposal_path` | `~/ai/agents/release-ticket-sync.md` | release manifest; Jira ticket; Linear ticket; GitHub PR; CI workflow; deployment window | 6 | declared adapter HIGH | HIGH | The adapter declaration is explicit but over threshold and reaches undeclared external contracts; non-adapter raw threshold would also be HIGH at `>= 6`. |
+
+### Quota-state intrinsic surface (LOW)
+
+Per `~/ai/conventions/code-quality.md` § Intrinsic-surface declarations, the intrinsic-surface threshold is N = 5 named domains.
+
+Declaration carrier:
+
+```yaml
+intrinsic_surface_declarations:
+  - component: ~/ai/agents/provider-quota-filter.md
+    role: intrinsic-surface
+    Domain: quota_state
+    Owns:
+      - provider_quotas
+      - provider_quota_windows
+      - exhausted_at
+      - resets_at
+      - filtered_indices
+      - clear_exhausted
+```
+
+Per-pair table entry:
+
+| source component | target component | distinct external symbols/modules referenced | intrinsic declaration artifact path | declared intrinsic component | `Domain:` | `Owns:` set | domain count | intrinsic-surface verdict | verdict | evidence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `~/ai/agents/provider-quota-filter.md` | quota-state domain surface | 8 raw references | `contracts/acr-205-phase-6a.md` | `~/ai/agents/provider-quota-filter.md` | quota_state | provider_quotas; provider_quota_windows; exhausted_at; resets_at; filtered_indices; clear_exhausted | 1 | declared intrinsic-surface LOW | LOW | Explicit `role: intrinsic-surface`; 1 domain is `<= 5`; every reference is subordinate to the declared `Owns:` set. |
+
+### Over-broad intrinsic surface (HIGH)
+
+Per `~/ai/conventions/code-quality.md` § Intrinsic-surface declarations, references outside `Owns:` are non-subordinate and score HIGH.
+
+Declaration carrier:
+
+```yaml
+intrinsic_surface_declarations:
+  - component: ~/ai/agents/provider-quota-filter.md
+    role: intrinsic-surface
+    Domain: quota_state
+    Owns:
+      - provider_quotas
+      - provider_quota_windows
+      - exhausted_at
+      - resets_at
+```
+
+Per-pair table entry:
+
+| source component | target component | distinct external symbols/modules referenced | intrinsic declaration artifact path | declared intrinsic component | `Domain:` | `Owns:` set | domain count | intrinsic-surface verdict | verdict | evidence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `~/ai/agents/provider-quota-filter.md` | quota-state plus external side effects | 9 raw references | `proposal_path` | `~/ai/agents/provider-quota-filter.md` | quota_state | provider_quotas; provider_quota_windows; exhausted_at; resets_at | 1 | declared intrinsic-surface HIGH | HIGH | The declaration is explicit and under the domain threshold, but the component reads a routing log and writes a billing record outside `Owns:`. |
 
 ## Escalation
 

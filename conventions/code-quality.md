@@ -142,11 +142,13 @@ Each `adapter_declarations:` entry names `component`, requires `role: adapter`, 
 
 For declared adapter components, A1 coupling counts distinct external CONTRACTS in `Translates:`, not field references within those contracts. A component declared as translating two stable contracts bridges 2 contracts even if each contract has many fields.
 
-The default adapter threshold is `N = 5` distinct contracts: LOW when the adapter bridges `<= N` named contracts and all external references are subordinate to the declared `Translates:` surfaces; HIGH when it bridges `> N` contracts, when the declaration is malformed, or when the component reaches undeclared external contracts not subordinate to `Translates:`.
+The default adapter threshold is `N = 5` distinct contracts: LOW when the adapter bridges `<= N` named contracts and all external references are subordinate to the declared `Translates:` surfaces; HIGH when it bridges `> N` contracts or when the component reaches undeclared external contracts not subordinate to `Translates:`.
+
+Malformed adapter declarations emit `BLOCKED:malformed-adapter-declaration:<component>:<reason>`. Valid-but-over-threshold adapters remain HIGH, and valid declarations with non-subordinate references remain HIGH. The same malformed-declaration disposition policy applies to intrinsic-surface declarations in the section below.
 
 A reference is subordinate to a declared `Translates:` contract when it is a field, method, type, symbol, section, or documented operation directly defined by that contract surface. References to contracts not listed in `Translates:` are not subordinate.
 
-Non-adapter coupling keeps the existing raw threshold: LOW `0-2`, MEDIUM `>= 3`, HIGH `>= 6` distinct external symbols/modules. The adapter rule is an opt-in branch for explicitly declared adapter components only; it does not weaken the non-adapter coupling row in `## Numerical thresholds`.
+Non-adapter coupling keeps the existing raw threshold: LOW `0-2`, MEDIUM `3-5`, HIGH `>= 6` distinct external symbols/modules. The adapter rule is an opt-in branch for explicitly declared adapter components only; it does not weaken the non-adapter coupling row in `## Numerical thresholds`.
 
 Use adapter declarations for explicit translation components, such as an operator bridging stable contracts. Do not use them for components reaching many unrelated external surfaces dressed up as "adapter"; that is sprawl masquerading as adapter and remains HIGH.
 
@@ -154,10 +156,46 @@ Adapter status MUST be explicit. The component must be named under an `adapter_d
 
 This convention is canonical for adapter declarations. `~/ai/agents/coupling-auditor.md` mirrors and applies this rule, and edits to the convention and auditor rule must land in lockstep.
 
+## Intrinsic-surface declarations
+
+Intrinsic-surface declarations are a sister mechanism to adapter declarations, distinct from adapter translation work. They are for components whose purpose is a predicate, filter, or selector over a coherent named data domain.
+
+Carrier shape:
+
+```text
+intrinsic_surface_declarations:
+  - component: <path-or-component-name>
+    role: intrinsic-surface
+    Domain: <stable-domain-name>
+    Owns:
+      - <domain-owned-symbol-or-operation>
+      - ...
+```
+
+Each `intrinsic_surface_declarations:` entry requires `component`, `role: intrinsic-surface`, exactly one `Domain:`, and a non-empty `Owns:` list. The carrier may live in `## Intrinsic-surface declarations` of `contract_path` when present, which is preferred, or in `## Intrinsic-surface declarations` of `proposal_path` when no contract carrier is supplied. Section names are exact; aliases do not apply.
+
+For declared intrinsic-surface components, A1 coupling counts named `Domain:` entries, not raw field references within those domains. The default intrinsic-surface threshold is `N = 5` named domains: LOW when the declared component covers `<= N` named `Domain:` entries and all external references are subordinate to the declared `Owns:` set; HIGH when it covers `> N` domains or when external references reach symbols, operations, contracts, or modules outside the declared `Owns:` set.
+
+Malformed intrinsic-surface declarations emit `BLOCKED:malformed-intrinsic-surface-declaration:<component>:<reason>`.
+
+A reference is subordinate to a declared `Owns:` set when it is a field, method, type, symbol, section, or documented operation directly named by, or directly belonging to, that domain-owned symbol or operation set. References outside `Owns:` are not subordinate.
+
+Non-declared coupling keeps the existing raw threshold: LOW `0-2`, MEDIUM `3-5`, HIGH `>= 6` distinct external symbols/modules. The intrinsic-surface rule is an opt-in branch for explicitly declared intrinsic-surface components only; it does not weaken the non-declared coupling row in `## Numerical thresholds`.
+
+Intrinsic-surface status MUST be explicit in the resolved carrier. The component must be named under an `intrinsic_surface_declarations:` carrier with `role: intrinsic-surface`; auto-declaration or inference from names, paths, domain vocabulary, or raw-reference counts is forbidden.
+
+This convention is canonical for intrinsic-surface declarations. `~/ai/agents/coupling-auditor.md` MUST match this section on carrier shape, role name, required fields, `N = 5` threshold, subordinate-reference rule, malformed disposition, and preserved raw thresholds. Edits to the convention and auditor rule must land in lockstep.
+
 ## Adapter-declaration examples
 
 - LOW: `agents/prototype-validation-proof-bundle-adapter.md` is declared with `role: adapter` and `Translates:` containing `prototype-validation-proof-bundle` and `agents/prototype-pr-writer.md`. The component bridges 2 stable contracts, and all external references are subordinate to those surfaces.
 - HIGH: `agents/release-and-ticket-sync.md` declares `role: adapter` but lists 6 unrelated contracts in `Translates:`, or reaches Slack, Jira, CI, release manifests, code-quality reports, and workflow internals without declaring those surfaces. The adapter declaration does not apply as LOW because the declaration exceeds `N = 5` or because undeclared external contracts are reached.
+
+## Intrinsic-surface examples
+
+- LOW: `agents/provider-quota-filter.md` is declared with `role: intrinsic-surface`, `Domain: quota_state`, and `Owns:` containing `provider_quotas`, `provider_quota_windows`, `exhausted_at`, `resets_at`, `filtered_indices`, and `clear_exhausted`. The component covers 1 domain and all external references are subordinate to the declared quota-state symbols and operations.
+- HIGH: `agents/provider-quota-filter.md` declares `role: intrinsic-surface` for `Domain: quota_state` but also reads routing-log internals or writes billing records outside `Owns:`. The intrinsic-surface declaration does not apply as LOW because non-subordinate references are reached.
+
 
 ## Disposition policy
 
@@ -189,7 +227,7 @@ These are starting calibration points for downstream auditors A4 / A5 / A6 (NES-
 | `Nesting depth` | 0-1 | n/a | >= 2 |
 | `Function categories per function` | 1 | n/a | >= 2 |
 | `Cohesion by classifications touched` | actual classifications are a subset of the declared role set (file-local, path default, or component-level declared roles in a Phase 6a contract); for components and files without any declared roles, exactly 1 classification | n/a | actual classifications exceed the declared role set or include classifications outside the declared role set; for components and files without any declared roles, 2 or more classifications |
-| `Coupling by distinct external symbols/modules referenced` | 0-2 | >= 3 | >= 6 |
+| `Coupling by distinct external symbols/modules referenced` | 0-2 | 3-5 | >= 6 |
 
 The first two rows are hard code-shape thresholds in this convention. The cohesion and coupling rows are review calibration: they identify where a function is likely doing too many kinds of work or depending on too many external surfaces.
 
