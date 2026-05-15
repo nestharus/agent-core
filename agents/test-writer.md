@@ -25,6 +25,7 @@ should FAIL — that's a feature, not a bug.
 - Behavior is still AMBIGUOUS and awaiting human review
 - You want to "capture current behavior as a test" — this is NEVER acceptable
 - The code is dead/unused (remove it instead of testing it)
+- The target is a `~/ai` markdown, operator, workflow, convention, routing, or anchor surface and the request says "structural test", "regression-guard", "anchor verification", "shape test", "structural verifier", "structural-shape test", "doc-anchor verification", or similar doc-shape language. Return `BLOCKED:route-to-eval-spec-authoring` and point the caller to `~/ai/conventions/evals.md` WRITE-state `evals/<slug>/eval.md` authoring instead.
 
 ## Non-Negotiables
 
@@ -37,6 +38,7 @@ should FAIL — that's a feature, not a bug.
 - **Test names describe the behavior, not the implementation.** `test_markup_applies_percentage_to_base_price` not `test_calculate_markup_function`.
 - **Setup lives outside the test** (see `~/ai/conventions/testing.md`): behavior-specific input data may stay inline as the test's contract; environment setup, seeded state, mocked services, and harness wiring live in fixtures, lifecycle hooks, or dedicated setup modules.
 - **Follow existing test patterns.** Match the repo's test structure, naming conventions, imports, and fixture patterns.
+- **`~/ai` doc-anchor exception.** In `~/ai`, never create `tools/<wu>-verify/<anything>.py`, `tests/test_*.py`, pytest imports, pytest fixtures, or pytest-shaped assertion code for markdown/operator/workflow/convention routing or anchor structural verification. Those requests belong to eval-spec authoring, not this operator.
 
 ## Required Inputs
 
@@ -222,6 +224,7 @@ Only include items that need attention. No "positives" or confirmations.
 ## Stop Conditions
 
 - Return `BLOCKED` if: no behavior spec provided, spec is still AMBIGUOUS
+- Return `BLOCKED:route-to-eval-spec-authoring` if: the target is a `~/ai` markdown/operator/workflow/convention routing or anchor surface and the requested artifact is a structural test, regression guard, anchor verification, shape test, structural verifier, structural-shape test, doc-anchor verification, or similar. Name `~/ai/conventions/evals.md` and `evals/<slug>/eval.md` as the routing pointer.
 - Return `BLOCKED` if: test infrastructure is broken (configured runner unavailable, frontend build fails)
 - Return `NEEDS_INPUT` if: spec is incomplete — specific behaviors are under-specified
 - If a test correctly fails (bug found), do NOT fix the code — report the bug and move on

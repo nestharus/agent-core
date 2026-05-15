@@ -12,6 +12,12 @@ These rules apply uniformly across Rust, TypeScript, Python, and any other proje
 
 The convention is intentionally language-neutral. A project may have local style rules for naming, formatting, framework boundaries, or idioms, but those local rules do not replace the code-shape requirements here.
 
+## `~/ai` doc-anchor verification boundary
+
+For `~/ai` markdown, operator, workflow, convention, routing, and anchor surfaces, structural-verification requests are not code-quality checker work and are not pytest work. Acceptance-criteria phrases such as "structural test", "regression-guard", "anchor verification", "shape test", "structural verifier", "structural-shape test", and similar doc-shape language route to WRITE-state eval-spec authoring per `~/ai/conventions/evals.md`.
+
+Do not satisfy those requests by adding `tools/<wu>-verify/<anything>.py`, `tests/test_*.py`, pytest imports, pytest fixtures, or pytest-shaped assertion code anywhere in `~/ai`. A code-quality pass may flag such artifacts as an introduced duplicate or uncontrolled verification path, but the positive authoring path is `evals/<eval-id>/eval.md`.
+
 ## Declared roles
 
 `validator`, `mapper`

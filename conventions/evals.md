@@ -66,6 +66,12 @@ Eval assets use this repository layout:
 
 ACR-175 creates only `eval.md` seed specifications. Future implementation tickets may add `eval.py-or-rs`, fixtures, and README files when they ship runnable detectors.
 
+## `~/ai` structural-verification routing
+
+For `~/ai` markdown, operator, workflow, convention, routing, and anchor surfaces, acceptance-criteria language such as "structural test", "regression-guard", "anchor verification", "shape test", "structural verifier", "structural-shape test", "doc-anchor verification", and similar wording routes to WRITE-state eval-spec authoring at `evals/<eval-id>/eval.md`. It does not route to pytest, repository test files, or one-off verifier scripts.
+
+For those surfaces, do not create `tools/<wu>-verify/<anything>.py`, `tests/test_*.py`, pytest imports, pytest fixtures, or pytest-shaped assertion code anywhere in `~/ai`. The structural intent must be encoded as an eval spec: unwanted behavior, positive evidence, non-fire cases, required trace fields, finding shape, suggested action, and lifecycle state.
+
 ## Evidence source stability
 
 Stable contracts:
@@ -97,7 +103,7 @@ Audit-history integration is caller-owned. Eval reports can be cited in audit-hi
 ## Anti-scope
 
 - No eval Python code, Rust code, parser code, fixtures, CLI implementation, scheduler, CI, cron, Jira, or Linear routing is defined here.
-- No pytest revival and no structural markdown tests.
+- No pytest revival, no structural markdown tests, no `tools/<wu>-verify/<anything>.py`, and no `tests/test_*.py` structural guard files anywhere in `~/ai`.
 - No required edits to `workflows/index.json`, `AGENTS.md`, agent-runner README, implementation-pipeline hooks, or backend ticket automation.
 - No raw SQLite schema or single state DB path is the sole stable contract.
 - No redefinition of process-tree, workflow-process, code-quality, coupling, cohesion, or push-pull auditor verdict systems.
