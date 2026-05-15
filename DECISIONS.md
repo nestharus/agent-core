@@ -3405,3 +3405,45 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
 - Branch base: `f3d4c69` (pre-retirement; this WU's branch was created BEFORE PRs #146 and #147 landed). The squash-merge into master will carry the orchestrator + workflow changes ACR-206 makes; the squash commit reconciles against the post-retirement master HEAD.
 - Outage evidence in worktree: `CODERABBIT_pass1.md` + `CODERABBIT_pass1_attempt{1..6}_stalled.md`.
 - Failed Phase 7 dispatch log: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/.scratch/logs/acr-206-phase-7-coderabbit.log` (codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`, exit 144 after 6 retry attempts).
+
+## D-2026-05-15-acr226-phase-2.5-risk-profile-accepted-medium
+
+**WU**: ACR-226. **Phase**: Phase 2.5 (problem-map + risk profile human gate).
+
+**Decision**: Phase 2.5 aggregate verdict MEDIUM accepted as the working risk floor for the WU. All 4 scored surfaces landed MEDIUM. MEDIUM is intrinsic to the prototype-validated D1 design (always direct-squash, no protection detection); not a smell to remediate. Defer-to-prototype signals fired 1/2 (coverage maturity) — below the 2-signal threshold, so the `defer to prototype` option was not offered. The standard problem-map approval question was resolved with option A.
+
+**Drift disposition (drift-B)**: Step 2.5.4 (duplicate-systems inventory) surfaced a workflow-doc Phase 10 wording drift in `workflows/implementation-pipeline.md`. Routed to a separate Linear tracker (**ACR-234** — `workflows/implementation-pipeline.md Phase 10 wording drift — consolidate with current orchestrator Phase 9 stanza`, labels `workflow` + `hardening`) rather than expanding ACR-226's scope. The `hardening` label was paginated past the CLI's visible 50-label page; the linear-operator worked around the ACR-233 paging bug via direct `issueLabels(filter:)` GraphQL.
+
+**Evidence**:
+
+- Risk profile: `/home/nes/projects/ai/planning/impl-acr-226/risk/acr-226-risk-profile.md`.
+- Problem map: `/home/nes/projects/ai/planning/impl-acr-226/research/acr-226-problem-map.md`.
+- Duplicates inventory + drift note: `/home/nes/projects/ai/planning/impl-acr-226/research/acr-226-duplicates.md` (§ Drift discovery note).
+- Drift tracker: ACR-234 — https://linear.app/oulipoly/issue/ACR-234/workflowsimplementation-pipelinemd-phase-10-wording-drift-consolidate
+- Question artifact: `/home/nes/projects/ai/planning/impl-acr-226/.scratch/questions/q-438a3ee9-3fa9-4d73-abfa-f35ce41aecc8.question.json` (answered option A 2026-05-15T15:00:00Z).
+- Audit history (full register entry): `/home/nes/projects/ai/planning/impl-acr-226/audit-history.md` § Decision register `D-2026-05-15-acr226-phase2.5-gate-approve-driftB`.
+
+## D-2026-05-15-acr226-claude-code-multi-root-topology
+
+**WU**: ACR-226. **Phase**: Phase 4 / Phase 6 / Phase 8 (process-tree audits #1, #2, #3).
+
+**Decision**: Accept multi-root topology of post-Phase-0 dispatches from this Claude Code session and rely on per-dispatch `agents trace` JSONs as topology evidence for the three required process-tree audits. The Claude Code interactive session continues running after the agents-runner-tracked parent invocation `4ef9c7b4-5c7a-42ae-9939-e2498e0337f4` terminates at `2026-05-15T14:57:59Z`. Subsequent dispatches (Phase 4 risk gates, Phase 4 code-quality, Step 6b / Step 6c / Phase 6 prototype-risk, Phase 8 PR-review gates) register as their own top-level roots in `agents trace`. This is a Claude Code / agents-runner integration boundary, not a workflow violation.
+
+**Resolution mechanic**: each subsequent process-tree audit receives a multi-root acceptance rule in its expected-process manifest and per-dispatch trace JSONs captured into `${scratch_dir}/process-trees/phase-<n>-<gate>.trace.json`. The auditor maps each canonical row to its own per-dispatch trace, verifies UUID match + status + sha256 + verdict, and explicitly does NOT require a common parent invocation in any single trace.
+
+**Audit outcomes under this rule**:
+
+- Phase 4 process-tree audit `e1bc7ac1-6790-4de1-9d56-cea343775226`: PASS (after initial single-root FAIL `3d9acdfa-f244-4f2f-a7d1-2cb37c34e262`).
+- Phase 6 process-tree audit `ab998988-7a2b-4268-a781-b63f2692079b`: PASS.
+- Phase 8 process-tree audit `72a2ca86-2e9a-41b5-ab4f-8586f36238aa`: PASS.
+
+## D-2026-05-15-acr226-prototype-risk-medium-accepted
+
+**WU**: ACR-226. **Phase**: Phase 6 prototype risk review.
+
+**Decision**: Phase 6 prototype-risk verdict MEDIUM accepted as a residual/advisory, citing the Phase 2.5 disposition entry `D-2026-05-15-acr226-phase2.5-gate-approve-driftB`. Stable MEDIUM passes per the orchestrator's rule for prototype-risk-review verdicts when the active WU's approved risk disposition accepts the residual with cited audit-history evidence.
+
+**Evidence**:
+
+- Phase 6 prototype-risk report: `/home/nes/projects/ai/planning/impl-acr-226/risk/acr-226-prototype-risk.md`.
+- Citation: `/home/nes/projects/ai/planning/impl-acr-226/audit-history.md` § Decision register `D-2026-05-15-acr226-phase2.5-gate-approve-driftB`.
