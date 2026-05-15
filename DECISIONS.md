@@ -3351,3 +3351,57 @@ While rebasing the ACR-149 branch onto current `origin/master` (`df6309e`) to re
 - Post-rebase (before patch): `workflow-index: workflows/prototype-validation-shipping.md: workflow_dispatch_contract has invalid keys: missing keys ['expectations', 'inputs', 'non_goals', 'outputs']`.
 - Post-patch: `python3 -m tools.workflow_index check` exits 0; `pytest tests/test_adversarial_qa_stage.py -v` reports 12 passed.
 - Total D1 batch is now SIX workflow files (eval-runtime, feature-development, refactoring, wu-session-wake, "writing pipeline orchestrator", prototype-validation-shipping). All opening-frontmatter only; bodies preserved.
+## D-2026-05-14-acr206-defer-signal-disposition-proceed-exhaustive
+
+**WU**: ACR-206. **Phase**: 2.5 (problem-map human gate).
+
+**Decision**: proceed in exhaustive mode. The Phase 2.5 risk profile rolled up HIGH at WU level (10 of 11 scored surfaces HIGH) and 2 of 5 defer-to-prototype signals fired (signal #1 — HIGH on majority; signal #5 — cross-language change-path entropy HIGH on its own). Per the orchestrator spec, ≥2 fired signals require offering the `defer to prototype` option at the human gate. `skip_problem_map_gate=true` was set, which suppresses the routine problem-map approval but does NOT suppress a genuine new-value question.
+
+In this case the defer-vs-proceed-vs-terminate question is NOT a previously-unevaluated new-value question. The dispatching task message explicitly framed the WU as an implementation-pipeline run, named the four acceptable proposal shapes ("Relax position", "Use a sentinel file", "Runner-side injection", "A different mechanism the implementer's proposal finds, as long as it's HONEST + ENFORCEABLE"), and pre-committed to `auto_merge_after_phase_9=true`. The framing equivalent to "proceed in exhaustive mode; Phase 3 picks the shape" is part of the inbound task. The orchestrator records the disposition here rather than escalating a question whose answer is already in the dispatching message.
+
+**Per-surface mode map** (from `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/risk/acr-206-risk-profile.md`):
+
+- `~/ai/agents/implementation-pipeline-orchestrator.md` — HIGH → exhaustive
+- `~/ai/workflows/implementation-pipeline.md` — HIGH → exhaustive
+- `~/ai/agents/process-tree-auditor.md` — HIGH → exhaustive
+- `~/ai/conventions/workflow-execution-violations.md` — HIGH → exhaustive
+- `~/ai/workflows/pr-review.md` — HIGH → exhaustive
+- `agent-runner/trunk/crates/oulipoly-state/src/db.rs` — HIGH (exhaustive if touched; otherwise lean-read-only)
+- `agent-runner/trunk/src-tauri/src/main.rs` — HIGH (exhaustive if touched; otherwise lean-read-only)
+- `~/ai/workflows/agents-cli.md` — HIGH (exhaustive only if dispatch/capture contract changed; otherwise lean-read-only)
+- `evals/orchestrator-step6c-consumption-evidence/eval.md` — HIGH → exhaustive (this WU's WRITE-state eval)
+- Synthetic-consumption-evidence bridge precedent family — HIGH → exhaustive
+- Other first-line / line-anchor operator contracts — MEDIUM → mostly lean with proposal callout (anti-scope unless Phase 3 explicitly broadens)
+
+**Evidence**:
+- Risk profile: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/risk/acr-206-risk-profile.md`
+- Problem map: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/research/acr-206-problem-map.md`
+- Defer-signal evaluation: same risk profile, § `Defer-to-prototype Signal Evaluation`.
+
+## D-2026-05-14-acr206-step6c-consumption-evidence-supersession
+
+**WU**: ACR-206. **Phase**: Phase 6 (Step 6c consumption-evidence replacement).
+
+**Decision**: ACR-206's relaxed-position Step 6c log-evidence rule supersedes the synthetic consumption-evidence bridge precedent family for future Work Units. Future WUs use Step 6c captured-log `consumed:` rows that may appear after runner-owned `OULIPOLY_INVOCATION` and `OULIPOLY_SESSION` envelope lines, while still proving consumption of the Step 6b output index and implemented Step 6b output-index rows.
+
+**Superseded bridge precedent family for future WUs**: ACR-154, ACR-198, ACR-149, ACR-207, ACR-88, ACR-186, NES-209, NES-219, NES-270, NES-274, AGE-93, AGE-44.
+
+**Historical evidence handling**: historical planning-side `step6c-consumed-evidence.md` files and related bridge artifacts remain in their own WU planning directories as evidence. They are not deleted, consolidated, or treated as the normal future contract after ACR-206.
+
+## D-2026-05-15-acr206-phase-7-skipped-coderabbit-retired
+
+**WU**: ACR-206. **Phase**: Phase 7 (CodeRabbit loop).
+
+**Decision**: Phase 7 is a no-op for ACR-206. CodeRabbit was retired in master on 2026-05-15 (PR #146 `ac58d35` short-circuits the operator with `CONVERGED:disabled-no-credits-2026-05-15`; PR #147 `df6309e` removes the workflow + orchestrator dispatch). CodeRabbit credits ran out and the service is unavailable to the project account. The three pre-dispatch readiness gates (inherited-prototype-tests, integration-tests, swap-record) remain as Phase 8 readiness checks; ACR-206 has no inherited prototype tests, no `LevelComponentSet` from post-prototype derivation, and a non-applicable PrototypeSwapRecord — all three gates clear.
+
+ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`) hit the "Setting up" hang for 6 retries and was killed by the runner with exit 144. That dispatch evidence is the outage signal; the convergence comes via the disabled-tombstone path per the retirement PR set, not via those failed pass artifacts. The `CODERABBIT_pass1*.md` artifacts in the worktree are left as outage evidence.
+
+**Retirement track**: PR #146 (`ac58d35`) + PR #147 (`df6309e`) in master, both landed 2026-05-15.
+
+**Action**: Advance directly to Phase 8 (PR-review gates: test-audit, multi-concern, justification, commit-hygiene) → Process-tree audit #3 → Phase 8.X closure judge → Phase 9 draft PR + ready + squash-merge (no `--auto`; master has no branch protection per ACR-193 pattern).
+
+**Evidence**:
+- Master HEAD at retirement: `df6309e remove(workflows): retire CodeRabbit from implementation pipeline (#147)`.
+- Branch base: `f3d4c69` (pre-retirement; this WU's branch was created BEFORE PRs #146 and #147 landed). The squash-merge into master will carry the orchestrator + workflow changes ACR-206 makes; the squash commit reconciles against the post-retirement master HEAD.
+- Outage evidence in worktree: `CODERABBIT_pass1.md` + `CODERABBIT_pass1_attempt{1..6}_stalled.md`.
+- Failed Phase 7 dispatch log: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/.scratch/logs/acr-206-phase-7-coderabbit.log` (codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`, exit 144 after 6 retry attempts).
