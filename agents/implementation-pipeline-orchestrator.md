@@ -100,7 +100,7 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 - `predecessor_session_manifest_path` — absolute path to a predecessor WU's `${planning_dir}/session.json` when this WU is spawned from a post-merge successor handoff. When supplied, Phase 0 validates the predecessor manifest and its `successor_session_brief`, imports carried context into `${scratch_dir}/predecessor-session.md`, and records the predecessor pointer in this WU's session manifest. Missing, unreadable, mismatched, or ambiguous predecessor evidence is `BLOCKED:invalid-predecessor-session`.
 - `models_dir` — passed through to `agents` invocations; usually omitted.
 - `skip_problem_map_gate` — boolean (default `false`). When `true`, Phase 2.5 step 6 (the problem-map human gate) is skipped and the orchestrator proceeds directly to step 8 (mode propagation). Project-level override; declare in the project's `AGENTS.md` (e.g., `~/ai/` itself opts out for its bootstrap flow). The defer-to-prototype detection (Phase 2.5 step 5) still runs and can still surface as a NEEDS_INPUT new-value question; this override only removes the routine "approve the problem map" step, not the genuine value-question escalation.
-- `auto_merge_after_phase_9` — boolean (default `false`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then `gh pr merge --auto --squash <pr_url>` so the PR auto-merges once branch protection / CI clears. Project-level override; declare in the project's `AGENTS.md`. Default-off to preserve the "draft PR is the WU's terminal artifact" contract for projects that want a human PR review.
+- `auto_merge_after_phase_9` — boolean (default `false`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then direct `gh pr merge --squash <pr_url>` unconditionally. It does not enable auto-wait behavior and does not detect branch protection; any command failure is surfaced as NEEDS_INPUT for the root. Project-level override; declare in the project's `AGENTS.md`. Default-off to preserve the "draft PR is the WU's terminal artifact" contract for projects that want a human PR review.
 
 ## Non-Negotiables
 
@@ -600,8 +600,8 @@ The draft PR is the WU's terminal artifact for projects that want a human PR rev
 **Auto-merge override.** When `auto_merge_after_phase_9=true` (project-level opt-in via `AGENTS.md`), the orchestrator additionally executes after step 7:
 
 1. `gh pr ready ${pr_url}` — flip the PR from draft to ready-for-review.
-2. `gh pr merge --auto --squash ${pr_url}` — enable auto-merge so the PR merges once branch protection / required CI clears.
-3. If either command fails (e.g., merge conflicts, CI red), surface the failure as a NEEDS_INPUT new-value question to the root and halt; do not retry blindly.
+2. `gh pr merge --squash ${pr_url}` — directly squash-merge the PR without any preliminary classification or auto-wait behavior.
+3. If either command fails for any reason, surface the failure as a NEEDS_INPUT new-value question to the root and halt with `path=auto-merge-direct`, `selected_command=<the failing command>`, and `captured_output=<command stdout+stderr>`. Do not retry.
 
 This override does NOT replace the Phase 8 audit gates — those still run and a `blocking` verdict still halts the pipeline. It only collapses the post-Phase-9 human review/merge step into an automated one for projects whose `AGENTS.md` declares the opt-in.
 
