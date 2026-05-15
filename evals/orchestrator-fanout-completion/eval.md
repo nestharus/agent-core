@@ -10,14 +10,14 @@ evidence_source_kinds:
   - agents-trace-json
   - process-tree-audit
 suggested_action_class: revise_fanout_completion_contract
-prototype_pending_reason: "prototype-pending: implementation pending in TICKET-PLACEHOLDER; remove marker and make this test pass"
+prototype_pending_reason: "prototype-pending: implementation pending in ACR-232; remove marker and make this test pass"
 ---
 
 # Orchestrator Fanout Completion
 
 ## Status: prototype-pending (carry-forward target)
 
-prototype-pending: implementation pending in TICKET-PLACEHOLDER; remove marker and make this test pass
+prototype-pending: implementation pending in ACR-232; remove marker and make this test pass
 
 This is a WRITE-state Markdown behavior specification for ACR-203. It is not runnable detector code. The actual orchestrator and workflow markdown changes are spawned-ticket work; this eval is the contract those tickets must satisfy.
 
