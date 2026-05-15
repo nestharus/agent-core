@@ -136,23 +136,69 @@ adapter_declarations:
     role: adapter
     Translates:
       - stable-external-contract-surface
+    adapter_evidence:
+      source_declared_roles:
+        - parser
+        - orchestration
+      external_contract_boundaries:
+        - surface: stable-external-contract-surface
+          subordinate_references:
+            - field-or-symbol-defined-by-that-surface
+          proof: "Brief evidence that the references belong to the named surface."
+      enumeration_purpose:
+        mode: none | exhaustive-contract-enumeration
+        contract_surface: stable-external-contract-surface
+        enumerates:
+          - field-or-anchor-defined-by-that-surface
+      envelope_boundary:
+        mode: none | envelope-consumption
+        envelope_contract: stable-envelope-contract-surface
+        consumed_fields:
+          - field-defined-by-that-envelope
+      reference_proof:
+        all_external_references_subordinate: true
+        non_subordinate_references: []
 ```
 
 Each `adapter_declarations:` entry names `component`, requires `role: adapter`, and lists `Translates:` as stable external contract surfaces. `Translates:` must contain at least one contract surface; an empty list is malformed. A valid declaration may live inside a `## Adapter declarations` section of a `proposal_path` or `contract_path` artifact.
+
+`adapter_evidence` is optional. Existing declarations with only `component`, `role: adapter`, and non-empty `Translates:` remain valid. When present, `adapter_evidence` is proof for the same explicit declaration; it never creates adapter status on its own. Valid evidence fields are:
+
+- `source_declared_roles`: role tokens already declared elsewhere for the same component. Parser or orchestration roles can support adapter evidence only after an explicit adapter declaration exists.
+- `external_contract_boundaries`: section- or file-level proof that raw references are fields, methods, types, symbols, sections, operations, or artifacts subordinate to listed `Translates:` surfaces. Each `surface` must equal or refine one listed `Translates:` surface.
+- `enumeration_purpose`: verifier-style proof. `mode: exhaustive-contract-enumeration` means the component deliberately enumerates one named external contract. `contract_surface` must be listed in `Translates:`, and every `enumerates` item must be subordinate to that surface. `mode: none` means this evidence is not being asserted.
+- `envelope_boundary`: envelope-consumption proof. `mode: envelope-consumption` means the component consumes a named envelope contract. `envelope_contract` must be listed in `Translates:`, and every `consumed_fields` item must be subordinate to that envelope. `mode: none` means this evidence is not being asserted.
+- `reference_proof`: summary proof. `all_external_references_subordinate: true` is valid only when `non_subordinate_references` is empty.
 
 For declared adapter components, A1 coupling counts distinct external CONTRACTS in `Translates:`, not field references within those contracts. A component declared as translating two stable contracts bridges 2 contracts even if each contract has many fields.
 
 The default adapter threshold is `N = 5` distinct contracts: LOW when the adapter bridges `<= N` named contracts and all external references are subordinate to the declared `Translates:` surfaces; HIGH when it bridges `> N` contracts or when the component reaches undeclared external contracts not subordinate to `Translates:`.
 
-Malformed adapter declarations emit `BLOCKED:malformed-adapter-declaration:<component>:<reason>`. Valid-but-over-threshold adapters remain HIGH, and valid declarations with non-subordinate references remain HIGH. The same malformed-declaration disposition policy applies to intrinsic-surface declarations in the section below.
+Malformed adapter declarations emit `BLOCKED:malformed-adapter-declaration:<component>:<reason>`. Malformed optional evidence also fails closed with the same stop shape when it has the wrong type, names a surface not listed in `Translates:`, asserts enumeration or envelope evidence without the required contract field, or claims all references are subordinate while listing non-subordinate references. Valid-but-over-threshold adapters remain HIGH, and valid declarations with non-subordinate references remain HIGH. The same malformed-declaration disposition policy applies to intrinsic-surface declarations in the section below.
 
 A reference is subordinate to a declared `Translates:` contract when it is a field, method, type, symbol, section, or documented operation directly defined by that contract surface. References to contracts not listed in `Translates:` are not subordinate.
+
+Adapter scoring recognizes four evidence shapes, all under the same explicit `adapter_declarations:` carrier:
+
+- `parser-role`: the component has parser or orchestration role evidence, but scoring still depends on the declared `Translates:` contract count and subordinate-reference proof.
+- `one-contract-many-fields`: the component references many fields from one stable contract surface, such as a `## Required Inputs` section, and those fields count as one contract when subordinate.
+- `verifier-enumeration`: the component exhaustively enumerates one declared external contract and every enumerated reference is subordinate to that contract.
+- `envelope-boundary`: the component consumes one declared envelope or handback contract and every consumed field is subordinate to that envelope.
 
 Non-adapter coupling keeps the existing raw threshold: LOW `0-2`, MEDIUM `3-5`, HIGH `>= 6` distinct external symbols/modules. The adapter rule is an opt-in branch for explicitly declared adapter components only; it does not weaken the non-adapter coupling row in `## Numerical thresholds`.
 
 Use adapter declarations for explicit translation components, such as an operator bridging stable contracts. Do not use them for components reaching many unrelated external surfaces dressed up as "adapter"; that is sprawl masquerading as adapter and remains HIGH.
 
 Adapter status MUST be explicit. The component must be named under an `adapter_declarations:` carrier with `role: adapter`; auto-declared or inferred adapters are HIGH.
+
+Report-level columns and finding-level annotations may use evidence-only vocabulary to explain adapter shape without changing severity:
+
+- `adapter-pattern: external-contract-bound`
+- `adapter-shape: parser-role | one-contract-many-fields | verifier-enumeration | envelope-boundary`
+- `external-contract: <path-or-section>`
+- `reference-proof: all-subordinate | non-subordinate | unproven`
+
+The terminal stdout and aggregate severity vocabulary remains exactly `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT:<artifact>`, or `BLOCKED:<reason>`. Adapter subcategories must not appear in terminal severity strings or parser-facing aggregate verdicts.
 
 This convention is canonical for adapter declarations. `~/ai/agents/coupling-auditor.md` mirrors and applies this rule, and edits to the convention and auditor rule must land in lockstep.
 
@@ -188,8 +234,11 @@ This convention is canonical for intrinsic-surface declarations. `~/ai/agents/co
 
 ## Adapter-declaration examples
 
-- LOW: `agents/prototype-validation-proof-bundle-adapter.md` is declared with `role: adapter` and `Translates:` containing `prototype-validation-proof-bundle` and `agents/prototype-pr-writer.md`. The component bridges 2 stable contracts, and all external references are subordinate to those surfaces.
-- HIGH: `agents/release-and-ticket-sync.md` declares `role: adapter` but lists 6 unrelated contracts in `Translates:`, or reaches Slack, Jira, CI, release manifests, code-quality reports, and workflow internals without declaring those surfaces. The adapter declaration does not apply as LOW because the declaration exceeds `N = 5` or because undeclared external contracts are reached.
+- LOW parser-role: `agents/prototype-validation-proof-bundle-adapter.md` is declared with `role: adapter`, `Translates:` containing `workflows/prototype-validation-shipping.md ## proof_bundle_contract` and `agents/prototype-pr-writer.md ## Required Inputs`, and `adapter_evidence.source_declared_roles: [parser, orchestration]`. The parser roles are evidence only; the component scores LOW because 2 contracts is `<= N` and all references are subordinate.
+- LOW one-contract-many-fields: the same adapter may declare only `agents/prototype-pr-writer.md ## Required Inputs` when the scored surface is the writer input contract. Seven writer-input field references count as 1 contract when `external_contract_boundaries` proves the fields are subordinate to that section.
+- LOW verifier-enumeration: `tools/acr-142-verify/check_operator.py` may be declared with `role: adapter`, one operator contract in `Translates:`, and `adapter_evidence.enumeration_purpose.mode: exhaustive-contract-enumeration`. The enumeration is LOW only when every listed heading, phase, child operator, and handoff field is subordinate to the declared contract.
+- LOW envelope-boundary: a prototype RCA handback consumer may declare `workflows/rca-prototype.md ## Handback Contract` in `Translates:` with `adapter_evidence.envelope_boundary.mode: envelope-consumption`. Consumed envelope fields count under the named envelope contract when subordinate.
+- HIGH with annotation: `agents/release-and-ticket-sync.md` declares `role: adapter` but lists 6 unrelated contracts in `Translates:`, or reaches Slack, Jira, CI, release manifests, code-quality reports, and workflow internals without declaring those surfaces. The final verdict remains exact `HIGH`; report evidence may add `adapter-pattern: external-contract-bound`, `adapter-shape: one-contract-many-fields`, and `external-contract: <surface>` to explain why this is adapter-shaped but still over threshold or non-subordinate.
 
 ## Intrinsic-surface examples
 
