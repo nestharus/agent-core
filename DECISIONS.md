@@ -3387,3 +3387,21 @@ In this case the defer-vs-proceed-vs-terminate question is NOT a previously-unev
 **Superseded bridge precedent family for future WUs**: ACR-154, ACR-198, ACR-149, ACR-207, ACR-88, ACR-186, NES-209, NES-219, NES-270, NES-274, AGE-93, AGE-44.
 
 **Historical evidence handling**: historical planning-side `step6c-consumed-evidence.md` files and related bridge artifacts remain in their own WU planning directories as evidence. They are not deleted, consolidated, or treated as the normal future contract after ACR-206.
+
+## D-2026-05-15-acr206-phase-7-skipped-coderabbit-retired
+
+**WU**: ACR-206. **Phase**: Phase 7 (CodeRabbit loop).
+
+**Decision**: Phase 7 is a no-op for ACR-206. CodeRabbit was retired in master on 2026-05-15 (PR #146 `ac58d35` short-circuits the operator with `CONVERGED:disabled-no-credits-2026-05-15`; PR #147 `df6309e` removes the workflow + orchestrator dispatch). CodeRabbit credits ran out and the service is unavailable to the project account. The three pre-dispatch readiness gates (inherited-prototype-tests, integration-tests, swap-record) remain as Phase 8 readiness checks; ACR-206 has no inherited prototype tests, no `LevelComponentSet` from post-prototype derivation, and a non-applicable PrototypeSwapRecord — all three gates clear.
+
+ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`) hit the "Setting up" hang for 6 retries and was killed by the runner with exit 144. That dispatch evidence is the outage signal; the convergence comes via the disabled-tombstone path per the retirement PR set, not via those failed pass artifacts. The `CODERABBIT_pass1*.md` artifacts in the worktree are left as outage evidence.
+
+**Retirement track**: PR #146 (`ac58d35`) + PR #147 (`df6309e`) in master, both landed 2026-05-15.
+
+**Action**: Advance directly to Phase 8 (PR-review gates: test-audit, multi-concern, justification, commit-hygiene) → Process-tree audit #3 → Phase 8.X closure judge → Phase 9 draft PR + ready + squash-merge (no `--auto`; master has no branch protection per ACR-193 pattern).
+
+**Evidence**:
+- Master HEAD at retirement: `df6309e remove(workflows): retire CodeRabbit from implementation pipeline (#147)`.
+- Branch base: `f3d4c69` (pre-retirement; this WU's branch was created BEFORE PRs #146 and #147 landed). The squash-merge into master will carry the orchestrator + workflow changes ACR-206 makes; the squash commit reconciles against the post-retirement master HEAD.
+- Outage evidence in worktree: `CODERABBIT_pass1.md` + `CODERABBIT_pass1_attempt{1..6}_stalled.md`.
+- Failed Phase 7 dispatch log: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/.scratch/logs/acr-206-phase-7-coderabbit.log` (codex2 invocation `f4d63d85-441e-4744-ab42-705feae1dad0`, exit 144 after 6 retry attempts).
