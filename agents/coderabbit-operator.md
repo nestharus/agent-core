@@ -36,7 +36,8 @@ You run the CodeRabbit review loop on a branch and iterate until the value-per-p
   git fetch origin main && git update-ref refs/heads/main refs/remotes/origin/main
   ```
 - **Amend the same commit during the loop, never create new commits per pass.** This keeps CodeRabbit reviewing one clean diff.
-- **Do NOT `git push` or `git push --force-with-lease` during the loop.** Push happens once, after post-CodeRabbit review gates approve. Pushing mid-loop blocks rebase and re-runs.
+- **The branch must be pushed to `origin` BEFORE pass 1.** CodeRabbit reviews only commits visible on the remote — a local-only branch causes `coderabbit review` to hang indefinitely at "Setting up". The Pre-Pass Sanity Check (below) verifies this.
+- **Do NOT `git push` or `git push --force-with-lease` mid-loop after pass 1.** Once the initial push lands, the mid-loop `git commit --amend` operations stay local. The amended commit diverges from the remote during the loop; that is acceptable for pass-to-pass review (CodeRabbit re-reads the local diff each pass via `--cwd`). Post-loop, the orchestrator's Phase 9 push reconciles with the remote.
 - **Stop when value drops to zero, not when the report is empty.** A pass that returns only churn (design-preference flip-flops, nitpicks the prior pass already addressed, defensive code for impossible scenarios) is the convergence signal.
 - **Skip findings with documented rationale.** Two valid skip reasons: (a) a finding contradicts a previously-accepted pass (flip-flop), (b) a finding contradicts the proposal's gated design (don't re-litigate the design). Document the skip rationale in the pass log.
 - **Do not chase flip-flops.** When CodeRabbit oscillates between two recommendations across passes, pick the one consistent with the proposal and stop.
@@ -95,7 +96,8 @@ Before pass 1:
 1. `git status` — confirm clean working tree
 2. `git fetch origin main && git update-ref refs/heads/main refs/remotes/origin/main`
 3. `git log --oneline main..HEAD` — confirm the diff base is right (only this branch's commits)
-4. Run tests (`${test_command}` if provided) — confirm green before CodeRabbit sees them
+4. **Verify the feature branch is pushed to `origin` at the current local HEAD.** `git ls-remote origin <branch>` must return the same SHA as local `HEAD`. If empty (branch not pushed) or different (remote stale), run `git push -u origin <branch>` (use `--force-with-lease` only if the remote ref exists and is an ancestor of local HEAD — never blind force). CodeRabbit can only review commits visible on the remote; a local-only branch will cause `coderabbit review` to hang at "Setting up".
+5. Run tests (`${test_command}` if provided) — confirm green before CodeRabbit sees them
 
 If any check fails, return `NEEDS_INPUT` rather than starting the loop.
 
