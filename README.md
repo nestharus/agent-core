@@ -43,6 +43,8 @@ Reusable process docs.
 
 - [`workflows/agents-cli.md`](workflows/agents-cli.md) — Default invocation shape, prompt/log conventions, and workflow-specific `agents` CLI usage rules.
 
+- [`workflows/adversarial-qa-stage.md`](workflows/adversarial-qa-stage.md) — Stage-only normal-regression plus adversarial QA with complete bug reports.
+
 - [`workflows/code-quality.md`](workflows/code-quality.md) — Composite A1 code-quality auditor fanout, normalized findings, and aggregate verdict.
 
 - [`workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md) — Step-7 review loop for running CodeRabbit passes until findings stop paying off.

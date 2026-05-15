@@ -1,8 +1,74 @@
 {
-  "aliases": [],
+  "aliases": [
+    {
+      "alias": "feature",
+      "normalized_alias": "feature",
+      "target": {
+        "path": "workflows/feature-development.md",
+        "workflow_id": "feature-development"
+      },
+      "workflow_id": "feature-development"
+    },
+    {
+      "alias": "multi-ticket-feature",
+      "normalized_alias": "multi ticket feature",
+      "target": {
+        "path": "workflows/feature-development.md",
+        "workflow_id": "feature-development"
+      },
+      "workflow_id": "feature-development"
+    },
+    {
+      "alias": "refactor",
+      "normalized_alias": "refactor",
+      "target": {
+        "path": "workflows/refactoring.md",
+        "workflow_id": "refactoring"
+      },
+      "workflow_id": "refactoring"
+    },
+    {
+      "alias": "flavor: regression-investigation",
+      "normalized_alias": "flavor regression investigation",
+      "target": {
+        "path": "workflows/regression-investigation.md",
+        "workflow_id": "regression-investigation"
+      },
+      "workflow_id": "regression-investigation"
+    }
+  ],
   "generated_from": "workflows/*.md",
   "schema_version": 1,
   "workflows": {
+    "adversarial-qa-stage": {
+      "path": "workflows/adversarial-qa-stage.md",
+      "workflow": {
+        "id": "adversarial-qa-stage"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs setup, normal-usage regression sweep, adversarial probing, bug report filing, and summary report as separate phases",
+          "files complete evidence-backed bugs and hands their trigger evidence to RCA consumers without fixing stage bugs inside this workflow",
+          "keeps production and prototype branches outside scope"
+        ],
+        "inputs": [
+          "stage_url, health_check_url, use_case_dossier_path, run_id, planning_dir, ticket_system, browser identity, credentials or roles, feature_flags, local_log_paths, and selected ticket-operator routing inputs",
+          "manual or scheduled dispatch context for a staged application surface only"
+        ],
+        "non_goals": [
+          "does not run against production",
+          "does not run against prototype branches",
+          "does not fix bugs in stage",
+          "does not add CI jobs, release gates, or ticket-backend API behavior"
+        ],
+        "orchestrator": "adversarial-qa-driver",
+        "outputs": [
+          "planning_dir/adversarial-qa/run-id/summary.md",
+          "planning_dir/adversarial-qa/run-id/evidence/ run bundle with screenshots, videos, logs, bug drafts, and per-finding PDFs",
+          "tracker bug URLs or BLOCKED and NEEDS_INPUT artifacts"
+        ]
+      }
+    },
     "agents-cli": {
       "path": "workflows/agents-cli.md",
       "workflow": {
@@ -77,12 +143,34 @@
         "non_goals": [
           "does not replace Phase 4 risk gates, PR review gates, workflow-reviewer, or process-tree topology audit",
           "does not implement fixes, revise target artifacts, or run historical audits unless explicitly invoked",
-          "does not wire implementation-pipeline entry modes"
+          "does not own implementation-pipeline entry-mode policy"
         ],
         "orchestrator": "root audit coordinator or implementation-pipeline-orchestrator",
         "outputs": [
           "dispatch manifest, child prompts/logs/reports, normalized findings, aggregate audit report",
           "role outputs suitable for proposer revision or decision-encoder when the caller enters a revise/review loop"
+        ]
+      }
+    },
+    "auditor-surface-expansion": {
+      "path": "workflows/auditor-surface-expansion.md",
+      "workflow": {
+        "id": "auditor-surface-expansion"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "collects bounded context for the source auditor without changing the review target"
+        ],
+        "inputs": [
+          "source auditor report context, bounded question, repo_root, scratch_dir, planning_dir, and evidence paths"
+        ],
+        "non_goals": [
+          "does not implement a concrete research operator",
+          "does not own final auditor verdicts"
+        ],
+        "orchestrator": "source A1 auditor",
+        "outputs": [
+          "context artifact consumed by the source auditor"
         ]
       }
     },
@@ -120,7 +208,7 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "dispatches A4/A5/A6a/A6b auditors as four parallel children and writes a durable code-quality bundle",
+          "dispatches each auditor named in conventions/code-quality.md ## Auditor Set and writes a durable code-quality bundle",
           "aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states",
           "preserves the convention as the single rule reference; does not redefine A1"
         ],
@@ -141,6 +229,58 @@
         ]
       }
     },
+    "eval-runtime": {
+      "path": "workflows/eval-runtime.md",
+      "workflow": {
+        "id": "eval-runtime"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "resolves trace evidence, normalizes it into semantic fields, executes the selected eval when runnable, and validates finding shape",
+          "stores markdown and JSON reports without mutating pipeline, CI, scheduler, or ticket backends"
+        ],
+        "inputs": [
+          "eval_id, trace locator, mode on-trace post-merge or on-demand, planning_dir, and workflow selection evidence",
+          "normalized evidence sources such as process-tree reports, prompts, logs, audit bundles, and trace JSON when present"
+        ],
+        "non_goals": [
+          "does not add CI jobs, cron jobs, CLI runtime code, or ticket-backend writes",
+          "does not implement eval code, trace parser code, fixture code, or pipeline hooks"
+        ],
+        "orchestrator": "eval-runner",
+        "outputs": [
+          "planning_dir eval findings markdown report",
+          "machine-readable eval JSON report",
+          "validation errors, behavior findings, no-finding results, or NEEDS_INPUT evidence"
+        ]
+      }
+    },
+    "feature-development": {
+      "path": "workflows/feature-development.md",
+      "workflow": {
+        "id": "feature-development"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "coordinates a feature lifecycle above individual WUs while dispatching implementation-pipeline-orchestrator once per scoped ticket",
+          "keeps ticket PRs targeted to the feature branch and assembles evidence packs for ticket PRs and the final feature PR"
+        ],
+        "inputs": [
+          "feature brief or approved roadmap, scoped ticket list, repo root, trunk branch, feature branch name, worktrees root, planning root, scratch root, ticket-backend inputs, and selected manager flavor",
+          "optional prototype dossier path, QA target descriptor, and evidence-pack context"
+        ],
+        "non_goals": [
+          "does not replace roadmap, prototype, implementation-pipeline, PR-review, or CodeRabbit workflows",
+          "does not inline ticket decomposition or implementation-pipeline phases"
+        ],
+        "orchestrator": "feature-orchestrator",
+        "outputs": [
+          "feature branch pushed to origin",
+          "per-ticket implementation-pipeline runs and ticket PR list",
+          "final feature-to-trunk PR with evidence pack, QA verdict or placeholder, prototype payload when applicable, and outcome record"
+        ]
+      }
+    },
     "implementation-pipeline": {
       "path": "workflows/implementation-pipeline.md",
       "workflow": {
@@ -150,6 +290,7 @@
         "expectations": [
           "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases",
           "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
+          "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
           "uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant",
           "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
         ],
@@ -289,6 +430,41 @@
         ]
       }
     },
+    "prototype-validation-shipping": {
+      "path": "workflows/prototype-validation-shipping.md",
+      "workflow": {
+        "id": "prototype-validation-shipping"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "keeps product code and behavior tests on the truth branch and eval scaffolding on the eval branch",
+          "gates each phase advance on contract-validator acceptance, behavior-test passage, QA walkthrough proof, and deep rebuild verification",
+          "routes failing behavior tests through the light prototype RCA workflow and applies only RCA-supplied fixes"
+        ],
+        "inputs": [
+          "truth branch and truth worktree path",
+          "eval branch and eval worktree path",
+          "planning path and scratch path",
+          "proposal or dossier reference",
+          "behavior-test manifest",
+          "base branch",
+          "registry target",
+          "prototype slug",
+          "package output paths"
+        ],
+        "non_goals": [
+          "does not discover or stabilize a prototype answer (see workflows/build-prototype.md)",
+          "does not ship production implementation work (see workflows/implementation-pipeline.md)",
+          "does not run adversarial QA or production-pipeline gates against the eval surface"
+        ],
+        "orchestrator": "prototype-validation-orchestrator",
+        "outputs": [
+          "eval branch with compose, Dockerfile, README, and eval helper scripts",
+          "proof bundle covering behavior tests, QA walkthrough, deep rebuild, and package material",
+          "one proof-focused draft PR shipping the stabilized prototype"
+        ]
+      }
+    },
     "rca": {
       "path": "workflows/rca.md",
       "workflow": {
@@ -337,6 +513,36 @@
         "orchestrator": "prototype-rca-orchestrator",
         "outputs": [
           "per-iteration RCA and fix artifacts under ${planning_dir}/rca/, targeted rerun logs under ${scratch_dir}/logs/, and a handback envelope"
+        ]
+      }
+    },
+    "refactoring": {
+      "path": "workflows/refactoring.md",
+      "workflow": {
+        "id": "refactoring"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "per-PR cycle output lands on the integration buffer"
+        ],
+        "inputs": [
+          "target_list",
+          "repo_root",
+          "worktree_path",
+          "planning_dir",
+          "scratch_dir",
+          "integration_branch_ref",
+          "slice_bounds"
+        ],
+        "non_goals": [
+          "does not implement cross-file auditor analysis",
+          "does not manage integration-branch lifecycle cadence",
+          "does not enumerate existing shims"
+        ],
+        "orchestrator": "refactoring-orchestrator",
+        "outputs": [
+          "per-PR cycle dispatch evidence",
+          "integration-buffer commit"
         ]
       }
     },
@@ -592,6 +798,60 @@
           "bundle under .tmp/verified-rebase/<branch-slug>/<timestamp>/",
           "stdout verdict CLEAN, DIRTY-EXPLAINED, DIRTY-UNPROVENANCED, or BLOCKED",
           "local refs/pre-rebase/<branch> rollback anchor and rollback.sh helper"
+        ]
+      }
+    },
+    "writing pipeline orchestrator": {
+      "path": "workflows/writing pipeline orchestrator.md",
+      "workflow": {
+        "id": "writing pipeline orchestrator"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs content, analysis, mechanical-ban fixes, editorial fixes, rubric fixes, and quality gate as separate agent invocations",
+          "uses reviewers to verify fixes after each category rather than allowing agents to self-review"
+        ],
+        "inputs": [
+          "draft public-facing document, writing craft reference, communication research, and reviewer/fixer prompt files",
+          "human approval for content additions before mechanical and editorial phases proceed"
+        ],
+        "non_goals": [
+          "does not merge separate violation categories into one fixing agent",
+          "does not let reviewers mutate the document",
+          "does not bypass the human content gate"
+        ],
+        "orchestrator": "writing pipeline orchestrator",
+        "outputs": [
+          "editing reports for each pipeline phase",
+          "review reports for each fix category",
+          "final quality gate report"
+        ]
+      }
+    },
+    "wu-session-wake": {
+      "path": "workflows/wu-session-wake.md",
+      "workflow": {
+        "id": "wu-session-wake"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "joins merged PR rows to one persisted WU session manifest",
+          "dispatches wu-session-resumer once per merged session",
+          "does not batch post-merge session work inside the poller or scheduler"
+        ],
+        "inputs": [
+          "sessions.index.json path",
+          "poller output from tools/pr-batch-poller",
+          "per-project worktree and planning roots"
+        ],
+        "non_goals": [
+          "does not implement the scheduler runtime",
+          "does not change pr-batch-poller schema",
+          "does not inline post-merge checks or spawn successor WUs"
+        ],
+        "orchestrator": "composition layer",
+        "outputs": [
+          "one wu-session-resumer log per merged session"
         ]
       }
     }

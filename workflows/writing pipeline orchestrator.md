@@ -1,3 +1,23 @@
+---
+workflow:
+  id: writing pipeline orchestrator
+workflow_dispatch_contract:
+  orchestrator: "writing pipeline orchestrator"
+  inputs:
+    - "draft public-facing document, writing craft reference, communication research, and reviewer/fixer prompt files"
+    - "human approval for content additions before mechanical and editorial phases proceed"
+  expectations:
+    - "runs content, analysis, mechanical-ban fixes, editorial fixes, rubric fixes, and quality gate as separate agent invocations"
+    - "uses reviewers to verify fixes after each category rather than allowing agents to self-review"
+  outputs:
+    - "editing reports for each pipeline phase"
+    - "review reports for each fix category"
+    - "final quality gate report"
+  non_goals:
+    - "does not merge separate violation categories into one fixing agent"
+    - "does not let reviewers mutate the document"
+    - "does not bypass the human content gate"
+---
 # Writing Pipeline Orchestrator
 
 ## Purpose
