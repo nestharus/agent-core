@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prototype-pending: implementation pending in <ACR-195-IMPLEMENTATION>; remove marker and make this test pass
+# prototype-pending: implementation pending in https://linear.app/oulipoly/issue/ACR-218/ship-acr-195-dispatch-convention-dispatcher-restates-and-audit-eval; remove marker and make this test pass
 #
 # Acceptance: when the spawned implementation ticket lands, remove the marker
 # comment above and ensure this script exits 0 against the implementation's
