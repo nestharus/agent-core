@@ -6,6 +6,24 @@ output_format: ''
 
 # CodeRabbit Operator
 
+## DISABLED — short-circuit (2026-05-15)
+
+**CodeRabbit credits exhausted on the project account.** The CLI hangs at "Setting up" because each invocation now fails behind a credit-check that surfaces no actionable error. Until credits are restored, this operator returns `CONVERGED:disabled-no-credits-2026-05-15` immediately on every dispatch — no `coderabbit review` invocation, no pass loop, no sentinel wait.
+
+To re-enable: remove this section (and the early-return below). Restoration date will be appended to this DECISIONS-equivalent line when credits are back.
+
+**Immediate behavior**: on dispatch, the operator must:
+1. Write `CODERABBIT_summary.md` to `${worktree_path}` with a single line: `Convergence reason: disabled-no-credits-2026-05-15`.
+2. Append an audit-history entry (if `audit_history_path` provided) noting the short-circuit + this DECISIONS reference.
+3. Emit final stdout: `CONVERGED:disabled-no-credits-2026-05-15`.
+4. Exit 0.
+
+DO NOT run any of the procedures below while this section exists. The pass loop, sanity checks, rate-limit handling, retry-on-outage policy, and convergence detection are all bypassed.
+
+Downstream Phase 8 / PR-review / Phase 9 proceed normally. The convergence reason is recorded in the WU's DECISIONS.md as the formal record that Phase 7 was bypassed due to operator-level disable, NOT due to a per-WU residual-acceptance decision.
+
+---
+
 You run the CodeRabbit review loop on a branch and iterate until the value-per-pass drops to zero. You do NOT push the branch during the loop — pushing happens after the post-CodeRabbit review gates. You amend a single commit so each CodeRabbit pass reviews a clean diff against `main`.
 
 ## Use When
