@@ -1,5 +1,13 @@
 # DECISIONS — `~/ai/`
 
+## D-2026-05-15-acr199-prototype-branch-disposition-keep
+
+**WU**: prototype-acr-199-clarify (defer_source `ACR-199`). **Phase**: P4 hand-off. **Decision**: branch disposition `keep`; original-ticket disposition `keep-as-meta-tracker` for ACR-199.
+
+The P3 human gate (`work-manager-operator` 2026-05-15) approved branch disposition `keep` per `dossier/branch-disposition.md`: the prototype branch is clean and reviewable (P3.5 LOW, P3.7 LOW_DEBRIS, P3.8 commit-hygiene passed) but should not merge as-is because the answer is mode `(b)`: five-surface routing edits are necessary but insufficient as an aggregate fix. The branch is now pushed to `origin/prototype-acr-199-clarify` and retained as the durable proven-reference + cherry-pick source. The two implementation tickets ACR-209 (routing edits, commit `b3dd005`) and ACR-212 (eval specs, commit `a82eba9`) cherry-pick per `dossier/branch-disposition.md` § Operational notes. Hardening tickets ACR-210, ACR-211, ACR-213, ACR-214, ACR-215 require new commits. Prototype follow-up ACR-216 is a separate prototype WU.
+
+ACR-199 disposition is `keep-as-meta-tracker`: ACR-199 remains open as the meta-tracker for all 8 spawned tickets (parented as sub-issues under ACR-199), since the original ACR-199 acceptance spans routing edits, eval-spec replacements, bypass hardening, and compatibility sequencing across live legacy artifacts. Per ACR-126/ACR-130, the prototype-orchestrator does not transition ticket status; the `deferred-to-prototype` label on ACR-199 is preserved because the prototype branch is retained and ACR-199 remains the meta-tracker. Implementation continues from spawned tickets, not from a direct merge of this branch.
+
 ## D-2026-05-12a — ACR-154 Phase 6c Tier-1 rewind ×2 (Step 6c log lacked required consumed-echo lines)
 
 **WU**: ACR-154. **Phase**: 6c R1 → R2 → R3. **Decision**: autonomous Tier-1 rewind, repeated, per violation-escalation policy.
