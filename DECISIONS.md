@@ -3287,3 +3287,40 @@ Phase 7 CodeRabbit CLI is in extended outage. Two `coderabbit-operator` dispatch
 ### Effect on Phase 9 contract
 
 Phase 9 step 6 (record draft PR URL in `${scratch_dir}/pr-url.txt` + session manifest update) is the early-entry point. Phase 9 step 7 (ticket cross-link comment) is the early-exit point. The "draft PR is the WU's terminal artifact" contract is preserved; auto-merge remains gated on Phase 7 + 8 + 8.X completion. Per dispatch input `auto_merge_after_phase_9=true` plus `~/ai` master having no branch protection, Phase 9 finish uses direct `gh pr merge --squash <pr_url>` (no `--auto` flag) per the ACR-193 / ACR-191 / ACR-198 / ACR-186 / ACR-205 same-day shipping pattern.
+
+## D-2026-05-15-acr149-phase7-coderabbit-retired
+
+**Date**: 2026-05-15
+**WU**: ACR-149
+**Phase**: Phase 7 (CodeRabbit loop)
+
+### Observation
+
+CodeRabbit credits ran out for this project on 2026-05-15. PR #146 (`ac58d35`) landed a disabled-tombstone hot-patch on `agents/coderabbit-operator.md` that returns `CONVERGED:disabled-no-credits-2026-05-15` immediately on any dispatch — no CLI invocation, no pass loop, no retry. PR #147 (`df6309e`) removed `workflows/coderabbit-loop.md`, removed the `coderabbit-loop` entry from `workflows/index.json`, and edited `workflows/implementation-pipeline.md` Phase 7 to `SKIPPED (CodeRabbit retired)`. The pipeline still preserves the Phase 7 number for audit-history coherence, but it's a no-op.
+
+The earlier R3 dispatch under invocation `d66c0096-8ff4-4f22-a5a9-4e6389e607b8` exited with the host CLI's `tracing_timeout` (>30 min idle) before the retirement landed — that attempt is obsolete and not re-tried. The earlier R1 (invocation `1449a91c-...`, 4 setup timeouts) and R2 (invocation `5ab88f13-...`, 2 setup timeouts) are likewise obsolete artifacts of the now-retired CLI path.
+
+### Decision
+
+**Treat Phase 7 as a no-op per `workflows/implementation-pipeline.md` line 485 (`Phase 7 - SKIPPED (CodeRabbit retired 2026-05-15)`).** Do NOT dispatch `coderabbit-operator`. Do NOT install the CodeRabbit GitHub App (separately confirmed not the intended path for this project — there is no App on `nestharus/agent-core`). Advance directly to Phase 8 PR-review gates against the already-pushed branch and the already-open draft PR #144.
+
+### Rationale
+
+1. The retirement is a project-wide policy decision encoded in master at `df6309e` (PR #147) and `ac58d35` (PR #146).
+2. Earlier same-WU CodeRabbit-outage handling (D-2026-05-14 § option-D reorder) is superseded by this retirement: the option-D path assumed a working GitHub-App fallback, which does not exist on this repo. The retirement is the correct disposition.
+3. The product is correct on all surfaces the orchestrator can verify: 12/12 structural pytests pass, `python3 -m tools.workflow_index check` exits 0, Phase 4 LOW × 5, Phase 6 alignment ALIGNED, Phase 6 per-component code-quality LOW × 4, process-tree audits #1 and #2 PASS. The Step 6c log-echo gap is documented residual per `D-2026-05-12-acr149-phase-6c-consumption-echo-residual`.
+4. Phase 8 PR-review gates (test-audit, multi-concern, justification, commit-hygiene) run against the actual diff and provide the post-implementation review surface that Phase 7 was meant to host. They are unchanged by the retirement.
+
+### Evidence
+
+- Master at `df6309e` (PR #147): `remove(workflows): retire CodeRabbit from implementation pipeline`
+- Master at `ac58d35` (PR #146): `hotpatch(coderabbit-operator): DISABLED short-circuit — out of credits`
+- `~/ai/workflows/implementation-pipeline.md` § "Phase 7 - SKIPPED (CodeRabbit retired 2026-05-15)" (line 485-)
+- Obsolete CLI attempt logs (kept as evidence of the outage that preceded retirement): `${scratch_dir}/logs/acr-149-phase-7-coderabbit*.log` (R1, R2, R3); audit-history.md § "CodeRabbit loop — Phase 7" Pass 1 BLOCKED entry (recorded before the retirement, retained as historical context).
+
+### Effect on downstream phases
+
+- Phase 8 four PR-review gates + Phase 8 join manifest + process-tree audit #3 run against the current diff (`master..acr-149-adversarial-qa-stage-workflow`, currently `7f6983f`).
+- Phase 8.X closure judge runs after Phase 8 clears.
+- Phase 9 finish (`gh pr ready` + direct `gh pr merge --squash` — no `--auto`, master has no branch protection) waits for Phase 8 + 8.X to clear.
+- The D-2026-05-14 option-D entry is left in place as historical record; the current Phase 7 disposition is this entry, which supersedes the option-D plan in operative effect.
