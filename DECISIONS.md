@@ -3351,3 +3351,29 @@ While rebasing the ACR-149 branch onto current `origin/master` (`df6309e`) to re
 - Post-rebase (before patch): `workflow-index: workflows/prototype-validation-shipping.md: workflow_dispatch_contract has invalid keys: missing keys ['expectations', 'inputs', 'non_goals', 'outputs']`.
 - Post-patch: `python3 -m tools.workflow_index check` exits 0; `pytest tests/test_adversarial_qa_stage.py -v` reports 12 passed.
 - Total D1 batch is now SIX workflow files (eval-runtime, feature-development, refactoring, wu-session-wake, "writing pipeline orchestrator", prototype-validation-shipping). All opening-frontmatter only; bodies preserved.
+## D-2026-05-14-acr206-defer-signal-disposition-proceed-exhaustive
+
+**WU**: ACR-206. **Phase**: 2.5 (problem-map human gate).
+
+**Decision**: proceed in exhaustive mode. The Phase 2.5 risk profile rolled up HIGH at WU level (10 of 11 scored surfaces HIGH) and 2 of 5 defer-to-prototype signals fired (signal #1 — HIGH on majority; signal #5 — cross-language change-path entropy HIGH on its own). Per the orchestrator spec, ≥2 fired signals require offering the `defer to prototype` option at the human gate. `skip_problem_map_gate=true` was set, which suppresses the routine problem-map approval but does NOT suppress a genuine new-value question.
+
+In this case the defer-vs-proceed-vs-terminate question is NOT a previously-unevaluated new-value question. The dispatching task message explicitly framed the WU as an implementation-pipeline run, named the four acceptable proposal shapes ("Relax position", "Use a sentinel file", "Runner-side injection", "A different mechanism the implementer's proposal finds, as long as it's HONEST + ENFORCEABLE"), and pre-committed to `auto_merge_after_phase_9=true`. The framing equivalent to "proceed in exhaustive mode; Phase 3 picks the shape" is part of the inbound task. The orchestrator records the disposition here rather than escalating a question whose answer is already in the dispatching message.
+
+**Per-surface mode map** (from `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/risk/acr-206-risk-profile.md`):
+
+- `~/ai/agents/implementation-pipeline-orchestrator.md` — HIGH → exhaustive
+- `~/ai/workflows/implementation-pipeline.md` — HIGH → exhaustive
+- `~/ai/agents/process-tree-auditor.md` — HIGH → exhaustive
+- `~/ai/conventions/workflow-execution-violations.md` — HIGH → exhaustive
+- `~/ai/workflows/pr-review.md` — HIGH → exhaustive
+- `agent-runner/trunk/crates/oulipoly-state/src/db.rs` — HIGH (exhaustive if touched; otherwise lean-read-only)
+- `agent-runner/trunk/src-tauri/src/main.rs` — HIGH (exhaustive if touched; otherwise lean-read-only)
+- `~/ai/workflows/agents-cli.md` — HIGH (exhaustive only if dispatch/capture contract changed; otherwise lean-read-only)
+- `evals/orchestrator-step6c-consumption-evidence/eval.md` — HIGH → exhaustive (this WU's WRITE-state eval)
+- Synthetic-consumption-evidence bridge precedent family — HIGH → exhaustive
+- Other first-line / line-anchor operator contracts — MEDIUM → mostly lean with proposal callout (anti-scope unless Phase 3 explicitly broadens)
+
+**Evidence**:
+- Risk profile: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/risk/acr-206-risk-profile.md`
+- Problem map: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/research/acr-206-problem-map.md`
+- Defer-signal evaluation: same risk profile, § `Defer-to-prototype Signal Evaluation`.
