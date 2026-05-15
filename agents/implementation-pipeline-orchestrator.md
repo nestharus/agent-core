@@ -123,6 +123,10 @@ EOF
 agents -m gpt-high -p ${worktree_path} -f ${prompt} | head -3"
 ```
 
+### DISPATCH PROMPT CONTENT
+
+Child prompt content follows `~/ai/conventions/no-operator-behavior-override-in-dispatch.md`: prompts may name inputs, artifact contracts, task variants, evidence paths, boundary anti-scope, and stop conditions, but they must not override the target operator's mechanics, verdict handling, or phase shape. A Phase 2.5 prompt may require the duplicates inventory path and output report; it may not tell the researcher to skip the lifecycle map because the orchestrator expects LOW risk. A ticket-operator, PR-writer, risk-gate, rebase-check, or Phase 6 prompt may pass required context and stop conditions; it may not replace that child operator's procedure with inline step ordering or override how the child handles its own blocking verdicts.
+
 - **Every phase dispatch is a fresh `agents` invocation.** No in-process synthesis. No shortcut where you "just write the proposal yourself because it's small." Each artifact must be produced by the operator named for that phase, in its own process, with its own prompt and log.
 - **Test writer and code writer are different invocations** in Phase 6b vs Phase 6c. The Step 6b agent never sees the implementation; the Step 6c agent reads the tests + the Step 6b output index. If the same `agents` invocation produced both, Phase 6 is a violation.
 - **Risk gates run on the proposal, not the diff.** Phase 4 is gated against `proposals/NN-*.md`, not against `git diff`. Post-implementation review is Phase 7/8.

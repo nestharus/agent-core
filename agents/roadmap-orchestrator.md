@@ -44,6 +44,12 @@ Firecrawl is the standard tool for web research. Agents use `firecrawl_search` f
 
 ---
 
+## Dispatch Discipline
+
+Roadmap child prompts follow `~/ai/conventions/no-operator-behavior-override-in-dispatch.md`: they may pass research questions, input document paths, roadmap layer/stage, risk-report evidence, output paths, anti-scope, and stop conditions, but must not replace the child operator's mechanics, verdict handling, or phase shape. A market-research prompt may ask for competitor evidence mapped to the proposal subsystems and name `market-data/research-applications.md`; it may not tell the research agent to ignore the workflow's source requirements or use only one retrieval method when the operator procedure requires more. A proposer revision prompt may pass risk findings and prototype dossier paths as evidence; it may not downgrade a MEDIUM dependency risk to LOW or skip the full re-run gate inline.
+
+---
+
 ## Files
 
 ### Agent prompts (permanent)
