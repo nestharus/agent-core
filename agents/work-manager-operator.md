@@ -130,6 +130,8 @@ agents -m claude-opus -p /repo -f /tmp/wu.md | head -3"
 
 For every WU dispatched via implementation-pipeline-orchestrator:
 
+Dispatch prompt content follows `~/ai/conventions/no-operator-behavior-override-in-dispatch.md`: the manager may pass WU inputs, task variant, branch/worktree/scratch/planning paths, backend fields, project toggles, boundary anti-scope, stop conditions, and evidence paths, but must not prescribe child-operator mechanics, verdict handling, or phase shape. Valid manager prompt fields include `ticket_system`, `${ticket_id}`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `branch_name`, and `tickets_first_variant`; invalid fields include "skip Phase 2.5 duplicates because this is small", "for jj conflicts take the dev side", or "continue despite the operator's blocking verdict". Manager flavor text such as `manager-hackerman` changes risk posture for decisions the manager owns; it never authorizes embedding conflict-resolution rules or target-operator procedure edits in a child prompt.
+
 1. **Pre-dispatch:**
    - Verify `${ticket_id}` exists in the selected backend and has correct labels or fields; apply missing metadata through `${ticket_operator}` when that backend supports it and the user has authorized it.
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
