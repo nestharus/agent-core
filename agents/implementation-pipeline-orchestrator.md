@@ -464,7 +464,9 @@ Before accepting the Phase 6 halt-state transition or advance to Phase 7, enforc
 6. On missing, unreadable, blank, incomplete, stale, missing-field, missing-enum-evidence, verdict-conflict, or present-artifact-without-valid-`HaltRecord`-or-explicit-non-applicability, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 6`, violation code `halt_record_missing_or_invalid` (for step 2-4 failures) or `halt_overrules_split_or_revise_by_omission` (for the step 5 verdict-conflict case), canonical path, refused action `Phase 6 halt-state transition / advance to Phase 7`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse the Phase 6 halt-state transition and must not advance to Phase 7; write `${scratch_dir}/questions/q-<uuidv4>.question.json`; halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
 7. On valid halt evidence or explicit non-applicability, allow the Phase 6 halt-state transition / advance to Phase 7.
 
-### Phase 7 — CodeRabbit Loop
+### Phase 7 — Pre-Phase-8 Readiness Gates (CodeRabbit retired 2026-05-15)
+
+CodeRabbit was removed from the pipeline 2026-05-15. The three pre-dispatch gates below (inherited-prototype-tests, integration-tests, swap-record) still run as Phase-8 readiness checks. No `coderabbit-operator` dispatch occurs. Phase 7 is otherwise a no-op; control passes directly to Phase 8 after the three readiness gates clear. The refusal-action text in each gate still references "Phase 7 CodeRabbit dispatch" for audit-history continuity with pre-retirement records; only the operator dispatch itself is removed (see the no-op marker at the end of this section).
 
 #### Pre-dispatch inherited prototype tests gate
 
@@ -504,9 +506,9 @@ Before dispatching `coderabbit-operator`, enforce the Phase 6 → Phase 7 `Proto
 6. On a missing, unreadable, blank, incomplete, stale (including overlay evidence that fails to prove currentness under step 5), missing-terminal-state, or missing-overlay-evidence artifact, or on a present artifact that contains neither a valid `PrototypeSwapRecord` shape nor an explicit non-applicability statement, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 7`, violation code `prototype_swap_record_missing_or_invalid`, canonical path, refused action `Phase 7 CodeRabbit dispatch`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse Phase 7 CodeRabbit dispatch, write `${scratch_dir}/questions/q-<uuidv4>.question.json`, and halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
 7. On valid swap evidence or explicit non-applicability, allow the following Phase 7 CodeRabbit dispatch to proceed.
 
-Dispatch `coderabbit-operator` per `~/ai/workflows/coderabbit-loop.md`. Inputs: branch `${branch_name}`, base `main`, worktree path. Loop terminates per the operator's value-zero stop condition.
+CodeRabbit retired 2026-05-15 — no operator dispatch. After the three readiness gates above clear, control passes directly to Phase 8. The `coderabbit-operator` agent file is retained as a disabled tombstone for in-flight WUs that may still dispatch it via context carried from before the retirement; its tombstone short-circuits to `CONVERGED:disabled-no-credits-2026-05-15`. The dedicated `workflows/coderabbit-loop.md` is deleted, the `coderabbit-loop` entry in `workflows/index.json` is removed.
 
-### Phase 8 — Post-CodeRabbit Gates + Process-tree Audit #3
+### Phase 8 — PR-review Gates + Process-tree Audit #3
 
 1. Dispatch the four PR-review gates per `~/ai/workflows/pr-review.md`:
    - test-audit (`gpt-high`)
