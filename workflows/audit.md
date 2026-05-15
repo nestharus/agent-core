@@ -190,8 +190,6 @@ Equality predicates:
 
 When an audit fanout is later consumed by a downstream gated workflow, the audit fanout itself is process-tree-audited before downstream gate consumption. The expected process should include child auditor prompts, logs, source reports, dispatch manifest, normalized findings, aggregate output, and any required question or blocked-state artifacts.
 
-Pipeline-callable audit fanout completion inherits `~/ai/workflows/agents-cli.md` § `Long-running agents`, including the ACR-203 sentinel, bounded-timeout, and cleanup-trap backstop before a downstream gated workflow consumes audit outputs.
-
 The topology review returns `PASS|FAIL|NEEDS_INPUT|BLOCKED` separately from the semantic aggregate.
 
 ## Standalone Mode
@@ -218,7 +216,6 @@ Non-`LOW` aggregate or drift signal seeds proposer/revision work or blocks conti
 - `NEEDS_INPUT:<absolute_artifact_path>`: halt until the caller supplies missing evidence or resolves a new value/scope/staleness question. Delegated questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
 - `BLOCKED:<reason>`: halt because required files, reports, or output destinations are unreadable, malformed, or unavailable.
 - `process-tree FAIL/NEEDS_INPUT/BLOCKED`: prevents downstream consumption of the audit aggregate until the audit fanout is rerun or repaired.
-- Pipeline-callable fanout completion follows `~/ai/workflows/agents-cli.md` § `Long-running agents`; missing completion evidence, stale artifacts, or failed topology review prevents aggregate consumption.
 
 ## Anti-Scope
 

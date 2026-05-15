@@ -120,8 +120,6 @@ Standalone mode uses one root:
 
 Write `dispatch-manifest.md` before child dispatch where possible. Every selected child row defaults to required.
 
-When code-quality runs in pipeline-callable fanout mode and a downstream gated workflow consumes its aggregate, child dispatch and completion inherit `~/ai/workflows/agents-cli.md` § `Long-running agents`, including the ACR-203 sentinel, bounded-timeout, and cleanup-trap backstop.
-
 Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; the table below is the operational manifest for the current canonical set.
 
 | Concern | Auditor | Model | Prompt path | Log path | Report path | Required |
@@ -179,8 +177,6 @@ Under `conventions/code-quality.md` `## Auditor Scope Boundary`, current severit
 
 Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOCKED` before downstream gate consumption.
 
-Downstream consumption also depends on the pipeline-callable fanout completion contract in `~/ai/workflows/agents-cli.md` § `Long-running agents`; the semantic aggregate is not consumable while completion evidence or required child artifacts are missing or stale.
-
 ## Finding Normalization
 
 `findings.json` and `findings.md` are both required. `findings.json` is the canonical machine-readable artifact; `findings.md` is the human-readable rendering of the same normalized records.
@@ -206,8 +202,6 @@ Equality predicates include commit SHA, diff base plus head, file list, `touched
 ## Process-Tree Relationship
 
 `process-tree-auditor` audits the four-child fanout before downstream gate consumption when applicable.
-
-That downstream fanout handoff uses `~/ai/workflows/agents-cli.md` § `Long-running agents` for completion evidence; this workflow owns the semantic aggregate, while the canonical agents-cli contract owns the gated-fanout completion backstop.
 
 The topology result is separate from the semantic aggregate. Topology review returns `PASS|FAIL|NEEDS_INPUT|BLOCKED`; semantic code-quality aggregation returns `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>`.
 

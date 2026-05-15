@@ -114,18 +114,4 @@ For agents expected to run longer than about 30 seconds:
 - Keep the `tee` log path stable so post-mortem inspection does not depend on terminal scrollback.
 - `agents trace --json` is for post-run inspection, audit evidence, session topology, and eval input. It is not the active completion-wait primitive for a running child.
 
-### sentinel completion markers for gated fanout
-
-This is a narrow ACR-203 carve-out for gated fanouts inside the implementation pipeline: Phase 2.5 audit dispatch, Phase 4 risk and code-quality fanouts, Phase 6 per-component code-quality fanouts, and Phase 8 PR-review gates. The Bash tool task completion notification remains the primary completion signal; sentinel files are defense-in-depth and a backstop, not a replacement for task notifications.
-
-Each child prompt in this carve-out instructs the child to `touch <log>.done` as its terminal action after the canonical report is written. Sentinel names must be unique per child and live under the stable log root. Before dispatch, the orchestrator must remove any stale `<log>.done` file so a prior run cannot satisfy the current completion check.
-
-Fallback reconciliation is bounded: use the Bash builtin `$SECONDS` with `[ $SECONDS -gt 1800 ] && break` inside the until-loop body, or an equivalent harness timeout. Incomplete sentinel set after the bounded wait returns `BLOCKED:fanout-completion-timeout` with cited missing sentinel paths; the orchestrator refuses join-manifest write and phase advance, and no partial-verdict residual advance is allowed.
-
-When the orchestrator owns backgrounded Bash tasks for such fanout, install `trap 'kill $(jobs -p) 2>/dev/null' EXIT INT TERM` or an equivalent harness-appropriate cleanup in the orchestrator's shell session before the first `Bash(run_in_background=True)` agents dispatch. This trap is current-shell-only: it kills jobs owned by that shell; grandchildren that escaped host CLI propagation remain ACR-203 anti-scope.
-
-Sentinel files are completion evidence only. Canonical report paths, size, mtime, sha256, verdict_line, producing invocation UUID, process-tree audits, and join manifests remain the verdict evidence boundary. The rationale for this carve-out is that a watcher cannot run when Bash tool task notifications themselves have been lost, so a signal-driven filesystem sentinel is the orchestrator's last-line guarantee against orphan-sleep leakage.
-
-The forbidden patterns above remain forbidden outside this carve-out and remain forbidden as primary completion mechanisms inside it: generic `until grep` log-scrapes, custom shell watcher machinery, trace polling loops, PID waits, bundled multi-`agents` shell scripts, and `head -N`-style truncation on live `agents` stdout.
-
 For parallel risk gates, dispatch all rounds as separate Bash-background tool calls, then collect outputs sequentially after their task notifications arrive.
