@@ -482,14 +482,16 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: Phase 6 -> Phase 7 `PrototypeSwapRecord` boundary: this rule sits after Step 6c's process-tree review and before Phase 7; Phase 6 still has exactly three sub-steps, Step 6a, Step 6b, and Step 6c, so this is not a Step 6d. Before Phase 7 can advance or CodeRabbit can consume the diff, every WU or level scope with a level prototype must produce a `PrototypeSwapRecord` at `${planning_dir}/risk/${wu_lower}-prototype-swap-record.md`; a WU or level scope without a level prototype must place an explicit non-applicability statement at that same path, because a missing artifact is not equivalent to non-applicability. The record must contain `component_refs`, `component_test_results`, `procedural_test_results`, `level_behavior_test_results`, `removed_or_retired_refs`, and `audit_overlay_refs`, with `level_id` and `prototype_ref` additional to the six ticket fields, plus a terminal-state field whose allowed values are `consumed`, `non-applicable`, and `superseded`. Each `audit_overlay_refs` entry must identify the artifact path and the verdict or currentness evidence proving the artifact applies to the swapped component inventory. The canonical implementation-pipeline workflow forbids the implementation-pipeline orchestrator from advancing to Phase 7 (CodeRabbit) on a diff that has no `PrototypeSwapRecord` or explicit non-applicability statement at `${planning_dir}/risk/${wu_lower}-prototype-swap-record.md`; Phase 7 dispatch cannot advance and CodeRabbit cannot consume that diff. This rule authorizes no new operators and no new workflow file, and it does not define overlay scheduling, which belongs to sibling NES-270. This prohibition is implemented by the `Pre-dispatch swap-record gate` in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 7, which the orchestrator agent executes procedurally. Parallel prototype code cannot remain as shadow implementation unless the proposal at the level scope has named retained prototype paths as supported-surface; supported-surface naming is the only retained-prototype escape clause.
 - Boundary pointer: same-layer component-pair integration-test evidence is upstream evidence consumed before swap readiness and is distinct from `component_test_results`, `procedural_test_results`, and `level_behavior_test_results`.
 
-## Phase 7 - CodeRabbit Loop
+## Phase 7 - SKIPPED (CodeRabbit retired 2026-05-15)
 
-- Run CodeRabbit only after implementation is functionally complete enough for review.
-- Pre-CodeRabbit inherited-test readiness: Phase 7 CodeRabbit dispatch refuses to advance when inherited prototype proof tests are missing, still `prototype-pending:`, unrun, failing, or replaced without a recorded strictly stronger equivalent supersession entry in the manifest, spawned ticket payload, or Step 6b output index.
-- Policy: follow `~/ai/workflows/coderabbit-loop.md`.
-- Rules: do not duplicate the CodeRabbit procedure here. This phase reviews the actual diff, not the proposal.
-- Rule: if CodeRabbit or the fix pass surfaces evidence that invalidates an approved assumption or collapses the approved net-value case, return to research and resume at Phase 2.5 instead of treating it as an ordinary review fix.
-- Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
+CodeRabbit has been removed from the implementation pipeline as of 2026-05-15. The dedicated `workflows/coderabbit-loop.md` is deleted, the `coderabbit-loop` entry in `workflows/index.json` is removed, and `agents/coderabbit-operator.md` is retained as a disabled tombstone that returns `CONVERGED:disabled-no-credits-2026-05-15` immediately on any dispatch (safety net for in-flight WUs that still reference it).
+
+- Phase 7 is a no-op. The orchestrator does not dispatch any CodeRabbit-related operator and does not run a review pass.
+- Phase numbering is preserved (Phase 7 between Phase 6 and Phase 8) so existing references and audit history remain coherent.
+- Inherited-prototype-test readiness and any other pre-Phase-8 readiness checks that previously gated Phase 7 now gate the Phase 6 → Phase 8 transition directly.
+- Downstream Phase 8 PR-review gates and Phase 9 PR creation / merge proceed unchanged.
+
+Re-enable would require restoring `coderabbit-loop.md`, restoring the index entry, and removing the disabled tombstone in `coderabbit-operator.md`.
 
 ## Phase 8 - Post-CodeRabbit Review Gates
 

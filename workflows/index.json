@@ -141,34 +141,6 @@
         ]
       }
     },
-    "coderabbit-loop": {
-      "path": "workflows/coderabbit-loop.md",
-      "workflow": {
-        "id": "coderabbit-loop"
-      },
-      "workflow_dispatch_contract": {
-        "expectations": [
-          "runs CodeRabbit on the actual branch diff and applies useful findings in place",
-          "amends the reviewed commit between passes without pushing during the loop",
-          "stops when the latest pass has no remaining value worth another iteration"
-        ],
-        "inputs": [
-          "branch under review, base branch, and project worktree path",
-          "current review commit and optional audit-history context for repeated passes"
-        ],
-        "non_goals": [
-          "does not push or force-push during the loop",
-          "does not weaken tests, regenerate baselines, or relax assertions to converge",
-          "does not replace the post-CodeRabbit PR review gates"
-        ],
-        "orchestrator": "coderabbit-operator",
-        "outputs": [
-          "amended local branch commit containing accepted CodeRabbit fixes",
-          "latest CodeRabbit pass output and optional audit-history entries for repeated loops",
-          "process-tree-auditor evidence before handoff to PR review gates"
-        ]
-      }
-    },
     "implementation-pipeline": {
       "path": "workflows/implementation-pipeline.md",
       "workflow": {
