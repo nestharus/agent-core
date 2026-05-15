@@ -3488,3 +3488,34 @@ When the manager resume note arrived 2026-05-15, the orchestrator session resume
 - `agents trace --json b14be71c-d4c7-45a6-8bb0-b789fd027c56` (succeeded, 18 children, Phase 3 + 4 + 5 + 6 + Phase 7 CodeRabbit dispatch attempt `f784a1c2`)
 - `agents trace --json 9b8c4057-1a70-4401-bac2-b6f2fa1fd9ea` (running, 4+ children, Phase 8 onward)
 - Saved trace JSONs at `${planning_dir}/.scratch/traces/`
+
+## ACR-203 — Phase 2.5 step 4a inherited-estimate cold-start (2026-05-15)
+
+- WU id: ACR-203
+- Phase: Phase 2.5 step 4a (inherited-estimate cold-start check)
+- Decision: A — Proceed without a baseline estimate.
+- Justifying evidence: `/home/nes/projects/ai/planning/acr-203-watcher-fragility/.scratch/questions/q-6f1eb335-5fa7-4db5-b858-a80a97789f0a.question.json` + `.answer.json`. Manager rationale: procedural cold-start, markdown + workflow surface, narrow defense-in-depth fix (sentinel + bounded watcher + cleanup trap); Phase 3 derives refined estimate; precedents ACR-205 (8/8), ACR-207 (in flight).
+- Apply to: Phase 2.5 step 8 mode propagation; Phase 3 proposer carries `inherited_story_point_estimate: null`, `estimate_source: missing`, `over_2x: unknown` into the `## Estimate refinement` block.
+
+## ACR-203 — Step 6c consumed-echo capture limitation (2026-05-15)
+
+- WU id: ACR-203
+- Phase: 6c (markdown-only docs/workflow WU)
+- Decision: apply the ACR-150 / ACR-186 bounded-exception precedent to the Step 6c log capture limitation. Step 6c invocation `ffae5fc6-9a0c-4849-9d51-ab5e1b0e09bb` ran under `codex2` source; the agent's main-response stdout (which includes the prompted `consumed:` echoes) is not fully captured to the tee log. The tee log instead starts with `OULIPOLY_*` markers and jumps to `WROTE:` lines, then ends with the verification block.
+- Justifying evidence: `/home/nes/projects/ai/planning/acr-203-watcher-fragility/.scratch/phase6/step6c-consumption-evidence.md` (supplementary filesystem-inspection consumption-evidence artifact). The artifact verifies: (a) Step 6b output index + Step 6b eval mtimes precede Step 6c product writes; (b) Step 6c product writes fall inside the Step 6c invocation window 04:01:15Z–04:05:44Z; (c) the edited workflow file contains every AC token (F1–F6, N4, M1–M5, W1–W3, V1) the Step 6b eval named, proving substantive eval consumption; (d) the Step 6c agent's own verification block (visible in the tee log) maps each AC to an inserted line.
+- Apply to: Process-tree audit #2 reads `step6c-consumption-evidence.md` as companion evidence; the prior FAIL on `consumed:` echo absence is reclassified as a bounded ACR-150 / ACR-186 stdout-capture-class instance, not a Step 6b/6c separation violation.
+- Bounded exception scope: applies only to this invocation. Expires at Process-tree audit #2; a non-PASS on the re-run with the supplementary artifact present reactivates Tier-2 split.
+- Platform hardening destination: ACR-190 / ACR-204 (stdout-capture class).
+- Precedent: `/home/nes/ai/DECISIONS.md` § `D-2026-05-13-acr150-step6c-consumed-echo-capture-limitation`.
+
+## ACR-203 — Phase 7 retired (CodeRabbit retirement; 2026-05-15)
+
+- WU id: ACR-203
+- Phase: Phase 7 CodeRabbit loop
+- Decision: Phase 7 is a no-op for ACR-203 under the CodeRabbit retirement decision shipped to master 2026-05-15. The original Phase 7 dispatches for this WU returned `BLOCKED:coderabbit-outage` three times across a >60-minute wall-time window (the immediate outage that prompted the retirement); the manager subsequently merged the retirement track to master and instructed the WU to advance past Phase 7 directly to Phase 8.
+- Retirement track on master:
+  - PR #146 (`ac58d35`): `agents/coderabbit-operator.md` short-circuits with `CONVERGED:disabled-no-credits-2026-05-15` on any dispatch (disabled tombstone).
+  - PR #147 (`df6309e`): `workflows/coderabbit-loop.md` deleted; `coderabbit-loop` entry removed from `workflows/index.json`; `workflows/implementation-pipeline.md` Phase 7 rewritten to "SKIPPED (CodeRabbit retired 2026-05-15)"; `agents/implementation-pipeline-orchestrator.md` no longer dispatches `coderabbit-operator`.
+- Outage evidence (historical, kept in the worktree as the immediate trigger for the retirement): `CODERABBIT_pass1-attempt1.md`, `CODERABBIT_pass1-attempt2.md`, `CODERABBIT_pass1.md` (third attempt), `CODERABBIT_summary*.md`, and `${planning_dir}/audit-history.md` rounds 4–7.
+- Apply to: ACR-203 advances from Phase 6 directly to Phase 8 PR-review gates without Phase 7 CodeRabbit work. The three pre-Phase-7 readiness gates (inherited-prototype-tests, integration-tests, swap-record) all already cleared as Phase 7 readiness checks and continue to serve as Phase 8 readiness checks. Phase 9 uses squash-merge without `--auto` per the manager's ACR-193-style instruction (master has no branch protection).
+- Anti-scope: do NOT retry CodeRabbit dispatch in this WU. Do NOT install the CodeRabbit GitHub App. Do NOT idle-timeout (ACR-203 still applies). Do NOT spawn orphan background commands without cleanup trap (ACR-203 anti-pattern).
