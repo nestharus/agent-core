@@ -58,6 +58,7 @@ Positive evidence includes one or more of these shapes:
 - Coordinated lockstep edits to `~/ai/conventions/code-quality.md` and `~/ai/agents/coupling-auditor.md` with no semantic drift.
 - Cosmetic markdown formatting changes outside the intrinsic-surface carrier, threshold, counting, subordinate-reference, malformed-disposition, and non-declared threshold rule sections.
 - Adapter declarations continuing to use the adapter branch only, with `adapter_declarations:`, `role: adapter`, and `Translates:` remaining translation-only and not cross-contaminating intrinsic-surface behavior.
+- Refined adapter declarations with parser-role evidence, external-contract-bound field proof, exhaustive verifier evidence, or envelope-boundary evidence continue to use only `adapter_declarations:` / `role: adapter` / `Translates:` and do not use `intrinsic_surface_declarations:`, `Domain:`, or `Owns:`.
 - A stable MEDIUM accepted under an active WU's approved risk disposition with cited audit-history evidence, where that acceptance is the convention-permitted narrow MEDIUM acceptance and not a coupling/code-quality pipeline gate bypass.
 
 ## Required trace fields
