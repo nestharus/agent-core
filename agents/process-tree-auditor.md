@@ -83,7 +83,7 @@ For join-manifest composition, the verdict expectation comes from the gate contr
 
 Step 6b output indexes, raw findings, dispatch manifests, generated tickets, and other non-verdict artifacts remain ordinary `expected_outputs` unless a caller defines a real verdict contract.
 
-For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and the Step 6b output paths consumed by Step 6c. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
+For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and relaxed-position Step 6c `consumed:` evidence for the Step 6b output index plus every Step 6b output-index row Step 6c implemented. The `consumed:` rows may appear anywhere in the Step 6c log after runner-owned `OULIPOLY_INVOCATION` and `OULIPOLY_SESSION` envelope lines. They must correspond to Step 6b output-index rows, including child `level_id` scope where applicable. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
 
 If the manifest is absent or too vague to map expected work to tree nodes, return `NEEDS_INPUT`.
 
@@ -141,8 +141,8 @@ For each expected prompt, log, gate report, status, or output:
 - for each blocking question artifact, verify the root-surfaced answer artifact exists before downstream dependent nodes run;
 - verify continuation evidence names the same `question_id`, origin invocation UUID, session ID when known, and session-graph manifest;
 - flag `Question/answer handling violation` when a question was emitted but not surfaced, the workflow advanced while unanswered, an answer was received but not applied, or the continuation target does not match the question artifact.
-- for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c prompt/log evidence shows those paths were consumed by Step 6c;
-- classify missing Step 6b output index, missing Step 6c consumption evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
+- for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c prompt/log evidence contains corresponding relaxed-position `consumed:` rows at any post-envelope position;
+- classify missing Step 6b output index, missing, malformed, mismatched, stale, or wrong-scope Step 6c consumption evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
 
 For each canonical-output row, `canonical_output_path` must be verified from the current filesystem: stat `canonical_output_path`, read the current file, parse verdict from the current file, compare the parsed verdict with `expected_verdict`, and when `expected_sha256` is present compute the current sha256 and compare it with `expected_sha256`.
 

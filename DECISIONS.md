@@ -3377,3 +3377,13 @@ In this case the defer-vs-proceed-vs-terminate question is NOT a previously-unev
 - Risk profile: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/risk/acr-206-risk-profile.md`
 - Problem map: `/home/nes/projects/ai/planning/acr-206-firstline-unenforceable/research/acr-206-problem-map.md`
 - Defer-signal evaluation: same risk profile, § `Defer-to-prototype Signal Evaluation`.
+
+## D-2026-05-14-acr206-step6c-consumption-evidence-supersession
+
+**WU**: ACR-206. **Phase**: Phase 6 (Step 6c consumption-evidence replacement).
+
+**Decision**: ACR-206's relaxed-position Step 6c log-evidence rule supersedes the synthetic consumption-evidence bridge precedent family for future Work Units. Future WUs use Step 6c captured-log `consumed:` rows that may appear after runner-owned `OULIPOLY_INVOCATION` and `OULIPOLY_SESSION` envelope lines, while still proving consumption of the Step 6b output index and implemented Step 6b output-index rows.
+
+**Superseded bridge precedent family for future WUs**: ACR-154, ACR-198, ACR-149, ACR-207, ACR-88, ACR-186, NES-209, NES-219, NES-270, NES-274, AGE-93, AGE-44.
+
+**Historical evidence handling**: historical planning-side `step6c-consumed-evidence.md` files and related bridge artifacts remain in their own WU planning directories as evidence. They are not deleted, consolidated, or treated as the normal future contract after ACR-206.
