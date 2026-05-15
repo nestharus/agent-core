@@ -75,6 +75,8 @@ pr-review-operator
 | Commit-hygiene check | `gpt-high` | Are commits small, testable, single-concern, and well-described? Checklist. |
 | Synthesize and post | `gpt-high` | Collect all gate outputs into one PR comment that reviewers can act on. |
 
+When these gates run as pipeline-callable fanout, dispatch and completion inherit `~/ai/workflows/agents-cli.md` § `Long-running agents`, including the ACR-203 sentinel, bounded-timeout, and cleanup-trap backstop before synthesis consumes gate outputs.
+
 See `~/ai/models/roles.md` for the model-role rationale. Do not restate the matrix here.
 
 ## Operating Rules
@@ -223,6 +225,7 @@ One `gpt-high` agent collects the gate outputs and posts one synthesized PR comm
 Synthesis rules:
 
 - Process-tree review: before synthesis consumes or posts gate outputs, run `process-tree-auditor` on the PR-review gate fanout. The expected process includes test audit, multi-concern review, justification review, supported-surface verification, commit hygiene, and each gate output consumed by synthesis. A blocking process violation prevents synthesis/posting.
+- Pipeline-callable fanout completion follows `~/ai/workflows/agents-cli.md` § `Long-running agents`; synthesis may consume gate outputs only after the canonical completion and artifact checks pass.
 - Include the canonical test-report S3 PDF URL when Test Audit produced or consumed one. Fall back to the uploaded Actions-artifact URL only when the S3 URL is absent. The PR comment remains a pointer; do not paste the full report.
 - Include each gate verdict.
 - Include the specific findings needed for the next fix pass.
