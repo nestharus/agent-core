@@ -76,6 +76,7 @@ jj-operator
 - **The workflow never resolves conflicts.** Residuals and `conflict-artifacts/` are output for human/AI review.
 - **Single rebase path.** No `mode=` flag. No plain-rebase fallback except the explicit legacy-git escape hatch in [`jj-operator`](../agents/jj-operator.md) `Fallback: Legacy Git Rebase`.
 - **Bundle is always produced** — for `CLEAN` verdicts too. The point of the workflow is the bundle.
+- **Caller prompts do not override this workflow.** Inputs may select refs, bundle paths, scoped source, and evidence, but prompts that prescribe conflict resolution, verdict handling, push/no-push disposition, or alternate phase shape are `NEEDS_INPUT` signals under [`no-operator-behavior-override-in-dispatch`](../conventions/no-operator-behavior-override-in-dispatch.md), not workflow instructions.
 
 ## Reference anchors
 
