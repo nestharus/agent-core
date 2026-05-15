@@ -3324,3 +3324,30 @@ The earlier R3 dispatch under invocation `d66c0096-8ff4-4f22-a5a9-4e6389e607b8` 
 - Phase 8.X closure judge runs after Phase 8 clears.
 - Phase 9 finish (`gh pr ready` + direct `gh pr merge --squash` — no `--auto`, master has no branch protection) waits for Phase 8 + 8.X to clear.
 - The D-2026-05-14 option-D entry is left in place as historical record; the current Phase 7 disposition is this entry, which supersedes the option-D plan in operative effect.
+
+## D-2026-05-15-acr149-rebase-d1-extension-prototype-validation-shipping
+
+**Date**: 2026-05-15
+**WU**: ACR-149
+**Phase**: Phase 9 (rebase onto current master)
+
+### Observation
+
+While rebasing the ACR-149 branch onto current `origin/master` (`df6309e`) to resolve a merge conflict before squash-merge, a new workflow file landed on master that has the same stale-frontmatter pattern previously covered by D-2026-05-12-acr149-phase-6c-d1-extension-batch: `workflows/prototype-validation-shipping.md`. Its `workflow_dispatch_contract` mapping is missing the four required keys (`inputs`, `expectations`, `outputs`, `non_goals`). `python3 -m tools.workflow_index check` fails on it; the structural pytest `test_eval_runtime_workflow_frontmatter_parses` (which invokes the canonical check across the whole `workflows/` directory) fails after the rebase as a result.
+
+### Decision
+
+**Extend the D1 batch one more time** to include `workflows/prototype-validation-shipping.md` opening-frontmatter repair, under the same narrow-frontmatter disposition as the prior batch entry. Repair adds only the four missing keys (`inputs`, `expectations`, `outputs`, `non_goals`) populated to match the existing body content. The `declared_roles` field and the rest of the body are preserved verbatim.
+
+### Rationale
+
+1. Same architectural alignment logic as the prior batch — these are stale-frontmatter cases the canonical generator catches as it gains new requirements over time. The dispatch's "Mid-pipeline drift: default A — proceed + note in DECISIONS as residual" pre-resolution authorizes the extension, and "max-alignment, no shortcuts" forbids accepting it as residual when a narrow architectural repair fixes it.
+2. The repair is bounded to one additional file. After the patch, `python3 -m tools.workflow_index check` exits 0 and all 12 ACR-149 pytests pass.
+3. Without this repair, the ACR-149 branch cannot merge because its own structural pytest would fail post-rebase.
+
+### Evidence
+
+- Pre-rebase: `python3 -m tools.workflow_index check` exited 0 against the pre-rebase branch HEAD `fac7c1d`.
+- Post-rebase (before patch): `workflow-index: workflows/prototype-validation-shipping.md: workflow_dispatch_contract has invalid keys: missing keys ['expectations', 'inputs', 'non_goals', 'outputs']`.
+- Post-patch: `python3 -m tools.workflow_index check` exits 0; `pytest tests/test_adversarial_qa_stage.py -v` reports 12 passed.
+- Total D1 batch is now SIX workflow files (eval-runtime, feature-development, refactoring, wu-session-wake, "writing pipeline orchestrator", prototype-validation-shipping). All opening-frontmatter only; bodies preserved.
