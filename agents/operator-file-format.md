@@ -100,6 +100,12 @@ One paragraph describing what this operator does, why it exists, and who it is f
 
 Projects may add more sections when useful, such as `## Outputs`, `## Example Invocations`, `## Non-Negotiables`, or `## Output Format`. The skeleton above is the canonical reference shape.
 
+## Caller Prompt Precedence
+
+The operator file's documented procedure is authoritative. Caller-supplied prompt content may add inputs, task scope, task variant, boundary anti-scope, stop conditions, and evidence paths, but it does not override operator mechanics, verdict handling, phase shape, step ordering, or workflow procedure.
+
+When a caller prompt prescribes mechanics that conflict with this operator file or a workflow it cites, treat that prescription as a `NEEDS_INPUT`-shape signal and surface it back instead of complying. The caller's corrective path is to update the owning operator, workflow, or convention through a normal work unit; see `~/ai/conventions/no-operator-behavior-override-in-dispatch.md`.
+
 ## File Placement
 
 - Cross-project operators live in `~/ai/agents/<name>.md`.
