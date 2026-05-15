@@ -117,6 +117,8 @@ Recommended shape:
 
 Everything else should either point to an existing doc in `~/ai/` or become a new shared doc here.
 
+<!-- ACR-225 prototype probe: docs-only branch used to observe PR-mode review completion signals. -->
+
 ## Update Rules
 
 - Treat `~/ai/` as the shared source for cross-project workflow and policy docs.
