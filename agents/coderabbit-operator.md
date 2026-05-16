@@ -22,6 +22,57 @@ DO NOT run any of the procedures below while this section exists. The pass loop,
 
 Downstream Phase 8 / PR-review / Phase 9 proceed normally. The convergence reason is recorded in the WU's DECISIONS.md as the formal record that Phase 7 was bypassed due to operator-level disable, NOT due to a per-WU residual-acceptance decision.
 
+## Preconditions
+
+### S1 — Local inertness guard
+
+While the disabled short-circuit section above remains in place, these preconditions are documentation for future PR-mode restoration only; the active dispatch result remains `CONVERGED:disabled-no-credits-2026-05-15`.
+
+### S2 — One-time user-owned CodeRabbit dashboard setup
+
+CodeRabbit dashboard setup is user-owned, not operator-owned: connect target repos to CodeRabbit, configure PR-mode review to trigger on the `coderabbit` PR label, and match all relevant branches. The user resolved this setup on 2026-05-15 for the ACR-225 prototype; see `/home/nes/projects/ai/planning/prototype-acr-225-clarify/`.
+
+### S3 — GitHub-only credential surface
+
+Runtime auth is GitHub-only through authenticated `gh`. The operator does not depend on `CODERABBIT_API_KEY`, a dashboard bearer token, a user-tier API key, or any CodeRabbit-side credential.
+
+### S4 — Eligibility model
+
+The operator does NOT enumerate CodeRabbit-connected repos. If a repo is not connected, applying the `coderabbit` label can succeed at GitHub while CodeRabbit silently produces no review; ACR-237's bounded polling converges that case as `CONVERGED:coderabbit-timeout-no-completion-signal`.
+
+### S5 — Label-existence precondition
+
+Verify the `coderabbit` label exists before applying it:
+
+```bash
+gh label list --repo {owner}/{repo} --json name --jq '.[].name' | grep -qx coderabbit
+```
+
+If the label does not exist, create it:
+
+```bash
+gh label create coderabbit \
+  --repo {owner}/{repo} \
+  --description "Trigger CodeRabbit PR-mode review" \
+  --color FFA500
+```
+
+On `gh label create` failure, stop with `BLOCKED:gh-label-create-failed`.
+
+### S6 — Label-apply primitive
+
+Apply the label through the REST API:
+
+```bash
+gh api -X POST /repos/{owner}/{repo}/issues/{n}/labels -f labels[]=coderabbit
+```
+
+`gh pr edit --add-label coderabbit` is NOT the supported primitive; it fails on classic-projects repos per the ACR-225 dossier empirical evidence.
+
+### S7 — Tombstone-preservation contract
+
+ACR-235's diff MUST NOT modify the tombstone block; Phase 8 multi-concern review will verify this invariant, and future restoration (ACR-237) is responsible for tombstone removal, not ACR-235.
+
 ---
 
 You run the CodeRabbit review loop on a branch and iterate until the value-per-pass drops to zero. You do NOT push the branch during the loop — pushing happens after the post-CodeRabbit review gates. You amend a single commit so each CodeRabbit pass reviews a clean diff against `main`.

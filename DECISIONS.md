@@ -3447,3 +3447,26 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
 
 - Phase 6 prototype-risk report: `/home/nes/projects/ai/planning/impl-acr-226/risk/acr-226-prototype-risk.md`.
 - Citation: `/home/nes/projects/ai/planning/impl-acr-226/audit-history.md` § Decision register `D-2026-05-15-acr226-phase2.5-gate-approve-driftB`.
+
+## 2026-05-16 — ACR-235 — Phase 2.5 step 4a inherited-estimate cold-start disposition
+
+- WU: ACR-235 (CodeRabbit label-trigger helper + one-time setup documentation)
+- Phase: Phase 2.5 step 4a (inherited-estimate cold-start check)
+- Decision: **Proceed without baseline estimate**
+- Justifying evidence:
+  - `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/ticket.md` (estimate_source=missing; "Estimate left blank in source ticket; description states refine at implementation pipeline Phase 1")
+  - `/home/nes/projects/ai/planning/prototype-acr-225-clarify/dossier/answer.md` (parent prototype terminal state `CONVERGED:design-fixed-by-user-config-update`)
+  - `/home/nes/projects/ai/planning/prototype-acr-225-clarify/dossier/spawned-tickets.md` ("Estimates: blank (per resume instructions; estimates refined at the implementation pipeline's Phase 1)")
+- Root rationale: parent prototype already converged with full empirical evidence; the design surface is bounded and small; re-running a fresh prototype would be circular. Phase 3 will produce a refined estimate per the standard contract; Phase 8.X closure-judge captures actuals.
+
+## 2026-05-16 — ACR-235 — Phase 4 MEDIUM halt split disposition
+
+- WU: ACR-235
+- Phase: Phase 4 (supported-surface gate revise-loop saturation)
+- Trigger: Phase 4 supported-surface gate returned MEDIUM in both round 1 and round 2; the MEDIUM was structurally inherent (eval surface had nominal-automated-consumption with no eval-runner pipeline wired up). Other gates LOW.
+- Decision: **Split.** Move the eval scaffolding (and the related acceptance criterion) from ACR-235 to ACR-237. ACR-235 ships docs-only: the new Preconditions / label-helper documentation block in `~/ai/agents/coderabbit-operator.md`.
+- Justifying evidence:
+  - `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/risk/acr-235-supported-surface.md` (gate quote: *"LOW would require all consumers to be wired in and value to be entirely ACR-237-independent."*)
+  - Question artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.question.json`
+  - Answer artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.answer.json`
+- Resume: re-run Phase 3 with narrowed scope; re-run Phase 4 from clean state.
