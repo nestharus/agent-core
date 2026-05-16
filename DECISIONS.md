@@ -3508,3 +3508,27 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
 - `git fetch origin master` → `FETCH_HEAD c11300e`.
 - `git log --oneline master..origin/master` → `c11300e ACR-235 (#159)` + `55fd61c ACR-217 (#158)`.
 - Problem map's "Touched surface (planned)" section cites fetched `origin/master` content explicitly; no LOW gate has consumed pre-rebase state.
+
+## D-2026-05-16-acr236-phase2.5-mode-propagation-exhaustive
+
+**WU**: ACR-236. **Phase**: Phase 2.5 step 8 (mode propagation).
+
+**Decision**: Proceed in exhaustive mode for `agents/coderabbit-operator.md`. Phase 2.5 WU-level verdict landed HIGH driven by the mechanical `coverage gap` axis (no existing eval/test coverage for the new `task=reply` variant). All other axes were LOW or MEDIUM.
+
+**Defer-to-prototype signal evaluation** (per orchestrator's Phase 2.5 step 5 detection rule, "two or more"):
+
+1. Risk profile rolls up HIGH on majority of touched surfaces: FIRES (1/1 surface is HIGH).
+2. Duplicates inventory names sprawling parallel-systems landscape outside WU's scope: does NOT fire. One known parallel (CodeRabbit dashboard `replyToReviewComment`) documented as accept-as-divergence.
+3. Lifecycle map largely operational-knowledge-not-repo-derivable: does NOT fire. Lifecycle fully named and repo-derivable from operator file + dossier.
+4. Coverage inventory names so many uncovered behaviors that characterization tests are themselves multi-WU work: does NOT fire. 4 eval cases are the named acceptance criterion and are Phase 6b scope.
+5. Cross-language trace shows implicit contracts in so many sites that change-path entropy is HIGH on its own: does NOT fire. Surface stays in Markdown + `gh` CLI; change-path entropy MEDIUM not HIGH.
+
+Only 1 of 5 signals fires. The 2+-rule for defer-to-prototype is NOT met. No NEEDS_INPUT new-value question is escalated for defer-disposition.
+
+**Why HIGH is mechanical and downstream-resolvable**: the convention's "no tests" rule scores HIGH for coverage gap. The current operator is a disabled tombstone; the `task=reply` variant is NEW behavior, not regressing existing coverage. The downstream Phase 6b will produce the missing eval coverage (4 cases named in the ticket acceptance criteria) at `evals/coderabbit-operator-pr-mode/eval.md` in WRITE-state, paralleling ACR-235's eval-WRITE-state approach. After Phase 6b lands, the coverage-gap axis will resolve to LOW for this surface against the new task. Phase 4 risk gates evaluate the proposal (which will commit to eval coverage), not the pre-implementation surface state.
+
+**User-prompt expectation reconciliation**: user invocation said "Phase 2.5 should land MEDIUM or LOW". Reality landed HIGH due to mechanical coverage-gap scoring. The user's anti-scope "NO quality-gate residual acceptance (LOW-only rule per ACR-156/162/163; ACR-242 enforcement)" applies to QUALITY gates (Phase 4 code-quality, Phase 6 per-component code-quality), not to Phase 2.5 risk-profile scoring. Phase 2.5 verdict drives mode propagation, not gate pass/fail; HIGH triggers exhaustive mode for downstream phases.
+
+**Project-aggregate update**: a sibling entry for `~/ai/agents/coderabbit-operator.md (ACR-236 task=reply variant while tombstoned)` was added to `/home/nes/projects/ai/planning/risk-profile.md` next to ACR-235's existing entry on the same surface. The risk-profile agent initially wrote a misplaced central-checkout aggregate at `/home/nes/ai/planning/risk-profile.md`; that file was removed and the entry was moved to the umbrella aggregate.
+
+**Mode for downstream phases**: exhaustive mode for `agents/coderabbit-operator.md` — Phase 3 proposal MUST address coverage gap by committing to WRITE-state eval coverage for all 4 acceptance criterion cases (`reply-already-present`, `comment-not-coderabbit`, `gh-auth-unavailable`, `reply-posted` with captured URL). Phase 4 risk gates will evaluate that proposal commitment.
