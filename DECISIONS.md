@@ -3470,3 +3470,41 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
   - Question artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.question.json`
   - Answer artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.answer.json`
 - Resume: re-run Phase 3 with narrowed scope; re-run Phase 4 from clean state.
+
+## D-2026-05-16-acr236-phase0-inherited-estimate-disposition
+
+**WU**: ACR-236. **Phase**: Phase 0 / Phase 2.5 step 4a.
+
+**Decision**: Proceed without inherited baseline estimate; Phase 3 will produce the refined estimate. The Phase 2.5 step 4a inherited-estimate cold-start NEEDS_INPUT new-value question is suppressed under prior-user-disposition: the predecessor prototype (ACR-225 `prototype-acr-225-clarify`) has already run and produced this ticket, and the user's invocation prompt explicitly states 'Predecessor prototype (ACR-225) satisfies prototype-first' and 'Phase 2.5 should land MEDIUM or LOW (small operator addition, single primitive, well-scoped acceptance criteria)'.
+
+**Why not re-ask**: The cold-start check exists to elicit a value/scope/trade-off decision (prototype-first vs proceed-without-baseline vs terminate). The user's invocation prompt explicitly captures that decision via the predecessor-dossier handoff and the MEDIUM-or-LOW scope mandate. Re-asking would re-litigate a decision already made.
+
+**Evidence**:
+
+- Ticket frontmatter: `/home/nes/projects/ai/planning/acr-236-coderabbit-reply-task/.scratch/ticket.md` (`estimate_source: missing`).
+- Spawn-record: `/home/nes/projects/ai/planning/prototype-acr-225-clarify/dossier/spawned-tickets.md` (ACR-236 spawned with Ticket-3 boundaries).
+- Sibling-shipped reference: ACR-235 PR #159 (label-trigger preconditions, just shipped).
+
+## D-2026-05-16-acr236-phase0-skip-problem-map-gate
+
+**WU**: ACR-236. **Phase**: Phase 0 / Phase 2.5 step 6.
+
+**Decision**: Use `skip_problem_map_gate=true` per the project's `~/ai/AGENTS.md` opt-out for bootstrap-flow WUs and the user's explicit invocation setting.
+
+**Effect**: Phase 2.5 step 6 (routine problem-map approval) is suppressed. Phase 2.5 step 5 (defer-to-prototype signals detection) still runs and may still surface NEEDS_INPUT new-value questions if two-or-more signals fire. `skip_problem_map_gate=true` does not weaken `AskUserQuestion` permission-denial behavior or the genuine value-question escalation contract.
+
+## D-2026-05-16-acr236-phase0-rebase-onto-origin-master
+
+**WU**: ACR-236. **Phase**: Phase 0 (post-bootstrap branch integration).
+
+**Decision**: Rebase the WU branch `acr-236-coderabbit-reply-task` onto `origin/master` (`c11300e`) to integrate ACR-235 (PR #159) preconditions block and ACR-217 (PR #158) operator-side rebase mechanics. Worktree branched from local `master` at `3351485` before fetching origin; origin had moved.
+
+**Why rebase mid-Phase-2.5 without running the heavyweight Rebase Verification Gate**: the gate triggers on rebases that risk consuming stale prior PASS/LOW state. This WU has no recorded PASS state yet (Phase 2.5 is in progress; problem map produced but no LOW verdict recorded; no Step 6 contract, no Step 6b tests, no coverage adapter for `~/ai/` markdown WUs). The gate's four checks (test-rerun, coverage-non-regression, contract-verify, drift-check) are all structurally inapplicable mid-Phase-2.5 on a markdown WU: there are no tests to rerun, no coverage adapter, no contract yet authored, and the drift-check requires a problem-map plus diff bundle. Running the gate now would produce `BLOCKED:coverage-adapter-missing` etc. without surfacing real evidence.
+
+**Resume action**: Rebase NOW (before any LOW gate state is recorded); the problem map (12.8KB) was authored against `3351485`-base content and pre-fetched origin/master file content (the researcher already read `git show origin/master:agents/coderabbit-operator.md`), so the problem map remains current.
+
+**Evidence**:
+
+- `git fetch origin master` → `FETCH_HEAD c11300e`.
+- `git log --oneline master..origin/master` → `c11300e ACR-235 (#159)` + `55fd61c ACR-217 (#158)`.
+- Problem map's "Touched surface (planned)" section cites fetched `origin/master` content explicitly; no LOW gate has consumed pre-rebase state.
