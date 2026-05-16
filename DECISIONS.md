@@ -3470,3 +3470,65 @@ ACR-206's initial Phase 7 dispatch attempt (2026-05-14, codex2 invocation `f4d63
   - Question artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.question.json`
   - Answer artifact: `/home/nes/projects/ai/planning/acr-235-coderabbit-label-helper/.scratch/questions/q-4a2cb650-06f9-4796-aaf8-c5bb519e5f70.answer.json`
 - Resume: re-run Phase 3 with narrowed scope; re-run Phase 4 from clean state.
+
+## D-2026-05-16-acr236-phase0-inherited-estimate-disposition
+
+**WU**: ACR-236. **Phase**: Phase 0 / Phase 2.5 step 4a.
+
+**Decision**: Proceed without inherited baseline estimate; Phase 3 will produce the refined estimate. The Phase 2.5 step 4a inherited-estimate cold-start NEEDS_INPUT new-value question is suppressed under prior-user-disposition: the predecessor prototype (ACR-225 `prototype-acr-225-clarify`) has already run and produced this ticket, and the user's invocation prompt explicitly states 'Predecessor prototype (ACR-225) satisfies prototype-first' and 'Phase 2.5 should land MEDIUM or LOW (small operator addition, single primitive, well-scoped acceptance criteria)'.
+
+**Why not re-ask**: The cold-start check exists to elicit a value/scope/trade-off decision (prototype-first vs proceed-without-baseline vs terminate). The user's invocation prompt explicitly captures that decision via the predecessor-dossier handoff and the MEDIUM-or-LOW scope mandate. Re-asking would re-litigate a decision already made.
+
+**Evidence**:
+
+- Ticket frontmatter: `/home/nes/projects/ai/planning/acr-236-coderabbit-reply-task/.scratch/ticket.md` (`estimate_source: missing`).
+- Spawn-record: `/home/nes/projects/ai/planning/prototype-acr-225-clarify/dossier/spawned-tickets.md` (ACR-236 spawned with Ticket-3 boundaries).
+- Sibling-shipped reference: ACR-235 PR #159 (label-trigger preconditions, just shipped).
+
+## D-2026-05-16-acr236-phase0-skip-problem-map-gate
+
+**WU**: ACR-236. **Phase**: Phase 0 / Phase 2.5 step 6.
+
+**Decision**: Use `skip_problem_map_gate=true` per the project's `~/ai/AGENTS.md` opt-out for bootstrap-flow WUs and the user's explicit invocation setting.
+
+**Effect**: Phase 2.5 step 6 (routine problem-map approval) is suppressed. Phase 2.5 step 5 (defer-to-prototype signals detection) still runs and may still surface NEEDS_INPUT new-value questions if two-or-more signals fire. `skip_problem_map_gate=true` does not weaken `AskUserQuestion` permission-denial behavior or the genuine value-question escalation contract.
+
+## D-2026-05-16-acr236-phase0-rebase-onto-origin-master
+
+**WU**: ACR-236. **Phase**: Phase 0 (post-bootstrap branch integration).
+
+**Decision**: Rebase the WU branch `acr-236-coderabbit-reply-task` onto `origin/master` (`c11300e`) to integrate ACR-235 (PR #159) preconditions block and ACR-217 (PR #158) operator-side rebase mechanics. Worktree branched from local `master` at `3351485` before fetching origin; origin had moved.
+
+**Why rebase mid-Phase-2.5 without running the heavyweight Rebase Verification Gate**: the gate triggers on rebases that risk consuming stale prior PASS/LOW state. This WU has no recorded PASS state yet (Phase 2.5 is in progress; problem map produced but no LOW verdict recorded; no Step 6 contract, no Step 6b tests, no coverage adapter for `~/ai/` markdown WUs). The gate's four checks (test-rerun, coverage-non-regression, contract-verify, drift-check) are all structurally inapplicable mid-Phase-2.5 on a markdown WU: there are no tests to rerun, no coverage adapter, no contract yet authored, and the drift-check requires a problem-map plus diff bundle. Running the gate now would produce `BLOCKED:coverage-adapter-missing` etc. without surfacing real evidence.
+
+**Resume action**: Rebase NOW (before any LOW gate state is recorded); the problem map (12.8KB) was authored against `3351485`-base content and pre-fetched origin/master file content (the researcher already read `git show origin/master:agents/coderabbit-operator.md`), so the problem map remains current.
+
+**Evidence**:
+
+- `git fetch origin master` → `FETCH_HEAD c11300e`.
+- `git log --oneline master..origin/master` → `c11300e ACR-235 (#159)` + `55fd61c ACR-217 (#158)`.
+- Problem map's "Touched surface (planned)" section cites fetched `origin/master` content explicitly; no LOW gate has consumed pre-rebase state.
+
+## D-2026-05-16-acr236-phase2.5-mode-propagation-exhaustive
+
+**WU**: ACR-236. **Phase**: Phase 2.5 step 8 (mode propagation).
+
+**Decision**: Proceed in exhaustive mode for `agents/coderabbit-operator.md`. Phase 2.5 WU-level verdict landed HIGH driven by the mechanical `coverage gap` axis (no existing eval/test coverage for the new `task=reply` variant). All other axes were LOW or MEDIUM.
+
+**Defer-to-prototype signal evaluation** (per orchestrator's Phase 2.5 step 5 detection rule, "two or more"):
+
+1. Risk profile rolls up HIGH on majority of touched surfaces: FIRES (1/1 surface is HIGH).
+2. Duplicates inventory names sprawling parallel-systems landscape outside WU's scope: does NOT fire. One known parallel (CodeRabbit dashboard `replyToReviewComment`) documented as accept-as-divergence.
+3. Lifecycle map largely operational-knowledge-not-repo-derivable: does NOT fire. Lifecycle fully named and repo-derivable from operator file + dossier.
+4. Coverage inventory names so many uncovered behaviors that characterization tests are themselves multi-WU work: does NOT fire. 4 eval cases are the named acceptance criterion and are Phase 6b scope.
+5. Cross-language trace shows implicit contracts in so many sites that change-path entropy is HIGH on its own: does NOT fire. Surface stays in Markdown + `gh` CLI; change-path entropy MEDIUM not HIGH.
+
+Only 1 of 5 signals fires. The 2+-rule for defer-to-prototype is NOT met. No NEEDS_INPUT new-value question is escalated for defer-disposition.
+
+**Why HIGH is mechanical and downstream-resolvable**: the convention's "no tests" rule scores HIGH for coverage gap. The current operator is a disabled tombstone; the `task=reply` variant is NEW behavior, not regressing existing coverage. The downstream Phase 6b will produce the missing eval coverage (4 cases named in the ticket acceptance criteria) at `evals/coderabbit-operator-pr-mode/eval.md` in WRITE-state, paralleling ACR-235's eval-WRITE-state approach. After Phase 6b lands, the coverage-gap axis will resolve to LOW for this surface against the new task. Phase 4 risk gates evaluate the proposal (which will commit to eval coverage), not the pre-implementation surface state.
+
+**User-prompt expectation reconciliation**: user invocation said "Phase 2.5 should land MEDIUM or LOW". Reality landed HIGH due to mechanical coverage-gap scoring. The user's anti-scope "NO quality-gate residual acceptance (LOW-only rule per ACR-156/162/163; ACR-242 enforcement)" applies to QUALITY gates (Phase 4 code-quality, Phase 6 per-component code-quality), not to Phase 2.5 risk-profile scoring. Phase 2.5 verdict drives mode propagation, not gate pass/fail; HIGH triggers exhaustive mode for downstream phases.
+
+**Project-aggregate update**: a sibling entry for `~/ai/agents/coderabbit-operator.md (ACR-236 task=reply variant while tombstoned)` was added to `/home/nes/projects/ai/planning/risk-profile.md` next to ACR-235's existing entry on the same surface. The risk-profile agent initially wrote a misplaced central-checkout aggregate at `/home/nes/ai/planning/risk-profile.md`; that file was removed and the entry was moved to the umbrella aggregate.
+
+**Mode for downstream phases**: exhaustive mode for `agents/coderabbit-operator.md` — Phase 3 proposal MUST address coverage gap by committing to WRITE-state eval coverage for all 4 acceptance criterion cases (`reply-already-present`, `comment-not-coderabbit`, `gh-auth-unavailable`, `reply-posted` with captured URL). Phase 4 risk gates will evaluate that proposal commitment.

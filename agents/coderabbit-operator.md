@@ -73,6 +73,94 @@ gh api -X POST /repos/{owner}/{repo}/issues/{n}/labels -f labels[]=coderabbit
 
 ACR-235's diff MUST NOT modify the tombstone block; Phase 8 multi-concern review will verify this invariant, and future restoration (ACR-237) is responsible for tombstone removal, not ACR-235.
 
+## Procedure: task=reply (GitHub-side review-thread reply)
+
+### Use this variant when
+
+Use `task=reply` when the caller has a specific CodeRabbit review-thread comment ID and a pre-composed Markdown reply body, wants one idempotent GitHub-side reply POST, and expects a terminal verdict. This variant validates target authorship plus PR/comment existence and produces exactly one side effect at most: one reply on one review thread. It is separate from the legacy pass-loop procedure and from the disabled `coderabbit review` invocation.
+
+### Inertness while tombstone is in place
+
+The `## DISABLED — short-circuit (2026-05-15)` block above and `S1 — Local inertness guard` remain authoritative for every dispatch. While that tombstone block is in place, `task=reply` dispatches return `CONVERGED:disabled-no-credits-2026-05-15` immediately with no POST, no validation, and no idempotency lookup. This section documents the post-tombstone-removal contract for the future ACR-237 caller and any other future caller; the active dispatch path stays the tombstone short-circuit.
+
+### Required inputs
+
+- `pr_url` OR `pr_number` (and `owner`, `repo` if the caller provides them separately). At least one of `pr_url` or `pr_number` MUST be supplied; if only `pr_number` is supplied, `owner` and `repo` MUST be derivable from `gh` context or supplied as inputs.
+- `comment_id` — REQUIRED. The GitHub PR review-comment database ID (integer), NOT the GraphQL node ID. To obtain review-comment database IDs, use a command such as `gh api /repos/{owner}/{repo}/pulls/{n}/comments --jq '.[].id'`.
+- `body` — REQUIRED. The Markdown reply body the operator will POST. It MUST NOT be empty.
+- `audit_history_path` — OPTIONAL. If supplied, append a one-line entry on terminal verdict.
+
+### Pre-flight validation order
+
+1. **Tombstone short-circuit check** — if the disabled tombstone section above is in place, return `CONVERGED:disabled-no-credits-2026-05-15` and exit 0 before any other validation. This inherits the existing operator behavior.
+2. **Body presence** — verify `body` is non-empty after stripping surrounding whitespace. On empty, emit `BLOCKED:empty-disagreement-body` and exit.
+3. **`gh` auth** — verify `gh auth status` returns successfully AND `gh api /repos/{owner}/{repo}` returns 200 for the target repo. On failure, emit `BLOCKED:gh-auth-unavailable` and exit.
+4. **PR exists** — `gh pr view {pr_number} --repo {owner}/{repo} --json number,state` returns successfully. On failure or 404, emit `BLOCKED:invalid-pr-url` and exit.
+5. **Comment exists on PR's review thread** — `gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments` returns and the response array contains an entry where `id == comment_id`. On absence, emit `BLOCKED:comment-not-found` and exit.
+6. **Comment author is CodeRabbit** — the comment entry from step 5 has `.user.login` equal to either `coderabbitai` or `coderabbitai[bot]`. On mismatch, emit `BLOCKED:comment-not-coderabbit` and exit.
+
+### Idempotency normalization rule
+
+- Strip leading and trailing whitespace from the candidate body.
+- Strip leading and trailing whitespace from each existing reply body fetched.
+- Collapse internal runs of whitespace (spaces, tabs, newlines) to single spaces.
+- Preserve case (NOT lowercase).
+- Compare the normalized candidate body to each normalized existing reply body for byte-equality.
+- On any byte-equality match, emit `CONVERGED:reply-already-present` and exit without POST.
+- Fetch existing replies with `gh api /repos/{owner}/{repo}/pulls/{pr_number}/comments` and filter by `in_reply_to_id == comment_id`.
+
+### POST shape
+
+```bash
+gh api -X POST \
+  /repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies \
+  -f body='{normalized_or_raw_body}'
+```
+
+GitHub provides NO server-side idempotency on this endpoint; the operator's self-implemented pre-check above is the only protection against duplicate replies. Capture the response's `html_url` field as the posted reply URL.
+
+### Terminal verdicts
+
+- `CONVERGED:reply-posted` — reply POSTed; reply URL captured.
+- `CONVERGED:reply-already-present` — idempotency hit; no duplicate POSTed.
+- `BLOCKED:gh-auth-unavailable` — `gh` cannot authenticate or access the target repo.
+- `BLOCKED:invalid-pr-url` — PR URL malformed or PR inaccessible.
+- `BLOCKED:comment-not-found` — `comment_id` does not exist on the PR's review thread.
+- `BLOCKED:comment-not-coderabbit` — target comment is not authored by `coderabbitai` / `coderabbitai[bot]`.
+- `BLOCKED:reply-api-error` — GitHub API rejected the reply with a non-recoverable error; capture the status code in the artifact.
+- `BLOCKED:empty-disagreement-body` — no body content supplied.
+- `NEEDS_INPUT:<artifact_path>` — ambiguous comment target; the artifact specifies what disambiguation is needed.
+
+### Output artifact
+
+Write `${worktree_path}/CODERABBIT_reply-<comment_id>.md` with YAML frontmatter containing:
+
+- `pr_url`
+- `pr_number`
+- `owner`
+- `repo`
+- `target_comment_id`
+- `target_comment_author`
+- `posted_reply_url` (null on non-`reply-posted` terminal verdict)
+- `body_sha256` (sha256 of the normalized body the operator considered POSTing)
+- `terminal_verdict`
+
+The Markdown body must contain 1-3 sentences summarizing the dispatch outcome. If `audit_history_path` is supplied, append one line: `<timestamp> task=reply pr=<pr_number> comment_id=<id> verdict=<terminal_verdict> artifact=<path>`.
+
+### Re-enable prerequisites
+
+- Remove the `## DISABLED — short-circuit (2026-05-15)` block; that is the operator-level re-enable.
+- Verify that `gh` auth is available in the operator's invocation context, typically the WU worktree.
+- ACR-237's caller MUST treat the terminal stdout verdict as authoritative for the reply side effect.
+
+### Anti-scope
+
+- No CodeRabbit-native reply path (`change-stack/replyToReviewComment` at `app.coderabbit.ai`). It requires dashboard session bearer auth and is deferred to a future ticket.
+- No bulk-reply / multi-comment fan-out. ONE comment target per dispatch; the caller iterates if multiple replies are needed.
+- No silent ignoring of CodeRabbit findings — this variant exists explicitly to replace that pattern.
+- No CLI-mode `coderabbit review` invocation; the CLI tombstone from PR #146 stays.
+- No idle timeouts; the operator emits its terminal verdict and exits.
+
 ---
 
 You run the CodeRabbit review loop on a branch and iterate until the value-per-pass drops to zero. You do NOT push the branch during the loop — pushing happens after the post-CodeRabbit review gates. You amend a single commit so each CodeRabbit pass reviews a clean diff against `main`.
