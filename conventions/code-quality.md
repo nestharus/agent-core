@@ -18,9 +18,11 @@ The convention is intentionally language-neutral. A project may have local style
 
 ## Auditor Scope Boundary
 
-For every A1 auditor, the current unified diff or equivalent WU-owned corpus is the blocking target; changed files, changed functions, changed symbols, changed fields, changed Markdown blocks, traces, proposals, risks, callers, callees, broader files, and adjacent declarations are boundary-resolution aids, not independent blocking targets. A finding is blocking only when the current WU introduced, worsened, or made the finding gate-relevant; context-only or pre-existing findings are residual and use the existing residual schema (`id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`) without raising the current gate severity. Every blocking finding must carry an ownership proof that cites the diff hunk, changed target, or WU-owned corpus evidence.
+For every A1 auditor, the WU's diff identifies the touched files or touched components that are in scope. Within those touched files/components, the auditor evaluates the whole file/component, not only hunk lines, changed functions, changed symbols, changed fields, changed Markdown blocks, or WU-authored declarations. Pre-existing findings inside touched files/components are current-WU findings and block the gate under the usual metric thresholds. Findings in untouched files/components remain out of scope except as context, residual evidence, or decomposition evidence.
 
-ACR-180 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, and ACR-156 oscillation handling remain authoritative in their existing sections.
+Diffs, changed-function inventories, traces, proposals, risks, callers, callees, broader files, and adjacent declarations are boundary-resolution aids for determining the touched set and understanding evidence; they do not narrow the blocking target below the whole touched file/component. Residual rows are valid only for genuinely context-only evidence outside touched ownership, and use the existing residual schema (`id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`) without raising the current gate severity.
+
+ACR-249 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, bootstrap exception, and ACR-156 oscillation handling remain authoritative in their existing sections.
 
 ## Auditor Set
 
@@ -107,11 +109,27 @@ The default declared role set for `agents/*-orchestrator.md` is `orchestration`,
 
 A documented path default supplies declared roles only when the file has no `## Declared roles` section. File-local `## Declared roles` content overrides the documented path default for that file.
 
+## Touched-file ownership
+
+When a WU's diff touches a file, the WU owns that file's whole-file LOW verdict on all code-quality gates selected for that WU. Pre-existing findings on touched files are this WU's work, not separate tech-debt tickets and not residual rows. The same rule applies to touched components when a workflow invokes a component-level audit: the whole touched component is audit-owned.
+
+If whole-file or whole-component cleanup is too large for one WU, the orchestrator decomposes the work before advance. Decomposition produces multiple smaller WUs, each responsible for fewer touched files/components; it does not predeclare a narrower finding set inside a file that the current WU has already touched.
+
+## Continuous refactor
+
+Each touch forces cleanup of the touched file's pre-existing code-quality defects. Technical debt gets paid down as features and fixes ship, not only through separate cleanup tickets. The codebase should compound toward `LOW` as ordinary WUs pass through the pipeline.
+
+## Anti-scope discipline
+
+Behavior-forbidding anti-scope is retained. Prompts and proposals may still forbid residual acceptance on non-LOW gates, precedent-citation as a residual basis, idle timeouts, sentinel-file polling, wall-clock kill heuristics, watcher shortcuts, test smuggling, unauthorized git mutations, and other unsafe execution behaviors.
+
+Work-narrowing anti-scope is forbidden. Clauses such as "do not touch file X", "no scope expansion to concern Y", "only update the changed function", or "leave adjacent cleanup out of scope" cannot exclude required A1 cleanup inside touched files/components. If the required cleanup is too large, decompose the WU; do not pre-declare narrowness by anti-scope.
+
 ### Component declared roles (multi-file WU components)
 
-When the cohesion auditor scores a multi-file WU component as a single component, per `~/ai/workflows/implementation-pipeline.md` Phase 6 per-component code-quality fanout, the component itself may have a declared role set living in the Phase 6a contract under a `## Component declared roles` heading. The cohesion auditor MUST read this section before falling back to per-file declared roles, path defaults, or count-only scoring when the diff or WU-owned corpus is the target of a component-level invocation.
+When the cohesion auditor scores a multi-file WU component as a single component, per `~/ai/workflows/implementation-pipeline.md` Phase 6 per-component code-quality fanout, the component itself may have a declared role set living in the Phase 6a contract under a `## Component declared roles` heading. The cohesion auditor MUST read this section before falling back to per-file declared roles, path defaults, or count-only scoring when the touched component is the target of a component-level invocation.
 
-When a component declared role set is present, the same subset-check semantic applies at the component level: LOW when the diff-owned classifications touched by the component are a subset of the component declared role set; HIGH when the diff-owned classifications exceed the component declared role set or include classifications outside it. The count-only fallback (LOW = exactly 1 classification; HIGH = 2 or more) applies only when no file-local, path-default, or component declared roles cover the touched classifications.
+When a component declared role set is present, the same subset-check semantic applies at the component level: LOW when the actual classifications in the touched component are a subset of the component declared role set; HIGH when the actual classifications exceed the component declared role set or include classifications outside it. The count-only fallback (LOW = exactly 1 classification; HIGH = 2 or more) applies only when no file-local, path-default, or component declared roles cover the touched classifications.
 
 A component declared role set is the union of per-file roles the component legitimately covers as part of one coordinated change; it does not extend the A1 vocabulary, alter LOW/MEDIUM/HIGH semantics, or replace per-file declared roles where those exist for the files in the component.
 

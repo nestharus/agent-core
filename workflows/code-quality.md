@@ -80,7 +80,7 @@ Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/c
 ## Required Inputs
 
 - `repo_root=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; points to the repository being reviewed.
-- `diff_path=<path>`: required for PR-review and ad-hoc invocations, and required in Phase 4 when A4/A5 are selected; contains a unified diff or equivalent text change artifact.
+- `diff_path=<path>`: required for PR-review and ad-hoc invocations, and required in Phase 4 when A4/A5 are selected; contains a unified diff or equivalent text change artifact used to identify touched files/components and evidence anchors.
 - `touched_surfaces_path=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; lists changed files, module/package/component labels, and known component boundaries.
 - `scratch_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores prompts and logs.
 - `planning_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores durable reports, findings, manifest, and aggregate output.
@@ -95,7 +95,7 @@ Coordinate a composite gate over the A1 code-quality surface by treating `~/ai/c
 - `code_trace_paths=<paths>`: optional evidence for coupling review when traces or symbol maps exist.
 - `code_quality_ref=<path>`: optional reference override; defaults to `~/ai/conventions/code-quality.md`.
 
-Dispatch prompts separate target evidence from context evidence under `conventions/code-quality.md` `## Auditor Scope Boundary`: `diff_path` or equivalent WU-owned change evidence is target evidence for implemented-work review, while proposal, problem-map, risk-profile, touched-surface, trace, and inventory paths are context evidence.
+Dispatch prompts apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`: `diff_path`, changed-file inventories, changed-function inventories, proposal, problem-map, risk-profile, touched-surface, trace, and inventory paths identify the touched files/components and supply evidence. They do not narrow the blocking target below the whole touched file/component.
 
 ## Output Paths
 
@@ -137,28 +137,28 @@ Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; t
 
 Auditor path: `~/ai/agents/push-pull-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `diff_path`, `output_path`.
+- Required inputs: `repo_root`, `diff_path`, `output_path`; `diff_path` identifies touched files/components.
 - Optional inputs: `base_ref`, `head_ref`, `changed_files_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
 
 ### A5 - Function classification
 
 Auditor path: `~/ai/agents/function-classification-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `diff_path`, `output_path`.
+- Required inputs: `repo_root`, `diff_path`, `output_path`; A5 audits every function in touched files.
 - Optional inputs: `changed_functions_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
 
 ### A6 - Cohesion
 
 Auditor path: `~/ai/agents/cohesion-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent WU-owned change evidence.
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
 - Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `output_path`.
 
 ### A6 - Coupling
 
 Auditor path: `~/ai/agents/coupling-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent WU-owned change evidence.
+- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
 - Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_trace_paths`, `output_path`.
 
 ## Aggregate Verdict
@@ -173,7 +173,7 @@ The aggregate verdict uses these outcomes:
 
 Completed severity rollup is worst-case: `HIGH > MEDIUM > LOW`. Coupling is the only child whose native vocabulary currently includes MEDIUM. `NEEDS_INPUT` and `BLOCKED` are stop states, not severity values, and native child report paths and source verdicts remain visible in the aggregate report.
 
-Under `conventions/code-quality.md` `## Auditor Scope Boundary`, current severity is raised by diff-owned findings; residuals are preserved separately and do not change the current severity rollup.
+Under `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`, current severity is raised by findings inside touched files/components, including pre-existing findings. Residuals are preserved separately only for genuinely context-only evidence outside the touched file/component set and do not change the current severity rollup.
 
 Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOCKED` before downstream gate consumption.
 
@@ -183,7 +183,7 @@ Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOC
 
 Each normalized finding records `id`, `source_auditor`, `source_id`, `severity` or stop-state, `metric` / `failure_mode`, `path`, optional location anchors (`function`, `component`, `source_component`, `target_component`, `line_span_or_diff_hunk`), `evidence`, `closure_expectation`, `report_path`, and `blocks_pipeline`.
 
-Residual normalization cites the residual-output schema in `conventions/code-quality.md` `## Auditor Scope Boundary`; record residuals by reference to that schema without duplicating it here.
+Residual normalization cites the residual-output schema in `conventions/code-quality.md` `## Auditor Scope Boundary`; record residuals by reference to that schema without duplicating it here. Do not normalize a finding inside a touched file/component as residual merely because it predates the current diff.
 
 Stable IDs use `CQ-<round?>-F<NN>` for canonical pipeline use and `CQ-F<NN>` for standalone bundles. Original child IDs remain in `source_id`.
 
@@ -213,7 +213,7 @@ All standalone artifacts are written under `${code_quality_work_dir}/`. The resu
 
 ## Pipeline-Callable Mode
 
-Pipeline-callable callers supply `planning_dir`, `scratch_dir`, `wu_id`, `repo_root`, `touched_surfaces_path`, optional Phase 4 evidence, and diff or equivalent change evidence for selected diff-first children.
+Pipeline-callable callers supply `planning_dir`, `scratch_dir`, `wu_id`, `repo_root`, `touched_surfaces_path`, optional Phase 4 evidence, and diff or equivalent changed-file evidence for selected children. That evidence identifies touched files/components; selected auditors inspect the whole touched file/component required by their operator contract.
 
 Prompts and logs are written under `${scratch_dir}/code-quality/${slug}/`; reports, dispatch manifest, `findings.json`, `findings.md`, aggregate output, and optional expected-process artifacts are written under `${planning_dir}/code-quality/${slug}/`.
 
@@ -241,7 +241,7 @@ After two consecutive non-converging remediation rounds, the WU decomposes auton
 
 - Does not implement any auditor or replace any auditor's procedure.
 - Does not redefine A1 or duplicate convention rule descriptions.
-- Does not edit child auditor operators; NES-235 captures cleanup of stale bundled A6 references.
+- Does not edit child auditor operators.
 - Does not include nesting/inline/duplicate auditors; no such child auditors exist in the current operator catalog, so this workflow cannot dispatch them. <!-- INTENTIONAL: this workflow coordinates existing child auditors only; new auditor creation belongs to a separate operator-design change before workflow fanout can include it. -->
 - Implementation-pipeline Phase 4 entry is wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § `#### Phase 4 code-quality gate`.
 - Does not replace `audit.md`, PR-review gates, or `process-tree-auditor`.
