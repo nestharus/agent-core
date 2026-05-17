@@ -3680,3 +3680,29 @@ Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the Ph
 - Proposal-side declaration: `/home/nes/projects/ai/planning/acr-249-file-scope-audit/proposals/acr-249-ACR-249.md` `## Bootstrap exception declaration` (lines 216–245; all 11 required fields present per Phase 4 sub-gate Parser step 1).
 - DECISIONS-side declaration: see `### D-ACR-249-Bootstrap-Exception` above for the four-condition argument and the Phase 4 join-manifest row spec.
 - Out-of-scope: the ratification does NOT extend to Phase 4 scope/audit/shortcut/supported-surface risk gates (all four landed LOW on their own merits) or to Phase 8 PR-review gates. Behavior-forbidding anti-scope (residual acceptance, precedent-citation, idle timeouts, sentinel-polling, watchers, test smuggling) remains in full force.
+
+## 2026-05-16 — ACR-237 — BLOCKED:auditor-strictness pending ACR-246
+
+- WU: ACR-237 (PR-mode coderabbit-operator rewrite, GitHub-only)
+- Phase: Phase 4 (code-quality coupling-auditor revise-loop saturation)
+- Trigger: Phase 4 code-quality coupling-auditor returned HIGH on 4 consecutive remediation rounds (R2/R3/R4/R5). Each round closed prior findings; auditor surfaced new findings via strict subordination / intrinsic-section heading rules. Other Phase 4 risk gates LOW after R2 (audit MEDIUM revised; scope/shortcut/supported-surface LOW throughout R2/R3/R4/R5).
+- Decision: **Halt as `BLOCKED:auditor-strictness`.** Wait for ACR-246. Do NOT decompose. Do NOT residual-accept. Do NOT open a PR.
+- Precedent (historical context only — NOT residual-acceptance authority): AGE-116. AGE-103→AGE-116 proved that decomposition under this pattern just relocates the same finding pattern to the decomposed tickets; AGE-116's halt-pending-architectural-fix was the correct disposition.
+- Cross-links:
+  - ACR-246 (audit-the-auditor — architectural fix: scope-tightening so auditor findings are WU-diff-only, pre-existing-code findings demoted to separate tickets, convergence guarantee on splits)
+  - ACR-242 (residual-acceptance enforcement convention — affirms NO residual-accept of MEDIUM/HIGH code-quality)
+- Branch disposition: **keep-as-blocked-evidence**. The 4-round R2/R3/R4/R5 audit findings + remediation attempts are the artifact ACR-246 will repair against. Worktree and branch `acr-237-coderabbit-pr-mode-rewrite` are NOT deleted.
+- Justifying evidence:
+  - `/home/nes/projects/ai/planning/acr-237-coderabbit-pr-mode-rewrite/audit-history.md` § `Phase 4 BLOCKED:auditor-strictness halt — 2026-05-16` (round-by-round pattern evidence preserved for ACR-246)
+  - `/home/nes/projects/ai/planning/acr-237-coderabbit-pr-mode-rewrite/.scratch/questions/q-e45661b0-935d-4a1e-8d4b-ac20bec131d9.question.json` (orchestrator-emitted NEEDS_INPUT)
+  - `/home/nes/projects/ai/planning/acr-237-coderabbit-pr-mode-rewrite/.scratch/questions/q-e45661b0-935d-4a1e-8d4b-ac20bec131d9.answer.json` (root disposition)
+  - `code-quality/acr-237-phase-4.r2/aggregate-code-quality.md` … `code-quality/acr-237-phase-4.r5/aggregate-code-quality.md` (HIGH verdicts each round)
+  - `code-quality/acr-237-phase-4.r5/reports/coupling-auditor.md` (terminal R5 evidence: `gh` CLI flagged non-subordinate to 5 declared contracts despite being the umbrella access mechanism for all of them)
+- Resume: re-invoke implementation-pipeline-orchestrator on ACR-237 after ACR-246 ships; expect convergence within 1-2 rounds.
+
+## 2026-05-17 — ACR-237 — Resume after ACR-246 + ACR-247 landed
+
+- WU: ACR-237 (PR-mode coderabbit-operator rewrite, GitHub-only)
+- Phase: Phase 4 code-quality re-run under tightened auditor scope (post-ACR-246) on rebased tree (post-ACR-247).
+- Rebase: WU branch advanced from `c11300e` (ACR-235) to `60f6655` (ACR-247). Fast-forward (no WU commits existed). Rebase-verification gate skipped per pre-ACR-247 audit-history note (docs-and-prompts repo; no test suite or coverage adapter). ACR-247's side-channel rule applies only to Phase 6 Step 6c, not Phase 4.
+- Trigger: unblock_condition from `q-e45661b0-935d-4a1e-8d4b-ac20bec131d9.answer.json` satisfied — ACR-246 + ACR-247 both shipped to origin/master 2026-05-16. ACR-236 (sibling reply task) also shipped (#160) so the proposal's reply primitive reference resolves concretely.
