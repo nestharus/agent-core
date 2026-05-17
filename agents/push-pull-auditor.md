@@ -65,6 +65,15 @@ A1 is the metric source. Read `~/ai/conventions/code-quality.md` § Push-vs-pull
 
 - LOW source-control proof: emit LOW when the consumer controls the source, or when a declared owner inside the same controlled boundary controls it. The controlled boundary may be the same repo, package, service-team, or explicitly owned subsystem, but the report must cite the proof.
 - LOW common-interface proof: emit LOW when the producer pushes into a common interface, such as a contract, schema, API boundary, generated artifact with a declared owner, or explicit agreement that both sides treat as stable, and the consumer pulls from that interface instead of the other side's private storage.
+- LOW canonical-doc-as-schema proof: emit LOW when the pulled generated
+  artifact's shape is declared inline by a canonical `~/ai` workflow,
+  convention, or orchestrator Markdown file in a dedicated `## Schema`,
+  `## Format`, `## Output Paths`, or phase-specific schema-declaration
+  section. The canonical doc is the declared schema owner for that
+  artifact; the consumer pulls from the declared shape, not from private
+  layout. Split mixed pull sites: score the declared-schema portion LOW
+  and the undeclared adjacent layout portion HIGH per the private-source
+  recipe.
 - HIGH private-source recipe: emit HIGH when the pull site reads private storage shape, private file layout, unstable generated output, incidental naming convention, private endpoint, or equivalent uncontrolled source, and cannot point to either ownership proof or a declared common-interface contract. Use `failure_mode: uncontrolled-source coupler`.
 
 Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MEDIUM for this metric.
@@ -78,6 +87,17 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
 5. Keep the review touched-file/component-first under `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`; prior pull-site concerns inside touched files/components are blocking, while pull sites outside the touched set are residual/context unless independently touched.
 6. If ownership, topology, or interface context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
 7. Classify each pull site by evidence: source-control proof, common-interface proof, or neither. Source-control proof means the consumer controls the source or a declared owner inside the same controlled boundary controls it. Common-interface proof means the producer pushes into a common interface and the consumer pulls from that interface.
+7a. For each generated-artifact pull site, inspect the cited canonical
+    `~/ai` workflow, convention, or orchestrator Markdown file for a
+    dedicated `## Schema`, `## Format`, `## Output Paths`, or
+    phase-specific schema-declaration section that declares the parsed
+    artifact shape (field lists, required keys, parse semantics,
+    terminal-state vocabulary, or required-token sets). When such a
+    section exists and the consumer pulls only from the declared shape,
+    classify the site as LOW common-interface proof under the
+    canonical-doc-as-schema rule. When the pull mixes declared shape
+    with undeclared private layout, split: declared-schema portion LOW,
+    undeclared portion HIGH per the private-source recipe.
 8. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
 9. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
 
