@@ -99,6 +99,25 @@ Pulling from a source you do not control is high-coupling. Either control the so
 
 The failure mode is an **uncontrolled-source coupler**. The important question is ownership: if a consumer must know another system's private storage shape, private file layout, unstable generated output, or incidental naming convention, the consumer is coupled to a source it does not control. A common interface can be a contract, schema, API boundary, generated artifact with a declared owner, or another explicit agreement that both sides treat as stable.
 
+A canonical `~/ai` workflow, convention, or orchestrator Markdown file is
+recognized as the **declared schema owner** for a generated artifact when a
+dedicated `## Schema`, `## Format`, `## Output Paths`, or phase-specific
+schema-declaration section in that file declares the parsed artifact shape
+inline (field lists, required keys, parse semantics, terminal-state
+vocabulary, or required-token sets). Push-pull's "separate schema-owner"
+requirement is satisfied by the inline declaration; the pull site does
+not score HIGH for parsing that artifact's declared shape. This narrows
+"generated artifact with a declared owner" above; it does not weaken any
+HIGH recipe below.
+
+HIGH still fires for pulls of private file layouts no canonical doc
+declares, pulls of incidental naming conventions or undeclared parsing
+tokens, pulls of generated artifacts where no canonical `~/ai` doc owns
+the schema, pulls of private endpoints or private storage shape, and the
+undeclared portion of mixed pull sites that combine a declared
+canonical-doc schema with adjacent undeclared layout (the auditor must
+split such findings).
+
 ## Declared roles
 
 Declared role set tokens must come from the A1 category vocabulary: `orchestration`, `filter`, `validator`, `predicate`, `mapper`, `accessor`, `formatter`, `parser`.
