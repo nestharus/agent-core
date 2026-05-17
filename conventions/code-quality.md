@@ -18,11 +18,7 @@ The convention is intentionally language-neutral. A project may have local style
 
 ## Auditor Scope Boundary
 
-For every A1 auditor, the diff, or an equivalent WU-owned corpus when a literal diff is unavailable, is the judgment target; auditors may inspect other evidence only to decide whether a finding is owned by the current Work Unit.
-
-The context set includes broader files, traces, proposals, risks, callers, and callees; these are context evidence that may inform the judgment but are not the target.
-
-Residual records use this schema: `id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`. A finding is blocking when it is introduced, worsened, or made gate-relevant by the current diff or WU-owned corpus; otherwise it is recorded as residual through the `blocking-or-residual` field and preserved without raising the current gate severity.
+For every A1 auditor, the current unified diff or equivalent WU-owned corpus is the blocking target; changed files, changed functions, changed symbols, changed fields, changed Markdown blocks, traces, proposals, risks, callers, callees, broader files, and adjacent declarations are boundary-resolution aids, not independent blocking targets. A finding is blocking only when the current WU introduced, worsened, or made the finding gate-relevant; context-only or pre-existing findings are residual and use the existing residual schema (`id`, `severity`, `surface`, `anchor`, `evidence`, and `blocking-or-residual`) without raising the current gate severity. Every blocking finding must carry an ownership proof that cites the diff hunk, changed target, or WU-owned corpus evidence.
 
 ACR-180 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, and ACR-156 oscillation handling remain authoritative in their existing sections.
 

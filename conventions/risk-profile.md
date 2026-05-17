@@ -12,6 +12,8 @@ A project that adopts this convention also maintains a **project-level risk prof
 
 Each touched surface (file, symbol, endpoint, job, workflow, contract) is scored on these axes. Score each `LOW` / `MEDIUM` / `HIGH`. Every `MEDIUM` or `HIGH` requires evidence — a path or symbol or query the next reader can verify.
 
+Non-negotiable WU-scope clause: risk profiles and code-quality auditors must score the active WU-owned target surface. Pre-existing or context-only findings may be recorded as residual risk, but they must not inflate the current WU's gate verdict or per-surface mode unless the WU introduced, worsened, or made the finding gate-relevant. Apply this clause with `conventions/code-quality.md` `## Auditor Scope Boundary`.
+
 <!-- INTENTIONAL: `# TODO` / `FIXME` / `HACK` below are brittleness markers to score in touched code, not deferred wiring notes for this convention. -->
 
 | Axis | LOW | MEDIUM | HIGH |
