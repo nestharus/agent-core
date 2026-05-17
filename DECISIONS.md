@@ -3532,3 +3532,81 @@ Only 1 of 5 signals fires. The 2+-rule for defer-to-prototype is NOT met. No NEE
 **Project-aggregate update**: a sibling entry for `~/ai/agents/coderabbit-operator.md (ACR-236 task=reply variant while tombstoned)` was added to `/home/nes/projects/ai/planning/risk-profile.md` next to ACR-235's existing entry on the same surface. The risk-profile agent initially wrote a misplaced central-checkout aggregate at `/home/nes/ai/planning/risk-profile.md`; that file was removed and the entry was moved to the umbrella aggregate.
 
 **Mode for downstream phases**: exhaustive mode for `agents/coderabbit-operator.md` — Phase 3 proposal MUST address coverage gap by committing to WRITE-state eval coverage for all 4 acceptance criterion cases (`reply-already-present`, `comment-not-coderabbit`, `gh-auth-unavailable`, `reply-posted` with captured URL). Phase 4 risk gates will evaluate that proposal commitment.
+
+## 2026-05-16 — ACR-246 — Phase 0 / cold-start estimate disposition (recorded from ticket body)
+
+- WU: ACR-246 (Audit + tighten cohesion-auditor + function-classification-auditor + coupling-auditor scope)
+- Phase: Phase 2.5 step 4a (inherited-estimate cold-start check) — recorded preemptively from ticket body so step 4a does not re-ask on resume.
+- Decision: **Proceed without baseline estimate**.
+- Justifying evidence:
+  - `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/ticket.md` frontmatter (`estimate_source: missing`, `story_point_estimate: null`)
+  - Ticket body `### Estimate` section: "Blank (estimate_source: missing). Phase 3 refines."
+  - User dispatch brief: "Run ~/ai/agents/implementation-pipeline-orchestrator.md against ACR-246" plus auto_merge_after_phase_9=true (the user has authorized end-to-end execution).
+- Root rationale: ticket-body `estimate_rationale` field is the prior user disposition. Phase 3 will produce `refined_story_point_estimate` per the standard contract; `inherited_story_point_estimate=null`, `estimate_source=missing` carried forward. Phase 8.X closure-judge captures actuals.
+
+## 2026-05-16 — ACR-246 — Phase 2.5 / step 2.5.4 — Drift #1 NEEDS_INPUT halt (orchestrator residual-MEDIUM text)
+
+- WU: ACR-246
+- Phase: Phase 2.5 / step 2.5.4 drift-discovery rule
+- Trigger: The Phase 2.5 step 2.5.4 duplicates inventory surfaced silent drift between `~/ai/agents/implementation-pipeline-orchestrator.md` (Phase 6 per-component fanout step 4 + Phase 6 prototype risk review step 4 both permit stable MEDIUM with risk disposition) and `~/ai/workflows/implementation-pipeline.md` + `~/ai/workflows/code-quality.md` + `~/ai/conventions/workflow-execution-violations.md` § *Named anti-pattern: Non-LOW gate residual acceptance* (which all say per-component code-quality is LOW-only).
+- Decision: **NEEDS_INPUT halt — awaiting root disposition.** Direct AskUserQuestion was permission-denied; per `~/ai/conventions/agent-questions-and-session-graph.md` § AskUserQuestion Permission-Denial, the orchestrator writes the question artifact, returns NEEDS_INPUT:<path>, and halts before any dependent action.
+- Justifying evidence:
+  - `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/research/acr-246-duplicates.md` § Drift Discovery item 1 (orchestrator MEDIUM-acceptance conflicts with LOW-only code-quality disposition)
+  - `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/research/acr-246-entrypoints.md` line 665 ("adjacent to but not identical with ACR-246's scope-boundary fix")
+  - Question artifact: `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/questions/q-7e41a667-cb04-4955-ab25-d43e398bdf0d.question.json`
+  - User dispatch brief anti-scope: "NO quality-gate residual acceptance (ACR-156/162/163 + the very LOW-only rule this ticket strengthens)"
+- Tracker ticket: NOT created. Deferred until root names disposition. Option A makes a tracker unnecessary (consolidate into ACR-246); options B and C both file the tracker but only C adds a `Blocks` link.
+- Blocked outputs:
+  - Phase 2.5 step 2.5.6 risk-profile dispatch (surfaces depend on whether the orchestrator file is in or out of scope)
+  - Phase 2.5 step 8 mode propagation
+  - Phase 3 proposal dispatch
+- Resume: root writes `${scratch_dir}/questions/q-7e41a667-cb04-4955-ab25-d43e398bdf0d.answer.json` per the convention's Answer Artifact Schema, or replies inline with the selected option ID. Then the orchestrator re-enters at the chosen path.
+
+## 2026-05-16 — ACR-246 — Phase 2.5 / step 2.5.4 — Drift #1 disposition (RESUME — option A-refined)
+
+- WU: ACR-246
+- Phase: Phase 2.5 / step 2.5.4 drift-discovery rule (resume from NEEDS_INPUT halt)
+- Decision: **Option A refined — proceed with auditor-only scope; cross-link to ACR-242 (no new tracker)**.
+- Justifying evidence:
+  - Answer artifact: `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/questions/q-7e41a667-cb04-4955-ab25-d43e398bdf0d.answer.json`
+  - Question artifact: `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/questions/q-7e41a667-cb04-4955-ab25-d43e398bdf0d.question.json`
+  - Root rationale (from answer): "ACR-242 ALREADY OWNS the orchestrator residual-MEDIUM fix scope. ACR-242's expanded body (per the 2026-05-16 update) explicitly covers Phase 4/6/8/9 non-LOW disposition rules + 'forbid precedent-citation as residual-acceptance basis' + 'audit + repair existing dispositions across all gate locations.' The two orchestrator-md sections ACR-246 discovered ... are exactly the language ACR-242 will repair. Filing a NEW tracker would duplicate ACR-242's scope."
+- Resume actions:
+  - Dispatch `linear-operator` (`task=comment` on `issue_key=ACR-242`) with the two line-citations and exact-quote text. NOT a new ticket.
+  - Continue Phase 2.5 from step 2.5.6 risk-profile dispatch with touched-surface unchanged (auditor files only).
+  - Continue Phase 3 proposal authoring focused on auditor-file scope.
+  - Continue Phase 4+ standard. On any MEDIUM verdict during this WU's Phase 4/6 code-quality gates: halt with NEEDS_INPUT — DO NOT invoke residual acceptance via the orchestrator's old residual-MEDIUM branch.
+- Anti-scope reaffirmed: NO new tracker; NO scope expansion to fix the orchestrator-md residual-MEDIUM (ACR-242's domain); NO Blocks link; NO residual-acceptance under any framing; NO precedent-citation as residual-acceptance basis; NO idle timeouts; Phase 7 retired.
+- Cross-link comment posted on ACR-242: linear comment id `eabb7684-b035-4134-9757-6d36ec244ad2` (linear-operator invocation `b8d14547-d7d0-4d53-bfcc-d6f369619b56`).
+
+## 2026-05-16 — D-ACR-246-Bootstrap-Exception — Phase 6 Step 6c consumed: rule skip (this WU only)
+
+- WU: ACR-246 (Audit + tighten cohesion-auditor + function-classification-auditor + coupling-auditor scope-boundary + convergence guarantee)
+- Phase: Phase 6 — Step 6c post-dispatch verification
+- Decision: **Bootstrap exception — skip `consumed:` rule enforcement for ACR-246 only.** Substantive Step 6c verification passes (8 `WROTE:` markers + `OK`, all 5 worktree file edits + 3 retroactive history appends aligned to the Step 6a contract, S6 eval + Step 6a contract + Step 6b output index byte-identical, Step 6c invocation UUID `2bbeab0c-e7a1-4718-be48-e4bf85cefbcd` distinct from Step 6b R2 UUID `e148e078-3e75-4592-8fa1-f664440fcebb`).
+- Manager-authorized rationale (exact quote): "we are bootstrapping the consume rule and have no way to follow it right now."
+- Why this is bootstrap exception, NOT residual-acceptance and NOT precedent-citation:
+  - ACR-246 fixes the auditor-strictness wall (cohesion + function-classification + coupling scope-boundary + convergence guarantee).
+  - ACR-247 is the sibling fix for the consumed: rule's enforceability (runtime side-channel).
+  - The two are an architectural fix-cluster. Subjecting either to the rule it fixes creates a mutual deadlock: ACR-246 cannot pass its own Phase 6 consumed-rule gate because the gate is the very enforceability ACR-247 is fixing; ACR-247 cannot pass its own auditor gates because those gates are the very strictness ACR-246 is fixing.
+  - This is "rule cannot apply to its own fix" structurally, not "prior WU shipped this way" precedentially.
+- Cross-link: ACR-247 (sibling architectural fix for the consumed: rule's runtime enforceability — separate scope, separate WU).
+- Answer artifact: `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/questions/q-35d39b08-7689-4f68-b185-f6130e0f72c0.answer.json`
+- Question artifact: `/home/nes/projects/ai/planning/acr-246-audit-the-auditor/.scratch/questions/q-35d39b08-7689-4f68-b185-f6130e0f72c0.question.json`
+- Step 6c invocation lineage: `2bbeab0c-e7a1-4718-be48-e4bf85cefbcd` (this dispatch); Step 6b lineage R2 `e148e078-3e75-4592-8fa1-f664440fcebb` (separate UUID, separate session).
+- Step 6c file-edit evidence (all PASS):
+  - S1 `/home/nes/projects/ai/worktrees/acr-246-audit-the-auditor/conventions/code-quality.md` — operational scope-boundary paragraph applied
+  - S2 `/home/nes/projects/ai/worktrees/acr-246-audit-the-auditor/agents/cohesion-auditor.md` — diff-required + citation + blocking_or_residual column applied
+  - S3 `/home/nes/projects/ai/worktrees/acr-246-audit-the-auditor/agents/function-classification-auditor.md` — convergence_proof fields + blocking_or_residual applied
+  - S4 `/home/nes/projects/ai/worktrees/acr-246-audit-the-auditor/agents/coupling-auditor.md` — scope-tightening + convergence-overlay applied (CORE thresholds untouched per anti-scope)
+  - S5 `/home/nes/projects/ai/worktrees/acr-246-audit-the-auditor/conventions/risk-profile.md` — AC #6 WU-scope-only clause applied
+  - S7 `/home/nes/projects/agent-runner/planning/age-103-invocation-mode-schema/audit-history.md` — disposition append applied
+  - S8 `/home/nes/projects/agent-runner/planning/age-116-providers-schema-splits/audit-history.md` — disposition append applied
+  - S9 `/home/nes/projects/ai/planning/acr-237-coderabbit-pr-mode-rewrite/audit-history.md` — disposition append applied
+- Anti-scope reaffirmed:
+  - NO generalization. AGE-105 / AGE-124 / any future Step 6c WU stays `BLOCKED:consumed-rule-unenforceable` until ACR-247's side-channel lands.
+  - NO precedent-citation. This DECISIONS entry is structurally honest framing, not authorization-by-prior-shipment.
+  - NO residual acceptance on any OTHER gate. Phase 4 quality, Phase 6 quality, Phase 8 PR-review, Phase 8.X closure capture, Phase 9 are all LOW-only for ACR-246.
+  - NO touching the `consumed:` rule text in `~/ai/workflows/implementation-pipeline.md` itself (that is ACR-247's domain).
+  - Phase 7 retired (CodeRabbit removed 2026-05-15).
+- Process-tree audit #2 framing: the missing `consumed:` rows are recorded in audit #2's non-applicability section under "Phase 6 Step 6c consumed-evidence — bootstrap exception per `D-ACR-246-Bootstrap-Exception`", not as residual. The audit must verify all OTHER expected-process rows pass.

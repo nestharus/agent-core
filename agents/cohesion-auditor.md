@@ -36,9 +36,11 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 - `problem_map_path=<path>` (required for Phase 4) - approved problem-map context.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels.
-- `diff_path=<path>` (optional) - diff evidence for ad-hoc or later PR/diff invocations.
+- `diff_path=<path>` (required for a blocking verdict; equivalent WU-owned corpus accepted) - diff or WU-owned target evidence for ad-hoc or later PR/diff invocations.
 - `contract_path=<path>` (optional) - Phase 6a contract. When present and the invocation scope is a multi-file WU component, read the `## Component declared roles` section for a component-level declared role set per `~/ai/conventions/code-quality.md` § Declared roles § Component declared roles (multi-file WU components).
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-cohesion.md`) - report destination.
+
+Proposal, problem-map, risk-profile, touched-surface, and code-trace inputs are context-only unless they contain or point to the current WU-owned target corpus.
 
 ## Non-Negotiables
 
@@ -68,9 +70,7 @@ If a future workflow needs those metrics to be authoritative, update `~/ai/conve
 
 ## Phase 4 Integration Role
 
-This operator is ready to be wired as an independent Phase 4 critic under `~/ai/workflows/implementation-pipeline.md`. It has its own report, per-component table, and LOW/HIGH verdict.
-
-Do not claim the current implementation pipeline already dispatches this operator when the workflow still lists the existing Phase 4 reports. Workflow/orchestrator dispatch wiring, all-LOW handling, and process-tree expected-process manifests are follow-up scope.
+Phase 4 runs through `workflows/code-quality.md`; this operator may be selected by that wrapper or by ad-hoc code-quality dispatches.
 
 ## Procedure
 
@@ -79,7 +79,8 @@ Do not claim the current implementation pipeline already dispatches this operato
 3. Verify that A1 still contains `Cohesion by classifications touched`.
 4. Resolve touched surfaces into candidate component boundaries using module/crate/package layout and any explicit labels in the touched-surface enumeration.
 5. Extract touched functions and A1 classifications from the supplied WU-owned change evidence, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
-6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary`: cohesion classifications are blocking only when diff-owned; existing whole-file cohesion concerns are residuals under that convention.
+6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` as the canonical target/context and blocking/residual rule.
+   Every non-LOW cohesion finding records an ownership proof per the canonical boundary, or is emitted as a residual row.
 7. If cohesion-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` and keep the expanded context out of the cohesion verdict target.
 8. Score per-component cohesion using the A1 cohesion row.
 9. Assign the overall verdict as the worst applicable score.
@@ -96,8 +97,9 @@ Report shape:
 - Inputs Read.
 - References Read.
 - Component Boundaries table with component, evidence, and notes.
-- Per-Component Cohesion table with component, classifications touched, verdict, and evidence.
-- Evidence For Non-LOW Scores table with score, evidence, and why it supports the verdict.
+- Per-Component Cohesion table with component, classifications touched, verdict, blocking_or_residual, and evidence.
+- Evidence For Non-LOW Scores table with score, blocking_or_residual, ownership proof or residual basis, evidence, and why it supports the verdict.
+- Residual Rows For Context-Only Cohesion Concerns table with id, severity, surface, anchor, evidence, residual basis, and why the concern is not part of the blocking target.
 - Residual Ambiguity / Stop-Condition Notes.
 - Final verdict line: LOW or HIGH.
 

@@ -40,12 +40,13 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 - `problem_map_path=<path>` (required for Phase 4) - approved problem-map context.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels.
-- `diff_path=<path>` (optional) - diff evidence for ad-hoc or later PR/diff invocations.
+- `diff_path=<path>` (required for a blocking verdict; equivalent WU-owned corpus accepted) - diff or WU-owned target evidence for ad-hoc or later PR/diff invocations.
 - `contract_path=<path>` (optional) - Phase 6a contract. When present, read exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections for declaration carriers per `~/ai/conventions/code-quality.md`.
 - `code_trace_paths=<paths>` (optional) - existing trace reports that identify dependency edges.
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-coupling.md`) - report destination.
 
 When `contract_path` is not supplied, the auditor may look for exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections in `proposal_path` before falling back to ordinary non-declared coupling scoring. Section-name lookup is exact; aliases do not apply.
+Adjacent declaration lookup via `contract_path` or `proposal_path` is context-only unless the declaration carrier is part of the current WU-owned target corpus.
 
 ## Non-Negotiables
 
@@ -102,7 +103,8 @@ Phase 4 runs through `~/ai/workflows/code-quality.md`. Phase 6 current-layer cou
    - On malformed entries in either declaration family, emit a fail-closed stop condition naming the offending entry.
    - Resolve matching declarations from both declaration families to the component boundaries from step 4.
    - Do not infer adapter or intrinsic-surface status for undeclared components.
-7. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and cite `workflows/auditor-surface-expansion.md`: coupling component-pair references are blocking only when diff-owned.
+7. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` as the canonical target/context and blocking/residual rule.
+   Adjacent declaration, subordination, or Markdown-operator references discovered only through context become residual/tracker material; a fix must not create a new blocking finding on a helper declaration or adjacent context surface unless the new target is independently WU-owned and outside the previous fix overlay.
 8. If pair-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
 9. Score per-pair coupling using the A1 coupling row, applying the adapter-aware distinct-contract rule first to components with a valid matching adapter declaration, the intrinsic-surface domain rule second to components with a valid matching intrinsic-surface declaration, and the raw non-declared rule otherwise.
 10. Assign the overall verdict as the worst applicable score.
@@ -119,8 +121,8 @@ Report shape:
 - Inputs Read.
 - References Read.
 - Component Boundaries table with component, evidence, and notes.
-- Per-Pair Coupling table with source component, target component, distinct external symbols/modules referenced, adapter declaration artifact path, declared adapter component, `Translates:` contracts, contract count, adapter verdict, intrinsic declaration artifact path, declared intrinsic component, `Domain:`, `Owns:` set or summary, domain count, intrinsic-surface verdict, final verdict, and evidence.
-- Evidence For Non-LOW Scores table with score, evidence, and why it supports the verdict.
+- Per-Pair Coupling table with source component, target component, distinct external symbols/modules referenced, adapter declaration artifact path, declared adapter component, `Translates:` contracts, contract count, adapter verdict, intrinsic declaration artifact path, declared intrinsic component, `Domain:`, `Owns:` set or summary, domain count, intrinsic-surface verdict, final verdict, blocking_or_residual, and evidence.
+- Evidence For Non-LOW Scores table with score, blocking_or_residual, ownership proof or residual basis, evidence, and why it supports the verdict.
 - Residual Ambiguity / Stop-Condition Notes.
 - Final verdict line: LOW, MEDIUM, or HIGH.
 

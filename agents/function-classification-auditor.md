@@ -43,7 +43,7 @@ Optional inputs: `base_ref=<ref>`, `head_ref=<ref>`, `changed_functions_path=<pa
 
 - `base_ref=<ref>` (optional) - base ref used to produce or verify `diff_path`.
 - `head_ref=<ref>` (optional) - head ref used to produce or verify `diff_path`.
-- `changed_functions_path=<path>` (optional) - caller-supplied inventory of changed functions, with path, symbol/name, and line span, used when diff-only boundary extraction is ambiguous.
+- `changed_functions_path=<path>` (optional) - boundary-resolution aid: caller-supplied inventory of changed functions, with path, symbol/name, and line span, used when diff-only boundary extraction is ambiguous.
 - `proposal_path=<path>` (optional) - proposal context for review-only assumptions; not a substitute for diff evidence.
 - `problem_map_path=<path>` (optional) - touched-surface and anti-scope context.
 - `risk_profile_path=<path>` (optional) - per-surface risk and mode context.
@@ -79,7 +79,8 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 2. Read A1 from `code_quality_ref`, defaulting to `~/ai/conventions/code-quality.md`.
 3. Verify A1 preservation: confirm the category list, the single-classification rule, the `Function categories per function` threshold row, and the `multi-classifier function` failure mode are present and not contradictory.
 4. Parse `diff_path` to identify changed functions, including every new or modified function visible in the diff. Use language-neutral diff tracing first, then file context under `repo_root` and optional `changed_functions_path` to resolve partial hunks.
-5. Apply `conventions/code-quality.md` `## Auditor Scope Boundary`: unmodified function concerns in touched files are residuals unless changed by the diff.
+5. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` as the canonical target/context and blocking/residual rule.
+   Every `suggested_split` names the current blocking finding, why the split strictly reduces the blocking finding set, and how introduced helpers are handled under the audit overlay rule.
 6. Classify each new or modified function against the convention categories.
 7. Score each changed function using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
 8. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
@@ -105,8 +106,8 @@ Report shape:
 |---|---|---|---|---|---|
 
  ## Multi-Classifier Findings
-| ID | Path | Function / symbol | Categories mixed | Evidence | Suggested split |
-|---|---|---|---|---|---|
+| ID | Path | Function / symbol | Categories mixed | Evidence | Suggested split | Blocking or residual |
+|---|---|---|---|---|---|---|
 
  ## Residual Ambiguity / Stop-Condition Notes
 
@@ -123,10 +124,16 @@ line_span_or_diff_hunk: <line range or diff hunk anchor>
 categories_mixed: [<A1 category>, <A1 category>, ...]   # exactly two or more
 evidence: <concise per-category evidence>
 failure_mode: multi-classifier function
-suggested_split: <responsibility boundary language; never replacement code>
+blocking_or_residual: blocking | residual
+suggested_split:
+  direction: <responsibility boundary language; never replacement code>
+  convergence_proof:
+    current_blocking_finding: <finding id and target the split is intended to close>
+    why_split_reduces_blocking_set: <why the split strictly reduces the current blocking finding set>
+    helper_overlay_handling: <how introduced helpers are handled under the audit overlay rule>
 ```
 
-`categories_mixed` must contain exactly two or more A1 categories. `suggested_split` is required split direction, never replacement code.
+`categories_mixed` must contain exactly two or more A1 categories. `blocking_or_residual` is required on every finding object. `suggested_split` is required split direction, never replacement code, and every `suggested_split` block must include `convergence_proof.current_blocking_finding`, `convergence_proof.why_split_reduces_blocking_set`, and `convergence_proof.helper_overlay_handling`.
 
 Final stdout vocabulary:
 
