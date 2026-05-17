@@ -1,0 +1,1 @@
+This fixture verifies the Step 6c prompt contract: side-channel artifacts may be supplied as context, but the prompt must not make model-authored read confirmations or consumed-row attestations load-bearing audit evidence.

@@ -1,0 +1,4 @@
+expected_audit_verdict: pass
+description: Valid side-channel evidence bundle with a current source index, byte-current side-file, matching re-projection, parent scope, and projection time before the synthetic Step 6c invocation start.
+applies_check: allow-pass
+step6c_invocation_start_at: 2026-05-16T20:01:00Z

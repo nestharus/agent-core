@@ -1,0 +1,4 @@
+consumed: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/row-mismatch/step6b-output-index.md
+consumed: fixture-rowmatch-eval-py
+consumed: fixture-rowmatch-readme
+consumed: fixture-rowmatch-unmapped

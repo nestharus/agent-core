@@ -198,6 +198,14 @@ The root orchestrator, or a designated helper operator acting for the root, popu
 
 Turn-content provenance uses references instead of copied transcript bodies. `turns/<session_id_safe>.jsonl` records turn IDs, role/timestamp metadata when available, and `source_file` pointers to provider raw logs with offsets or line metadata when available. Continuations pull exact turn content from those referenced source files when needed and record both graph files and source files read.
 
+## Load-Bearing Audit Evidence Authorship
+
+load-bearing audit evidence must not be authored or attested by the model agent under audit.
+
+When a workflow needs load-bearing proof that exact evidence was present, current, read, projected, or consumed, the orchestrator, runner, or a designated helper acting outside the audited model response must produce that evidence. Audit verification reads the orchestrator/runner-authored artifact and its current filesystem or trace provenance. A model-authored claim, read confirmation, transcript line, `consumed:` echo, or equivalent attestation from the agent under audit is narrative context only unless another convention explicitly defines it as non-load-bearing support.
+
+For side-channel evidence bundles, the audited model may receive the evidence path as context, but the proof carrier is the helper/orchestrator artifact. The auditor must not convert the model's statement that it read the path into the authority that the path existed, was current, or matched the expected source.
+
 Edges use these names:
 
 - `parent_invocation`

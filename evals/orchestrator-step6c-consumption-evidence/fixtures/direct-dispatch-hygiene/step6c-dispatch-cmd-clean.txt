@@ -1,0 +1,1 @@
+agents -m gpt-high -p /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel -f /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/step6c.md 2>&1 | tee /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/logs/step6c.log

@@ -1,0 +1,8 @@
+expected_audit_verdict: pass-if-convention-rule-present
+description: AC5 convention assertion path for the load-bearing audit evidence authorship rule. Step 6b local mode may observe the rule absent while Step 6c is in progress, but the post-Step-6c strict run must find the rule present.
+strict_requires: convention-rule-present-after-step6c
+pre_step6c_skip: true
+applies_check: convention-rule
+convention_rule_snippet_path: convention-rule-snippet.md
+expected_convention_target_path: expected-convention-target.yaml
+step6c_invocation_start_at: 2026-05-16T20:41:00Z

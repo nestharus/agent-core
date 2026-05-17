@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/prompt-contract/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/prompt-contract/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 2
+  side_file_sha256: a0340a8a70884aecd27d376e6a01516e1cb3e6da917f7596323ecfaf440694e2
+  source_index_sha256: 1fa0f814b9d1388c9cd3c6bb4c6d8eb6b3713373e4e9d7855e6e2c050a942a54
+  projected_at: 2026-05-16T20:20:00Z
+  step6c_invocation_uuid: 22222222-2222-4222-8222-222222222222
+  step6c_prompt_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/prompt-contract/step6c-prompt-clean.md
+  step6c_log_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/prompt-contract/step6c-log.txt

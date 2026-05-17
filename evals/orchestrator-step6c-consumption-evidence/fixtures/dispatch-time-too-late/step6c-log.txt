@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-dispatch-time-too-late
+Topology exists, but the projected_at value is too late for dispatch-time evidence.

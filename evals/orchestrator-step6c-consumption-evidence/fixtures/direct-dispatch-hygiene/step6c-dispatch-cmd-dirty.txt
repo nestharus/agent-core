@@ -1,0 +1,1 @@
+agents-with-evidence -m gpt-high -p /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel -f /tmp/step6c.md 2>&1 | head -3 | tee /tmp/step6c.log

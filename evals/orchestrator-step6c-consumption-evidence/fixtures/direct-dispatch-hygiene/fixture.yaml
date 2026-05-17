@@ -1,0 +1,6 @@
+expected_audit_verdict: pass-if-dispatch-shape-clean | block-if-wrapper-or-shell-fanout-or-truncating-filter
+description: Synthetic captured Step 6c dispatch commands prove the canonical direct agents invocation is accepted and wrappers, fanout, and truncating filters are blocked.
+applies_check: dispatch-hygiene
+dispatch_cmd_clean_path: step6c-dispatch-cmd-clean.txt
+dispatch_cmd_dirty_path: step6c-dispatch-cmd-dirty.txt
+step6c_invocation_start_at: 2026-05-16T20:31:00Z

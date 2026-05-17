@@ -1,0 +1,4 @@
+expected_audit_verdict: block-side-file-missing
+description: The source index and manifest exist, but the side-file path declared in the manifest is absent, so Audit #2 must block before any model log evidence is considered.
+applies_check: Audit #2 check 3 - side-file presence
+step6c_invocation_start_at: 2026-05-16T20:05:00Z

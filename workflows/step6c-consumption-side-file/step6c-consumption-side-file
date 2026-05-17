@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+SELF="$0"
+if command -v readlink >/dev/null 2>&1; then
+  RESOLVED=$(readlink -f -- "$0" 2>/dev/null || true)
+  if [ -n "$RESOLVED" ]; then
+    SELF="$RESOLVED"
+  fi
+fi
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+exec python3 "$SCRIPT_DIR/projection.py" "$@"
