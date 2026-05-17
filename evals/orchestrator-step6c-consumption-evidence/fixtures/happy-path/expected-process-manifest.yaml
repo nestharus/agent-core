@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/happy-path/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/happy-path/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 3
+  side_file_sha256: 735e67cff15377fe82d82489d98a22ea25e5d6495a902e02a0fbb24a9a06ffcc
+  source_index_sha256: c618715ea8f9c5481e5354e90d35fc3ff13566cba48861a7e1dd3fa5b447b729
+  projected_at: 2026-05-16T20:00:00Z
+  step6c_invocation_uuid: 11111111-1111-4111-8111-111111111111
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/happy-path-step6c.md
+  step6c_log_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/happy-path/step6c-log.txt

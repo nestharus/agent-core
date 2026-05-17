@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/dispatch-time-too-late/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/dispatch-time-too-late/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 3
+  side_file_sha256: bde316d94471dd67cae76cc2e21910067a65c1dca8816f7222058cfa589cfc6c
+  source_index_sha256: 5c7936e9b0a4665295b0881b24a0344d44819c7f8b998120a0a774ec3ef8e146
+  projected_at: 2026-05-16T20:16:00Z
+  step6c_invocation_uuid: 88888888-8888-4888-8888-888888888888
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/late-step6c.md
+  step6c_log_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/dispatch-time-too-late/step6c-log.txt

@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/direct-dispatch-hygiene/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/direct-dispatch-hygiene/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 2
+  side_file_sha256: a710eadfdb75aef909542d0e347fe6915b595c66f3bd53143ab4d251d3345cab
+  source_index_sha256: 5cff8756dc3e089a74c7253e4c5203f7ea700fb4ba2d426df324a6dea42facc0
+  projected_at: 2026-05-16T20:30:00Z
+  step6c_invocation_uuid: 33333333-3333-4333-8333-333333333333
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/direct-dispatch-hygiene-step6c.md
+  step6c_log_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/logs/direct-dispatch-hygiene-step6c.log

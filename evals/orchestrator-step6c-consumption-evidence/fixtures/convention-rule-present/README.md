@@ -1,0 +1,1 @@
+This fixture verifies the AC5 convention-update assertion path by scanning the declared convention target for the canonical rule that load-bearing audit evidence must not be authored or attested by the model agent under audit.

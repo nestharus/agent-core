@@ -1,0 +1,8 @@
+OULIPOLY_INVOCATION synthetic-model-attestation-only
+consumed: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/model-attestation-only-fail/step6b-output-index.md
+consumed: fixture-attestation-eval-py
+consumed: fixture-attestation-readme
+consumed: fixture-attestation-manifest
+CONSUMED_EVIDENCE_EMITTED
+read-confirmed: every row above was read
+The log is intentionally stuffed with model-authored claims that must not satisfy the side-channel predicate.

@@ -1,0 +1,1 @@
+This fixture verifies direct-dispatch hygiene for Step 6c: the captured command must be the canonical `agents -m ... -p ... -f ... 2>&1 | tee ...` shape, with no wrappers, heredocs, shell fanout, or truncating filters between the parent shell and `agents`.

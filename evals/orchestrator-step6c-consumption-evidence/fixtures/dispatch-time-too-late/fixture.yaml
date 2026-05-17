@@ -1,0 +1,4 @@
+expected_audit_verdict: block-dispatch-time-ordering
+description: The side-file and source index are current, but `projected_at` is after the synthetic Step 6c invocation start, so the bundle cannot prove the side-file was available at dispatch time.
+applies_check: Audit #2 check 9 - dispatch-time ordering
+step6c_invocation_start_at: 2026-05-16T20:15:00Z

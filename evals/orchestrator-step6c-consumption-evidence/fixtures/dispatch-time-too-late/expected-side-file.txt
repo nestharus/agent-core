@@ -1,0 +1,4 @@
+consumed: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/dispatch-time-too-late/step6b-output-index.md
+consumed: fixture-late-eval-py
+consumed: fixture-late-readme
+consumed: fixture-late-manifest

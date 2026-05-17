@@ -1,0 +1,4 @@
+expected_audit_verdict: block-source-index-sha-mismatch
+description: The side-file was projected from v1 of the Step 6b output index, but the manifest points at the current v2 index, so Audit #2 must detect source-index staleness.
+applies_check: Audit #2 check 5 - source-index sha currentness
+step6c_invocation_start_at: 2026-05-16T20:07:00Z

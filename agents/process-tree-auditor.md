@@ -6,6 +6,10 @@ output_format: ''
 
 # Process Tree Auditor
 
+## Declared roles
+
+`parser`, `validator`.
+
 ## Role
 
 You verify that a root-delegated sub-orchestrator or multi-agent workflow actually executed the required process tree.
@@ -83,7 +87,25 @@ For join-manifest composition, the verdict expectation comes from the gate contr
 
 Step 6b output indexes, raw findings, dispatch manifests, generated tickets, and other non-verdict artifacts remain ordinary `expected_outputs` unless a caller defines a real verdict contract.
 
-For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and relaxed-position Step 6c `consumed:` evidence for the Step 6b output index plus every Step 6b output-index row Step 6c implemented. The `consumed:` rows may appear anywhere in the Step 6c log after runner-owned `OULIPOLY_INVOCATION` and `OULIPOLY_SESSION` envelope lines. They must correspond to Step 6b output-index rows, including child `level_id` scope where applicable. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
+For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and evidence that Step 6c consumed the Step 6b output index plus every Step 6b output-index row Step 6c implemented. For ACR-247 side-channel runs, the canonical carrier is a `side_channel_evidence_bundle:` entry produced by `~/ai/workflows/step6c-consumption-side-file.md`; the manifest-declared side-file is load-bearing, and the Step 6c log is topology-only for prompt path, log path, and invocation UUID joins. Historical relaxed-position log-row evidence may still be read for completed pre-ACR-247 audit-history references, but new Phase 6 dispatches must use the side-channel bundle. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
+
+### ACR-247 Side-Channel Audit #2 Predicate
+
+For each ACR-247 Step 6c child invocation, perform these checks in order:
+
+1. Manifest entry presence: locate the `side_channel_evidence_bundle:` block for the mapped Step 6c invocation. Missing block is `blocking`.
+2. Schema completeness: verify every required key from `~/ai/workflows/step6c-consumption-side-file.md` and the Step 6a contract is present and well-typed: `schema_version`, `level_id`, `side_file_path`, `source_step6b_output_index_path`, `projection_helper_identity`, `projection_schema_version`, `canonical_row_count`, `side_file_sha256`, `source_index_sha256`, `projected_at`, `step6c_invocation_uuid`, `step6c_prompt_path`, and `step6c_log_path`. Missing or malformed keys are `blocking`.
+3. Side-file presence: stat `side_file_path`. Missing file is `blocking`.
+4. Source-index presence: stat `source_step6b_output_index_path`. Missing file is `blocking`.
+5. Source-index sha currentness: recompute SHA-256 for `source_step6b_output_index_path` and compare to `source_index_sha256`. A mismatch is stale evidence and is `blocking`; exact match is the required baseline.
+6. Side-file sha currentness: recompute SHA-256 for `side_file_path` and compare to `side_file_sha256`. A mismatch means post-projection tampering and is `blocking`.
+7. Re-projection equivalence: run the declared projection operation against the current source index with the manifest `level_id`, then byte-compare the result to the current side-file. A mismatch is `blocking`.
+8. Row count check: count canonical `consumed:` rows in the side-file excluding blank/comment lines and excluding the required prefix index row; compare to `canonical_row_count`. A mismatch is `blocking`.
+9. Dispatch-time ordering: verify `projected_at` is before the Step 6c invocation start time for `step6c_invocation_uuid` in the trace or an equivalent expected-process start-time field. If projection happened at or after Step 6c start, the side-file was not available at dispatch time and the result is `blocking`.
+10. Level-scope correctness: verify parent manifests contain parent-scope rows and child manifests contain rows scoped to the matching `<level_id>:<local_artifact_id>` when the index uses string artifact identifiers. Mismatched scope is `blocking`.
+11. Model-attestation rejection: the Step 6c log MUST NOT be read for model-authored `consumed:` rows, read-confirmation rows, `CONSUMED_EVIDENCE_EMITTED`, or equivalent attestations as load-bearing evidence. The log may be read only for topology evidence such as prompt path, log path, invocation UUID, and direct dispatch shape. Model-authored attestation tokens are informational; if checks 1-10 fail, they do not repair the bundle.
+
+Allow PASS only when checks 1-10 pass. Check 11 never blocks an otherwise valid side-channel bundle by itself; it prevents model-authored claims from becoming audit authority.
 
 If the manifest is absent or too vague to map expected work to tree nodes, return `NEEDS_INPUT`.
 
@@ -141,8 +163,8 @@ For each expected prompt, log, gate report, status, or output:
 - for each blocking question artifact, verify the root-surfaced answer artifact exists before downstream dependent nodes run;
 - verify continuation evidence names the same `question_id`, origin invocation UUID, session ID when known, and session-graph manifest;
 - flag `Question/answer handling violation` when a question was emitted but not surfaced, the workflow advanced while unanswered, an answer was received but not applied, or the continuation target does not match the question artifact.
-- for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c prompt/log evidence contains corresponding relaxed-position `consumed:` rows at any post-envelope position;
-- classify missing Step 6b output index, missing, malformed, mismatched, stale, or wrong-scope Step 6c consumption evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
+- for Phase 6 audits, verify that Step 6b output paths are tied to the mapped Step 6b node and that Step 6c consumption evidence uses the ACR-247 manifest-declared side-channel bundle for new side-channel runs; use Step 6c prompt/log paths only for topology joins, not for model-authored `consumed:` proof;
+- classify missing Step 6b output index, missing side-channel bundle, malformed schema, missing side-file, stale source index, side-file hash mismatch, re-projection mismatch, row-count mismatch, late projection, wrong-scope evidence, same-invocation Step 6b/Step 6c mapping, or Step 6c-before-Step 6b timing as `blocking` unless the missing evidence is surfaced as `NEEDS_INPUT:<question_artifact>` before downstream consumption.
 
 For each canonical-output row, `canonical_output_path` must be verified from the current filesystem: stat `canonical_output_path`, read the current file, parse verdict from the current file, compare the parsed verdict with `expected_verdict`, and when `expected_sha256` is present compute the current sha256 and compare it with `expected_sha256`.
 

@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/row-mismatch/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/row-mismatch/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 3
+  side_file_sha256: 5f86cdf04b345152219f953474601a8380a661461be95e73feb4c993bcd38f92
+  source_index_sha256: 7f45641b1cb492b587cc6e182f5ea0931bac2633b12e97953d4adf95c9908993
+  projected_at: 2026-05-16T20:08:00Z
+  step6c_invocation_uuid: 55555555-5555-4555-8555-555555555555
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/row-mismatch-step6c.md
+  step6c_log_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/row-mismatch/step6c-log.txt

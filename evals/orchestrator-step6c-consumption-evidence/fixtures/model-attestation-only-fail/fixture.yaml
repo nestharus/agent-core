@@ -1,0 +1,4 @@
+expected_audit_verdict: block-side-file-missing
+description: The Step 6c log contains many model-authored `consumed:` and read-confirmation tokens, but the manifest-declared side-file is missing, so Audit #2 must still block.
+applies_check: Audit #2 check 11 - model-attestation rejection with check 3 first-block behavior
+step6c_invocation_start_at: 2026-05-16T20:13:00Z
