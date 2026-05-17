@@ -63,7 +63,7 @@ See also: ACR-153 (implementation-pipeline flavors), ACR-156 (decompose-enforcem
 
 ## Out-of-scope refactor request
 
-When a child WU surfaces an existing-code refactor request outside the current ticket's scope, pause the current WU, file a linked refactor ticket, preserve state evidence, and resume only after the refactor is closed, superseded, or explicitly dispositioned. Use `workflows/implementation-pipeline.md` `## Pause For Refactor` for the state model; the active flavor file decides only whether to accept pause/file/refactor or carry a bounded residual.
+When a child WU surfaces existing-code refactor work outside touched-file/component ownership, or inside touched ownership but too large for one coherent WU, pause the current WU, file or dispatch the appropriate linked refactor/decomposition ticket, preserve state evidence, and resume only after that work is closed, superseded, or explicitly dispositioned. "Out of scope" cannot mean "inside a touched file but pre-existing." Use `workflows/implementation-pipeline.md` `## Pause For Refactor` for the state model; the active flavor file decides only among options that do not bypass pipeline-callable LOW-only gates.
 
 ## Ticket System Pluggability
 
@@ -134,7 +134,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - Verify `${ticket_id}` exists in the selected backend and has correct labels or fields; apply missing metadata through `${ticket_operator}` when that backend supports it and the user has authorized it.
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
    - Use `${ticket_operator}` with `task=transition` to move the selected ticket to **In Progress** immediately after dispatch. For Linear, pass `target_status="In Progress"` and let `linear-operator` resolve the issue team's workflow state.
-   - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`.
+  - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`. Include only behavior-forbidding `Forbidden behaviors`; do not write work-narrowing anti-scope clauses that exclude files, concerns, changed-function siblings, or adjacent cleanup inside touched-file/component ownership.
    - Run the implementation-pipeline-orchestrator as one Bash-background dispatch:
      ```python
      Bash(
@@ -187,7 +187,7 @@ The full implementation pipeline runs. Manager pauses dispatching adjacent WUs t
 Single-shot opus run. Work is done in opus's bash tool directly; no sub-agent delegation surface is available. The investigation prompt MUST include:
 
 - A **strict output contract**: a single structured summary block. No reasoning trail, no quoted API responses, no raw JSON dumps in the result. The manager only sees the final block.
-- An **anti-scope**: do not modify code, do not transition real tickets, do not mutate repository state.
+	- **Forbidden behaviors**: do not modify code, do not transition real tickets, do not mutate repository state.
 - A **disposition rubric**: how findings translate into action (file ticket / no action / produce runbook / etc.).
 
 Cost profile: $1-3 per investigation, 3-15min wall time.

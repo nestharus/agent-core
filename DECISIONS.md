@@ -3627,3 +3627,56 @@ Only 1 of 5 signals fires. The 2+-rule for defer-to-prototype is NOT met. No NEE
 - **Anti-scope reaffirmed**: no generalization of bootstrap exception to other WUs (AGE-105 / AGE-116 / AGE-119 / AGE-123 / AGE-124 / ACR-237 stay BLOCKED until both ACR-246 + ACR-247 actually land); no precedent-citation framing; no residual acceptance on OTHER gates; LOW-only in force everywhere else.
 - **Cross-references**: ACR-246 (sibling fix-cluster); ACR-242 (no-precedent-citation rule, honored); AGE-116 (canonical halt template, NOT cited as precedent for shipping); ACR-198 (bootstrap-exception convention).
 - **Evidence**: agent-runner-side planning_dir at `/home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/` (audit-history.md R1-R5 + Resume entry + Final state placeholder; risk/*.md; code-quality/acr-247-phase-4/*; audit/process-tree-audit-{1,2}.md; contracts/acr-247-runtime-consumed-side-channel.md; etc.).
+
+## 2026-05-17 — ACR-249 — Phase 2.5 cold-start disposition + bootstrap-exception pre-authorization
+
+### D-ACR-249-Phase-2.5-Cold-Start-Disposition
+
+- WU: ACR-249 (Reverse anti-scope-as-WU-narrowing; audit whole files/systems; decompose WUs when too large)
+- Phase: 2.5 step 4a (inherited-estimate cold-start)
+- Disposition: Proceed without a baseline estimate (Option B equivalent).
+- Evidence:
+  - `${scratch_dir}/ticket.md` Estimate section reads "Blank (estimate_source: missing). Phase 3 refines." This is the ticket-author's explicit pre-disposition.
+  - Dispatch task terminal-state declares "ACR-249 ships via auto-merge"; `auto_merge_after_phase_9=true`.
+  - `AskUserQuestion` for the cold-start question was permission-denied by the root; per `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`, value/scope/trade-off questions normally halt with `NEEDS_INPUT`. Here the ticket text is treated as the prior user disposition, satisfying step 4a's "no prior user disposition" carve-out.
+- Effect:
+  - Phase 3 proceeds with `inherited_story_point_estimate: null`, `estimate_source: missing`.
+  - Phase 3 emits a refined estimate from Phase 2.5 evidence.
+  - Phase 4 pre-update-estimate dispatch passes `estimate_delta_flag.over_2x: unknown`.
+  - Phase 8.X closure capture cross-checks against the orchestrator-supplied baseline `null`.
+
+### D-ACR-249-Bootstrap-Exception
+
+- WU: ACR-249
+- Phase: 2.5 (pre-authorized in dispatch; ratified at Phase 4 bootstrap-exception sub-gate)
+- Authority: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+- Risk profile: WU verdict HIGH; 14 touched surfaces all HIGH under file-level audit framing (`/home/nes/projects/ai/planning/acr-249-file-scope-audit/risk/acr-249-risk-profile.md`).
+- Argument (four conditions per the convention; Phase 3 proposer supplies the proposal-side `## Bootstrap exception declaration` section; this entry is the DECISIONS-side declaration cited by the Phase 4 sub-gate parser):
+  1. `primary_deliverable_fixes_or_extends_metric`: this WU IS the rewrite of the auditor scope-boundary rule that the cohesion / function-classification / coupling auditors measure. The deliverable changes the metric definition.
+  2. `non_low_finding_is_intrinsic_lockstep`: any non-LOW finding the Phase 4 code-quality gate surfaces on the touched auditor / convention / orchestrator / manager files would be a finding produced by the OLD WU-diff-only auditor rule (or the OLD work-narrowing anti-scope) applied to the post-rewrite text. The lockstep is intrinsic to the bootstrap.
+  3. `post_merge_satisfies_new_rule_under_new_metric`: once ACR-249 lands, the new whole-file rule applies; the merged convention text + auditor operator text define the new rule.
+  4. `declared_for_phase_4_ratification`: this entry is the DECISIONS.md side of the declaration; the Phase 3 proposer's `## Bootstrap exception declaration` section is the proposal-side declaration.
+- Dispatch task pre-authorization: the root dispatch explicitly authorized this exception ("Same bootstrap exception authorized: if Phase 4/6 verdicts surface findings on touched files BUT the findings would have been caught only by the OLD WU-diff-only narrowing OR the OLD work-narrowing anti-scope, those findings are bootstrap-exempt for THIS WU only").
+- Scope of the exception (narrow):
+  - Phase 4 code-quality gate (canonical authority — Phase 4 bootstrap-exception sub-gate ratifies this row).
+  - Phase 6 per-component code-quality fanout (analogous; the convention's bootstrap-exception rule applies to "the code-quality gate", which the per-component fanout extends).
+- Out of scope (the exception does NOT cover):
+  - Phase 4 scope/audit/shortcut/supported-surface risk gates (these are separate from code-quality). If the scope-risk gate fires non-LOW, the legitimate paths are revise the proposal or NEEDS_INPUT halt; not bootstrap-exception ratification.
+  - Phase 8 PR-review gates (different gates, different evidence).
+  - Any behavior-forbidding anti-scope from the dispatch task (residual acceptance, precedent-citation, idle timeouts, sentinel-polling, `^WROTE:` watchers, `tests/test_*.py` smuggling — all remain in full force per dispatch task "Forbidden behaviors").
+- Phase 4 sub-gate manifest row (to be written at the Phase 4 join):
+  - `gate_name=bootstrap-exception`
+  - `verdict_line=RATIFIED`
+  - `ratifies_gate=code-quality`
+  - `allow_advance_basis=bootstrap-exception`
+  - `canonical_output_path=/home/nes/projects/ai/planning/acr-249-file-scope-audit/proposals/acr-249-ACR-249.md` (Phase 3 proposal containing the `## Bootstrap exception declaration` section).
+
+### ACR-249 — Bootstrap exception ratification
+
+Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the Phase 4 code-quality aggregate `HIGH` verdict (child verdicts: `cohesion-auditor: HIGH`, `coupling-auditor: HIGH`, `function-classification-auditor: INAPPLICABLE`, `push-pull-auditor: LOW`) under `~/ai/conventions/code-quality.md` § `Bootstrap exception`. The detailed four-condition argument and Phase 4 sub-gate manifest row spec live in the immediately preceding `### D-ACR-249-Bootstrap-Exception` entry above; this entry is the canonical-heading anchor the parser locates.
+
+- Authority cited: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+- Ratifies gate: `code-quality` (Phase 4 code-quality aggregate verdict `HIGH`).
+- Proposal-side declaration: `/home/nes/projects/ai/planning/acr-249-file-scope-audit/proposals/acr-249-ACR-249.md` `## Bootstrap exception declaration` (lines 216–245; all 11 required fields present per Phase 4 sub-gate Parser step 1).
+- DECISIONS-side declaration: see `### D-ACR-249-Bootstrap-Exception` above for the four-condition argument and the Phase 4 join-manifest row spec.
+- Out-of-scope: the ratification does NOT extend to Phase 4 scope/audit/shortcut/supported-surface risk gates (all four landed LOW on their own merits) or to Phase 8 PR-review gates. Behavior-forbidding anti-scope (residual acceptance, precedent-citation, idle timeouts, sentinel-polling, watchers, test smuggling) remains in full force.

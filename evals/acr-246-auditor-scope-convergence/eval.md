@@ -62,6 +62,8 @@ This eval ships in `WRITE` state. No `eval.py`, `eval.rs`, pytest, CLI, CI, sche
 
 Downstream runnable eval work owns fixtures, detector code, advisory rollout, false-positive review, and enforcement readiness. Until then, this file is a reviewable behavior contract consumed by Phase 6b/6c handoff and by future audits that need to compare trace evidence against ACR-246's expected scope and convergence shape.
 
+Lifecycle note: ACR-249 supersedes this eval for scope-boundary behavior via `evals/auditor-whole-file-scope/eval.md`. The scenarios below remain historical ACR-246 evidence, but F1/S1/S5 residual expectations are reversed for files/components touched by a current WU: pre-existing A1 findings inside touched files/components are current-WU work after ACR-249.
+
 ## Scenarios
 
 ### F1 scope-boundary-pre-existing-residual
