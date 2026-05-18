@@ -1,0 +1,173 @@
+# PREDICTED_TREE probe
+repo: /home/nes/ai/worktrees/prototype-acr-255-clarify/prototypes/acr-255-conflict-resolution-integrity/v3-bundle-artifact-map/.tmp/v3-fixtures/minimal-conflict-repo
+bundle: /home/nes/ai/worktrees/prototype-acr-255-clarify/prototypes/acr-255-conflict-resolution-integrity/v3-bundle-artifact-map/.tmp/v3-fixtures/minimal-conflict-repo/.tmp/verified-rebase/feature__topic/v3-probe
+PRE_BASE=e870d5c2b98b9ae01f4738624d824070dbbbafe0
+PRE_TIP=6698b34348e6e97f5043017c293d17a110dcd3bf
+NEW_TARGET=f7644fe4f559be7d452cbff25f901c0eb0ed2858
+POST_TIP=41fea30ec31898da7b59d1e2c19d22c6563608dd
+POST_CHANGE_ID=kmnowozrrulronqvwlrznxzpklqstsyx
+PREDICTED_TREE=6b133836c44c7c80c6bfe0c4f357b99da331a5c3
+merge-tree exit status=1
+
+## merge-tree raw output
+6b133836c44c7c80c6bfe0c4f357b99da331a5c3
+100644 d725b6f44b5d620e6e1137cc4fa600cd49f798ba 1	module.txt
+100644 0942f0322e29261d8d3c68de656cc7951593391f 2	module.txt
+100644 4700c4f16d733012a0a1fc51443ee1cebdad5519 3	module.txt
+
+Auto-merging module.txt
+CONFLICT (content): Merge conflict in module.txt
+
+## predicted tree module.txt
+header: stable
+prelude: unchanged
+<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+branch-auto: branch-only non-conflicting line
+common-auto: base
+section-start
+logic: branch restructure computation
+logic-helper: branch extracted helper
+=======
+common-auto: target-side non-conflicting update
+section-start
+logic: target hotfix computation
+logic-hotfix: target adds clamp
+>>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+section-end
+target-auto: target-only non-conflicting line
+footer-auto: base
+branch-tail-auto: branch-only tail line
+
+## post tip module.txt (jj first-class conflict rendered through git tree)
+header: stable
+prelude: unchanged
+common-auto: target-side non-conflicting update
+section-start
+logic: target hotfix computation
+logic-hotfix: target adds clamp
+section-end
+target-auto: target-only non-conflicting line
+footer-auto: base
+
+## diff predicted tree vs post tip
+diff --git a/module.txt b/module.txt
+index 2dce8d8..4700c4f 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,18 +1,9 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+-branch-auto: branch-only non-conflicting line
+-common-auto: base
+-section-start
+-logic: branch restructure computation
+-logic-helper: branch extracted helper
+-=======
+ common-auto: target-side non-conflicting update
+ section-start
+ logic: target hotfix computation
+ logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+ target-auto: target-only non-conflicting line
+ footer-auto: base
+-branch-tail-auto: branch-only tail line
+
+## diff predicted tree vs PRE_TIP side
+diff --git a/module.txt b/module.txt
+index 2dce8d8..0942f03 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,18 +1,10 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+ branch-auto: branch-only non-conflicting line
+ common-auto: base
+ section-start
+ logic: branch restructure computation
+ logic-helper: branch extracted helper
+-=======
+-common-auto: target-side non-conflicting update
+-section-start
+-logic: target hotfix computation
+-logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+-target-auto: target-only non-conflicting line
+ footer-auto: base
+ branch-tail-auto: branch-only tail line
+
+## diff predicted tree vs NEW_TARGET side
+diff --git a/module.txt b/module.txt
+index 2dce8d8..4700c4f 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,18 +1,9 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+-branch-auto: branch-only non-conflicting line
+-common-auto: base
+-section-start
+-logic: branch restructure computation
+-logic-helper: branch extracted helper
+-=======
+ common-auto: target-side non-conflicting update
+ section-start
+ logic: target hotfix computation
+ logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+ target-auto: target-only non-conflicting line
+ footer-auto: base
+-branch-tail-auto: branch-only tail line
+
+## whole-file-replace simulation: predicted vs branch side
+diff --git a/dev/fd/63 b/dev/fd/62
+--- a/dev/fd/63
++++ b/dev/fd/62
+@@ -1,18 +1,10 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+ branch-auto: branch-only non-conflicting line
+ common-auto: base
+ section-start
+ logic: branch restructure computation
+ logic-helper: branch extracted helper
+-=======
+-common-auto: target-side non-conflicting update
+-section-start
+-logic: target hotfix computation
+-logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+-target-auto: target-only non-conflicting line
+ footer-auto: base
+ branch-tail-auto: branch-only tail line
+
+## whole-file-replace simulation: predicted vs target side
+diff --git a/dev/fd/63 b/dev/fd/62
+--- a/dev/fd/63
++++ b/dev/fd/62
+@@ -1,18 +1,9 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+-branch-auto: branch-only non-conflicting line
+-common-auto: base
+-section-start
+-logic: branch restructure computation
+-logic-helper: branch extracted helper
+-=======
+ common-auto: target-side non-conflicting update
+ section-start
+ logic: target hotfix computation
+ logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+ target-auto: target-only non-conflicting line
+ footer-auto: base
+-branch-tail-auto: branch-only tail line
