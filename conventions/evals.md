@@ -6,6 +6,12 @@ Evals are the behavior-detection replacement path for brittle structural markdow
 
 This convention defines the stable contract for eval specifications, future runnable eval implementations, findings, lifecycle state, repository placement, and evidence-source boundaries. `eval.md` files are reviewable behavior specifications. They are not executable assertions and do not enforce behavior by themselves.
 
+## Declared roles
+
+`validator`, `mapper`
+
+This file-local declaration follows `~/ai/conventions/code-quality.md` `## Declared roles`: this convention validates eval-spec, finding, lifecycle, placement, and evidence-source contracts while mapping trace evidence into the future `trace -> finding | None` eval contract.
+
 ## Eval definition
 
 An eval is future Python or Rust code shaped as:

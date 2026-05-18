@@ -3719,3 +3719,36 @@ Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the Ph
   - Risk profile: `planning/acr-250-entry-point-orchestration-refinement/risk/acr-250-risk-profile.md` (WU-level MEDIUM; defer-to-prototype signals did not fire)
 - Resume: continue Phase 2.5 step 8 mode propagation → Phase 3 proposal dispatch with `inherited_story_point_estimate=null`, `estimate_source=missing` carried through.
 - Note: original Phase 2.5 dispatch (provider session `1dd660cd-bc3c-447b-b734-8369c0e7d2da`) was orphaned per AGE-91 pattern; process chain manually killed and resumed under ACR-250 RESUME directive. State preserved on disk; no rewind required.
+
+## 2026-05-17 — ACR-209 — Phase 2.5 human gate: WU brief is the pre-answered "proceed in exhaustive mode" decision
+
+- WU: ACR-209 (route ~/ai structural guards to WRITE eval specs).
+- Phase: Phase 2.5, after step 2.5.6 (risk profile).
+- Decision: skip emitting `NEEDS_INPUT` for the defer-to-prototype option even though 2 of 5 raw signals fire per `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/risk/acr-209-risk-profile.md` `## 4. Defer-to-prototype signal evaluation`. Proceed in exhaustive mode.
+- Justifying evidence:
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/.scratch/predecessor-prototype-evidence.md` — predecessor prototype `prototype-acr-199-clarify` has already run and produced the carry-forward payload for ACR-209.
+  - `/home/nes/projects/ai/planning/prototype-acr-199-clarify/dossier/answer.md` — the prototype answered the value question affirmatively for Option B (WRITE-state eval-spec routing) and named ACR-209 as the spawned routing-edit implementation WU.
+  - `/home/nes/projects/ai/planning/prototype-acr-199-clarify/dossier/spawned-tickets.md` — ACR-209 is the routing-edit ticket; ACR-210 through ACR-216 own siblings (preflight, supersession, dominance language, exemplar quarantine, detector authoring).
+  - The ACR-209 WU brief names anti-scope `NO scope expansion to ACR-210..216 (sibling sub-WUs own those slices)`; acceptance criteria are stable; `skip_problem_map_gate=true` (project-level opt-out for the routine `~/ai` bootstrap flow).
+  - The risk-profile researcher's own ACR-209-specific disposition is "defer-to-prototype does not fire as an action recommendation" because the prototype already ran.
+- Why not halt for NEEDS_INPUT: the defer-to-prototype option would route ACR-209 back to a prototype workflow, but ACR-209 IS the implementation ticket spawned BY a prototype. Going back to prototype mode would create a workflow loop. The WU brief is itself the authoritative pre-answer.
+- Effect: proceed to Phase 2.5 step 8 (mode propagation: all surfaces require exhaustive mode per WU verdict HIGH) and Phase 3.
+
+## 2026-05-17 — ACR-209 — BLOCKED on ACR-251 (push-pull-auditor canonical-doc-as-schema refinement)
+
+- WU: ACR-209 (route ~/ai structural guards to WRITE eval specs).
+- Phase: Phase 4 code-quality, after R1 HIGH → R2 HIGH non-converging.
+- Trigger: Phase 4 code-quality auditor surfaced deep pre-existing architectural debt (push-pull-auditor false-positives on canonical-doc-as-schema pattern across the implementation pipeline). The WU brief forbids both bootstrap-exception and scope expansion to siblings, and the user's stop condition is "ACR-209 ships via Phase 9 auto-merge". Root selected `FILE_AUDITOR_REFINEMENT_AND_BLOCK`.
+- Decision: **Halt as `BLOCKED:awaiting-push-pull-auditor-refinement`.** Wait for ACR-251. Do NOT decompose. Do NOT residual-accept. Do NOT use bootstrap-exception. Do NOT introduce schema-stub sub-WUs.
+- Precedent (procedural pattern only, NOT residual-acceptance authority): ACR-250 filed a similar auditor-refinement ticket for function-classification-auditor calibration and used the same FILE_AUDITOR_REFINEMENT_AND_BLOCK pattern.
+- Cross-links:
+  - ACR-251 (push-pull-auditor refinement — architectural fix: inline-schema-owner exception for canonical workflow/convention/orchestrator markdown files).
+- Branch disposition: **keep-as-blocked-evidence**. The R1 + R2 Phase 4 code-quality reports plus R2 worktree file edits (declared-roles additions) are the artifact ACR-251 will refine against. Worktree `/home/nes/ai/worktrees/acr-209-route-structural-guards-to-eval-specs` and branch `acr-209-route-structural-guards-to-eval-specs` are NOT deleted.
+- Justifying evidence:
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/audit-history.md` § `Round terminal — Block on ACR-251`
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/.scratch/questions/q-acr-209-phase4-code-quality-architectural-debt.question.json` (orchestrator-emitted NEEDS_INPUT to root)
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/code-quality/acr-209-phase-4/aggregate-code-quality.md` (R2 HIGH aggregate; 13 findings)
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/code-quality/acr-209-phase-4/reports/push-pull-auditor.md` (R2 — 8 HIGH findings on canonical-doc-as-schema parsing)
+  - `/home/nes/ai/planning/acr-209-route-structural-guards-to-eval-specs/code-quality/acr-209-phase-4/reports/coupling-auditor.md` (R2 — 5 HIGH; declarations valid but external refs reach outside Owns/Translates)
+  - Linear cross-link comments: ACR-209 `fa681f41-932b-4a71-a879-e39ea899a2d2`; ACR-251 `30724620-b1c4-4ded-9b96-819caa5aca06`.
+- Resume: re-invoke implementation-pipeline-orchestrator on ACR-209 after ACR-251 ships; expect Phase 4 code-quality to converge to LOW on the existing R2 worktree state and Phase 5 / 6 / 8 / 8.X / 9 to proceed normally.

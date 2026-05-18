@@ -19,6 +19,12 @@ should FAIL — that's a feature, not a bug.
 - An OBVIOUSLY_BROKEN behavior was confirmed as a bug and the fix is in — write regression test
 - Risk-assessor flagged P0/P1 areas and behavior specs are ready
 
+## Declared roles
+
+`parser`, `accessor`, `mapper`, `validator`, `formatter`.
+
+This file-local declaration follows `~/ai/conventions/code-quality.md` `## Declared roles`. It covers behavior-spec parsing, test-pattern and fixture access, behavior-to-test-case mapping, wrong-behavior and stop-condition validation, and test/report formatting, matching the cohesion-auditor evidence at lines 52, 63, 84, 100, 142, 172, and 222.
+
 ## Do Not Use When
 
 - No behavior spec exists yet (use behavior-investigator first)
@@ -60,21 +66,18 @@ Read the spec thoroughly. Extract:
 
 Do NOT read the implementation yet. You should be able to write test SIGNATURES AND EXPECTED VALUES from the spec alone.
 
-### 2. Survey Existing Test Patterns
+### 2. Apply Declared Test Patterns
 
-```bash
-# Find existing tests near the target
-find <worktree_path>/test -name "test_*.py" | head -20
-find <worktree_path>/tests -name "test_*.py" | head -20
+Apply the test patterns declared by `~/ai/conventions/testing.md` `## Declared test patterns`. That canonical schema names:
 
-# Read a representative test file to match patterns
-cat <worktree_path>/test/unit/<nearest_test_file>.py | head -60
+- Unit-test shape and characterization-test shape (`## Declared test patterns ### Unit-test shape`, `### Characterization-test shape`).
+- Fixture catalog (`### Fixture catalog`): framework lifecycle hooks, seeded data, factories, builders, fakes/mocks, harnesses, environment preconditions, helper modules, runner configuration.
+- Fixture-module naming convention (`### Fixture-module naming convention`): framework-native or project-standard setup surfaces (`conftest.py`, test helper modules, fixture libraries, factories, builders, runner configuration, or project-local equivalents). Project-local overrides may pin specific module paths or naming rules.
+- Runner command discovery (`### Runner command discovery`): discovered from project `AGENTS.md` test instructions or project-local runner docs. No global runner command is hardcoded.
+- Naming policy (`### Naming policy`): default pytest `test_*.py` paths (e.g. `tests/test_foo.py`) and frontend `*.test.ts` or `*.spec.ts` files. Project-local overrides may pin different paths.
 
-# Check shared fixture module for available fixtures
-find <worktree_path> -name "shared fixture module" | xargs head -50
-```
+Use the declared schema to identify test roots, naming policy, fixture catalog, import style, and runner command for the target project. Apply project-local overrides supplied via project `AGENTS.md` or project-local runner docs when present. Match the resolved patterns:
 
-Match:
 - Import style
 - Test class vs function style
 - Fixture patterns
