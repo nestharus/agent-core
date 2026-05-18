@@ -1,0 +1,239 @@
+# conflict artifact probe
+repo: /home/nes/ai/worktrees/prototype-acr-255-clarify/prototypes/acr-255-conflict-resolution-integrity/v3-bundle-artifact-map/.tmp/v3-fixtures/minimal-conflict-repo
+bundle: /home/nes/ai/worktrees/prototype-acr-255-clarify/prototypes/acr-255-conflict-resolution-integrity/v3-bundle-artifact-map/.tmp/v3-fixtures/minimal-conflict-repo/.tmp/verified-rebase/feature__topic/v3-probe
+
+## conflict files
+module.txt    2-sided conflict
+
+## artifact: conflict-artifacts/module.txt.conflict
+header: stable
+prelude: unchanged
+<<<<<<< conflict 1 of 2
++++++++ ypyvoszm f7644fe4 "target hotfix with target-auto" (rebase destination)
+common-auto: target-side non-conflicting update
+%%%%%%% diff from: zskummmo e870d5c2 "base" (parents of rebased revision)
+\\\\\\\        to: kmnowozr 6698b343 "feature restructure with branch-auto" (rebased revision)
++branch-auto: branch-only non-conflicting line
+ common-auto: base
+>>>>>>> conflict 1 of 2 ends
+section-start
+<<<<<<< conflict 2 of 2
+%%%%%%% diff from: zskummmo e870d5c2 "base" (parents of rebased revision)
+\\\\\\\        to: ypyvoszm f7644fe4 "target hotfix with target-auto" (rebase destination)
+-logic: base computation
++logic: target hotfix computation
++logic-hotfix: target adds clamp
++++++++ kmnowozr 6698b343 "feature restructure with branch-auto" (rebased revision)
+logic: branch restructure computation
+logic-helper: branch extracted helper
+>>>>>>> conflict 2 of 2 ends
+section-end
+target-auto: target-only non-conflicting line
+footer-auto: base
+branch-tail-auto: branch-only tail line
+
+## marker line numbers: conflict-artifacts/module.txt.conflict
+     3	<<<<<<< conflict 1 of 2
+     4	+++++++ ypyvoszm f7644fe4 "target hotfix with target-auto" (rebase destination)
+     6	%%%%%%% diff from: zskummmo e870d5c2 "base" (parents of rebased revision)
+     7	\\\\\\\        to: kmnowozr 6698b343 "feature restructure with branch-auto" (rebased revision)
+    10	>>>>>>> conflict 1 of 2 ends
+    12	<<<<<<< conflict 2 of 2
+    13	%%%%%%% diff from: zskummmo e870d5c2 "base" (parents of rebased revision)
+    14	\\\\\\\        to: ypyvoszm f7644fe4 "target hotfix with target-auto" (rebase destination)
+    18	+++++++ kmnowozr 6698b343 "feature restructure with branch-auto" (rebased revision)
+    21	>>>>>>> conflict 2 of 2 ends
+
+## outside-marker lines: conflict-artifacts/module.txt.conflict
+header: stable
+prelude: unchanged
+section-start
+section-end
+target-auto: target-only non-conflicting line
+footer-auto: base
+branch-tail-auto: branch-only tail line
+
+## residual.patch
+diff --git a/.jjconflict-base-0/module.txt b/.jjconflict-base-0/module.txt
+new file mode 100644
+index 0000000..d725b6f
+--- /dev/null
++++ b/.jjconflict-base-0/module.txt
+@@ -0,0 +1,7 @@
++header: stable
++prelude: unchanged
++common-auto: base
++section-start
++logic: base computation
++section-end
++footer-auto: base
+diff --git a/.jjconflict-side-0/module.txt b/.jjconflict-side-0/module.txt
+new file mode 100644
+index 0000000..4700c4f
+--- /dev/null
++++ b/.jjconflict-side-0/module.txt
+@@ -0,0 +1,9 @@
++header: stable
++prelude: unchanged
++common-auto: target-side non-conflicting update
++section-start
++logic: target hotfix computation
++logic-hotfix: target adds clamp
++section-end
++target-auto: target-only non-conflicting line
++footer-auto: base
+diff --git a/.jjconflict-side-1/module.txt b/.jjconflict-side-1/module.txt
+new file mode 100644
+index 0000000..0942f03
+--- /dev/null
++++ b/.jjconflict-side-1/module.txt
+@@ -0,0 +1,10 @@
++header: stable
++prelude: unchanged
++branch-auto: branch-only non-conflicting line
++common-auto: base
++section-start
++logic: branch restructure computation
++logic-helper: branch extracted helper
++section-end
++footer-auto: base
++branch-tail-auto: branch-only tail line
+diff --git a/JJ-CONFLICT-README b/JJ-CONFLICT-README
+new file mode 100644
+index 0000000..c8ea641
+--- /dev/null
++++ b/JJ-CONFLICT-README
+@@ -0,0 +1,11 @@
++This commit was made by jj, https://jj-vcs.dev/.
++The commit contains file conflicts, and therefore looks wrong when used with
++plain Git or other tools that are unfamiliar with jj.
++
++The .jjconflict-* directories represent the different inputs to the conflict.
++For details, see
++https://docs.jj-vcs.dev/latest/git-compatibility/#format-mapping-details
++
++If you see this file in your working copy, it probably means that you used a
++regular `git` command to check out a conflicted commit. Use `jj abandon` to
++recover.
+diff --git a/module.txt b/module.txt
+index 2dce8d8..4700c4f 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,18 +1,9 @@
+ header: stable
+ prelude: unchanged
+-<<<<<<< 6698b34348e6e97f5043017c293d17a110dcd3bf
+-branch-auto: branch-only non-conflicting line
+-common-auto: base
+-section-start
+-logic: branch restructure computation
+-logic-helper: branch extracted helper
+-=======
+ common-auto: target-side non-conflicting update
+ section-start
+ logic: target hotfix computation
+ logic-hotfix: target adds clamp
+->>>>>>> f7644fe4f559be7d452cbff25f901c0eb0ed2858
+ section-end
+ target-auto: target-only non-conflicting line
+ footer-auto: base
+-branch-tail-auto: branch-only tail line
+
+## branch-intended.patch
+diff --git a/module.txt b/module.txt
+index d725b6f..0942f03 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,7 +1,10 @@
+ header: stable
+ prelude: unchanged
++branch-auto: branch-only non-conflicting line
+ common-auto: base
+ section-start
+-logic: base computation
++logic: branch restructure computation
++logic-helper: branch extracted helper
+ section-end
+ footer-auto: base
++branch-tail-auto: branch-only tail line
+
+## target-delta.patch
+diff --git a/module.txt b/module.txt
+index d725b6f..4700c4f 100644
+--- a/module.txt
++++ b/module.txt
+@@ -1,7 +1,9 @@
+ header: stable
+ prelude: unchanged
+-common-auto: base
++common-auto: target-side non-conflicting update
+ section-start
+-logic: base computation
++logic: target hotfix computation
++logic-hotfix: target adds clamp
+ section-end
++target-auto: target-only non-conflicting line
+ footer-auto: base
+
+## branch-actual.patch
+diff --git a/.jjconflict-base-0/module.txt b/.jjconflict-base-0/module.txt
+new file mode 100644
+index 0000000..d725b6f
+--- /dev/null
++++ b/.jjconflict-base-0/module.txt
+@@ -0,0 +1,7 @@
++header: stable
++prelude: unchanged
++common-auto: base
++section-start
++logic: base computation
++section-end
++footer-auto: base
+diff --git a/.jjconflict-side-0/module.txt b/.jjconflict-side-0/module.txt
+new file mode 100644
+index 0000000..4700c4f
+--- /dev/null
++++ b/.jjconflict-side-0/module.txt
+@@ -0,0 +1,9 @@
++header: stable
++prelude: unchanged
++common-auto: target-side non-conflicting update
++section-start
++logic: target hotfix computation
++logic-hotfix: target adds clamp
++section-end
++target-auto: target-only non-conflicting line
++footer-auto: base
+diff --git a/.jjconflict-side-1/module.txt b/.jjconflict-side-1/module.txt
+new file mode 100644
+index 0000000..0942f03
+--- /dev/null
++++ b/.jjconflict-side-1/module.txt
+@@ -0,0 +1,10 @@
++header: stable
++prelude: unchanged
++branch-auto: branch-only non-conflicting line
++common-auto: base
++section-start
++logic: branch restructure computation
++logic-helper: branch extracted helper
++section-end
++footer-auto: base
++branch-tail-auto: branch-only tail line
+diff --git a/JJ-CONFLICT-README b/JJ-CONFLICT-README
+new file mode 100644
+index 0000000..c8ea641
+--- /dev/null
++++ b/JJ-CONFLICT-README
+@@ -0,0 +1,11 @@
++This commit was made by jj, https://jj-vcs.dev/.
++The commit contains file conflicts, and therefore looks wrong when used with
++plain Git or other tools that are unfamiliar with jj.
++
++The .jjconflict-* directories represent the different inputs to the conflict.
++For details, see
++https://docs.jj-vcs.dev/latest/git-compatibility/#format-mapping-details
++
++If you see this file in your working copy, it probably means that you used a
++regular `git` command to check out a conflicted commit. Use `jj abandon` to
++recover.
