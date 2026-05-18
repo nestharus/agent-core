@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prototype-pending: implementation pending in ACR-255-spawned-TBD; remove marker and make this test pass
+# prototype-pending: implementation pending in ACR-259; remove marker and make this test pass
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
