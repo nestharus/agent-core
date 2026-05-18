@@ -36,8 +36,18 @@ This section is an inventory catalog of the four A1 auditor modules that make up
 - `agents/coupling-auditor.md` - A6 coupling.
 - `agents/function-classification-auditor.md` - A5.
 - `agents/push-pull-auditor.md` - A4.
+- `agents/validation-integrity-auditor.md` - ACR-254 validation-integrity critic for applicable PR diff and RCA dossier contexts.
+- `agents/proof-risk-auditor.md` - ACR-254 proof-risk critic for applicable proposal and RCA fix-decision contexts.
 
 Workflows dispatch by reference to this list rather than by maintaining a separate canonical auditor inventory.
+
+### Active validation-integrity / proof-risk layer
+
+ACR-254 is enforced by active operator dispatch, not by declarative convention text. The enforcement operators are `agents/validation-integrity-auditor.md` and `agents/proof-risk-auditor.md`; workflow callers select them through `workflows/code-quality.md`, `workflows/implementation-pipeline.md`, and RCA critic wiring when their evidence contexts apply.
+
+The acceptance criteria for these operators are the WRITE eval specs at `evals/validation-integrity-auditor/eval.md`, `evals/proof-risk-auditor/eval.md`, and the workflow-wiring coverage in `evals/acr-254-workflow-wiring/eval.md`. This convention names the active layer and its composition with the auditor set; the operators define how findings are detected, ratified, and reported.
+
+The LOW-only disposition policy, touched-file ownership, and bootstrap exception below still govern pipeline-callable aggregate results. A non-LOW active-layer child verdict is preserved by aggregation and is not converted into passive advice by this convention.
 
 ## Function classification
 
