@@ -66,6 +66,26 @@ Expected signal: `acr-246-auditor-scope-convergence` is explicitly marked supers
 
 Residual risk not verified: This WRITE-state spec does not implement a runtime eval registry, enforce supersession ordering, or update historical audit reports that already cited ACR-246.
 
+### Scenario 5: `pure-orchestrator-helper-dispatch-classified-as-orchestration-only`
+
+Risk verified: The function-classification auditor may continue to attribute helper classifications (accessor, mapper, validator, parser, formatter) to a dispatching entry-point that is itself pure helper dispatch plus structural control flow, producing a false-positive multi-classifier HIGH on bodies that cannot be honestly reduced further.
+
+Fixture description: The trace bundle describes a function whose body is a sequence of named single-classification helper calls plus structural control flow with no inline domain logic. The canonical shape is `let x = pure_accessor()?; let y = pure_mapper(x)?; Some(format!("{}", y))`, or any equivalent body composed of helper dispatch plus `Option::?` / `Result::?` propagation plus trivial value wrapping (`.to_string()`, `.display()`, `format!()` whose arguments are helper return values).
+
+Expected signal: The auditor classifies the function as `orchestration` only and emits LOW. Helper classifications (`accessor`, `mapper`, `formatter`, etc.) are NOT attributed to the dispatching function merely because it calls helpers shaped as accessors, mappers, or formatters. The report cites the A1 category list and the new pure orchestrator body-shape recognition rule from Metric Binding.
+
+Residual risk not verified: This WRITE-state spec does not execute a detector against live traces, prove every helper signature shape, or enumerate every trivial-inline syntactic form across all supported languages.
+
+### Scenario 6: `inline-domain-work-still-multi-classifier-high`
+
+Risk verified: The pure orchestrator body-shape recognition rule may be widened to accept bodies that mix helper dispatch with inline domain work (validation, mapping, parsing, non-trivial formatting, SQL construction, row mapping, error construction, predicate, filter, or other named domain operation), regressing the auditor's primary value of detecting multi-classifier functions.
+
+Fixture description: The trace bundle describes a function whose body is superficially similar to the positive scenario above but mixes helper dispatch with inline domain work. The canonical shape is `let x = pure_accessor()?; let y = pure_mapper(x)?; let result = inline_validate(y); format!("{}", result)`, where `inline_validate` is an inline validation expression and `format!("{}", result)` composes a domain-meaningful message rather than a trivial display wrapper of a helper return value.
+
+Expected signal: The auditor classifies the function as multi-class and emits HIGH with `failure_mode: multi-classifier function`. The report cites both the inline validation and the non-trivial format expression as disqualifiers, and references the inline-domain-work disqualifier list from the new Metric Binding clause.
+
+Residual risk not verified: This WRITE-state spec cannot enumerate every possible inline domain operation. The Metric Binding clause's "any other named-domain operation performed inline" guardrail must catch operations not literally named in the spec.
+
 ## Cross-references
 
 - ACR-249: Reverse anti-scope-as-WU-narrowing; audit whole files/systems; decompose WUs when too large.
