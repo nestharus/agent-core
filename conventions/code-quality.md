@@ -10,6 +10,8 @@ This is the canonical, language-neutral code-shape rule list for generated and r
 
 These rules apply uniformly across Rust, TypeScript, Python, and any other project language. They apply to both human-authored and agent-authored code. They are review rules for ordinary PR review and for specialized auditor passes that inspect function shape, responsibility boundaries, duplicate handling, and cross-system coupling.
 
+`~/ai` markdown/operator/workflow/convention/routing/anchor structural guard requests are not code-quality checker authoring and are not pytest work. Structural-verification requests for those surfaces route to WRITE eval-spec authoring under `~/ai/conventions/evals.md`, with no narrower prohibition than that convention's binding enumeration: no `tools/<wu>-verify/<anything>.py`, no `tests/test_*.py`, no pytest imports or fixtures, and no pytest-shaped assertion code.
+
 The convention is intentionally language-neutral. A project may have local style rules for naming, formatting, framework boundaries, or idioms, but those local rules do not replace the code-shape requirements here.
 
 ## Declared roles
