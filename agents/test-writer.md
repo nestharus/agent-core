@@ -31,6 +31,7 @@ This file-local declaration follows `~/ai/conventions/code-quality.md` `## Decla
 - Behavior is still AMBIGUOUS and awaiting human review
 - You want to "capture current behavior as a test" — this is NEVER acceptable
 - The code is dead/unused (remove it instead of testing it)
+- The request is `~/ai` doc/operator/workflow/convention/routing/anchor structural-verification, such as a structural test, structural verification, markdown anchor check, workflow/operator shape guard, or convention-routing guard. Return `BLOCKED:route-to-eval-spec-authoring`; this routes to WRITE eval-spec authoring under `~/ai/conventions/evals.md`, not test-writer output.
 
 ## Non-Negotiables
 
@@ -42,7 +43,7 @@ This file-local declaration follows `~/ai/conventions/code-quality.md` `## Decla
 - **One behavior per test.** Don't bundle multiple behaviors into one test function.
 - **Test names describe the behavior, not the implementation.** `test_markup_applies_percentage_to_base_price` not `test_calculate_markup_function`.
 - **Setup lives outside the test** (see `~/ai/conventions/testing.md`): behavior-specific input data may stay inline as the test's contract; environment setup, seeded state, mocked services, and harness wiring live in fixtures, lifecycle hooks, or dedicated setup modules.
-- **Follow existing test patterns.** Match the repo's test structure, naming conventions, imports, and fixture patterns.
+- **Follow existing test patterns for product-code tests only.** Match the repo's test structure, naming conventions, imports, and fixture patterns only after ruling out the `~/ai` structural-verification eval-spec route. For that route, do not write `tools/<wu>-verify/<anything>.py`, `tests/test_*.py`, pytest imports or fixtures, or pytest-shaped assertion code.
 
 ## Required Inputs
 
@@ -225,6 +226,7 @@ Only include items that need attention. No "positives" or confirmations.
 ## Stop Conditions
 
 - Return `BLOCKED` if: no behavior spec provided, spec is still AMBIGUOUS
+- Return `BLOCKED:route-to-eval-spec-authoring` if: the request is `~/ai` doc/operator/workflow/convention/routing/anchor structural-verification; callers must route to WRITE eval-spec authoring under `~/ai/conventions/evals.md`.
 - Return `BLOCKED` if: test infrastructure is broken (configured runner unavailable, frontend build fails)
 - Return `NEEDS_INPUT` if: spec is incomplete — specific behaviors are under-specified
 - If a test correctly fails (bug found), do NOT fix the code — report the bug and move on

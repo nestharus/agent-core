@@ -4,6 +4,8 @@
 
 Evals are the behavior-detection replacement path for brittle structural markdown tests removed under ACR-174. They give `~/ai` a shared way to name unwanted workflow or agent behavior, consume agent-runner trace evidence, and produce reviewable findings without asserting that a markdown file has a particular shape.
 
+The canonical route for `~/ai` markdown/operator/workflow/convention/routing/anchor structural-verification work is WRITE-state eval-spec authoring at `evals/<slug>/eval.md`, not pytest files, pytest-shaped assertions, or one-off verifier scripts. This route covers phrases such as "structural test", "structural verification", "markdown anchor check", "workflow/operator shape guard", and "convention-routing guard" when the target is a `~/ai` structural surface. The predecessor prototype evidence at `/home/nes/projects/ai/planning/prototype-acr-199-clarify/dossier/evidence/p1-vector-b-routing-sufficiency.md` and `/home/nes/projects/ai/planning/prototype-acr-199-clarify/dossier/evidence/p1-vector-b-before-after-hand-trace.md` records the routing flip from pytest/verifier-shaped output to eval-spec output.
+
 This convention defines the stable contract for eval specifications, future runnable eval implementations, findings, lifecycle state, repository placement, and evidence-source boundaries. `eval.md` files are reviewable behavior specifications. They are not executable assertions and do not enforce behavior by themselves.
 
 ## Declared roles
@@ -70,6 +72,8 @@ Eval assets use this repository layout:
 
 `evals/<eval-id>/{eval.md, eval.py-or-rs, fixtures/, README.md}`
 
+For `~/ai` structural-verification routes, this layout is the canonical target: Step 6b may author only `evals/<eval-id>/eval.md` while the lifecycle is `WRITE`, and future detector work may add `eval.py-or-rs`, fixtures, and README files in a later ticket.
+
 ACR-175 creates only `eval.md` seed specifications. Future implementation tickets may add `eval.py-or-rs`, fixtures, and README files when they ship runnable detectors.
 
 ## Evidence source stability
@@ -103,7 +107,7 @@ Audit-history integration is caller-owned. Eval reports can be cited in audit-hi
 ## Anti-scope
 
 - No eval Python code, Rust code, parser code, fixtures, CLI implementation, scheduler, CI, cron, Jira, or Linear routing is defined here.
-- No pytest revival and no structural markdown tests.
+- No pytest revival and no structural markdown tests. For `~/ai` markdown/operator/workflow/convention/routing/anchor structural-verification routes, forbidden outputs include `tools/<wu>-verify/<anything>.py`, `tests/test_*.py`, pytest imports or fixtures, and pytest-shaped assertion code in any file.
 - No required edits to `workflows/index.json`, `AGENTS.md`, agent-runner README, implementation-pipeline hooks, or backend ticket automation.
 - No raw SQLite schema or single state DB path is the sole stable contract.
 - No redefinition of process-tree, workflow-process, code-quality, coupling, cohesion, or push-pull auditor verdict systems.
