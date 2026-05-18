@@ -1,5 +1,11 @@
 # Eval: route-ai-structural-guards-to-eval-specs
 
+## Declared roles
+
+`validator`, `mapper`
+
+This file-local declaration follows `~/ai/conventions/code-quality.md` `## Declared roles`: this eval spec validates whether trace evidence shows the unwanted pytest/verifier output vs the wanted WRITE-state eval-spec output (validator), and maps trace fields plus output-index rows into a finding shape per `conventions/evals.md` (mapper).
+
 ## Lifecycle state
 
 WRITE
