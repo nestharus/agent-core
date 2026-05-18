@@ -29,6 +29,7 @@ just re-describing the implementation.
 ## Non-Negotiables
 
 - **A test that passes against wrong code is worse than no test.** It provides false confidence. Flag these aggressively.
+- **A test that passes because the validation surface was weakened is worse than a failing test.** If a diff removes, bypasses, mocks, stubs, skips, narrows, or relocates the condition that made the signal meaningful without proving the runtime path was fixed, classify it as `HARMFUL`.
 - **"Tests current behavior" is not a defense.** If there's no evidence the current behavior is correct, the test is capturing an assumption, not verifying a requirement.
 - **Dead tests are not "harmless".** They create maintenance burden, confuse developers about what's actually tested, and waste CI time if accidentally re-enabled.
 - **Coverage percentage without quality assessment is misleading.** 80% coverage with bad tests is worse than 40% coverage with good tests.
@@ -40,6 +41,7 @@ just re-describing the implementation.
 - `test_files` (for validate-new): Paths to newly written test files
 - `behavior_specs` (for validate-new): Paths to the behavior specs the tests claim to verify
 - `report_bundle_dir` (optional): Report bundle to validate against `~/ai/conventions/test-reports.md`.
+- `evidence_class_path` (optional): Evidence-class ledger from `~/ai/conventions/evidence-class.md` when test evidence is being used to prove runtime-scoped claims.
 
 ## Procedure: Audit Existing Tests
 
@@ -68,6 +70,8 @@ For each test file, classify into one of:
 **DEAD** — Test exists but is not run by any CI workflow, is skipped/xfail'd, or tests code that no longer exists.
 
 **HARMFUL** — Test actively prevents correct behavior by asserting wrong expectations, or mocks so heavily that it tests nothing real.
+
+Validation-surface integrity examples are `HARMFUL`: a test or harness change that makes a runtime dependency, artifact path, service call, schema constraint, installer/updater path, production import, or release artifact no longer exercised while the supported runtime surface remains unchanged. This includes test-only dependency injection that masks a missing production dependency, broad skips/xfails, fixture stubs replacing runtime setup, relaxed baselines, narrowed matrices, and mocks replacing previously real validation of the system under test.
 
 ### 2. Check CI Alignment
 
@@ -166,6 +170,8 @@ For newly written tests (from test-writer), verify:
 5. **No over-testing:** Are there tests for behaviors NOT in the spec? (scope creep)
 6. **Setup convention:** Apply `~/ai/conventions/testing.md`: setup stays external, setup variants stay swappable, and cross-module setup is allowed.
 7. **Report artifact evidence:** When `report_bundle_dir` is supplied, verify canonical PDFs, UI screenshots, non-UI evidence, `file_path:line_number` citations, exact fenced code blocks, and strict-xfail bug stories per `~/ai/conventions/test-reports.md`.
+8. **Validation-surface integrity:** When tests, fixtures, mocks, baselines, eval specs, skips/xfails, dependency setup, or harness code changed, compare the old and new validation meaning. A change is `FAIL` when it weakens the signal for a runtime risk without a corresponding product/runtime-artifact fix and replacement validation against the supported artifact or path.
+9. **Evidence-class fit:** When `evidence_class_path` is supplied, classify each test/report as `validation-proxy`, `runtime-path`, `static-or-documentary`, or `unknown` for the claim it supports. A test that passes only because mocks, fixtures, harnesses, baselines, or test-environment dependencies changed is not runtime-path evidence. Return `FAIL` when a runtime-scoped claim requires `runtime-path` evidence and the supplied test/report evidence is only `validation-proxy`, `static-or-documentary`, or `unknown`.
 
 ```markdown
 ## New Test Validation: <test_file>
@@ -187,6 +193,11 @@ For newly written tests (from test-writer), verify:
 |------|------------------------|-----------|
 | test_X | Wrong percentage calc | YES |
 | test_Y | Off-by-one in loop | NO — needs boundary test |
+
+### Validation-Surface Integrity
+| Changed validation surface | Previous runtime meaning | New meaning | Corresponding runtime fix? | Replacement runtime validation? | Verdict |
+|----------------------------|--------------------------|-------------|----------------------------|----------------------------------|---------|
+| <path/test/fixture> | <what it used to exercise> | <what changed> | YES/NO | YES/NO | PASS/FAIL |
 
 ### Verdict: PASS / FAIL
 <reasoning>
