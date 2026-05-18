@@ -120,6 +120,18 @@ undeclared portion of mixed pull sites that combine a declared
 canonical-doc schema with adjacent undeclared layout (the auditor must
 split such findings).
 
+Validation-surface integrity is adjacent to this rule when a proof path
+pulls runtime truth from a test-owned substitute instead of a stable
+runtime interface. A test harness, fixture, mock, generated baseline, or
+CI-only dependency can be a valid common interface only for behavior it
+explicitly owns. It is an uncontrolled-source shape when a runtime or
+deployment claim depends on private test-environment setup, incidental
+mock behavior, a test-only dependency declaration, or a generated
+baseline whose owner is not the runtime artifact. The decoupling
+direction is to make the producer push the required fact into the
+supported runtime artifact or declared contract, then have validation
+pull from that artifact or contract rather than from test-only setup.
+
 ## Declared roles
 
 Declared role set tokens must come from the A1 category vocabulary: `orchestration`, `filter`, `validator`, `predicate`, `mapper`, `accessor`, `formatter`, `parser`.

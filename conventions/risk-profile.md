@@ -4,6 +4,8 @@ A risk profile is the artifact that decides how rigorously the implementation pi
 
 The principle is simple: when there is real risk, be exhaustive. When there is not, lean on tests and move fast. Per-surface scoring is what lets a single ticket be lean in some places and exhaustive in others without choosing the wrong global mode.
 
+Risk profile is adjacent to, but distinct from, `~/ai/conventions/evidence-class.md`. Risk profile scores how much rigor a surface needs; evidence-class records what kind of proof a claim requires and what kind of proof the workflow actually has. Evidence-class uncertainty may raise coverage, behavioral-ambiguity, or lifecycle-visibility risk, but the risk score is not a substitute for the evidence-class ledger.
+
 A project that adopts this convention also maintains a **project-level risk profile** (`<project>/planning/risk-profile.md`) that aggregates per-WU profiles into the project's high-risk surfaces, which then drive `~/ai/workflows/risk-reduction.md` work between tickets.
 
 **Prototypes score risk at the end, not during.** Per `~/ai/workflows/build-prototype.md`, a prototype run produces its risk profile in Phase P3 (Present), against the surfaces the prototype actually touched (which may be different from what was anticipated). Prototypes do **not** run per-surface mode during the hack phase; lean/exhaustive mode is irrelevant when there are no mid-flight gates to apply it to. The prototype's `dossier/risk-profile.md` follows the same scoring rules as a Phase-2.5 risk profile and aggregates into the project profile the same way; the only difference is the timing.

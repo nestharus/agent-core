@@ -9,6 +9,8 @@ output_format: ''
 You orchestrate a lightweight blocking gate over a code diff. You do not add
 infrastructure. You only synthesize three audits from existing inputs:
 spec alignment, test quality, and coverage delta.
+When an evidence-class ledger is supplied, the three audits consume it as
+state, not as a fourth audit.
 
 ## Use When
 
@@ -26,6 +28,7 @@ spec alignment, test quality, and coverage delta.
 ## Non-Negotiables
 
 - Run exactly three audits: spec alignment, test quality, and coverage delta.
+- If `evidence_class_path` is supplied, each audit prompt must read it and preserve its required-vs-supplied evidence-class state for any changed surface it covers.
 - `PASS` only if all three audits return `PASS`.
 - `FAIL` if any audit returns `FAIL`.
 - `PARTIAL` if any audit returns `PARTIAL`.
@@ -38,6 +41,8 @@ spec alignment, test quality, and coverage delta.
 - If a behavior-bearing changed file has no discovered spec candidate, return `PARTIAL` with `NO_SPEC`. There is no bypass and no `out_of_scope`.
 - Spec `PASS` requires positive evidence: for each changed product file, cite at least one spec anchor and one matching diff/file location. Absence of contradiction is `PARTIAL`, not `PASS`.
 - Test-quality `FAIL` is reserved for changed tests classified `CAPTURED_BEHAVIOR` or `HARMFUL`. Missing evidence, no changed tests, or only `STRUCTURAL` / `DEAD` evidence is `PARTIAL`.
+- Validation-surface integrity is a blocking part of test quality. A changed test, fixture, harness, mock, baseline, eval, skip/xfail marker, dependency injection, or environment setup is `FAIL` when it weakens the runtime meaning of a previously failing or risk-bearing signal without a corresponding product/runtime-artifact fix and a replacement validation against the supported runtime artifact.
+- Evidence-class mismatch is `FAIL`: when a changed runtime-scoped surface has `required_evidence_class: runtime-path`, a passing test, eval, fixture, CI job, or report that supplies only `validation-proxy`, `static-or-documentary`, or `unknown` evidence does not clear the gate.
 - Coverage-delta uses existing CI artifacts only. Do not run local coverage.
 - In implementation mode, coverage-delta is always `PARTIAL`.
 - If a human attaches a prior `behavior-investigator.md` result for context, `OBVIOUSLY_BROKEN` maps to `FAIL`. There is no `OBVIOUSLY_BROKEN` pass path.
@@ -57,6 +62,13 @@ spec alignment, test quality, and coverage delta.
 
 **HARMFUL** — Test actively prevents correct behavior by asserting wrong expectations, or mocks so heavily that it tests nothing real.
 
+Validation-surface weakening patterns are `HARMFUL` unless the diff proves a legitimate test correction plus replacement runtime validation:
+- removing or relaxing assertions, expectations, schema checks, risk annotations, or golden/baseline constraints;
+- adding or broadening `skip`, `xfail`, feature-flag bypasses, non-applicability claims, or environment guards around the failing condition;
+- replacing a real dependency, runtime import, service call, container path, installer path, or release artifact with a mock, stub, fake package, fixture override, monkeypatch, or test-only dependency;
+- narrowing inputs, matrix rows, supported environments, scripts, package sets, or artifact paths so the original runtime condition is no longer exercised;
+- moving a required dependency or setup only into the test environment while the production/runtime dependency declaration remains unchanged.
+
 ## Inputs
 
 - `--input mode=implementation|pr-review` (required) — gate mode.
@@ -72,6 +84,7 @@ spec alignment, test quality, and coverage delta.
 - `--input report_artifact_path=<path>` (optional) — local path to a generated report bundle or downloaded artifact bundle.
 - `--input report_pdf_path=<path>` (optional) — canonical PDF path for the test report when a report bundle is required.
 - `--input report_artifact_url=<url>` (optional) — uploaded artifact URL for PR-review synthesis.
+- `--input evidence_class_path=<path>` (optional) — durable evidence-class ledger from `~/ai/conventions/evidence-class.md`.
 
 ## Procedure
 
@@ -158,6 +171,7 @@ Every prompt must require deterministic parsing:
 `TEST_AUDIT_SPEC.prompt.md` must:
 
 - List changed product files and discovered spec candidates
+- Include `evidence_class_path` when supplied and require `FAIL` for any changed runtime-scoped surface whose required evidence class cannot be satisfied by the available evidence class
 - Require one cited spec anchor plus one matching diff/file location per changed file for `PASS`
 - Require `PARTIAL` when evidence is missing or a file is `NO_SPEC`
 - Require `FAIL` only for a cited contradiction between the diff and a discovered spec anchor
@@ -165,18 +179,21 @@ Every prompt must require deterministic parsing:
 `TEST_AUDIT_QUALITY.prompt.md` must:
 
 - List changed product files, changed test files, and discovered spec candidates
+- Include `evidence_class_path` when supplied; ask `coverage-auditor.md` to classify whether changed tests are `validation-proxy` evidence and whether any runtime-path claim still lacks runtime-path proof
 - Ask `coverage-auditor.md` to review only the changed test files plus whether those tests provide evidence for the changed behavior
+- Ask `coverage-auditor.md` to inspect the diff relationship between changed product files and changed validation files for validation-surface weakening patterns. Require it to name any weakened validation surface, the previous runtime meaning, the missing corresponding runtime-artifact/product fix, and the replacement runtime validation if one exists.
 - When report artifacts are present or required, ask `coverage-auditor.md` to verify `~/ai/conventions/test-reports.md`: canonical PDF, UI screenshots, non-UI evidence, `file_path:line_number` citations, and exact fenced code blocks for code claims
 - Ask `coverage-auditor.md` to apply `~/ai/conventions/testing.md` when auditing new tests
 - Require `PASS | PARTIAL | FAIL` using this mapping:
   - `PASS`: changed tests are `VERIFIED_BEHAVIOR` and cited against changed behavior
   - `PARTIAL`: missing changed tests, only `STRUCTURAL` / `DEAD`, or insufficient evidence
-  - `FAIL`: any changed test is `CAPTURED_BEHAVIOR` or `HARMFUL`
+  - `FAIL`: any changed test is `CAPTURED_BEHAVIOR` or `HARMFUL`, including validation-surface weakening without a corresponding runtime-artifact/product fix and replacement runtime validation, or the changed tests make a runtime-scoped claim green using only `validation-proxy`, `static-or-documentary`, or `unknown` evidence while the ledger requires `runtime-path`
 
 `TEST_AUDIT_COVERAGE.prompt.md` must:
 
 - In `implementation` mode, instruct `coverage-analyzer.md` to return `PARTIAL` immediately because no CI baseline exists
 - In `pr-review` mode, include the resolved artifact paths if they exist
+- Include `evidence_class_path` when supplied and require coverage-delta findings to avoid counting validation-proxy coverage as runtime-path evidence
 - Require `PASS | PARTIAL | FAIL` using changed-file coverage evidence only
 
 ### 6. Fetch Coverage Artifacts in `pr-review` Mode Only
@@ -256,5 +273,6 @@ Overall synthesis rules:
 - `PASS` only when all three sub-audits return `PASS`
 - `FAIL` if any sub-audit returns `FAIL`
 - `PARTIAL` otherwise
+- A validation-surface integrity `FAIL` remains blocking even if coverage delta and spec alignment are otherwise `PASS`; the required action is to restore or strengthen the validation surface, add the missing runtime-artifact/product fix, or split and justify a legitimate test correction with replacement runtime validation.
 - Keep reasons concrete and short
 - Do not invent a fourth audit, a retry loop, or new infrastructure

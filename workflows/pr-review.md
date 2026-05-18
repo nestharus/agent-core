@@ -43,7 +43,7 @@ pr-review-operator
 
 ### Inputs
 
-- actual branch diff or PR, approved proposal package, test evidence, and audit-history context
+- actual branch diff or PR, approved proposal package, test evidence, evidence-class ledger when present, and audit-history context
 - base branch or true stacked parent for comparison
 
 ### Expectations
@@ -143,10 +143,12 @@ Asks: do the tests encode intended behavior first, reduce named risks, and cover
 Audit rules:
 
 - Read the approved proposal package before judging the tests: `research/NN-problem-map.md`, the approved `proposals/NN-*.md`, `risk/NN-supported-surface.md`, and `risk/NN-test-residuals.md` if it exists.
+- Read `${planning_dir}/evidence-class.md` when present. For each runtime-scoped claim, compare `required_evidence_class` with the strongest supplied evidence from the actual diff, Step 6b output index, report bundle, runtime command output, or residual artifact.
 - When a test report bundle exists or is required, read `reports/report-index.md` first and record the canonical PDF path, canonical S3 URL when present, Actions-artifact fallback URL otherwise, screenshot paths, and non-UI evidence paths.
 - Apply `~/ai/conventions/test-reports.md`: PDFs are canonical, PR comments are pointers, UI-touching tests need screenshots, non-UI tests need artifact evidence, and every code claim needs `file_path:line_number` plus an exact fenced code block.
 - Read the contract next: schemas, endpoint signatures, CLI definitions, public interfaces, explicit acceptance criteria, fixture application points, and test-intent handoff.
 - Check each acceptance criterion and each proposal test-intent item against a test, a deliberate residual entry, or a documented non-applicability reason.
+- A test, eval, fixture, CI job, or report that exercises only a test harness is `validation-proxy` evidence. It does not satisfy a `runtime-path` required claim unless the evidence-class ledger contains a justified proxy-equivalence entry or independent runtime-path evidence.
 - Check Phase 6 firstness evidence before accepting tests as intent-first: the Phase 6 process-tree report, expected-process manifest, Step 6b prompt/log, Step 6c prompt/log bundle, Step 6b output index, Step 6b output paths, and relaxed-position Step 6c `consumed:` rows for the output index plus every implemented Step 6b output-index row.
 - Missing, malformed, mismatched, stale, wrong-scope, or contradicted required firstness evidence is `blocking`; surface `NEEDS_INPUT:<question_artifact>` only when the missing artifact can still be supplied before downstream consumption.
 - A commit marker, commit order, or risk annotation may support review, but none replaces the Phase 6 process-tree review plus companion artifacts.
@@ -196,6 +198,9 @@ Firstness routing cases:
 - Check that fixtures are externally applied. Flag durable or shared fixture state, dependency substitutions, seed data, shared mocks, baselines, service setup, or environment setup edited into the test body or declared as same-file fixtures unless project convention names that file pattern as the dedicated fixture file pattern.
 - Flag hidden coupling between fixtures and implementation details.
 - Block any test change that relaxes an assertion, regenerates a baseline, deletes coverage, narrows input space, removes a risk annotation, or turns a red test green without a corresponding product-code fix.
+- Block any validation-surface change that makes the runtime meaning weaker: added or broadened skips/xfails, fixture stubs, mocks replacing real dependencies, test-only dependency declarations, CI-only environment setup, baseline/schema relaxation, narrowed runtime matrices, or non-applicability claims that remove the original supported path from validation. Passing requires both a corresponding product/runtime-artifact fix and replacement validation against the supported runtime artifact or path.
+- For runtime surfaces outside the test harness, including containers, release artifacts, installers, updaters, CLIs, jobs, and deployed services, "tests now pass" is not enough when the validation surface changed in the same diff. Require artifact/path evidence such as build-and-run output, container import checks, production requirements/package declarations, installer execution, updater script execution, or a documented supported-surface validation command.
+- Block any diff that changes the validation surface for a runtime-scoped claim and supplies only `validation-proxy`, `static-or-documentary`, or `unknown` evidence where `evidence-class.md` requires `runtime-path`. Route this as a blocking Test Audit finding; if the mismatch collapses supported-surface value, also emit a Supported-Surface Verification finding.
 - Allow test renames, typo fixes, and risk-annotation strengthening only when they are net non-assertion-weakening edits.
 - A test edit is not accepted as a review-time justification. It is accepted only as the consequence of changed intended behavior, corrected fixture truth, an explicit invalidation condition, or a documented test bug in the upstream verification artifact. Implementation failure is not a valid reason to edit the test.
 - Treat this as the PR-review counterpart to `~/ai/agents/test-writer.md`'s rule that tests are not changed to match current behavior.

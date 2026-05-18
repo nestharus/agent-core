@@ -43,6 +43,7 @@ Do not edit code, proposals, tests, workflows, branches, routing files, or plann
 - Optional `proposal_path=<path>` - proposal context for planned pull sites and declared interface intent.
 - Optional `problem_map_path=<path>` - problem-map context for scope, touched surfaces, and deployment topology notes.
 - Optional `risk_profile_path=<path>` - risk-profile context for blast radius and ambiguity notes.
+- Optional `evidence_class_path=<path>` - evidence-class context for runtime-vs-validation boundary notes; this does not change A1 scoring.
 - Optional `code_quality_ref=<path>` - default `~/ai/conventions/code-quality.md`; A1 metric source to read before scoring.
 
 `diff_path` and `changed_files_path` identify touched files/components; they do not limit the audit to changed hunks or newly modified pull sites. Pre-existing pull-site findings inside touched files/components are blocking under touched-file ownership.
@@ -55,6 +56,7 @@ Do not edit code, proposals, tests, workflows, branches, routing files, or plann
 - Scan every visible pull site in touched files/components at code-level scope and deployment-level scope.
 - Treat code-level pull sites as reads from storage, generated artifacts, endpoints, file layout, naming conventions, package internals, or module internals.
 - Treat deployment-level pull sites as service, database, cache, filesystem, private endpoint, or service-topology reads.
+- Treat validation pull sites as in scope when the supplied diff or proposal uses a test harness, fixture, mock, generated baseline, CI-only package setup, or environment substitution as evidence for a runtime/deployment claim. Score the pull LOW only when the validation pulls from a declared runtime artifact, stable contract, or owner-controlled interface; score HIGH when runtime truth is pulled from a private test-environment source that the runtime artifact does not control.
 - Evidence-cite every HIGH finding with a path, diff hunk, query, call, config, workflow edge, deployment edge, or proposal line.
 - Require `decoupling_direction` for every finding: name which side should push into which common interface so the consumer pulls from the interface; this is not replacement code and never replacement code.
 - Write only `output_path`.
@@ -80,7 +82,7 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
 
 ## Procedure
 
-1. Load supplied inputs: `repo_root`, `diff_path`, `output_path`, and every optional context file or ref that was provided.
+1. Load supplied inputs: `repo_root`, `diff_path`, `output_path`, and every optional context file or ref that was provided. If `evidence_class_path` is supplied, read it as context for runtime truth boundaries; do not treat it as a replacement for ownership/common-interface proof.
 2. Read A1 from `code_quality_ref` before scoring, defaulting to `~/ai/conventions/code-quality.md`.
 3. Verify Push-vs-pull system coupling text, the session-graph Pull-vs-Push Policy disambiguator, the `uncontrolled-source coupler` failure mode, and numerical thresholds before scoring. Return `BLOCKED:A1-metric-source` if the metric source is missing or contradictory.
 4. Parse the diff and changed evidence to identify touched files/components, then inspect every code-level pull/read site in those touched files/components plus every touched deployment-level pull site involving service, database, cache, filesystem, private endpoint, or service-topology reads.
@@ -98,6 +100,12 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
     canonical-doc-as-schema rule. When the pull mixes declared shape
     with undeclared private layout, split: declared-schema portion LOW,
     undeclared portion HIGH per the private-source recipe.
+7b. For each validation-surface pull site inside the touched evidence,
+    identify whether the validation source is the supported runtime
+    artifact/contract or a test-owned substitute. A test-owned substitute
+    cannot prove a runtime/deployment claim unless the runtime producer
+    pushes the same requirement into a declared interface consumed by the
+    validation.
 8. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
 9. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
 

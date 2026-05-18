@@ -91,6 +91,7 @@ rca-orchestrator
 - `${planning_dir}/rca/<failure-id>-fix-decision.md`: selected best appropriate fix.
 - `${planning_dir}/rca/<failure-id>-application-plan.md`: best way to apply the fix.
 - `${planning_dir}/rca/<failure-id>-applied.md`: applied change, changed paths, and verification notes.
+- `${planning_dir}/rca/<failure-id>-evidence-class.md`: evidence-class ledger per `~/ai/conventions/evidence-class.md` when the failure is runtime-scoped, a validation surface changes, or the runtime-vs-validation evidence boundary is ambiguous.
 - `${planning_dir}/rca/<failure-id>-cap-hit.md`: human-review artifact when the loop reaches the cap.
 - `${planning_dir}/post-mortem.md`: downstream post-mortem.
 - `${planning_dir}/action-items.md`: downstream action-item ticket index.
@@ -125,6 +126,8 @@ Phase 1 runs only for `incident`. It authors a real test under the worktree's `t
 
 The reproduction test must be red on current `HEAD` before the fix and green after the fix. Red-run output is part of the Phase 1 artifact; a reproduction that cannot be made red is not silently accepted as root-cause evidence.
 
+The reproduction artifact must classify evidence using `~/ai/conventions/evidence-class.md`: `runtime-path`, `validation-proxy`, `static-or-documentary`, or `unknown`. When the incident is a runtime or deployment failure, the RCA ledger at `${planning_dir}/rca/<failure-id>-evidence-class.md` records the original signal's `required_evidence_class` and `supplied_evidence_class`; if only test-environment, mock, fixture, or inferred evidence is available for a runtime claim, the artifact must downgrade confidence and carry the limitation into root-cause analysis.
+
 The orchestrator dispatches the test writer with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>` or `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` as a fresh invocation. The prompt must not expose Phase 5 implementation details because no implementation exists yet.
 
 If the incident description is too ambiguous to author a meaningful real test in the worktree, emit `NEEDS_INPUT:<absolute_artifact_path>` with the missing behavior question. If paths are unreadable or unwritable, stop with `BLOCKED:reproduction-test-unavailable`.
@@ -135,6 +138,8 @@ Phase 2 identifies the root cause only. Dispatch a fresh root-cause prompt with 
 
 The Phase 2 artifact names the failing signal, root cause, causal path, evidence references, and any ambiguity. It must NOT propose a fix; root cause and fix choice are separate decisions.
 
+For runtime incidents, Phase 2 must preserve whether the evidence proves the supported runtime artifact/path or only a validation proxy. A root-cause claim that depends only on `validation-proxy`, `static-or-documentary`, or `unknown` evidence must be marked ambiguous or unproven rather than upgraded to confirmed runtime cause, and the RCA ledger must keep the required-vs-supplied evidence-class entry current.
+
 If the evidence cannot support a root-cause claim, stop with `NEEDS_INPUT:<absolute_artifact_path>` or `BLOCKED:root-cause-unproven` rather than inventing a cause.
 
 ## Phase 3 - Best Appropriate Fix
@@ -142,6 +147,8 @@ If the evidence cannot support a root-cause claim, stop with `NEEDS_INPUT:<absol
 Phase 3 selects the best appropriate fix from the root-cause artifact. Dispatch a fresh fix-decision prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` and require it to read `${planning_dir}/rca/<failure-id>.md`, compare viable fixes, and write `${planning_dir}/rca/<failure-id>-fix-decision.md`.
 
 The Phase 3 artifact explains why the selected fix addresses the root cause and why rejected options are worse. It must NOT determine the application strategy and must NOT apply code changes.
+
+For runtime incidents, Phase 3 must reject fixes that only modify validation: tests, fixtures, mocks, baselines, evals, skips/xfails, CI setup, or harness behavior. The selected fix must touch or prove the actual runtime path, and the artifact must name the verification that will run against the supported runtime artifact or path. Validation changes are allowed only as legitimate test correction when paired with a corresponding runtime fix and replacement runtime validation. The fix-decision artifact records the verification `required_evidence_class`, normally `runtime-path` for runtime claims.
 
 If the fix decision depends on product judgment or an unacceptable tradeoff, emit `NEEDS_INPUT:<absolute_artifact_path>`.
 
@@ -155,7 +162,7 @@ If the plan exposes a larger implementation scope than the RCA loop can safely o
 
 ## Phase 5 - Apply
 
-Phase 5 applies the Phase 4 plan through a fresh apply prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. The apply invocation edits `${worktree_path}` only according to `${planning_dir}/rca/<failure-id>-application-plan.md` and writes `${planning_dir}/rca/<failure-id>-applied.md`.
+Phase 5 applies the Phase 4 plan through a fresh apply prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. The apply invocation edits `${worktree_path}` only according to `${planning_dir}/rca/<failure-id>-application-plan.md` and writes `${planning_dir}/rca/<failure-id>-applied.md`, including observed `supplied_evidence_class` per affected runtime-scoped surface when an evidence-class ledger exists.
 
 After apply, the orchestrator runs an independent changed-path check such as `git -C ${worktree_path} diff --name-only` and fails with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
 
@@ -164,6 +171,8 @@ Phase 5 applies the Phase 4 plan and does not re-decide root cause or fix. If th
 ## Phase 6 - Verify-Or-Return Gate
 
 Phase 6 re-runs the original failing or reproduction test from the trigger evidence or `${planning_dir}/repro/<failure-id>.md`. The rerun is targeted: it verifies the signal that justified the RCA loop before any broader downstream work.
+
+Before accepting a green rerun, Phase 6 compares the applied diff and RCA artifacts against the original signal. If the RCA cycle changed tests, fixtures, mocks, baselines, eval specs, skips/xfails, dependency setup, CI setup, reproduction commands, or harness behavior in a way that weakens the original runtime meaning, green is not verification. A same-dossier validation change requires both a corresponding runtime-artifact fix and replacement validation against the supported runtime artifact/path. When `${planning_dir}/rca/<failure-id>-evidence-class.md` exists, Phase 6 compares `required_evidence_class` and `supplied_evidence_class`; if a runtime-scoped claim requires `runtime-path` and the supplied evidence is only `validation-proxy`, `static-or-documentary`, or `unknown`, verification returns `BLOCKED:evidence-class-mismatch`.
 
 If the rerun is red, return to Phase 2 with the new failure output attached to the RCA context. The cycle count increments only after Phase 6 observes red and returns.
 
@@ -223,6 +232,7 @@ Resume verifies durable artifacts before skipping a phase. A supplied reproducti
 ## Cross-References
 
 - `~/ai/agents/rca-orchestrator.md`: procedural owner for this workflow.
+- `~/ai/conventions/evidence-class.md`: evidence-class ledger schema and reader rule for runtime-vs-validation proof.
 - `~/ai/workflows/rca-prototype.md`: separate light prototype RCA loop.
 - `~/ai/agents/incident-investigator.md`: evidence-backed production incident investigation, composed when downstream findings are needed.
 - `~/ai/agents/behavior-investigator.md`: behavior research operator, not redefined by this workflow.
