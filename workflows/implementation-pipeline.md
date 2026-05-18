@@ -29,7 +29,9 @@ Bugs start with RCA. Features, refactors, and other planned work skip RCA.
 
 ## Declared roles
 
-`orchestration`, `validator`
+`orchestration`, `validator`, `parser`
+
+This workflow sequences the implementation pipeline (orchestration), validates phase/gate/audit conditions (validator), and parses ticket/frontmatter/fenced-YAML and required-token shapes throughout Phase 0, Phase 2.5, Phase 3, Phase 4, Phase 6, and Phase 8 (parser). The R6 declared-roles expansion adds `parser` per the cohesion-auditor R5 evidence at lines 68, 320, 322, and 334.
 
 Passive alternative pointer: when the intended deliverable is a validated prototype PR rather than production implementation work, `~/ai/workflows/prototype-validation-shipping.md` owns the prototype-as-deliverable handoff; this workflow remains the production implementation route.
 
