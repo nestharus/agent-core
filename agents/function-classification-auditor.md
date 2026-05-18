@@ -71,6 +71,34 @@ The A1 category list is `orchestration`, `filter`, `validator`, `predicate`, `ma
 
 For each function in a touched file, infer which A1 category or categories the function body performs. The scoring question is exactly one A1 category per function. A function with exactly one inferred category is LOW. A function with two or more inferred categories is HIGH and must be reported as `multi-classifier function`, even when the function predates the current diff.
 
+**Pure orchestrator body-shape recognition.** A function whose body,
+after parsing, is composed predominantly of already-named helper
+dispatch plus structural control flow classifies as `orchestration`
+only (LOW) when ALL of the following hold:
+
+- The body contains no inline domain logic. Inline domain logic
+  includes inline SQL construction, row mapping, error construction,
+  inline validation, inline parsing, non-trivial format-string
+  composition whose arguments require domain reasoning, inline
+  classification or filtering or predicate work, and any other named
+  domain operation performed inline alongside helper dispatch.
+- All inline operations are either trivial value-extraction
+  (`Option::?`, `Result::?`, `.unwrap_or`, `.unwrap_or_else` with
+  literal arguments), trivial format helpers in argument position
+  (`.to_string()`, `.display()`, `format!()` whose arguments are
+  themselves helper return values), or pure control-flow constructs
+  (`match`, `if let`, `for ... in`, `?`).
+- Helper roles are NOT attributed to the dispatching function merely
+  because it calls helpers named or shaped as accessors, mappers,
+  validators, parsers, or formatters. Dispatching to single-class
+  helpers is a single classification (`orchestration`), not a
+  composite of helper classes.
+
+The exemption ends as soon as the dispatching function performs any
+named domain work inline. Mixed bodies — pure helper dispatch plus
+any inline domain operation — remain multi-class HIGH per the
+`multi-classifier function` failure mode above.
+
 MEDIUM is not valid for the core `Function categories per function` metric because A1 says MEDIUM = n/a. It remains only in stdout vocabulary for sibling-shell consistency and should not be emitted for a completed core metric verdict.
 
 ## Procedure
@@ -82,11 +110,19 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 5. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
    Every `suggested_split` names the current blocking finding, why the split strictly reduces the blocking finding set, and how introduced helpers are handled under the audit overlay rule.
 6. Classify each function in each touched file against the convention categories.
-7. Score each function in each touched file using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
-8. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
-9. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
-10. Assign the overall verdict as HIGH if any function in a touched file is HIGH; otherwise LOW.
-11. Write the report to `output_path`.
+7. For each function whose inferred-category set initially contains more
+   than one A1 category, re-evaluate the body under the pure orchestrator
+   body-shape recognition rule above. When the body is helper dispatch
+   plus structural control flow with no inline domain logic and every
+   inline operation is on the trivial-inline list, classify as
+   `orchestration` only (LOW). When any inline operation lies outside the
+   trivial-inline list or performs named domain work, keep the
+   multi-classifier inference and emit `multi-classifier function` HIGH.
+8. Score each function in each touched file using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
+9. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
+10. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
+11. Assign the overall verdict as HIGH if any function in a touched file is HIGH; otherwise LOW.
+12. Write the report to `output_path`.
 
 ## Output Contract
 

@@ -3706,3 +3706,16 @@ Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the Ph
 - Phase: Phase 4 code-quality re-run under tightened auditor scope (post-ACR-246) on rebased tree (post-ACR-247).
 - Rebase: WU branch advanced from `c11300e` (ACR-235) to `60f6655` (ACR-247). Fast-forward (no WU commits existed). Rebase-verification gate skipped per pre-ACR-247 audit-history note (docs-and-prompts repo; no test suite or coverage adapter). ACR-247's side-channel rule applies only to Phase 6 Step 6c, not Phase 4.
 - Trigger: unblock_condition from `q-e45661b0-935d-4a1e-8d4b-ac20bec131d9.answer.json` satisfied — ACR-246 + ACR-247 both shipped to origin/master 2026-05-16. ACR-236 (sibling reply task) also shipped (#160) so the proposal's reply primitive reference resolves concretely.
+
+## 2026-05-17 — ACR-250 — Phase 2.5 step 4a cold-start estimate disposition
+
+- WU: ACR-250 (function-classification-auditor false-positive on orchestration entry-points)
+- Phase: Phase 2.5 step 4a (inherited-estimate cold-start)
+- Decision: Proceed without baseline estimate. Phase 3 proposer refines a fresh estimate without comparing against an inherited baseline. `estimate_delta_flag.inherited=null`, `over_2x=unknown`.
+- Justifying evidence:
+  - Question artifact: `planning/acr-250-entry-point-orchestration-refinement/.scratch/questions/q-37352d5e-83f8-4f39-9942-bdb67d29df28.question.json`
+  - Answer artifact: `planning/acr-250-entry-point-orchestration-refinement/.scratch/questions/q-37352d5e-83f8-4f39-9942-bdb67d29df28.answer.json` (selected_option_id=PROCEED_WITHOUT_BASELINE, answered_by=root, answered_at=2026-05-17T15:50:00Z)
+  - Ticket: `planning/acr-250-entry-point-orchestration-refinement/.scratch/ticket.md` (`estimate_source: missing`, `story_point_estimate: null`)
+  - Risk profile: `planning/acr-250-entry-point-orchestration-refinement/risk/acr-250-risk-profile.md` (WU-level MEDIUM; defer-to-prototype signals did not fire)
+- Resume: continue Phase 2.5 step 8 mode propagation → Phase 3 proposal dispatch with `inherited_story_point_estimate=null`, `estimate_source=missing` carried through.
+- Note: original Phase 2.5 dispatch (provider session `1dd660cd-bc3c-447b-b734-8369c0e7d2da`) was orphaned per AGE-91 pattern; process chain manually killed and resumed under ACR-250 RESUME directive. State preserved on disk; no rewind required.
