@@ -215,7 +215,11 @@ Process-tree fanout review is recorded separately as `PASS|FAIL|NEEDS_INPUT|BLOC
 
 `findings.json` and `findings.md` are both required. `findings.json` is the canonical machine-readable artifact; `findings.md` is the human-readable rendering of the same normalized records.
 
-Each normalized finding records `id`, `source_auditor`, `source_id`, `severity` or stop-state, `metric` / `failure_mode`, `path`, optional location anchors (`function`, `component`, `source_component`, `target_component`, `line_span_or_diff_hunk`), `evidence`, `closure_expectation`, `report_path`, and `blocks_pipeline`.
+Each normalized finding records `id`, `source_auditor`, `source_id`, optional pass-through hint fields (`finding_origin`, `domain_relation`), `severity` or stop-state, `metric` / `failure_mode`, `path`, optional location anchors (`function`, `component`, `source_component`, `target_component`, `line_span_or_diff_hunk`), `evidence`, `closure_expectation`, `report_path`, and `blocks_pipeline`.
+
+`finding_origin` and `domain_relation` are optional fields preserved verbatim from child findings when present in `findings.json` and `findings.md`; when absent from a child finding, omit them from the normalized record rather than synthesizing an `unknown` value.
+
+These fields are advisory hints from the Function Classification auditor (ACR-281); the orchestrator's existing strategy-selection logic operates over the normalized aggregate path unchanged.
 
 Residual normalization cites the residual-output schema in `conventions/code-quality.md` `## Auditor Scope Boundary`; record residuals by reference to that schema without duplicating it here. Do not normalize a finding inside a touched file/component as residual merely because it predates the current diff.
 

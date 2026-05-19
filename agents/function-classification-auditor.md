@@ -146,6 +146,8 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 
 Default report path: none. `output_path` is required to avoid inventing caller-specific planning locations.
 
+`finding_origin` and `domain_relation` are non-binding hints. This auditor remains a classifier and evidence-reporter only; it does not select decomposition, remediation, follow-up, or pass strategy. Use `unknown` / `wu_authored_unknown` only as documented safe fallbacks when evidence is insufficient; do not fabricate stronger classifications.
+
 Report shape:
 
 `## Functions In Touched Files` lists only actual executable function-like symbols admitted by the inventory boundary. Excluded Markdown procedure headings or sections are not rows in `Functions In Touched Files` or `Multi-Classifier Findings`; they may appear in `Residual Ambiguity / Stop-Condition Notes` only to explain inventory exclusion or unresolved boundary ambiguity.
@@ -162,8 +164,8 @@ Report shape:
 |---|---|---|---|---|---|
 
  ## Multi-Classifier Findings
-| ID | Path | Function / symbol | Categories mixed | Evidence | Suggested split | Blocking or residual |
-|---|---|---|---|---|---|---|
+| ID | Path | Function / symbol | Categories mixed | Evidence | Suggested split | Blocking or residual | Finding origin | Domain relation |
+|---|---|---|---|---|---|---|---|---|
 
  ## Residual Ambiguity / Stop-Condition Notes
 
@@ -181,6 +183,8 @@ categories_mixed: [<A1 category>, <A1 category>, ...]   # exactly two or more
 evidence: <concise per-category evidence>
 failure_mode: multi-classifier function
 blocking_or_residual: blocking | residual
+finding_origin: pre_existing_in_touched_file | changed_function | wu_authored_unknown
+domain_relation: same_domain | unrelated_domain | unknown
 suggested_split:
   direction: <responsibility boundary language; never replacement code>
   convergence_proof:
@@ -190,6 +194,24 @@ suggested_split:
 ```
 
 `categories_mixed` must contain exactly two or more A1 categories. `blocking_or_residual` is required on every finding object. `suggested_split` is required split direction, never replacement code, and every `suggested_split` block must include `convergence_proof.current_blocking_finding`, `convergence_proof.why_split_reduces_blocking_set`, and `convergence_proof.helper_overlay_handling`.
+
+`finding_origin` allowed values:
+
+| Value | Meaning |
+|---|---|
+| `pre_existing_in_touched_file` | The multi-classifier function existed in this file before the WU touched it, and its body was not modified by the WU's diff. |
+| `changed_function` | The function's body or signature is included in the WU's diff. |
+| `wu_authored_unknown` | The auditor cannot determine origin from supplied diff evidence; this is the safe non-fabrication fallback for inconclusive origin evidence. |
+
+`domain_relation` allowed values:
+
+| Value | Meaning |
+|---|---|
+| `same_domain` | The function shares responsibility or domain with the current WU's primary deliverable. |
+| `unrelated_domain` | The function operates on a different domain than the current WU's primary deliverable. |
+| `unknown` | The auditor cannot determine domain relation from supplied evidence; this is the documented safe fallback for inconclusive domain evidence. |
+
+When `finding_origin` or `domain_relation` evidence is incomplete, emit the conservative fallback (`wu_authored_unknown` or `unknown`) rather than inferring a stronger value. These fields do not change the verdict, `blocking_or_residual`, `suggested_split`, or `convergence_proof` requirements.
 
 Final stdout vocabulary:
 
