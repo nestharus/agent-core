@@ -3886,6 +3886,46 @@ Scope of ratification: local to the Phase 6 per-component code-quality fanout fo
 
 Effect: Phase 6 may close per-component and advance to Process-tree audit #2 and Phase 7 readiness gates with the `acr-254-active-layer` component marked as ratified. The component's `aggregate-code-quality.md` retains its actual `HIGH` verdict; the orchestrator's ratification is the advance basis, recorded here.
 
+## D-2026-05-18a — ACR-261 BLOCKED on ACR-276 (function-classification-auditor oscillation on workflow markdown)
+
+**WU**: ACR-261. **Phase**: 4. **Decision**: halt cleanly; block ACR-261 on ACR-276; preserve worktree + Round 2 evidence.
+
+Phase 4 code-quality gate produced two consecutive non-LOW rounds against the canonical Phase 4 code-quality contract:
+
+- **Round 1** (proposal at 3 SP, no `## Declared roles` / `## Intrinsic-surface declarations`): HIGH (14 findings; cohesion ×2, coupling ×9, push-pull ×3). Four proposal-risk gates LOW.
+- **Round 2** (proposal at 5 SP per root's Option B, with `## Declared roles` covering `orchestration, validator, parser, mapper, formatter` on `workflows/verified-rebase.md` and `orchestration, validator, parser, mapper` on `agents/jj-operator.md`, plus `## Intrinsic-surface declarations` YAML for jj-CLI / git-CLI / bundle-artifact / workflow-convention-operator surfaces on both files): HIGH (21 findings). Delta-from-R1: cohesion HIGH→LOW (declared-roles accepted), coupling 9 HIGH→2 HIGH (7 cleared via intrinsic-surface declarations; only the planned `evals/acr-261/eval.md` component remains HIGH), push-pull 3 HIGH→1 HIGH (CQ-F01 is the bug ACR-261 fixes; LOW post-merge), function-classification LOW (0 findings)→**HIGH (18 findings, FC-001..FC-018)**. Four proposal-risk gates LOW.
+
+The Round 2 function-classification-auditor's `## Markdown inventory rule applied for this invocation` treats markdown procedure sections + embedded shell snippets as runnable function/symbol equivalents. Under that rule, each `### N.` section in `workflows/verified-rebase.md` and each `## Procedure: …` / `### Phase N: …` section in `agents/jj-operator.md` mixes 2+ function categories (e.g. `accessor, parser, mapper, formatter, orchestration`). The convention's `Function categories per function` row in `~/ai/conventions/code-quality.md` is a hard threshold (LOW=1, HIGH=>=2) with **no declared-roles escape hatch**.
+
+Bootstrap-exception (`~/ai/conventions/code-quality.md` § Bootstrap exception) honestly does not apply to function-classification on ACR-261:
+
+- Condition 1 (primary deliverable fixes or extends the metric): FAILS. ACR-261's deliverable is `jj resolve --list` output normalization, not a function-classification metric/rule/verifier/auditor change.
+- Condition 2 (non-LOW on intrinsic lockstep elements of the metric/convention/verifier/auditor change itself): FAILS. The findings are on procedural sections of the touched workflow files, not on an ACR-261-owned metric change.
+- Condition 3 (post-merge satisfies new rule under new metric): FAILS. Without restructuring sections into single-category sub-sections, the same audit on the post-merge tree would still be HIGH.
+
+Per `~/ai/conventions/code-quality.md` § Oscillation signals WU-too-large, two consecutive non-LOW rounds is the autonomous decomposition signal. Per `~/ai/conventions/workflow-execution-violations.md` § Non-LOW gate residual acceptance, advancing without ratified bootstrap-exception (which cannot honestly be declared here) is a forbidden anti-pattern. The orchestrator therefore did NOT silently advance and did NOT synthesize a partial bootstrap-exception.
+
+Root dispositioned via `NEEDS_INPUT:/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/.scratch/questions/q-581cbf21-dfcc-4ee5-9b16-d6f6b6b76f6d.question.json`: chose Option D (patch the auditor). ACR-276 has been filed (manually) to refine `function-classification-auditor` scoping for markdown procedure sections. ACR-261 is BLOCKED on ACR-276 until ACR-276 merges to `~/ai` master.
+
+**Unblock conditions**: ACR-276 merged to `~/ai` master; manager re-dispatches ACR-261; worktree pulls current `~/ai`; re-run Phase 4 code-quality gate on the preserved Round 2 worktree state.
+
+**Preserved state**:
+
+- Branch tip: `1f8051b5130b38fa67417f849599e3823f66e8e7` (master at branch-out time; **no commits authored under ACR-261**).
+- Worktree retained at `/home/nes/ai/worktrees/acr-261-jj-resolve-list-normalize/`.
+- Round 2 evidence retained under `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/`:
+  - `proposals/acr-261-acr-261.md` (Round 2, 5 SP, with Declarations track containing verbatim text for Phase 6c to transcribe)
+  - `risk/acr-261-{audit,scope,shortcut,supported-surface}.md` (Round 2 four LOW reports)
+  - `risk/acr-261-risk-profile.md` (HIGH WU-level verdict, per-surface mode map)
+  - `research/acr-261-{problem-map,coverage-inventory,lifecycle-map,entrypoints,duplicates,cross-language-trace}.md`
+  - `code-quality/acr-261-phase-4/{aggregate-code-quality.md,findings.{json,md},dispatch-manifest.md,reports/*.md}` (Round 2 HIGH aggregate + child reports)
+  - `audit-history.md` (Round 1, Round 2, Terminal entries)
+- Linear comment on ACR-261: `comment_id=9f6b3473-e828-4718-a09b-639b633f620d` (citing ACR-276 dependency).
+- Linear estimate: 3 SP (updated at end of Round 1; Round 2's refined 5 SP not pushed to Linear because Round 2 didn't reach Phase 4 join-manifest publication).
+
+**Linear `Blocks` link**: deferred to manual UI step per dispatch directive ("manual UI step or comment-only per linear-operator limitations"). Comment-only link established via the ACR-261 comment above.
+
+Scope of this decision: local to ACR-261 only. Future WUs hitting similar function-classification HIGH on markdown procedure sections MUST run their own four-condition check; they cannot cite ACR-261 as authority for residual acceptance.
 
 ## D-2026-05-19-acr276-estimate-coldstart — ACR-276 inherited-estimate cold-start disposition
 
@@ -3909,3 +3949,45 @@ Question/answer artifacts:
 | `~/ai/evals/acr-276-*/eval.md` candidate | MEDIUM | lean with explicit HIGH-coverage-gap callout |
 
 WU-level verdict: HIGH. Phase 3 prompt carries `risk_profile_path` and the per-surface mode list at the top of the proposal per orchestrator Phase 3 spec.
+
+## D-2026-05-19b — ACR-261 UNBLOCKED (ACR-276 shipped) — Phase 4 Round 3 begins
+
+**WU**: ACR-261. **Phase**: 4. **Decision**: unblock; fast-forward worktree to `e525dee109a34d67e3a24f35ec9c36fabbee675e`; re-run Phase 4 code-quality gate on preserved Round 2 worktree state.
+
+ACR-276 (`function-classification-auditor` markdown procedure inventory boundary refinement) merged to `~/ai` master at `e525dee` (PR #175). The `~/ai/conventions/code-quality.md` § Oscillation signals WU-too-large signal from ACR-261 Round 2 is resolved: the auditor refinement directly addresses the false-positive class that surfaced as 18 HIGH findings in ACR-261 R2 (`workflows/verified-rebase.md` `### N.` markdown procedure sections + `agents/jj-operator.md` `## Procedure:` sections).
+
+Branch fast-forward: `1f8051b` → `e525dee` (5 files changed: `DECISIONS.md`, `agents/function-classification-auditor.md`, `evals/acr-260/eval.md`, `evals/acr-276-function-classification-markdown-procedure-inventory/eval.md`, `workflows/verified-rebase.md`). No commits authored under ACR-261; this is a clean fast-forward, not a rebase. The orchestrator's Rebase Verification Gate does not trigger because no branch-unique commits were rebased — there is nothing to verify drift against.
+
+Resume plan: re-run only the Phase 4 code-quality gate against the preserved Round 2 proposal. The four Round 2 proposal-risk-gate LOW reports remain current evidence (the proposal has not changed). Expected verdict on R3: LOW or addressable via narrow Phase 6 fix. If HIGH again, escalate (this branch has now had two prior failed convergence cycles).
+
+Note: ACR-260 also merged (`2bf6c26`) during the block window and modified `workflows/verified-rebase.md`. The fast-forward includes its changes. The Round 2 proposal's Declarations track refers to verbatim text for Phase 6c to transcribe into `workflows/verified-rebase.md` and `agents/jj-operator.md` — Phase 6c will need to re-anchor those transcriptions to the post-ACR-260 line locations, but the text itself remains valid.
+
+### ACR-261 — Bootstrap exception ratification
+
+**WU**: ACR-261. **Phase**: 4 code-quality gate. **Decision**: Ratify a narrow bootstrap-exception for push-pull finding CQ-F01 ONLY, root-authorized 2026-05-19. Cited authority: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+**Scope of ratification**: this ratification covers ONLY push-pull-auditor findings rooted in the `uncontrolled-source coupler` failure mode caused by raw `jj resolve --list` stdout flowing into canonical `conflict-artifacts/files.txt`. In the fresh R7 code-quality bundle these map to CQ-F01..CQ-F05 (push-pull source IDs PP-003/004/005/008/010 — § 6 conflict capture path; § 6 `.conflict` producer; § 8 verdict `CF`; stale-parent diagnostic; jj-operator Phase 3 inspect-bundle guidance). All five findings are different pull-site manifestations of the same root defect on the same intrinsic-lockstep surface set (`workflows/verified-rebase.md` § 6 + `agents/jj-operator.md` Phase 3 inspect-bundle prose). The ratification does NOT cover any non-push-pull finding; cohesion/coupling/function-classification reached LOW via the R5 declaration revisions, and proof-risk was reframed to a `Runtime claim` field with specification-style content.
+
+**Four-condition argument** (cited from R5 proposal `## Bootstrap exception declaration` and `~/ai/conventions/code-quality.md` § `Bootstrap exception`):
+
+- Condition 1 (`primary_deliverable_fixes_or_extends_metric`): TRUE under root's modified-condition-1 reading. The convention's strict text says "primary deliverable is itself a change to the code-quality metric, convention, verifier, or auditor surface." Root's narrower-but-fitting reading: "primary deliverable fixes the specific finding the metric flagged." ACR-261's primary deliverable IS to normalize the canonical conflict path set so jj 0.39.0 raw display rendering stops flowing into `conflict-artifacts/files.txt`. The push-pull-auditor's CQ-F01 (sourced from PP-002) IS that exact defect. Root-authorized 2026-05-19 via NEEDS_INPUT artifact `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/.scratch/questions/q-c9ddabc9-7b2e-49ba-8274-6813dc7f41ab.question.json`.
+
+- Condition 2 (`non_low_finding_is_intrinsic_lockstep`): TRUE. The push-pull HIGH finding is on the exact intrinsic-lockstep surface (`workflows/verified-rebase.md` § 6 capture) that ACR-261 rewrites. The finding cannot be cleared without ACR-261's change landing; it cannot be cleared by changes outside the WU's intrinsic-lockstep surface set.
+
+- Condition 3 (`post_merge_satisfies_new_rule_under_new_metric`): TRUE. Once Phase 6c lands the row-validation adapter, the post-merge state has a workflow-owned validated `files.txt` source, and PP-002's `uncontrolled-source coupler` failure mode no longer applies. The Phase 6 per-component code-quality fanout will verify this on the post-fix surface — that fanout is the runtime evidence for this ratification.
+
+- Condition 4 (`declared_for_phase_4_ratification`): TRUE. The Phase 3 proposal at `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/proposals/acr-261-acr-261.md` includes a `## Bootstrap exception declaration` section with the required 12 parser-step-1 fields. This DECISIONS entry is the parser-step-2 evidence.
+
+**Forbidden propagation**:
+
+- NO precedent-citation of THIS bootstrap-exception for unrelated WUs. Future WUs hitting similar push-pull HIGH on `~/ai` workflow surfaces MUST run their own four-condition check; they cannot cite ACR-261 as authority.
+- NO weakening of other findings via the same exception. CQ-F02, CQ-F03, CQ-F04, CQ-F05 are addressed by mechanical declaration text fixes + proof-plan reframing in the R5 proposal revision.
+- The narrow-condition-1 reading used here is root-authorized for ACR-261 only and is NOT a convention amendment. The convention's strict condition-1 text remains the canonical rule for all future bootstrap-exception evaluations.
+
+**Effect**: Phase 4 join manifest may include a `bootstrap-exception` row with `verdict_line=RATIFIED`, `ratifies_gate=code-quality`, `allow_advance_basis=bootstrap-exception` IF the Phase 4 code-quality aggregate verdict is `MEDIUM` or `HIGH` AND the only blocking finding is CQ-F01. If R5 code-quality aggregate is HIGH on findings OTHER than CQ-F01 (i.e., the R4 mechanical findings were not adequately fixed by the R5 revision), the orchestrator does NOT ratify and re-enters the revise-loop instead — this ratification is for CQ-F01 only.
+
+**Evidence path**:
+- `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/proposals/acr-261-acr-261.md` § `## Bootstrap exception declaration`
+- `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/.scratch/questions/q-c9ddabc9-7b2e-49ba-8274-6813dc7f41ab.question.json` (root authorization)
+- `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/audit-history.md` § Round 5
+- `~/ai/conventions/code-quality.md` § Bootstrap exception (canonical authority)

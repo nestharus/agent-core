@@ -21,6 +21,99 @@ workflow_dispatch_contract:
 ---
 # Verified Rebase
 
+## Declared roles
+
+`orchestration`, `validator`, `parser`, `mapper`, `formatter`.
+
+This file-local declaration is explicit per `~/ai/conventions/code-quality.md` § Declared roles. `orchestration` covers the ordered verified-rebase phases and delegation to `jj-operator`. `validator` covers preflight checks, stop conditions, mechanical verdict production, rollback preconditions, and gate ownership. `parser` covers jj/git command output, patch path sets, `refs.json`, `range-diff.txt`, conflict artifact records, and parent-bundle inputs. `mapper` covers ref-to-artifact, conflict-path-to-conflict-file, residual-path-to-conflict-path, and parent-bundle relationships. `formatter` covers bundle files, summary output, stdout verdicts, and rollback helper text.
+
+## Intrinsic-surface declarations
+
+These declarations are explicit per `~/ai/conventions/code-quality.md` § Intrinsic-surface declarations. The workflow's purpose is to predicate, filter, and select over jj CLI state, git CLI state, the verified-rebase bundle contract, and the workflow/operator/convention references that define that local rebase surface.
+
+```yaml
+intrinsic_surface_declarations:
+  - component: workflows/verified-rebase.md
+    role: intrinsic-surface
+    Domain: verified_rebase_jj_cli
+    Owns:
+      - jj status
+      - jj log
+      - jj git fetch
+      - jj op log
+      - jj rebase
+      - jj resolve --list
+      - jj file show
+      - jj op restore
+  - component: workflows/verified-rebase.md
+    role: intrinsic-surface
+    Domain: verified_rebase_git_cli
+    Owns:
+      - git merge-base
+      - git rev-parse
+      - git update-ref
+      - git merge-tree
+      - git diff
+      - git range-diff
+      - git log
+      - git push --force-with-lease
+      - refs/pre-rebase/<branch>
+  - component: workflows/verified-rebase.md
+    role: intrinsic-surface
+    Domain: verified_rebase_bundle_artifact_contract
+    Owns:
+      - summary.md
+      - refs.json
+      - target-delta.patch
+      - main-delta.patch
+      - branch-intended.patch
+      - branch-actual.patch
+      - residual.patch
+      - range-diff.txt
+      - conflict-artifacts/files.txt
+      - conflict-artifacts/<slug>.conflict
+      - jj-pre-op-id.txt
+      - rollback.sh
+      - .tmp/verified-rebase/<branch-slug>/<ISO-timestamp>/
+      - merge-tree.out
+      - merge-tree.err
+      - merge-tree.status
+      - jj-op-log-before.txt
+      - jj-op-log-after.txt
+      - parent-delta.patch
+      - summary.md.fragment
+      - parent-pointer-check
+      - rolled-back.flag
+  - component: workflows/verified-rebase.md
+    role: intrinsic-surface
+    Domain: verified_rebase_workflow_convention_operator_refs
+    Owns:
+      - agents/jj-operator.md
+      - models/roles.md
+      - workflows/agents-cli.md
+      - conventions/no-backwards-compatibility.md
+      - conventions/no-operator-behavior-override-in-dispatch.md
+      - conventions/gate-ownership.md
+      - ../.build/VR-01-verified-rebase-proposal.md
+      - agents/commit-hygiene-operator.md
+      - agents/worktree-operator.md
+  - component: workflows/verified-rebase.md
+    role: intrinsic-surface
+    Domain: verified_rebase_helper_commands
+    Owns:
+      - mkdir
+      - jq
+      - grep
+      - head
+      - tr
+      - cp
+      - chmod
+      - cat
+      - date
+```
+
+Standard POSIX-shell helpers used by the workflow's reference shell snippets.
+
 Produce a deterministic artifact bundle for every rebase so a reviewer inspects O(residual) content instead of O(full-diff), with a cheap local rollback when the bundle shows unacceptable residuals.
 
 This is the single rebase path. The plain `jj rebase` procedure is retired — see [`~/ai/agents/jj-operator.md`](../agents/jj-operator.md) `Procedure: Verified Rebase`.
@@ -113,7 +206,8 @@ Slugging: replace `/` with `__`. Example: `feat/p2-version-parsing-unification` 
 | `merge-tree.err` | `git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET"` | Prediction stderr. |
 | `merge-tree.status` | workflow | Decimal prediction command status, one line. `0` is success, `1` is expected content-conflict status when line 1 of `merge-tree.out` is a valid tree oid, and anything outside `{0, 1}` is `BLOCKED:merge-tree-failed`. |
 | `range-diff.txt` | `git range-diff "$PRE_BASE..$PRE_TIP" "$NEW_TARGET..$POST_TIP"` | Per-commit correspondence; catches drops/reorders |
-| `conflict-artifacts/files.txt` | `jj resolve --list -r "$POST_CHANGE_ID" --no-pager` | One conflicted path per line; empty if no conflicts |
+| `conflict-artifacts/files.txt` | Row-validation adapter over `conflict-artifacts/jj-resolve-list-raw.txt` | Row-validation adapter output. One validated bare conflicted repository path per non-empty line, produced from `conflict-artifacts/jj-resolve-list-raw.txt` per § 6. Empty if no conflicts. |
+| `conflict-artifacts/jj-resolve-list-raw.txt` | `jj resolve --list -r "$POST_CHANGE_ID" --no-pager` | Raw `jj resolve --list -r "$POST_CHANGE_ID" --no-pager` stdout sidecar; preserved for diagnostics. May contain jj's human-rendered `path<TAB>N-sided conflict` rows. NOT consumed by verdict computation, `.conflict` artifact production, or operator inspection prose. |
 | `conflict-artifacts/<slug>.conflict` | `jj file show -r "$POST_CHANGE_ID" "$path"` | jj's first-class conflict representation, per conflicted path |
 | `jj-op-log-before.txt` | `jj op log --limit 20 --no-pager` pre-rebase | Audit trail |
 | `jj-op-log-after.txt` | `jj op log --limit 20 --no-pager` post-rebase | Audit trail |
@@ -215,8 +309,27 @@ POST_CHANGE_ID=$(jj log -r "$BRANCH" --no-graph --no-pager --limit 1 --template 
 jj op log --limit 20 --no-pager > "$BUNDLE/jj-op-log-after.txt"
 
 mkdir -p "$BUNDLE/conflict-artifacts"
+# Capture raw jj resolve --list stdout to a diagnostic sidecar first (ACR-260 precedent).
 jj resolve --list -r "$POST_CHANGE_ID" --no-pager \
-  > "$BUNDLE/conflict-artifacts/files.txt" 2>/dev/null || true
+  > "$BUNDLE/conflict-artifacts/jj-resolve-list-raw.txt" 2>/dev/null || true
+
+# Row-validation adapter: validate each non-empty raw line and emit only validated bare paths
+# into the canonical conflict-artifacts/files.txt. Reject unsupported rendering rows with a
+# documented BLOCKED token rather than silently truncating.
+: > "$BUNDLE/conflict-artifacts/files.txt"
+while IFS= read -r RAW; do
+  [ -z "$RAW" ] && continue
+  # Strip the first whitespace-delimited field as the candidate path.
+  CAND=${RAW%%[[:space:]]*}
+  # Strict bare-path validation: no whitespace, no shell metacharacters, repository-path-shaped.
+  if ! echo "$CAND" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+    echo "BLOCKED:unsupported-jj-resolve-list-row: raw='$RAW'; candidate='$CAND'; see $BUNDLE/conflict-artifacts/jj-resolve-list-raw.txt" >&2
+    exit 1
+  fi
+  printf '%s\n' "$CAND" >> "$BUNDLE/conflict-artifacts/files.txt"
+done < "$BUNDLE/conflict-artifacts/jj-resolve-list-raw.txt"
+
+# .conflict artifact production reads only validated paths from canonical files.txt.
 while IFS= read -r P; do
   [ -z "$P" ] && continue
   SLUG=$(echo "$P" | tr '/' '__')
@@ -225,7 +338,7 @@ while IFS= read -r P; do
 done < "$BUNDLE/conflict-artifacts/files.txt"
 ```
 
-If there are no conflicts, `files.txt` is empty and no `.conflict` files are written.
+Raw jj output is captured first in `conflict-artifacts/jj-resolve-list-raw.txt`, then the row-validation adapter publishes only validated bare paths to canonical `conflict-artifacts/files.txt`. If there are no conflicts, `files.txt` is empty and no `.conflict` files are written. Unsupported rows halt the workflow with `BLOCKED:unsupported-jj-resolve-list-row` rather than publishing truncated or raw display text.
 
 ### 7. Compute diffs
 
