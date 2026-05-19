@@ -315,10 +315,10 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases",
+          "runs research, proposal, shared apply-gate-set risk/review boundaries, hookpoint, implementation, readiness, PR, and audit phases",
           "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
           "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
-          "uses model-owned gates; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
+          "dispatches apply-gate-set with caller_mode implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
           "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
         ],
         "inputs": [

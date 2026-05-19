@@ -4363,3 +4363,68 @@ Action: `git fetch origin && git rebase origin/master`. PRE: 0f39cc5b47e5b049e55
 Rebase verification gate disposition: the formal gate (4 checks) per `~/ai/conventions/rebase-verification.md` is structurally INAPPLICABLE for this markdown-only WU. Check #1 test re-run: no `cargo`/`bun`/`pytest` test suite for `~/ai` markdown surface. Check #2 coverage non-regression: no coverage adapter exists for markdown — would BLOCKED:coverage-adapter-missing per convention; not a true defect. Check #3 behavior/contract verification: "tests" for this WU are WRITE-state eval-spec scenarios; the eval-spec IS the diff itself, with no runtime detector. Check #4 drift check: the upstream commit `c42290f` adds a NEW file (`conventions/hotfix-skip-with-followup.md`) that ACR-287 does not touch — no overlap, no drift surface. The clean fast-forward + content-unchanged-from-WU verification (above) is the equivalent evidence for a markdown-only WU.
 
 Re-running Phase 8 PR-review gates against the fresh post-rebase `wu-diff.patch` is the substantive verification path. All four gates run R2 against the regenerated diff.
+
+### ACR-288 — Self-referential recursion caveat
+
+**WU**: ACR-288. **Phase**: 3 proposal. **Decision**: ACR-288 may edit `agents/implementation-pipeline-orchestrator.md` and `workflows/implementation-pipeline.md` to route future implementation-pipeline Phase 4, Phase 6, and Phase 8 gate sets through the shared `apply-gate-set` operator, but the new wiring is not applied to ACR-288's own in-flight Phase 4, Phase 6, or Phase 8 execution.
+
+**Recursion shape**: this WU modifies the orchestrator and workflow that are governing this same WU. Applying the new dispatch vehicle midway through the current run would change the rules under evidence that was already produced by pre-ACR-288 per-gate fan-out semantics.
+
+**No-self-application rule**: ACR-288's own Phase 4, Phase 6, and Phase 8 continue to use the pre-ACR-288 direct gate fan-out, join-manifest, and process-tree-audit semantics. The new `apply-gate-set` caller-mode wiring is adopted only by the next implementation-pipeline parent invocation after ACR-288 ships through Phase 9.
+
+**Transparent adoption rule**: `agents` reads the orchestrator/workflow files fresh for each new parent invocation, so no separate migration flag is required after merge. Future WUs receive the new `implementation-phase-4`, `implementation-phase-6`, and `implementation-phase-8` dispatch vehicle through normal prompt loading.
+
+**Equivalence basis**: the change is valid only because it preserves the existing gate inventories, canonical output paths, blocking semantics, currentness re-verification, bootstrap-exception row surface, ACR-280 decomposition-strategy handling, and process-tree-audit joins. The dispatch vehicle changes from direct phase-local fan-out to the shared operator; the required evidence and blockers do not weaken.
+
+### ACR-288 — Bootstrap exception ratification
+
+Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the expected Phase 4 code-quality aggregate `HIGH` verdict for the intrinsic central-document coupling on `agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, and `workflows/index.json` under `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+- Authority cited: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+- Ratifies gate: `code-quality` (Phase 4 code-quality aggregate verdict `HIGH`, expected from A1 coupling by distinct external symbols/modules referenced).
+- Proposal-side declaration: `/home/nes/ai/planning/acr-288-impl-pipeline-apply-gate-set-wiring/proposals/acr-288-ACR-288.md` `## Bootstrap exception declaration`.
+- Four-condition argument:
+  1. `primary_deliverable_fixes_or_extends_metric`: ACR-288's primary deliverable routes Phase 4/6/8 gate fan-out through the shared `apply-gate-set` operator. That materially reduces the gate-fanout sub-coupling by replacing per-gate direct references with one shared-operator call per phase, extending the A1 coupling metric for this sub-domain.
+  2. `non_low_finding_is_intrinsic_lockstep`: the expected HIGH coupling on `agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, and `workflows/index.json` is intrinsic to these central documents. The orchestrator composes every workflow/operator/convention it runs, the workflow doc sequences every gate, and `workflows/index.json` catalogs workflows. Splitting those central documents only to reduce the finding is outside ACR-288 scope and conflicts with ACR-280's rule not to decompose a central document for decomposition's sake.
+  3. `post_merge_satisfies_new_rule_under_new_metric`: post-merge, the Phase 4/6/8 gate-fanout sub-coupling is consolidated into one shared-operator dispatch per phase, replacing roughly 14 direct per-gate dispatches with 3 phase-level dispatches. Pre-existing non-gate-fanout references for research, roadmap, agents-cli, rebase-verification, evals, decomposition strategies, Step 6c consumption-side file handling, and PR review are outside ACR-288's deliverable metric and remain inherent central-document references.
+  4. `declared_for_phase_4_ratification`: the Phase 3 proposal declares the bootstrap exception in `## Bootstrap exception declaration`; this DECISIONS entry is the Phase 4 sub-gate ratification anchor.
+- Phase 4 sub-gate manifest row spec:
+  - `gate_name=bootstrap-exception`
+  - `verdict_line=RATIFIED`
+  - `ratifies_gate=code-quality`
+  - `allow_advance_basis=bootstrap-exception`
+  - `canonical_output_path=/home/nes/ai/planning/acr-288-impl-pipeline-apply-gate-set-wiring/proposals/acr-288-ACR-288.md` (Phase 3 proposal containing the `## Bootstrap exception declaration` section).
+- Out-of-scope: the ratification does NOT extend to Phase 4 scope/audit/shortcut/supported-surface risk gates or to non-gate-fanout central-document coupling outside the ACR-288 deliverable metric.
+
+### ACR-288 — Phase 6 per-component code-quality fanout ratification (bootstrap-exception second extension)
+
+**Convention citation:** `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+**WU**: ACR-288. **Phase**: 6 per-component code-quality fanout (component slug `acr-288-wiring`).
+
+**Aggregate verdict.** Phase 6 per-component code-quality at `/home/nes/ai/planning/acr-288-impl-pipeline-apply-gate-set-wiring/code-quality/acr-288-wiring/aggregate-code-quality.md` returned aggregate `HIGH`. Child verdicts: push-pull-auditor LOW, function-classification-auditor LOW, cohesion-auditor LOW, coupling-auditor HIGH, validation-integrity-auditor LOW, proof-risk-auditor LOW. The HIGH is driven by whole-file coupling on the touched central documents (`agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, `workflows/index.json`) — the same intrinsic-lockstep pattern that Phase 4 bootstrap-exception ratification already covers.
+
+**Continuity with Phase 4 ratification (ACR-279 precedent pattern).** Following the ACR-279 third-extension pattern (DECISIONS.md `### ACR-279 — Phase 8 code-quality gate ratification (bootstrap-exception third extension)`), the Phase 4 bootstrap-exception ratification at `### ACR-288 — Bootstrap exception ratification` (Phase 4 join-manifest `bootstrap-exception=RATIFIED` row at `/home/nes/ai/planning/acr-288-impl-pipeline-apply-gate-set-wiring/risk/phase-4-join-manifest.json`) extends to this Phase 6 per-component code-quality fanout because:
+
+- (a) The metric is unchanged across phases: A1 "Coupling by distinct external symbols/modules referenced" applied to whole-file touched-file ownership of the central documents.
+- (b) The audited surface is the same: same WU (ACR-288), same touched-file set (orchestrator + workflow + index.json + new eval-spec), same change-set (gate-fanout caller-mode consolidation).
+- (c) The convention's "ONLY local carve-out" language covers all subsequent same-WU same-metric pipeline-callable code-quality audits.
+
+**Four-condition argument (unchanged from Phase 4).**
+
+- `primary_deliverable_fixes_or_extends_metric: true` — ACR-288's primary deliverable IS the gate-fanout sub-coupling consolidation. Coupling-auditor's Phase 6 report confirms: "ACR-288 improved the targeted gate-fanout sub-coupling by consolidating Phase 4, Phase 6, and Phase 8 fanout into one shared `apply-gate-set` call per phase." The metric is extended for the gate-fanout sub-domain.
+- `non_low_finding_is_intrinsic_lockstep: true` — every HIGH child verdict is on whole-file coupling of the central documents whose central-document nature requires referencing many subordinate workflows / operators / conventions. The coupling cannot be reduced without splitting the central documents, which is out of ACR-288's scope and contradicts the convention's "ONLY local carve-out" language.
+- `post_merge_satisfies_new_rule_under_new_metric: true` — post-merge, the gate-fanout sub-coupling is consolidated into three shared-operator dispatches per phase (one each for Phase 4, Phase 6, Phase 8).
+- `declared_for_phase_4_ratification: true` — the Phase 3 proposal's `## Bootstrap exception declaration` section remains the source of truth.
+
+**Strategy-selection sub-step (per orchestrator Phase 6 spec).** Before applying ratification, the orchestrator considered the `~/ai/conventions/decomposition-strategies.md` strategies:
+
+- MOVE-and-import: N/A — the touched central documents are inherently single-file by design; splitting them is out of scope and would contradict ACR-280's rule that central documents are not decomposed for the sake of decomposition.
+- In-place file-decomposition: N/A — no bolted-on domain; the central documents are cohesive procedural directives.
+- In-WU helper extraction: N/A — the dispatch language IS the deliverable; there is no helper to extract.
+- In-WU head-on remediation: N/A — the wiring change IS the remediation for the gate-fanout sub-coupling; the remaining non-gate-fanout coupling is pre-existing intrinsic-lockstep debt outside ACR-288's metric.
+- Follow-up ticket decomposition: N/A for the gate-fanout sub-coupling (that's what ACR-288 IS); pre-existing non-gate-fanout coupling debt in the central documents is intrinsic to the touched-file ownership rule and remains pre-existing debt.
+
+None of the decomposition strategies apply to the bootstrap-exception-territory findings.
+
+**Forward enforcement.** Process-tree audit #2 must verify this DECISIONS entry exists, names the convention citation, and is paired with the non-LOW Phase 6 per-component code-quality aggregate.
