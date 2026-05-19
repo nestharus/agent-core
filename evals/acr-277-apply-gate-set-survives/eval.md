@@ -10,6 +10,8 @@ created: 2026-05-19
 prototype_dossier: /home/nes/ai/planning/acr-277-clarify/dossier/evidence/
 coverage_inventory: /home/nes/ai/planning/acr-277-rca-orchestrator-gate-fan-out/research/acr-277-coverage-inventory.md
 pending_implementation_ticket: ACR-291
+prototype_test_pr_url: https://github.com/nestharus/agent-core/pull/181
+prototype_test_branch: prototype-acr-277-clarify
 ticket_mapping:
   - ACR-291  # Apply-gate-set operator and companion workflow
   - ACR-292  # Full implementation eval-spec authoring
