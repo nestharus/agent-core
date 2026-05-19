@@ -8,6 +8,27 @@ This convention defines the canonical evidence artifact for a hotfix path that s
 
 This file-local declaration overrides the documented path default per `~/ai/conventions/code-quality.md` § `Declared roles`. The role set covers parsing the canonical skip row, validating required evidence fields, mapping prototype-era names and inherited proof into the canonical schema, and formatting auditor-readable file-first evidence.
 
+## Intrinsic-surface declarations
+
+```yaml
+intrinsic_surface_declarations:
+  - component: ~/ai/conventions/hotfix-skip-with-followup.md
+    role: intrinsic-surface
+    Domain: hotfix_skip_with_followup
+    Owns:
+      - hotfix_skip_schema
+      - field_blocking_semantics
+      - post_push_pre_merge_gating_rule
+      - allowed_skip_vs_violation_predicate
+      - canonical_artifact_location_policy
+      - field_name_canonicalization_table
+      - prototype_supersession_record_format
+      - boundary_disambiguation_registry
+      - anti_scope_registry
+```
+
+Per `~/ai/conventions/code-quality.md` § `Intrinsic-surface declarations`, this convention is the canonical authority for the `hotfix_skip_with_followup` domain. All external references in this file are subordinate to the owned elements: code-quality `Declared roles` to `Declared roles` administrative inheritance and to `boundary_disambiguation_registry`'s CONTRAST against bootstrap exception; Linear/Jira comment evidence to `canonical_artifact_location_policy`; prototype-pending markers and inherited `APPLY-GATE-SET-004` to `prototype_supersession_record_format` and `post_push_pre_merge_gating_rule`; workflow-execution-violations procedure-step and non-LOW residual references to `boundary_disambiguation_registry` and `allowed_skip_vs_violation_predicate`; decomposition-strategies follow-up to `boundary_disambiguation_registry`; agent-questions-and-session-graph to `boundary_disambiguation_registry`; prototype-pending-tests boundary/carry-forward/supersession-entry to `prototype_supersession_record_format`; audit-history decision register to `canonical_artifact_location_policy`; ACR-291 / ACR-287 / ACR-288 / ACR-292 / ACR-294 ownership surfaces to `anti_scope_registry`.
+
 ## Use When
 
 Use this convention when a hotfix path skips or defers one or more required gates and the workflow needs a controlled, evidence-bearing record of the skipped gates, accepted risk, already-run evidence, owner, follow-up vehicle, due window, and any post-push / pre-merge gate requirement.
