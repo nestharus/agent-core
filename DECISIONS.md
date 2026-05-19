@@ -3991,3 +3991,51 @@ Note: ACR-260 also merged (`2bf6c26`) during the block window and modified `work
 - `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/.scratch/questions/q-c9ddabc9-7b2e-49ba-8274-6813dc7f41ab.question.json` (root authorization)
 - `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/audit-history.md` § Round 5
 - `~/ai/conventions/code-quality.md` § Bootstrap exception (canonical authority)
+
+## D-2026-05-18-acr280-phase4-proofrisk-drift — ACR-280 Phase 2.5 step 2.5.4 drift discovery (Phase 4 proof-risk wiring)
+
+**WU**: ACR-280. **Phase**: 2.5 step 2.5.4.
+
+**Discovery.** `/home/nes/ai/planning/acr-280-decomposition-strategies/research/acr-280-duplicates.md` §6 flagged silent divergence between `workflows/implementation-pipeline.md` Phase 4 (five proposal-risk gates, including `proof-risk` after ACR-254) and `agents/implementation-pipeline-orchestrator.md` Phase 4 (still composes/dispatches/joins only four: `audit`, `scope`, `shortcut`, `supported-surface`).
+
+**Affects touched surface.** Adjacent — same Phase 4 region the ACR-280 proposer will edit, but the proof-risk wiring is NOT one of the four orchestrator edit surfaces named in ACR-280 ticket §4. Ticket §4 enumerates: Phase 4 supported-surface non-LOW handling, Phase 4 code-quality semantic non-LOW handling, Phase 8 code-quality alignment, audit-history labels.
+
+**AskUserQuestion permission-denied.** Surfaced as a new-value scope question to the root; permission was denied. Per `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`, NEEDS_INPUT that the orchestrator can resolve from supplied inputs stays inline. Supplied inputs resolving the question: ticket §4 scope enumeration + brief anti-scope "follow-up tickets are decomposition artifacts, not a pass-state".
+
+**Decision.** Proceed with ACR-280 current scope. Apply the convention this WU is codifying: file a follow-up tracker ticket as a decomposition artifact for the Phase 4 proof-risk wiring drift; do not expand ACR-280.
+
+**Follow-up ticket recommendation.** Not filed inline (autonomous externally-visible action avoided). Surfaced at WU close with subject "Align orchestrator Phase 4 proposal-risk dispatch with workflow's five-gate composition (proof-risk wiring)" and scope: edit `agents/implementation-pipeline-orchestrator.md` Phase 4 step 2/3 to compose and dispatch the fifth `proof-risk` gate and add a `proof-risk` row to the Phase 4 join manifest, matching `workflows/implementation-pipeline.md` lines 352-368.
+
+## D-2026-05-18-acr280-mode-propagation — ACR-280 Phase 2.5 step 8 mode propagation
+
+**WU**: ACR-280. **Phase**: 2.5 step 8.
+
+**Decision**: All four touched surfaces are HIGH per `/home/nes/ai/planning/acr-280-decomposition-strategies/risk/acr-280-risk-profile.md`. Per-surface mode is exhaustive across Phase 3, Phase 4, Phase 5, and Phase 6b.
+
+| Surface | Per-surface verdict | Pipeline mode |
+|---|---|---|
+| NEW `~/ai/conventions/decomposition-strategies.md` | HIGH | exhaustive |
+| MODIFY `~/ai/conventions/code-quality.md` pointer text | HIGH | exhaustive |
+| MODIFY `~/ai/conventions/design-patterns.md` DP-013 | HIGH | exhaustive |
+| MODIFY `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 4/8 strategy routing + audit-history labels | HIGH | exhaustive |
+
+WU-level verdict: HIGH.
+
+**Phase 2.5 step 4a inherited-estimate cold-start.** `${scratch_dir}/ticket.md` reports `estimate_source: missing`. User pre-disposition supplied via brief: `proceed-without-baseline` (the strategy vocabulary is small and enumerable; ticket §1-§2 already enumerates the five strategies and signal-to-strategy table, so the inherited 8 SP is treated as the live working estimate without a separate spike).
+
+**Defer-to-prototype detection.** 1/5 signals fire (risk profile HIGH on majority). Threshold is 2+; defer-to-prototype option is NOT included. WU continues in exhaustive mode.
+
+**Phase 2.5 human gate.** Skipped per `skip_problem_map_gate=true` project override. No genuine new-value question survives after the inline resolution of the Phase 4 proof-risk drift discovery (see D-2026-05-18-acr280-phase4-proofrisk-drift). Phase 3 proceeds.
+
+Phase 3 prompt will carry `risk_profile_path=/home/nes/ai/planning/acr-280-decomposition-strategies/risk/acr-280-risk-profile.md` and the per-surface exhaustive mode list at the top of the proposal per orchestrator Phase 3 spec.
+
+## D-2026-05-18-acr280-pytest-sweep-out-of-scope — ACR-280 Phase 2.5 step 2.5.1 broad pytest sweep findings (out-of-scope)
+
+**WU**: ACR-280. **Phase**: 2.5 step 2.5.1.
+
+**Discovery.** Coverage agent's broad `pytest -q` sweep surfaced two unrelated pre-existing failures outside the ACR-280 touched surface:
+
+1. `tests/test_adversarial_qa_stage.py::test_eval_runtime_workflow_frontmatter_parses` — `workflows/step6c-consumption-side-file.md` workflow frontmatter is malformed (`workflow must be a mapping`).
+2. `tools/acr-187-verify/test_verify.py::test` — pytest collection error: helper `test(func: Callable[[], None])` is treated as a fixture-bearing test.
+
+**Decision.** Outside ACR-280's touched-file enumeration. Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5, the bug-discovery rule applies only when characterization tests this WU authored fail; none were authored in 2.5.1 because the WU is markdown-only and routes to structural-verification eval-spec authoring per `~/ai/conventions/evals.md`. Not blocking; surfaced at WU close as recommended separate tickets.
