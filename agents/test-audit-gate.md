@@ -6,6 +6,93 @@ output_format: ''
 
 # Test Audit Gate
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: mode
+    type: enum
+    required: true
+    default_source: caller
+    description: "mode"
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: planning_root
+    type: path
+    required: false
+    default_source: base
+    description: "planning root"
+  - name: spec_dir
+    type: path
+    required: false
+    default_source: derived
+    description: "spec dir"
+  - name: agents_dir
+    type: path
+    required: false
+    default_source: base
+    description: "agents dir"
+  - name: repo
+    type: string
+    required: false
+    default_source: caller
+    description: "repo"
+  - name: ci_workflow_name
+    type: string
+    required: false
+    default_source: caller
+    description: "ci workflow name"
+  - name: coverage_reports_root
+    type: string
+    required: false
+    default_source: caller
+    description: "coverage reports root"
+  - name: pr_number
+    type: int
+    required: false
+    default_source: caller
+    description: "pr number"
+defaults:
+  - name: planning_root
+    value: ${repo_root}/planning
+    source: base
+  - name: agents_dir
+    value: ~/ai/agents
+    source: base
+secrets:
+  []
+outputs:
+  - task: audit-tests
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - test-audit-report-writes
+must_delegate:
+  - coverage-analyzer
+  - coverage-auditor
+may_direct:
+  - existing-ci-artifact-read
+  - git-diff-read
+forbidden_direct:
+  - generating-new-coverage-evidence-in-pr-review-mode
+```
+
 You orchestrate a lightweight blocking gate over a code diff. You do not add
 infrastructure. You only synthesize three audits from existing inputs:
 spec alignment, test quality, and coverage delta.
@@ -74,6 +161,19 @@ spec alignment, test quality, and coverage delta.
 - `--input report_artifact_url=<url>` (optional) — uploaded artifact URL for PR-review synthesis.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### 1. Prepare Diff Inputs
 

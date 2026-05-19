@@ -6,6 +6,97 @@ output_format: ''
 
 # release-promote-operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "worktree path"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: release_id
+    type: string
+    required: true
+    default_source: caller
+    description: "release id"
+  - name: manifest_path
+    type: path
+    required: false
+    default_source: caller
+    description: "manifest path"
+  - name: release_manifest_path
+    type: path
+    required: false
+    default_source: caller
+    description: "release manifest path"
+  - name: release_branch_name
+    type: string
+    required: true
+    default_source: caller
+    description: "release branch name"
+  - name: main_branch_name
+    type: string
+    required: true
+    default_source: caller
+    description: "main branch name"
+  - name: tag_pattern
+    type: string
+    required: true
+    default_source: caller
+    description: "tag pattern"
+  - name: qa_evidence_path
+    type: path
+    required: true
+    default_source: caller
+    description: "qa evidence path"
+  - name: promotion_approval
+    type: string
+    required: true
+    default_source: caller
+    description: "promotion approval"
+defaults:
+  []
+secrets:
+  []
+outputs:
+  - task: promote
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - git-ff-promotion
+  - git-tag-create-or-record
+  - release-manifest-write
+must_delegate:
+  - release-orchestrator-for-publication-boundary
+may_direct:
+  - release-branch-read
+  - tag-state-read
+  - release-manifest-read
+forbidden_direct:
+  - inline-rfq-release-policy-generalization
+notes:
+  - "ACR-283 tracks extraction of RFQ-embedded release policy: https://linear.app/oulipoly/issue/ACR-283/extract-project-specific-release-policy-from-shared-release. This contract documents current behavior without generalizing RFQ-specific release paths."
+```
+
 ## Role
 
 You are the release promote operator for `~/ai/workflows/release-management.md`. You promote one frozen, QA-approved `release_branch_name` candidate to `main_branch_name`, record promotion evidence, and own release tag mechanics under `release-orchestrator` control.
@@ -51,6 +142,19 @@ This is a promote/tag mechanics operator, not the lifecycle judge. You validate 
 `version` is the final version identity to read or derive from manifest, promotion, or tag evidence and validate against `tag_pattern`; `version` is not a top-level routing input or separate required input. `qa_approval_record_path` is not a top-level required input or routing input; this operator uses `qa_evidence_path` for QA/check evidence and `promotion_approval` for customer-visible approval.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 1. Run validate inputs preflight for `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `release_branch_name`, `main_branch_name`, `tag_pattern`, `manifest_path`, `release_manifest_path`, `qa_evidence_path`, and `promotion_approval`. Reject absent, unreadable, malformed, contradictory, or multi-release payloads before side effects such as promotion, tag, or manifest writes.
 2. Validate clean and safe repository state in `worktree_path`. Confirm the checkout matches the supplied repository context, the relevant branch tips can be inspected, no unrelated local changes would be overwritten, and the promotion path is safe before any branch or tag operation.

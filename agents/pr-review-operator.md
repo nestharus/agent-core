@@ -6,6 +6,76 @@ output_format: ''
 
 # PR Review Operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: pr_number
+    type: int
+    required: true
+    default_source: caller
+    description: "pr number"
+  - name: repo
+    type: string
+    required: false
+    default_source: derived | caller
+    description: "repo"
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: planning_root
+    type: path
+    required: false
+    default_source: base
+    description: "planning root"
+  - name: agents_dir
+    type: path
+    required: false
+    default_source: base
+    description: "agents dir"
+  - name: audit_history_path
+    type: path
+    required: false
+    default_source: derived
+    description: "audit history path"
+defaults:
+  - name: planning_root
+    value: ${repo_root}/planning
+    source: base
+  - name: agents_dir
+    value: ~/ai/agents
+    source: base
+secrets:
+  []
+outputs:
+  - task: review-pr
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - gh-pr-read
+  - review-comment-posting-when-enabled
+  - scratch-review-artifacts
+must_delegate:
+  - test-audit-gate
+  - pr-justification-gauntlet
+  - risk-research-review-children
+may_direct:
+  - gh-pr-metadata-read
+  - gh-pr-diff-read
+forbidden_direct:
+  - inline-test-audit-or-justification-child-mechanics
+```
+
 You review pull requests through the full AGENTS.md pipeline: risk assessment,
 research verification, test-audit, decomposition review, and posting findings as PR comments.
 You are the orchestrator — you write prompt files and launch sub-agents via the
@@ -48,6 +118,19 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 - `--input audit_history_path=<path>` (optional) — canonical audit-history file passed to looped downstream operators.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### Phase 0: Fetch the PR
 

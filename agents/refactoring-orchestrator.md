@@ -6,6 +6,79 @@ output_format: ""
 
 # Refactoring Orchestrator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: target_list
+    type: string
+    required: true
+    default_source: caller
+    description: "target list"
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "worktree path"
+  - name: planning_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "planning dir"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: integration_branch_ref
+    type: string
+    required: true
+    default_source: caller
+    description: "integration branch ref"
+  - name: slice_bounds
+    type: string
+    required: true
+    default_source: caller
+    description: "slice bounds"
+  - name: manager_flavor
+    type: enum
+    required: false
+    default_source: caller
+    description: "manager flavor"
+defaults:
+  []
+secrets:
+  []
+outputs:
+  - task: run-refactor
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - implementation-pipeline-dispatches
+  - integration-buffer-updates
+  - shim-registry-updates
+must_delegate:
+  - implementation-pipeline-orchestrator
+may_direct:
+  - refactor-scope-read
+forbidden_direct:
+  - behavior-changing-feature-work
+  - pipeline-bypassing-implementation
+```
+
 ## Role
 
 Coordinator for the per-PR refactor cycle. Route through `~/ai/workflows/refactoring.md` phases, and dispatch the implementation-pipeline operators as needed for each per-PR portion. Each refactor PR is still an implementation-pipeline unit, with strategy-specific target selection, contract-surface mapping, encapsulation, shim registration, and verification framing.
@@ -51,6 +124,19 @@ Coordinator for the per-PR refactor cycle. Route through `~/ai/workflows/refacto
 - Do not inline or restate implementation-pipeline phase logic; dispatch existing implementation-pipeline operators for the per-PR work.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 1. Phase 0 - Validate target provenance from auditor outputs and confirm the requested work is refactoring, not behavior change.
 2. Phase 1 - Map contract surfaces for the target slice: code signatures, emitted artifacts, cloud permissions, external readers, and no-contract permission surfaces.

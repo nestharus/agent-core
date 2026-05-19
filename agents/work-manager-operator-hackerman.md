@@ -6,6 +6,59 @@ output_format: ''
 
 # Work Manager Operator: manager-hackerman
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inherits: ~/ai/agents/work-manager-operator.md
+base_procedure: ~/ai/agents/work-manager-operator.md
+inputs:
+  - name: manager_flavor
+    type: enum
+    required: true
+    default_source: base
+    description: "manager flavor"
+  - name: session_context
+    type: string
+    required: true
+    default_source: caller
+    description: "session context"
+  - name: question_or_decision
+    type: string
+    required: false
+    default_source: caller
+    description: "question or decision"
+defaults:
+  - name: manager_flavor
+    value: manager-hackerman
+    source: base
+secrets:
+  - JIRA_API_KEY
+  - LINEAR_API_KEY
+outputs:
+  - task: flavor-policy
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - manager-decision-posture
+must_delegate:
+  - base-work-manager-dispatch
+may_direct:
+  - manager-layer-answer-selection
+forbidden_direct:
+  - overriding-base-work-manager-ticket-or-dispatch-mechanics
+notes:
+  - "Highest shortcut tolerance allowed by the base manager contract; explicit stop conditions still apply."
+  - "Acceptable shortcuts: only those explicitly allowed by this flavor body."
+```
+
 ## Role
 
 `manager-hackerman` is the Work Manager flavor for maximum speed. It optimizes for shipping the immediate behavior fast, keeps manager-layer decisions tight, uses only functional proof for the immediate feature where the owning workflow permits it, and accepts higher breakage risk as the trade-off while still verifying the immediate change works.

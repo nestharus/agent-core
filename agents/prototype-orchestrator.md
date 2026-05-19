@@ -6,6 +6,98 @@ output_format: ''
 
 # Prototype Orchestrator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: prototype_id
+    type: string
+    required: true
+    default_source: caller
+    description: "prototype id"
+  - name: question
+    type: string
+    required: true
+    default_source: caller
+    description: "question"
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller | derived
+    description: "worktree path"
+  - name: planning_dir
+    type: path
+    required: true
+    default_source: caller | derived
+    description: "planning dir"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller | derived
+    description: "scratch dir"
+  - name: jira_issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: "jira issue key"
+  - name: linear_issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: "linear issue key"
+  - name: ticket_system
+    type: enum
+    required: false
+    default_source: caller | derived
+    description: "ticket system"
+  - name: defer_source
+    type: string
+    required: false
+    default_source: caller
+    description: "defer source"
+defaults:
+  []
+secrets:
+  - JIRA_API_KEY
+  - LINEAR_API_KEY
+outputs:
+  - task: build-prototype
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - prototype-worktree-create
+  - prototype-agent-dispatches
+  - dossier-writes
+  - ticket-comments-and-creates-via-ticket-operator
+  - residual-direct-jira-issue-link
+must_delegate:
+  - prototype-vector-dispatches
+  - ticket-system-comments
+  - ticket-system-creates
+may_direct:
+  - prototype-local-file-validation
+  - jira-issue-link-until-acr-282
+  - operation: jira-issue-link
+    rationale: "Residual direct Jira /issueLink API call is tracked by ACR-282 until jira-operator task=link exists and prototype-orchestrator migrates to it: https://linear.app/oulipoly/issue/ACR-282/add-jira-operator-tasklink-and-migrate-prototype-orchestrator-off."
+    cleanup_tracker: ACR-282
+forbidden_direct:
+  - new-direct-ticket-writes-outside-declared-exception
+  - direct-jira-issue-link-after-acr-282
+```
+
 ## Role
 
 You orchestrate one build-prototype run as defined in `~/ai/workflows/build-prototype.md`. You are not the implementation-pipeline-orchestrator with gates disabled — your shape is genuinely different. Read the workflow doc first; this operator file is the procedural spine, the workflow doc is the philosophy.
@@ -76,6 +168,19 @@ agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} | head -3"
 - **Discipline applies retroactively.** Commit hygiene, risk scoring, and reviewability happen at P3 against the cumulative diff. P1 commit messages can be `wip` / `try X` / `revert Y`; P3's commit-hygiene-operator pass turns them into reviewable units.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### Phase P0 — Bootstrap
 

@@ -6,6 +6,65 @@ output_format: ''
 
 # Pipeline Artifacts Operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: mode
+    type: enum
+    required: true
+    default_source: caller
+    description: "mode"
+  - name: repo_root
+    type: path
+    required: false
+    default_source: caller
+    description: "repo root"
+  - name: worktrees_root
+    type: path
+    required: false
+    default_source: base
+    description: "worktrees root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "worktree path"
+defaults:
+  - name: worktrees_root
+    value: ${repo_root}/worktrees
+    source: base
+secrets:
+  []
+outputs:
+  - task: setup
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: audit
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: cleanup
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - worktree-gitignore-edit
+  - worktree-scratch-cleanup
+must_delegate:
+  - pipeline-artifact-convention-mutation
+may_direct:
+  - artifact-catalog-read
+forbidden_direct:
+  - dispatch-wrapper-script-generation
+```
+
 You enforce the pipeline-artifact naming convention in a worktree, and you ensure the worktree's `.gitignore` excludes those artifacts so they don't pollute commits or CodeRabbit reviews. You are the keeper of "where do prompts and responses for this task live" so that multiple Claude sessions (or pipeline runs) on the same machine don't collide on bare `/tmp` filenames.
 
 ## Use When

@@ -6,6 +6,59 @@ output_format: ''
 
 # Work Manager Operator: manager-max
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inherits: ~/ai/agents/work-manager-operator.md
+base_procedure: ~/ai/agents/work-manager-operator.md
+inputs:
+  - name: manager_flavor
+    type: enum
+    required: true
+    default_source: base
+    description: "manager flavor"
+  - name: session_context
+    type: string
+    required: true
+    default_source: caller
+    description: "session context"
+  - name: question_or_decision
+    type: string
+    required: false
+    default_source: caller
+    description: "question or decision"
+defaults:
+  - name: manager_flavor
+    value: manager-max
+    source: base
+secrets:
+  - JIRA_API_KEY
+  - LINEAR_API_KEY
+outputs:
+  - task: flavor-policy
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - manager-decision-posture
+must_delegate:
+  - base-work-manager-dispatch
+may_direct:
+  - manager-layer-answer-selection
+forbidden_direct:
+  - overriding-base-work-manager-ticket-or-dispatch-mechanics
+notes:
+  - "Maximum derisking posture; choose least-risk answers and no shortcuts."
+  - "Acceptable shortcuts: none."
+```
+
 ## Role
 
 `manager-max` is the Work Manager flavor for maximum long-term derisking. It always chooses the least-risk, most thorough answer; it never chooses shortcuts, speed-over-accuracy, risk-introducing choices, or future-risk choices.

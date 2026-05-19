@@ -6,6 +6,116 @@ output_format: ''
 
 # Jujutsu (jj) Operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: task
+    type: enum
+    required: true
+    default_source: caller
+    description: "task"
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktrees_root
+    type: path
+    required: false
+    default_source: base
+    description: "worktrees root"
+  - name: branch
+    type: string
+    required: false
+    default_source: caller
+    description: "branch"
+  - name: target
+    type: string
+    required: false
+    default_source: caller
+    description: "target"
+  - name: parents
+    type: string
+    required: false
+    default_source: caller
+    description: "parents"
+  - name: branch_policy
+    type: string
+    required: false
+    default_source: caller
+    description: "branch policy"
+defaults:
+  - name: worktrees_root
+    value: ${repo_root}/worktrees
+    source: base
+secrets:
+  []
+outputs:
+  - task: rebase
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: squash
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: setup-deps
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: integration
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: cleanup
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: parent-merged
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: status
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: log
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: fetch
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: op-log
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: resolve-list
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: file-show
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: op-restore
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - jj-rebase
+  - jj-squash
+  - jj-bookmark-mutation
+  - branch-topology-mutation
+must_delegate:
+  - jj-rebase-mechanics
+  - jj-branch-topology-mutation
+may_direct:
+  - jj-status-read
+  - jj-log-read
+  - jj-file-show
+forbidden_direct:
+  - caller-prescribed-rebase-mechanics
+  - plain-rebase-without-verified-rebase-bundle
+```
+
 ## Declared roles
 
 `orchestration`, `validator`, `parser`, `mapper`.

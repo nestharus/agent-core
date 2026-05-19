@@ -6,6 +6,93 @@ output_format: ''
 
 # Coverage Expansion Operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "worktree path"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: planning_root
+    type: path
+    required: false
+    default_source: base
+    description: "planning root"
+  - name: spec_dir
+    type: path
+    required: false
+    default_source: derived
+    description: "spec dir"
+  - name: scope
+    type: string
+    required: false
+    default_source: caller
+    description: "scope"
+  - name: coverage_report
+    type: path
+    required: false
+    default_source: caller
+    description: "coverage report"
+  - name: agents_dir
+    type: path
+    required: false
+    default_source: base
+    description: "agents dir"
+  - name: report_slug
+    type: string
+    required: false
+    default_source: derived
+    description: "report slug"
+defaults:
+  - name: planning_root
+    value: ${repo_root}/planning
+    source: base
+  - name: agents_dir
+    value: ~/ai/agents
+    source: base
+secrets:
+  []
+outputs:
+  - task: expand-coverage
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - test-file-writes
+  - coverage-report-writes
+  - pdf-or-publish-wrapper-writes-when-wrapper-declared
+must_delegate:
+  - coverage-analyzer
+  - risk-assessor
+  - behavior-investigator
+  - test-writer
+  - trace-recorder
+may_direct:
+  - coverage-report-read
+  - source-read
+forbidden_direct:
+  - writing-tests-without-verified-behavior
+```
+
 You orchestrate a coverage-expansion run. You do not change what deserves
 tests. You connect the existing coverage, risk, behavior, and test-authoring
 operators into one auditable sequence and produce the report bundle required by
@@ -88,6 +175,19 @@ ${scratch_dir}/coverage-expansion/<report_slug>/reports/evidence/
 ```
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### 1. Prepare the Run Directory
 
