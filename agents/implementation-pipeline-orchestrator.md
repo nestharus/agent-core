@@ -302,8 +302,8 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 | `proposer_fix_scope` | path list/target item list, optional | entry modes | Ambiguous scope that changes value/tradeoff: `NEEDS_INPUT`; otherwise default to audited target items. |
 | Runtime evidence fields | paths/UUIDs/timestamps per `audit.md` | runtime targets | Missing currentness evidence: `NEEDS_INPUT`; unreadable artifacts: `BLOCKED`. |
 
-- `tickets_first_variant` — boolean (default `false`). When `true`, the orchestrator inserts the **Phase 8.5 human-local-review gate** (defined below) between Phase 8 and Phase 9, and Phase 9's ticket cross-link comment cites the **branch name** rather than a PR URL. When `false`, Phase 9 follows directly from a clean Phase 8 audit per the default pipeline. Set `true` for projects whose `AGENTS.md` declares opt-in to `~/ai/workflows/tickets-first-review.md`.
-- `branch_name` — the working branch on `worktree_path`. Default `impl-<wu_lower>` for default projects. Tickets-first-variant projects override with `<TICKET-ID>-<short>` per the project's branch-naming rule. The orchestrator uses this verbatim everywhere a branch name appears (worktree creation, push, CodeRabbit dispatch, PR-writer brief, ticket cross-link).
+- `tickets_first_variant` — removed/no-op migration-compatible boolean (default `false`). Stale `true` inputs do not change behavior: the orchestrator proceeds through the default Phase 8 -> Phase 8.X -> Phase 9 draft PR flow and never inserts a Phase 8.5 gate.
+- `branch_name` — the working branch on `worktree_path`. Default `impl-<wu_lower>` for default projects. Projects may override with `<TICKET-ID>-<short>` per the project's branch-naming rule. The orchestrator uses this verbatim everywhere a branch name appears (worktree creation, push, CodeRabbit dispatch, PR-writer brief, ticket cross-link).
 - `predecessor_session_manifest_path` — absolute path to a predecessor WU's `${planning_dir}/session.json` when this WU is spawned from a post-merge successor handoff. When supplied, Phase 0 validates the predecessor manifest and its `successor_session_brief`, imports carried context into `${scratch_dir}/predecessor-session.md`, and records the predecessor pointer in this WU's session manifest. Missing, unreadable, mismatched, or ambiguous predecessor evidence is `BLOCKED:invalid-predecessor-session`.
 - `models_dir` — passed through to `agents` invocations; usually omitted.
 - `skip_problem_map_gate` — boolean (default `false`). When `true`, Phase 2.5 step 6 (the problem-map human gate) is skipped and the orchestrator proceeds directly to step 8 (mode propagation). Project-level override; declare in the project's `AGENTS.md` (e.g., `~/ai/` itself opts out for its bootstrap flow). The defer-to-prototype detection (Phase 2.5 step 5) still runs and can still surface as a NEEDS_INPUT new-value question; this override only removes the routine "approve the problem map" step, not the genuine value-question escalation.
@@ -337,7 +337,6 @@ agents -m gpt-high -p ${worktree_path} -f ${prompt} | head -3"
 - **Human gates are restricted.** The default orchestrator flow has only two human gates:
   1. Phase 2.5 problem-map review.
   2. Any sub-agent that emits `NEEDS_INPUT:<question_artifact>` per `~/ai/conventions/agent-questions-and-session-graph.md` whose question carries a **new value** flag (i.e. surfaces a previously-unevaluated value, scope, or trade-off question for the user). Procedural NEEDS_INPUT (missing input the orchestrator can supply) is resolved by the orchestrator, not the user.
-- Projects with `tickets_first_variant=true` add the Phase 8.5 human-local-review gate before Phase 9; default-variant projects do not.
 - **AskUserQuestion permission-denial citation.** For direct `AskUserQuestion` permission-denial on human-owned value/scope/trade-off or new-value questions, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: procedural permission-denial or NEEDS_INPUT that the orchestrator can resolve from supplied inputs stays inline; non-procedural questions return `NEEDS_INPUT:<absolute_artifact_path>` and halt per that convention.
 - All other human gates listed in `~/ai/workflows/implementation-pipeline.md` are removed for this orchestrator's runs.
 - **You are autonomous on destructive git ops.** When the violation-escalation policy requires a Tier-1 rewind, you may `git reset --hard` and `git push --force-with-lease origin main`, delete branches, and remove worktrees without asking the user. Record the rewind in `${worktree_path}/DECISIONS.md` before re-attempting the failed phase.
@@ -750,9 +749,11 @@ CodeRabbit retired 2026-05-15 — no operator dispatch. After the three readines
 6. If multi-concern review says split, split the work and re-enter from the affected phase.
 7. **Process-tree audit #3**: dispatch `process-tree-auditor` against the Phase 8 subtrees. For Phase 8 canonical rows, compose `expected_process` from all five rows in `${planning_dir}/risk/phase-8-join-manifest.json`, including `code-quality`: copy `canonical_output_path`, copy `sha256` to `expected_sha256`, and supply `expected_verdict` from the owning gate contract, not from `verdict_line`. `blocking` verdict halts draft PR.
 
+Phase 8 gates are the substantive pre-PR review layer and are not followed by branch-local human revalidation before draft PR creation.
+
 ### Phase 8.X — Closure judge dispatch
 
-Default-variant capture runs after Process-tree audit #3 clears and before Phase 9. The orchestrator dispatches a `claude-opus` closure judge to write `${planning_dir}/closure-judge.md`; this is an orchestrator-owned closure step, not a new human gate and not a new ticket-operator task.
+Closure capture runs immediately after Phase 8 Process-tree audit #3 clears and before Phase 9 for all variants. The orchestrator dispatches a `claude-opus` closure judge to write `${planning_dir}/closure-judge.md`; this is an orchestrator-owned closure step, not a new human gate and not a new ticket-operator task.
 
 The closure judge output is parsed only from the first fenced YAML block. The required field set and order are:
 
@@ -786,22 +787,15 @@ On detection, append `${planning_dir}/audit-history.md` evidence naming the mani
 
 If the orchestrator or a downstream sub-agent intentionally removes, renames, or supersedes a canonical gate report during rewind, redo, split, shrink, or another approved lifecycle transition, the actor must append an audit-history entry before removal or immediately after detection. Entry fields include `actor`, `timestamp`, `manifest_path`, `gate_name`, `canonical_output_path`, `old_sha256`, `reason`, `replacement_path`, and `replacement_sha256` when applicable.
 
-### Phase 8.5 — Human Local Review Gate (tickets-first variant only)
+### Migration semantics for in-flight WUs
 
-This phase runs **only when `tickets_first_variant = true`**. Default-variant projects skip it and proceed straight to Phase 9.
+When stale `tickets_first_variant=true` is observed, or when an existing Phase 8.5 question is being resumed, append this exact migration note to `${planning_dir}/audit-history.md`: `tickets_first_variant is removed by ACR-275; proceeding with default Phase 8 -> Phase 8.X -> Phase 9 draft PR flow; no Phase 8.5 local-review gate will run`.
 
-In the tickets-first variant (per `~/ai/workflows/tickets-first-review.md`), the orchestrator's automated gates do **not** count as the local review. A human reviewer pulls the branch and reviews locally; only after that passes does the branch owner open a draft PR. Skipping this gate and treating Phase 8 audits as a substitute is a workflow violation.
-
-1. `git push origin ${branch_name}` so the branch is fetchable on origin.
-2. **Comment on the ticket citing the branch.** Compose `${scratch_dir}/prompts/${wu_lower}-phase-8.5-ticket-comment.md` instructing `${ticket_operator}` (`task=comment` on `issue_key=${ticket_id}`) with a comment body (ADF for JIRA, Markdown for Linear) that includes: branch name (`${branch_name}`), head SHA, "branch is the unit of review per tickets-first variant; please pull and review locally; draft PR will open after local review passes", and pointers into the planning artifacts the reviewer may want as context (problem-map path, proposal path, contract path) — described as informational, not a citation target. Dispatch `agents -m claude-opus -a ${ticket_operator} -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-8.5-ticket-comment.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-8.5-ticket-comment.log`. If the dispatch returns `BLOCKED:*` or `NEEDS_INPUT:*`, stop before emitting the local-review question; do not advance to Phase 9.
-3. **Emit a NEEDS_INPUT to the root** with `question.title` "Phase 8.5 — local review of branch `${branch_name}` @ `<head-sha>`" and options `A` "Review passed — open draft PR (Phase 9 proceeds)", `B` "Revisions requested" (free-text follow-up), `C` "Reject — close branch, halt WU". The question artifact lives at `${scratch_dir}/questions/<question_id>.question.json` per `~/ai/conventions/agent-questions-and-session-graph.md`. Block until answered.
-4. On answer:
-   - **A (review passed):** record approval in `${planning_dir}/audit-history.md` with the reviewer's identifier (or "user-via-root" if anonymous) and head SHA; approval recorded means the Phase 8.X closure capture step occurs only after approval and before Phase 9, then proceed to Phase 9.
-   - **B (revisions):** the user's revision details land as a new round of audit-history. Re-enter from the appropriate phase (typically Phase 7 if the request is review-comment-shaped, Phase 6 if it requires test/code changes). Re-run Phase 8 audits + Phase 8.5 gate after the new round. The Phase 9 draft PR does not open until A. Phase 8.5 answer B/C has no calibration block, no comparison comment, no audit-history capture write.
-   - **C (rejected):** record termination in `${worktree_path}/DECISIONS.md`, comment closure on the ticket via `${ticket_operator}` (`task=comment`), halt WU. Do not open a PR. For answer B/C, no calibration block, no comparison comment, no audit-history capture write.
-5. Phase 9's ticket cross-link step (step 6 below) does **not** repeat the branch-citation comment from step 2 above; instead it adds a follow-up comment containing the PR URL once the draft PR is open. The branch-citation comment from this phase remains as the historical record.
+Resume by re-verifying join manifests, running Phase 8.X if it has not already completed, and proceeding to Phase 9. If a halted Phase 8.5 question contains substantive revision instructions already supplied by the user, treat those instructions as normal new review input and re-enter the appropriate prior phase; do not preserve the Phase 8.5 approval gate.
 
 ### Phase 9 — Draft PR
+
+Phase 9 starts after Phase 8.X completion.
 
 1. `git push origin ${branch_name}`.
 2. **Author the title and body via `pr-writer`.** Compose `${scratch_dir}/prompts/${wu_lower}-phase-9-pr-writer.md` instructing the writer to produce the title at `${scratch_dir}/pr-body.md.title` and the body at `${scratch_dir}/pr-body.md`. Inputs:

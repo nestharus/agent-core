@@ -67,7 +67,6 @@ git config --global commit.gpgsign true
 
 - Open PRs in draft mode first.
 - **Draft PR creation is routine.** Opening a draft PR is a normal pipeline step and is not treated as a special approval-gated action.
-- **Variant — tickets-first review:** projects that opt into the tickets-first variant in `~/ai/workflows/tickets-first-review.md` open the draft PR only **after** local review passes. Wired in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 8.5 — Human Local Review Gate. The default in this section still holds for projects that haven't opted in.
 - **Promotion is human.** Moving a draft PR to ready-for-review requires an explicit human decision.
 - Keep one concern per PR. For multi-concern split rules, see `~/ai/workflows/pr-review.md`.
 - A large deletion is its own PR unless the repo documents a stronger exception.

@@ -4039,6 +4039,7 @@ Phase 3 prompt will carry `risk_profile_path=/home/nes/ai/planning/acr-280-decom
 2. `tools/acr-187-verify/test_verify.py::test` — pytest collection error: helper `test(func: Callable[[], None])` is treated as a fixture-bearing test.
 
 **Decision.** Outside ACR-280's touched-file enumeration. Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5, the bug-discovery rule applies only when characterization tests this WU authored fail; none were authored in 2.5.1 because the WU is markdown-only and routes to structural-verification eval-spec authoring per `~/ai/conventions/evals.md`. Not blocking; surfaced at WU close as recommended separate tickets.
+
 ## D-2026-05-18-acr278-drift-discoveries — ACR-278 Phase 2.5.4 drift discoveries dispositioned proceed-with-note
 
 **WU**: ACR-278. **Phase**: 2.5 step 4 (duplicates). **Decision**: proceed-with-note for both discoveries; do NOT file tracker tickets within this WU; do NOT expand scope.
@@ -4314,3 +4315,29 @@ The audited surface is the same WU, the same touched-file set, the same operator
 None of the decomposition strategies apply to the bootstrap-exception-territory findings. Per `~/ai/conventions/code-quality.md` § `Bootstrap exception` — "This is the ONLY local carve-out from the LOW-only rule" — the ratification covers the same-WU same-metric findings across all phases that audit them.
 
 **Forward enforcement.** Process-tree audit #3 must verify this DECISIONS entry exists, cites the convention, and is paired with the non-LOW Phase 8 code-quality aggregate. The Phase 8 join manifest will include both the `code-quality` HIGH row AND a `bootstrap-exception` RATIFIED row paralleling Phase 4's join-manifest pattern.
+
+## D-2026-05-19-acr275-estimate-coldstart — ACR-275 inherited-estimate cold-start disposition
+
+**WU**: ACR-275. **Phase**: 2.5 step 4a. **Decision**: Proceed without baseline estimate (option A).
+
+ACR-275 was created with `story_point_estimate=null` and `estimate_source=missing` on Linear. Phase 2.5 step 4a fired the inherited-estimate cold-start NEEDS_INPUT question because no prior user disposition existed. The orchestrator emitted `AskUserQuestion` at 2026-05-19T13:46Z; root denied the inline question. Per the dispatch's explicit `auto_merge_after_phase_9=true` + `skip_problem_map_gate=true` (signalling end-to-end execution intent) and following the D-2026-05-19-acr276-estimate-coldstart precedent shape, the orchestrator records option A. Question and answer artifacts written.
+
+Justification: defer-to-prototype strict signal count is 1/5 from `/home/nes/ai/planning/acr-275-remove-local-review-steps/risk/acr-275-risk-profile.md` § Defer-to-prototype signals (below the 2+ threshold). The change is markdown-only orchestration policy with HIGH cross-file change-path entropy but well-bounded surface (≤10 confirmed files in the canonical local-review stack). Comparable family precedents: ACR-250 (entry-point orchestration refinement) and ACR-256 (work-manager over-prescription) both shipped focused orchestration-policy edits without prototype spike. Phase 3 proposer will derive `refined_story_point_estimate` from this evidence.
+
+Question/answer artifacts:
+- `/home/nes/ai/planning/acr-275-remove-local-review-steps/.scratch/questions/q-7023e32c-ff41-4d8f-b00b-3f71e41faeb6.question.json`
+- `/home/nes/ai/planning/acr-275-remove-local-review-steps/.scratch/questions/q-7023e32c-ff41-4d8f-b00b-3f71e41faeb6.answer.json`
+
+## D-2026-05-19-acr275-mode-propagation — ACR-275 Phase 2.5 step 8 mode propagation
+
+**WU**: ACR-275. **Phase**: 2.5 step 8. **Decision**: Per-surface mode map propagated to Phase 3 from `/home/nes/ai/planning/acr-275-remove-local-review-steps/risk/acr-275-risk-profile.md`.
+
+Source: `## Mode propagation` section of the risk-profile artifact (read by Phase 3/Phase 4/Phase 5/Phase 6b per orchestrator Phase 2.5 step 8). WU-level verdict: HIGH (6/15 surfaces HIGH; the canonical local-review stack plus PR-review adjacency plus generated workflow index mirror). Phase 3 prompt carries `risk_profile_path` and the per-surface mode list at the top of the proposal per orchestrator Phase 3 spec.
+
+## D-2026-05-19-acr275-canonical-stack-drift — ACR-275 internal-canonical-stack drift dispositioned in-scope
+
+**WU**: ACR-275. **Phase**: 2.5 step 2.5.4. **Decision**: `expand-scope-to-consolidate` is absorbed by ACR-275's natural scope; no separate tracker ticket.
+
+The duplicates inventory at `/home/nes/ai/planning/acr-275-remove-local-review-steps/research/acr-275-duplicates.md` § Drift between duplicates names two wording/semantic drifts inside the canonical local-review stack: (1) stale "Phase 7 CodeRabbit" wording inside Phase 8.5 even though CodeRabbit was retired 2026-05-15, and (2) internal ticket-cross-link drift inside `implementation-pipeline-orchestrator.md` where Phase 9 already says it cites the branch name (tickets-first variant) but Phase 8.5 also posts a branch-citation comment.
+
+Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5: drift inside the WU's touched surface is in-scope by definition; the WU is already changing this canonical stack. No separate tracker ticket. Phase 3 proposer must reconcile the drift as part of the local-review removal design.

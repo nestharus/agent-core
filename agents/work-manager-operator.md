@@ -134,6 +134,15 @@ git diff --staged > "${prefix}.staged.diff"
 # ${prefix}.context from the investigation ticket before any disposition.
 ```
 
+## Declared roles
+
+This file's classifications under `~/ai/conventions/code-quality.md` § Declared roles:
+
+- `orchestration` — Sequences manager-owned Work Unit dispatch, follow-up, and handoff across backlog sessions.
+- `validator` — Defines dirty-state, ticket-input, and authorization checks that must pass before manager actions proceed.
+- `mapper` — Maps ticket backends, priorities, and dispatch targets to the correct operators and inputs.
+- `formatter` — Specifies prompt, ticket, and status-update formats used when filing or dispatching work.
+
 ## Use When
 
 - A long-running session is managing N >> 1 work units across an ecosystem (multiple repos, multiple agent / tool / workflow concerns).
@@ -232,7 +241,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - Verify `${ticket_id}` exists in the selected backend and has correct labels or fields; apply missing metadata through `${ticket_operator}` when that backend supports it and the user has authorized it.
    - For Linear, resolve metadata against the ticket's team key: verify the expected project when supplied, and apply missing labels through `linear-operator` / `apply-labels --team <team> --labels ...`. Label names are per-team facts, not workspace-global strings.
    - Use `${ticket_operator}` with `task=transition` to move the selected ticket to **In Progress** immediately after dispatch. For Linear, pass `target_status="In Progress"` and let `linear-operator` resolve the issue team's workflow state.
-  - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`, `tickets_first_variant`), and `${ticket_system_inputs}`. Include only behavior-forbidding `Forbidden behaviors`; do not write work-narrowing anti-scope clauses that exclude files, concerns, changed-function siblings, or adjacent cleanup inside touched-file/component ownership.
+   - Compose the dispatch prompt: name `ticket_system`, the selected issue key (`jira_issue_key` or `linear_issue_key`), repo paths, worktree path, scratch dir, planning dir, branch name, project-policy toggles (`skip_problem_map_gate`, `auto_merge_after_phase_9`), and `${ticket_system_inputs}`. If stale project policy still declares the retired tickets-first local-review variant, include only an informational migration note; do not pass a child prompt flag for it. Include only behavior-forbidding `Forbidden behaviors`; do not write work-narrowing anti-scope clauses that exclude files, concerns, changed-function siblings, or adjacent cleanup inside touched-file/component ownership.
    - Run the implementation-pipeline-orchestrator as one Bash-background dispatch:
      ```python
      Bash(

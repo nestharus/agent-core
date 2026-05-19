@@ -4,6 +4,14 @@ Use this convention when a delegated sub-agent needs user input and must route t
 
 This convention also defines the file-based session graph used to continue answered work when non-interactive provider session resume is unavailable or when the resumed agent needs to pull exact prior context.
 
+## Declared roles
+
+This file's classifications under `~/ai/conventions/code-quality.md` § Declared roles:
+
+- `parser` — Defines machine-readable question, answer, and session graph artifact schemas.
+- `validator` — Requires blocked sub-agent outputs to surface through root-owned NEEDS_INPUT artifacts before dependent work continues.
+- `orchestration` — Sequences continuation, resume, and fallback flow across invocation and session graph evidence.
+
 ## Vocabulary
 
 - `root orchestrator`: the workflow actor that talks to the user.
@@ -49,6 +57,8 @@ For that denied human-owned question, write `${scratch_dir}/questions/q-<uuidv4>
 Procedural permission-denial or procedural `NEEDS_INPUT` that the orchestrator can resolve from supplied inputs stays inline and does not bother the root.
 
 Forbidden language: permission denial is not a user decline and does not authorize defaults or self-applied answers. self-applying defaults on a new-value, scope, or trade-off question after `AskUserQuestion` is denied is a contract violation.
+
+`NEEDS_INPUT` is not a carrier for pre-draft local branch-review approval, revisions, or reject decisions. Legitimate new-value, scope, trade-off, evidence-access, credential, backend-authority, and gate-dependent questions remain valid.
 
 ## Question Artifact Schema
 

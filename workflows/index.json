@@ -291,7 +291,7 @@
           "runs research, proposal, risk, hookpoint, implementation, CodeRabbit, review, PR, and audit phases",
           "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
           "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
-          "uses model-owned gates; default flow exposes only Phase 2.5 review and NEEDS_INPUT new-value questions, with an additional Phase 8.5 human gate in the tickets-first variant",
+          "uses model-owned gates; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
           "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
         ],
         "inputs": [
@@ -714,34 +714,6 @@
           "market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files",
           "generated implementation tickets for approved AI roadmap slices, including story-point estimate/source/rationale per SLICE and unsized INIT tickets",
           "risk-gate reports and process-tree-auditor evidence at each gated layer"
-        ]
-      }
-    },
-    "tickets-first-review": {
-      "path": "workflows/tickets-first-review.md",
-      "workflow": {
-        "id": "tickets-first-review"
-      },
-      "workflow_dispatch_contract": {
-        "expectations": [
-          "uses the tracker ticket and pushed branch as the review unit before a PR exists",
-          "requires ticket-prefixed branch and commit naming for new branches",
-          "inserts a human local-review gate between automated review gates and draft PR creation"
-        ],
-        "inputs": [
-          "tracker ticket, origin branch name, branch head SHA, and local reviewer context",
-          "project AGENTS.md opt-in declaring the tickets-first review variant"
-        ],
-        "non_goals": [
-          "does not replace the default draft-PR workflow for projects that have not opted in",
-          "does not delete branches when transitioning existing draft PRs",
-          "does not treat automated gates as the human local review"
-        ],
-        "orchestrator": "implementation-pipeline-orchestrator with tickets_first_variant=true",
-        "outputs": [
-          "tracker ticket body with source, touched paths, branch summary, and local-review acceptance criteria",
-          "reviewer approval, revision request, or rejection before Phase 9 can draft a PR",
-          "eventual draft PR only after local review passes"
         ]
       }
     },
