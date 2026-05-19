@@ -6,6 +6,17 @@ This file is a thin citation index for workflow and operator design auditors. It
 
 Use these entries as report citations for `workflow-design-auditor` and `agent-design-auditor`. When a design finding relies on a primary source outside this index, mark the finding as `unindexed-pattern` so later corpus maintenance can decide whether to add an entry.
 
+## Intrinsic-surface declarations
+
+```yaml
+intrinsic_surface_declarations:
+  - component: conventions/design-patterns.md
+    role: intrinsic-surface
+    Domain: design_pattern_citations
+    Owns:
+      - dp_xxx_index_entries
+```
+
 ## Pattern Index
 
 ### DP-001 - Proposer/critic revise-review loop
@@ -79,3 +90,9 @@ Use these entries as report citations for `workflow-design-auditor` and `agent-d
 - Canonical authority: `~/ai/agents/operator-file-format.md`
 - Exemplars: `~/ai/agents/process-tree-auditor.md`; `~/ai/agents/cohesion-auditor.md`; `~/ai/agents/coupling-auditor.md`; `~/ai/conventions/agent-questions-and-session-graph.md`
 - Auditor use: Cite when an artifact lacks out-of-scope routing, stop outcomes, escalation behavior, or question-handling boundaries.
+
+### DP-013 - Strategy selection before NEEDS_INPUT
+- Short statement: When an existing gate produces a current semantic blocker, workflows should classify the blocker and select a supported remediation/decomposition strategy before surfacing a user question.
+- Canonical authority: `~/ai/conventions/decomposition-strategies.md`
+- Exemplars: `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 4 supported-surface; `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 4 code-quality; `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 8 code-quality.
+- Auditor use: Cite when a workflow escalates mixed-domain or semantic non-LOW gate findings to `NEEDS_INPUT` without first applying the strategy table, or when it hides strategy procedure inside a caller prompt instead of a canonical convention/operator.

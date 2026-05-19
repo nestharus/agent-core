@@ -146,6 +146,8 @@ When a WU's diff touches a file, the WU owns that file's whole-file LOW verdict 
 
 If whole-file or whole-component cleanup is too large for one WU, the orchestrator decomposes the work before advance. Decomposition produces multiple smaller WUs, each responsible for fewer touched files/components; it does not predeclare a narrower finding set inside a file that the current WU has already touched.
 
+When that whole-file/component cleanup is too large, `~/ai/conventions/decomposition-strategies.md` selects the remediation or decomposition shape. The selector operates after this ownership rule fires and does not predeclare a narrower in-file finding set.
+
 ## Continuous refactor
 
 Each touch forces cleanup of the touched file's pre-existing code-quality defects. Technical debt gets paid down as features and fixes ship, not only through separate cleanup tickets. The codebase should compound toward `LOW` as ordinary WUs pass through the pipeline.
@@ -205,6 +207,19 @@ This convention is canonical for adapter declarations. `~/ai/agents/coupling-aud
 
 Intrinsic-surface declarations are a sister mechanism to adapter declarations, distinct from adapter translation work. They are for components whose purpose is a predicate, filter, or selector over a coherent named data domain.
 
+```yaml
+intrinsic_surface_declarations:
+  - component: conventions/code-quality.md
+    role: intrinsic-surface
+    Domain: code_quality_policy
+    Owns:
+      - touched_file_ownership_rule
+      - low_only_disposition_rule
+      - oscillation_decompose_rule
+      - bootstrap_exception_rule
+      - numerical_thresholds
+```
+
 Carrier shape:
 
 ```text
@@ -246,6 +261,8 @@ This convention is canonical for intrinsic-surface declarations. `~/ai/agents/co
 
 Only LOW passes pipeline-callable code-quality gates. `MEDIUM` and `HIGH` block advance, trigger remediation/revise, and require a rerun from current evidence. Neither severity is ever a residual, a `NEEDS_INPUT` user choice, or a "stable" allow-advance state for code-quality / risk-gate / prototype-risk verdicts.
 
+For current, well-formed semantic `MEDIUM` or `HIGH` findings, `~/ai/conventions/decomposition-strategies.md` selects remediation, MOVE, split, or decomposition handling. Neither severity becomes a residual or user-disposition state through that selector.
+
 This rule is the ACR-156 parent regression disposition and is enforced across all four canonical surfaces: `~/ai/agents/implementation-pipeline-orchestrator.md`, `~/ai/workflows/implementation-pipeline.md`, this convention, and `~/ai/workflows/code-quality.md`.
 
 ### Bootstrap exception
@@ -262,6 +279,8 @@ This is the ONLY local carve-out from the LOW-only rule above. Ordinary residual
 ### Oscillation signals WU-too-large
 
 After two consecutive rounds that do not converge to `LOW`, the Work Unit is too large for the current grain and must decompose instead of attempting a third remediation pass. Decompose is autonomous, not `NEEDS_INPUT`-mediated; the caller records the oscillation evidence and opens the smaller WU path required by the owning workflow.
+
+After this two-round non-convergence trigger fires, `~/ai/conventions/decomposition-strategies.md` names the smaller-WU shape and any follow-up-ticket handoff evidence. It does not make decompose `NEEDS_INPUT`-mediated.
 
 ## Numerical thresholds
 
@@ -292,6 +311,7 @@ It also does not replace project-local architecture rules. A project may have st
 
 ## Cross-references
 
+- `~/ai/conventions/decomposition-strategies.md` - selector for remediation, MOVE, split, or decomposition after existing ownership, LOW-only, bootstrap, and oscillation signals fire.
 - `~/ai/workflows/code-quality.md` - composite dispatch workflow for existing A1 auditors; this is an operational pointer only and does not change this convention's rule text, failure modes, numerical thresholds, or policy-only status.
 - `~/ai/workflows/code-quality.md` § `Stop Conditions And Escalation` - separates standalone advisory use from pipeline-callable blocking use; pipeline-callable blocking enforces this disposition policy, including LOW-only passage and autonomous decomposition after oscillation.
 - `~/ai/agents/function-classification-auditor.md` - A5 / NES-141 enforcement surface for the `Function categories per function` threshold and `multi-classifier function` findings; this is a forward pointer only and does not change this convention's categories, rule, failure modes, thresholds, or policy-only status.
