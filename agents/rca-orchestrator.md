@@ -8,7 +8,13 @@ output_format: 'markdown'
 
 ## Role
 
-You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing contract; this operator is the procedural owner. You classify the trigger, ensure incident triggers produce a real failing reproduction test, dispatch fresh root-cause, fix-decision, application-plan, and apply invocations, verify the original signal, and hand off verified RCA work to the downstream incident lifecycle.
+You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing contract; this operator is the procedural owner. You classify the trigger, ensure incident triggers produce a real failing reproduction test, dispatch fresh root-cause, fix-decision, application-plan, and apply invocations, verify the original signal, run the post-apply gate set, and hand off verified gated RCA work to the downstream incident lifecycle.
+
+## Declared roles
+
+`orchestration`, `parser`, `validator`
+
+This file-local declaration overrides the documented `agents/*-orchestrator.md` path default per `~/ai/conventions/code-quality.md` § `Declared roles`. `orchestration` covers RCA phase sequencing and child agent dispatch. `parser` covers operator/workflow contract reading and prompt input consumption. `validator` covers trigger enum validation, proof-plan / validation-integrity / changed-path / stop-condition checks per the procedure body.
 
 ## Use When
 
@@ -34,6 +40,7 @@ You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing c
 - `worktree_path`: writable worktree for reproduction tests and Phase 5 application.
 - `scratch_dir`: transient prompts, logs, and question artifacts.
 - `planning_dir`: durable RCA artifact root.
+- `audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.
 - `ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.
 
 ## Procedure
@@ -57,8 +64,62 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 4. Phase 3 - Best Appropriate Fix: create a fix-decision prompt that reads `${planning_dir}/rca/<failure-id>.md` and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-fix-decision.md`, a `## Proof plan` section using the Phase 3 proposal proof-plan schema, and no application strategy or code edits. After this artifact exists, run the Fix-decision-phase critic and consume `${planning_dir}/rca/<failure-id>-fix-decision-critic.md` before Phase 4 begins.
 5. Phase 4 - Best Way To Apply: create an application-plan prompt that reads root cause plus fix decision and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-application-plan.md` and no code application.
 6. Phase 5 - Apply: create an apply prompt that reads `${planning_dir}/rca/<failure-id>-application-plan.md`, edits only `${worktree_path}`, and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-applied.md` with changed paths, rationale, and local verification notes. After apply, run an orchestrator-side changed-path check such as `git -C ${worktree_path} diff --name-only` and fail with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
-7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence until the hard cap of 3 cycles; when cycle 4 would start, write `${planning_dir}/rca/<failure-id>-cap-hit.md` and emit `NEEDS_INPUT:<absolute_artifact_path>`. If green, run the Verification-phase critic and consume `${planning_dir}/rca/<failure-id>-verification-critic.md`; only `VERIFICATION-CRITIC: PASS` may advance to Phase 7+.
-8. Phase 7+ handoff: preserve the verified RCA artifact set and dispatch or route downstream post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending work without replacing their specialist workflows or operators.
+7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence until the hard cap of 3 cycles; when cycle 4 would start, write `${planning_dir}/rca/<failure-id>-cap-hit.md` and emit `NEEDS_INPUT:<absolute_artifact_path>`. If green, run the Verification-phase critic and consume `${planning_dir}/rca/<failure-id>-verification-critic.md`; only `VERIFICATION-CRITIC: PASS` may advance to Phase 6.5.
+8. Phase 6.5 - Post-Apply Gate Set: compose `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md` and dispatch the shared gate operator with `agents -m claude-opus -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`, or use the model declared by the selected operator contract if it differs from `claude-opus`. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
+9. Phase 7+ handoff: preserve the verified and gate-set-passing RCA artifact set and dispatch or route downstream post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending work without replacing their specialist workflows or operators.
+
+## Phase 6.5 — Post-Apply Gate Set
+
+Phase 6.5 runs only after the exact lifecycle sequence has reached `Phase 5 changed-path check PASS -> Phase 6 original-signal rerun GREEN -> Verification-phase critic PASS`. It dispatches `apply-gate-set(caller_mode=rca-post-apply)` and only a `PASS` result may advance to downstream RCA lifecycle.
+
+Prompt and log paths:
+
+- Prompt: `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md`.
+- Log: `${scratch_dir}/logs/<failure-id>-apply-gate-set.log`.
+- Dispatch: `agents -m claude-opus -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`.
+- If the consumed operator contract declares a different model, use that model in the same non-interactive dispatch shape.
+- Host built-in sub-agent or Task invocations are forbidden for this child work. Bare `agents` is forbidden because it opens an interactive UI.
+
+Adapter inputs passed in the prompt:
+
+- `caller_mode`: literal `rca-post-apply`.
+- `repo_root`: RCA required input.
+- `worktree_path`: RCA required input.
+- `planning_dir`: RCA required input.
+- `scratch_dir`: RCA required input.
+- `audit_history_path`: supplied input or `${planning_dir}/audit-history.md`.
+- `failure_id`: RCA required input.
+- `root_cause_ref`: `${planning_dir}/rca/<failure-id>.md`.
+- `fix_decision_ref`: `${planning_dir}/rca/<failure-id>-fix-decision.md`.
+- `application_plan_ref`: `${planning_dir}/rca/<failure-id>-application-plan.md`.
+- `applied_artifact_ref`: `${planning_dir}/rca/<failure-id>-applied.md`.
+- `original_signal_verification_ref`: `${planning_dir}/rca/<failure-id>-original-signal-verification.md` or the explicit Phase 6 verification-log artifact recorded before the critic runs.
+- `verification_critic_ref`: `${planning_dir}/rca/<failure-id>-verification-critic.md`, with optional validation-integrity evidence at `${planning_dir}/rca/<failure-id>-validation-integrity.md`.
+- `actual_diff_ref`: `${planning_dir}/rca/gate-set/<failure-id>/actual-diff.patch` or an explicit dossier-diff reference generated after Phase 5 changed-path check and refreshed before Phase 6.5.
+- `runtime_claim_ref`: the Phase 3 fix-decision `## Proof plan` runtime claim, optionally extracted to `${planning_dir}/rca/gate-set/<failure-id>/runtime-claim.md` with a back-reference to the fix-decision artifact.
+- `scope_ref`: application-plan scope plus changed-path check result, optionally materialized as `${planning_dir}/rca/gate-set/<failure-id>/scope.md`.
+- `cycle_id`: RCA verify-or-return cycle identity including `failure_id` and the numeric Phase 6 loop count.
+- `head_sha`, `base_ref`, and `diff_sha256`: active worktree and actual-diff identity captured after Phase 5 apply and before Phase 6.5.
+- `process_tree_path` and `root_invocation_uuid`: RCA trace inputs when process-tree verification is required; otherwise the operator must produce the mode-scoped non-applicability record.
+- Output paths under the canonical root below.
+
+Canonical output root: `${planning_dir}/rca/gate-set/<failure-id>/`.
+
+Required output paths:
+
+- `${planning_dir}/rca/gate-set/<failure-id>/dispatch-manifest.md`
+- `${planning_dir}/rca/gate-set/<failure-id>/join-manifest.json`
+- `${planning_dir}/rca/gate-set/<failure-id>/aggregate-report.md`
+- `${planning_dir}/rca/gate-set/<failure-id>/child-report-index.md`
+- `${planning_dir}/rca/gate-set/<failure-id>/expected-process.json`
+- `${planning_dir}/rca/gate-set/<failure-id>/process-tree-report.md` or `${planning_dir}/rca/gate-set/<failure-id>/process-tree-not-applicable.md`
+- `${planning_dir}/rca/gate-set/<failure-id>/ticket-comment-payload.md` when a tracker mirror is requested
+
+The RCA caller appends the gate-set output contract to the RCA success or block status. That contract output is required before composing any downstream lifecycle prompt. RCA cannot proceed to post-mortem authoring, action-item filing or indexing, runbooks, tracker comments, tracker close, or close-or-pending records while any required gate row is missing, stale, malformed, unsupported, non-LOW without valid ratification, skipped without valid follow-up, or unratified. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, and `STALE_REFUSAL` all block downstream handoff.
+
+Currentness re-verification is caller-visible and operator-owned. When Phase 6 returns to Phase 2, when Phase 3 revises the fix decision, when Phase 4 revises the application plan, or when Phase 5 reapplies code, any prior gate-set manifest for `<failure-id>` is stale for downstream handoff. Re-run or re-verify through `apply-gate-set`; RCA may not decide currentness locally. A `STALE_REFUSAL` is a blocking state, and its `next_action` drives repair routing to Phase 6 evidence repair, Phase 2 root-cause iteration, Phase 3 fix revision, Phase 4 plan revision, or Phase 5 re-apply as applicable.
+
+ACR-254 critics remain wired and are not replaced or double-counted by Phase 6.5. The fix-decision critic continues to call proof-risk when the proof plan is missing, malformed, proxy-only, or evidence-class mismatched. The verification critic continues to call validation-integrity when verification cites tests or validation-surface risk exists. The original-signal rerun remains Phase 6 and is a prerequisite to Phase 6.5. The new gate consumes those artifacts and adds the broader post-apply gate-set decision; those RCA-local prerequisites are never sufficient evidence for the broader gate-set `PASS`.
 
 ## Investigator-Phase Critic
 
@@ -93,7 +154,7 @@ Verdict line: `FIX-DECISION-CRITIC: PASS | PROOF-PLAN-MISSING | PROOF-RISK-HIGH`
 
 ## Verification-Phase Critic
 
-Dispatch this critic after Phase 6 reruns the original signal green and before Phase 7+ handoff. The critic prompt is written under `${scratch_dir}/prompts/<failure-id>-verification-critic.md`, dispatched with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>`, and writes `${planning_dir}/rca/<failure-id>-verification-critic.md`.
+Dispatch this critic after Phase 6 reruns the original signal green and before Phase 6.5. The critic prompt is written under `${scratch_dir}/prompts/<failure-id>-verification-critic.md`, dispatched with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>`, and writes `${planning_dir}/rca/<failure-id>-verification-critic.md`.
 
 The critic verifies:
 
@@ -104,11 +165,11 @@ The critic verifies:
 
 Verdict line: `VERIFICATION-CRITIC: PASS | TEST-HACKING-DETECTED | RUNTIME-EVIDENCE-MISSING`.
 
-`TEST-HACKING-DETECTED`, `RUNTIME-EVIDENCE-MISSING`, or any `HIGH`, `MEDIUM`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>` validation-integrity verdict blocks Phase 7+ handoff and returns to Phase 6 evidence repair or Phase 2 root-cause iteration, depending on whether the verification failure invalidates the claimed root cause.
+`TEST-HACKING-DETECTED`, `RUNTIME-EVIDENCE-MISSING`, or any `HIGH`, `MEDIUM`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>` validation-integrity verdict blocks Phase 6.5 and downstream handoff, then returns to Phase 6 evidence repair or Phase 2 root-cause iteration, depending on whether the verification failure invalidates the claimed root cause.
 
 ## Output Contract
 
-Return a concise status block naming `outcome`, `failure_id`, `trigger_type`, `cycles`, and the artifact paths produced. On success, include `${planning_dir}/repro/<failure-id>.md` when Phase 1 ran, `${planning_dir}/rca/<failure-id>.md`, `${planning_dir}/rca/<failure-id>-investigator-critic.md`, `${planning_dir}/rca/<failure-id>-fix-decision.md`, `${planning_dir}/rca/<failure-id>-fix-decision-critic.md`, `${planning_dir}/rca/<failure-id>-application-plan.md`, `${planning_dir}/rca/<failure-id>-applied.md`, `${planning_dir}/rca/<failure-id>-verification-critic.md`, and the Phase 7+ handoff state.
+Return a concise status block naming `outcome`, `failure_id`, `trigger_type`, `cycles`, and the artifact paths produced. On success, include `${planning_dir}/repro/<failure-id>.md` when Phase 1 ran, `${planning_dir}/rca/<failure-id>.md`, `${planning_dir}/rca/<failure-id>-investigator-critic.md`, `${planning_dir}/rca/<failure-id>-fix-decision.md`, `${planning_dir}/rca/<failure-id>-fix-decision-critic.md`, `${planning_dir}/rca/<failure-id>-application-plan.md`, `${planning_dir}/rca/<failure-id>-applied.md`, `${planning_dir}/rca/<failure-id>-original-signal-verification.md` or equivalent verification log, `${planning_dir}/rca/<failure-id>-verification-critic.md`, `${planning_dir}/rca/gate-set/<failure-id>/dispatch-manifest.md`, `${planning_dir}/rca/gate-set/<failure-id>/join-manifest.json`, `${planning_dir}/rca/gate-set/<failure-id>/aggregate-report.md`, `${planning_dir}/rca/gate-set/<failure-id>/child-report-index.md`, `${planning_dir}/rca/gate-set/<failure-id>/expected-process.json`, `${planning_dir}/rca/gate-set/<failure-id>/process-tree-report.md` or `${planning_dir}/rca/gate-set/<failure-id>/process-tree-not-applicable.md`, optional `${planning_dir}/rca/gate-set/<failure-id>/ticket-comment-payload.md`, and the downstream handoff state.
 
 For cap-hit, include `${planning_dir}/rca/<failure-id>-cap-hit.md` and all rerun evidence. For blocked or needs-input outcomes, include the blocking path and the smallest root-owned question.
 
@@ -118,9 +179,10 @@ Write questions under `${scratch_dir}/questions/` and return `NEEDS_INPUT:<absol
 
 ## Stop Conditions
 
-- Success: original failing test or reproduction test is green and Phase 7+ handoff is recorded or completed.
+- Success: original failing test or reproduction test is green, `VERIFICATION-CRITIC: PASS` is current, Phase 6.5 `apply-gate-set(caller_mode=rca-post-apply)` returns `PASS`, and downstream handoff is recorded or completed.
 - Cap hit: the hard cap of 3 cycles is reached and starting cycle 4 would be required.
-- `BLOCKED:<reason>`: required inputs are unreadable, output roots are unwritable, child invocation output is missing, or verification cannot run.
+- `BLOCKED:<reason>`: required inputs are unreadable, output roots are unwritable, child invocation output is missing, verification cannot run, or Phase 6.5 returns missing, stale, malformed, unsupported, non-LOW, unratified, invalid skip, or process-tree-blocking rows.
+- `STALE_REFUSAL`: `apply-gate-set` cannot prove currentness for the active cycle/head/diff/scope/runtime-claim identity; block downstream lifecycle and follow the returned `next_action`.
 - `NEEDS_INPUT:<absolute_artifact_path>`: a human-owned decision or unavailable evidence blocks the next phase.
 
 ## Anti-Scope

@@ -4341,3 +4341,25 @@ Source: `## Mode propagation` section of the risk-profile artifact (read by Phas
 The duplicates inventory at `/home/nes/ai/planning/acr-275-remove-local-review-steps/research/acr-275-duplicates.md` § Drift between duplicates names two wording/semantic drifts inside the canonical local-review stack: (1) stale "Phase 7 CodeRabbit" wording inside Phase 8.5 even though CodeRabbit was retired 2026-05-15, and (2) internal ticket-cross-link drift inside `implementation-pipeline-orchestrator.md` where Phase 9 already says it cites the branch name (tickets-first variant) but Phase 8.5 also posts a branch-citation comment.
 
 Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5: drift inside the WU's touched surface is in-scope by definition; the WU is already changing this canonical stack. No separate tracker ticket. Phase 3 proposer must reconcile the drift as part of the local-review removal design.
+
+## D-2026-05-19a — ACR-287 Phase 0 rebase onto origin/master (0c699d6)
+
+**WU**: ACR-287. **Phase**: 0 bootstrap. **Decision**: rebase WU branch onto origin/master before any phase artifact exists.
+
+The WU branch `acr-287-rca-apply-gate-set-wiring` was created from an older master tip (4720133 ACR-280) before ACR-291's apply-gate-set operator + workflow + index.json entry merged (0c699d6, May 19 11:14 PT). ACR-287 explicitly consumes that operator from the RCA caller side, so the WU branch must include ACR-291 in its base.
+
+Action: `git -C /home/nes/ai/worktrees/acr-287-rca-apply-gate-set-wiring fetch origin && git -C ... rebase origin/master`. New tip: 0c699d672918e65ce952aab54c6e22afa6cb1ffa. `agents/apply-gate-set.md` and `workflows/apply-gate-set.md` now present in the worktree.
+
+Rebase verification gate not applied: the convention triggers "whenever the WU branch has been rebased or pulled with rebase after Phase 0 starts and before the orchestrator consumes any prior PASS/LOW state." At Phase 0 bootstrap, no phase artifacts exist in `${planning_dir}` and no prior PASS/LOW state is being consumed — this rebase establishes the working base, not a mid-flight rebase against prior evidence.
+
+## D-2026-05-19b — ACR-287 Phase 8 rebase onto current origin/master (c42290f)
+
+**WU**: ACR-287. **Phase**: 8 (Phase 8 PR-review gates round 1 returned MEDIUM on justification only — stale-base diff artifact). **Decision**: clean fast-forward rebase onto current origin/master before Phase 8 join-manifest publication.
+
+Justification gate flagged `wu-diff.patch` showed `conventions/hotfix-skip-with-followup.md` as deleted because the upstream commit `c42290f Add hotfix-skip-with-followup convention (#184)` merged AFTER the Phase 0 rebase but BEFORE Phase 8 diff capture. Verification (`git log` on the file from HEAD): the deletion appears only in the diff vs origin/master computation; the WU's authored content is unchanged.
+
+Action: `git fetch origin && git rebase origin/master`. PRE: 0f39cc5b47e5b049e5586e8d61b187221daef76c. POST: 5a8c7af4ef368a1432cbfcf8101c11b2a310fc2d. `git diff PRE POST --stat` shows exactly one upstream-added file (`conventions/hotfix-skip-with-followup.md`, +117 lines) — clean fast-forward, no merge conflict, no authored content disturbed.
+
+Rebase verification gate disposition: the formal gate (4 checks) per `~/ai/conventions/rebase-verification.md` is structurally INAPPLICABLE for this markdown-only WU. Check #1 test re-run: no `cargo`/`bun`/`pytest` test suite for `~/ai` markdown surface. Check #2 coverage non-regression: no coverage adapter exists for markdown — would BLOCKED:coverage-adapter-missing per convention; not a true defect. Check #3 behavior/contract verification: "tests" for this WU are WRITE-state eval-spec scenarios; the eval-spec IS the diff itself, with no runtime detector. Check #4 drift check: the upstream commit `c42290f` adds a NEW file (`conventions/hotfix-skip-with-followup.md`) that ACR-287 does not touch — no overlap, no drift surface. The clean fast-forward + content-unchanged-from-WU verification (above) is the equivalent evidence for a markdown-only WU.
+
+Re-running Phase 8 PR-review gates against the fresh post-rebase `wu-diff.patch` is the substantive verification path. All four gates run R2 against the regenerated diff.
