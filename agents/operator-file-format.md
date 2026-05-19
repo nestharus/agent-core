@@ -1,5 +1,11 @@
 # Operator Prompt File Format
 
+## Declared roles
+
+`validator`, `parser`, `formatter`.
+
+This file-local declaration reflects this document's ownership of operator schema validation rules, YAML contract parse shape, and canonical format examples.
+
 Operator prompts are `.md` files invoked via the `agents` CLI. See `~/ai/workflows/agents-cli.md` for local usage notes. This doc specifies the format for operator prompt files in `~/ai/agents/` and `~/work/agents/`.
 
 Use this as the reference shape for new operators. For CLI resolution order, see `/home/nes/projects/agent-runner/README.md`.
@@ -16,7 +22,7 @@ output_format: ''
 ---
 ```
 
-The contract is the three keys above. Preserve them exactly.
+Frontmatter is the CLI metadata contract. Preserve these three keys exactly.
 
 - `description` tells another operator or a human when to choose this file. Single-quoted to keep YAML parsing simple even when the description contains colons or other punctuation.
 - `model` sets the default model. The caller can override it with `-m <other-model>` at invocation time.
@@ -32,6 +38,211 @@ description: 'Run the CodeRabbit review loop until review value converges'
 model: gpt-high
 output_format: ''
 ---
+```
+
+## Contract block (`operator-contract-v1`)
+
+Every operator or workflow Markdown file MUST contain a `## Contract` heading with a single fenced YAML block whose first key is `schema: operator-contract-v1`. The contract block is the machine-readable call interface for dispatchers.
+
+The schema fields are:
+
+- `inputs:` - required and optional input keys per task, with type and default-source annotations. Each input has `name`, `type`, `required`, `default_source`, and `description`.
+- `defaults:` - project-specific or wrapper-declared default values. Each default has `name`, `value`, and `source`.
+- `secrets:` - environment variables the operator reads.
+- `outputs:` - return envelope shape by task. Each output has `task`, `success_shape`, and `wrote_lines`.
+- `errors:` - known error envelope shapes. Each error has `class`, `cause`, and `recovery`.
+- `side_effects:` - file, system, or external-API mutations.
+- `must_delegate:` - operations callers MUST invoke through this operator.
+- `may_direct:` - operations callers MAY invoke directly.
+- `forbidden_direct:` - operations callers MUST NEVER do directly.
+- `inherits:` - project-wrapper-only base operator path or identity.
+- `base_procedure:` - project-wrapper-only base operator procedure-file path.
+
+Schema reference:
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: <input-key>
+    type: <string | int | bool | enum | path>
+    required: <true | false>
+    default_source: <wrapper:<name> | env:<VAR> | caller | prompt | derived | base>
+    description: <one-line description>
+defaults:
+  - name: <input-key>
+    value: <default-value>
+    source: <wrapper:<name> | env:<VAR> | base>
+secrets:
+  - <ENV_VAR_NAME>
+outputs:
+  - task: <task-name>
+    success_shape: <one-line description of stdout or return shape>
+    wrote_lines: [<artifact-path>, ...]
+errors:
+  - class: <BLOCKED | NEEDS_INPUT | INVALID_INPUT | INFRA>
+    cause: <when this fires>
+    recovery: <expected caller action>
+side_effects:
+  - <side-effect-description>
+must_delegate:
+  - <operation-name>
+may_direct:
+  - <operation-name>
+forbidden_direct:
+  - <operation-name>
+```
+
+## Wrapper inheritance pattern
+
+A project wrapper sets `inherits:` and `base_procedure:` in its `## Contract` block. Wrapper `defaults:` override base `defaults:`; inheritance is otherwise additive for `secrets:`, `outputs:`, `errors:`, `side_effects:`, `must_delegate:`, `may_direct:`, and `forbidden_direct:`.
+
+## Procedure-vs-contract boundary
+
+The `## Contract` block is the call interface dispatchers read mechanically; the body remains the procedural authority. Procedure detail belongs in the body, not in the contract YAML. The contract is not a place for if-then logic, exception-handling prose, or step-by-step instructions.
+
+## Worked example — base operator (`jira-operator`)
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: task
+    type: enum
+    required: true
+    default_source: caller
+    description: One of read, comment, transition, search, create, update-estimate.
+  - name: issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: Jira issue key for read, comment, transition, or update-estimate.
+  - name: body
+    type: string
+    required: false
+    default_source: caller
+    description: Comment body; markdown is rendered to ADF by the operator.
+  - name: target_status
+    type: string
+    required: false
+    default_source: caller
+    description: Destination status name for transition.
+  - name: jql
+    type: string
+    required: false
+    default_source: caller
+    description: Jira Query Language string for search.
+  - name: fields
+    type: string
+    required: false
+    default_source: caller
+    description: Create payload fields including project, summary, issuetype, labels, parent, and description.
+  - name: jira_url
+    type: string
+    required: true
+    default_source: wrapper:<name> | caller | prompt
+    description: Jira base URL.
+  - name: jira_project
+    type: string
+    required: true
+    default_source: wrapper:<name> | caller | prompt
+    description: Default Jira project key.
+  - name: jira_account_email
+    type: string
+    required: true
+    default_source: wrapper:<name> | caller | prompt
+    description: Jira account email used with JIRA_API_KEY.
+  - name: estimate
+    type: int
+    required: false
+    default_source: caller
+    description: Refined story-point estimate for update-estimate.
+  - name: estimate_field
+    type: string
+    required: false
+    default_source: base
+    description: Jira story-point field for update-estimate.
+defaults:
+  - name: estimate_field
+    value: customfield_10016
+    source: base
+secrets:
+  - JIRA_API_KEY
+outputs:
+  - task: read
+    success_shape: Brief issue block or rendered ticket markdown when output_path is supplied.
+    wrote_lines: []
+  - task: comment
+    success_shape: New comment ID and confirmation line.
+    wrote_lines: []
+  - task: transition
+    success_shape: Before-status to after-status line.
+    wrote_lines: []
+  - task: search
+    success_shape: One result per line as KEY status summary.
+    wrote_lines: []
+  - task: create
+    success_shape: New issue key and browse URL.
+    wrote_lines: []
+  - task: update-estimate
+    success_shape: Issue key, refined estimate, and durable comment ID.
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: JIRA_API_KEY unset, lookup/auth failure, or Jira REST 4xx.
+    recovery: Fix credentials, permissions, endpoint, or request payload, then rerun.
+  - class: NEEDS_INPUT
+    cause: Required create-screen field is not specified by caller, wrapper, or base default.
+    recovery: Supply the missing field or project wrapper default.
+side_effects:
+  - jira-create
+  - jira-comment
+  - jira-transition
+  - jira-update-estimate
+must_delegate:
+  - jira-writes
+may_direct:
+  - jira-reads
+forbidden_direct:
+  - curl-against-atlassian-with-session-metadata
+```
+
+## Worked example — project wrapper (`rfq/jira-operator`)
+
+```yaml
+schema: operator-contract-v1
+inherits: ~/ai/agents/jira-operator.md
+base_procedure: ~/ai/agents/jira-operator.md
+inputs: []
+defaults:
+  - name: jira_url
+    value: https://lamaai.atlassian.net
+    source: wrapper:rfq
+  - name: jira_project
+    value: INFA
+    source: wrapper:rfq
+  - name: jira_account_email
+    value: aaron.solomon@scint.ai
+    source: wrapper:rfq
+  - name: story_points_disabled
+    value: true
+    source: wrapper:rfq
+secrets:
+  - JIRA_API_KEY
+outputs:
+  - task: inherited
+    success_shape: Inherited from ~/ai/agents/jira-operator.md.
+    wrote_lines: []
+errors:
+  - class: inherited
+    cause: Inherited from ~/ai/agents/jira-operator.md.
+    recovery: Follow the base operator recovery path.
+side_effects:
+  - inherited-from-base-jira-operator
+must_delegate:
+  - jira-writes
+may_direct:
+  - jira-reads
+forbidden_direct:
+  - curl-against-atlassian-with-session-metadata
 ```
 
 ## Minimum Body

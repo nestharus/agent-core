@@ -4039,3 +4039,29 @@ Phase 3 prompt will carry `risk_profile_path=/home/nes/ai/planning/acr-280-decom
 2. `tools/acr-187-verify/test_verify.py::test` — pytest collection error: helper `test(func: Callable[[], None])` is treated as a fixture-bearing test.
 
 **Decision.** Outside ACR-280's touched-file enumeration. Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5, the bug-discovery rule applies only when characterization tests this WU authored fail; none were authored in 2.5.1 because the WU is markdown-only and routes to structural-verification eval-spec authoring per `~/ai/conventions/evals.md`. Not blocking; surfaced at WU close as recommended separate tickets.
+## D-2026-05-18-acr278-drift-discoveries — ACR-278 Phase 2.5.4 drift discoveries dispositioned proceed-with-note
+
+**WU**: ACR-278. **Phase**: 2.5 step 4 (duplicates). **Decision**: proceed-with-note for both discoveries; do NOT file tracker tickets within this WU; do NOT expand scope.
+
+Two out-of-scope duplicate-systems drift discoveries surfaced in `/home/nes/ai/planning/acr-278-operator-contract-format/research/acr-278-duplicates.md` § Discoveries During Phase 2.5:
+
+1. **RFQ direct Jira REST write paths** parallel to `jira-operator`. Type: duplicate-system / delegation-boundary drift. Researcher recommendation: deferred to later migration work.
+2. **`agent-core-acr225-probe` operator-catalog drift** — 15 silently-drifted operator files in a project-local copy. Type: stale-snapshot risk. Researcher recommendation: deferred as follow-up/archive cleanup.
+
+**Justifying evidence path**: `/home/nes/ai/planning/acr-278-operator-contract-format/research/acr-278-duplicates.md`.
+
+**Why**: The ACR-278 dispatch from root explicitly anti-scoped this: "NO expanding the priority-0 backfill set (priority-1+ is ACR-279's job)." The user pre-decided the value/scope question, so no NEEDS_INPUT new-value question is warranted (procedural drift resolved by orchestrator per the dispatch). Both discoveries are appropriate inputs to ACR-279 (broader backfill + dispatcher rollout) and are recorded here for traceability.
+
+## D-2026-05-18-acr278-phase4-pta-rerun — ACR-278 Phase 4 process-tree audit #1 rerun (codex CLI wrapper-hang quirk)
+
+**WU**: ACR-278. **Phase**: 4 (Process-tree audit #1, R1 → R2). **Decision**: rerun the code-quality workflow to produce a terminal-status trace; canonical outputs are independently validated as LOW.
+
+R1 of Process-tree audit #1 returned `FAIL:1` on a single blocking violation (`P4-PTA-001` non-terminal trace). All five Phase 4 canonical outputs (audit/scope/shortcut/supported-surface/code-quality aggregate) PASSED canonical-output-trust verification (SHA-256 + verdict match). The blocking defect was confined to trace status: the code-quality root (`ed877df1-efe1-4e30-a094-b9248559031a`) and the cohesion-auditor child (`da35cc79-...`) remained `running` in the runner state DB after the codex CLI wrapper hung post-aggregate-write — the aggregate's own `## Operational Note` documented the wrapper hang, and the cohesion grandchildren show terminal status with mtime matching the cohesion-auditor.md report (22:12:37 vs 22:12:39). The R2 risk gates and the R2 code-quality aggregate all returned LOW.
+
+Per the orchestrator's escalation policy, a `blocking` process-tree audit verdict halts the next phase "until the affected subtree is rerun or repaired." Rerunning the code-quality workflow is the canonical "rerun the affected subtree" disposition. The repair-without-rerun path (treating the operational note as evidence that the work completed) was not adopted because the process-tree-auditor's `blocking` topology check is a hard non-terminal-status rule that cannot be advisory-downgraded for an untrusted-canonical workflow.
+
+**Justifying evidence path**: `/home/nes/ai/planning/acr-278-operator-contract-format/risk/acr-278-phase-4-process-tree-audit.md` (R1 FAIL:1 verdict + per-row PASS/FAIL detail). After the rerun, a fresh trace + re-dispatched process-tree-auditor verdict will land at the same path.
+
+**Why**: codex CLI wrapper hang is an existing infrastructure quirk independent of ACR-278's content. The R1 R2-cycle for code-quality produced LOW correctly; the rerun is purely topology-bookkeeping to clear the runner state. The rerun risks a different verdict (gpt-high non-determinism on cohesion/coupling); if a HIGH appears, it's a new violation handled separately.
+
+

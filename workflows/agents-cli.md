@@ -19,6 +19,12 @@ workflow_dispatch_contract:
 ---
 # `agents` CLI — Workflow Conventions
 
+## Declared roles
+
+`orchestration`, `validator`, `formatter`.
+
+This file-local declaration reflects this workflow's ownership of dispatch sequencing, pre-dispatch contract validation, and canonical prompt/log command formatting.
+
 CLI reference: `/home/nes/projects/agent-runner/README.md`.
 That is the authoritative source for flags, options, named-agent resolution, TOML model config, and invocation shapes. This doc only covers the conventions layered on top for pipeline work.
 
@@ -48,6 +54,16 @@ root orchestrator or workflow operator invoking agents CLI
 
 - does not replace the agent-runner README as the authoritative CLI reference
 - does not define model role selection beyond pointing to the model-role matrix
+
+## Pre-dispatch contract resolution
+
+1. Resolve the selected operator path: use the project wrapper when execution is in project scope and the wrapper is current; otherwise use the base operator.
+2. Read the operator's `## Contract` block. Parse the fenced YAML and validate `schema: operator-contract-v1`.
+3. Apply `defaults:` to the input set and verify all required inputs are present from defaults or caller-supplied values.
+4. Honor the `must_delegate:` and `forbidden_direct:` boundaries when constructing the dispatch prompt; do not inline procedure that belongs to the operator.
+5. Then invoke `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape.
+
+The `workflow_dispatch_contract` frontmatter, where present in workflow files, is the sibling workflow contract surface. The operator `## Contract` block is the analogous surface for operator dispatch.
 
 ## Standard invocation shape
 
