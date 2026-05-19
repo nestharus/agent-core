@@ -3886,3 +3886,26 @@ Scope of ratification: local to the Phase 6 per-component code-quality fanout fo
 
 Effect: Phase 6 may close per-component and advance to Process-tree audit #2 and Phase 7 readiness gates with the `acr-254-active-layer` component marked as ratified. The component's `aggregate-code-quality.md` retains its actual `HIGH` verdict; the orchestrator's ratification is the advance basis, recorded here.
 
+
+## D-2026-05-19-acr276-estimate-coldstart — ACR-276 inherited-estimate cold-start disposition
+
+**WU**: ACR-276. **Phase**: 2.5 step 4a. **Decision**: Proceed without baseline estimate (option A).
+
+ACR-276 was created with `story_point_estimate=null` and `estimate_source=missing` on Linear. Phase 2.5 step 4a fired the inherited-estimate cold-start NEEDS_INPUT question because no prior user disposition existed. Per `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`, the orchestrator emitted question artifact `q-55fa6252-da3b-41d3-9c7c-6dee8430fd2e.question.json` (root selected option A) rather than self-applying a default.
+
+Justification: ACR-261 R2 first-party finding rows in `/home/nes/ai/planning/acr-261-jj-resolve-list-normalize/code-quality/acr-261-phase-4/reports/function-classification-auditor.md` supply the false-positive class verbatim (e.g. `workflows/verified-rebase.md` `### 1. Preflight` flagged as mixing validator + formatter + orchestration). ACR-250 and ACR-251 are direct family precedent (both shipped focused auditor-prompt refinements without prototype spike). Defer-to-prototype strict signal count: 0/6 (1/6 if the "majority HIGH" signal is read leniently against 1 HIGH + 1 MEDIUM surface), below the 2+ threshold. Phase 3 proposer will derive `refined_story_point_estimate` from this evidence.
+
+Question/answer artifacts:
+- `/home/nes/ai/planning/acr-276-fc-auditor-markdown-procedure/.scratch/questions/q-55fa6252-da3b-41d3-9c7c-6dee8430fd2e.question.json`
+- `/home/nes/ai/planning/acr-276-fc-auditor-markdown-procedure/.scratch/questions/q-55fa6252-da3b-41d3-9c7c-6dee8430fd2e.answer.json`
+
+## D-2026-05-19-acr276-mode-propagation — ACR-276 Phase 2.5 step 8 mode propagation
+
+**WU**: ACR-276. **Phase**: 2.5 step 8. **Decision**: Per-surface mode map propagated to Phase 3 from `/home/nes/ai/planning/acr-276-fc-auditor-markdown-procedure/risk/acr-276-risk-profile.md`.
+
+| Surface | Per-surface verdict | Pipeline mode |
+|---|---|---|
+| `~/ai/agents/function-classification-auditor.md` | HIGH | exhaustive |
+| `~/ai/evals/acr-276-*/eval.md` candidate | MEDIUM | lean with explicit HIGH-coverage-gap callout |
+
+WU-level verdict: HIGH. Phase 3 prompt carries `risk_profile_path` and the per-surface mode list at the top of the proposal per orchestrator Phase 3 spec.
