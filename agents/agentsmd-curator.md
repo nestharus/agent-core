@@ -6,6 +6,12 @@ output_format: ''
 
 # AGENTS.md Curator
 
+## Declared roles
+
+`parser`, `validator`, `formatter`.
+
+This file-local declaration reflects the curator's parsing of AGENTS routing rows and operator contracts, validation of catalog-to-contract consistency, and formatted finding output.
+
 You audit and (in `edit` mode) maintain the AGENTS.md file and the `${agents_dir}` operator ecosystem against the architecture rules below. You do NOT design new workflows or operators (that's an orchestration concern); you keep the existing structure clean, consistent, and discoverable.
 
 ## Architecture Rules (Authoritative)
@@ -30,8 +36,9 @@ These rules drive every audit and edit you make.
 
 **Operator files (`${agents_dir}/*.md`) contain:**
 - Frontmatter: `description`, `model`, `output_format`
+- `## Contract` with a fenced `operator-contract-v1` YAML call interface for inputs, defaults, errors, delegation, and side effects
 - Use When / Do Not Use When
-- Required Inputs (named, typed if relevant)
+- Required Inputs as human-readable prose that points to, and does not conflict with, the structured `## Contract`
 - Non-Negotiables (rules that must hold regardless of input)
 - Procedures (one per workflow path the operator handles)
 - Decision Table
@@ -44,6 +51,7 @@ These rules drive every audit and edit you make.
 - Workflow steps in AGENTS.md reference operators by `agents/<name>.md` (relative)
 - The model named in a workflow step matches the operator file's frontmatter `model` (or is an explicit override stated in the workflow row)
 - No procedural drift — if an operator's procedure changes, the AGENTS.md row must still describe the same shape (inputs/outputs/model)
+- AGENTS routing summaries SHOULD point to the operator's `## Contract` block rather than duplicate the input schema.
 
 ## Use When
 
@@ -105,7 +113,9 @@ Default to `audit` if mode is not specified.
 2. **Cross-reference check.** For each row in AGENTS.md routing table:
    - Does the named `agents/<name>.md` exist?
    - Does its frontmatter `model` match the workflow row's model (or is the row an explicit override)?
-   - Are required inputs in the routing table consistent with the operator's `Required Inputs` section?
+   - Does the operator file contain a `## Contract` block with `schema: operator-contract-v1`? If not, emit `severity: advisory`, `class: catalog-row-missing-contract`.
+   - Does the AGENTS.md row duplicate Required Inputs prose that conflicts with the operator's `## Contract` `inputs:` field set? If so, emit `severity: advisory`, `class: catalog-row-contract-input-conflict`.
+   - Are any brief routing input summaries still consistent with the operator's `## Contract` and `Required Inputs` prose?
 
 3. **Operator discoverability check.** For each `${agents_dir}/*.md`:
    - Is it reachable from AGENTS.md routing?
@@ -175,6 +185,8 @@ These are the patterns the curator most often encounters. Familiarity speeds aud
 | Decision table for one operator embedded in AGENTS.md | MAJOR | Move to that operator file's Decision Table section |
 | Detailed example walkthrough in AGENTS.md | MAJOR | Move to operator (or to a dedicated docs file outside AGENTS.md) |
 | Cross-reference uses absolute path (`${agents_dir}/foo.md`) | MINOR | Change to relative `agents/foo.md` |
+| Operator row points to an operator file with no `## Contract` block | advisory | Point to the missing contract and leave blocking enforcement to later migration |
+| AGENTS row input prose conflicts with operator `## Contract` inputs | advisory | Replace the row's duplicate schema with a pointer to the operator contract |
 
 ## Stop Conditions
 
@@ -183,7 +195,7 @@ These are the patterns the curator most often encounters. Familiarity speeds aud
 
 ## Output Contract
 
-Audit mode: `AUDIT REPORT` block with status, findings (numbered, with severity + description + proposed remediation), and an aggregate status.
+Audit mode: `AUDIT REPORT` block with status, findings (numbered, with severity + description + proposed remediation), catalog-contract findings (`catalog-row-missing-contract`, `catalog-row-contract-input-conflict`) when present, and an aggregate status.
 
 Edit mode: list of edits applied, findings closed, re-audit status, any new findings.
 

@@ -1,5 +1,11 @@
 # `~/ai/` Master Routing & Topology
 
+## Declared roles
+
+`orchestration`, `accessor`, `formatter`.
+
+This file-local declaration reflects AGENTS.md ownership of shared routing order, pointer access to operator contracts, and catalog summary formatting.
+
 Purpose: shared routing and workflow topology for any project that uses `~/ai/` as its workflow library.
 
 Project `AGENTS.md` files should reference this file for the generic routing layer, then add only repo-specific overrides, operators, infrastructure, and exceptions.
@@ -29,6 +35,8 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - Machine-local planning artifacts live outside the worktree/repo diff; do not add new `.gitignore` rules for this WU's machine-local planning artifacts; upload durable outputs to the ticket when they need to survive.
 
 ## Operator Routing Table
+
+Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-orchestrator`, and `rfq/jira-operator` carry valid `## Contract` blocks as of ACR-278.
 
 ### AGENTS maintenance
 
@@ -174,7 +182,7 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 ### Implementation pipeline orchestration
 
 - `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions remain user-owned, and `tickets_first_variant=true` also surfaces the Phase 8.5 human local-review gate before Phase 9.
-  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?`, `tickets_first_variant?` | Model: `claude-opus`
+  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | See `agents/implementation-pipeline-orchestrator.md` `## Contract` for inputs/defaults/errors/delegation, including ticket-operator contract resolution. | Model: `claude-opus`
 
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
   File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
@@ -276,8 +284,8 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 
 ### External integration
 
-- `jira-operator` - Read, comment on, transition, search, or create Jira issues through the Atlassian REST API.
-  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | Inputs: `task`, `issue_key?`, `body?`, `target_status?`, `jql?`, `fields?`, `jira_url`, `jira_project`, `jira_account_email` | Model: `claude-opus`
+- `jira-operator` - Read, comment on, transition, search, create, or update-estimate Jira issues through the Atlassian REST API.
+  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | See `agents/jira-operator.md` `## Contract` for inputs/defaults/errors/delegation. | Model: `claude-opus`
 
 ### Writing / document authoring
 
@@ -393,7 +401,7 @@ See [`~/ai/models/roles.md`](models/roles.md) for the authoritative matrix. Defa
 
 ## Operator File Format
 
-See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for the frontmatter contract and body skeleton.
+See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for frontmatter, `## Contract` call-interface blocks, and body skeleton guidance.
 
 ## How Projects Extend This
 
@@ -405,9 +413,7 @@ Projects organized for agent-driven workflows use the
 The git repository sits at `trunk/`; the project's own `AGENTS.md`
 lives at `<project>/trunk/AGENTS.md`.
 
-Project-specific operator wrappers live in `<project>/trunk/agents/` and reference `~/ai/agents/<name>.md` as their base procedure.
-
-See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for the shared contract; once a `Project wrappers` section exists there, use it. Until then, follow the current convention: frontmatter, `Base procedure: ~/ai/agents/<name>.md`, and repo-specific defaults only.
+Project-specific operator wrappers live in `<project>/trunk/agents/`, reference `~/ai/agents/<name>.md` as their base procedure, and carry wrapper defaults in their `## Contract` block. See [`~/ai/conventions/bootstrap-pattern.md`](conventions/bootstrap-pattern.md) § Closed-path dispatch for the wrapper-first contract-block read order.
 
 ### Per-Project Policy
 
@@ -415,7 +421,7 @@ A project's own `AGENTS.md` declares the per-project policy knobs the orchestrat
 
 - `ticket_system`: `jira` or `linear` — selects the ticket backend per [`~/ai/agents/implementation-pipeline-orchestrator.md`](agents/implementation-pipeline-orchestrator.md) § Ticket System Pluggability.
 - Linear projects declare `linear_team_key` (and optionally `linear_project_id`).
-- Jira projects declare `jira_url`, `jira_project`, and `jira_account_email`.
+- Jira projects may declare project policy values, but category-local Jira execution defaults should live in the project wrapper `## Contract` when a wrapper exists.
 - `skip_problem_map_gate` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
 - `auto_merge_after_phase_9` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
 - `tickets_first_variant` (boolean, default `false`) — see the orchestrator file's Optional Inputs.

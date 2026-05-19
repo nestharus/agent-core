@@ -26,6 +26,197 @@ adapter_declarations:
       - process-tree-auditor-surface
 ```
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: jira_issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: Jira issue key; mutually exclusive with linear_issue_key unless wu_brief_path cold-starts a ticket.
+  - name: linear_issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: Linear issue key; mutually exclusive with jira_issue_key unless wu_brief_path cold-starts a ticket.
+  - name: wu_brief_path
+    type: path
+    required: false
+    default_source: caller
+    description: Markdown brief used to create a ticket when no issue key is supplied.
+  - name: ticket_system
+    type: enum
+    required: false
+    default_source: caller
+    description: jira or linear; required when wu_brief_path is supplied without an issue key.
+  - name: jira_url
+    type: string
+    required: false
+    default_source: wrapper:<name> | base | caller
+    description: Jira base URL resolved from selected ticket operator contract.
+  - name: jira_project
+    type: string
+    required: false
+    default_source: wrapper:<name> | base | caller
+    description: Jira project key resolved from selected ticket operator contract.
+  - name: jira_account_email
+    type: string
+    required: false
+    default_source: wrapper:<name> | base | caller
+    description: Jira credential identity resolved from selected ticket operator contract, never session metadata.
+  - name: linear_team_key
+    type: string
+    required: false
+    default_source: wrapper:<name> | base | caller
+    description: Linear team key for create, list, and search dispatches.
+  - name: linear_project_id
+    type: string
+    required: false
+    default_source: wrapper:<name> | base | caller
+    description: Optional Linear project UUID or slugId for create and query dispatches.
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: Absolute path to the project repo root.
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: Absolute path to the per-WU worktree.
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: Absolute path to the per-WU scratch directory.
+  - name: planning_dir
+    type: path
+    required: true
+    default_source: caller
+    description: Absolute path to the per-WU planning artifact directory.
+  - name: audit_history_path
+    type: path
+    required: false
+    default_source: derived
+    description: Audit history path, defaulting to ${planning_dir}/audit-history.md.
+  - name: pipeline_entry_mode
+    type: enum
+    required: false
+    default_source: base
+    description: normal, review_first, or plug_existing_review.
+  - name: audit_target_type
+    type: enum
+    required: false
+    default_source: caller
+    description: Audit target type for review_first mode.
+  - name: audit_target_paths
+    type: path
+    required: false
+    default_source: caller
+    description: Audit target paths for review_first mode.
+  - name: audit_target_manifest
+    type: path
+    required: false
+    default_source: caller
+    description: Audit target manifest for review_first or mixed targets.
+  - name: audit_target_ref
+    type: string
+    required: false
+    default_source: caller
+    description: Current target ref for currentness certification.
+  - name: existing_review_bundle_path
+    type: path
+    required: false
+    default_source: caller
+    description: Existing review bundle for plug_existing_review mode.
+  - name: review_staleness_policy
+    type: enum
+    required: false
+    default_source: base
+    description: exact-match, required, or allow-with-drift-report.
+  - name: tickets_first_variant
+    type: bool
+    required: false
+    default_source: base
+    description: Enables Phase 8.5 human-local-review gate.
+  - name: branch_name
+    type: string
+    required: false
+    default_source: derived
+    description: Working branch name.
+  - name: predecessor_session_manifest_path
+    type: path
+    required: false
+    default_source: caller
+    description: Predecessor WU session manifest for successor handoff.
+  - name: models_dir
+    type: path
+    required: false
+    default_source: caller
+    description: Optional models directory passed through to agents invocations.
+  - name: skip_problem_map_gate
+    type: bool
+    required: false
+    default_source: base
+    description: Suppresses the routine Phase 2.5 problem-map approval gate.
+  - name: auto_merge_after_phase_9
+    type: bool
+    required: false
+    default_source: base
+    description: Enables direct ready-and-merge after Phase 9.
+defaults:
+  - name: pipeline_entry_mode
+    value: normal
+    source: base
+  - name: tickets_first_variant
+    value: false
+    source: base
+  - name: skip_problem_map_gate
+    value: false
+    source: base
+  - name: auto_merge_after_phase_9
+    value: false
+    source: base
+  - name: audit_workflow_path
+    value: ~/ai/workflows/audit.md
+    source: base
+  - name: operator_format_ref
+    value: ~/ai/agents/operator-file-format.md
+    source: base
+  - name: design_patterns_ref
+    value: ~/ai/conventions/design-patterns.md
+    source: base
+secrets: []
+outputs:
+  - task: run-pipeline
+    success_shape: Phase 9 draft PR URL recorded, audit-history closed, decisions tail synced.
+    wrote_lines:
+      - ${planning_dir}/session.json
+      - ${planning_dir}/audit-history.md
+      - ${scratch_dir}/pr-url.txt
+errors:
+  - class: BLOCKED
+    cause: Phase refusal, malformed artifact, missing required input after contract resolution, or process-tree blocking verdict.
+    recovery: Repair the blocked input or artifact and rerun the affected phase.
+  - class: NEEDS_INPUT
+    cause: New value, scope, or trade-off question written as an absolute question artifact path.
+    recovery: Root answers the question artifact and resumes.
+side_effects:
+  - git-worktree-create
+  - planning-dir-writes
+  - scratch-dir-writes
+  - ticket-system-writes-via-ticket-operator
+  - git-push-origin
+  - gh-pr-create
+must_delegate:
+  - ticket-operator-resolution
+  - contract-resolution
+forbidden_direct:
+  - session-metadata-jira-credential-resolution
+```
+
 ## Role
 
 You orchestrate one Work Unit through the full pipeline defined in `~/ai/workflows/implementation-pipeline.md`. You are the **only** delegated actor that coordinates the per-phase dispatches; if you are not running, the pipeline is not running. Every phase you trigger goes through `agents -m <model> -p <worktree> -f <prompt> 2>&1 | tee <log>` so that `agents trace --json` captures the entire orchestration tree and `process-tree-auditor` can audit it end-to-end.
@@ -51,16 +242,18 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 
 | Ticket system | Issue-key input | Operator | Description format |
 |---|---|---|---|
-| JIRA (Atlassian) | `jira_issue_key` | `~/ai/agents/jira-operator.md` (claude-opus) | ADF JSON |
+| JIRA (Atlassian) | `jira_issue_key` | resolved project wrapper when present and current, otherwise `~/ai/agents/jira-operator.md` (claude-opus) | ADF JSON |
 | Linear | `linear_issue_key` | `~/ai/agents/linear-operator.md` (claude-opus) | Markdown native |
 
-**Detection rule:** if both `jira_issue_key` and `linear_issue_key` are supplied, return `BLOCKED:exactly-one-ticket-system-required`. Otherwise, if `jira_issue_key` (or `wu_brief_path` with `ticket_system=jira`) is provided, all ticket dispatches use `jira-operator` and JIRA inputs (`jira_url`, `jira_project`, `jira_account_email`). If `linear_issue_key` (or `wu_brief_path` with `ticket_system=linear`) is provided, all ticket dispatches use `linear-operator` and Linear inputs (`linear_team_key`, optional `linear_project_id`). `linear_team_key` is passed through for team-scoped create, list, and search linear-operator dispatches. For Linear, `linear_project_id` is the retained input name, but the value may be a project UUID or `slugId` resolved by `linear-operator`; when supplied, it is passed through to create dispatches and issue-query dispatches that should be scoped to a project. Known-issue-key read/comment dispatches do not require separate team selection because the issue identifier carries the team identity. Exactly one system must be selected per WU; cross-system handoff is not supported within a single WU.
+**Detection rule:** if both `jira_issue_key` and `linear_issue_key` are supplied, return `BLOCKED:exactly-one-ticket-system-required`. Otherwise, if `jira_issue_key` (or `wu_brief_path` with `ticket_system=jira`) is provided, all ticket dispatches use the resolved Jira operator and its resolved contract inputs. If `linear_issue_key` (or `wu_brief_path` with `ticket_system=linear`) is provided, all ticket dispatches use `linear-operator` and Linear inputs (`linear_team_key`, optional `linear_project_id`) resolved through the same operator-contract rule. `linear_team_key` is passed through for team-scoped create, list, and search linear-operator dispatches. For Linear, `linear_project_id` is the retained input name, but the value may be a project UUID or `slugId` resolved by `linear-operator`; when supplied, it is passed through to create dispatches and issue-query dispatches that should be scoped to a project. Known-issue-key read/comment dispatches do not require separate team selection because the issue identifier carries the team identity. Exactly one system must be selected per WU; cross-system handoff is not supported within a single WU.
+
+Before any `${ticket_operator}` dispatch, resolve the selected operator contract in this order: project wrapper `## Contract` defaults when a current project wrapper applies, then base operator `## Contract` defaults, then caller-supplied inputs, then `BLOCKED:missing-required-input` or `NEEDS_INPUT:<artifact>`. Never use session metadata for Jira credential identity such as `jira_account_email`. This rule applies to Phase 0 read/create, Phase 3 update-estimate, Phase 8.5 cross-link comment, Phase 9 cross-link comment, and Final close-comment. Preserve the resolved contract path for the WU lifetime in `${planning_dir}/session.json` as `resolved_operator_contract_path`.
 
 **Shorthand used in this doc:**
 
-- `${ticket_operator}` = `jira-operator` (JIRA) or `linear-operator` (Linear).
+- `${ticket_operator}` = resolved project wrapper/base Jira operator (JIRA) or `linear-operator` (Linear).
 - `${ticket_id}` = `${jira_issue_key}` (JIRA) or `${linear_issue_key}` (Linear).
-- `${ticket_system_inputs}` = `jira_url, jira_project, jira_account_email` (JIRA) or `linear_team_key[, linear_project_id for create/query]` (Linear).
+- `${ticket_system_inputs}` = resolved contract inputs from the selected ticket operator; for JIRA this may be `jira_url, jira_project, jira_account_email` from wrapper/base defaults rather than caller input; for Linear this is `linear_team_key[, linear_project_id for create/query]`.
 
 **Format substitution:** wherever the existing JIRA procedure says "render to ADF" or "ADF body", the Linear path skips that step — Linear comments and descriptions are passed as Markdown directly. The `linear-operator` accepts Markdown verbatim; the `jira-operator` renders Markdown to ADF before POST.
 
@@ -71,7 +264,7 @@ The orchestrator supports two ticket backends and dispatches to the matching ope
 ## Required Inputs
 
 - One of `jira_issue_key` OR `linear_issue_key` — the issue key on the project's chosen ticket site. The orchestrator dispatches `${ticket_operator}` (`task=read`) at bootstrap to fetch the ticket and renders the description into `${scratch_dir}/ticket.md`. **Tickets live on the ticket system, not on disk.** The orchestrator does not read or write any `plans/tickets/**` file. If neither key is supplied, `wu_brief_path` must be present so Phase 0 can draft the ticket via `${ticket_operator}` (`task=create`) before continuing; in that case the caller must also supply `ticket_system` (`jira` or `linear`) so the orchestrator knows which backend to address.
-- The JIRA path additionally requires `jira_url`, `jira_project`, `jira_account_email` (passed through to every `jira-operator` dispatch). The Linear path additionally requires `linear_team_key` for team-scoped create/list/search dispatches. `linear_project_id` is optional, accepts a project UUID or `slugId`, and is passed to Linear create/query dispatches that should be scoped to a project. Known-issue-key read/comment dispatches do not require separate team selection.
+- Backend-specific inputs (`jira_url`, `jira_project`, `jira_account_email`, `linear_team_key`, and optional `linear_project_id`) are optional at the caller boundary when the resolved operator's `## Contract` defaults supply them. The caller need not pass them when Phase 0 step 1's contract-resolution rule resolves them from the project wrapper or base operator. Jira credential identity, especially `jira_account_email`, is never filled from session metadata.
 - `repo_root` — absolute path to the project repo root.
 - `worktree_path` — absolute path to the per-WU worktree. Default placement depends on the project's layout (see `~/ai/conventions/project-layout.md`):
   - Single-repo projects: `<repo_root>/worktrees/impl-<wu_lower>` or `~/projects/<name>/worktrees/<branch>/`.
@@ -165,11 +358,14 @@ Run this gate whenever the WU branch has been rebased or pulled with rebase afte
 
 ### Phase 0 — Bootstrap
 
-1. Resolve inputs. Detect the ticket system per the Ticket System Pluggability table: if both `jira_issue_key` and `linear_issue_key` are provided, return `BLOCKED:exactly-one-ticket-system-required`. If only `jira_issue_key` is provided, set `ticket_system=jira`, `ticket_operator=jira-operator`, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If only `linear_issue_key` is provided, set `ticket_system=linear`, `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input.
+1. Resolve inputs. Detect the ticket system per the Ticket System Pluggability table: if both `jira_issue_key` and `linear_issue_key` are provided, return `BLOCKED:exactly-one-ticket-system-required`. If only `jira_issue_key` is provided, set `ticket_system=jira`, resolve the current project wrapper contract first when project scope provides one, otherwise resolve the base Jira operator contract, set `ticket_operator` to that resolved operator path, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If only `linear_issue_key` is provided, set `ticket_system=linear`, resolve the selected Linear operator contract, set `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input.
+   - Before dispatching `${ticket_operator}` for `task=read` or `task=create`, resolve required operator inputs in this order: project wrapper `## Contract` `defaults:` when the resolved operator is a project wrapper; base operator `## Contract` `defaults:`; caller-supplied input; `BLOCKED:missing-required-input` or `NEEDS_INPUT:<artifact>`.
+   - Never use session metadata for Jira credential identity, including `jira_account_email`.
+   - Record `resolved_operator_path`, `resolved_contract_path`, and `resolved_defaults_source` in memory for every later `${ticket_operator}` prompt and for session manifest initialization.
 2. `mkdir -p ${scratch_dir}/{prompts,logs,phase6,phase25,questions}`.
 3. **Draft the ticket if cold-starting.** When `ticket_id` is unset:
    - Compose `${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-create.md` instructing `${ticket_operator}` to perform `task=create`.
-     - For `ticket_system=jira`: pass through `jira_url`, `jira_project`, `jira_account_email`, and the brief-derived `fields` block (`project`, `summary`, `issuetype`, `parent`, `labels`, ADF `description` containing problem context and any known constraints). `jira-operator` renders the brief Markdown to ADF.
+     - For `ticket_system=jira`: pass through the resolved contract inputs (`jira_url`, `jira_project`, `jira_account_email`) and the brief-derived `fields` block (`project`, `summary`, `issuetype`, `parent`, `labels`, ADF `description` containing problem context and any known constraints). `jira-operator` renders the brief Markdown to ADF.
      - For `ticket_system=linear`: pass through `linear_team_key` (and `linear_project_id` if set; accepted as UUID or `slugId`), the brief-derived `summary`, `description` (Markdown verbatim — no ADF), and any `labels`. `linear-operator` posts the Markdown directly via the Linear GraphQL API after resolving project and per-team labels.
    - The operator's output contract returns the new key + browse URL in both cases.
    - Dispatch: `agents -m claude-opus -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-create.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-0-ticket-create.log`.
@@ -180,7 +376,7 @@ Run this gate whenever the WU branch has been rebased or pulled with rebase afte
 7. **Route central-checkout WU execution.** When `repo_root` is the central `~/ai` checkout (the same checkout as `/home/nes/ai`), the orchestrator routes mutable WU execution to the per-WU `worktree_path` and never operates phase dispatches with `worktree_path == repo_root` (cf. `conventions/worktree-isolation.md`).
 8. `mkdir -p ${planning_dir}/{research,proposals,risk,contracts,alignment,code-quality}` if those subdirs don't exist. Initialize `${planning_dir}/audit-history.md` (empty audit-history skeleton).
 9. Verify `~/ai/workflows/implementation-pipeline.md`, `~/ai/conventions/agent-questions-and-session-graph.md`, and `~/ai/conventions/audit-history.md` exist; abort if any is missing.
-10. **Initialize the WU session manifest.** Write `${planning_dir}/session.json` before the first delegated phase dispatch. The manifest records `session_id` from the root `agents trace --json` invocation UUID, `ticket_id`, `ticket_system`, `branch=${branch_name}`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `branch_out_sha` from the current `main` at WU spawn, `spawned_at`, empty `phase_history`, `draft_pr_url=null`, `draft_pr_head_sha=null`, `merge_sha=null`, `merged_at=null`, empty `post_merge`, `successor_session_brief=null`, `predecessor_session_manifest_path` when supplied, and `closed_at=null`. Also create or update the aggregate index at `${planning_dir}/../sessions.index.json` with a row keyed by `ticket_id` and `branch`; the row points to `${planning_dir}/session.json`. Missing root invocation UUID, unresolved `branch_out_sha`, unwritable manifest, or unwritable index is `BLOCKED:session-manifest-init-failed`.
+10. **Initialize the WU session manifest.** Write `${planning_dir}/session.json` before the first delegated phase dispatch. The manifest records `session_id` from the root `agents trace --json` invocation UUID, `ticket_id`, `ticket_system`, `resolved_operator_path`, `resolved_contract_path`, `resolved_operator_contract_path`, `resolved_defaults_source` as a map of input to wrapper or base, `branch=${branch_name}`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `branch_out_sha` from the current `main` at WU spawn, `spawned_at`, empty `phase_history`, `draft_pr_url=null`, `draft_pr_head_sha=null`, `merge_sha=null`, `merged_at=null`, empty `post_merge`, `successor_session_brief=null`, `predecessor_session_manifest_path` when supplied, and `closed_at=null`. Also create or update the aggregate index at `${planning_dir}/../sessions.index.json` with a row keyed by `ticket_id` and `branch`; the row points to `${planning_dir}/session.json`. Missing root invocation UUID, unresolved `branch_out_sha`, unresolved contract path, unwritable manifest, or unwritable index is `BLOCKED:session-manifest-init-failed`.
 11. **Import predecessor handoff when supplied.** If `predecessor_session_manifest_path` is non-empty, read that manifest, verify it names this WU in either `successor_session_brief` or carried context, verify the referenced successor brief exists and cites the predecessor ticket, branch, PR URL, and merge SHA, then render `${scratch_dir}/predecessor-session.md` for downstream prompts. When the predecessor manifest or `${scratch_dir}/ticket-prototype-evidence.md` carries prototype-test PR fields, also render `${scratch_dir}/predecessor-prototype-evidence.md` with required keys from `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`: `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`. `test_paths_or_node_ids` must be a YAML sequence with one entry per test file path or node ID. Treat inherited test paths or node IDs as durable test-contract inputs, not optional context; dropping one without a manifest, spawned-ticket, or Step 6b output index strictly stronger equivalent supersession entry is a workflow violation. Do not spawn another WU from this step. On missing, unreadable, mismatched, stale, or ambiguous predecessor evidence, halt with `BLOCKED:invalid-predecessor-session`.
 12. **Entry-mode preflight.** After worktree/ticket bootstrap, parse `pipeline_entry_mode` as `normal` when absent. Unknown values return `BLOCKED:unknown-pipeline-entry-mode`; this is fail-closed and must not fall-closed into normal or audit-consuming behavior.
 13. **Normal-mode pollution guard.** In absent/normal mode, reject audit-only fields as `BLOCKED:entry-mode-input-conflict`. Audit-only fields are `audit_workflow_path`, `audit_target_type`, `audit_target_paths`, `audit_target_manifest`, `audit_target_ref`, `audit_report_bundle_path`, `existing_review_bundle_path`, `existing_review_bundle_schema`, `reviewed_target_paths`, `reviewed_target_ref`, `current_target_ref`, `review_staleness_policy`, `review_staleness_fallback`, and `proposer_fix_scope`. `audit_history_path` remains allowed loop memory.
@@ -278,7 +474,7 @@ After all six sub-steps land:
      3. Refuse to advance to Phase 3 after this dispatch. If the dispatch command fails or `${scratch_dir}/logs/${wu_lower}-phase-2.5-prototype-dispatch.log` is missing/empty, write `${scratch_dir}/questions/q-<uuidv4>.question.json` and halt with `NEEDS_INPUT:<absolute_question_artifact_path>` for handoff repair; do not silently fall through to exhaustive mode.
      4. Apply the backend-specific immediate `deferred_marker_operation`. ACR-126 defines a narrow Phase 2.5 step 7 defer branch exception to the normal rule that this orchestrator does not transition status; the exception is limited to immediate original-ticket defer disposition.
         - For `ticket_system=linear`, compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-linear.md` instructing `linear-operator` to run `task=apply-labels issue_key=${linear_issue_key} linear_team_key=${linear_team_key} labels=deferred-to-prototype create_missing=true replace=false`. Dispatch: `agents -m claude-opus -a linear-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-linear.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-linear.log`.
-        - For `ticket_system=jira`, compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira.md` instructing `jira-operator` to run `task=transition issue_key=${jira_issue_key} target_status=Blocked jira_url=${jira_url} jira_project=${jira_project} jira_account_email=${jira_account_email}`. Dispatch: `agents -m claude-opus -a jira-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira.log`. When `Blocked` is unavailable, compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.md` instructing `jira-operator` to run `task=comment` stating that `Blocked` was unavailable. Dispatch: `agents -m claude-opus -a jira-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.log`.
+        - For `ticket_system=jira`, compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira.md` instructing `${ticket_operator}` to run `task=transition issue_key=${jira_issue_key} target_status=Blocked` with the previously resolved contract inputs from `${planning_dir}/session.json`; do not rederive Jira credential identity from session metadata. Dispatch: `agents -m claude-opus -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira.log`. When `Blocked` is unavailable, compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.md` instructing `${ticket_operator}` to run `task=comment` stating that `Blocked` was unavailable, again using the resolved contract inputs. Dispatch: `agents -m claude-opus -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-marker-jira-comment-fallback.log`.
      5. Compose `${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-crosslink-comment.md` instructing `${ticket_operator}` to run `task=comment` on `issue_key=${ticket_id}` with body shape: `ACR-126 deferred-to-prototype handoff`, `original_ticket=<key>`, `prototype_tracker=<key|none>`, `prototype_identity=<short>`, `dossier_path=${prototype_planning_dir}/dossier/`, `deferred_marker=<transition:Blocked|label:deferred-to-prototype|comment-only>`, and `sprint_cycle_removal=<applied|fallback:operationally-manual|n/a>`. Dispatch: `agents -m claude-opus -a ${ticket_operator} -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-2.5-defer-crosslink-comment.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-2.5-defer-crosslink-comment.log`. The cross-link comment uses `prototype_tracker=none` when no `prototype_tracker` key exists yet, and otherwise names the `prototype_tracker`; it always names `prototype_identity` as `prototype-${prototype_id}` or `proto-<short>` plus `dossier_path`. Record `sprint_cycle_removal=fallback:operationally-manual` because there is no current Linear/Jira sprint/cycle/iteration removal task, and do not dispatch a client or CLI capacity-removal call.
      6. Write `${scratch_dir}/phase25/defer-disposition-execution.md` with required field names `original_ticket`, `ticket_system`, `prototype_identity`, `prototype_tracker_key_or_none`, `dossier_path`, `prototype_dispatch_prompt_path`, `prototype_dispatch_log_path`, `deferred_marker_operation`, `sprint_cycle_removal`, `comment_prompt_path`, `comment_log_path`, and `actor=implementation-pipeline-orchestrator`; valid values include `deferred_marker_operation` as `transition:Blocked | label:deferred-to-prototype | comment-only` and `sprint_cycle_removal` as `applied | fallback:operationally-manual | n/a`. Note for the spawned implementation WU: when the prototype dossier or spawned ticket later supplies prototype-test PR evidence, import it into `${scratch_dir}/predecessor-prototype-evidence.md` before the spawned implementation WU reaches Phase 3.
      7. Halt the implementation pipeline for this WU. The WU re-enters implementation only when the prototype's dossier spawns new tickets that supersede or replace it.
