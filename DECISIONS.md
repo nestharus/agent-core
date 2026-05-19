@@ -4341,3 +4341,13 @@ Source: `## Mode propagation` section of the risk-profile artifact (read by Phas
 The duplicates inventory at `/home/nes/ai/planning/acr-275-remove-local-review-steps/research/acr-275-duplicates.md` § Drift between duplicates names two wording/semantic drifts inside the canonical local-review stack: (1) stale "Phase 7 CodeRabbit" wording inside Phase 8.5 even though CodeRabbit was retired 2026-05-15, and (2) internal ticket-cross-link drift inside `implementation-pipeline-orchestrator.md` where Phase 9 already says it cites the branch name (tickets-first variant) but Phase 8.5 also posts a branch-citation comment.
 
 Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5: drift inside the WU's touched surface is in-scope by definition; the WU is already changing this canonical stack. No separate tracker ticket. Phase 3 proposer must reconcile the drift as part of the local-review removal design.
+
+## D-2026-05-19a — ACR-287 Phase 0 rebase onto origin/master (0c699d6)
+
+**WU**: ACR-287. **Phase**: 0 bootstrap. **Decision**: rebase WU branch onto origin/master before any phase artifact exists.
+
+The WU branch `acr-287-rca-apply-gate-set-wiring` was created from an older master tip (4720133 ACR-280) before ACR-291's apply-gate-set operator + workflow + index.json entry merged (0c699d6, May 19 11:14 PT). ACR-287 explicitly consumes that operator from the RCA caller side, so the WU branch must include ACR-291 in its base.
+
+Action: `git -C /home/nes/ai/worktrees/acr-287-rca-apply-gate-set-wiring fetch origin && git -C ... rebase origin/master`. New tip: 0c699d672918e65ce952aab54c6e22afa6cb1ffa. `agents/apply-gate-set.md` and `workflows/apply-gate-set.md` now present in the worktree.
+
+Rebase verification gate not applied: the convention triggers "whenever the WU branch has been rebased or pulled with rebase after Phase 0 starts and before the orchestrator consumes any prior PASS/LOW state." At Phase 0 bootstrap, no phase artifacts exist in `${planning_dir}` and no prior PASS/LOW state is being consumed — this rebase establishes the working base, not a mid-flight rebase against prior evidence.
