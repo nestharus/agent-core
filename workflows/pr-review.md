@@ -23,6 +23,8 @@ workflow_dispatch_contract:
 
 **This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md` — the step that makes implementation work consumable for review by gating the diff against the proposal that scoped it. It runs after CodeRabbit (`~/ai/workflows/coderabbit-loop.md`). Gates the draft PR before it is opened, or before it is promoted if it was opened already.
 
+Model-owned gates may block on their own evidence questions, but a human does not re-run or revalidate them as branch-local approval before a draft PR opens.
+
 This phase is decomposition review plus supported-surface verification, test-coverage, and commit-organization checks. Each gate presupposes a **proposal** as the contract being enforced — the gates are not directly applicable to work without a proposal (e.g. prototypes).
 
 For prototype presentation — work that arrived at an answer without a proposal — see `~/ai/workflows/build-prototype.md` § Phase P3, which runs the **functional analogs** of these gates (proof-test audit, one-question check, answer-trace, commit-hygiene) without requiring a proposal contract. The two workflows share `commit-hygiene-operator` but are otherwise distinct: PR-review presents *implementation*, P3 presents *prototypes*.
@@ -34,6 +36,14 @@ When PR review enters a repeated fix/gate loop, follow `~/ai/conventions/audit-h
 Delegated user questions follow `~/ai/conventions/agent-questions-and-session-graph.md`.
 
 Process-tree review uses `~/ai/agents/process-tree-auditor.md` and the violation taxonomy in `~/ai/conventions/workflow-execution-violations.md`.
+
+## Declared roles
+
+This file's classifications under `~/ai/conventions/code-quality.md` § Declared roles:
+
+- `orchestration` — Sequences the PR review gates and repeated fix loops over the actual implementation diff.
+- `validator` — Defines review gates and audit rules that validate proposal alignment, evidence, and review readiness.
+- `formatter` — Describes synthesis and posting of gate outputs into reviewer-facing PR comments.
 
 ## Workflow Dispatch Surface
 

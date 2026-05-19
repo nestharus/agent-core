@@ -14,6 +14,14 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 
 Dispatch terminology: in RCA and bug workflows, "reproduce" means create a deterministic failure signal only when the input is symptom-only. When a failing test command, node ID, CI log, red-phase report, or structured failure already exists, that signal is the reproduction; carry it forward and run the same failing signal with the candidate fix instead of dispatching redundant reproduction work.
 
+## Declared roles
+
+This file's classifications under `~/ai/conventions/code-quality.md` § Declared roles:
+
+- `mapper` — Maps workflow triggers and operator entries to their routed agent, workflow, input, and model contracts.
+- `orchestration` — Defines activation, topology, and strategy-selection flow for work across the shared `~/ai/` workflow library.
+- `parser` — Specifies dispatch contract inputs and invocation fields that callers must supply to routed operators.
+
 ## Quick Activation: Work Manager Mode
 
 When the user says **"you are work manager"** (or any equivalent designation), or otherwise places you in a long-running session managing a backlog of work units across multiple repos / dispatching orchestrators / surfacing frictions to the user — **operate as the Work Manager** per [`~/ai/agents/work-manager-operator.md`](agents/work-manager-operator.md). Read that file in full and follow its filing discipline, dispatch discipline, delegation patterns, and anti-scope. The default rule once activated: keep the user's context clean by delegating execution; do not perform multi-WU work inline.
@@ -181,8 +189,8 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 
 ### Implementation pipeline orchestration
 
-- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions remain user-owned, and `tickets_first_variant=true` also surfaces the Phase 8.5 human local-review gate before Phase 9.
-  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | See `agents/implementation-pipeline-orchestrator.md` `## Contract` for inputs/defaults/errors/delegation, including ticket-operator contract resolution. | Model: `claude-opus`
+- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions remain user-owned.
+  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?` | Model: `claude-opus`
 
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
   File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
@@ -362,7 +370,6 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)
 - PR review gates (test-audit, multi-concern, justification, commit-hygiene): [`~/ai/workflows/pr-review.md`](workflows/pr-review.md)
 - Audit sub-workflow (target-typed design/process/drift audit coordination): [`~/ai/workflows/audit.md`](workflows/audit.md)
-- Tickets-first review (variant: ticket is the unit of review; PR drafted only after review passes): [`~/ai/workflows/tickets-first-review.md`](workflows/tickets-first-review.md)
 - CodeRabbit loop (CLI-only, amend-only, stop at value-zero): [`~/ai/workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md)
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
 - Linter bootstrap (A1 linter coverage inventory, ecosystem research, and setup-PR proposal): [`~/ai/workflows/linter-bootstrap.md`](workflows/linter-bootstrap.md)
@@ -424,6 +431,5 @@ A project's own `AGENTS.md` declares the per-project policy knobs the orchestrat
 - Jira projects may declare project policy values, but category-local Jira execution defaults should live in the project wrapper `## Contract` when a wrapper exists.
 - `skip_problem_map_gate` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
 - `auto_merge_after_phase_9` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
-- `tickets_first_variant` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
 
 Semantics for each knob live on the orchestrator's input contract; the project `AGENTS.md` only declares the chosen values.

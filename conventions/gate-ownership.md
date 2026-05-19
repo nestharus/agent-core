@@ -24,6 +24,13 @@ Model-role rationale for named gates lives in
 Tier-3 action approval rules live in
 `~/ai/workflows/tiered-approval.md`.
 
+## Declared roles
+
+This file's classifications under `~/ai/conventions/code-quality.md` § Declared roles:
+
+- `mapper` — Maps workflow phases and gates to their owning validator or human decision point.
+- `validator` — Defines ask and do-not-ask rules that validate whether a gate should involve the user.
+
 ## Gate-owner table
 
 This table is cited by
@@ -133,6 +140,8 @@ Do not ask at model-owned gates.
 If the model gate returned `LOW`, proceed.
 
 Do not double-check it with the user.
+
+Model-owned gates are not followed by human local-review approval before automated draft PR opening.
 
 Minor design decisions that fit within a phase's scope are not
 user gates.
