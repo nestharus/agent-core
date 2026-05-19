@@ -8,20 +8,6 @@ This convention defines the canonical evidence artifact for a hotfix path that s
 
 This file-local declaration overrides the documented path default per `~/ai/conventions/code-quality.md` § `Declared roles`. The role set covers parsing the canonical skip row, validating required evidence fields, mapping prototype-era names and inherited proof into the canonical schema, and formatting auditor-readable file-first evidence.
 
-## Adapter declarations
-
-```yaml
-adapter_declarations:
-  - component: ~/ai/conventions/hotfix-skip-with-followup.md
-    role: adapter
-    Translates:
-      - prototype-era skip field vocabulary (`followup_ticket`, `followup_pr`, `due_date`) <-> canonical hotfix-skip vocabulary (`follow_up_issue_or_pr`, `due_date_or_release_window`)
-      - human-authored file-first hotfix skip artifact <-> consumer manifest-row shape
-      - Linear/Jira comment mirror <-> canonical file-first hotfix skip artifact
-```
-
-The canonical file-first artifact remains the authority. Adapter handling exists only to translate between stable surfaces that need to describe the same skip obligation; it does not make comments, prototype-era field names, or consumer-only manifest metadata authoritative.
-
 ## Use When
 
 Use this convention when a hotfix path skips or defers one or more required gates and the workflow needs a controlled, evidence-bearing record of the skipped gates, accepted risk, already-run evidence, owner, follow-up vehicle, due window, and any post-push / pre-merge gate requirement.
