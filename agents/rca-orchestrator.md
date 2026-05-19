@@ -38,6 +38,19 @@ You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing c
 
 ## Procedure
 
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
+
 1. Phase 0 - Trigger Classification: validate `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `scratch_dir`, and `planning_dir`. Accept only `failing_test` and `incident`. Route `incident` to Phase 1 and `failing_test` to Phase 2.
 2. Phase 1 - Reproduction Test: for `incident`, create a fresh test-writer prompt under `${scratch_dir}/prompts/` and dispatch `agents -m gpt-high -p ${worktree_path} -f <prompt-file>` or `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require a real test in `${worktree_path}` plus red-run evidence in `${planning_dir}/repro/<failure-id>.md`.
 3. Phase 2 - Root Cause: create a root-cause prompt that reads the failing test evidence and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>.md` and reject any output that proposes the fix instead of naming cause and evidence. After this artifact exists, run the Investigator-phase critic and consume `${planning_dir}/rca/<failure-id>-investigator-critic.md` before Phase 3 begins.

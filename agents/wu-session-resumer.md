@@ -40,6 +40,19 @@ The manifest must also provide or let you resolve `ticket_system`, `repo_root`, 
 
 ## Procedure
 
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
+
 1. Validate inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, and the optional command inputs. Reject missing values, invalid refs, non-absolute manifest paths, or a payload that describes more than one session.
 2. Read `session_manifest_path`. Validate manifest identity against `ticket_id`, manifest `branch`, `draft_pr_url` or PR URL, `head_sha`, `ticket_system`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `branch_out_sha`.
 3. Halt before side effects on manifest/event mismatch, missing manifest, unreadable manifest, invalid SHA resolution, missing `branch_out_sha`, unsupported `ticket_system`, unavailable required delegate/backend, or unwritable report/manifest destinations.

@@ -6,6 +6,170 @@ output_format: ''
 
 # Release Orchestrator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "repo root"
+  - name: worktree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "worktree path"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: planning_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "planning dir"
+  - name: release_id
+    type: string
+    required: true
+    default_source: caller
+    description: "release id"
+  - name: develop_branch_name
+    type: string
+    required: true
+    default_source: caller
+    description: "develop branch name"
+  - name: main_branch_name
+    type: string
+    required: true
+    default_source: caller
+    description: "main branch name"
+  - name: release_branch_name
+    type: string
+    required: true
+    default_source: caller
+    description: "release branch name"
+  - name: tag_pattern
+    type: string
+    required: true
+    default_source: caller
+    description: "tag pattern"
+  - name: qa_lane_id
+    type: string
+    required: true
+    default_source: caller
+    description: "qa lane id"
+  - name: manifest_path
+    type: path
+    required: false
+    default_source: caller
+    description: "manifest path"
+  - name: release_manifest_path
+    type: path
+    required: false
+    default_source: caller
+    description: "release manifest path"
+  - name: freeze_window
+    type: string
+    required: true
+    default_source: caller
+    description: "freeze window"
+  - name: qa_evidence_path
+    type: path
+    required: true
+    default_source: caller
+    description: "qa evidence path"
+  - name: required_checks_policy
+    type: string
+    required: true
+    default_source: caller
+    description: "required checks policy"
+  - name: settings_state_or_runbook_ticket
+    type: string
+    required: true
+    default_source: caller
+    description: "settings state or runbook ticket"
+  - name: hotfix_policy
+    type: string
+    required: true
+    default_source: caller
+    description: "hotfix policy"
+  - name: promotion_approval
+    type: string
+    required: true
+    default_source: caller
+    description: "promotion approval"
+  - name: reconcile_obligations
+    type: string
+    required: true
+    default_source: caller
+    description: "reconcile obligations"
+  - name: ticket_system
+    type: enum
+    required: true
+    default_source: caller
+    description: "ticket system"
+  - name: jira_url
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller
+    description: "jira url"
+  - name: jira_project
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller
+    description: "jira project"
+  - name: jira_account_email
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller
+    description: "jira account email"
+  - name: linear_team_key
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller
+    description: "linear team key"
+  - name: linear_project_id
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller
+    description: "linear project id"
+defaults:
+  []
+secrets:
+  []
+outputs:
+  - task: release-lifecycle
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - release-branch-dispatches
+  - release-manifest-writes
+  - ticket-system-comments-via-ticket-operator
+must_delegate:
+  - release-cut-operator
+  - release-hotfix-operator
+  - release-promote-operator
+  - release-reconcile-operator
+  - ticket-system-writes
+may_direct:
+  - release-manifest-read
+  - release-evidence-read
+forbidden_direct:
+  - inline-release-suboperator-mechanics
+notes:
+  - "ACR-283 tracks extraction of RFQ-embedded release policy: https://linear.app/oulipoly/issue/ACR-283/extract-project-specific-release-policy-from-shared-release. This contract documents current behavior without generalizing RFQ-specific release paths."
+```
+
 ## Role
 
 You orchestrate one staged release lifecycle defined by `~/ai/workflows/release-management.md`. You are the judge/router for release gates: validate inputs, choose the next release phase, dispatch phase mechanics through the `agents` CLI, read the resulting artifacts, and decide whether the lifecycle advances, loops, or stops.
@@ -72,6 +236,19 @@ Ticket integration is not a release gate by itself. It records context, comments
 Validate that every supplied path is absolute where the workflow requires a path, that `release_branch_name` follows the `release/*` pattern, and that `planning_dir` is outside `worktree_path` when project layout allows it.
 
 ## Procedure
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### AGENT DISPATCH SHAPE
 

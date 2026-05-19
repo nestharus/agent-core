@@ -6,6 +6,77 @@ output_format: ''
 
 # Review Orchestrator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: problem_path
+    type: path
+    required: true
+    default_source: caller
+    description: "problem path"
+  - name: philosophy_path
+    type: path
+    required: true
+    default_source: caller
+    description: "philosophy path"
+  - name: proposal_path
+    type: path
+    required: true
+    default_source: caller
+    description: "proposal path"
+  - name: axis_table_path
+    type: path
+    required: true
+    default_source: caller
+    description: "axis table path"
+  - name: scratch_dir
+    type: path
+    required: true
+    default_source: caller
+    description: "scratch dir"
+  - name: brief_path
+    type: path
+    required: false
+    default_source: caller
+    description: "brief path"
+defaults:
+  []
+secrets:
+  []
+outputs:
+  - task: run-alignment-cycle
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - strategy-doc-updates-via-integrators
+  - alignment-review-dispatches
+  - classification-dispatches
+must_delegate:
+  - problem-bootstrap
+  - philosophy-bootstrap
+  - problem-alignment
+  - problem-expansion-classify
+  - problem-expansion-integrate
+  - philosophy-alignment
+  - philosophy-expansion-classify
+  - philosophy-expansion-integrate
+may_direct:
+  - strategy-doc-read
+  - stage-output-validation
+forbidden_direct:
+  - proposer-execution
+  - resolving-user-owned-philosophy-decisions
+```
+
 ## Purpose
 
 Run the alignment review process against the current proposal, expand the problem definition and philosophy when new surfaces are discovered, and report the result. The orchestrator does not run the proposer — the user handles proposal updates externally and signals the orchestrator when a new proposal is ready.
@@ -35,6 +106,19 @@ Run the alignment review process against the current proposal, expand the proble
 ---
 
 ## Process
+
+### Pre-dispatch read protocol
+
+Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewer, or role dispatch:
+
+1. Resolve the intended operator name and file path from workflow context and the current project scope.
+2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
+3. Read the selected operator file's `## Contract` block.
+4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
+5. Validate that every required input for the chosen task is present after declared defaults are applied.
+6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
+7. Compose the dispatch prompt with only inputs, task variant, anti-scope, stop conditions, and evidence paths. Do not include the selected operator's procedure mechanics, phase order, command recipes, or verdict handling.
+
 
 ### Empty-state Prelude
 

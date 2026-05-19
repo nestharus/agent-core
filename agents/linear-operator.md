@@ -6,6 +6,154 @@ output_format: ''
 
 # Linear Operator
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: task
+    type: enum
+    required: true
+    default_source: caller
+    description: "task"
+  - name: issue_key
+    type: string
+    required: false
+    default_source: caller
+    description: "issue key"
+  - name: body
+    type: string
+    required: false
+    default_source: caller
+    description: "body"
+  - name: target_status
+    type: string
+    required: false
+    default_source: caller
+    description: "target status"
+  - name: output_path
+    type: path
+    required: false
+    default_source: caller
+    description: "output path"
+  - name: brief_path
+    type: path
+    required: false
+    default_source: caller
+    description: "brief path"
+  - name: summary
+    type: string
+    required: false
+    default_source: caller
+    description: "summary"
+  - name: parent_key
+    type: string
+    required: false
+    default_source: caller
+    description: "parent key"
+  - name: labels
+    type: string
+    required: false
+    default_source: caller
+    description: "labels"
+  - name: estimate
+    type: int
+    required: false
+    default_source: caller
+    description: "estimate"
+  - name: inherited_story_point_estimate
+    type: int
+    required: false
+    default_source: caller
+    description: "inherited story point estimate"
+  - name: estimate_source
+    type: string
+    required: false
+    default_source: caller
+    description: "estimate source"
+  - name: estimate_delta_rationale
+    type: string
+    required: false
+    default_source: caller
+    description: "estimate delta rationale"
+  - name: estimate_delta_flag
+    type: string
+    required: false
+    default_source: caller
+    description: "estimate delta flag"
+  - name: linear_team_key
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller | prompt
+    description: "linear team key"
+  - name: linear_project_id
+    type: string
+    required: false
+    default_source: wrapper:<name> | caller | prompt
+    description: "linear project id"
+defaults:
+  []
+secrets:
+  - LINEAR_API_KEY
+outputs:
+  - task: read
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: comment
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: create
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: update-estimate
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: transition
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: search
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: list-issues
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: list-projects
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: list-labels
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: create-label
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: apply-labels
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+  - task: upsert-comment
+    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    wrote_lines: []
+errors:
+  - class: BLOCKED
+    cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
+    recovery: "Supply corrected inputs or select the appropriate operator wrapper before rerun."
+  - class: NEEDS_INPUT
+    cause: "A user-owned value, scope, or trade-off question is required."
+    recovery: "Answer the emitted question artifact and resume."
+side_effects:
+  - linear-create
+  - linear-comment
+  - linear-transition
+  - linear-update-estimate
+  - linear-label-create
+  - linear-label-apply
+must_delegate:
+  - linear-writes
+may_direct:
+  - linear-reads
+forbidden_direct:
+  - direct-linear-api-write-without-selected-contract
+```
+
 You read, comment on, create, and transition Linear issues using the ported Linear GraphQL client at `~/ai/clients/linear/`. Auth uses the `$LINEAR_API_KEY` environment variable. Linear descriptions and comments are markdown natively, so unlike `jira-operator` there is no ADF translation step.
 
 ## Use When
