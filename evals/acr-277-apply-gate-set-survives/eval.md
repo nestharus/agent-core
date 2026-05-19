@@ -9,7 +9,17 @@ behavior_class: rca-orchestrator-post-apply-gate-fan-out
 created: 2026-05-19
 prototype_dossier: /home/nes/ai/planning/acr-277-clarify/dossier/evidence/
 coverage_inventory: /home/nes/ai/planning/acr-277-rca-orchestrator-gate-fan-out/research/acr-277-coverage-inventory.md
-pending_implementation_ticket: <TBD-acr-apply-gate-set>
+pending_implementation_ticket: ACR-291
+ticket_mapping:
+  - ACR-291  # Apply-gate-set operator and companion workflow
+  - ACR-292  # Full implementation eval-spec authoring
+  - ACR-287  # RCA-orchestrator apply-gate-set wiring
+  - ACR-288  # Implementation-pipeline-orchestrator apply-gate-set wiring
+  - ACR-293  # Hotfix-skip-with-followup convention
+  - ACR-289  # Drift-1 dependency note (proof-risk; relates ACR-285)
+  - ACR-290  # Drift-2 dependency note (supported-surface; relates ACR-286)
+  - ACR-294  # RCA-cycle currentness invalidation rules
+  - ACR-295  # Process-tree topology modes for apply-gate-set
 severity_when_fires: HIGH
 evidence_source_kinds:
   - agents-trace-json
@@ -41,12 +51,12 @@ to a later spawned implementation ticket under `~/ai/conventions/evals.md`.
 
 ## Pending marker
 
-prototype-pending: implementation pending in `<TBD-acr-apply-gate-set>`; remove
-this marker, transition lifecycle from `WRITE` to `ROLL_OUT`, and prove the
-unwanted-behavior scenarios detect under real `agents trace --json` evidence
-once the spawned implementation ticket lands the operator/workflow and the
-runnable detector. The placeholder `<TBD-acr-apply-gate-set>` will be replaced
-by the prototype-orchestrator in Phase P4 with the spawned ticket key.
+prototype-pending: implementation pending in `ACR-291` (operator/workflow);
+the eval-spec is inherited verbatim by all 9 spawned tickets per
+`ticket_mapping:` above. Remove this marker, transition lifecycle from
+`WRITE` to `ROLL_OUT`, and prove the unwanted-behavior scenarios detect
+under real `agents trace --json` evidence once the spawned implementation
+ticket lands the operator/workflow and the runnable detector.
 
 ## Scope
 
@@ -430,7 +440,7 @@ tracker-neutral evidence).
 
 Runnable detector implementation, fixtures, CLI integration, and CI
 wiring belong to the spawned implementation ticket
-`<TBD-acr-apply-gate-set>` and are not residuals for this WRITE-state
+`ACR-291` and are not residuals for this WRITE-state
 spec.
 
 The oscillation-propagation refinement (repeated non-LOW rounds on the
@@ -450,7 +460,7 @@ runnable detector is required to exist (per
 `~/ai/conventions/evals.md` § Lifecycle states).
 
 Transition note: move to `ROLL_OUT` once the spawned implementation
-ticket `<TBD-acr-apply-gate-set>` lands `agents/apply-gate-set.md`,
+ticket `ACR-291` lands `agents/apply-gate-set.md`,
 `workflows/apply-gate-set.md`, and a runnable detector that consumes
 saved `agents trace --json` evidence and produces findings under the
 schema above. Removal of the `## Pending marker` section and the
