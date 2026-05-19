@@ -4039,3 +4039,38 @@ Phase 3 prompt will carry `risk_profile_path=/home/nes/ai/planning/acr-280-decom
 2. `tools/acr-187-verify/test_verify.py::test` — pytest collection error: helper `test(func: Callable[[], None])` is treated as a fixture-bearing test.
 
 **Decision.** Outside ACR-280's touched-file enumeration. Per `~/ai/conventions/risk-profile.md` § Discoveries during Phase 2.5, the bug-discovery rule applies only when characterization tests this WU authored fail; none were authored in 2.5.1 because the WU is markdown-only and routes to structural-verification eval-spec authoring per `~/ai/conventions/evals.md`. Not blocking; surfaced at WU close as recommended separate tickets.
+
+## D-2026-05-19-acr277-p4-execution — ACR-277 prototype-orchestrator P4 hand-off completed
+
+**WU**: ACR-277 prototype `prototype-acr-277-clarify`. **Phase**: P4 (per `~/ai/workflows/build-prototype.md` § Phase P4 — Hand-off).
+
+**Approval**: P3 human-gate answer A (approve, proceed to P4) recorded at `/home/nes/ai/planning/acr-277-clarify/.scratch/questions/q-0a22eb70-709f-4423-8fc9-a51ea847c5c0.answer.json`.
+
+**Spawned tickets (9)**: filed in Linear team `ACR` with label `prototype-spawned-acr-277-clarify`.
+
+- ACR-291 (21 pts) — Apply-gate-set operator and companion workflow
+- ACR-292 (8 pts)  — Full implementation eval-spec authoring
+- ACR-287 (5 pts)  — RCA-orchestrator apply-gate-set wiring
+- ACR-288 (8 pts)  — Implementation-pipeline-orchestrator apply-gate-set wiring
+- ACR-293 (3 pts)  — Hotfix-skip-with-followup convention
+- ACR-289 (1 pt)   — Drift-1 dependency note (proof-risk; relates ACR-285)
+- ACR-290 (1 pt)   — Drift-2 dependency note (supported-surface; relates ACR-286)
+- ACR-294 (5 pts)  — RCA-cycle currentness invalidation rules
+- ACR-295 (5 pts)  — Process-tree topology modes for apply-gate-set
+
+**Prototype-test draft PR**: https://github.com/nestharus/agent-core/pull/181 (head `prototype-acr-277-clarify`, base `master`).
+
+**Branch disposition**: `keep`. Branch lives on origin under `prototype-*` as the durable proof reference. **No merge to `master`.**
+
+**Original-ticket disposition**: ACR-277 `close-as-superseded` → transitioned `Backlog → Canceled` (closest team-approved terminal; no native `Superseded` state on team ACR). Closure comment id `84cd9640-ee41-4e14-b3d1-b78201f5d4f0` posted with dossier link, PR URL, and all 9 spawned keys. Execution record at `/home/nes/ai/planning/acr-277-clarify/dossier/original-ticket-disposition-execution.md`.
+
+**Carry-forward proof artifact**: `evals/acr-277-apply-gate-set-survives/eval.md` (lifecycle `WRITE`, scenarios `APPLY-GATE-SET-001..007`). Pending marker references ACR-291; frontmatter `ticket_mapping:` lists all 9 spawned keys; `prototype_test_pr_url` and `prototype_test_branch` are backfilled in eval frontmatter and in each spawned ticket's description per `~/ai/conventions/prototype-pending-tests.md` § Carry-forward.
+
+**Project risk-profile**: appended ACR-277 section to `/home/nes/ai/planning/risk-profile.md` reflecting refined HIGH roll-up for the spawned implementation set and MEDIUM for the actual prototype-branch touch.
+
+**Commits on `prototype-acr-277-clarify` branch (P4)**:
+
+- `a42b4a0 test(evals/acr-277): backfill spawned Linear keys into pending marker`
+- `6d96a06 test(evals/acr-277): backfill prototype-test PR URL into eval frontmatter`
+
+**Stop**: P4 complete; prototype-orchestrator halts.
