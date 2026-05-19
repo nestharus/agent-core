@@ -89,9 +89,9 @@ All commands use `$BRANCH` and `$TARGET` from Inputs.
 | `NEW_TARGET` | target ref **after** fetch | `jj git fetch` then `git rev-parse "$TARGET"`; SHA. `jj git fetch` is a no-op for local `$TARGET` but still runs for `origin/*` updates. |
 | `POST_TIP` | branch tip **after** rebase | `git rev-parse "$BRANCH"`; SHA |
 | `POST_CHANGE_ID` | jj change id of branch tip **after** rebase | `jj log -r "$BRANCH" --no-graph --no-pager --limit 1 --template 'change_id'`. Addresses post-rebase revision for `jj file show` / `jj resolve --list`. |
-| `PREDICTED_TREE` | tree a clean 3-way merge would produce (merge-ort) | `git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET"`; tree oid |
+| `PREDICTED_TREE` | tree a clean 3-way merge would produce (merge-ort) | first line of `$BUNDLE/merge-tree.out`; valid tree oid. Captured even when `merge-tree.status` is `1` for an expected content conflict. |
 
-`PREDICTED_TREE` is a tree object, not a commit. Downstream diffs use it as a tree-ish alongside `$POST_TIP^{tree}`.
+`PREDICTED_TREE` is a tree object, not a commit. Downstream diffs use it as a tree-ish alongside `$POST_TIP^{tree}`. Prediction command metadata is stored in `merge-tree.out`, `merge-tree.err`, and `merge-tree.status`.
 
 `POST_CHANGE_ID` is jj's stable change id, distinct from `POST_TIP` (git SHA). Change ids survive rebases; git SHAs don't.
 
@@ -109,6 +109,9 @@ Slugging: replace `/` with `__`. Example: `feat/p2-version-parsing-unification` 
 | `branch-intended.patch` | `git diff "$PRE_BASE" "$PRE_TIP" --find-renames` | What the branch intended to change |
 | `branch-actual.patch` | `git diff "$NEW_TARGET" "$POST_TIP" --find-renames` | What the branch changes after rebase |
 | `residual.patch` | `git diff "$PREDICTED_TREE" "$POST_TIP^{tree}" --find-renames` | **Provenance check.** See "Verdict" below. |
+| `merge-tree.out` | `git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET"` | Prediction stdout. First line is the accepted `PREDICTED_TREE` when the workflow continues; later lines may contain conflict descriptors. |
+| `merge-tree.err` | `git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET"` | Prediction stderr. |
+| `merge-tree.status` | workflow | Decimal prediction command status, one line. `0` is success, `1` is expected content-conflict status when line 1 of `merge-tree.out` is a valid tree oid, and anything outside `{0, 1}` is `BLOCKED:merge-tree-failed`. |
 | `range-diff.txt` | `git range-diff "$PRE_BASE..$PRE_TIP" "$NEW_TARGET..$POST_TIP"` | Per-commit correspondence; catches drops/reorders |
 | `conflict-artifacts/files.txt` | `jj resolve --list -r "$POST_CHANGE_ID" --no-pager` | One conflicted path per line; empty if no conflicts |
 | `conflict-artifacts/<slug>.conflict` | `jj file show -r "$POST_CHANGE_ID" "$path"` | jj's first-class conflict representation, per conflicted path |
@@ -164,10 +167,27 @@ Stop: `BLOCKED:fetch-failed`.
 ### 4. Predict
 
 ```bash
-PREDICTED_TREE=$(git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET")
+if git merge-tree --write-tree --merge-base="$PRE_BASE" "$PRE_TIP" "$NEW_TARGET" \
+    > "$BUNDLE/merge-tree.out" \
+    2> "$BUNDLE/merge-tree.err"; then
+  MERGE_TREE_RC=0
+else
+  MERGE_TREE_RC=$?
+fi
+echo "$MERGE_TREE_RC" > "$BUNDLE/merge-tree.status"
+
+PREDICTED_TREE=$(head -n 1 "$BUNDLE/merge-tree.out" | tr -d '[:space:]')
+if ! echo "$PREDICTED_TREE" | grep -Eq '^[0-9a-f]{40}$|^[0-9a-f]{64}$'; then
+  echo "BLOCKED:merge-tree-failed: empty or invalid PREDICTED_TREE on rc=$MERGE_TREE_RC" >&2
+  exit 1
+fi
+if [ "$MERGE_TREE_RC" -ne 0 ] && [ "$MERGE_TREE_RC" -ne 1 ]; then
+  echo "BLOCKED:merge-tree-failed: unexpected exit $MERGE_TREE_RC" >&2
+  exit 1
+fi
 ```
 
-`merge-tree` writes a tree object. If it returns non-zero or emits no tree oid (rare, e.g. unsupported binary operations), stop with `BLOCKED:merge-tree-failed`.
+`merge-tree` metadata is captured before classification: stdout in `merge-tree.out`, stderr in `merge-tree.err`, and the decimal exit code in `merge-tree.status`. On the B1 success path, `merge-tree.status` is `0` and line 1 of `merge-tree.out` is a valid tree oid, so `PREDICTED_TREE` is set from that line and the workflow continues. On the B2 content-conflict path, `merge-tree.status` is `1` and line 1 is still a valid tree oid; Git emits the predicted tree oid on line 1 and conflict descriptors on subsequent lines, so `PREDICTED_TREE` is set and the workflow continues to rebase. On the B3 real-failure path, status is outside `{0, 1}` or line 1 is empty or not a valid 40-hex or 64-hex tree oid, so the workflow stops with `BLOCKED:merge-tree-failed`.
 
 ### 5. Rebase
 
@@ -338,7 +358,7 @@ Workflow files aren't unit-testable. The contract is:
 | T6 | No-op rebase (branch already up-to-date with target) | `CLEAN`. `target-delta` empty. `branch-intended` == `branch-actual`. |
 | T7 | Rename conflict (main renames a file the branch edited) | `DIRTY-EXPLAINED` with rename-present flag; OR `DIRTY-UNPROVENANCED` if ort/jj disagree (flagged as rename-detection divergence). |
 | T8 | Delete conflict (main deletes, branch modifies) | `DIRTY-EXPLAINED`. `conflict-artifacts/<slug>.conflict` shows the deletion side. |
-| T9 | Binary conflict | `DIRTY-EXPLAINED` or `BLOCKED:merge-tree-failed` depending on ort support. |
+| T9 | Binary conflict | Content-conflict exit with a valid first-line predicted tree (`merge-tree.status=1`) continues into ordinary conflict accounting via `conflict-artifacts/files.txt` and `residual.patch`; real binary/unsupported prediction failure with no valid tree oid or status outside `{0, 1}` stops with `BLOCKED:merge-tree-failed`. |
 | T10 | Rebase leaves unresolved conflicts | `DIRTY-EXPLAINED`. `conflict-artifacts/` has content. Caller resolves or rolls back. |
 | T11 | Multi-parent basis collapse (one parent merged; child rebases onto main directly) | Single bundle at child level; no `parent-pointer-check` (basis was never pushed as target). |
 | T12 | Branch carries stale copies of parent's commits (parent rewritten without child rebase) | With default scope: `DIRTY-UNPROVENANCED`. With `SOURCE=<first-unique-commit>`: `CLEAN`; `branch-intended.patch` reflects only the branch's unique work. |
