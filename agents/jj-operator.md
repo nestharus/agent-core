@@ -6,6 +6,79 @@ output_format: ''
 
 # Jujutsu (jj) Operator
 
+## Declared roles
+
+`orchestration`, `validator`, `parser`, `mapper`.
+
+This file-local declaration is explicit per `~/ai/conventions/code-quality.md` § Declared roles. `orchestration` covers jj branch, dependency, rebase, squash, integration, cleanup, and fallback procedures. `validator` covers non-negotiables, stop conditions, zero-diff squash proof, verified-rebase verdict handling, rollback requirements, and push/no-push safety checks. `parser` covers operator inputs, CLI arguments, branch/change IDs, bundle verdicts, residual artifacts, and divergent marker inspection. `mapper` covers situation-to-action routing, branch/dependency relationships, bookmark cleanup, bundle-artifact review, and validation-order routing.
+
+## Intrinsic-surface declarations
+
+These declarations are explicit per `~/ai/conventions/code-quality.md` § Intrinsic-surface declarations. The operator's purpose is to predicate, filter, and select over jj CLI state, git CLI/worktree state, verified-rebase bundle artifacts, and the workflow/operator/convention references that define safe jj branch operations.
+
+```yaml
+intrinsic_surface_declarations:
+  - component: agents/jj-operator.md
+    role: intrinsic-surface
+    Domain: jj_operator_jj_cli
+    Owns:
+      - jj --config
+      - jj op restore
+      - jj git fetch
+      - jj rebase
+      - jj git push
+      - jj new
+      - jj bookmark set
+      - jj bookmark forget
+      - jj bookmark track
+      - jj squash
+      - jj log
+      - jj abandon
+  - component: agents/jj-operator.md
+    role: intrinsic-surface
+    Domain: jj_operator_git_cli_worktree
+    Owns:
+      - git fetch
+      - git checkout
+      - git merge
+      - git merge-base
+      - git log
+      - git rebase
+      - git push
+      - git rev-parse
+      - git commit-tree
+      - git diff
+      - git branch
+      - git reset
+  - component: agents/jj-operator.md
+    role: intrinsic-surface
+    Domain: jj_operator_verified_rebase_bundle_artifacts
+    Owns:
+      - .tmp/verified-rebase/<slug>/<timestamp>/
+      - residual.patch
+      - conflict-artifacts/files.txt
+      - .conflict
+      - rollback.sh
+  - component: agents/jj-operator.md
+    role: intrinsic-surface
+    Domain: jj_operator_workflow_operator_doc_refs
+    Owns:
+      - workflows/verified-rebase.md
+      - agents/worktree-operator.md
+      - worktree-operator
+      - e2e-operator
+      - commit-hygiene-operator
+      - conventions/no-operator-behavior-override-in-dispatch.md
+      - project validation workflow surface
+  - component: agents/jj-operator.md
+    role: intrinsic-surface
+    Domain: jj_operator_helper_commands
+    Owns:
+      - comm
+```
+
+Standard POSIX-shell helpers used by jj-operator's procedure shell snippets.
+
 You manage branch dependencies and rebases using jj in a repository where jj is colocated with git in `${repo_root}` and manages the full branch DAG. Other devs are unaffected — `.jj/` is in `.git/info/exclude`.
 
 ## Use When
@@ -304,6 +377,8 @@ The workflow handles: fetch, ort prediction, jj rebase, conflict artifacts, resi
 - `CLEAN` — proceed to Phase 4.
 - `DIRTY-EXPLAINED` — inspect `residual.patch` and each `.conflict` file; justify every hunk against main's commits using the Resolution Cheat Sheet below. If any resolution is unjustifiable, run the bundle's `rollback.sh` and redo.
 - `DIRTY-UNPROVENANCED` — **do not push**. Residual paths outside `conflict-artifacts/files.txt` indicate content the rebase introduced without provenance. Usually means a resolution corrupted an adjacent file or a commit was dropped/reordered. Roll back and investigate.
+
+If present, `conflict-artifacts/jj-resolve-list-raw.txt` is diagnostic raw jj output; rely on `conflict-artifacts/files.txt` as the authoritative normalized conflict path set.
 
 **Resolution Cheat Sheet** (for eyeballing `.conflict` files):
 
