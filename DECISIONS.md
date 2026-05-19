@@ -4428,3 +4428,55 @@ Canonical Phase 4 sub-gate parser entry. Cites the authority and ratifies the ex
 None of the decomposition strategies apply to the bootstrap-exception-territory findings.
 
 **Forward enforcement.** Process-tree audit #2 must verify this DECISIONS entry exists, names the convention citation, and is paired with the non-LOW Phase 6 per-component code-quality aggregate.
+
+### ACR-288 — Phase 8 code-quality gate ratification (bootstrap-exception third extension)
+
+**Convention citation:** `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+**WU**: ACR-288. **Phase**: 8 code-quality gate (actual PR diff scope).
+
+**Aggregate verdict.** Phase 8 code-quality at `/home/nes/ai/planning/acr-288-impl-pipeline-apply-gate-set-wiring/code-quality/acr-288-phase-8/aggregate-code-quality.md` returned aggregate `HIGH`. Child verdicts: push-pull-auditor LOW, function-classification-auditor LOW, cohesion-auditor LOW, coupling-auditor HIGH, validation-integrity-auditor LOW, proof-risk-auditor LOW. The HIGH is driven by whole-file coupling on five touched files: three inside the Phase 4 declared `intrinsic_lockstep_paths` (`agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, `workflows/index.json`) and two outside the declared scope (`DECISIONS.md`, `evals/acr-277-apply-gate-set-survives/eval.md`).
+
+**Continuity with Phase 4 and Phase 6 ratifications.** Following the ACR-279 third-extension pattern (DECISIONS.md `### ACR-279 — Phase 8 code-quality gate ratification (bootstrap-exception third extension)`):
+
+- Phase 4 (proposal-time): aggregate `HIGH`; ratified by `### ACR-288 — Bootstrap exception ratification` (Phase 4 join manifest `bootstrap-exception=RATIFIED` row).
+- Phase 6 (per-component): aggregate `HIGH`; ratified by `### ACR-288 — Phase 6 per-component code-quality fanout ratification (bootstrap-exception second extension)`.
+- Phase 8 (actual PR diff): aggregate `HIGH`; ratified by this entry.
+
+**Four-condition argument (unchanged for in-scope findings; extended for out-of-scope findings).**
+
+For the in-scope findings (`CQ-F01`, `CQ-F02`, `CQ-F03` on `agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, `workflows/index.json`): the four-condition argument is identical to Phase 4 / Phase 6 — these are the declared `intrinsic_lockstep_paths`, the metric is the same A1 coupling, the audited surface is the same change-set.
+
+For the out-of-scope findings (`CQ-F04` on `DECISIONS.md`, `CQ-F05` on `evals/acr-277-apply-gate-set-survives/eval.md`):
+
+- `primary_deliverable_fixes_or_extends_metric: true` — these files were modified BY ACR-288 specifically to (a) record the bootstrap-exception authority headings the convention requires (DECISIONS.md), and (b) lift and extend the inherited prototype-pending eval-spec into master per the proposal's Section 7a carry-forward path (eval-spec).
+- `non_low_finding_is_intrinsic_lockstep: true` — both files exhibit intrinsic-lockstep coupling patterns by design:
+  - `DECISIONS.md` is a project-wide append-only authority log; it inherently references every WU's contracts, conventions, decisions, audit artifacts, and process-tree evidence. Touched-file ownership applied to a 4400+ line authority log will ALWAYS verdict HIGH whole-file coupling under raw A1; the coupling is intrinsic to the document type.
+  - `evals/acr-277-apply-gate-set-survives/eval.md` is a 648-line WRITE-state structural-verification eval-spec that names many code-quality, workflow, convention, and operator surfaces by design (the inherited prototype-test scenarios verify behavior across the entire pipeline). The original assertions from the prototype branch already embedded these references; the lift preserves them verbatim and adds impl-pipeline-mode analogue rows that strengthen rather than reduce the cross-reference set.
+- `post_merge_satisfies_new_rule_under_new_metric: true` — the bootstrap-exception ratification headings in DECISIONS.md are required by the convention; the eval-spec lift is required by the inherited prototype-test acceptance criterion in the Linear ticket. Neither file's HIGH whole-file coupling is reducible without violating the convention or the carry-forward acceptance criterion.
+- `declared_for_phase_4_ratification: true` — the Phase 3 proposal's `## Bootstrap exception declaration` section remains the source of truth for the metric and the deliverable; this Phase 8 ratification entry extends the declared `intrinsic_lockstep_paths` set to include the two out-of-scope findings under the same four-condition argument.
+
+**Extended `intrinsic_lockstep_paths` for Phase 8.**
+
+```yaml
+intrinsic_lockstep_paths:
+  - agents/implementation-pipeline-orchestrator.md
+  - workflows/implementation-pipeline.md
+  - workflows/index.json
+  - DECISIONS.md                                          # extended Phase 8
+  - evals/acr-277-apply-gate-set-survives/eval.md         # extended Phase 8
+```
+
+**Strategy-selection sub-step (per orchestrator Phase 8 spec).** Before applying ratification, the orchestrator considered the `~/ai/conventions/decomposition-strategies.md` strategies:
+
+- MOVE-and-import: N/A — `DECISIONS.md` is a project-wide log inherently single-file; the eval-spec lift is a single-file authoritative WRITE-state document. Neither admits MOVE-and-import.
+- In-place file-decomposition: N/A — `DECISIONS.md` is append-only history; decomposing it would lose authority chain. The eval-spec lift is a single cohesive structural-verification specification; decomposing it would break the inherited scenario set.
+- In-WU helper extraction: N/A — neither file is a code helper surface; they are documents.
+- In-WU head-on remediation: N/A — the cross-references ARE the deliverable.
+- Follow-up ticket decomposition: N/A — the cross-references are intrinsic to the document types, not unrelated multi-domain debt.
+
+None of the decomposition strategies apply.
+
+**Phase 8 join manifest implication.** The Phase 8 join manifest at `${planning_dir}/risk/phase-8-join-manifest.json` will include both the `code-quality` `HIGH` row AND a `bootstrap-exception` `RATIFIED` row paralleling Phase 4's pattern.
+
+**Forward enforcement.** Process-tree audit #3 must verify this DECISIONS entry exists, cites the convention, and is paired with the non-LOW Phase 8 code-quality aggregate. Both the in-scope and out-of-scope findings are covered by this single Phase 8 ratification entry.
