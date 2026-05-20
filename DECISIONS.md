@@ -4544,3 +4544,39 @@ Required canonical manifest fields (matched literally in `risk/phase-8-join-mani
 - `ratification_heading: ### ACR-294 — Phase 8 code-quality gate ratification (bootstrap-exception extension)`
 
 **Forward enforcement.** Process-tree audit #3 must verify this DECISIONS entry exists, cites the convention `~/ai/conventions/code-quality.md` § `Bootstrap exception`, and is paired with the non-LOW Phase 8 code-quality aggregate plus the existing Phase 4 ratification entry (preserved as historical context — Phase 4 sub-gate did not fire because Phase 4 code-quality was LOW; Phase 8 is the active ratification anchor).
+
+## D-2026-05-19-acr290-phase4-r1-route-a — ACR-290 Phase 4 R1 STRATEGY_PHASE4_SUPPORTED_SURFACE_INWU repair
+
+**WU**: ACR-290. **Phase**: 4 (R1 → R2). **Decision**: apply Route A proposal-revision repair for the substantive R4 supported-surface MEDIUM finding, adopt canonical apply-gate-set session `e6067599-f87c-4b38-9ee2-5f74d6fd00c0` evidence, then full re-dispatch as `cycle_id=acr-290-phase-4-r2`.
+
+Phase 4 R1 (cycle `acr-290-phase-4-r1`) returned MEDIUM BLOCKED with two substantive findings beneath the duplicate-dispatch race noted in the audit-history:
+
+- **R4 supported-surface-risk MEDIUM** (`STRATEGY_PHASE4_SUPPORTED_SURFACE_INWU`): proposal lines 92 (touched-surface eval row) and 104 (acceptance criterion 2) carried an "add the smallest `EDIT-SCENARIO`" fallback that proxied a READ-VERIFY row into an eval source-contract edit even though ACR-292 owns broader eval-spec authoring and the proposal's own § Forbidden behaviors line 112 forbids it.
+- **R2 scope-risk MEDIUM (malformed canonical output)**: the scope-risk child wrote `## Verdict\n\nMEDIUM` with `## Findings\n\nNone.` and `## Disposition\n\nno remediation needed.` The body and header disagree; per the gate's contract the raw MEDIUM verdict is preserved as blocking.
+
+**Repair applied (Route A) prior to R2 dispatch.** Proposal lines 92 and 104 revised to drop the EDIT-SCENARIO fallback and route any eval-anchor gap through ACR-292 (matching the other READ-VERIFY rows in the proposal). R2 dispatches a fresh `apply-gate-set(caller_mode=implementation-phase-4)` against the revised proposal hash; the R2 scope-risk child is expected to write a coherent LOW verdict body once it runs cleanly without the dual-writer race that confused R1.
+
+- **R1 proposal sha256**: `9d7307b20df1d614303d324efbcf637ed9754ac44ff96e7430f75c7e69e44245`
+- **R2 proposal sha256**: `f1d598aac28be56f8093fafc74b1f563f3c096f5db2aa0ac41eb783ca76500b8`
+- **Canonical R1 evidence adopted**: `risk/phase-4-{dispatch-manifest,join-manifest,aggregate}.md` + `process-tree/acr-290-phase-4-{expected-process.json,audit-report.md}` (producing session `e6067599`)
+- **Stale-refusal evidence retained for audit lineage**: `risk/phase-4-*-stale-refusal-session-65e99c2e.*`, `process-tree/acr-290-phase-4-*-stale-refusal-session-65e99c2e.*`
+
+Per `~/ai/conventions/apply-gate-set-currentness.md` § `Full re-dispatch`, R2 invalidates R1 currentness keys via the new proposal hash; no row reuse.
+
+## D-2026-05-20-acr290-phase6c-dependency-note-publication
+
+- **WU**: ACR-290
+- **Phase**: 6c
+- **Decision**: record-standalone-Linear-issue-disposition
+- **dependency_note_artifact_path_source_tree**: `notes/acr-290-acr-286-supported-surface-drift.md`
+- **dependency_note_artifact_path_source_tree_absolute**: `/home/nes/ai/worktrees/acr-290-drift-2-supported-surface-note/notes/acr-290-acr-286-supported-surface-drift.md`
+- **dependency_note_artifact_path_planning_tree**: `/home/nes/ai/planning/acr-290-drift-2-supported-surface-note/risk/acr-290-acr-286-dependency-note.md`
+- **dependency_note_artifact_sha256_source_tree**: `6576e8f743834e5a40d801743ee7ae7d7d4b6b965bf522742d11ddb13700e064`
+- **dependency_note_artifact_sha256_planning_tree**: `6576e8f743834e5a40d801743ee7ae7d7d4b6b965bf522742d11ddb13700e064`
+- **linear_acr_286_comment_ref**: `8bccecdd-be70-4d87-9a62-9fc5decc2805` (`https://linear.app/oulipoly/issue/ACR-286#comment-8bccecdd-be70-4d87-9a62-9fc5decc2805`)
+- **linear_acr_290_comment_ref**: `61fdbb80-e74c-4421-a948-5bd164b289ae` (`https://linear.app/oulipoly/issue/ACR-290/drift-2-resolution-dependency-note-for-supported-surface-inventory#comment-61fdbb80-e74c-4421-a948-5bd164b289ae`)
+- **step6b_output_index_path**: `/home/nes/ai/planning/acr-290-drift-2-supported-surface-note/.scratch/phase6/step6b-output-index.md`
+- **step6b_output_index_sha256**: `6da85a4c2e3264c91fd6fd30f7bc1d829c075b077eda5778890baa692699abcf`
+- **supersession_entry_ref**: `/home/nes/ai/planning/acr-290-drift-2-supported-surface-note/.scratch/phase6/step6b-output-index.md` section `## Supersession entry (S2 deliverable)`
+- **actor**: implementation-pipeline-orchestrator (via Step 6c product writer)
+- **recorded_at**: `2026-05-20T07:36:15Z`
