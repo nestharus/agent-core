@@ -4535,4 +4535,12 @@ None of the decomposition strategies apply at Phase 8. The intrinsic central-doc
 
 **Phase 8 join manifest implication.** The Phase 8 join manifest at `${planning_dir}/risk/phase-8-join-manifest.json` will include both the `code-quality` `HIGH` row AND a `bootstrap-exception` `RATIFIED` row, paralleling ACR-288's Phase 8 pattern.
 
+Required canonical manifest fields (matched literally in `risk/phase-8-join-manifest.json`):
+- `gate_name: bootstrap-exception`
+- `verdict_line: RATIFIED`
+- `ratifies_gate: code-quality`
+- `allow_advance_basis: bootstrap-exception`
+- `convention_citation: ~/ai/conventions/code-quality.md § Bootstrap exception`
+- `ratification_heading: ### ACR-294 — Phase 8 code-quality gate ratification (bootstrap-exception extension)`
+
 **Forward enforcement.** Process-tree audit #3 must verify this DECISIONS entry exists, cites the convention `~/ai/conventions/code-quality.md` § `Bootstrap exception`, and is paired with the non-LOW Phase 8 code-quality aggregate plus the existing Phase 4 ratification entry (preserved as historical context — Phase 4 sub-gate did not fire because Phase 4 code-quality was LOW; Phase 8 is the active ratification anchor).
