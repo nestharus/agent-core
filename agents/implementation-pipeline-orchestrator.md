@@ -639,7 +639,7 @@ Before accepting the Phase 6 halt-state transition or advance to Phase 7, requir
 
 ### Phase 7 — Optional PR-Mode Review Delegation
 
-Phase 7 has two responsibilities: run the three readiness checks below, then call the single gate primitive that decides whether the optional PR-mode review operator is enabled for this repository. The orchestrator does not inspect review status, apply trigger labels, or poll GitHub review evidence. Those mechanics belong to `coderabbit-operator` only after the gate returns an enabled verdict.
+Phase 7 has two responsibilities: run the three readiness checks below, then use `~/ai/tools/coderabbit_review_driver.py` for the optional PR-mode CodeRabbit review loop. The orchestrator does not parse GitHub review/comment bodies inline; the script persists CodeRabbit bodies to disk and returns metadata plus file paths.
 
 #### Pre-dispatch inherited prototype tests gate
 
@@ -679,14 +679,24 @@ Before optional review dispatch, enforce the Phase 6 → Phase 7 `PrototypeSwapR
 6. On a missing, unreadable, blank, incomplete, stale (including overlay evidence that fails to prove currentness under step 5), missing-terminal-state, or missing-overlay-evidence artifact, or on a present artifact that contains neither a valid `PrototypeSwapRecord` shape nor an explicit non-applicability statement, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 7`, violation code `prototype_swap_record_missing_or_invalid`, canonical path, refused action `Phase 7 optional review dispatch`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse Phase 7 optional review dispatch, write `${scratch_dir}/questions/q-<uuidv4>.question.json`, and halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
 7. On valid swap evidence or explicit non-applicability, allow the following Phase 7 gate to proceed.
 
-#### Enablement gate and operator delegation
+#### CodeRabbit script gate and review loop
 
-1. Run the single gate primitive after all three readiness checks clear:
-   `tools/coderabbit_gate.py --worktree-path ${worktree_path} --output ${planning_dir}/risk/${wu_lower}-phase-7-review-gate.json`.
-2. Consume only the gate's terminal verdict and JSON artifact. `SKIP:*` is a clean non-applicability result: append an audit-history line naming the gate artifact and proceed directly to Phase 8 without dispatching `coderabbit-operator`. `BLOCKED:*`, missing JSON, malformed JSON, or any verdict that is not exactly `ENABLED:*` or `SKIP:*` halts Phase 7 before any review operator dispatch.
-3. On `ENABLED:*`, compose `${scratch_dir}/prompts/${wu_lower}-phase-7-pr-mode-review.md` and dispatch `coderabbit-operator` with the model declared in that operator's frontmatter: `agents -m gpt-high -a ~/ai/agents/coderabbit-operator.md -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-7-pr-mode-review.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-7-pr-mode-review.log`. The prompt supplies `task=review`, `worktree_path`, `base`, `branch_name`, `audit_history_path`, the gate artifact path, and the same PR-writer context Phase 9 would otherwise use. The orchestrator must not include review polling commands, status-rollup queries, trigger-label mutation commands, or bounded-silence policy in this prompt.
-4. Accepted operator success is `CONVERGED:review-complete-pass<N>`. `BLOCKED:*`, `NEEDS_INPUT:*`, missing output artifacts, or a timeout/no-completion terminal verdict blocks downstream movement. The orchestrator does not synthesize an empty review pass.
-5. If the operator creates or reuses a PR, it must write the PR URL to `${scratch_dir}/pr-url.txt`. Phase 9 reuses that PR instead of creating a duplicate.
+1. Resolve the GitHub repo as `owner/name`, then run:
+   `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`.
+   Exit `1` is clean non-applicability: append an audit-history line and proceed directly to Phase 8 without CodeRabbit. Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
+2. Select the trigger mode. Use `incremental` for normal implementation-pipeline PR review, including re-runs after child fix commits. Use `full` only when the caller explicitly declares a code-audit or mass-cleanup invocation whose review target is whole files rather than the latest diff. After the PR exists, run:
+   `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode ${coderabbit_trigger_mode}`.
+   The script posts the matching CodeRabbit @mention command and waits until the CodeRabbit bot posts the trigger acknowledgement. Do not apply the `coderabbit` label to the PR; the repository-level label is only an installation marker and has block/suppress semantics on PRs.
+3. Review loop:
+   - Run `~/ai/tools/coderabbit_review_driver.py poll ${repo} ${pr_num}` and read the JSON stdout.
+   - If `review_decision` is `APPROVED`, record `bot_login` and proceed.
+   - If `review_decision` is `CHANGES_REQUESTED`, dispatch one child agent per `new_comments[i].file_path`. Each prompt carries exactly one CodeRabbit comment file path plus the current WU context. Child dispatches use non-interactive `agents -m <model> -f <prompt-file>` shape and must not run bare `agents`.
+   - If `terminal` is `false` and `new_comments` is empty, call `poll` again later. There is no timeout, max-attempt cap, idle-timeout convergence, or silence-as-success path.
+   - If `terminal` is `false` and `new_comments` is non-empty, dispatch one child agent per `new_comments[i].file_path`. Each prompt carries exactly one CodeRabbit comment file path plus the current WU context. Child dispatches use non-interactive `agents -m <model> -f <prompt-file>` shape and must not run bare `agents`.
+   - After child fix commits are pushed, run `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental` before returning to `poll`, unless the current caller is the explicitly declared whole-file code-audit/mass-cleanup path from step 2.
+4. The orchestrator must not call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
+5. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`.
+6. The PR URL remains `${scratch_dir}/pr-url.txt`; Phase 9 reuses that PR instead of creating a duplicate.
 
 ### Phase 8 — apply-gate-set PR-review Gates + Process-tree Audit #3
 

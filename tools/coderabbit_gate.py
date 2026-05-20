@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decide whether CodeRabbit PR-mode review is enabled for a GitHub repo."""
+"""Legacy helper for checking the repository-level CodeRabbit marker label."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", help="GitHub repo in owner/name form.")
     parser.add_argument("--worktree-path", help="Worktree used to resolve the GitHub repo when --repo is omitted.")
-    parser.add_argument("--label", default="coderabbit", help="Trigger label name. Default: coderabbit.")
+    parser.add_argument("--label", default="coderabbit", help="Repository marker label name. Default: coderabbit.")
     parser.add_argument("--output", help="Optional JSON verdict output path.")
     args = parser.parse_args()
 
@@ -90,7 +90,7 @@ def main() -> int:
         payload = {
             "checked_at": checked_at,
             "label": args.label,
-            "reason": "trigger label exists on repository",
+            "reason": "CodeRabbit marker label exists on repository",
             "repo": repo,
             "source": "github-repo-label",
             "verdict": "ENABLED:github-label-present",
@@ -104,7 +104,7 @@ def main() -> int:
         payload = {
             "checked_at": checked_at,
             "label": args.label,
-            "reason": "trigger label is absent from repository",
+            "reason": "CodeRabbit marker label is absent from repository",
             "repo": repo,
             "source": "github-repo-label",
             "verdict": "SKIP:github-label-missing",

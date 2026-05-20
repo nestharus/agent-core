@@ -511,16 +511,19 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 
 ## Phase 7 - Optional PR-Mode Review Delegation
 
-The implementation-pipeline orchestrator runs readiness checks, then calls one gate primitive to decide whether to dispatch `~/ai/agents/coderabbit-operator.md`. The orchestrator does not apply trigger labels, poll review evidence, or query review status rollups itself.
+The implementation-pipeline orchestrator runs readiness checks, then calls `~/ai/tools/coderabbit_review_driver.py` directly for optional PR-mode CodeRabbit review. The script owns @mention triggering, trigger-ack polling, GitHub review-state interpretation, review/comment normalization, and per-comment body persistence. The repository-level `coderabbit` label is only an installation marker; applying it to a PR suppresses CodeRabbit and is not a trigger.
 
 - Readiness checks: inherited prototype proof tests, integration-test evidence for same-layer interacting component pairs, and `PrototypeSwapRecord` / explicit non-applicability.
-- Gate primitive: `tools/coderabbit_gate.py --worktree-path ${worktree_path} --output ${planning_dir}/risk/${wu_lower}-phase-7-review-gate.json`.
-- `SKIP:*` from the gate is a clean non-applicability result. The orchestrator records the gate artifact and proceeds to Phase 8 without dispatching the operator.
-- `ENABLED:*` from the gate allows one `coderabbit-operator task=review` dispatch. The dispatch prompt carries `worktree_path`, branch/base, `audit_history_path`, the gate artifact path, and PR-writer context. The operator owns PR creation/reuse, trigger-label application, review polling, and normalized artifacts.
-- Operator success is `CONVERGED:review-complete-pass<N>`. `BLOCKED:*`, `NEEDS_INPUT:*`, missing artifacts, or timeout/no-completion terminals block downstream movement; the orchestrator does not synthesize an empty review pass.
-- If the operator creates or reuses a PR, it writes `${scratch_dir}/pr-url.txt`; Phase 9 reuses that URL instead of creating a duplicate PR.
-
-There is no bounded-silence fallback in Phase 7. The gate skips repositories that are not enabled up front; an enabled operator dispatch polls until it observes a terminal review signal or returns a blocking failure.
+- Enablement primitive: `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`. Exit `1` is a clean skip. Other nonzero exits block Phase 7.
+- Trigger primitive after PR creation/reuse: `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental`.
+- Trigger mode criterion: use `incremental` for normal PR-review flow and for re-runs after child fix commits. Use `full` only for code-audit or mass-cleanup workflows whose declared review target is whole files rather than the latest diff, such as file-by-file risk-assessment cleanup passes.
+- Poll primitive: `~/ai/tools/coderabbit_review_driver.py poll ${repo} ${pr_num}`. The orchestrator consumes the returned JSON metadata only. Comment bodies stay in files under `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/`.
+- `APPROVED` is CodeRabbit success. `CHANGES_REQUESTED` is terminal for that review pass but not pipeline success: dispatch one child agent per `new_comments[i].file_path`, push the fixes, trigger another incremental review, and poll again.
+- If `terminal` is false with no `new_comments`, poll again later with no timeout, max-attempt cap, idle-timeout convergence, or silence-as-success path.
+- If `terminal` is false with `new_comments`, dispatch one child agent per `new_comments[i].file_path`; each child reads exactly one persisted comment file and acts on that one item.
+- After child fix commits are pushed, call `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental` before polling for the next batch, except in the explicit whole-file code-audit/mass-cleanup path where the caller selected `--mode full`.
+- The orchestrator must not use inline `gh pr view ... statusCheckRollup` polling, must not inline CodeRabbit comment bodies, and must not synthesize an empty review pass.
+- If the pipeline creates or reuses a PR, it writes `${scratch_dir}/pr-url.txt`; Phase 9 reuses that URL instead of creating a duplicate PR.
 
 ## Phase 8 - Post-Review Gates
 
