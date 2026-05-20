@@ -89,8 +89,8 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 - `test-discovery` - Mechanically map changed product files to existing test files that mention them.
   File: [~/ai/agents/test-discovery.md](agents/test-discovery.md) | Inputs: `repo_root`, `scratch_dir`, `base_ref?`, `planning_root?`, `spec_dir?`, `product_globs?`, `test_roots?` | Model: `gpt-high`
 
-- `test-audit-gate` - Produce a blocking `PASS | PARTIAL | FAIL` from existing spec, test, and CI coverage evidence.
-  File: [~/ai/agents/test-audit-gate.md](agents/test-audit-gate.md) | Inputs: `mode`, `repo_root`, `scratch_dir`, `planning_root?`, `spec_dir?`, `agents_dir?`, `repo?`, `ci_workflow_name?`, `coverage_reports_root?`, `pr_number?` | Model: `gpt-high`
+- `test-audit-gate` - Produce a blocking `PASS | PARTIAL | FAIL` from existing spec, test, and locally-generated coverage evidence.
+  File: [~/ai/agents/test-audit-gate.md](agents/test-audit-gate.md) | Inputs: `mode`, `repo_root`, `scratch_dir`, `planning_root?`, `spec_dir?`, `agents_dir?`, `repo?`, `local_coverage_command?`, `pr_number?` | Model: `gpt-high`
 
 - `red-phase-gate` - Run newly authored tests against pre-implementation `HEAD` to confirm whether they are genuinely red.
   File: [~/ai/agents/red-phase-gate.md](agents/red-phase-gate.md) | Inputs: `project_dir`, `scratch_dir`, `base_ref?`, `new_test_nodeids?` | Model: `gpt-high`

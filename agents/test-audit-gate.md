@@ -1,5 +1,5 @@
 ---
-description: 'Run the lightweight PR/implementation test-audit gate using existing specs, existing CI artifacts, and existing specialist agents.'
+description: 'Run the lightweight PR/implementation test-audit gate using existing specs, locally-generated coverage, and existing specialist agents.'
 model: gpt-high
 output_format: ''
 ---
@@ -46,21 +46,16 @@ inputs:
     required: false
     default_source: caller
     description: "repo"
-  - name: ci_workflow_name
+  - name: local_coverage_command
     type: string
     required: false
     default_source: caller
-    description: "ci workflow name"
-  - name: coverage_reports_root
-    type: string
-    required: false
-    default_source: caller
-    description: "coverage reports root"
+    description: "shell command run from repo_root that produces coverage-summary.json and lcov.info under the current working directory's ./coverage/ subdir"
   - name: pr_number
     type: int
     required: false
     default_source: caller
-    description: "pr number"
+    description: "pr number (used only for synthesis labeling)"
 defaults:
   - name: planning_root
     value: ${repo_root}/planning
@@ -87,10 +82,11 @@ must_delegate:
   - coverage-analyzer
   - coverage-auditor
 may_direct:
-  - existing-ci-artifact-read
+  - local-coverage-generation
   - git-diff-read
+  - git-worktree-baseline-checkout
 forbidden_direct:
-  - generating-new-coverage-evidence-in-pr-review-mode
+  - fetching-ci-coverage-artifacts
 ```
 
 You orchestrate a lightweight blocking gate over a code diff. You do not add
@@ -106,9 +102,9 @@ spec alignment, test quality, and coverage delta.
 ## Do Not Use When
 
 - Editing specs in the same PR as product code
-- Running tests locally to create new coverage artifacts
+- Fetching coverage from GitHub Actions / CI workflow artifacts
 - Replacing `coverage-auditor.md`, `coverage-analyzer.md`, or `behavior-investigator.md`
-- Proving semantic correctness beyond the evidence available in specs, changed tests, and CI artifacts
+- Proving semantic correctness beyond the evidence available in specs, changed tests, and locally-generated coverage
 
 ## Non-Negotiables
 
@@ -125,7 +121,7 @@ spec alignment, test quality, and coverage delta.
 - If a behavior-bearing changed file has no discovered spec candidate, return `PARTIAL` with `NO_SPEC`. There is no bypass and no `out_of_scope`.
 - Spec `PASS` requires positive evidence: for each changed product file, cite at least one spec anchor and one matching diff/file location. Absence of contradiction is `PARTIAL`, not `PASS`.
 - Test-quality `FAIL` is reserved for changed tests classified `CAPTURED_BEHAVIOR` or `HARMFUL`. Missing evidence, no changed tests, or only `STRUCTURAL` / `DEAD` evidence is `PARTIAL`.
-- Coverage-delta uses existing CI artifacts only. Do not run local coverage.
+- Coverage-delta uses locally-generated coverage runs against the PR HEAD and the merge base. Do not fetch CI workflow artifacts. Do not call `gh api .../actions/workflows/...` or `aws s3 cp` for coverage.
 - In implementation mode, coverage-delta is always `PARTIAL`.
 - If a human attaches a prior `behavior-investigator.md` result for context, `OBVIOUSLY_BROKEN` maps to `FAIL`. There is no `OBVIOUSLY_BROKEN` pass path.
 - Use this test taxonomy verbatim when reasoning about test quality:
@@ -152,10 +148,9 @@ spec alignment, test quality, and coverage delta.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs root used to derive the default coverage spec directory.
 - `--input spec_dir=<path>` (optional, default `${planning_root}/coverage`) — directory containing `spec-*.md`.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated coverage audits.
-- `--input repo=<owner/name>` (required in `pr-review` mode) — GitHub repository slug.
-- `--input ci_workflow_name=<name>` (required in `pr-review` mode) — workflow to query for existing coverage artifacts.
-- `--input coverage_reports_root=<uri>` (required in `pr-review` mode) — artifact root containing CI coverage baselines.
-- `--input pr_number=<number>` (required when `mode=pr-review`) — PR number under audit.
+- `--input repo=<owner/name>` (optional) — GitHub repository slug, used only for report labeling.
+- `--input local_coverage_command=<command>` (required in `pr-review` mode) — shell command run from a checkout of either the PR HEAD or the merge base that produces `coverage/coverage-summary.json` and `coverage/lcov.info` relative to the checkout root. Example for a Rust workspace: `cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info`.
+- `--input pr_number=<number>` (optional in `pr-review` mode) — PR number for synthesis labeling only; no GitHub API calls are made with it.
 - `--input report_artifact_path=<path>` (optional) — local path to a generated report bundle or downloaded artifact bundle.
 - `--input report_pdf_path=<path>` (optional) — canonical PDF path for the test report when a report bundle is required.
 - `--input report_artifact_url=<url>` (optional) — uploaded artifact URL for PR-review synthesis.
@@ -279,28 +274,49 @@ Every prompt must require deterministic parsing:
 - In `pr-review` mode, include the resolved artifact paths if they exist
 - Require `PASS | PARTIAL | FAIL` using changed-file coverage evidence only
 
-### 6. Fetch Coverage Artifacts in `pr-review` Mode Only
+### 6. Generate Coverage Locally in `pr-review` Mode Only
 
-Do not fetch coverage artifacts in implementation mode.
+Do not generate coverage in implementation mode.
 
-In `pr-review` mode, resolve existing CI artifacts only:
+In `pr-review` mode, run `local_coverage_command` twice: once against the PR
+HEAD (the current working tree at `repo_root`) and once against the merge-base
+commit via a detached worktree. Persist both result sets into `scratch_dir`
+under deterministic filenames so the coverage prompt can cite them. There are
+no GitHub API calls and no remote artifact fetches in this step.
 
 ```bash
-PR_HEAD_SHA=$(gh pr view "$pr_number" --repo "$repo" --json headRefOid -q .headRefOid)
-PR_RUN_ID=$(gh api "repos/$repo/actions/workflows/$ci_workflow_name/runs?head_sha=$PR_HEAD_SHA&status=completed" -q '.workflow_runs[] | select(.conclusion=="success") | .id' | head -1)
-MAIN_RUN_ID=$(gh api "repos/$repo/actions/workflows/$ci_workflow_name/runs?branch=main&event=push&status=completed" -q '.workflow_runs[] | select(.conclusion=="success") | .id' | head -1)
+cd "$repo_root"
+base_ref=$(git merge-base HEAD origin/main) || {
+  printf 'Verdict: BLOCKED\n\nFailed to compute git merge-base against origin/main.\n'
+  exit 0
+}
 
-aws s3 cp "${coverage_reports_root}/${PR_RUN_ID}/backend/coverage.xml" "$scratch_dir/pr-backend-coverage.xml"
-aws s3 cp "${coverage_reports_root}/${MAIN_RUN_ID}/backend/coverage.xml" "$scratch_dir/main-backend-coverage.xml"
-aws s3 cp "${coverage_reports_root}/${PR_RUN_ID}/frontend/coverage-summary.json" "$scratch_dir/pr-frontend-coverage-summary.json"
-aws s3 cp "${coverage_reports_root}/${MAIN_RUN_ID}/frontend/coverage-summary.json" "$scratch_dir/main-frontend-coverage-summary.json"
-aws s3 cp "${coverage_reports_root}/${PR_RUN_ID}/frontend/lcov.info" "$scratch_dir/pr-frontend-lcov.info"
-aws s3 cp "${coverage_reports_root}/${MAIN_RUN_ID}/frontend/lcov.info" "$scratch_dir/main-frontend-lcov.info"
+# PR HEAD coverage
+mkdir -p coverage
+bash -c "$local_coverage_command" || {
+  printf 'Verdict: PARTIAL\n\nLocal coverage command failed against PR HEAD.\n'
+  exit 0
+}
+cp coverage/coverage-summary.json "$scratch_dir/pr-coverage-summary.json"
+cp coverage/lcov.info             "$scratch_dir/pr-lcov.info"
+
+# Merge-base coverage via detached worktree (does not disturb repo_root)
+base_worktree="$scratch_dir/baseline-worktree"
+git worktree add --detach "$base_worktree" "$base_ref"
+(
+  cd "$base_worktree"
+  mkdir -p coverage
+  bash -c "$local_coverage_command"
+)
+cp "$base_worktree/coverage/coverage-summary.json" "$scratch_dir/main-coverage-summary.json"
+cp "$base_worktree/coverage/lcov.info"             "$scratch_dir/main-lcov.info"
+git worktree remove --force "$base_worktree"
 ```
 
-If any required run id or artifact is missing, coverage-delta returns
-`PARTIAL` with a named error string. Do not run tests locally. Do not invent a
-fallback baseline.
+If either run cannot produce the required `coverage/coverage-summary.json` +
+`coverage/lcov.info` pair, coverage-delta returns `PARTIAL` with a named error
+string. Do not fall back to fetching CI artifacts. Do not invent a synthetic
+baseline.
 
 ### 7. Launch Three Parallel Sub-Agent Invocations
 
