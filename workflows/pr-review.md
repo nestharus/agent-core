@@ -8,7 +8,7 @@ workflow_dispatch_contract:
     - "base branch or true stacked parent for comparison"
   expectations:
     - "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks"
-    - "runs on the actual diff after CodeRabbit rather than judging the proposal alone"
+    - "runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone"
     - "routes repeated fix or gate loops through audit-history and process-tree review"
   outputs:
     - "gate verdicts and actionable findings for the next fix pass or decomposition"
@@ -21,7 +21,7 @@ workflow_dispatch_contract:
 ---
 # PR Review Gates
 
-**This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md` — the step that makes implementation work consumable for review by gating the diff against the proposal that scoped it. It runs after CodeRabbit (`~/ai/workflows/coderabbit-loop.md`). Gates the draft PR before it is opened, or before it is promoted if it was opened already.
+**This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md` — the step that makes implementation work consumable for review by gating the diff against the proposal that scoped it. It runs after Phase 7 optional review handling. Gates the draft PR before it is opened, or before it is promoted if it was opened already.
 
 Model-owned gates may block on their own evidence questions, but a human does not re-run or revalidate them as branch-local approval before a draft PR opens.
 
@@ -59,7 +59,7 @@ pr-review-operator
 ### Expectations
 
 - gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks
-- runs on the actual diff after CodeRabbit rather than judging the proposal alone
+- runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone
 - routes repeated fix or gate loops through audit-history and process-tree review
 
 ### Outputs
@@ -125,7 +125,7 @@ Review rules:
 - Flag drift, drive-by cleanup, speculative abstractions, and unrelated fixes.
 - Flag behavior changes that are not required for the stated purpose.
 - Flag cleanup that should ship separately even if it is "good cleanup."
-- Minor polish items can be folded into the next CodeRabbit fix pass when they do not change the PR's concern.
+- Minor polish items can be folded into the next optional PR-mode review fix pass when that upstream operator ran and the items do not change the PR's concern.
 
 Typical verdict: `LOW_CONCERN` with specific findings, or a stronger escalation if the diff is materially off-purpose.
 
@@ -254,9 +254,9 @@ If a delegated gate or operator returns `NEEDS_INPUT:<question_artifact>`, the r
 
 If any gate surfaces findings that require code changes:
 
-1. A `gpt-high` agent applies the fixes, combined with any remaining useful CodeRabbit findings.
+1. A `gpt-high` agent applies the fixes, combined with any remaining useful findings from the upstream optional PR-mode review operator.
 2. Amend the commit.
-3. Re-run CodeRabbit using `~/ai/workflows/coderabbit-loop.md`.
+3. If Phase 7 was enabled for this PR, rerun through `~/ai/agents/coderabbit-operator.md`; if Phase 7 was skipped by its gate, do not synthesize or request a review pass.
 4. Re-run only the gates that flagged findings, unless the fix touched another gate's area.
 
 ## Decomposition

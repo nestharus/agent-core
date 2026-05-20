@@ -375,7 +375,7 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks",
-          "runs on the actual diff after CodeRabbit rather than judging the proposal alone",
+          "runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone",
           "routes repeated fix or gate loops through audit-history and process-tree review"
         ],
         "inputs": [
