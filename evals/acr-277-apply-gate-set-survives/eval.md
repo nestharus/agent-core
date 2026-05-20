@@ -37,6 +37,30 @@ evidence_source_kinds:
 suggested_action_class: route-rca-post-apply-through-shared-apply-gate-set-operator
 ---
 
+## Declared roles
+
+`mapper`, `validator`
+
+This eval-spec maps scenario inputs to expected findings (`mapper`) and validates structural evidence per `~/ai/conventions/evals.md` finding contract (`validator`). The currentness scenario (`APPLY-GATE-SET-005`) inherits these declared roles for ACR-294 currentness-key + invalidation-trigger detection.
+
+## Adapter declarations
+
+```yaml
+adapter_declarations:
+  - component: evals/acr-277-apply-gate-set-survives/eval.md
+    role: adapter
+    Translates:
+      - apply-gate-set-structural-verification-surface
+      - currentness-policy-citation-surface
+      - prototype-pending-supersession-surface
+```
+
+The three translated surfaces are the complete adapter declaration. The new currentness-policy-citation-surface subordinates the ACR-294 currentness-scenario references to `~/ai/conventions/apply-gate-set-currentness.md` section anchors, currentness key fields, finding-contract fields, and lifecycle triggers under one translated contract. ACR-292 owns broader eval-spec authoring outside the currentness scope.
+
+## Path-lookup protocol
+
+All path tokens of the form `${planning_dir}/risk/<...>-join-manifest.json`, `${planning_dir}/pr-review/<...>-post-apply/<gate>.md`, `${planning_dir}/process-tree/<...>-post-apply/<artifact>.{json,md}`, `${planning_dir}/code-quality/<...>-post-apply/<artifact>.{json,md}`, and equivalent caller-mode-scoped report paths used in the scenarios below are owned-schema bindings from `~/ai/agents/apply-gate-set.md` § `Output contract` sub-section `Canonical output-path schema (per caller mode)`, which declares the per-caller-mode path TEMPLATE schema bound to the output contract field names (`join_manifest_path`, `aggregate_report_path`, `expected_process_path`, `process_tree_report_path`, and the per-gate canonical-report-path templates). The apply-gate-set workflow at `~/ai/workflows/apply-gate-set.md` § `Join manifest schema` mirrors that declaration for discoverability. Scenarios cite the resolved paths inline for readability, but the binding source of truth is the owned schema declaration in the operator's Output contract section — not the literal path string in this eval-spec. Per `~/ai/conventions/code-quality.md` push-pull canonical-doc-as-schema proof type, this binding makes the path-template references a common-interface pull rather than an uncontrolled-source pull.
+
 # ACR-277 Apply-Gate-Set Survives-With-Refinement Eval
 
 ## Purpose
@@ -333,38 +357,76 @@ required field is missing or unresolved.
 
 Scenario id: `APPLY-GATE-SET-005`
 
+Lifecycle: `ROLL_OUT`.
+
+Marker disposition: `removed` for the ACR-294 currentness carry-forward
+row. The inherited global pending marker remains outside this
+currentness-only edit; this row's production evidence is recorded in
+`/home/nes/ai/planning/acr-294-rca-cycle-currentness/.scratch/phase6/step6b-output-index.md#acr-294-currentness-001`.
+
 Intended observation: When the RCA cycle re-enters Phase 2 to revise
-root cause, the operator must invalidate gate reports whose
-`verified_at` predates the latest Phase 5 apply commit and require
-rerun before Phase 7+ handoff.
+root cause, or when any later currentness trigger changes active
+cycle/head/diff/scope/runtime-claim/contract/report/authority identity,
+the operator must invalidate stale post-apply join-manifest rows and
+require row-level re-verification or full re-dispatch before Phase 7+
+handoff.
 
 Gate this scenario covers: `manifest-currentness`.
+
+Currentness finding contract: findings from this scenario must include
+the eval minimum fields `eval_id`, `severity`, `evidence_paths`,
+`summary`, `suggested_action`, and `confidence`. Currentness-specific
+extensions include `scenario_id`, `wu_id`, `root_invocation_uuid`,
+`phase`, `gate`, `trace_locator`, `manifest_path`, `row_kind`,
+`report_paths`, and `expected_currentness_keys`.
 
 Positive evidence (the eval should produce a finding when):
 
 - Trace shows two or more Phase 5 apply commits for the same RCA WU
   (re-entry case), and the second Phase 5 apply commit timestamp is
   after the `verified_at` of one or more post-apply join-manifest rows.
+- Trace, manifest, or planning artifacts show an ACR-294 currentness
+  trigger after the previous row was produced: Phase 2 root-cause
+  re-entry, Phase 3 fix-decision revision, Phase 4 application-plan
+  revision, Phase 5 apply re-run, Phase 6 verification repair, cap-hit
+  or scope expansion, rebase, verification repair, or substantive
+  contract/test revision.
 - No reissued manifest exists for the latter cycle, or the existing
-  manifest reuses prior-cycle `producing_invocation_uuid` /
-  `sha256` / `mtime` values whose `verified_at` predates the latest
-  Phase 5 apply.
+  manifest reuses prior-cycle `producing_invocation_uuid`, `sha256`,
+  `mtime`, `verdict_line`, or currentness-key values whose recorded
+  identity predates or does not match the active cycle.
+- One or more required currentness keys is missing or mismatched:
+  `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`,
+  `contract_artifact_hashes`, `report_path_hashes`, `scope_hash`,
+  `runtime_claim_hash`, `canonical_output_path_hashes`,
+  `producing_invocation_uuid`, `verified_at`, `currentness_policy_ref`,
+  `authority_ref_hashes` for exception rows, or
+  `refused_transition_record` for stale-refusal rows.
 - Phase 7+ handoff occurred after the latter Phase 5 apply despite
-  stale rows.
+  stale rows, and no stale-refusal audit-history record blocked the
+  transition.
 
 Non-fire cases:
 
-- A reissued post-apply join manifest exists with `verified_at` values
-  after the latest Phase 5 apply commit, and any stale rows are
-  explicitly invalidated; or
+- Every post-apply join-manifest row is reissued after the latest
+  currentness trigger and matches the active
+  cycle/head/diff/scope/runtime-claim/contract/report/authority identity;
+  or
 - The prior manifest is preserved and re-verified per row, with
-  `verified_at` advanced and `sha256` / `mtime` re-checked against the
-  current canonical output paths.
+  matching currentness keys, current canonical output `size` / `mtime`
+  / `sha256`, unchanged parsed `verdict_line`, traceable
+  `producing_invocation_uuid`, matching exception authority where
+  applicable, and refreshed `verified_at`; or
+- A mismatch is found before handoff and an audit-history
+  `refused_transition_record` routes the row to row-level rerun, full
+  re-dispatch, split, shrink, or `NEEDS_INPUT`.
 
-Suggested action: have `apply-gate-set` re-verify each row's
-`sha256` / `mtime` against the current canonical output and refresh
-`verified_at` on any Phase 2 re-entry; refuse advance when stale rows
-remain after re-entry.
+Suggested action: have `apply-gate-set` apply
+`~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`,
+§ `Invalidation trigger matrix`, § `Row-level re-verification`, § `Full re-dispatch`,
+and § `Stale-refusal records` to compare currentness keys,
+canonical output stats, verdict lines, producer traceability, and exception
+authority; refuse downstream advance when stale rows remain.
 
 ### APPLY-GATE-SET-006: Bootstrap-exception ratification used without DECISIONS authority or four-condition record
 

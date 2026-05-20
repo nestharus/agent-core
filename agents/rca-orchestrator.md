@@ -16,6 +16,21 @@ You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing c
 
 This file-local declaration overrides the documented `agents/*-orchestrator.md` path default per `~/ai/conventions/code-quality.md` § `Declared roles`. `orchestration` covers RCA phase sequencing and child agent dispatch. `parser` covers operator/workflow contract reading and prompt input consumption. `validator` covers trigger enum validation, proof-plan / validation-integrity / changed-path / stop-condition checks per the procedure body.
 
+## Adapter declarations
+
+```yaml
+adapter_declarations:
+  - component: agents/rca-orchestrator.md
+    role: adapter
+    Translates:
+      - rca-lifecycle-orchestration-surface
+      - rca-evidence-and-artifact-surface
+      - rca-apply-gate-set-caller-surface
+      - currentness-policy-citation-surface
+```
+
+The four translated surfaces are the complete adapter declaration. The new currentness-policy-citation-surface subordinates `~/ai/conventions/apply-gate-set-currentness.md` § `Invalidation trigger matrix` and § `Stale-refusal records` to one translated contract.
+
 ## Use When
 
 - The caller has a production incident, customer incident, operational outage, or field failure that needs full RCA.
@@ -117,7 +132,7 @@ Required output paths:
 
 The RCA caller appends the gate-set output contract to the RCA success or block status. That contract output is required before composing any downstream lifecycle prompt. RCA cannot proceed to post-mortem authoring, action-item filing or indexing, runbooks, tracker comments, tracker close, or close-or-pending records while any required gate row is missing, stale, malformed, unsupported, non-LOW without valid ratification, skipped without valid follow-up, or unratified. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, and `STALE_REFUSAL` all block downstream handoff.
 
-Currentness re-verification is caller-visible and operator-owned. When Phase 6 returns to Phase 2, when Phase 3 revises the fix decision, when Phase 4 revises the application plan, or when Phase 5 reapplies code, any prior gate-set manifest for `<failure-id>` is stale for downstream handoff. Re-run or re-verify through `apply-gate-set`; RCA may not decide currentness locally. A `STALE_REFUSAL` is a blocking state, and its `next_action` drives repair routing to Phase 6 evidence repair, Phase 2 root-cause iteration, Phase 3 fix revision, Phase 4 plan revision, or Phase 5 re-apply as applicable.
+Currentness re-verification is caller-visible and operator-owned. RCA delegates currentness decisions to `apply-gate-set` using `~/ai/conventions/apply-gate-set-currentness.md` § `Invalidation trigger matrix` and § `Stale-refusal records`; RCA does not redefine those triggers locally. RCA Phase 2 root-cause re-entry, Phase 3 fix-decision revision, Phase 4 application-plan revision, Phase 5 apply re-run, Phase 6 verify-or-return repair, cap-hit or scope expansion, rebase, verification repair, and substantive contract/test revision all require the prior gate-set manifest for `<failure-id>` to be rerun or re-verified through `apply-gate-set` before downstream handoff. A `STALE_REFUSAL` is a blocking state, and its `next_action` drives repair routing to Phase 6 evidence repair, Phase 2 root-cause iteration, Phase 3 fix revision, Phase 4 plan revision, Phase 5 re-apply, scope/cap-hit handling, rebase verification, or full gate re-dispatch as applicable.
 
 ACR-254 critics remain wired and are not replaced or double-counted by Phase 6.5. The fix-decision critic continues to call proof-risk when the proof plan is missing, malformed, proxy-only, or evidence-class mismatched. The verification critic continues to call validation-integrity when verification cites tests or validation-surface risk exists. The original-signal rerun remains Phase 6 and is a prerequisite to Phase 6.5. The new gate consumes those artifacts and adds the broader post-apply gate-set decision; those RCA-local prerequisites are never sufficient evidence for the broader gate-set `PASS`.
 

@@ -26,7 +26,7 @@ adapter_declarations:
       - inventory-resolution-surface
 ```
 
-The five translated surfaces are the complete adapter declaration for this operator. Subordinate references to RCA evidence, implementation-phase artifacts, manifest rows, child gate reports, expected-process rows, and tracker-neutral evidence are fields inside these surfaces, not additional translated contracts.
+The five translated surfaces are the complete adapter declaration for this operator. Subordinate references to RCA evidence, implementation-phase artifacts, manifest rows, child gate reports, expected-process rows, and tracker-neutral evidence are fields inside these surfaces, not additional translated contracts. References to `~/ai/conventions/apply-gate-set-currentness.md` are subordinate fields inside `manifest-schema-and-audit-history-surface` (currentness keys, stale-refusal records) and `manifest-row-convention-surface` (row-kind coverage), not separate translated contracts.
 
 ## Role
 
@@ -79,7 +79,7 @@ All caller modes require:
 - `skip_request_ref` for hotfix-skip-with-followup rows.
 - `bootstrap_exception_request_ref`, `decisions_ref`, and `root_authorization_ref` for ratification rows.
 - `inventory_resolution_context_ref` for ACR-285 or ACR-286 drift rows.
-- `currentness_policy_ref`, defaulting to the future ACR-294 convention placeholder.
+- `currentness_policy_ref`, defaulting to `~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema`.
 
 Optional inputs never waive required currentness, active dispatch evidence, or canonical-output checks.
 
@@ -251,25 +251,9 @@ The row is valid only as a separate ratification record; it never rewrites the c
 
 ## Currentness fields
 
-ACR-291 defines fields and refusal shape. ACR-294 owns the future invalidation algorithm and detailed trigger matrix.
+The canonical field set for `currentness_key` lives in `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`; the invalidation algorithm lives in § `Invalidation trigger matrix`, § `Row-level re-verification`, and § `Full re-dispatch`. This operator records and validates those fields in each row, but it does not redefine the schema inline.
 
-Each `currentness_key` must include:
-
-- `cycle_id`
-- `caller_mode`
-- `head_sha`
-- `base_ref`
-- `diff_hash` or `diff_sha256`
-- `contract_artifact_hashes`
-- `report_path_hashes`
-- `scope_hash`
-- `runtime_claim_hash`
-- `producing_invocation_uuid`
-- `verified_at`
-- `currentness_policy_ref`
-- `refused_transition_record`
-
-If a required row lacks a currentness key, has an ambiguous producing invocation, points to a missing or hash-mismatched canonical output, or cannot be matched to the caller's current mode, cycle, head, diff, scope, and runtime-claim context, emit `row_kind: stale_refusal`, block caller advancement, and append audit-history evidence. Re-entry, rebase, amend, scope expansion, and verification repair are named hazard classes only; ACR-294 owns final trigger detail.
+If a required row lacks the canonical currentness key, has an ambiguous producing invocation, points to a missing or hash-mismatched canonical output, or cannot be matched to the caller's current mode, cycle, head, diff, scope, runtime-claim, contract, report, policy, and exception-authority context, emit `row_kind: stale_refusal`, block caller advancement, and append audit-history evidence shaped by `~/ai/conventions/apply-gate-set-currentness.md` § `Stale-refusal records`.
 
 ## Inventory-resolution rows
 
@@ -350,7 +334,7 @@ Host built-in sub-agents and Task-style child invocations are out of contract. C
 - `BLOCKED`: required evidence is missing, stale, malformed, unsupported, non-LOW without valid ratification, skipped without valid skip row, or contradicted by process-tree evidence.
 - `NEEDS_INPUT`: a required user-owned artifact, authorization, scope decision, or convention-owned choice is absent and cannot be inferred safely.
 - `MEDIUM` or `HIGH`: child gate found a non-LOW result. Return to the owning repair route unless a valid convention-backed bootstrap-exception row permits advancement.
-- `STALE_REFUSAL`: currentness cannot be proven against caller inputs. Block transition and record rerun or repair route.
+- `STALE_REFUSAL`: currentness cannot be proven against caller inputs. Block transition and record rerun or repair route using `~/ai/conventions/apply-gate-set-currentness.md` § `Stale-refusal records`.
 
 ## Output contract
 
@@ -369,9 +353,25 @@ Return:
 - `inventory_resolution_rows`
 - `skip_rows`
 - `stale_refusal_rows`
-- `currentness_key_summary`
+- `currentness_key_summary`: compact summary of the keys defined by `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`, plus the row-level or full-dispatch disposition when currentness was rechecked.
 - `terminal_decision`
 - `next_action`
 - optional caller-owned comment payload path
 
 The caller may advance only when the returned status is `PASS` and the manifest contains no unresolved blocking, stale, malformed, or unsupported required rows.
+
+### Canonical output-path schema (per caller mode)
+
+The output contract above returns the path FIELDS. The caller-mode-scoped path TEMPLATES that those fields are bound to are part of the operator's owned schema; consumers (RCA orchestrator, implementation-pipeline orchestrator, structural-verification eval-specs) cite them as a common interface rather than re-derive them.
+
+For `caller_mode=rca-post-apply` (RCA Phase 6.5):
+
+- `join_manifest_path`: `${planning_dir}/risk/post-apply-join-manifest.json`
+- `aggregate_report_path`: `${planning_dir}/code-quality/<rca-id>-post-apply/aggregate-code-quality.md`
+- `expected_process_path`: `${planning_dir}/process-tree/<rca-id>-post-apply/expected-process.json`
+- `process_tree_report_path`: `${planning_dir}/process-tree/<rca-id>-post-apply/audit-report.md`
+- per-gate canonical report paths under `${planning_dir}/<gate-family>/<rca-id>-post-apply/<gate-name>.md` for PR-review (`${planning_dir}/pr-review/<rca-id>-post-apply/pr-review-<gate>.md`), code-quality (`${planning_dir}/code-quality/<rca-id>-post-apply/{findings.json,findings.md,aggregate-code-quality.md}`), and process-tree (`${planning_dir}/process-tree/<rca-id>-post-apply/{expected-process.json,audit-report.md}`).
+
+For `caller_mode=implementation-phase-4`, `implementation-phase-6`, and `implementation-phase-8`, the equivalent path templates substitute `<rca-id>-post-apply` with the corresponding `<phase-N-join-manifest>` slug per the implementation-pipeline orchestrator's existing phase-join naming. The implementation-pipeline orchestrator's `~/ai/agents/implementation-pipeline-orchestrator.md` and `~/ai/workflows/implementation-pipeline.md` are the source of truth for the implementation-phase path-template bindings; this operator preserves them.
+
+This schema declaration is the canonical-doc-as-schema source for the path templates referenced by structural-verification eval-specs (e.g., `~/ai/evals/acr-277-apply-gate-set-survives/eval.md`) and downstream callers. Eval-specs and callers cite this section as the common interface; literal path strings in those documents are non-authoritative re-statements of this owned schema.
