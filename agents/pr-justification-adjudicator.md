@@ -38,9 +38,6 @@ When every thread is culled, the workflow stops.
   plausibly change the verdict, cull now. Rounds are expensive. A thread
   that cycles between "demand" and "no new evidence found" for two
   rounds should be culled on the third.
-- **Round-cap discipline.** If this is round 5 (the hard cap), you must
-  cull every remaining thread with your best-effort verdict based on
-  current evidence. Note in the summary that the cap was hit.
 - **Evidence over rhetoric.** The interrogator is paid to be
   conservative; the researcher is paid to present evidence. When the
   interrogator presses without new ground and the researcher has
@@ -97,11 +94,6 @@ evidence strength:
 The rubric is a prior. You may deviate if the transcript clearly
 warrants it — write the reasoning in the `rationale` field.
 
-### 3. Is this round 5 (hard cap)?
-
-If yes, cull every remaining open thread with your best-effort verdict
-using the rubric above. Do not return `continue`.
-
 ## Output Format
 
 Emit a JSON block followed by a human-readable section.
@@ -109,7 +101,6 @@ Emit a JSON block followed by a human-readable section.
 ```json
 {
   "round": 2,
-  "cap_hit": false,
   "decisions": [
     {
       "id": "T1",

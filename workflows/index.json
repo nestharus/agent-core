@@ -501,7 +501,7 @@
         "expectations": [
           "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle",
           "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS",
-          "returns to root-cause analysis on red verification until the hard cap is reached, then surfaces human review through NEEDS_INPUT instead of starting another cycle"
+          "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts"
         ],
         "inputs": [
           "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed",
@@ -517,7 +517,7 @@
         ],
         "orchestrator": "rca-orchestrator",
         "outputs": [
-          "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, cap-hit artifact when needed, and RCA-scoped gate-set artifacts",
+          "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and RCA-scoped gate-set artifacts",
           "gate-set dispatch manifest, join manifest, aggregate report, child report index, expected-process manifest, process-tree report reference or non-applicability record, audit-history records, and optional ticket-comment payload",
           "post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds after current Phase 6.5 PASS",
           "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed"

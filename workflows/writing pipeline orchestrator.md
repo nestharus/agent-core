@@ -77,7 +77,7 @@ Per category, the fix pass: read violation report filtered to this category → 
 **C10. Hedging fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
 **C11. Filler/throat-clearing fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
 
-If a reviewer finds remaining violations in its category, the orchestrator re-runs the fix agent with the reviewer's findings. Max 3 cycles per category.
+If a reviewer finds remaining violations in its category, the orchestrator re-runs the fix agent with the reviewer's findings. Iterate until the reviewer returns no remaining violations.
 
 **C12. Full ban rescan** (`gpt-high`) — runs the full non-negotiable scan again on the document after all category fixes. If new violations appeared (the fix passes can introduce new ones), route them to the appropriate category fix agent.
 
@@ -118,7 +118,7 @@ Reviewers are opus because structural quality is judgment, not pattern-matching.
 
 Orchestrator reads all editing reports from D-G. If any fix made major structural changes (moved sections, rewrote >30% of a section, changed narrative arc), restart from Phase C (ban rescan is cheap, structural fixes may have introduced violations).
 
-Max 3 full cycles through C-G. After 3 cycles, proceed to Phase I.
+Restart from Phase C as needed until no major structural changes are introduced; then proceed to Phase I.
 
 ### Phase I: Quality Gate
 

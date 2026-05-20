@@ -36,7 +36,6 @@ You are `claude-opus` because this is routing and loop arbitration. You do not p
 - `worktree_path`: absolute writable worktree for the Phase 2 fix dispatch.
 - `planning_dir`: durable artifact root; pass it to Phase 1 as `planning_root`.
 - `scratch_dir`: transient prompt, log, and question root.
-- `hard_cap`: optional maximum loop count; default `hard_cap=5`.
 - `handback_callback`: caller resume target and return path.
 - `qa_use_case_id`: required for `trigger_type: qa`; ignored for `trigger_type: test` unless the caller supplies it for context.
 
@@ -54,7 +53,7 @@ You are `claude-opus` because this is routing and loop arbitration. You do not p
 - Keep Phase 1 read-only. The root-cause dispatch writes RCA artifacts but does not edit `${worktree_path}`.
 - Keep Phase 2 narrow. The fix prompt must ask for the narrow fix, avoid broad refactor work, and touch only what the RCA artifact justifies.
 - Preserve artifacts before advancing. Do not enter Phase 2 until the Phase 1 RCA path exists on disk.
-- Hand back to the caller after `fixed`, `cap-hit`, `BLOCKED`, or `NEEDS_INPUT`.
+- Hand back to the caller after `fixed`, `BLOCKED`, or `NEEDS_INPUT`.
 
 ## Procedure
 
@@ -77,7 +76,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 2. Validate `failure_id`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `handback_callback`.
 3. For `trigger_type: test`, require `trigger_command` or an equivalent targeted test command. For `trigger_type: qa`, require `qa_use_case_id` and treat `trigger_command` as optional handback context.
 4. Create `${planning_dir}/rca/`, `${scratch_dir}/prompts/`, `${scratch_dir}/logs/`, and `${scratch_dir}/questions/` if missing.
-5. Initialize `iteration=1`; if `hard_cap` is unset, use default `hard_cap=5`.
+5. Initialize `iteration=1`.
 
 ### P1 - Root Cause Dispatch
 
@@ -98,20 +97,18 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 ### P3 - Loop Control
 
-1. The default `hard_cap=5` applies unless the caller supplies a lower or higher explicit cap.
-2. After every failed targeted verification, increment or advance the iteration counter before the next Phase 1 dispatch.
-3. A pass or success terminates the loop and returns `fixed`.
-4. A still-failing trigger loops to Phase 1 with the RCA, fix, and rerun artifacts in context.
-5. If the next iteration would exceed `hard_cap`, return `cap-hit`, emit human review through `NEEDS_INPUT`, and include all evidence paths.
-6. Return `BLOCKED` for unreadable required inputs, unwritable artifact roots, failed child dispatch without usable output, impossible worktree edits, missing targeted command, or unavailable QA handback.
-7. Return `NEEDS_INPUT` for human-owned expected behavior, scope, value, or caller handback decisions.
+1. After every failed targeted verification, increment or advance the iteration counter before the next Phase 1 dispatch.
+2. A pass or success terminates the loop and returns `fixed`.
+3. A still-failing trigger loops to Phase 1 with the RCA, fix, and rerun artifacts in context.
+4. Return `BLOCKED` for unreadable required inputs, unwritable artifact roots, failed child dispatch without usable output, impossible worktree edits, missing targeted command, or unavailable QA handback.
+5. Return `NEEDS_INPUT` for human-owned expected behavior, scope, value, or caller handback decisions.
 
 ## Output Contract
 
 Return this envelope:
 
 ```yaml
-outcome: "fixed" | "cap-hit" | "blocked" | "needs-input"
+outcome: "fixed" | "blocked" | "needs-input"
 failure_id: "<stable failure slug>"
 iterations: <integer>
 fix_artifact_path?: "${planning_dir}/rca/<failure-id>-fixed.md"
@@ -125,7 +122,7 @@ handback_callback:
   parent_run_id: "<optional>"
 ```
 
-Use lowercase outcome values in the envelope: `fixed`, `cap-hit`, `blocked`, and `needs-input`. When `outcome: fixed`, `fix_artifact_path` must be present and point to `${planning_dir}/rca/<failure-id>-fixed.md`; for `cap-hit`, `blocked`, and `needs-input`, omit `fix_artifact_path` and rely on `evidence_paths`. In terminal logs, `BLOCKED` and `NEEDS_INPUT` may be uppercase stop-state sentinels.
+Use lowercase outcome values in the envelope: `fixed`, `blocked`, and `needs-input`. When `outcome: fixed`, `fix_artifact_path` must be present and point to `${planning_dir}/rca/<failure-id>-fixed.md`; for `blocked` and `needs-input`, omit `fix_artifact_path` and rely on `evidence_paths`. In terminal logs, `BLOCKED` and `NEEDS_INPUT` may be uppercase stop-state sentinels.
 
 ## NEEDS_INPUT Handling
 
@@ -136,7 +133,6 @@ Do not ask the root for ordinary implementation friction that the fix dispatch c
 ## Stop Conditions
 
 - `fixed`: targeted test command passes or targeted QA handback returns pass; return success immediately.
-- `cap-hit`: `hard_cap` reached; emit human review via `NEEDS_INPUT`, return all evidence paths, and do not continue.
 - `BLOCKED`: required input is missing or unreadable, artifact directories cannot be written, `behavior-investigator` cannot produce an on-disk RCA artifact, the fix dispatch cannot edit `${worktree_path}`, or targeted verification cannot be invoked.
 - `NEEDS_INPUT`: human-owned expected behavior, scope, value, or caller handback question is required.
 

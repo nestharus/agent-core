@@ -124,7 +124,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   Model: claude-opus
 
 - `prototype-rca-orchestrator` - Run the light two-agent prototype RCA loop for one failed behavior test or QA walkthrough observation, then hand back after targeted verification.
-  File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?`, `hard_cap?` | Model: `claude-opus`
+  File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?` | Model: `claude-opus`
 
 ### Regression Investigation
 

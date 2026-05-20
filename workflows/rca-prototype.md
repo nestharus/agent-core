@@ -69,8 +69,7 @@ prototype-rca-orchestrator
 - `worktree_path`: absolute writable worktree where the Phase 2 fix dispatch may apply code changes.
 - `planning_dir`: durable planning artifact root.
 - `scratch_dir`: transient prompts, logs, and questions root.
-- `hard_cap?`: maximum Phase 1 to Phase 2 cycles. Default `hard_cap=5`.
-- `handback_callback`: caller-owned resume target and enough context to return `fixed`, `cap-hit`, `blocked`, or `needs-input`.
+- `handback_callback`: caller-owned resume target and enough context to return `fixed`, `blocked`, or `needs-input`.
 
 ## Output Paths
 
@@ -108,14 +107,13 @@ For a test trigger, Phase 2 re-runs only `trigger_command` or the supplied `test
 
 ## Loop Semantics
 
-The default `hard_cap=5`. One iteration is one Phase 1 root-cause pass followed by one Phase 2 fix and targeted re-run pass. The iteration counter starts at 1 and advances before the next Phase 1 dispatch after a still-failing targeted signal.
+One iteration is one Phase 1 root-cause pass followed by one Phase 2 fix and targeted re-run pass. The iteration counter starts at 1 and advances before the next Phase 1 dispatch after a still-failing targeted signal. The loop iterates until a stop state is reached.
 
 Each iteration has named artifacts: `${planning_dir}/rca/<failure-id>-iter<N>.md`, `${planning_dir}/rca/<failure-id>-iter<N>-fix.md`, and `${scratch_dir}/logs/<failure-id>-iter<N>-rerun.log`. `${planning_dir}/rca/<failure-id>.md` always points to the latest root-cause content, while `${planning_dir}/rca/<failure-id>-fixed.md` exists only after the targeted signal passes.
 
 Stop states are:
 
 - `fixed`: targeted behavior test passes or the targeted QA re-walk returns pass.
-- `cap-hit`: the loop reached `hard_cap` without a targeted pass.
 - `blocked`: a required input, path, worktree edit, dispatch, or targeted verification path is unavailable.
 - `needs-input`: a user-owned value, scope, intended-behavior, or handback question must be answered.
 
@@ -124,7 +122,7 @@ Stop states are:
 The workflow returns a parseable envelope to the caller:
 
 ```yaml
-outcome: "fixed" | "cap-hit" | "blocked" | "needs-input"
+outcome: "fixed" | "blocked" | "needs-input"
 failure_id: "<stable failure slug>"
 iterations: <integer>
 fix_artifact_path?: "${planning_dir}/rca/<failure-id>-fixed.md"
@@ -138,12 +136,11 @@ handback_callback:
   parent_run_id: "<optional caller session id>"
 ```
 
-When `outcome: fixed`, `fix_artifact_path` must be present and point to `${planning_dir}/rca/<failure-id>-fixed.md`. For `cap-hit`, `blocked`, and `needs-input`, omit `fix_artifact_path` and rely on `evidence_paths` for the artifacts needed for human review or caller-owned continuation.
+When `outcome: fixed`, `fix_artifact_path` must be present and point to `${planning_dir}/rca/<failure-id>-fixed.md`. For `blocked` and `needs-input`, omit `fix_artifact_path` and rely on `evidence_paths` for the artifacts needed for human review or caller-owned continuation.
 
 ## Stop Conditions
 
 - Success returns `outcome: fixed` immediately after the targeted signal passes.
-- `cap-hit` returns after the iteration count reaches `hard_cap`; include all iteration artifacts and surface human review through the handback envelope.
 - `blocked` returns when required inputs are unreadable, the worktree cannot be edited, the child dispatch cannot produce an RCA artifact, the targeted command cannot run, or the QA handback cannot return a result.
 - `needs-input` returns when expected behavior, scope, value judgment, or caller handback ownership is genuinely human-owned.
 
