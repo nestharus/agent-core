@@ -70,6 +70,9 @@ ACR-285 is the authority for choosing one of these. Until then, `apply-gate-set`
 - Do NOT redefine proof-risk semantics — ACR-285 owns that decision.
 - Do NOT redefine `apply-gate-set` operator/workflow surface — ACR-291 owns.
 - Do NOT author eval-spec scenarios beyond the proof-risk scope — ACR-292 owns broader.
+- Do NOT smuggle pytest tests (`tests/test_*.py`, pytest imports/fixtures, pytest-shaped assertion code) into Step 6b.
+- Do NOT introduce verifier scripts under `tools/<wu>-verify/`.
+- Do NOT use `| tail -N` or other truncating filters on agents dispatches.
 
 ## Lifecycle / supersession
 
