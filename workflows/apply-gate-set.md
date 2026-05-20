@@ -22,6 +22,26 @@ workflow_dispatch_contract:
 
 # Apply Gate Set Workflow
 
+## Declared roles
+
+`mapper`, `validator`, `orchestration`, `parser`, `formatter`, `accessor`
+
+This workflow's procedural Markdown maps caller modes to the apply-gate-set operator dispatch contract (`mapper`). It validates dispatch evidence presence/currentness against the operator + currentness convention (`validator`). It covers caller-mode dispatch sequencing (`orchestration`). It consumes manifest/report structures (`parser`). It defines caller-facing summary lines (`formatter`). It requires cited canonical-path stat/read evidence (`accessor`).
+
+## Adapter declarations
+
+```yaml
+adapter_declarations:
+  - component: workflows/apply-gate-set.md
+    role: adapter
+    Translates:
+      - apply-gate-set-discoverability-surface
+      - caller-mode-dispatch-contract-surface
+      - currentness-policy-citation-surface
+```
+
+The three translated surfaces are the complete adapter declaration. The new currentness-policy-citation-surface subordinates all `~/ai/conventions/apply-gate-set-currentness.md` section citations (`Currentness key schema`, `Invalidation trigger matrix`, `Row-level re-verification`, `Full re-dispatch`, `Stale-refusal records`, `Row-kind coverage`) to one translated contract.
+
 ## Purpose
 
 Coordinate existing gates after a caller reaches a gate-set boundary. The workflow is the caller-facing contract and discoverability surface for `agents/apply-gate-set.md`, which remains the active procedural owner.
@@ -120,7 +140,11 @@ apply-gate-set
 
 The canonical schema lives in `agents/apply-gate-set.md` § `Join manifest schema`.
 
-Required row families include required gates, optional gates, applicability, non-applicability, skip, bootstrap-exception, inventory-resolution, stale-refusal, and aggregate rows. Currentness fields cite the future ACR-294 invalidation algorithm as placeholder policy. Skip rows cite the future ACR-293 convention path as placeholder policy. Bootstrap-exception rows cite `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+Required row families include required gates, optional gates, applicability, non-applicability, skip, bootstrap-exception, inventory-resolution, stale-refusal, and aggregate rows. Currentness fields cite `~/ai/conventions/apply-gate-set-currentness.md` as canonical policy. Skip rows cite `~/ai/conventions/hotfix-skip-with-followup.md`. Bootstrap-exception rows cite `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+## Currentness
+
+Apply-gate-set currentness rules live in `~/ai/conventions/apply-gate-set-currentness.md`. Caller surfaces cite that convention for `Currentness key schema`, `Invalidation trigger matrix`, `Row-level re-verification`, `Full re-dispatch`, `Stale-refusal records`, and `Row-kind coverage`; this workflow remains the discoverability and dispatch contract, not the invalidation algorithm owner.
 
 ## Audit-history reference
 

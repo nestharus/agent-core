@@ -70,6 +70,20 @@ rca-orchestrator
 
 `orchestration` covers RCA phase sequencing and transitions. `parser` covers dispatch-contract / frontmatter / input-output schema. `validator` covers trigger validation, phase-advancement gate, cap-hit, and stop-condition checks per the procedure body.
 
+## Adapter declarations
+
+```yaml
+adapter_declarations:
+  - component: workflows/rca.md
+    role: adapter
+    Translates:
+      - rca-workflow-lifecycle-surface
+      - rca-caller-mode-contract-surface
+      - currentness-policy-citation-surface
+```
+
+The three translated surfaces are the complete adapter declaration. The new currentness-policy-citation-surface subordinates all `~/ai/conventions/apply-gate-set-currentness.md` section citations to one translated contract.
+
 ## Use When
 
 - A production incident, customer incident, operational outage, or field failure needs reproduction, root-cause analysis, fix selection, application, verification, and downstream incident follow-through.
@@ -201,7 +215,7 @@ Phase 6.5 dispatches `apply-gate-set` through `rca-orchestrator` in `caller_mode
 
 The gate prompt supplies root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification-critic, actual-diff, runtime-claim, scope, cycle id, audit-history, currentness, output-path, and process-tree inputs when required. Required output paths are `dispatch-manifest.md`, `join-manifest.json`, `aggregate-report.md`, `child-report-index.md`, `expected-process.json`, `process-tree-report.md` or `process-tree-not-applicable.md`, and optional `ticket-comment-payload.md` when a tracker mirror is requested.
 
-Downstream lifecycle is blocked unless the returned gate-set status is `PASS` and the join manifest has no unresolved missing, stale, malformed, unsupported, non-LOW, unratified, invalid skip, bootstrap-exception, inventory-resolution, or process-tree blocking rows. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, and `STALE_REFUSAL` all stop before Phase 7 and follow the operator-returned repair route. RCA records the returned manifest path, aggregate path, blocking rows, exception rows, inventory-resolution rows, currentness key, decision, and repair route in audit-history metadata.
+Downstream lifecycle is blocked unless the returned gate-set status is `PASS` and the join manifest has no unresolved missing, stale, malformed, unsupported, non-LOW, unratified, invalid skip, bootstrap-exception, inventory-resolution, or process-tree blocking rows. Currentness decisions and stale-refusal records are delegated to `~/ai/conventions/apply-gate-set-currentness.md` § `Invalidation trigger matrix` and § `Stale-refusal records`. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, and `STALE_REFUSAL` all stop before Phase 7 and follow the operator-returned repair route. RCA records the returned manifest path, aggregate path, blocking rows, exception rows, inventory-resolution rows, currentness key, decision, and repair route in audit-history metadata.
 
 ## Phase 7 - Post-Mortem Authoring
 
@@ -237,7 +251,7 @@ If implementation, PR review, runbook, or tracker ownership remains pending, the
 
 Resume verifies durable artifacts before skipping a phase. A supplied reproduction test can skip Phase 1 only when `trigger_type=failing_test` and the failing command or node id is known. Existing root-cause, fix-decision, application-plan, or applied artifacts may be reused only when the orchestrator records why they remain current for the active trigger.
 
-Gate-set currentness is stricter than local RCA artifact reuse. Phase 6.5 currentness keys include `caller_mode`, `cycle_id`, `head_sha`, `base_ref`, diff hash, scope hash or reference, runtime-claim hash or reference, relevant contract/report hashes, producing invocation UUIDs, and verified-at data. When Phase 6 returns to Phase 2, Phase 3 revises the fix decision, Phase 4 revises the application plan, or Phase 5 reapplies code, the prior `${planning_dir}/rca/gate-set/<failure-id>/join-manifest.json` is stale for downstream lifecycle until `apply-gate-set` reruns or re-verifies it for the active identity. A `STALE_REFUSAL` is a blocking state; RCA follows the returned `next_action` and may not decide currentness locally.
+Gate-set currentness is stricter than local RCA artifact reuse. Phase 6.5 currentness keys follow `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`. When the convention's invalidation triggers fire, including Phase 2 re-entry, Phase 3 revision, Phase 4 revision, Phase 5 re-apply, Phase 6 verification repair, cap-hit or scope expansion, rebase, verification repair, or substantive contract/test revision, the prior `${planning_dir}/rca/gate-set/<failure-id>/join-manifest.json` is stale for downstream lifecycle until `apply-gate-set` reruns or re-verifies it for the active identity per § `Row-level re-verification` or § `Full re-dispatch`. A `STALE_REFUSAL` is a blocking state; RCA follows the returned `next_action` and may not decide currentness locally.
 
 ## Stop Conditions
 

@@ -4480,3 +4480,30 @@ None of the decomposition strategies apply.
 **Phase 8 join manifest implication.** The Phase 8 join manifest at `${planning_dir}/risk/phase-8-join-manifest.json` will include both the `code-quality` `HIGH` row AND a `bootstrap-exception` `RATIFIED` row paralleling Phase 4's pattern.
 
 **Forward enforcement.** Process-tree audit #3 must verify this DECISIONS entry exists, cites the convention, and is paired with the non-LOW Phase 8 code-quality aggregate. Both the in-scope and out-of-scope findings are covered by this single Phase 8 ratification entry.
+
+---
+
+### ACR-294 — Bootstrap exception ratification
+
+**WU**: ACR-294 (RCA-cycle currentness invalidation rules). **Phase**: Phase 3 declaration → Phase 4 ratification. **Authority**: `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+**Declared at Phase 3** in `/home/nes/ai/planning/acr-294-rca-cycle-currentness/proposals/acr-294-acr-294.md` § `## Bootstrap exception declaration`. All four conditions per `~/ai/conventions/code-quality.md` § `Bootstrap exception` are asserted by the proposer as the source of truth:
+
+1. `primary_deliverable_fixes_or_extends_metric: true` — ACR-294's primary deliverable IS the canonical currentness rule set; the Phase 4 code-quality metric that may register non-LOW (apply-gate-set currentness rule completeness + intrinsic lockstep citation consistency) is the metric this WU defines/extends.
+2. `non_low_finding_is_intrinsic_lockstep: true` — the 8 intrinsic-lockstep paths in the declaration (`conventions/apply-gate-set-currentness.md`, `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, `agents/rca-orchestrator.md`, `workflows/rca.md`, `agents/implementation-pipeline-orchestrator.md`, `workflows/implementation-pipeline.md`, `evals/acr-277-apply-gate-set-survives/eval.md`) MUST move together because the currentness rule policy is the contract that ties them; partial updates would create a worse intermediate state.
+3. `post_merge_satisfies_new_rule_under_new_metric: true` — the merged WU produces `conventions/apply-gate-set-currentness.md` plus the Phase 4 join-manifest bootstrap-exception row paralleling ACR-288's Phase 4 pattern, satisfying the new policy under the active tree.
+4. `declared_for_phase_4_ratification: true` — declaration is gate-scoped to Phase 4 only; Phase 6 and Phase 8 code-quality gates are not pre-ratified.
+
+**Strategy-selection sub-step** (per orchestrator Phase 4 spec, applied at Phase 3 declaration time). The Phase 4 code-quality gate is expected to emit a semantic HIGH on the apply-gate-set currentness rule completeness metric. Per `~/ai/conventions/decomposition-strategies.md`:
+
+- MOVE-and-import: N/A — the policy text and its 7 reference surfaces are documentation; MOVE-and-import is for code lifted from a god-file.
+- In-place file-decomposition: N/A — the new convention IS a focused single-file policy; decomposing it would scatter the canonical rule home and defeat the consolidation that resolves the Phase 2.5 duplicates inventory.
+- In-WU helper extraction: N/A — no code helper surface.
+- In-WU head-on remediation: N/A — the canonical rule home IS the head-on remediation; the work cannot be done piecemeal because the policy is consumed by 7 cross-references that must land in the same WU.
+- Follow-up ticket decomposition: N/A — the rule set and the 7 cross-references are intrinsic to a single hardening slice per the ACR-277 dossier's spawned-ticket boundary; splitting would re-introduce the same drift between operator-defined and convention-defined currentness that ACR-294 is fixing.
+
+None of the decomposition strategies apply. Bootstrap exception is the correct local path per `~/ai/conventions/code-quality.md` § `Bootstrap exception`.
+
+**Phase 4 join manifest implication.** The Phase 4 join manifest at `${planning_dir}/risk/phase-4-join-manifest.json` will include both the `code-quality` row (carrying its actual non-LOW verdict) AND a `bootstrap-exception` `RATIFIED` row authorizing advance past the non-LOW aggregate, paralleling ACR-288's precedent.
+
+**Forward enforcement.** Process-tree audit #1 must verify this DECISIONS entry exists, cites the convention `~/ai/conventions/code-quality.md` § `Bootstrap exception`, and is paired with the Phase 3 proposal declaration plus the non-LOW Phase 4 code-quality aggregate.
