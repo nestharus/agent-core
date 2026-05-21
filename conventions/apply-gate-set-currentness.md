@@ -59,7 +59,7 @@ Any trigger below makes the prior matching row historical context unless `## Row
 | RCA Phase 4 application-plan revision | Application plan and possibly application scope. | `contract_artifact_hashes`, `scope_hash` when scope changes. | All row kinds whose contract artifacts include the application plan. |
 | RCA Phase 5 apply re-run | Applied worktree content and child producer set. | `head_sha`, `diff_hash`, `producing_invocation_uuid`. | All row kinds; full re-dispatch is required. |
 | RCA Phase 6 verify-or-return repair | Verification artifacts. | `report_path_hashes`, often `canonical_output_path_hashes`. | Rows that cite verification artifacts. |
-| Cap-hit / scope expansion | RCA or implementation scope. | `scope_hash`, often `contract_artifact_hashes`. | All row kinds whose scope is affected. |
+| Human halt / scope expansion | RCA or implementation scope. | `scope_hash`, often `contract_artifact_hashes`. | All row kinds whose scope is affected. |
 | Rebase | Base/head relation and active diff. | `head_sha`, `base_ref`, `diff_hash`. | All row kinds. Currentness applies after `~/ai/conventions/rebase-verification.md` clears. |
 | Verification repair | Canonical output content, stat bundle, parsed verdict, or report set. | `canonical_output_path_hashes`, possibly `report_path_hashes`. | Rows that cite the affected canonical output. |
 | Substantive contract/test revision per Entry-Mode Re-audit rule | Audited contract, test, runtime, corpus, or behavior artifact. | `contract_artifact_hashes`, possibly `report_path_hashes`. | Rows whose contract artifacts include the revised content. |

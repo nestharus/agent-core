@@ -138,9 +138,7 @@ Below the JSON, write:
    line, and briefly summarize the overall disposition (e.g., "3
    keep, 2 drop, 1 backlog — the PR largely justified its core change
    but two incidental cleanups should be dropped").
-3. **If cap hit**: state `STATUS: CAP_HIT` on its own line and note
-   which threads would have benefited from more rounds.
-4. **Otherwise**: state `STATUS: CONTINUE` on its own line.
+3. **Otherwise**: state `STATUS: CONTINUE` on its own line.
 
 Also write `Determination: continue | apply | decompose`. Use `continue` with `STATUS: CONTINUE`, `apply` when all threads are culled without a decompose trigger, and `decompose` when audit history shows repeated same-family pressure, unresolved prior findings, or another hard trigger from `~/ai/conventions/audit-history.md`.
 
@@ -152,7 +150,6 @@ loop.
 You do not stop the workflow directly — the orchestrator reads your
 `STATUS:` line. But you control convergence:
 - Return `STATUS: CONVERGED` when all threads are culled
-- Return `STATUS: CAP_HIT` if this is round 5
 - Otherwise `STATUS: CONTINUE`
 
 If the input `threads.json` has no open threads when you run, return

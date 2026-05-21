@@ -126,9 +126,9 @@ Phase 4b) with an adversarial loop.
 - **Value assessor preps information for the adjudicator.** It may dispatch
   a `gpt-high` research sub-agent for a specific factual question but does
   not explore the codebase itself.
-- **Hard cap of 5 rounds** for safety. If the adjudicator has not culled all
-  threads by round 5, it culls the remainder with whatever verdict the
-  current evidence supports and records the cap in the final report.
+- **Convergence-based loop.** The gauntlet continues until the adjudicator
+  culls every thread, returns a blocking condition, or routes to a decomposition
+  decision through audit-history evidence.
 
 ## Required Inputs
 
@@ -330,9 +330,9 @@ cat > "$RD/adjudicator-prompt.md" <<EOF
 ## Thread state (full history)
 $(cat $JG/threads.json)
 
-## Hard cap
-Round $ROUND of 5. If this is round 5, you must cull every remaining thread
-with a final verdict based on current evidence.
+## Round posture
+Use the complete thread history to decide whether each open thread is settled.
+Do not force a verdict from elapsed round count alone.
 
 ## Your job
 For each open thread, decide:
@@ -355,7 +355,7 @@ Apply adjudicator decisions to `threads.json`:
 
 ```bash
 OPEN_COUNT=$(jq '[.threads[] | select(.status=="open")] | length' "$JG/threads.json")
-if [ "$OPEN_COUNT" -eq 0 ] || [ "$ROUND" -ge 5 ]; then
+if [ "$OPEN_COUNT" -eq 0 ]; then
   # done
   break
 else
@@ -366,15 +366,13 @@ fi
 
 ### Phase 2: Final verdict
 
-When all threads are culled (or the cap is hit), write
-`$JG/final-verdict.md`:
+When all threads are culled, write `$JG/final-verdict.md`:
 
 ```markdown
 # Justification Gauntlet — Final Verdict
 
 **PR:** #<pr_number>
 **Rounds:** <N>
-**Cap hit:** <yes|no>
 
 ## Per-thread verdicts
 
@@ -404,8 +402,6 @@ Justifications" section).
 
 Return one of:
 - `JUSTIFICATION_CONVERGED` — final verdict at `$JG/final-verdict.md`
-- `JUSTIFICATION_CAPPED` — round cap hit; final verdict written with
-  adjudicator's best-effort calls, noted as capped
 - `BLOCKED` — inputs missing or sub-agent failed; error detail in stdout
 
 ## Non-goals

@@ -122,6 +122,6 @@ collapse it into a boolean fixed/not-fixed result.
 - No `gh pr view ... statusCheckRollup` calls.
 - No CodeRabbit CLI mode.
 - No CodeRabbit dashboard credential.
-- No timeout, max-attempt, idle-timeout, bounded-silence, cycle cap, or
+- No timeout, attempt ceiling, idle-timeout, bounded-silence, count-bound, or
   silence-as-success convergence.
 - No comment-body fan-in to the orchestrator context.

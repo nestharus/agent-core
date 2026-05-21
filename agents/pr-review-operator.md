@@ -425,7 +425,8 @@ Replaces the prior single-shot justification check with an adversarial
 multi-round workflow: a conservative interrogator demands justification,
 a researcher presents evidence, a value assessor weighs benefit vs cost,
 and an adjudicator culls settled threads with `drop | backlog | keep`
-verdicts. Runs until all threads are culled or the 5-round cap is hit.
+verdicts. Runs until all threads are culled or the gauntlet returns a blocking
+condition.
 
 Launch — same pattern note as Phase 3 (build a kickoff prompt with inputs
 embedded in markdown; do not use `-i key=value`):
@@ -444,9 +445,9 @@ Inputs:
 - diff_path: $WORK_DIR/diff.txt
 - audit_history_path: ${audit_history_path:-$WORK_DIR/audit-history.md}
 
-Create the scratch layout at \`\$work_dir/justification/\` and run rounds 1..5
+Create the scratch layout at \`\$work_dir/justification/\` and run rounds
 (interrogator → researcher → value assessor → adjudicator). Stop when all
-threads are culled or the cap is hit. Write the final verdict to
+threads are culled or the gauntlet returns a blocking condition. Write the final verdict to
 \`\$work_dir/justification/final-verdict.md\`.
 EOF
 
@@ -584,7 +585,8 @@ If any risk is MEDIUM or HIGH:
 1. Write a revision prompt incorporating the specific findings
 2. Run `gpt-high` to revise
 3. Re-run 3x risk gate on the revision
-4. Repeat until all three are LOW (max 3 iterations)
+4. Repeat until all three are LOW or the audit-history decision loop halts
+   for a blocking condition, explicit user input, or decomposition
 
 For each proposal revision/re-risk round, update `audit_history_path` with prior-finding closure/regression counters, new findings, oscillation classification, decompose-trigger status, watch signals, and the current determination. If hard triggers do not decide whether to continue, apply, or decompose, dispatch per-role decision agents under `~/ai/conventions/audit-history.md`.
 

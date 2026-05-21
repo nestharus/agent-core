@@ -157,7 +157,7 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
 
 ## Title Rules
 
-- ≤ 70 characters preferred; ≤ 80 hard cap.
+- ≤ 70 characters preferred; 80-character strict limit.
 - Conventional prefix encouraged when the codebase uses one (`fix(scope):`, `feat(scope):`, `test(scope):`, `chore(scope):`, `docs(scope):`, `refactor(scope):`).
 - No internal jargon in the title (no `WU-WR-NN:` prefix, no "wave 1", etc.).
 - No close keyword or `Closes <KEY>` text in the title.
