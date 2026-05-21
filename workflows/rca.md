@@ -10,9 +10,9 @@ workflow_dispatch_contract:
   expectations:
     - "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, then verify-or-return"
     - "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work"
-    - "returns to root-cause analysis on red verification until the hard cap is reached, then surfaces human review through NEEDS_INPUT instead of starting another cycle"
+    - "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts"
   outputs:
-    - "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, cap-hit artifact when needed, and Phase 7+ downstream RCA artifacts"
+    - "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and Phase 7+ downstream RCA artifacts"
     - "post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds"
     - "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed"
   non_goals:
@@ -44,11 +44,11 @@ rca-orchestrator
 
 - runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, then verify-or-return
 - uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work
-- returns to root-cause analysis on red verification until the hard cap is reached, then surfaces human review through NEEDS_INPUT instead of starting another cycle
+- returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts
 
 ### Outputs
 
-- reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, cap-hit artifact when needed, and Phase 7+ downstream RCA artifacts
+- reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and Phase 7+ downstream RCA artifacts
 - post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds
 - NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed
 
@@ -91,7 +91,6 @@ rca-orchestrator
 - `${planning_dir}/rca/<failure-id>-fix-decision.md`: selected best appropriate fix.
 - `${planning_dir}/rca/<failure-id>-application-plan.md`: best way to apply the fix.
 - `${planning_dir}/rca/<failure-id>-applied.md`: applied change, changed paths, and verification notes.
-- `${planning_dir}/rca/<failure-id>-cap-hit.md`: human-review artifact when the loop reaches the cap.
 - `${planning_dir}/post-mortem.md`: downstream post-mortem.
 - `${planning_dir}/action-items.md`: downstream action-item ticket index.
 - `${planning_dir}/runbooks/`: downstream runbook outputs.
@@ -108,7 +107,7 @@ rca-orchestrator
 | 3 | Best Appropriate Fix | fresh `claude-opus` fix-decision dispatch | `${planning_dir}/rca/<failure-id>-fix-decision.md` | Phase 4 |
 | 4 | Best Way To Apply | fresh `claude-opus` application-plan dispatch | `${planning_dir}/rca/<failure-id>-application-plan.md` | Phase 5 |
 | 5 | Apply | fresh `claude-opus` apply dispatch | `${planning_dir}/rca/<failure-id>-applied.md` | Phase 6 |
-| 6 | Verify-Or-Return Gate | `rca-orchestrator` | verification log or `${planning_dir}/rca/<failure-id>-cap-hit.md` | Phase 7+ on green, Phase 2 on red, NEEDS_INPUT on cap hit |
+| 6 | Verify-Or-Return Gate | `rca-orchestrator` | verification log | Phase 7+ on green, Phase 2 on red |
 | 7+ | Downstream RCA lifecycle | existing specialist operators and ticket workflows | post-mortem, action items, runbooks, tracker comments, close record | complete or pending |
 
 ## Phase 0 - Trigger Classification
@@ -169,11 +168,9 @@ If the rerun is red, return to Phase 2 with the new failure output attached to t
 
 If the rerun is green, advance to Phase 7+ and preserve the passing command, output, and applied artifact reference. A pass advances to Phase 7+ rather than deleting downstream incident follow-through.
 
-The hard-cap is 3 cycles. When the next red return would start cycle 4, write `${planning_dir}/rca/<failure-id>-cap-hit.md` and emit `NEEDS_INPUT:<absolute_artifact_path>` for cap-hit human review instead of starting cycle 4.
-
 ## Phase 7 - Post-Mortem Authoring
 
-Phase 7 starts the downstream RCA lifecycle after the verification gate is green or after a human explicitly asks for downstream documentation from a cap-hit state. Dispatch `~/ai/agents/post-mortem-author.md` when incident context, root-cause evidence, and applied-fix evidence are sufficient. The post-mortem output is `${planning_dir}/post-mortem.md`.
+Phase 7 starts the downstream RCA lifecycle after the verification gate is green or after a human explicitly asks for downstream documentation from a halted state. Dispatch `~/ai/agents/post-mortem-author.md` when incident context, root-cause evidence, and applied-fix evidence are sufficient. The post-mortem output is `${planning_dir}/post-mortem.md`.
 
 Post-mortem authoring remains a synthesis step; it does not reopen root cause, change the applied fix, or replace the verification gate.
 
@@ -208,9 +205,8 @@ Resume verifies durable artifacts before skipping a phase. A supplied reproducti
 ## Stop Conditions
 
 - Success / verified: the original failing or reproduction test is green and the workflow advances to Phase 7+ or completes downstream lifecycle work.
-- `NEEDS_INPUT:<absolute_artifact_path>`: human-owned behavior, product tradeoff, cap-hit, tracker, close-policy, or evidence question is required.
+- `NEEDS_INPUT:<absolute_artifact_path>`: human-owned behavior, product tradeoff, tracker, close-policy, or evidence question is required.
 - `BLOCKED:<reason>`: required inputs are missing or unreadable, artifact roots are unwritable, child invocations cannot produce required outputs, or verification cannot run.
-- Cap hit: three red verification cycles have occurred and starting cycle 4 would be required.
 
 ## Anti-Scope
 

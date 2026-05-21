@@ -44,23 +44,22 @@ You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing c
 4. Phase 3 - Best Appropriate Fix: create a fix-decision prompt that reads `${planning_dir}/rca/<failure-id>.md` and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-fix-decision.md` and no application strategy or code edits.
 5. Phase 4 - Best Way To Apply: create an application-plan prompt that reads root cause plus fix decision and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-application-plan.md` and no code application.
 6. Phase 5 - Apply: create an apply prompt that reads `${planning_dir}/rca/<failure-id>-application-plan.md`, edits only `${worktree_path}`, and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-applied.md` with changed paths, rationale, and local verification notes. After apply, run an orchestrator-side changed-path check such as `git -C ${worktree_path} diff --name-only` and fail with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
-7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence until the hard cap of 3 cycles; when cycle 4 would start, write `${planning_dir}/rca/<failure-id>-cap-hit.md` and emit `NEEDS_INPUT:<absolute_artifact_path>`. If green, advance to Phase 7+.
+7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence. If green, advance to Phase 7+.
 8. Phase 7+ handoff: preserve the verified RCA artifact set and dispatch or route downstream post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending work without replacing their specialist workflows or operators.
 
 ## Output Contract
 
 Return a concise status block naming `outcome`, `failure_id`, `trigger_type`, `cycles`, and the artifact paths produced. On success, include `${planning_dir}/repro/<failure-id>.md` when Phase 1 ran, `${planning_dir}/rca/<failure-id>.md`, `${planning_dir}/rca/<failure-id>-fix-decision.md`, `${planning_dir}/rca/<failure-id>-application-plan.md`, `${planning_dir}/rca/<failure-id>-applied.md`, and the Phase 7+ handoff state.
 
-For cap-hit, include `${planning_dir}/rca/<failure-id>-cap-hit.md` and all rerun evidence. For blocked or needs-input outcomes, include the blocking path and the smallest root-owned question.
+For blocked or needs-input outcomes, include the blocking path and the smallest root-owned question.
 
 ## NEEDS_INPUT Handling
 
-Write questions under `${scratch_dir}/questions/` and return `NEEDS_INPUT:<absolute_artifact_path>`. Ask only for human-owned behavior, product tradeoff, evidence access, tracker authority, close-policy, or cap-hit review decisions. Do not ask for ordinary local code-reading or prompt-composition work.
+Write questions under `${scratch_dir}/questions/` and return `NEEDS_INPUT:<absolute_artifact_path>`. Ask only for human-owned behavior, product tradeoff, evidence access, tracker authority, or close-policy decisions. Do not ask for ordinary local code-reading or prompt-composition work.
 
 ## Stop Conditions
 
 - Success: original failing test or reproduction test is green and Phase 7+ handoff is recorded or completed.
-- Cap hit: the hard cap of 3 cycles is reached and starting cycle 4 would be required.
 - `BLOCKED:<reason>`: required inputs are unreadable, output roots are unwritable, child invocation output is missing, or verification cannot run.
 - `NEEDS_INPUT:<absolute_artifact_path>`: a human-owned decision or unavailable evidence blocks the next phase.
 

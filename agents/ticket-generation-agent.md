@@ -110,7 +110,7 @@ Selection-band rule:
 | `XL` | `21` or `40` | Pick `40` unless explicit prior-slice scaffolding materially reduces the surface. |
 | cross-cutting / unbounded | `100` | Use only when the AI roadmap deliberately keeps one broad cross-cutting slice. |
 
-Layer-3 slice heuristic: when no T-shirt magnitude is usable, compute `points = max(2, min(40, round(2 * (entrypoints + data_shapes + dependencies))))`, snap to the nearest allowed fibonacci value, and justify the snap in `estimate_rationale`.
+Layer-3 slice heuristic: when no T-shirt magnitude is usable, compute `raw_points = 2 * (entrypoints + data_shapes + dependencies)`, clamp it to the inclusive `2..40` range, convert to the nearest integer, snap to the nearest allowed fibonacci value, and justify the snap in `estimate_rationale`.
 
 Backstop-spike rule: when none of `prototype-dossier`, `layer-2-magnitude`, or `layer-3-slice` produces a usable signal, emit a Spike SLICE whose deliverable is to produce a real estimate; the Spike `story_point_estimate` is `1` or `2` and `estimate_source` is `backstop-spike`.
 

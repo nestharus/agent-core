@@ -484,7 +484,7 @@ When a risk assessment returns MEDIUM or HIGH at any layer:
    - If resolution requires additional research: dispatch a gpt-high research agent with a focused prompt (the agent uses Firecrawl for web research or reads the codebase as appropriate)
    - If resolution requires proposal revision: run the proposer with the risk findings as additional input (append risk findings to the prompt)
 4. **Re-run the full risk gate** — all three risk types, not just the ones that were non-LOW. Revisions can introduce new issues.
-5. **Maximum 3 revision cycles** per layer. If risk is still not all-LOW after 3 cycles, present the findings to the user. The user decides whether to accept the risk, provide additional direction, or abandon the layer.
+5. **Iterate until risk is all-LOW or the operator halts.** The loop is not count-bounded. If the operator wants to accept residual risk, provide additional direction, or abandon the layer, that decision is surfaced via `NEEDS_INPUT`, not forced by an iteration count.
 
 ---
 

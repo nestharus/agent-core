@@ -77,7 +77,7 @@ Per category, the fix pass: read violation report filtered to this category → 
 **C10. Hedging fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
 **C11. Filler/throat-clearing fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
 
-If a reviewer finds remaining violations in its category, the orchestrator re-runs the fix agent with the reviewer's findings. Max 3 cycles per category.
+If a reviewer finds remaining violations in its category, the orchestrator re-runs the fix agent with the reviewer's findings until the category passes or the operator halts for a blocking condition.
 
 **C12. Full ban rescan** (`gpt-high`) — runs the full non-negotiable scan again on the document after all category fixes. If new violations appeared (the fix passes can introduce new ones), route them to the appropriate category fix agent.
 

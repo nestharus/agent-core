@@ -38,9 +38,9 @@ When every thread is culled, the workflow stops.
   plausibly change the verdict, cull now. Rounds are expensive. A thread
   that cycles between "demand" and "no new evidence found" for two
   rounds should be culled on the third.
-- **Round-cap discipline.** If this is round 5 (the hard cap), you must
-  cull every remaining thread with your best-effort verdict based on
-  current evidence. Note in the summary that the cap was hit.
+- **Convergence discipline.** Cull every thread whose record is settled, and
+  keep only threads where another round is likely to add decision-changing
+  evidence.
 - **Evidence over rhetoric.** The interrogator is paid to be
   conservative; the researcher is paid to present evidence. When the
   interrogator presses without new ground and the researcher has
@@ -97,11 +97,6 @@ evidence strength:
 The rubric is a prior. You may deviate if the transcript clearly
 warrants it — write the reasoning in the `rationale` field.
 
-### 3. Is this round 5 (hard cap)?
-
-If yes, cull every remaining open thread with your best-effort verdict
-using the rubric above. Do not return `continue`.
-
 ## Output Format
 
 Emit a JSON block followed by a human-readable section.
@@ -109,7 +104,6 @@ Emit a JSON block followed by a human-readable section.
 ```json
 {
   "round": 2,
-  "cap_hit": false,
   "decisions": [
     {
       "id": "T1",
@@ -147,9 +141,7 @@ Below the JSON, write:
    line, and briefly summarize the overall disposition (e.g., "3
    keep, 2 drop, 1 backlog — the PR largely justified its core change
    but two incidental cleanups should be dropped").
-3. **If cap hit**: state `STATUS: CAP_HIT` on its own line and note
-   which threads would have benefited from more rounds.
-4. **Otherwise**: state `STATUS: CONTINUE` on its own line.
+3. **Otherwise**: state `STATUS: CONTINUE` on its own line.
 
 Also write `Determination: continue | apply | decompose`. Use `continue` with `STATUS: CONTINUE`, `apply` when all threads are culled without a decompose trigger, and `decompose` when audit history shows repeated same-family pressure, unresolved prior findings, or another hard trigger from `~/ai/conventions/audit-history.md`.
 
@@ -161,7 +153,6 @@ loop.
 You do not stop the workflow directly — the orchestrator reads your
 `STATUS:` line. But you control convergence:
 - Return `STATUS: CONVERGED` when all threads are culled
-- Return `STATUS: CAP_HIT` if this is round 5
 - Otherwise `STATUS: CONTINUE`
 
 If the input `threads.json` has no open threads when you run, return
