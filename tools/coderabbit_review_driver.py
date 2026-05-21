@@ -38,6 +38,11 @@ FIX_OUTCOMES = {"fixed", "fixed_and_replied"}
 REPLY_OUTCOMES = {"replied", "fixed_and_replied"}
 CALLER_DECISION_OUTCOMES = {"rejected", "deferred"}
 VALID_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES | CALLER_DECISION_OUTCOMES
+TERMINAL_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED"}
+REVIEW_STATES = TERMINAL_REVIEW_STATES | {"COMMENTED"}
+SUMMARY_COMMENT_MARKER = "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->"
+SUMMARY_APPROVED_MARKER = "No actionable comments were generated in the recent review"
+SUMMARY_CHANGES_REQUESTED_MARKER = "Actionable comments posted"
 
 
 class DriverError(Exception):
@@ -320,16 +325,96 @@ def latest_coderabbit_review(
     ]
     if not cr_reviews:
         return None
-    return max(cr_reviews, key=lambda review: (review.get("submitted_at") or "", int(review.get("id") or 0)))
+    return max(cr_reviews, key=review_sort_key)
+
+
+def review_sort_key(review: dict[str, Any]) -> tuple[str, int]:
+    return (review.get("submitted_at") or "", int(review.get("id") or 0))
+
+
+def issue_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
+    return (comment.get("updated_at") or comment.get("created_at") or "", int(comment.get("id") or 0))
 
 
 def normalized_review_decision(latest_review: dict[str, Any] | None) -> str:
     if not latest_review:
         return "NONE"
-    state = latest_review.get("state") or "NONE"
-    if state in {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}:
+    state = str(latest_review.get("state") or "NONE").upper()
+    if state in REVIEW_STATES:
         return state
     return "NONE"
+
+
+def review_decision_outcome(decision: str) -> str | None:
+    if decision == "APPROVED":
+        return "approved"
+    if decision == "CHANGES_REQUESTED":
+        return "changes_requested"
+    return None
+
+
+def summary_comment_decision(comment: dict[str, Any]) -> str:
+    body = comment.get("body") or ""
+    if SUMMARY_COMMENT_MARKER not in body:
+        return "NONE"
+    if SUMMARY_APPROVED_MARKER in body:
+        return "APPROVED"
+    if SUMMARY_CHANGES_REQUESTED_MARKER in body:
+        return "CHANGES_REQUESTED"
+    return "NONE"
+
+
+def coderabbit_decision_signal(
+    reviews: list[dict[str, Any]],
+    issue_comments: list[dict[str, Any]],
+    bot_login: str | None,
+) -> dict[str, Any]:
+    terminal_signals: list[dict[str, Any]] = []
+    for review in reviews:
+        login = (review.get("user") or {}).get("login")
+        if not is_bot_login(login, bot_login):
+            continue
+        decision = normalized_review_decision(review)
+        if decision not in TERMINAL_REVIEW_STATES:
+            continue
+        terminal_signals.append(
+            {
+                "decision": decision,
+                "source": "github_review",
+                "review_id": review.get("id"),
+                "submitted_at": review.get("submitted_at"),
+                "sort_key": (*review_sort_key(review), 1),
+            }
+        )
+
+    for comment in issue_comments:
+        login = (comment.get("user") or {}).get("login")
+        if not is_bot_login(login, bot_login):
+            continue
+        decision = summary_comment_decision(comment)
+        if decision not in TERMINAL_REVIEW_STATES:
+            continue
+        terminal_signals.append(
+            {
+                "decision": decision,
+                "source": "summary_comment",
+                "comment_id": comment.get("id"),
+                "updated_at": comment.get("updated_at"),
+                "sort_key": (*issue_comment_sort_key(comment), 0),
+            }
+        )
+
+    if terminal_signals:
+        signal = max(terminal_signals, key=lambda item: item["sort_key"])
+        return {key: value for key, value in signal.items() if key != "sort_key"}
+
+    latest_review = latest_coderabbit_review(reviews, bot_login)
+    return {
+        "decision": normalized_review_decision(latest_review),
+        "source": "github_review" if latest_review else "none",
+        "review_id": latest_review.get("id") if latest_review else None,
+        "submitted_at": latest_review.get("submitted_at") if latest_review else None,
+    }
 
 
 def is_trigger_ack_body(body: str, mode: str) -> bool:
@@ -586,7 +671,9 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
     thread_status = graphql_review_threads(repo, pr_num)
 
     latest_review = latest_coderabbit_review(reviews, bot_login)
-    decision = normalized_review_decision(latest_review)
+    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
+    decision = decision_signal["decision"]
+    outcome = review_decision_outcome(decision)
     records = collect_comment_records(
         repo, pr_num, reviews, review_comments, issue_comments, thread_status, bot_login
     )
@@ -637,8 +724,11 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
     new_state = {
         "last_polled_at": utc_now(),
         "last_review_decision": decision,
+        "last_review_decision_source": decision_signal.get("source"),
         "last_bot_login": bot_login,
         "latest_review_id": latest_review.get("id") if latest_review else None,
+        "latest_decision_review_id": decision_signal.get("review_id"),
+        "latest_decision_comment_id": decision_signal.get("comment_id"),
         "seen_comment_hashes": current_hashes,
         "comment_status": current_status,
         "seen_comment_ids_per_review": seen_by_review,
@@ -649,7 +739,11 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
 
     return {
         "review_decision": decision,
-        "terminal": decision in {"APPROVED", "CHANGES_REQUESTED"},
+        "terminal": outcome is not None,
+        "outcome": outcome,
+        "review_decision_source": decision_signal.get("source"),
+        "latest_decision_review_id": decision_signal.get("review_id"),
+        "latest_decision_comment_id": decision_signal.get("comment_id"),
         "new_comments": new_comments,
         "actionable_comments": actionable_comments,
         "resolved_since_last_poll": resolved_since_last_poll,
@@ -754,6 +848,17 @@ def initial_trigger_decision(repo: Repo, pr_num: int, mode: str, policy: str) ->
     bot_login = discover_bot_login(repo, pr_num, reviews=reviews, issue_comments=issue_comments)
     latest_review = latest_coderabbit_review(reviews, bot_login)
     latest_review_at = parse_time(latest_review.get("submitted_at")) if latest_review else None
+    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
+    outcome = review_decision_outcome(decision_signal["decision"])
+    if outcome:
+        return {
+            "trigger": False,
+            "reason": f"initial-trigger-policy:auto:terminal-review-{outcome}",
+            "review_decision": decision_signal["decision"],
+            "outcome": outcome,
+            "review_decision_source": decision_signal.get("source"),
+            "latest_review_at": latest_review_at.isoformat() if latest_review_at else None,
+        }
     ack_time = latest_trigger_ack_time(issue_comments, mode, bot_login)
 
     if ack_time and (latest_review_at is None or ack_time > latest_review_at):
@@ -1104,7 +1209,7 @@ def post_reply(repo: Repo, pr_num: int, comment_id: int, body_file: str) -> dict
 
 def wait_for_loop_poll_cadence(repo: Repo, pr_num: int, min_interval_seconds: int) -> dict[str, Any]:
     state = load_state(repo, pr_num)
-    last_raw = state.get("last_loop_poll_at") or state.get("last_polled_at")
+    last_raw = state.get("last_loop_poll_at")
     last_at = parse_time(last_raw) if isinstance(last_raw, str) else None
     if not last_at:
         return {"waited_seconds": 0, "last_poll_at": None, "min_interval_seconds": min_interval_seconds}
@@ -1208,6 +1313,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         poll_result = poll(repo, args.pr_num)
         mark_loop_poll(repo, args.pr_num)
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
+        final_outcome = poll_result.get("outcome")
         actionable_comments = select_actionable_comments(poll_result)
         iteration: dict[str, Any] = {
             "iteration": iteration_index,
@@ -1216,6 +1322,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "cadence": cadence,
             "review_decision": final_review_decision,
             "terminal": poll_result.get("terminal"),
+            "outcome": final_outcome,
+            "review_decision_source": poll_result.get("review_decision_source"),
             "new_comments": poll_result.get("new_comments", []),
             "actionable_comments": actionable_comments,
             "resolved_since_last_poll": poll_result.get("resolved_since_last_poll", []),
@@ -1226,8 +1334,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "trigger_result": None,
         }
 
-        if final_review_decision == "APPROVED":
-            terminal_reason = "approved"
+        if final_outcome in {"approved", "changes_requested"}:
+            terminal_reason = str(final_outcome)
             iterations.append(iteration)
             break
 
@@ -1317,6 +1425,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "loop_completed_at": utc_now(),
         "terminal": True,
         "terminal_reason": terminal_reason,
+        "outcome": terminal_reason,
         "needs_caller_decision": False,
         "review_decision": final_review_decision,
         "initial_trigger_decision": trigger_decision,
