@@ -684,19 +684,18 @@ Before optional review dispatch, enforce the Phase 6 → Phase 7 `PrototypeSwapR
 1. Resolve the GitHub repo as `owner/name`, then run:
    `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`.
    Exit `1` is clean non-applicability: append an audit-history line and proceed directly to Phase 8 without CodeRabbit. Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
-2. Select the trigger mode. Use `incremental` for normal implementation-pipeline PR review, including re-runs after child fix commits. Use `full` only when the caller explicitly declares a code-audit or mass-cleanup invocation whose review target is whole files rather than the latest diff. After the PR exists, run:
-   `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode ${coderabbit_trigger_mode}`.
-   The script posts the matching CodeRabbit @mention command and waits until the CodeRabbit bot posts the trigger acknowledgement. Do not apply the `coderabbit` label to the PR; the repository-level label is only an installation marker and has block/suppress semantics on PRs.
-3. Review loop:
-   - Run `~/ai/tools/coderabbit_review_driver.py poll ${repo} ${pr_num}` and read the JSON stdout.
-   - If `review_decision` is `APPROVED`, record `bot_login` and proceed.
-   - If `review_decision` is `CHANGES_REQUESTED`, dispatch one child agent per `new_comments[i].file_path`. Each prompt carries exactly one CodeRabbit comment file path plus the current WU context. Child dispatches use non-interactive `agents -m <model> -f <prompt-file>` shape and must not run bare `agents`.
-   - If `terminal` is `false` and `new_comments` is empty, call `poll` again later. There is no timeout, max-attempt cap, idle-timeout convergence, or silence-as-success path.
-   - If `terminal` is `false` and `new_comments` is non-empty, dispatch one child agent per `new_comments[i].file_path`. Each prompt carries exactly one CodeRabbit comment file path plus the current WU context. Child dispatches use non-interactive `agents -m <model> -f <prompt-file>` shape and must not run bare `agents`.
-   - After child fix commits are pushed, run `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental` before returning to `poll`, unless the current caller is the explicitly declared whole-file code-audit/mass-cleanup path from step 2.
-4. The orchestrator must not call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
-5. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`.
-6. The PR URL remains `${scratch_dir}/pr-url.txt`; Phase 9 reuses that PR instead of creating a duplicate.
+2. Select the trigger mode. Use `incremental` for normal implementation-pipeline PR review, including re-runs after child fix commits. Use `full` only when the caller explicitly declares a code-audit or mass-cleanup invocation whose review target is whole files rather than the latest diff.
+3. Run the driver-owned loop:
+   `~/ai/tools/coderabbit_review_driver.py review-loop ${repo} ${pr_num} --worktree-path ${worktree_path} --mode ${coderabbit_trigger_mode}`.
+   The driver posts the matching CodeRabbit @mention unless its `auto` initial-trigger policy detects an already-pending trigger acknowledgement newer than the latest CodeRabbit review. It waits for trigger acknowledgement, enforces the 300-second minimum cadence between loop-owned `poll` calls, persists comment bodies, dispatches one fixer invocation per actionable in-diff comment, aggregates the full structured outcome, pushes fixed commits, posts reply files, triggers incremental follow-up reviews, and loops until terminal.
+4. Interpret the final JSON:
+   - `terminal_reason=approved` is CodeRabbit success; record `review_decision`, `bot_login` from the final iteration, and proceed.
+   - `terminal_reason=no_value_provided` is CodeRabbit loop convergence; record the no-value decision and proceed unless the project has an explicit stricter policy.
+   - `needs_caller_decision=true` means a per-comment fixer returned `rejected` or `deferred` for a valuable comment. Surface the verbatim `caller_decision_outcomes` to the root caller; do not re-trigger or merge until dispositioned.
+   - Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
+5. The orchestrator must not call `poll` in its own loop, call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
+6. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`, and per-iteration prompts/outcomes live under `iter-{n}/`.
+7. The PR URL remains `${scratch_dir}/pr-url.txt`; Phase 9 reuses that PR instead of creating a duplicate.
 
 ### Phase 8 — apply-gate-set PR-review Gates + Process-tree Audit #3
 

@@ -515,14 +515,13 @@ The implementation-pipeline orchestrator runs readiness checks, then calls `~/ai
 
 - Readiness checks: inherited prototype proof tests, integration-test evidence for same-layer interacting component pairs, and `PrototypeSwapRecord` / explicit non-applicability.
 - Enablement primitive: `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`. Exit `1` is a clean skip. Other nonzero exits block Phase 7.
-- Trigger primitive after PR creation/reuse: `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental`.
 - Trigger mode criterion: use `incremental` for normal PR-review flow and for re-runs after child fix commits. Use `full` only for code-audit or mass-cleanup workflows whose declared review target is whole files rather than the latest diff, such as file-by-file risk-assessment cleanup passes.
-- Poll primitive: `~/ai/tools/coderabbit_review_driver.py poll ${repo} ${pr_num}`. The orchestrator consumes the returned JSON metadata only. Comment bodies stay in files under `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/`.
-- `APPROVED` is CodeRabbit success. `CHANGES_REQUESTED` is terminal for that review pass but not pipeline success: dispatch one child agent per `new_comments[i].file_path`, push the fixes, trigger another incremental review, and poll again.
-- If `terminal` is false with no `new_comments`, poll again later with no timeout, max-attempt cap, idle-timeout convergence, or silence-as-success path.
-- If `terminal` is false with `new_comments`, dispatch one child agent per `new_comments[i].file_path`; each child reads exactly one persisted comment file and acts on that one item.
-- After child fix commits are pushed, call `~/ai/tools/coderabbit_review_driver.py trigger ${repo} ${pr_num} --mode incremental` before polling for the next batch, except in the explicit whole-file code-audit/mass-cleanup path where the caller selected `--mode full`.
-- The orchestrator must not use inline `gh pr view ... statusCheckRollup` polling, must not inline CodeRabbit comment bodies, and must not synthesize an empty review pass.
+- Loop primitive: `~/ai/tools/coderabbit_review_driver.py review-loop ${repo} ${pr_num} --worktree-path ${worktree_path} --mode ${coderabbit_trigger_mode}`.
+- The driver owns the full loop: trigger or auto-skip an already-pending trigger, wait for ack, enforce the 300-second minimum cadence between loop-owned polls, dispatch one fixer invocation per actionable in-diff comment, preserve each structured outcome, push fixed commits, post reply files, trigger incremental follow-up reviews, and continue until terminal.
+- `terminal_reason=approved` is CodeRabbit success.
+- `terminal_reason=no_value_provided` is accepted convergence when every actionable in-diff comment in the latest iteration was assessed `review_provided_value: false`.
+- `needs_caller_decision=true` surfaces valuable `rejected` or `deferred` per-comment outcomes to the root caller without re-triggering.
+- The orchestrator must not compose its own trigger/poll/dispatch/retrigger loop, must not use inline `gh pr view ... statusCheckRollup` polling, must not inline CodeRabbit comment bodies, and must not synthesize an empty review pass.
 - If the pipeline creates or reuses a PR, it writes `${scratch_dir}/pr-url.txt`; Phase 9 reuses that URL instead of creating a duplicate PR.
 
 ## Phase 8 - Post-Review Gates
