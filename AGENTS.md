@@ -189,7 +189,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 
 ### Implementation pipeline orchestration
 
-- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions remain user-owned.
+- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions and (for foreign repositories only) PR merge remain user-owned.
   File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?` | Model: `claude-opus`
 
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
@@ -430,6 +430,6 @@ A project's own `AGENTS.md` declares the per-project policy knobs the orchestrat
 - Linear projects declare `linear_team_key` (and optionally `linear_project_id`).
 - Jira projects may declare project policy values, but category-local Jira execution defaults should live in the project wrapper `## Contract` when a wrapper exists.
 - `skip_problem_map_gate` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
-- `auto_merge_after_phase_9` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
+- `auto_merge_after_phase_9` (boolean, default `true`) — see the orchestrator file's Optional Inputs. Default-on; foreign repos opt out via their `AGENTS.md`.
 
 Semantics for each knob live on the orchestrator's input contract; the project `AGENTS.md` only declares the chosen values.

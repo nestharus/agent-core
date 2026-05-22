@@ -179,7 +179,7 @@ defaults:
     value: false
     source: base
   - name: auto_merge_after_phase_9
-    value: false
+    value: true
     source: base
   - name: audit_workflow_path
     value: ~/ai/workflows/audit.md
@@ -309,7 +309,7 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 - `predecessor_session_manifest_path` — absolute path to a predecessor WU's `${planning_dir}/session.json` when this WU is spawned from a post-merge successor handoff. When supplied, Phase 0 validates the predecessor manifest and its `successor_session_brief`, imports carried context into `${scratch_dir}/predecessor-session.md`, and records the predecessor pointer in this WU's session manifest. Missing, unreadable, mismatched, or ambiguous predecessor evidence is `BLOCKED:invalid-predecessor-session`.
 - `models_dir` — passed through to `agents` invocations; usually omitted.
 - `skip_problem_map_gate` — boolean (default `false`). When `true`, Phase 2.5 step 6 (the problem-map human gate) is skipped and the orchestrator proceeds directly to step 8 (mode propagation). Project-level override; declare in the project's `AGENTS.md` (e.g., `~/ai/` itself opts out for its bootstrap flow). The defer-to-prototype detection (Phase 2.5 step 5) still runs and can still surface as a NEEDS_INPUT new-value question; this override only removes the routine "approve the problem map" step, not the genuine value-question escalation.
-- `auto_merge_after_phase_9` — boolean (default `false`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then direct `gh pr merge --squash <pr_url>` unconditionally. It does not enable auto-wait behavior and does not detect branch protection; any command failure is surfaced as NEEDS_INPUT for the root. Project-level override; declare in the project's `AGENTS.md`. Default-off to preserve the "draft PR is the WU's terminal artifact" contract for projects that want a human PR review.
+- `auto_merge_after_phase_9` — boolean (default `true`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then direct `gh pr merge --squash <pr_url>` unconditionally. It does not enable auto-wait behavior and does not detect branch protection; any command failure is surfaced as NEEDS_INPUT for the root. Project-level override; declare in the project's `AGENTS.md`. Default-on because merge of a non-foreign repository is not a user-owned action — the PR open + CodeRabbit + gates are the review surface, not a manual merge step. Foreign repositories (where the user does not control the merge gate) opt out by setting `auto_merge_after_phase_9: false` in their `AGENTS.md`.
 
 ## Non-Negotiables
 
