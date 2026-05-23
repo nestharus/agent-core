@@ -1,6 +1,6 @@
 ---
 description: 'Assess risk and value of uncovered code: outage potential, distance from happy paths, branch importance, priority ranking'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

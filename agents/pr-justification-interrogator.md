@@ -1,6 +1,6 @@
 ---
 description: 'Conservative PR interrogator: reads the PR only, demands absolute justification for every change, opens threads for anything extraneous. No research, no recommendations.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

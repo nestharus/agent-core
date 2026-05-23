@@ -1,6 +1,6 @@
 ---
 description: 'Detect rebase drift by comparing caller-supplied merged-base changes with a Work Unit touched-surface map'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 

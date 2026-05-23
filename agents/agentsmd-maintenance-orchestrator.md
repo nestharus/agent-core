@@ -1,6 +1,6 @@
 ---
 description: 'Owns the AGENTS.md maintenance workflow: inventory, audit, triage, plan, risk-gate, apply, verify. Dispatches agentsmd-curator and risk-assessment sub-agents; reconciles findings; writes a maintenance report. Does not directly edit AGENTS.md or operator files.'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 

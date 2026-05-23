@@ -1,6 +1,6 @@
 ---
 description: 'Thin wrapper for the GitHub PR-mode CodeRabbit review loop in tools/coderabbit_review_driver.py.'
-model: gpt-high
+model: gpt-medium
 output_format: ''
 ---
 

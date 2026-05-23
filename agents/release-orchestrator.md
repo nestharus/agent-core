@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate staged release lifecycles across cut, freeze, hotfix, promote, tag, and reconcile phases'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

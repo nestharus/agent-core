@@ -1,6 +1,6 @@
 ---
 description: 'Audit workflow document design against the shared design-pattern corpus. Reports LOW/MEDIUM/HIGH findings with citations. Read-only.'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 

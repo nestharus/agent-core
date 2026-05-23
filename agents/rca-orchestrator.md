@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate the full RCA workflow from trigger classification through reproduction, root-cause/fix/application split, verification, and downstream incident handoff.'
-model: claude-opus
+model: gpt-xhigh
 output_format: 'markdown'
 ---
 

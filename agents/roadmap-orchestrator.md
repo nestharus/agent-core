@@ -1,6 +1,6 @@
 ---
 description: 'Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

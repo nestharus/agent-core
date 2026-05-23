@@ -1,6 +1,6 @@
 ---
 description: 'Audit proposal and RCA fix-decision proof plans for runtime-claim evidence-class mismatch.'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 

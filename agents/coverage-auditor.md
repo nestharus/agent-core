@@ -1,6 +1,6 @@
 ---
 description: 'Audit existing tests: flag unverified behavior capture, dead CI tests, low-value tests, coverage enforcement recommendations'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

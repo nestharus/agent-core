@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate validation, packaging, PR proof, and cleanup for a shippable prototype'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Address one persisted CodeRabbit review comment and emit a structured outcome JSON file.'
-model: gpt-high
+model: gpt-medium
 output_format: ''
 ---
 

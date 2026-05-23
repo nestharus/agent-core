@@ -45,14 +45,14 @@ This table is cited by
 | Problem research (optional) | Model - orchestrator advances when framing artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Synthesize user needs (optional) | Model - orchestrator advances when synthesis artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Existing-state risk profile (Phase 2.5) | **Human** | User confirms the `problem map` names the right current terrain. **First of the two surviving human gates** in the implementation pipeline. |
-| Proposal | Model - audit (`gpt-high`) + scope (`claude-opus`) + shortcut (`claude-opus`) + supported-surface (`claude-opus`) in parallel | The risk assessment is the review. No human gate. |
-| Alignment (optional) | Model - `claude-opus` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
+| Proposal | Model - audit (`gpt-high`) + scope (`gpt-xhigh`) + shortcut (`claude-opus`) + supported-surface (`claude-opus`) + proof-risk (`gpt-xhigh`) in parallel | The risk assessment is the review. No human gate. |
+| Alignment (optional) | Model - `gpt-xhigh` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
 | Hookpoint research | Model - orchestrator advances when artifact is non-empty, contains the four required sections, and does not invalidate the approved problem map | No default human gate. Returning to Phase 2.5 re-engages the problem-map human gate. |
 | Implementation | Continuous (test suite, CI, smoke, tests-first encoding artifacts) | No explicit gate. Failures block the pipeline, and Step 6b must produce risk-annotated tests plus any required residual-risk artifact before Step 6c writes code. |
-| CodeRabbit | Model - loop owner agent | Rerun until per-pass value drops to zero. |
+| CodeRabbit | Model - `gpt-medium` loop owner agent + per-comment fixer | Rerun until per-pass value drops to zero. |
 | Test audit | Model - `gpt-high` | Validate that tests encode intended behavior first, reduce named risks, preserve fixture externality, keep explicit levels, and do not weaken ground-truth tests to match implementation. Checklist gate. |
-| Multi-concern | Model - `claude-opus` | Decide whether the PR should be split. |
-| Justification | Model - `claude-opus` | Decide whether every change justifies its presence. |
+| Multi-concern | Model - `gpt-high` | Decide whether the PR should be split. |
+| Justification | Model - `gpt-high` | Decide whether every change justifies its presence. |
 | Supported-surface verification | Model - supported-surface verification role (see `~/ai/models/roles.md`) | Validate that the actual diff still reduces risk on the approved supported surface; return to research on invalidated assumptions and stop the PR on non-positive value. |
 | Commit hygiene | Model - `gpt-high` | Validate small, testable, single-concern commits. |
 | Draft PR open | Automated (orchestrator) | Routine pipeline output. |

@@ -1,6 +1,6 @@
 ---
 description: 'Coordinate commit-history-driven refactoring scoping and per-package handoff.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Run the proposal alignment review cycle against problem.md + philosophy.md, expand problem/philosophy when new surfaces are discovered, write philosophy-decisions.md when philosophy concerns require user input, and produce a run report. The orchestrator dispatches Stage 1 (problem alignment), Stage 1b (problem expansion), Stage 2 (philosophy alignment), and Stage 2b (philosophy expansion). It does NOT run the proposer; that is user-driven.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

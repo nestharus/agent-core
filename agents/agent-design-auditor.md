@@ -1,6 +1,6 @@
 ---
 description: 'Audit operator prompt design against operator-file format and shared design patterns. Reports LOW/MEDIUM/HIGH findings with citations. Read-only.'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 

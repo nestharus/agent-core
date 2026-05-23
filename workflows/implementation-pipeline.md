@@ -91,7 +91,7 @@ The orchestrator comments back to the ticket on Phase 9 (PR URL) and on Final (a
 
 Model assignments are authoritative in `~/ai/models/roles.md`.
 Do not restate or override that matrix in project docs.
-Use it exactly, including the synthesis/audit-vs-judgment split and the rule that `gpt-xhigh` is not the default coordinator.
+Use it exactly, including the synthesis/audit-vs-judgment split.
 
 Agent invocation: `~/ai/workflows/agents-cli.md`
 Agent Q&A and session graph convention: `~/ai/conventions/agent-questions-and-session-graph.md`
@@ -633,7 +633,7 @@ Without that record, the phase was not skipped correctly.
 
 ## Orchestrator
 
-This pipeline is dispatched by the `implementation-pipeline-orchestrator` (`claude-opus`) operator at `~/ai/agents/implementation-pipeline-orchestrator.md`. The orchestrator is the only delegated actor that walks a Work Unit through every phase, dispatches each leaf operator via the `agents` CLI, runs the three required process-tree audits, and enforces the violation-escalation policy autonomously (including Tier-1 main-branch rewinds when a violation is detected). Inlining the orchestrator role into the root conversation is itself a workflow violation because it removes the orchestration decisions from `agents trace --json` and prevents process-tree-auditor from auditing the workflow as a whole.
+This pipeline is dispatched by the `implementation-pipeline-orchestrator` (`gpt-xhigh`) operator at `~/ai/agents/implementation-pipeline-orchestrator.md`. The orchestrator is the only delegated actor that walks a Work Unit through every phase, dispatches each leaf operator via the `agents` CLI, runs the three required process-tree audits, and enforces the violation-escalation policy autonomously (including Tier-1 main-branch rewinds when a violation is detected). Inlining the orchestrator role into the root conversation is itself a workflow violation because it removes the orchestration decisions from `agents trace --json` and prevents process-tree-auditor from auditing the workflow as a whole.
 
 ## Adjacent References
 

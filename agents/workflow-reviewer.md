@@ -1,6 +1,6 @@
 ---
 description: 'Verify a workflow execution complied with its operator procedure. Compares reported step log to required steps in the operator file. PASS or FAIL with specific violations. Read-only.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

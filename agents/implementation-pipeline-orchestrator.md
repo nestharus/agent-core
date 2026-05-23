@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate one Work Unit through the full implementation pipeline: Phase 2.5 → 3 → 4 → process-tree audit → 5 → 6a/6b/6c → process-tree audit → 7 → 8 → process-tree audit → 9. Dispatches every phase via the agents CLI and enforces the violation-escalation policy autonomously.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: 'Coordinate one feature lifecycle above individual Work Units, using feature branches and per-ticket implementation-pipeline runs.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

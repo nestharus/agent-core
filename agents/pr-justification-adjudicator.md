@@ -1,6 +1,6 @@
 ---
 description: 'Per-round adjudicator for PR justification. Decides cull/continue per thread; when culling, assigns drop/backlog/keep verdict. Workflow stops when all threads culled.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

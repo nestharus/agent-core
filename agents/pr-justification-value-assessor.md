@@ -1,6 +1,6 @@
 ---
 description: 'Per-thread value assessor for PR justification. Weighs how much a change buys relative to keeping it in this PR. May dispatch a gpt-high research sub-agent. Does not explore the codebase itself.'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

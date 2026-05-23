@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate the light prototype RCA loop for one failed behavior test or QA observation, dispatching root cause and one narrow fix cycle before handback.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

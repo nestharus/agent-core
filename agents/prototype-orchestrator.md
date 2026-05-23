@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate a build-prototype workflow run end-to-end (~/ai/workflows/build-prototype.md). P1 hack/explore (parallel agent dispatch, no gates), P2 stabilize, P3 present (commit hygiene + risk profile + spawned tickets retroactively), P4 hand-off (file tickets via jira-operator, update project risk profile, apply branch disposition). Used when implementation-pipeline-orchestrator defers due to unclear framing, OR when roadmap workflow needs a Layer 2/3 feasibility prototype.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

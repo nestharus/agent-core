@@ -1,6 +1,6 @@
 ---
 description: 'Audit workflow run artifacts for procedure adherence without replacing process-tree topology review. Reports LOW/MEDIUM/HIGH findings. Read-only.'
-model: gpt-high
+model: gpt-xhigh
 output_format: ''
 ---
 
