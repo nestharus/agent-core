@@ -61,22 +61,29 @@ root orchestrator or workflow operator invoking agents CLI
 2. Read the operator's `## Contract` block. Parse the fenced YAML and validate `schema: operator-contract-v1`.
 3. Apply `defaults:` to the input set and verify all required inputs are present from defaults or caller-supplied values.
 4. Honor the `must_delegate:` and `forbidden_direct:` boundaries when constructing the dispatch prompt; do not inline procedure that belongs to the operator.
-5. Then invoke `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape.
+5. Then invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
 
 The `workflow_dispatch_contract` frontmatter, where present in workflow files, is the sibling workflow contract surface. The operator `## Contract` block is the analogous surface for operator dispatch.
 
 ## Standard invocation shape
 
+Two shapes, selected by whether you are dispatching a defined agent or an ad-hoc prompt:
+
 ```bash
+# Defined agent: frontmatter drives the model. No -m.
+agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
+
+# Ad-hoc / undefined agent: no agent file to read frontmatter from, so -m is required.
 agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
-- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `claude-opus`, `claude-sonnet`, or similar. See `~/ai/models/roles.md` for selection guidance.
+- `-a <agent.md>`: path or named-agent reference; the `model:` value in the agent's frontmatter selects the model. **Do not** combine with `-m` — `-m` shadows the frontmatter and silently defeats any model rebalancing.
+- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `gpt-medium`, `claude-opus`, `claude-sonnet`, or similar. Only used when there is no `-a`. See `~/ai/models/roles.md` for selection guidance.
 - `-p <worktree-path>`: the agent's working directory; for branch work or tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
 - `2>&1 | tee <log-path>`: capture stdout and stderr into a log file for review.
 
-Use the README for other invocation forms. In `~/ai/`, the pattern above is the default pipeline entry point.
+Use the README for other invocation forms. In `~/ai/`, the patterns above are the default pipeline entry point.
 
 ## Prompt / log file conventions
 
@@ -115,14 +122,15 @@ Every branch-work or tracked-file-mutating agent runs in a worktree, regardless 
 For agents expected to run longer than about 30 seconds:
 
 - Dispatch with the orchestrator's background-execution mode, one Bash tool call per child.
-- Canonical long-running shape:
+- Canonical long-running shape (defined agent; frontmatter drives model):
   ```python
   Bash(
-      command="agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>",
+      command="agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>",
       run_in_background=True,
       description="Run <child role>"
   )
   ```
+  Use `-m <model>` instead of `-a <agent.md>` only when the dispatch has no agent file (ad-hoc prompt). Never combine `-m` with `-a`.
 - Do not use shell job control or custom watcher machinery for `agents` dispatches. Forbidden patterns: trailing shell `&`, `disown`, bundled wrapper scripts around multiple `agents` calls, shell `wait` after `agents` fanout, PID-capture plus PID waits around `agents` invocations, trace polling loops as the waiting primitive, and piping live `agents` stdout through truncating filters such as `head -N` or `grep -m1`.
 - The forbidden trace-loop class includes repeated `agents trace --json` inspection used to decide when a child is complete.
 - Do not poll continuously; use the Bash task completion notification.

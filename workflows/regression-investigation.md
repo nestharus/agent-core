@@ -152,7 +152,7 @@ Phase 0 identified `investigation_window`, surface scope, and the output path `$
 
 Write `${scratch_dir}/prompts/regression-investigation-phase-1-commit-history.md` with `investigation_window`, `repo_root`, `surface_scope_path`, `regression_introduction_sha`, `fix_sha`, and `output_path=${planning_dir}/regression-investigation/<incident_id>/commit-history.md`.
 
-`agents -m gpt-high -a ~/ai/agents/commit-history-analyzer.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-1-commit-history.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-1-commit-history.log`
+`agents -a ~/ai/agents/commit-history-analyzer.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-1-commit-history.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-1-commit-history.log`
 
 Refuse to advance unless `${planning_dir}/regression-investigation/<incident_id>/commit-history.md` exists, is readable, and the log records `WROTE:`.
 
@@ -175,7 +175,7 @@ Phase 1 completed or supplied enough commit context to choose `historical_ref` a
 
 Compare A1 evidence at the incident commit and trunk. This phase references `~/ai/workflows/code-quality.md`, `~/ai/agents/cohesion-auditor.md`, `~/ai/agents/coupling-auditor.md`, `~/ai/agents/function-classification-auditor.md`, and `~/ai/agents/push-pull-auditor.md`. Use read-only snapshots such as `git show <ref>:<path>` or prepared bundles; do not checkout or mutate the active worktree.
 
-`agents -m gpt-high -a ~/ai/agents/cohesion-auditor.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-2-cohesion.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-2-cohesion.log`
+`agents -a ~/ai/agents/cohesion-auditor.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-2-cohesion.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-2-cohesion.log`
 
 ### Outputs
 
@@ -196,7 +196,7 @@ Phase 0 supplied one or more implicated files or surfaces, and Phase 2 either pr
 
 For each scoped file, write `${scratch_dir}/prompts/regression-investigation-phase-3-pattern-audit-<file-slug>.md` with `surface_path`, `surface_context`, `repo_root`, `planning_dir`, `incident_id`, `incident_artifact_path`, A1 evidence pointers, and `output_path=${planning_dir}/regression-investigation/<incident_id>/pattern-findings/<file-slug>.md`.
 
-`agents -m gpt-high -a ~/ai/agents/pattern-auditor.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-3-pattern-audit-<file-slug>.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-3-pattern-audit-<file-slug>.log`
+`agents -a ~/ai/agents/pattern-auditor.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-3-pattern-audit-<file-slug>.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-3-pattern-audit-<file-slug>.log`
 
 Refuse to advance unless `${planning_dir}/regression-investigation/<incident_id>/pattern-findings/<file-slug>.md` exists for every required file or a `BLOCKED:`/`NEEDS_INPUT:` child result has been preserved.
 
@@ -257,9 +257,9 @@ Phase 5 produced `findings.json` and `findings.md`, and `ticket_system` is `line
 
 For `ticket_system=linear`, prepare a prompt for `~/ai/agents/linear-operator.md`. For `ticket_system=jira`, prepare a prompt for `~/ai/agents/jira-operator.md`. For `file-only`, write ticket payloads to `${planning_dir}/regression-investigation/<incident_id>/follow-up-tickets.md`.
 
-`agents -m claude-opus -a ~/ai/agents/linear-operator.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-6-linear-ticket.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-6-linear-ticket.log`
+`agents -a ~/ai/agents/linear-operator.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-6-linear-ticket.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-6-linear-ticket.log`
 
-`agents -m claude-opus -a ~/ai/agents/jira-operator.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-6-jira-ticket.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-6-jira-ticket.log`
+`agents -a ~/ai/agents/jira-operator.md -p ${repo_root} -f ${scratch_dir}/prompts/regression-investigation-phase-6-jira-ticket.md 2>&1 | tee ${scratch_dir}/logs/regression-investigation-phase-6-jira-ticket.log`
 
 ### Outputs
 

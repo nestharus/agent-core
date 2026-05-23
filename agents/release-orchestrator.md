@@ -283,7 +283,7 @@ Validate `release_id`, branch names, manifest, required-checks policy, settings 
 Dispatch the cut mechanics with one bash invocation:
 
 ```bash
-agents -m gpt-high -a release-cut-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-cut.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-cut.log
+agents -a release-cut-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-cut.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-cut.log
 ```
 
 Gate the returned evidence: `${planning_dir}/release/${release_id}/cut-evidence.md` and `${scratch_dir}/logs/${release_id}-cut.log` must exist, `release_branch_name` under `release/*` must exist or be recorded as created, release scope/version readiness must be in `release_manifest_path` or `manifest_path`, and settings gaps must have `settings_state_or_runbook_ticket`. Refuse to advance with `BLOCKED:missing-required-input`, `BLOCKED:settings-runbook-required`, or the child operator's concrete `BLOCKED:` reason when the evidence is absent, malformed, or contradictory. Advance to freeze only when the cut evidence is durable.
@@ -299,7 +299,7 @@ When a release-blocking or customer-blocking defect appears and `hotfix_policy` 
 Dispatch the hotfix mechanics with one bash invocation:
 
 ```bash
-agents -m gpt-high -a release-hotfix-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-hotfix.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-hotfix.log
+agents -a release-hotfix-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-hotfix.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-hotfix.log
 ```
 
 After dispatch, gate the hotfix evidence. `${planning_dir}/release/${release_id}/hotfix-evidence.md` and `${scratch_dir}/logs/${release_id}-hotfix.log` must exist. Low-blast-radius fixes may return to freeze or promote when recorded. High-blast-radius or approval-sensitive paths require rehearsal and approval evidence; otherwise stop with `BLOCKED:hotfix-rehearsal-missing`, the child operator's concrete `BLOCKED:` reason, or return `NEEDS_INPUT:<question_artifact_path>` only for human-owned gates.
@@ -311,7 +311,7 @@ After freeze evidence is complete, the release candidate is approved, hotfix rec
 Dispatch the promote mechanics with one bash invocation:
 
 ```bash
-agents -m gpt-high -a release-promote-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-promote.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-promote.log
+agents -a release-promote-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-promote.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-promote.log
 ```
 
 Gate the result. `${planning_dir}/release/${release_id}/promote-tag-evidence.md` and `${scratch_dir}/logs/${release_id}-promote.log` must exist. Failures return to freeze or hotfix-cherry-pick when model-owned evidence can still be corrected; customer-visible approval gaps stop with `BLOCKED:promotion-approval-missing`, the child operator's concrete `BLOCKED:` reason, or `NEEDS_INPUT:<question_artifact_path>` only for human-owned gates.
@@ -327,7 +327,7 @@ After a tagged release or landed hotfix work exists and `reconcile_obligations` 
 Dispatch the reconcile mechanics with one bash invocation:
 
 ```bash
-agents -m gpt-high -a release-reconcile-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-reconcile.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-reconcile.log
+agents -a release-reconcile-operator -p ${worktree_path} -f ${scratch_dir}/prompts/${release_id}-reconcile.md 2>&1 | tee ${scratch_dir}/logs/${release_id}-reconcile.log
 ```
 
 Gate the result. `${planning_dir}/release/${release_id}/reconcile-evidence.md` and `${scratch_dir}/logs/${release_id}-reconcile.log` must exist. If hotfix divergence, release-line mismatch, or manifest discrepancy remains, stop with `BLOCKED:reconcile-open` or the child operator's concrete `BLOCKED:` reason. Close the lifecycle only when promotion, tag evidence, human-owned approvals, and reconciliation closure are all durable.

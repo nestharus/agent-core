@@ -324,7 +324,7 @@ Mechanical. Do not gate.
    - Update prototype-test branch markers to cite real spawned-ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md`; this is the required update prototype-test branch markers step before publication.
    - Push the prototype-test branch: `git push origin ${prototype_test_branch_ref}`.
    - Compose the `prototype-test-pr-writer` prompt with `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, and `output_path`.
-   - Dispatch prototype-test-pr-writer with `agents -m claude-opus -a ~/ai/agents/prototype-test-pr-writer.md -p ${worktree_path} -f ${scratch_dir}/prompts/${prototype_id}-prototype-test-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-prototype-test-pr-writer.log`.
+   - Dispatch prototype-test-pr-writer with `agents -a ~/ai/agents/prototype-test-pr-writer.md -p ${worktree_path} -f ${scratch_dir}/prompts/${prototype_id}-prototype-test-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-prototype-test-pr-writer.log`.
    - Verify `${output_path}.title` and `${output_path}` exist and are non-empty.
    - Create the draft PR: `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`.
    - Verify the parsed draft PR URL is non-empty and begins with `https://`; otherwise halt with `BLOCKED:prototype-test-pr-url-missing`.

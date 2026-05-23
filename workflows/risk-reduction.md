@@ -110,7 +110,7 @@ For each item type, the lever is the same: narrow the work until it can be revie
 When the selected item is a TODO/FIXME/HACK conversion, the local risk-reduction orchestrator writes `${scratch_dir}/prompts/risk-reduction-brittleness-todo.md` with the selected axis, surface, source marker locations, desired tracker project, and required output path `${planning_dir}/risk-reduction/${surface_slug}-brittleness-followups.md`. It then dispatches:
 
 ```bash
-agents -m claude-opus -a jira-operator -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-brittleness-todo.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-brittleness-todo.log
+agents -a jira-operator -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-brittleness-todo.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-brittleness-todo.log
 ```
 
 The Jira operator must file or identify one follow-up issue per unresolved marker and write `${planning_dir}/risk-reduction/${surface_slug}-brittleness-followups.md` with the marker path, line, issue key, and replacement comment text. The orchestrator refuses to advance if the artifact is missing, if any unresolved marker lacks an issue key, or if the worktree diff does not replace each converted marker comment with a reference to its issue key. Wired in this section; no separate operator runtime wiring remains.
@@ -118,13 +118,13 @@ The Jira operator must file or identify one follow-up issue per unresolved marke
 When the selected item is an `xfail` or `skip` resolution, the local risk-reduction orchestrator writes `${scratch_dir}/prompts/risk-reduction-xfail-tests.md` and dispatches:
 
 ```bash
-agents -m gpt-high -a test-writer -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-tests.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-test-writer.log
+agents -a test-writer -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-tests.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-test-writer.log
 ```
 
 After the test-writer returns, the orchestrator records the new node IDs in `${scratch_dir}/risk-reduction-xfail-nodeids.txt`, writes `${scratch_dir}/prompts/risk-reduction-xfail-green-gate.md`, and dispatches:
 
 ```bash
-agents -m gpt-high -a green-phase-gate -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-green-gate.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-green-gate.log
+agents -a green-phase-gate -p <worktree> -f ${scratch_dir}/prompts/risk-reduction-xfail-green-gate.md 2>&1 | tee ${scratch_dir}/logs/risk-reduction-xfail-green-gate.log
 ```
 
 The green-phase report must land at `${planning_dir}/risk-reduction/${surface_slug}-xfail-green-gate.md`. The orchestrator refuses to advance if the report is missing, if the resolved marker still appears in the touched tests without an issue reference, or if the green-phase verdict is not pass/accepted-blocked according to `~/ai/agents/green-phase-gate.md`.

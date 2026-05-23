@@ -39,7 +39,7 @@ This workflow wires `~/ai/conventions/wu-session-lifecycle.md` Stage 5 through S
 5. Dispatch one resumer per merged session:
 
 ```bash
-agents -m gpt-high -a wu-session-resumer -p ${worktree_path} -f ${planning_dir}/prompts/${ticket_id}-wu-session-resume.md 2>&1 | tee ${planning_dir}/logs/${ticket_id}-wu-session-resume.log
+agents -a wu-session-resumer -p ${worktree_path} -f ${planning_dir}/prompts/${ticket_id}-wu-session-resume.md 2>&1 | tee ${planning_dir}/logs/${ticket_id}-wu-session-resume.log
 ```
 
 6. Refuse to advance a row when the resumer returns `BLOCKED:` or `NEEDS_INPUT:`. Keep the prompt and log path as durable evidence for that row. A clean `closed` or `handoff-prepared` resumer status closes the wake item.

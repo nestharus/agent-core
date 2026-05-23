@@ -25,7 +25,7 @@ it as the comparator for the P4 publication subtree.
 6. Dispatch the writer with the canonical agents CLI shape:
 
    ```bash
-   agents -m claude-opus -a ~/ai/agents/prototype-test-pr-writer.md \
+   agents -a ~/ai/agents/prototype-test-pr-writer.md \
      -p ${prototype_worktree_path} \
      -f ${scratch_dir}/prompts/${prototype_id}-prototype-test-pr-writer.md \
      2>&1 | tee ${scratch_dir}/logs/${prototype_id}-prototype-test-pr-writer.log

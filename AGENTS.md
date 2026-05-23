@@ -333,7 +333,13 @@ Source-of-truth repository: <https://github.com/nestharus/ai>.
 
 Use the shared wrapper conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
 
-Default shape: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>`.
+Default shapes:
+
+- Defined agent: `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` — no `-m`; the agent file's `model:` frontmatter drives model selection.
+- Ad-hoc / undefined agent: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` — `-m` is required because there is no agent file to read frontmatter from.
+
+Never combine `-m <model>` with `-a <agent.md>`: `-m` shadows the frontmatter and silently defeats any model rebalancing.
+
 For long-running or parallel child dispatch, [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md) is also the canonical dispatch/wait rule: use one Bash-background tool invocation per child, not shell `&`, bundled wrapper scripts, shell `wait`, PID waits, or trace-polling loops.
 
 ### AGENT DISPATCH SHAPE
@@ -341,18 +347,26 @@ For long-running or parallel child dispatch, [`~/ai/workflows/agents-cli.md`](wo
 `~/ai/workflows/agents-cli.md` is the canonical positive-shape source. A child dispatch stays as one parent-visible bash invocation:
 
 ```bash
+# Defined agent (no -m; frontmatter drives model):
+agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
+
+# Ad-hoc dispatch (no agent file; -m required):
 agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
 Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; capture the full stream with `2>&1 | tee <log-path>` and parse the completed log afterward. Do not combine N independent dispatches into a single shell script; each dispatch is its own bash invocation, and ticket or setup commands run separately before or after it.
 
-Wrong shape:
+Wrong shapes:
 
 ```bash
+# Wrong: -m combined with -a shadows the agent's frontmatter model.
+agents -m claude-opus -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md
+
+# Wrong: composition between the parent shell and the agents invocation.
 bash -c "python << EOF
 print('ticket update or setup call here')
 EOF
-agents -m claude-opus -p /repo -f /tmp/prompt.md | head -3"
+agents -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md | head -3"
 ```
 
 Use [`/home/nes/projects/agent-runner/README.md`](/home/nes/projects/agent-runner/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.

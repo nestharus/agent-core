@@ -245,7 +245,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
    - Run the implementation-pipeline-orchestrator as one Bash-background dispatch:
      ```python
      Bash(
-         command="agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt> 2>&1 | tee <log>",
+         command="agents -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt> 2>&1 | tee <log>",
          run_in_background=True,
          description="Run implementation pipeline for <ticket_id>"
      )
@@ -283,7 +283,7 @@ When ambiguous whether a feature is must-have vs nice-to-have, ask the user expl
 
 ### WU-shaped work (code change, operator authoring, workflow authoring)
 
-`agents -m claude-opus -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt.md>`
+`agents -a ~/ai/agents/implementation-pipeline-orchestrator.md -p <repo_root> -f <prompt.md>`
 
 The full implementation pipeline runs. Manager pauses dispatching adjacent WUs that depend on this one until it merges. Cost profile: ~$15-30 per WU, ~30min-2hr wall time.
 

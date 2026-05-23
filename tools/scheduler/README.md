@@ -4,7 +4,7 @@
 
 ## One concern
 
-Schedule a task to run on a specified time pattern. The task can be a shell script, an agent dispatch (`agents -m … -a … -f …`), or a workflow invocation. The scheduler stores the schedule definition, ensures the runner is up when work is due, and tears down idle runners.
+Schedule a task to run on a specified time pattern. The task can be a shell script, an agent dispatch (`agents -a … -f …`), or a workflow invocation. The scheduler stores the schedule definition, ensures the runner is up when work is due, and tears down idle runners.
 
 ## Anti-scope
 

@@ -80,7 +80,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 5. Phase 4 - Best Way To Apply: create an application-plan prompt that reads root cause plus fix decision and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-application-plan.md` and no code application.
 6. Phase 5 - Apply: create an apply prompt that reads `${planning_dir}/rca/<failure-id>-application-plan.md`, edits only `${worktree_path}`, and dispatch `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-applied.md` with changed paths, rationale, and local verification notes. After apply, run an orchestrator-side changed-path check such as `git -C ${worktree_path} diff --name-only` and fail with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
 7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence and iterate until verification is green or the operator halts. If green, run the Verification-phase critic and consume `${planning_dir}/rca/<failure-id>-verification-critic.md`; only `VERIFICATION-CRITIC: PASS` may advance to Phase 6.5.
-8. Phase 6.5 - Post-Apply Gate Set: compose `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md` and dispatch the shared gate operator with `agents -m claude-opus -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`, or use the model declared by the selected operator contract if it differs from `claude-opus`. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
+8. Phase 6.5 - Post-Apply Gate Set: compose `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md` and dispatch the shared gate operator with `agents -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`, or use the model declared by the selected operator contract if it differs from `claude-opus`. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
 9. Phase 7+ handoff: preserve the verified and gate-set-passing RCA artifact set and dispatch or route downstream post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending work without replacing their specialist workflows or operators.
 
 ## Phase 6.5 — Post-Apply Gate Set
@@ -91,7 +91,7 @@ Prompt and log paths:
 
 - Prompt: `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md`.
 - Log: `${scratch_dir}/logs/<failure-id>-apply-gate-set.log`.
-- Dispatch: `agents -m claude-opus -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`.
+- Dispatch: `agents -a /home/nes/ai/agents/apply-gate-set.md -p ${worktree_path} -f ${scratch_dir}/prompts/<failure-id>-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/<failure-id>-apply-gate-set.log`.
 - If the consumed operator contract declares a different model, use that model in the same non-interactive dispatch shape.
 - Host built-in sub-agent or Task invocations are forbidden for this child work. Bare `agents` is forbidden because it opens an interactive UI.
 
