@@ -1,6 +1,6 @@
 ---
 description: 'Shared active gate-set owner per ACR-277 Shape 1: dispatches required gate children, owns join-manifest schema with currentness + skip + ratification + inventory-resolution rows, owns process-tree expected-process projection per caller mode, transports runtime claim and dossier/actual diff into code-quality/proof-risk/validation-integrity children, refuses silent convention-only inheritance. ACR-287 wires rca-post-apply; ACR-288 wires implementation-phase-4/6/8 separately.'
-model: claude-opus
+model: gpt-medium
 output_format: ''
 ---
 

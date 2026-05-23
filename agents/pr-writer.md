@@ -1,6 +1,6 @@
 ---
 description: 'Write a PR title and body for a draft pull request, suitable for an external reviewer who has no project context'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

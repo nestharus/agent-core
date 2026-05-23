@@ -1,6 +1,6 @@
 ---
 description: 'Write a proof-focused PR body for a shippable prototype after validation, QA proof, and deliverable material already exist'
-model: claude-opus
+model: gpt-medium
 output_format: ''
 ---
 

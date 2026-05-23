@@ -1,6 +1,6 @@
 ---
 description: 'Work Manager flavor rules for manager-pragmatic: short-term derisking, bare-minimum change, correctness-preserving shortcuts only.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

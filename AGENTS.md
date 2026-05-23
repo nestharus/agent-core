@@ -121,7 +121,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 - `post-mortem-author` — Synthesizes a post-mortem from incident-investigator findings and the incident brief, then writes one Markdown document
   File: [~/ai/agents/post-mortem-author.md](agents/post-mortem-author.md)
   Inputs: findings_path, incident_brief_path, output_path
-  Model: claude-opus
+  Model: gpt-high
 
 - `prototype-rca-orchestrator` - Run the light two-agent prototype RCA loop for one failed behavior test or QA walkthrough observation, then hand back after targeted verification.
   File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?` | Model: `claude-opus`
@@ -131,7 +131,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 - `regression-investigator` — Orchestrate one regression-investigation run from incident artifact through commit-history analysis, A1 comparison, pattern audit, synthesis, and ticket handoff.
   File: [~/ai/agents/regression-investigator.md](agents/regression-investigator.md)
   Inputs: `incident_artifact_path`, `incident_id`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `ticket_system`, `surface_scope_path`, `investigation_window`, `linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email`
-  Model: `claude-opus`
+  Model: `gpt-xhigh`
 
 - `pattern-auditor` — Read-only per-file pattern auditor for regression-enabling code shapes.
   File: [~/ai/agents/pattern-auditor.md](agents/pattern-auditor.md)
@@ -146,13 +146,13 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
-  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `gpt-high`
 
 - `prototype-pr-writer` - Author a proof-focused draft PR body for a shippable-prototype PR, centered on shipped use-cases, behavior-test evidence, QA screenshots, observed-vs-expected notes, and deliverable bring-up material; this PR writer does not replace `pr-writer` for production implementation PRs.
-  File: [~/ai/agents/prototype-pr-writer.md](agents/prototype-pr-writer.md) | Inputs: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, `deliverable_paths` | Model: `claude-opus`
+  File: [~/ai/agents/prototype-pr-writer.md](agents/prototype-pr-writer.md) | Inputs: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, `deliverable_paths` | Model: `gpt-medium`
 
 - `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for test-contract review (NOT production implementation, NOT shippable-prototype proof bundles).
-  File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `claude-opus`
+  File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
 
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
@@ -234,10 +234,10 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
   File: [~/ai/agents/proposer.md](agents/proposer.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, optional review files | Model: `gpt-high`
 
 - `problem-alignment` - Stage 1 alignment review: read `problem.md` + `proposal.md` + project's axis reference table; produce `problem-review.md` (always) and `problem-surfaces.md` (when new surfaces are discovered).
-  File: [~/ai/agents/problem-alignment.md](agents/problem-alignment.md) | Inputs: `problem.md`, `proposal.md`, project axis table | Model: `claude-opus`
+  File: [~/ai/agents/problem-alignment.md](agents/problem-alignment.md) | Inputs: `problem.md`, `proposal.md`, project axis table | Model: `gpt-xhigh`
 
 - `problem-expansion-classify` - Stage 1b-classify (judge): read `problem-surfaces.md` and judge each surface as `discard / already-covered`, `discard / proposal-specific`, `discard / out-of-scope`, `new-axis`, or `axis-expansion`. Writes `problem-classification.md`. Does NOT modify `problem.md`.
-  File: [~/ai/agents/problem-expansion-classify.md](agents/problem-expansion-classify.md) | Inputs: `problem-surfaces.md`, `problem.md`, project axis table | Model: `claude-opus`
+  File: [~/ai/agents/problem-expansion-classify.md](agents/problem-expansion-classify.md) | Inputs: `problem-surfaces.md`, `problem.md`, project axis table | Model: `gpt-xhigh`
 
 - `problem-expansion-integrate` - Stage 1b-integrate (synthesis): read `problem-classification.md` and synthesize integrated text into `problem.md` + the axis reference table for `new-axis` and `axis-expansion` verdicts. Skips `discard` verdicts. Does NOT re-judge.
   File: [~/ai/agents/problem-expansion-integrate.md](agents/problem-expansion-integrate.md) | Inputs: `problem-classification.md`, `problem-surfaces.md`, `problem.md`, project axis table | Model: `gpt-high`
@@ -246,7 +246,7 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
   File: [~/ai/agents/philosophy-alignment.md](agents/philosophy-alignment.md) | Inputs: `philosophy.md`, `proposal.md`, `problem-review.md` | Model: `claude-opus`
 
 - `philosophy-expansion-classify` - Stage 2b-classify (judge): classify each concern as A absorbable, B compatible-addition, C tension, D new-axis, or E contradiction. Writes `philosophy-classification.md` (always) and `philosophy-decisions.md` (only when any C/D/E surface user-input concerns). Does NOT modify `philosophy.md`.
-  File: [~/ai/agents/philosophy-expansion-classify.md](agents/philosophy-expansion-classify.md) | Inputs: `philosophy-surfaces.md`, `philosophy.md`, `philosophy-alignment.md` | Model: `claude-opus`
+  File: [~/ai/agents/philosophy-expansion-classify.md](agents/philosophy-expansion-classify.md) | Inputs: `philosophy-surfaces.md`, `philosophy.md`, `philosophy-alignment.md` | Model: `gpt-xhigh`
 
 - `philosophy-expansion-integrate` - Stage 2b-integrate (synthesis): apply absorbable clarifications (A) and provisional new principles (B) to `philosophy.md`. Skips C/D/E (those live in `philosophy-decisions.md` and are user-owned). Does NOT modify `philosophy-decisions.md`.
   File: [~/ai/agents/philosophy-expansion-integrate.md](agents/philosophy-expansion-integrate.md) | Inputs: `philosophy-classification.md`, `philosophy-surfaces.md`, `philosophy.md` | Model: `gpt-high`
@@ -293,7 +293,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 ### External integration
 
 - `jira-operator` - Read, comment on, transition, search, create, or update-estimate Jira issues through the Atlassian REST API.
-  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | See `agents/jira-operator.md` `## Contract` for inputs/defaults/errors/delegation. | Model: `claude-opus`
+  File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | See `agents/jira-operator.md` `## Contract` for inputs/defaults/errors/delegation. | Model: `gpt-medium`
 
 ### Writing / document authoring
 

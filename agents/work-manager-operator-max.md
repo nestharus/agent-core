@@ -1,6 +1,6 @@
 ---
 description: 'Work Manager flavor rules for manager-max: maximum long-term derisking, no shortcuts, least-risk NEEDS_INPUT answers.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

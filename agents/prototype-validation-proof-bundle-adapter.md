@@ -46,7 +46,7 @@ Parse `proof_bundle_path`, resolve it into the existing `prototype-pr-writer.md`
 7. Resolve `qa_screenshots_dir` from the uploaded screenshot URL manifest carried by QA evidence.
 8. Resolve `deliverable_paths` from the deliverable manifest.
 9. Write `pr_writer_input_bundle_path` with the seven resolved anchors: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, and `deliverable_paths`.
-10. Dispatch `prototype-pr-writer.md` through `agents -m claude-opus -f <prompt-file>` with those seven required inputs and any caller-provided output target.
+10. Dispatch `prototype-pr-writer.md` through `agents -m gpt-medium -f <prompt-file>` with those seven required inputs and any caller-provided output target.
 
 ## Stop Conditions
 

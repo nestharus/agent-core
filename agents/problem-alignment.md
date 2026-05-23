@@ -1,6 +1,6 @@
 ---
 description: 'Stage 1 of the alignment cycle. Read problem.md + proposal.md and determine whether the proposal is aimed at the problems defined. Write problem-review.md (always); write problem-surfaces.md only if new problem surfaces were discovered.'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 
@@ -130,4 +130,3 @@ For each sub-problem or interaction that the proposal reveals within an existing
 - **Why it matters:** what the problem definition misses by not describing this
 
 ---
-

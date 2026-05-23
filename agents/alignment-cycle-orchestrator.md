@@ -148,11 +148,11 @@ Check whether `problem-surfaces.md` was produced by Stage 1.
 
 If it was not produced, skip this stage entirely — no new problem surfaces were discovered.
 
-If it was produced, run two sub-agents in sequence: **Stage 1b-classify (judge)** then **Stage 1b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that opus never synthesizes; classification judgment runs on `claude-opus`, integrated text synthesis runs on `gpt-high`.
+If it was produced, run two sub-agents in sequence: **Stage 1b-classify (judge)** then **Stage 1b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-xhigh`, integrated text synthesis runs on `gpt-high`.
 
 #### Stage 1b-classify
 
-Run a sub-agent with the instructions in `problem-expansion-classify.md` (model: `claude-opus`).
+Run a sub-agent with the instructions in `problem-expansion-classify.md` (model: `gpt-xhigh`).
 
 Provide the agent with:
 - `problem-surfaces.md` (the new surfaces)
@@ -205,11 +205,11 @@ Check whether `philosophy-surfaces.md` was produced by Stage 2.
 
 If it was not produced, skip this stage entirely — no new philosophical concerns were discovered.
 
-If it was produced, run two sub-agents in sequence: **Stage 2b-classify (judge)** then **Stage 2b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that opus never synthesizes; classification judgment runs on `claude-opus`, integrated philosophy text synthesis runs on `gpt-high`. The user-input gate (`philosophy-decisions.md`) is owned by classify, not by integrate.
+If it was produced, run two sub-agents in sequence: **Stage 2b-classify (judge)** then **Stage 2b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-xhigh`, integrated philosophy text synthesis runs on `gpt-high`. The user-input gate (`philosophy-decisions.md`) is owned by classify, not by integrate.
 
 #### Stage 2b-classify
 
-Run a sub-agent with the instructions in `philosophy-expansion-classify.md` (model: `claude-opus`).
+Run a sub-agent with the instructions in `philosophy-expansion-classify.md` (model: `gpt-xhigh`).
 
 Provide the agent with:
 - `philosophy-surfaces.md` (the new concerns)

@@ -1,6 +1,6 @@
 ---
 description: 'Author draft PR title/body files for fail-expected prototype-test contract PRs.'
-model: claude-opus
+model: gpt-medium
 inputs:
   - prototype_test_branch_ref
   - base

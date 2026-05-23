@@ -1,6 +1,6 @@
 ---
 description: 'Read/comment/create/transition Linear issues via the ported Linear client at ~/ai/clients/linear/. Auth via $LINEAR_API_KEY env var.'
-model: claude-opus
+model: gpt-medium
 output_format: ''
 ---
 

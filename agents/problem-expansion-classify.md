@@ -1,6 +1,6 @@
 ---
 description: 'Stage 1b-classify of the alignment cycle (judge). Run only when problem-surfaces.md was produced by Stage 1. Read problem-surfaces.md + problem.md + problem-alignment.md and judge each surface: discard (covered / proposal-specific / out-of-scope), classify as new-axis, or classify as axis-expansion. Output: problem-classification.md with the per-surface verdict + rationale. Does NOT modify problem.md or problem-alignment.md (that is the integrate stage''s job).'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 
@@ -10,7 +10,7 @@ output_format: ''
 
 Judge each surface in `problem-surfaces.md` against the existing problem definition and decide its disposition. This is Stage 1b-classify: the judgment half of expansion. The integrate stage that runs after you (`problem-expansion.md`, gpt-high) consumes your output and synthesizes the integrated text into `problem.md` and `problem-alignment.md`.
 
-Per `~/ai/models/roles.md`, judgment is `claude-opus`'s role. This operator is the judge; it does not synthesize.
+Per `~/ai/models/roles.md`, judgment is this operator's role. This operator is the judge; it does not synthesize.
 
 ---
 

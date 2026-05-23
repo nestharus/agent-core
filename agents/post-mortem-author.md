@@ -1,6 +1,6 @@
 ---
 description: 'Synthesizes a post-mortem from incident-investigator findings and the incident brief, then writes one Markdown document'
-model: claude-opus
+model: gpt-high
 output_format: ''
 ---
 

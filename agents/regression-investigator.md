@@ -1,6 +1,6 @@
 ---
 description: 'Read-only regression investigation orchestrator that composes incident, history, A1, and pattern evidence without mutating source'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 

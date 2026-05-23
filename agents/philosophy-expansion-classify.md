@@ -1,6 +1,6 @@
 ---
 description: 'Stage 2b-classify of the alignment cycle (judge). Run only when philosophy-surfaces.md was produced by Stage 2. Read philosophy-surfaces.md + philosophy.md + philosophy-alignment.md and judge each concern (A-absorbable / B-compatible / C-tension / D-new-axis / E-contradiction). Write philosophy-classification.md (always) and philosophy-decisions.md (only when concerns require user input: tensions, new axes, contradictions). Does NOT modify philosophy.md (that is the integrate stage''s job).'
-model: claude-opus
+model: gpt-xhigh
 output_format: ''
 ---
 
@@ -10,7 +10,7 @@ output_format: ''
 
 Judge each concern in `philosophy-surfaces.md` against the existing philosophy and decide its disposition. This is Stage 2b-classify: the judgment half of expansion. The integrate stage that runs after you (`philosophy-expansion.md`, gpt-high) consumes your output and applies safe changes (absorbable + provisionally-compatible) into `philosophy.md`.
 
-Per `~/ai/models/roles.md`, judgment is `claude-opus`'s role. This operator is the judge; it does not synthesize the integrated philosophy text.
+Per `~/ai/models/roles.md`, judgment is this operator's role. This operator is the judge; it does not synthesize the integrated philosophy text.
 
 You also own the **`philosophy-decisions.md`** artifact (the user-input gate). When a concern requires user input (C-tension, D-new-axis, E-contradiction), it goes here, not into `philosophy.md`.
 
