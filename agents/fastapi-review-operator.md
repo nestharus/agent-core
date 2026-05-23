@@ -12,7 +12,7 @@ architecture, state management, Pydantic contracts, and testing patterns. This i
 (`pr-review-operator.md`) passes its risk gate (all three LOW).
 
 You are the orchestrator — you write prompt files and launch 5 facet sub-agents via the
-`agents` CLI (all `claude-opus`), synthesize their results, and post structured comments
+`agents` CLI (all `gpt-xhigh`), synthesize their results, and post structured comments
 to GitHub.
 
 ## Use When
@@ -34,7 +34,7 @@ to GitHub.
 - **Primary pipeline must have passed first.** Verify by reading the existing PR review
   comments. If the primary risk gate wasn't LOW/LOW/LOW or didn't run, STOP and say so.
 - **Run on the actual diff, not the PR description.**
-- **All sub-agents run via `agents` CLI** — never substitute with Claude Code's built-in Agent tool.
+- **All sub-agents run via `agents` CLI** — never substitute with a host CLI's built-in sub-agent tool.
 - **Each facet reviewer reads the shared best-practices reference**
   (`${reference_doc}`) plus the diff. Don't reinvent opinions.
 - **Post findings as a separate comment thread** from the primary review. Title the review
@@ -102,7 +102,7 @@ Skim `diff.txt` to identify FastAPI-relevant files:
 
 Enumerate the FastAPI-relevant files in a list for the facet prompts.
 
-### Phase 1: 5 facet reviews in parallel (claude-opus)
+### Phase 1: 5 facet reviews in parallel (gpt-xhigh)
 
 Write 5 prompt files and launch them in parallel via `agents`. All five share this
 **project context header** (inline into each prompt):
@@ -132,7 +132,7 @@ Read the file `$WORK_DIR/diff.txt` for the complete PR diff.
 For every facet: rate **framework-quality risk** as LOW / MEDIUM / HIGH. All five must be
 **LOW** for the PR to clear the FastAPI gate.
 
-#### 1a. Framework Idioms (`claude-opus`)
+#### 1a. Framework Idioms (`gpt-xhigh`)
 
 File: `$WORK_DIR/facet-framework.md`
 
@@ -178,10 +178,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" 2>&1 | tee "$WORK_DIR/result-framework.md"', run_in_background=True, description="Run FastAPI framework facet")
+Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" 2>&1 | tee "$WORK_DIR/result-framework.md"', run_in_background=True, description="Run FastAPI framework facet")
 ```
 
-#### 1b. Service / Controller / Repository Architecture (`claude-opus`)
+#### 1b. Service / Controller / Repository Architecture (`gpt-xhigh`)
 
 File: `$WORK_DIR/facet-architecture.md`
 
@@ -230,10 +230,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" 2>&1 | tee "$WORK_DIR/result-architecture.md"', run_in_background=True, description="Run FastAPI architecture facet")
+Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" 2>&1 | tee "$WORK_DIR/result-architecture.md"', run_in_background=True, description="Run FastAPI architecture facet")
 ```
 
-#### 1c. State & Concurrency (`claude-opus`)
+#### 1c. State & Concurrency (`gpt-xhigh`)
 
 File: `$WORK_DIR/facet-state.md`
 
@@ -283,10 +283,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" 2>&1 | tee "$WORK_DIR/result-state.md"', run_in_background=True, description="Run FastAPI state facet")
+Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" 2>&1 | tee "$WORK_DIR/result-state.md"', run_in_background=True, description="Run FastAPI state facet")
 ```
 
-#### 1d. Pydantic & API Contracts (`claude-opus`)
+#### 1d. Pydantic & API Contracts (`gpt-xhigh`)
 
 File: `$WORK_DIR/facet-pydantic.md`
 
@@ -337,10 +337,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" 2>&1 | tee "$WORK_DIR/result-pydantic.md"', run_in_background=True, description="Run FastAPI Pydantic facet")
+Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" 2>&1 | tee "$WORK_DIR/result-pydantic.md"', run_in_background=True, description="Run FastAPI Pydantic facet")
 ```
 
-#### 1e. Testing & Observability (`claude-opus`)
+#### 1e. Testing & Observability (`gpt-xhigh`)
 
 File: `$WORK_DIR/facet-testing.md`
 
@@ -390,7 +390,7 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" 2>&1 | tee "$WORK_DIR/result-testing.md"', run_in_background=True, description="Run FastAPI testing facet")
+Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" 2>&1 | tee "$WORK_DIR/result-testing.md"', run_in_background=True, description="Run FastAPI testing facet")
 ```
 
 `~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule for these facet launches. After all five task notifications arrive, collect the result files:

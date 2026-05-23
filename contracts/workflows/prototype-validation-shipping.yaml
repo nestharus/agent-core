@@ -1,0 +1,26 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/prototype-validation-shipping.md
+workflow_id: prototype-validation-shipping
+orchestrator: prototype-validation-orchestrator
+inputs:
+- truth branch and truth worktree path
+- eval branch and eval worktree path
+- planning path and scratch path
+- proposal or dossier reference
+- behavior-test manifest
+- base branch
+- registry target
+- prototype slug
+- package output paths
+expectations:
+- keeps product code and behavior tests on the truth branch and eval scaffolding on the eval branch
+- gates each phase advance on contract-validator acceptance, behavior-test passage, QA walkthrough proof, and deep rebuild verification
+- routes failing behavior tests through the light prototype RCA workflow and applies only RCA-supplied fixes
+outputs:
+- eval branch with compose, Dockerfile, README, and eval helper scripts
+- proof bundle covering behavior tests, QA walkthrough, deep rebuild, and package material
+- one proof-focused draft PR shipping the stabilized prototype
+non_goals:
+- does not discover or stabilize a prototype answer (see workflows/build-prototype.md)
+- does not ship production implementation work (see workflows/implementation-pipeline.md)
+- does not run adversarial QA or production-pipeline gates against the eval surface

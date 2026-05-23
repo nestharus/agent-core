@@ -140,10 +140,10 @@ The three translated surfaces are the complete adapter declaration. The new curr
 |---|---|---|---|---|
 | 0 | Trigger Classification | `rca-orchestrator` (`agents/rca-orchestrator.md`) | normalized trigger envelope | Phase 1 for `incident`, Phase 2 for `failing_test` |
 | 1 | Reproduction Test | fresh test-writer invocation through `rca-orchestrator` | `${planning_dir}/repro/<failure-id>.md` | Phase 2 after red on current HEAD |
-| 2 | Root Cause | fresh `claude-opus` RCA dispatch | `${planning_dir}/rca/<failure-id>.md` | Phase 3 |
-| 3 | Best Appropriate Fix | fresh `claude-opus` fix-decision dispatch | `${planning_dir}/rca/<failure-id>-fix-decision.md` | Phase 4 |
-| 4 | Best Way To Apply | fresh `claude-opus` application-plan dispatch | `${planning_dir}/rca/<failure-id>-application-plan.md` | Phase 5 |
-| 5 | Apply | fresh `claude-opus` apply dispatch | `${planning_dir}/rca/<failure-id>-applied.md` | Phase 6 |
+| 2 | Root Cause | fresh `gpt-xhigh` RCA dispatch | `${planning_dir}/rca/<failure-id>.md` | Phase 3 |
+| 3 | Best Appropriate Fix | fresh `gpt-xhigh` fix-decision dispatch | `${planning_dir}/rca/<failure-id>-fix-decision.md` | Phase 4 |
+| 4 | Best Way To Apply | fresh `gpt-xhigh` application-plan dispatch | `${planning_dir}/rca/<failure-id>-application-plan.md` | Phase 5 |
+| 5 | Apply | fresh `gpt-xhigh` apply dispatch | `${planning_dir}/rca/<failure-id>-applied.md` | Phase 6 |
 | 6 | Verify-Or-Return Gate | `rca-orchestrator` | verification log | Phase 6.5 on green plus verification critic PASS, Phase 2 on red |
 | 6.5 | Post-Apply Gate Set | apply-gate-set through rca-orchestrator | ${planning_dir}/rca/gate-set/<failure-id>/aggregate-report.md and join-manifest.json | downstream lifecycle only on PASS |
 | 7+ | Downstream RCA lifecycle | existing specialist operators and ticket workflows | post-mortem, action items, runbooks, tracker comments, close record | complete or pending |
@@ -162,13 +162,13 @@ Phase 1 runs only for `incident`. It authors a real test under the worktree's `t
 
 The reproduction test must be red on current `HEAD` before the fix and green after the fix. Red-run output is part of the Phase 1 artifact; a reproduction that cannot be made red is not silently accepted as root-cause evidence.
 
-The orchestrator dispatches the test writer with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>` or `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` as a fresh invocation. The prompt must not expose Phase 5 implementation details because no implementation exists yet.
+The orchestrator dispatches the test writer with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>` or `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>` as a fresh invocation. The prompt must not expose Phase 5 implementation details because no implementation exists yet.
 
 If the incident description is too ambiguous to author a meaningful real test in the worktree, emit `NEEDS_INPUT:<absolute_artifact_path>` with the missing behavior question. If paths are unreadable or unwritable, stop with `BLOCKED:reproduction-test-unavailable`.
 
 ## Phase 2 - Root Cause
 
-Phase 2 identifies the root cause only. Dispatch a fresh root-cause prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` and require it to read the failing test evidence or `${planning_dir}/repro/<failure-id>.md`, inspect the repository read-only, and write `${planning_dir}/rca/<failure-id>.md`.
+Phase 2 identifies the root cause only. Dispatch a fresh root-cause prompt with `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>` and require it to read the failing test evidence or `${planning_dir}/repro/<failure-id>.md`, inspect the repository read-only, and write `${planning_dir}/rca/<failure-id>.md`.
 
 The Phase 2 artifact names the failing signal, root cause, causal path, evidence references, and any ambiguity. It must NOT propose a fix; root cause and fix choice are separate decisions.
 
@@ -176,7 +176,7 @@ If the evidence cannot support a root-cause claim, stop with `NEEDS_INPUT:<absol
 
 ## Phase 3 - Best Appropriate Fix
 
-Phase 3 selects the best appropriate fix from the root-cause artifact. Dispatch a fresh fix-decision prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` and require it to read `${planning_dir}/rca/<failure-id>.md`, compare viable fixes, and write `${planning_dir}/rca/<failure-id>-fix-decision.md`.
+Phase 3 selects the best appropriate fix from the root-cause artifact. Dispatch a fresh fix-decision prompt with `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>` and require it to read `${planning_dir}/rca/<failure-id>.md`, compare viable fixes, and write `${planning_dir}/rca/<failure-id>-fix-decision.md`.
 
 The Phase 3 artifact explains why the selected fix addresses the root cause and why rejected options are worse. It must NOT determine the application strategy and must NOT apply code changes.
 
@@ -184,7 +184,7 @@ If the fix decision depends on product judgment or an unacceptable tradeoff, emi
 
 ## Phase 4 - Best Way To Apply
 
-Phase 4 plans how to apply the selected fix. Dispatch a fresh application-plan prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>` and require it to read the root-cause and fix-decision artifacts, inspect local code as needed, and write `${planning_dir}/rca/<failure-id>-application-plan.md`.
+Phase 4 plans how to apply the selected fix. Dispatch a fresh application-plan prompt with `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>` and require it to read the root-cause and fix-decision artifacts, inspect local code as needed, and write `${planning_dir}/rca/<failure-id>-application-plan.md`.
 
 The Phase 4 artifact names the files to change, order of edits, verification command, rollback or recovery notes when useful, and constraints for avoiding unrelated changes. It must NOT apply the change.
 
@@ -192,7 +192,7 @@ If the plan exposes a larger implementation scope than the RCA loop can safely o
 
 ## Phase 5 - Apply
 
-Phase 5 applies the Phase 4 plan through a fresh apply prompt with `agents -m claude-opus -p ${worktree_path} -f <prompt-file>`. The apply invocation edits `${worktree_path}` only according to `${planning_dir}/rca/<failure-id>-application-plan.md` and writes `${planning_dir}/rca/<failure-id>-applied.md`.
+Phase 5 applies the Phase 4 plan through a fresh apply prompt with `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. The apply invocation edits `${worktree_path}` only according to `${planning_dir}/rca/<failure-id>-application-plan.md` and writes `${planning_dir}/rca/<failure-id>-applied.md`.
 
 After apply, the orchestrator runs an independent changed-path check such as `git -C ${worktree_path} diff --name-only` and fails with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
 

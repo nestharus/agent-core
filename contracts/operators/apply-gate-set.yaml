@@ -1,0 +1,148 @@
+schema: operator-contract-v1
+source: agents/apply-gate-set.md
+model: gpt-medium
+description: 'Shared active gate-set owner per ACR-277 Shape 1: dispatches required gate children, owns join-manifest schema with currentness + skip + ratification + inventory-resolution rows, owns process-tree expected-process projection per caller mode, transports runtime claim and dossier/actual diff into code-quality/proof-risk/validation-integrity children, refuses silent convention-only inheritance. ACR-287 wires rca-post-apply; ACR-288 wires implementation-phase-4/6/8 separately.'
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: caller_mode
+  type: string
+  required: true
+  default_source: caller
+  description: '`caller_mode`: one of `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
+- name: audit_history_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
+- name: process_tree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.'
+- name: root_invocation_uuid
+  type: string
+  required: true
+  default_source: caller
+  description: '`process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.'
+- name: cycle_id
+  type: string
+  required: true
+  default_source: caller
+  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
+- name: head_sha
+  type: string
+  required: true
+  default_source: caller
+  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
+- name: base_ref
+  type: string
+  required: true
+  default_source: caller
+  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
+- name: diff_sha256
+  type: string
+  required: true
+  default_source: caller
+  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
+- name: Output
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: root
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: paths
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: for
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: dispatch
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: manifest
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: join
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: aggregate
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: report
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: expected
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: process
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: tree
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- name: reference
+  type: string
+  required: true
+  default_source: caller
+  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

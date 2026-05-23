@@ -1,0 +1,68 @@
+schema: operator-contract-v1
+source: agents/roadmap-orchestrator.md
+model: gpt-xhigh
+description: 'Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.'
+inputs:
+- name: problem_path
+  type: path
+  required: true
+  default_source: caller
+  description: problem path
+- name: philosophy_path
+  type: path
+  required: true
+  default_source: caller
+  description: philosophy path
+- name: proposal_path
+  type: path
+  required: true
+  default_source: caller
+  description: proposal path
+- name: decisions_path
+  type: path
+  required: true
+  default_source: caller
+  description: decisions path
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: product_strategy_root
+  type: path
+  required: false
+  default_source: derived
+  description: product strategy root
+defaults: []
+secrets: []
+outputs:
+- task: run-roadmap-cascade
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- roadmap-artifact-writes
+- child-research-dispatches
+- proposer-dispatches
+- risk-gate-dispatches
+- prototype-dispatches
+- ticket-generation-dispatches
+must_delegate:
+- executive-roadmap-proposer
+- engineering-roadmap-proposer
+- ai-roadmap-proposer
+- ticket-generation-agent
+- risk-gate-children
+- prototype-orchestrator
+may_direct:
+- strategy-doc-read
+- roadmap-output-validation
+forbidden_direct:
+- collapsing-roadmap-layers
+- deciding-user-owned-NEEDS_INPUT

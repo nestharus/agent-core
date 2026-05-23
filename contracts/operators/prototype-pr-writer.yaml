@@ -1,0 +1,58 @@
+schema: operator-contract-v1
+source: agents/prototype-pr-writer.md
+model: gpt-medium
+description: Write a proof-focused PR body for a shippable prototype after validation, QA proof, and deliverable material already exist
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: truth_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input truth_branch_ref=<ref>` (required) - branch or commit ref containing the prototype truth branch.'
+- name: proposal_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input proposal_path=<path>` (required) - approved prototype proposal that names shipped use-cases and expectations.'
+- name: behavior_tests_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input behavior_tests_paths=<paths>` (required) - comma-separated behavior test files or manifest paths; cite file and test names from here.'
+- name: test_results
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input test_results=<path-or-text>` (required) - test result evidence with pass/fail status and minimal output snippets.'
+- name: qa_walkthrough_report_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input qa_walkthrough_report_path=<path>` (required) - QA walkthrough report with use-case observations and any divergence notes.'
+- name: qa_screenshots_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input qa_screenshots_dir=<path>` (required) - directory or manifest containing uploaded screenshot URLs and captions for QA proof.'
+- name: deliverable_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`--input deliverable_paths=<paths>` (required) - comma-separated deliverables or manifest entries for compose, README, image tag, zip, and download link material.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

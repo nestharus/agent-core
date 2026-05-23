@@ -1,0 +1,17 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/agents-cli.md
+workflow_id: agents-cli
+orchestrator: root orchestrator or workflow operator invoking agents CLI
+inputs:
+- model name, worktree path, prompt file, and log path for an agent dispatch
+- sub-agent delegation, question-handling, or parallel-writer context
+expectations:
+- standardizes agents CLI invocation and tee-based log capture for pipeline work
+- routes delegated user questions through the root-owned question artifact convention
+- requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only
+outputs:
+- consistent agents command shape for prompts, logs, and long-running background work
+- stable prompt and log naming conventions for post-run review
+non_goals:
+- does not replace the agent-runner README as the authoritative CLI reference
+- does not define model role selection beyond pointing to the model-role matrix

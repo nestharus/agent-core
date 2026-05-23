@@ -98,7 +98,7 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 ## Non-Negotiables
 
 - **Run on the actual diff, not the PR description** — descriptions can look reasonable while the diff bundles too much.
-- **All sub-agents run via `agents` CLI** — never substitute with Claude Code's built-in Agent tool.
+- **All sub-agents run via `agents` CLI** — never substitute with a host CLI's built-in sub-agent tool.
 - **Risk gate requires all three LOW** — audit, scope, and shortcut must all return LOW before a PR passes.
 - **Post findings to the PR** — every finding gets posted as a review comment or inline comment. Don't just report to the orchestrator.
 - **Never approve a PR that fails the risk gate or the test-audit gate.**
@@ -125,7 +125,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 1. Resolve the intended operator name and file path from workflow context and the current project scope.
 2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
-3. Read the selected operator file's `## Contract` block.
+3. Read the selected operator contract sidecar when present; otherwise read the selected operator file's `## Contract` block.
 4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
 5. Validate that every required input for the chosen task is present after declared defaults are applied.
 6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
@@ -178,7 +178,7 @@ All three prompts share this **project context header** (customize per PR):
 Read the file `<WORK_DIR>/diff.txt` for the complete diff.
 ```
 
-#### 1a. Audit Risk (`claude-opus`)
+#### 1a. Audit Risk (`gpt-xhigh`)
 
 File: `$WORK_DIR/risk-audit.md`
 
@@ -214,9 +214,9 @@ Format:
 **File**: [path:line if applicable]
 ```
 
-Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-audit.md" > "$WORK_DIR/result-audit.md" 2>&1`
+Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-audit.md" > "$WORK_DIR/result-audit.md" 2>&1`
 
-#### 1b. Scope Risk (`claude-opus`)
+#### 1b. Scope Risk (`gpt-xhigh`)
 
 File: `$WORK_DIR/risk-scope.md`
 
@@ -261,9 +261,9 @@ Format:
 ...
 ```
 
-Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-scope.md" > "$WORK_DIR/result-scope.md" 2>&1`
+Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-scope.md" > "$WORK_DIR/result-scope.md" 2>&1`
 
-#### 1c. Shortcut Risk (`claude-opus`)
+#### 1c. Shortcut Risk (`gpt-xhigh`)
 
 File: `$WORK_DIR/risk-shortcut.md`
 
@@ -298,7 +298,7 @@ Format:
 **File**: [path:line if applicable]
 ```
 
-Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
+Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
 
 **Run all three in parallel** as separate Bash tool invocations with `run_in_background=True`, following `~/ai/workflows/agents-cli.md`. Collect the three results after their task notifications arrive.
 
@@ -350,7 +350,7 @@ Launch `test-audit-gate.md` once with the full diff and the `$WORK_DIR` path.
 
 The `agents` runner does NOT support typed `-i key=value` inputs for these
 operator files (no `[[inputs]]` schema; unknown inputs pass through as
-`--key value` to the wrapped `codex`/`claude` CLI and fail). Build a kickoff
+`--key value` to the wrapped provider CLI and fail). Build a kickoff
 prompt file that embeds the inputs in markdown, then dispatch with `-f`:
 
 ```bash
@@ -385,7 +385,7 @@ determine whether Phase 5 posts `--request-changes`.
 Run after Phases 1-3 complete (or in parallel if you already have the diff).
 These two checks focus specifically on PR structure, not technical correctness.
 
-#### 4a. Multi-Concern Check (`claude-opus`)
+#### 4a. Multi-Concern Check (`gpt-xhigh`)
 
 File: `$WORK_DIR/pr-multiconcern.md`
 
@@ -417,7 +417,7 @@ into smaller PRs, each with a single concern. Operate on the actual diff.
 4. Final verdict: "cannot decompose further" OR specific decomposition with merge order
 ```
 
-Launch: `agents -m claude-opus -p "$PROJECT_DIR" -f "$WORK_DIR/pr-multiconcern.md" > "$WORK_DIR/result-multiconcern.md" 2>&1`
+Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/pr-multiconcern.md" > "$WORK_DIR/result-multiconcern.md" 2>&1`
 
 #### 4b. Justification Gauntlet (`pr-justification-gauntlet.md`)
 
@@ -452,7 +452,7 @@ threads are culled or the gauntlet returns a blocking condition. Write the final
 EOF
 
 agents -a ${agents_dir}/pr-justification-gauntlet.md \
-  -m claude-opus -p "$PROJECT_DIR" \
+  -m gpt-xhigh -p "$PROJECT_DIR" \
   -f "$WORK_DIR/gauntlet-kickoff.md" \
   > "$WORK_DIR/result-justification.md" 2>&1
 ```
@@ -575,7 +575,7 @@ Synthesize all findings into a proposal prompt that:
 
 Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" > "$WORK_DIR/result-proposal.md" 2>&1`
 
-#### 6b. Risk-Assess the Proposal (3x `claude-opus`)
+#### 6b. Risk-Assess the Proposal (3x `gpt-xhigh`)
 
 Run the same 3x risk gate on the proposal (not a diff — the proposal text).
 Adapt the prompts: instead of "read the diff", say "read the proposal at

@@ -1,0 +1,93 @@
+schema: operator-contract-v1
+source: agents/prototype-validation-orchestrator.md
+model: gpt-xhigh
+description: Orchestrate validation, packaging, PR proof, and cleanup for a shippable prototype
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: truth_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`truth_branch_ref`: branch or commit containing product code and behavior tests.'
+- name: truth_worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`truth_worktree_path`: writable checkout for truth-branch code and tests.'
+- name: eval_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_branch_ref`: branch for compose, Dockerfile, README, eval scripts, and package staging.'
+- name: eval_worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`: writable checkout for eval-only scaffolding.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` and `scratch_dir`: durable artifacts and transient prompts/logs.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` and `scratch_dir`: durable artifacts and transient prompts/logs.'
+- name: proposal_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`proposal_path` or dossier reference naming shipped use cases and expectations.'
+- name: behavior_tests_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`behavior_tests_paths` or behavior test manifest.'
+- name: qa_use_case_manifest
+  type: string
+  required: true
+  default_source: caller
+  description: '`qa_use_case_manifest`: QA walkthrough selectors, expected observations, and screenshot requirements.'
+- name: registry_target
+  type: string
+  required: true
+  default_source: caller
+  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+- name: image_tag
+  type: string
+  required: true
+  default_source: caller
+  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+- name: zip_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+- name: base_branch
+  type: string
+  required: true
+  default_source: caller
+  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+- name: prototype_slug
+  type: string
+  required: true
+  default_source: caller
+  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

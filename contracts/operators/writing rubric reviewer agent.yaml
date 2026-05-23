@@ -1,0 +1,23 @@
+schema: operator-contract-v1
+source: agents/writing rubric reviewer agent.md
+model: gpt-high
+description: "Independently verify that a specific writing fix pass actually landed. The reviewer did NOT participate in the fix \u2014 it reads the document fresh and checks only the concern assigned."
+contract_status: minimum-generated-from-operator-sections
+inputs: []
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

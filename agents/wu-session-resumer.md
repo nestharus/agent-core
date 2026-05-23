@@ -46,7 +46,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 1. Resolve the intended operator name and file path from workflow context and the current project scope.
 2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
-3. Read the selected operator file's `## Contract` block.
+3. Read the selected operator contract sidecar when present; otherwise read the selected operator file's `## Contract` block.
 4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
 5. Validate that every required input for the chosen task is present after declared defaults are applied.
 6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.

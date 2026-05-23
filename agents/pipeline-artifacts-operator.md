@@ -65,7 +65,7 @@ forbidden_direct:
   - dispatch-wrapper-script-generation
 ```
 
-You enforce the pipeline-artifact naming convention in a worktree, and you ensure the worktree's `.gitignore` excludes those artifacts so they don't pollute commits or CodeRabbit reviews. You are the keeper of "where do prompts and responses for this task live" so that multiple Claude sessions (or pipeline runs) on the same machine don't collide on bare `/tmp` filenames.
+You enforce the pipeline-artifact naming convention in a worktree, and you ensure the worktree's `.gitignore` excludes those artifacts so they don't pollute commits or CodeRabbit reviews. You are the keeper of "where do prompts and responses for this task live" so that multiple agent sessions or pipeline runs on the same machine don't collide on bare `/tmp` filenames.
 
 ## Use When
 
@@ -89,7 +89,7 @@ You enforce the pipeline-artifact naming convention in a worktree, and you ensur
 
 ## Non-Negotiables
 
-- **Pipeline artifacts live in the worktree, not `/tmp`.** A worktree is unique per task by design; using it as the namespace removes the collision class entirely. Bare `/tmp/<phase>.md` filenames collide across Claude sessions running on the same machine — this has actually shipped bad work to background agents.
+- **Pipeline artifacts live in the worktree, not `/tmp`.** A worktree is unique per task by design; using it as the namespace removes the collision class entirely. Bare `/tmp/<phase>.md` filenames collide across concurrent agent sessions running on the same machine — this has actually shipped bad work to background agents.
 - **Use the standard filename catalogue** below. Do not invent new patterns; ask the orchestrator to extend this operator's catalogue if you need a new artifact type.
 - **`.gitignore` patterns are scoped (e.g. `PROPOSAL.log`, NOT `*.log`).** Broad patterns hide legitimate test fixtures or example logs.
 - **Read existing files before overwriting.** A `.prompt.md` in the worktree may contain context from a previous iteration that should inform the next pass.

@@ -35,7 +35,7 @@ During the open path, the general operator may emit a wrapper or refresh a wrapp
 
 The closed path is the steady-state expectation. On subsequent WUs in the same category, the workflow should dispatch the project-specific wrapper directly when it is current.
 
-The project-specific wrapper carries stable project facts, so the agent does not re-discover ticket fields, routing assumptions, commands, or artifact destinations that are already settled. This is the fast path because the wrapper narrows the operator to the known project shape. Closed-path dispatch reads the wrapper's `## Contract` block first, applies the wrapper's `defaults:`, then dispatches the wrapper. The wrapper inherits the base operator's procedure through `base_procedure:`.
+The project-specific wrapper carries stable project facts, so the agent does not re-discover ticket fields, routing assumptions, commands, or artifact destinations that are already settled. This is the fast path because the wrapper narrows the operator to the known project shape. Closed-path dispatch reads the wrapper's optimized contract sidecar first, falls back to the wrapper's `## Contract` block when needed, applies the wrapper's `defaults:`, then dispatches the wrapper. The wrapper inherits the base operator's procedure through `base_procedure:`.
 
 ### Re-Bootstrap Triggers
 
@@ -63,13 +63,13 @@ Wrappers live at `<project>/trunk/agents/<name>.md` in the single-repo layout, o
 
 A wrapper carries frontmatter, an H1, a `Base procedure: ~/ai/agents/<name>.md` pointer, and project-specific defaults, examples, and overrides only. It does not re-inline the shared procedure.
 
-A project wrapper MUST populate a `## Contract` block per `agents/operator-file-format.md` `## Contract block (operator-contract-v1)`. The `## Contract` block carries the wrapper's `defaults:` for project-specific values and any wrapper-level `must_delegate:` or `forbidden_direct:` overrides. The wrapper is callable mechanically without reading the wrapper body.
+A project wrapper MUST expose an `operator-contract-v1` contract surface per `agents/operator-file-format.md`, preferably through an optimized sidecar and optionally mirrored in a `## Contract` block. The contract surface carries the wrapper's `defaults:` for project-specific values and any wrapper-level `must_delegate:` or `forbidden_direct:` overrides. The wrapper is callable mechanically without reading the wrapper body.
 
 The operator-file contract remains in `~/ai/agents/operator-file-format.md`. Project-wrapper emission and validation are wired in `~/ai/workflows/project-bootstrap.md` § Emission steps 1-5; this convention does not expand the owner format file beyond that procedural back-reference.
 
 ## Closed-path dispatch
 
-Closed-path dispatch selects the current project wrapper, reads its `## Contract` block, applies wrapper `defaults:` before base operator defaults, and then dispatches the wrapper. The wrapper's `base_procedure:` points to the shared operator procedure; callers do not copy the base procedure into the dispatch prompt.
+Closed-path dispatch selects the current project wrapper, reads its contract sidecar or `## Contract` block, applies wrapper `defaults:` before base operator defaults, and then dispatches the wrapper. The wrapper's `base_procedure:` points to the shared operator procedure; callers do not copy the base procedure into the dispatch prompt.
 
 ## Stale-Wrapper Signals
 
@@ -103,4 +103,4 @@ This convention codifies the pattern only. It does not implement and does not sp
 
 It does not define a wrapper format beyond `~/ai/agents/operator-file-format.md`. It does not define a freshness marker, checksum, or registry; those are downstream category-specific concerns.
 
-It does not enumerate per-project bootstrap state in `~/ai/AGENTS.md`. Migration of existing RFQ wrappers to add `## Contract` blocks is in scope for the priority-0 set (`rfq/jira-operator`) under ACR-278; broader RFQ wrapper migration is ACR-279.
+It does not enumerate per-project bootstrap state in `~/ai/AGENTS.md`. Migration of existing RFQ wrappers to expose optimized contract surfaces is in scope for the priority-0 set (`rfq/jira-operator`) under ACR-278; broader RFQ wrapper migration is ACR-279.

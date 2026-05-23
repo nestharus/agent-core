@@ -503,7 +503,7 @@ These risks assess the pitch deck as a public-facing communication artifact. The
 - **HIGH:** Multiple sections would confuse a non-technical officer. Heavy jargon throughout. No clear narrative arc. Tone is inconsistent or inappropriate for the audience.
 
 **Resolution when not LOW:**
-1. Present the communication findings to the pitch deck agent (claude-opus)
+1. Present the communication findings to the pitch deck agent (gpt-xhigh)
 2. The agent rewrites flagged sections for clarity, removes jargon, strengthens narrative arc
 3. Re-run the full pitch deck risk gate
 

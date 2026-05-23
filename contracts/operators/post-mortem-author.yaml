@@ -1,0 +1,78 @@
+schema: operator-contract-v1
+source: agents/post-mortem-author.md
+model: gpt-high
+description: Synthesizes a post-mortem from incident-investigator findings and the incident brief, then writes one Markdown document
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: findings_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: confirmed
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: probable
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: unverified
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: causal
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: contributing
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: incidental
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: unverifiable
+  type: string
+  required: true
+  default_source: caller
+  description: '`findings_path` (required) - Path to the structured Markdown findings emitted by `incident-investigator` (`~/ai/agents/incident-investigator.md`). Expect per-question verdicts such as `confirmed`, `probable`, and `unverified`; suspect classifications such as `causal`, `contributing`, and `incidental`; and caveats such as `unverifiable from code alone`.'
+- name: incident_brief_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`incident_brief_path` (required) - Path to the same incident brief consumed by the findings producer. Use it to preserve the original symptoms, framing, scope, open questions, and named references.'
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`output_path` (required) - Destination for the single Markdown post-mortem file.'
+- name: reference_paths
+  type: string
+  required: false
+  default_source: caller
+  description: '`reference_paths` (optional) - Additional already-captured local reference files named by the brief or findings. Read only when they are supplied and needed to cite source context already captured by the upstream process.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

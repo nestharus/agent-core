@@ -79,9 +79,9 @@ pr-review-operator
 | Gate | Model | Purpose |
 |---|---|---|
 | Test audit | `gpt-high` | Check intent-first tests, risk reduction, acceptance criteria, and fixture externality. |
-| Multi-concern review | `claude-opus` | Should this PR be split? Intent: does everything in this diff belong together? |
-| Justification review | `claude-opus` | Does every change justify its presence? Intent: is anything here for a reason other than the stated purpose? |
-| Supported-Surface Verification | `claude-opus` | Does the actual diff still reduce risk on the approved supported surface, including adjacent paths, migration/rollback, and observability? |
+| Multi-concern review | `gpt-xhigh` | Should this PR be split? Intent: does everything in this diff belong together? |
+| Justification review | `gpt-xhigh` | Does every change justify its presence? Intent: is anything here for a reason other than the stated purpose? |
+| Supported-Surface Verification | `gpt-xhigh` | Does the actual diff still reduce risk on the approved supported surface, including adjacent paths, migration/rollback, and observability? |
 | Commit-hygiene check | `gpt-high` | Are commits small, testable, single-concern, and well-described? Checklist. |
 | Synthesize and post | `gpt-high` | Collect all gate outputs into one PR comment that reviewers can act on. |
 

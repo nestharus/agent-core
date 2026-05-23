@@ -1,0 +1,25 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/prototype-research-planning.md
+workflow_id: prototype-research-planning
+orchestrator: prototype-research-planner
+inputs:
+- originating context (bug report, feature ambiguity, architectural unknown, stakeholder request, defer dossier)
+- project repo_root, worktree_path, planning_dir, scratch_dir
+- optional user preferences
+- optional defer dossier from implementation-pipeline Phase 2.5 defer-to-prototype branch
+- downstream consumer target (normally prototype-orchestrator.md Phase P0)
+expectations:
+- produces a research-plan bundle (behaviors / UX / contracts / expectations / fluid avenues / anti-scope) and a prototype-proposal that captures behaviors, UX flows, contracts, and approved fluid avenues without making implementation commitments
+- halts at the proposal-approval gate until durable approval evidence exists
+- post-approval, ships behavior tests only -- never procedural / lifecycle / race / retry / internal-invariant tests
+outputs:
+- behaviors.md, ux.md, contracts.md, expectations.md, avenues.md, anti-scope.md, prototype-proposal.md, approval evidence, behavior tests at appropriate E2E/integration/component levels
+- Phase 7 handoff summary feeding prototype input context to prototype-orchestrator.md Phase P0 (which then proceeds into build-prototype.md Phase P1)
+non_goals:
+- does not perform market research, comparable-product analysis, or philosophy/values capture
+- does not run a 4-layer roadmap cascade or generate sub-tickets
+- does not run risk-gate cycles inside the prototype workflow
+- does not pick implementation details, libraries, or architecture for the prototype
+- does not specify final UI design
+- does not introduce machine-enforcement framing
+- does not declare itself as the merge gate; the prototype branch's disposition is owned downstream

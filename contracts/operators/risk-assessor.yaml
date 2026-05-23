@@ -1,0 +1,53 @@
+schema: operator-contract-v1
+source: agents/risk-assessor.md
+model: gpt-xhigh
+description: 'Assess risk and value of uncovered code: outage potential, distance from happy paths, branch importance, priority ranking'
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: uncovered_areas
+  type: string
+  required: true
+  default_source: caller
+  description: '`uncovered_areas`: List of uncovered code areas from coverage-analyzer (file paths, line ranges, branch info)'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path`: Path to the codebase'
+- name: coverage_data
+  type: string
+  required: false
+  default_source: caller
+  description: '`coverage_data` (optional): Path to coverage JSON for context on what IS covered nearby'
+- name: proposal_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional proposal/diff/invariant context may be supplied when available, such as `proposal_path`, `diff_path`, or explicit `invariant_candidates`. Do not make this context mandatory for existing callers.
+- name: diff_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional proposal/diff/invariant context may be supplied when available, such as `proposal_path`, `diff_path`, or explicit `invariant_candidates`. Do not make this context mandatory for existing callers.
+- name: invariant_candidates
+  type: string
+  required: false
+  default_source: caller
+  description: Optional proposal/diff/invariant context may be supplied when available, such as `proposal_path`, `diff_path`, or explicit `invariant_candidates`. Do not make this context mandatory for existing callers.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

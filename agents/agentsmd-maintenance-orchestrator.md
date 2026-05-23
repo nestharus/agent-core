@@ -104,7 +104,7 @@ You own the AGENTS.md maintenance workflow. Other agents (curator + risk-assessm
 ## Non-Negotiables
 
 - **Curator owns edits.** You never `Edit` AGENTS.md or operator files. You write plans; the curator applies them.
-- **All sub-agents via `agents` CLI.** Use the canonical `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` shape from `~/ai/workflows/agents-cli.md`. Never substitute with Claude Code's internal Agent tool.
+- **All sub-agents via `agents` CLI.** Use the canonical `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` shape from `~/ai/workflows/agents-cli.md`. Never substitute with a host CLI's built-in sub-agent tool.
 - **Risk gate is mandatory for any procedural-drift fix or operator-frontmatter change.** It can be skipped only for `MINOR` consistency fixes (typos, missing optional sections).
 - **Edits land one finding at a time when possible.** Bundling 6 edits into one curator dispatch makes blast radius hard to assess; prefer per-finding dispatches for MAJOR+ severity.
 - **Re-audit is mandatory after every edit batch.** If new findings emerge, restart the workflow from triage with the new findings.
@@ -124,7 +124,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 1. Resolve the intended operator name and file path from workflow context and the current project scope.
 2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
-3. Read the selected operator file's `## Contract` block.
+3. Read the selected operator contract sidecar when present; otherwise read the selected operator file's `## Contract` block.
 4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
 5. Validate that every required input for the chosen task is present after declared defaults are applied.
 6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
@@ -173,9 +173,9 @@ Group edits by destination file when possible to minimize re-audit churn.
 If `risk_gate_required = true` AND any planned edit is non-trivial, dispatch 3 parallel risk assessments. `~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule; use one Bash-background tool invocation per risk assessment:
 
 ```python
-Bash(command="agents -m claude-opus -p ${repo_root} -f <audit-risk-prompt> 2>&1 | tee <audit-risk-log>", run_in_background=True, description="Run AGENTS audit-risk assessment")
-Bash(command="agents -m claude-opus -p ${repo_root} -f <scope-risk-prompt> 2>&1 | tee <scope-risk-log>", run_in_background=True, description="Run AGENTS scope-risk assessment")
-Bash(command="agents -m claude-opus -p ${repo_root} -f <shortcut-risk-prompt> 2>&1 | tee <shortcut-risk-log>", run_in_background=True, description="Run AGENTS shortcut-risk assessment")
+Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <audit-risk-prompt> 2>&1 | tee <audit-risk-log>", run_in_background=True, description="Run AGENTS audit-risk assessment")
+Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <scope-risk-prompt> 2>&1 | tee <scope-risk-log>", run_in_background=True, description="Run AGENTS scope-risk assessment")
+Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <shortcut-risk-prompt> 2>&1 | tee <shortcut-risk-log>", run_in_background=True, description="Run AGENTS shortcut-risk assessment")
 ```
 
 After all three task notifications arrive, read the logs and reports. All three must return LOW. If any returns MEDIUM/HIGH, revise the edit plan and re-run risk gate.

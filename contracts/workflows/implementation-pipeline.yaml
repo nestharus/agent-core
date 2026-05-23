@@ -1,0 +1,22 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/implementation-pipeline.md
+workflow_id: implementation-pipeline
+orchestrator: implementation-pipeline-orchestrator
+inputs:
+- ticket id and branch, worktree, scratch, and planning paths
+- non-empty ticket description from the configured Jira or Linear ticket system
+- optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them
+expectations:
+- runs research, proposal, shared apply-gate-set risk/review boundaries, hookpoint, implementation, readiness, PR, and audit phases
+- defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it
+- 'defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.'
+- uses apply-gate-set caller modes implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions
+- keeps tests and product code separated between Phase 6b and Phase 6c invocations
+outputs:
+- planning artifacts under the per-WU planning directory
+- tested repository diff and draft PR URL when the work proceeds
+- ticket comments and audit-history closure evidence at PR and finalization points
+non_goals:
+- does not use git-resident ticket files as the source of truth
+- does not skip phases implicitly
+- does not inline the orchestrator role into the root conversation

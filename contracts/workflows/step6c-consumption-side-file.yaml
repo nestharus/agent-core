@@ -1,0 +1,8 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/step6c-consumption-side-file.md
+workflow_id: step6c-consumption-side-file
+orchestrator: implementation-pipeline-orchestrator
+command: step6c-consumption-side-file project --index <step6b-output-index> --out <side-file> --level-id <level-id> [--expected-process <manifest-path>]
+outputs:
+- side-file with canonical consumed rows
+- optional side_channel_evidence_bundle manifest entry

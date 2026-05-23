@@ -1,0 +1,208 @@
+schema: operator-contract-v1
+source: agents/prototype-validation-contract-validator.md
+model: gpt-high
+description: Validate bounded contracts and stop conditions for prototype validation shipping
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: Root
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: inputs
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: truth
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: branch
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: ref
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: worktree
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: eval
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: planning
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: dir
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: scratch
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: proposal
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: dossier
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: path
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: behavior
+  type: string
+  required: true
+  default_source: caller
+  description: 'Root inputs: truth branch ref, truth worktree, eval branch ref, eval worktree, planning dir, scratch dir, proposal or dossier path, behavior-test manifest, QA use-case expectations, registry target, package paths, base branch, and prototype slug.'
+- name: topology
+  type: string
+  required: true
+  default_source: caller
+  description: Branch topology evidence from truth and eval worktrees.
+- name: evidence
+  type: string
+  required: true
+  default_source: caller
+  description: Branch topology evidence from truth and eval worktrees.
+- name: from
+  type: string
+  required: true
+  default_source: caller
+  description: Branch topology evidence from truth and eval worktrees.
+- name: worktrees
+  type: string
+  required: true
+  default_source: caller
+  description: Branch topology evidence from truth and eval worktrees.
+- name: screenshot_url_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: Phase output paths for behavior-test logs, QA report, `screenshot_url_manifest_path`, deep-rebuild evidence, `package_manifest_path`, `proof_bundle_path`, PR URL, and `cleanup_report_path`.
+- name: package_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: Phase output paths for behavior-test logs, QA report, `screenshot_url_manifest_path`, deep-rebuild evidence, `package_manifest_path`, `proof_bundle_path`, PR URL, and `cleanup_report_path`.
+- name: proof_bundle_path
+  type: string
+  required: true
+  default_source: caller
+  description: Phase output paths for behavior-test logs, QA report, `screenshot_url_manifest_path`, deep-rebuild evidence, `package_manifest_path`, `proof_bundle_path`, PR URL, and `cleanup_report_path`.
+- name: cleanup_report_path
+  type: string
+  required: true
+  default_source: caller
+  description: Phase output paths for behavior-test logs, QA report, `screenshot_url_manifest_path`, deep-rebuild evidence, `package_manifest_path`, `proof_bundle_path`, PR URL, and `cleanup_report_path`.
+- name: rca_handback_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`rca_handback_path` when behavior or QA failures route through prototype RCA.'
+- name: Cleanup
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: candidate
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: manifest
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: with
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: terminal
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: event
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: type
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: exact
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: prototype
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: slug
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: image
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: tag
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: zip
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+- name: package
+  type: string
+  required: true
+  default_source: caller
+  description: Cleanup candidate manifest with terminal event type, exact prototype slug, exact image tag, exact zip path, exact eval branch, and package paths.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

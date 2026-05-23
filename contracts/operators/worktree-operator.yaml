@@ -1,0 +1,86 @@
+schema: operator-contract-v1
+source: agents/worktree-operator.md
+model: gpt-high
+description: Create, list, sync, and manage git worktrees for feature branches.
+inputs:
+- name: task
+  type: enum
+  required: true
+  default_source: caller
+  description: task
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktrees_root
+  type: path
+  required: false
+  default_source: base
+  description: worktrees root
+- name: name
+  type: string
+  required: false
+  default_source: caller
+  description: name
+- name: branch_name
+  type: string
+  required: false
+  default_source: caller | derived
+  description: branch name
+- name: base_branch
+  type: string
+  required: false
+  default_source: base
+  description: base branch
+- name: branch_policy
+  type: string
+  required: false
+  default_source: caller
+  description: branch policy
+defaults:
+- name: worktrees_root
+  value: ${repo_root}/worktrees
+  source: base
+- name: base_branch
+  value: main
+  source: base
+secrets: []
+outputs:
+- task: create
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: list
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: sync
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: remove
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: bulk-cleanup
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: open-pr
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- git-worktree-create
+- git-worktree-remove
+- git-branch-create
+- git-push-origin
+- gh-pr-create
+must_delegate:
+- worktree-mutation
+may_direct:
+- worktree-list-read
+forbidden_direct:
+- direct-worktree-mutation-without-branch-policy

@@ -1,0 +1,163 @@
+schema: operator-contract-v1
+source: agents/prototype-validation-packager.md
+model: gpt-high
+description: Package shippable prototype deliverables, proof bundles, and scoped cleanup reports
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: eval_worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: truth_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: prototype_slug
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: registry_target
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: image_tag
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: zip_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_worktree_path`, `truth_branch_ref`, `prototype_slug`, `registry_target`, `image_tag`, and `zip_path`.'
+- name: Deliverable
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: source
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: paths
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: for
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: compose
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: Dockerfile
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: README
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: eval
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: scripts
+  type: string
+  required: true
+  default_source: caller
+  description: Deliverable source paths for compose, Dockerfile, README, and eval scripts.
+- name: Validator
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: approved
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: behavior
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: test
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: evidence
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: QA
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved behavior-test evidence and QA evidence.
+- name: screenshot_url_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`screenshot_url_manifest_path` from `prototype-validation-screenshot-uploader.md`.'
+- name: package_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`package_manifest_path`, `proof_bundle_path`, and `cleanup_report_path` target paths.'
+- name: proof_bundle_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`package_manifest_path`, `proof_bundle_path`, and `cleanup_report_path` target paths.'
+- name: cleanup_report_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`package_manifest_path`, `proof_bundle_path`, and `cleanup_report_path` target paths.'
+- name: cleanup
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved cleanup scope for Phase 8 or Phase 8b cleanup.
+- name: scope
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved cleanup scope for Phase 8 or Phase 8b cleanup.
+- name: Phase
+  type: string
+  required: true
+  default_source: caller
+  description: Validator-approved cleanup scope for Phase 8 or Phase 8b cleanup.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

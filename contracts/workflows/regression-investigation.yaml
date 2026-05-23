@@ -1,0 +1,19 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/regression-investigation.md
+workflow_id: regression-investigation
+orchestrator: regression-investigator
+inputs:
+- incident_artifact_path, incident_id, surface_scope_path, investigation_window, repo_root, worktree_path, planning_dir, scratch_dir, and ticket_system
+- Linear fields linear_team_key and linear_project_id or Jira fields jira_url, jira_project, and jira_account_email
+- optional regression_introduction_sha, fix_sha, evidence_dir, current_ref, historical_ref, and max_followup_tickets
+expectations:
+- investigates the codebase conditions around one known regression without replacing RCA, code-quality, audit, or risk-reduction workflows
+- dispatches read-only commit-history and pattern-audit children, compares A1 coupling/cohesion evidence at incident commit and trunk, and synthesizes findings
+- files or prepares remediation ticket payloads only after findings.json and findings.md are complete
+outputs:
+- regression-investigation artifacts under ${planning_dir}/regression-investigation/<incident_id>/
+- child prompt and log artifacts under ${scratch_dir}/prompts/ and ${scratch_dir}/logs/
+- NEEDS_INPUT question artifacts under ${scratch_dir}/questions/ or BLOCKED stop-state evidence when required inputs are absent
+non_goals:
+- does not run application code, mutate source under audit, redefine A1, replace RCA, replace code-quality, replace audit, or replace risk-reduction
+- does not implement remediation tickets inline

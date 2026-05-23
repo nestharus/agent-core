@@ -56,9 +56,9 @@ Service example: the Linear GraphQL code under `clients/linear/` is the
 current Linear Client family even though today's `LinearClient` object also
 carries auth in implementation.
 
-CLI example: the `claude` executable plus its basic invocation pattern is a
-Client family for Claude CLI access; `codex` is a separate Client family for
-Codex CLI access.
+CLI example: the `codex` executable plus its basic invocation pattern is a
+Client family for Codex CLI access; another provider CLI with a different
+executable or invocation shape would be a separate Client family.
 
 ### Auth
 
@@ -72,7 +72,7 @@ Service example: `LINEAR_API_KEY` is an Auth implementation/source form for
 Linear, while `jira_account_email` plus `JIRA_API_KEY` is an Auth
 implementation/source form for JIRA.
 
-CLI example: an upstream OAuth login or credential file used by `claude2`
+CLI example: an upstream OAuth login or credential file used by `codex2`
 is Auth for that CLI account; the convention does not define where that
 credential is stored or how it refreshes.
 
@@ -125,8 +125,8 @@ Project-conn, a JIRA project Project-conn, and a GitHub repository
 Project-conn without making any one Project-conn cross systems.
 
 CLI example: a user-facing project can use multiple CLI Project-conns such
-as `claude`, `claude2`, `claude3`, and `codex` accounts for the same work,
-while still keeping provider account, model alias, and session id distinct.
+as `codex`, `codex2`, and `codex3` accounts for the same work, while still
+keeping provider account, model alias, and session id distinct.
 
 ## Cardinality
 
@@ -188,32 +188,25 @@ quota scripts, refresh commands, storage, discovery, or lookup.
 
 For CLI surfaces, agent-runner's `provider` remains agent-runner vocabulary.
 A CLI Client+Auth+System-conn corresponds to what agent-runner today calls
-a `provider`: for example, `claude2` is a System-conn under the `claude`
+a `provider`: for example, `codex2` is a System-conn under the `codex`
 Client family with its own credential/Auth. The model alias is a
 Project-conn scope element, not the System-conn identity.
-
-`claude`: Client = the Claude CLI executable plus invocation pattern such
-as `claude -p <cwd> -f <prompt>`. Auth = the Claude CLI login/credential
-binding. System-conn = executable/invocation family + Auth, reaching the
-provider account. Project-conn = System-conn + working directory, model
-alias, and optional session id.
-
-`claude2`: Client = the same Claude CLI family when it uses the same
-executable/invocation shape. Auth = the second Claude account's credential
-or login binding. System-conn = Claude Client + that Auth, matching the
-agent-runner `provider` account named `claude2`. Project-conn = that
-System-conn + working directory, model alias, and optional session id.
-
-`claude3`: Client = the Claude CLI family. Auth = the third Claude
-account's credential or login binding. System-conn = Claude Client + that
-Auth, matching the agent-runner `provider` account named `claude3`.
-Project-conn = that System-conn + working directory, model alias, and
-optional session id.
 
 `codex`: Client = the Codex CLI executable plus invocation pattern. Auth =
 the Codex CLI login/credential binding. System-conn = Codex Client + Auth,
 reaching the provider account. Project-conn = System-conn + working
 directory, model alias, and optional session id.
+
+`codex2`: Client = the same Codex CLI family when it uses the same
+executable/invocation shape. Auth = the second Codex account's credential
+or login binding. System-conn = Codex Client + that Auth, matching the
+agent-runner `provider` account named `codex2`. Project-conn = that
+System-conn + working directory, model alias, and optional session id.
+
+`codex3`: Client = the Codex CLI family. Auth = the third Codex account's
+credential or login binding. System-conn = Codex Client + that Auth,
+matching the agent-runner `provider` account named `codex3`. Project-conn =
+that System-conn + working directory, model alias, and optional session id.
 
 The phrase "session id" is only a possible CLI Project-conn scope element
 for resume/conversation targeting. It is not a synonym for Connection,

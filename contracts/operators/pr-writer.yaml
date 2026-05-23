@@ -1,0 +1,73 @@
+schema: operator-contract-v1
+source: agents/pr-writer.md
+model: gpt-high
+description: Write a PR title and body for a draft pull request, suitable for an external reviewer who has no project context
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: branch
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input branch=<name>` (required) \u2014 the branch the PR is/will be opened from."
+- name: base
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input base=<name>` (required) \u2014 the PR's base branch (usually `main`, sometimes another open PR's head branch when stacked)."
+- name: main
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input base=<name>` (required) \u2014 the PR's base branch (usually `main`, sometimes another open PR's head branch when stacked)."
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input repo_root=<path>` (required) \u2014 local checkout from which to read `git diff base...branch`."
+- name: git
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input repo_root=<path>` (required) \u2014 local checkout from which to read `git diff base...branch`."
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: "`--input output_path=<path>` (required) \u2014 where to write the final body markdown. Title goes to `<output_path>.title`."
+- name: context_files
+  type: string
+  required: false
+  default_source: caller
+  description: "`--input context_files=<comma-separated-paths>` (optional) \u2014 paths to artifacts that describe what the PR is supposed to accomplish: a problem statement, a contract, a Phase 6a contract file, an acceptance-criteria list, etc. Read these to understand intent; do NOT cite them in the body (they're scratch-only)."
+- name: stack_parent_pr
+  type: string
+  required: false
+  default_source: caller
+  description: "`--input stack_parent_pr=<num>` (optional) \u2014 when the base is another open PR's head branch, supply that PR number so it can be cited as the stack dependency."
+- name: merged_refs
+  type: string
+  required: false
+  default_source: caller
+  description: "`--input merged_refs=<comma-separated-list>` (optional) \u2014 open list of PR numbers / commit SHAs that have **already merged to main** and that the description may need to cite for context (e.g., a contract test extension that piggybacks on a previously-merged restructure). Verify each is actually on main before citing."
+- name: linear_issue_keys
+  type: string
+  required: false
+  default_source: caller
+  description: "`--input linear_issue_keys=<KEY1,KEY2,...>` (optional) \u2014 known Linear issue keys for the close-keyword footer. Parse as comma-separated tokens, ASCII-trim each token, uppercase it, deduplicate in first-seen order, and drop empty, non-Linear-shaped, unknown, ambiguous, or JIRA-shaped tokens (for example `PROJ-123`)."
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

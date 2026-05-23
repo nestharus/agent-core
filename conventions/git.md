@@ -57,7 +57,7 @@ git config --global commit.gpgsign true
 - Upload the public key to GitHub so signatures show as verified in the UI.
 - **Prefer new commits over amends.** Amend only when the previous commit has not been pushed, or during the CodeRabbit loop described in `~/ai/workflows/coderabbit-loop.md`.
 - Never amend a pushed commit outside that narrow loop.
-- **No agent authorship attribution.** Agents do not add `Co-Authored-By:`, `Generated-By:`, "Claude wrote this", "Generated with ...", or similar trailers.
+- **No agent authorship attribution.** Agents do not add `Co-Authored-By:`, `Generated-By:`, provider-specific "wrote this" notes, "Generated with ...", or similar trailers.
 - The commit author is the human operator who ran the pipeline; agents are tools.
 - Prefer small, testable commits. Each commit should build, pass tests, and represent one concern.
 - **Reference the ticket in every commit message** when the project uses a tracker. Use a leading scope, e.g. `INFA-118: surface script error in download status` — the tracker auto-links the commit and the change history stays navigable from the ticket. The same form is acceptable as a trailing `Refs: INFA-118` line for fixup-style commits where the leading scope would distort readability. Multiple tickets are listed comma-separated (`INFA-118, INFA-117: ...`).

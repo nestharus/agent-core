@@ -123,9 +123,9 @@ For each work unit, determine which `AGENTS.md` pipeline phases apply:
   - Research: gpt-high
   - Proposal: gpt-high
   - Audit risk: gpt-high
-  - Scope risk: claude-opus
-  - Shortcut risk: claude-opus
-  - Supported-surface risk: claude-opus
+  - Scope risk: gpt-xhigh
+  - Shortcut risk: gpt-xhigh
+  - Supported-surface risk: gpt-xhigh
   - Hookpoints: gpt-high
   - Test agent: gpt-high
   - Code agent: gpt-high

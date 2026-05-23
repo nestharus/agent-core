@@ -1,0 +1,73 @@
+schema: operator-contract-v1
+source: agents/cohesion-auditor.md
+model: gpt-high
+description: Score touched surfaces against the A1 cohesion-by-classifications-touched metric and return a LOW/HIGH verdict with evidence.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root=<path>` (required) - repository root to inspect.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir=<path>` (required) - planning artifact root for this WU.'
+- name: wu_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`wu_id=<id>` (required) - Work Unit identifier used to derive the default report path.'
+- name: proposal_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`proposal_path=<path>` (required for Phase 4) - proposal artifact under review.'
+- name: problem_map_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`problem_map_path=<path>` (required for Phase 4) - approved problem-map context.'
+- name: risk_profile_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.'
+- name: touched_surfaces_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels; this helps resolve the touched file/component set.'
+- name: diff_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`diff_path=<path>` (required for a blocking verdict; equivalent changed-file evidence accepted) - diff or WU-owned evidence used to identify touched files/components and current evidence for ad-hoc or later PR/diff invocations.'
+- name: contract_path
+  type: string
+  required: false
+  default_source: caller
+  description: "`contract_path=<path>` (optional) - Phase 6a contract. When present and the invocation scope is a multi-file WU component, read the `## Component declared roles` section for a component-level declared role set per `~/ai/conventions/code-quality.md` \xA7 Declared roles \xA7 Component declared roles (multi-file WU components)."
+- name: output_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-cohesion.md`) - report destination.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

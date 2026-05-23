@@ -1,0 +1,141 @@
+schema: operator-contract-v1
+source: agents/jira-operator.md
+model: gpt-medium
+description: Read/comment/transition JIRA issues on a configured Atlassian site via REST API. Auth via $JIRA_API_KEY env var. User email comes from project config.
+inputs:
+- name: task
+  type: enum
+  required: true
+  default_source: caller
+  description: One of read, comment, transition, search, create, update-estimate.
+- name: issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: Required for read, comment, transition, and update-estimate.
+- name: body
+  type: string
+  required: false
+  default_source: caller
+  description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
+- name: target_status
+  type: string
+  required: false
+  default_source: caller
+  description: Destination status name for transition.
+- name: jql
+  type: string
+  required: false
+  default_source: caller
+  description: JQL query for search.
+- name: fields
+  type: string
+  required: false
+  default_source: caller
+  description: Create payload fields including project, summary, issuetype, parent, labels, and description.
+- name: jira_url
+  type: string
+  required: true
+  default_source: wrapper:override | caller | prompt
+  description: Jira base URL.
+- name: jira_project
+  type: string
+  required: true
+  default_source: wrapper:override | caller | prompt
+  description: Default Jira project key.
+- name: jira_account_email
+  type: string
+  required: true
+  default_source: wrapper:override | caller | prompt
+  description: Jira account email used with JIRA_API_KEY.
+- name: estimate
+  type: int
+  required: false
+  default_source: caller
+  description: Refined story-point estimate for update-estimate.
+- name: inherited_story_point_estimate
+  type: int
+  required: false
+  default_source: caller
+  description: Prior estimate recorded for durable update-estimate note.
+- name: estimate_source
+  type: string
+  required: false
+  default_source: caller
+  description: Estimate source recorded for durable update-estimate note.
+- name: estimate_delta_rationale
+  type: string
+  required: false
+  default_source: caller
+  description: Rationale recorded for durable update-estimate note.
+- name: estimate_delta_flag
+  type: string
+  required: false
+  default_source: caller
+  description: Delta flag recorded verbatim for update-estimate audit evidence.
+- name: estimate_field
+  type: string
+  required: false
+  default_source: base
+  description: Jira estimate field for update-estimate.
+defaults:
+- name: jira_account_email
+  value: null
+  source: wrapper:override | caller | prompt
+- name: jira_url
+  value: null
+  source: wrapper:override | caller | prompt
+- name: jira_project
+  value: null
+  source: wrapper:override | caller | prompt
+- name: estimate_field
+  value: customfield_10016
+  source: base
+secrets:
+- JIRA_API_KEY
+outputs:
+- task: read
+  success_shape: Print key, summary, status, assignee, or render ticket markdown to output_path for orchestrator bootstrap.
+  wrote_lines:
+  - ${scratch_dir}/ticket.md when output_path is supplied
+- task: comment
+  success_shape: Print the new comment ID and a confirmation line.
+  wrote_lines: []
+- task: transition
+  success_shape: Print before-status to after-status.
+  wrote_lines: []
+- task: search
+  success_shape: Print one line per result as KEY status summary.
+  wrote_lines: []
+- task: create
+  success_shape: Print the new key and browse URL.
+  wrote_lines: []
+- task: update-estimate
+  success_shape: Print the issue key, refined estimate, and comment ID for the durable ADF note.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: JIRA_API_KEY is unset.
+  recovery: Export JIRA_API_KEY and rerun.
+- class: BLOCKED
+  cause: Jira issue lookup, auth, or REST call returns HTTP 4xx.
+  recovery: Surface the raw Jira error envelope and rerun after credentials, permissions, endpoint, or payload are corrected.
+- class: NEEDS_INPUT
+  cause: Required create-screen fields are unspecified by caller, wrapper, or base defaults.
+  recovery: Supply the missing create fields or wrapper defaults.
+side_effects:
+- jira-create
+- jira-comment
+- jira-transition
+- jira-update-estimate
+must_delegate:
+- jira-writes
+may_direct:
+- jira-reads
+forbidden_direct:
+- curl-against-atlassian-with-session-metadata
+wrapper_inheritance_points:
+- defaults
+- must_delegate
+- forbidden_direct
+- routing

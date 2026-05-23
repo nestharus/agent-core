@@ -1,0 +1,78 @@
+schema: operator-contract-v1
+source: agents/wu-session-resumer.md
+model: gpt-high
+description: Wake one merged Work Unit session and close or hand off its post-merge lifecycle
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: pr_url
+  type: string
+  required: true
+  default_source: caller
+  description: '`pr_url` (required) - URL of the merged PR.'
+- name: merge_sha
+  type: string
+  required: true
+  default_source: caller
+  description: '`merge_sha` (required) - final merge commit SHA on `main`; anchors post-merge checks and manifest closure.'
+- name: main
+  type: string
+  required: true
+  default_source: caller
+  description: '`merge_sha` (required) - final merge commit SHA on `main`; anchors post-merge checks and manifest closure.'
+- name: head_sha
+  type: string
+  required: true
+  default_source: caller
+  description: '`head_sha` (required) - PR head SHA before merge; must match the dormant session.'
+- name: pre_merge_main_sha
+  type: string
+  required: true
+  default_source: caller
+  description: '`pre_merge_main_sha` (required) - main SHA before the merge; used for coverage comparison.'
+- name: branch_name
+  type: string
+  required: true
+  default_source: caller
+  description: '`branch_name` (required) - WU branch name from the merge event; must match manifest `branch`.'
+- name: branch
+  type: string
+  required: true
+  default_source: caller
+  description: '`branch_name` (required) - WU branch name from the merge event; must match manifest `branch`.'
+- name: ticket_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_id` (required) - ticket key or issue id for identity validation and ticket comment.'
+- name: session_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`session_manifest_path` (required) - absolute path to the WU session manifest, normally `${planning_dir}/session.json`.'
+- name: test_command
+  type: string
+  required: false
+  default_source: caller
+  description: '`test_command` (optional) - explicit command for the merged-main test rerun. If absent, use only an explicit manifest or project policy value; do not infer one.'
+- name: coverage_command
+  type: string
+  required: false
+  default_source: caller
+  description: '`coverage_command` (optional) - explicit command for coverage measurement. If absent, use only explicit before/after artifacts or manifest/project policy.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

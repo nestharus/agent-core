@@ -1,0 +1,88 @@
+schema: operator-contract-v1
+source: agents/refactoring-commit-history-orchestrator.md
+model: gpt-xhigh
+description: Coordinate commit-history-driven refactoring scoping and per-package handoff.
+inputs:
+- name: target
+  type: string
+  required: false
+  default_source: caller
+  description: target
+- name: target_surface
+  type: string
+  required: false
+  default_source: caller
+  description: target surface
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: planning_dir
+  type: path
+  required: true
+  default_source: caller
+  description: planning dir
+- name: integration_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: integration branch ref
+- name: history_base_ref
+  type: string
+  required: true
+  default_source: caller
+  description: history base ref
+- name: milestone_search_policy
+  type: string
+  required: true
+  default_source: caller
+  description: milestone search policy
+- name: degradation_signal_sources
+  type: string
+  required: true
+  default_source: caller
+  description: degradation signal sources
+- name: package_bounds
+  type: string
+  required: true
+  default_source: caller
+  description: package bounds
+- name: manager_flavor
+  type: enum
+  required: true
+  default_source: caller
+  description: manager flavor
+defaults: []
+secrets: []
+outputs:
+- task: scope-refactor-from-history
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- refactoring-orchestrator-dispatches
+- planning-report-writes
+must_delegate:
+- refactoring-orchestrator
+may_direct:
+- commit-history-read
+- package-descriptor-read
+forbidden_direct:
+- per-package-refactor-execution-inline

@@ -1,0 +1,83 @@
+schema: operator-contract-v1
+source: agents/feature-orchestrator.md
+model: gpt-xhigh
+description: Coordinate one feature lifecycle above individual Work Units, using feature branches and per-ticket implementation-pipeline runs.
+inputs:
+- name: feature_id
+  type: string
+  required: true
+  default_source: caller
+  description: feature id
+- name: feature_branch
+  type: string
+  required: false
+  default_source: base
+  description: feature branch
+- name: trunk_branch
+  type: string
+  required: false
+  default_source: base
+  description: trunk branch
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+- name: planning_dir
+  type: path
+  required: true
+  default_source: caller
+  description: planning dir
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: scoped_ticket_list
+  type: string
+  required: true
+  default_source: caller
+  description: scoped ticket list
+- name: manager_flavor
+  type: enum
+  required: true
+  default_source: caller
+  description: manager flavor
+defaults:
+- name: feature_branch
+  value: feat-<feature_id>
+  source: base
+- name: trunk_branch
+  value: master
+  source: base
+secrets:
+- JIRA_API_KEY
+- LINEAR_API_KEY
+outputs:
+- task: run-feature
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- implementation-pipeline-dispatches
+- feature-branch-updates
+- ticket-system-writes-via-ticket-operator
+must_delegate:
+- implementation-pipeline-orchestrator
+- pr-writer
+- ticket-system-writes
+may_direct:
+- feature-branch-read
+forbidden_direct:
+- behavior-shipping-execution-inline

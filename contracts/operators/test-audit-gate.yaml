@@ -1,0 +1,80 @@
+schema: operator-contract-v1
+source: agents/test-audit-gate.md
+model: gpt-high
+description: Run the lightweight PR/implementation test-audit gate using existing specs, locally-generated coverage, and existing specialist agents.
+inputs:
+- name: mode
+  type: enum
+  required: true
+  default_source: caller
+  description: mode
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: planning_root
+  type: path
+  required: false
+  default_source: base
+  description: planning root
+- name: spec_dir
+  type: path
+  required: false
+  default_source: derived
+  description: spec dir
+- name: agents_dir
+  type: path
+  required: false
+  default_source: base
+  description: agents dir
+- name: repo
+  type: string
+  required: false
+  default_source: caller
+  description: repo
+- name: local_coverage_command
+  type: string
+  required: false
+  default_source: caller
+  description: shell command run from repo_root that produces coverage-summary.json and lcov.info under the current working directory's ./coverage/ subdir
+- name: pr_number
+  type: int
+  required: false
+  default_source: caller
+  description: pr number (used only for synthesis labeling)
+defaults:
+- name: planning_root
+  value: ${repo_root}/planning
+  source: base
+- name: agents_dir
+  value: ~/ai/agents
+  source: base
+secrets: []
+outputs:
+- task: audit-tests
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- test-audit-report-writes
+must_delegate:
+- coverage-analyzer
+- coverage-auditor
+may_direct:
+- local-coverage-generation
+- git-diff-read
+- git-worktree-baseline-checkout
+forbidden_direct:
+- fetching-ci-coverage-artifacts

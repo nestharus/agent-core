@@ -1,0 +1,83 @@
+schema: operator-contract-v1
+source: agents/work-manager-ticket-filing-operator.md
+model: gpt-high
+description: Draft Work Manager direct tickets, emit canonical evidence bundles, run pre-posting audit, and post only after LOW.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: ticket_system
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system=linear|jira` and matching backend inputs.'
+- name: ticket_operator
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_operator=/home/nes/ai/agents/linear-operator.md|/home/nes/ai/agents/jira-operator.md`.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`scratch_dir=<absolute path>` for draft, route, bundle, prompt, and log artifacts.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir=<absolute path>` for durable audit reports.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path=<absolute path>` for command execution context.'
+- name: active_manager_flavor
+  type: string
+  required: true
+  default_source: caller
+  description: '`active_manager_flavor=max|pragmatic|hackerman|base`.'
+- name: caller_brief_content
+  type: string
+  required: true
+  default_source: caller
+  description: '`caller_brief_content=<text or path>` or `problem_context=<text or path>`.'
+- name: problem_context
+  type: string
+  required: true
+  default_source: caller
+  description: '`caller_brief_content=<text or path>` or `problem_context=<text or path>`.'
+- name: source_evidence_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`source_evidence_paths=[absolute paths]`, empty only for a `problem-statement`.'
+- name: NEEDS_INPUT
+  type: string
+  required: true
+  default_source: caller
+  description: '`producer_invocation.invocation_uuid`, `producer_invocation.prompt_path`, and `producer_invocation.log_path` when known; otherwise stop with `NEEDS_INPUT` for runner/orchestrator provenance.'
+- name: currentness
+  type: string
+  required: true
+  default_source: caller
+  description: '`currentness.captured_against_commit_sha=<sha>` from the runner/orchestrator.'
+- name: model
+  type: string
+  required: true
+  default_source: caller
+  description: '`model=<model>` for the N4/N3 child audit dispatch.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

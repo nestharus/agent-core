@@ -180,7 +180,7 @@ PR-review's test-audit verifies the test set covers the proposal's test-intent t
 
 PR-review's multi-concern asks "is this one PR or several?" The prototype analog asks "is this one prototype or several?" — a prototype that drifted to answer multiple questions in one run produces a confused dossier; the right move is to split into two dossiers or two follow-up prototypes.
 
-- Dispatch a `claude-opus` reviewer with `answer.md` + `spawned-tickets.md` + the diff.
+- Dispatch a `gpt-xhigh` reviewer with `answer.md` + `spawned-tickets.md` + the diff.
 - The reviewer checks whether the answer reads as one coherent question with one coherent answer, or whether the work actually answered N questions and the dossier conflates them. The spawned-tickets list is a hint: if it's decomposing the prototype's work into K downstream tickets where K > 1 and they don't share a common dependency, the prototype was multi-question.
 - Verdict: `SINGLE_QUESTION` (one prototype, one answer, coherent) / `MULTI_QUESTION` (the prototype answered N questions; recommend splitting the dossier into N separate dossiers OR re-framing `answer.md` as a multi-part answer with explicit sub-question structure).
 - Output: `dossier/one-question-check.md`. A `MULTI_QUESTION` verdict either splits the dossier (re-runs P3.1–P3.6 per sub-dossier) or rewrites `answer.md` to have explicit sub-question structure.
@@ -189,7 +189,7 @@ PR-review's multi-concern asks "is this one PR or several?" The prototype analog
 
 PR-review's justification verifies every change in the diff traces to ticket / proposal / contract / hookpoints. The prototype analog verifies every piece of code on the prototype branch traces to the answer.
 
-- Dispatch a `claude-opus` reviewer with the diff (`git diff main..HEAD`) and the dossier's `answer.md` + `evidence/`.
+- Dispatch a `gpt-xhigh` reviewer with the diff (`git diff main..HEAD`) and the dossier's `answer.md` + `evidence/`.
 - For each file/hunk in the diff, the reviewer asks: does this serve the answer, or is it hack-debris that survived stabilization but doesn't belong? Common debris: scratch print statements, test-mode flags, hardcoded local paths, commented-out experimentation, files added during P1 to test something that is no longer reachable from the answer.
 - Verdict: `LOW_DEBRIS` (every change serves the answer) / `MEDIUM_DEBRIS` (one or two minor leftovers; flag for cleanup before P4) / `HIGH_DEBRIS` (substantive code on the branch is not traceable to the answer; the branch needs cleanup before the dossier can claim it as the answer's evidence).
 - Output: `dossier/answer-trace.md`. A `HIGH_DEBRIS` verdict halts P3 and re-enters P2 to clean up the unjustified content.

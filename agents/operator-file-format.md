@@ -40,9 +40,17 @@ output_format: ''
 ---
 ```
 
+## Optimized contract sidecar
+
+Dispatchers SHOULD read `contracts/operators/<operator-name>.yaml` before opening the full operator file. The sidecar carries the same `operator-contract-v1` YAML as the embedded `## Contract` block, plus optional dispatch metadata such as `source`, `model`, and `description` after the leading `schema` key.
+
+When an operator has both a sidecar and an embedded block, keep them equivalent for the fields in the schema below. The sidecar is the optimized call interface; the full operator file remains the procedural authority.
+
+Workflow files use the same pattern under `contracts/workflows/<workflow-id>.yaml` for their `workflow_dispatch_contract` frontmatter.
+
 ## Contract block (`operator-contract-v1`)
 
-Every operator or workflow Markdown file MUST contain a `## Contract` heading with a single fenced YAML block whose first key is `schema: operator-contract-v1`. The contract block is the machine-readable call interface for dispatchers.
+Every operator file MUST expose an `operator-contract-v1` call interface either through an optimized sidecar or through a `## Contract` heading with a single fenced YAML block whose first key is `schema: operator-contract-v1`. New or edited high-risk operators SHOULD carry both until sidecar generation is automated in CI. The contract is the machine-readable call interface for dispatchers.
 
 The schema fields are:
 
@@ -94,7 +102,7 @@ forbidden_direct:
 
 ## Wrapper inheritance pattern
 
-A project wrapper sets `inherits:` and `base_procedure:` in its `## Contract` block. Wrapper `defaults:` override base `defaults:`; inheritance is otherwise additive for `secrets:`, `outputs:`, `errors:`, `side_effects:`, `must_delegate:`, `may_direct:`, and `forbidden_direct:`.
+A project wrapper sets `inherits:` and `base_procedure:` in its optimized sidecar or `## Contract` block. Wrapper `defaults:` override base `defaults:`; inheritance is otherwise additive for `secrets:`, `outputs:`, `errors:`, `side_effects:`, `must_delegate:`, `may_direct:`, and `forbidden_direct:`.
 
 ## Procedure-vs-contract boundary
 
@@ -252,7 +260,7 @@ Everything after the frontmatter is the prompt. A minimal operator can be just a
 ```markdown
 ---
 description: 'Summarize a diff into 3 bullet points'
-model: claude-sonnet
+model: gpt-medium
 output_format: ''
 ---
 

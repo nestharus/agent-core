@@ -1,0 +1,67 @@
+schema: operator-contract-v1
+source: agents/pr-review-operator.md
+model: gpt-high
+description: 'Review PRs: risk assessment, research, test-audit, decomposition, and post comments.'
+inputs:
+- name: pr_number
+  type: int
+  required: true
+  default_source: caller
+  description: pr number
+- name: repo
+  type: string
+  required: false
+  default_source: derived | caller
+  description: repo
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: planning_root
+  type: path
+  required: false
+  default_source: base
+  description: planning root
+- name: agents_dir
+  type: path
+  required: false
+  default_source: base
+  description: agents dir
+- name: audit_history_path
+  type: path
+  required: false
+  default_source: derived
+  description: audit history path
+defaults:
+- name: planning_root
+  value: ${repo_root}/planning
+  source: base
+- name: agents_dir
+  value: ~/ai/agents
+  source: base
+secrets: []
+outputs:
+- task: review-pr
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- gh-pr-read
+- review-comment-posting-when-enabled
+- scratch-review-artifacts
+must_delegate:
+- test-audit-gate
+- pr-justification-gauntlet
+- risk-research-review-children
+may_direct:
+- gh-pr-metadata-read
+- gh-pr-diff-read
+forbidden_direct:
+- inline-test-audit-or-justification-child-mechanics

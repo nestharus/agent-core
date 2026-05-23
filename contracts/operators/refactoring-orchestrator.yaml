@@ -1,0 +1,69 @@
+schema: operator-contract-v1
+source: agents/refactoring-orchestrator.md
+model: gpt-xhigh
+description: Coordinate one per-PR refactor cycle against an integration buffer.
+inputs:
+- name: target_list
+  type: string
+  required: true
+  default_source: caller
+  description: target list
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+- name: planning_dir
+  type: path
+  required: true
+  default_source: caller
+  description: planning dir
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: integration_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: integration branch ref
+- name: slice_bounds
+  type: string
+  required: true
+  default_source: caller
+  description: slice bounds
+- name: manager_flavor
+  type: enum
+  required: false
+  default_source: caller
+  description: manager flavor
+defaults: []
+secrets: []
+outputs:
+- task: run-refactor
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- implementation-pipeline-dispatches
+- integration-buffer-updates
+- shim-registry-updates
+must_delegate:
+- implementation-pipeline-orchestrator
+may_direct:
+- refactor-scope-read
+forbidden_direct:
+- behavior-changing-feature-work
+- pipeline-bypassing-implementation

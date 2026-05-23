@@ -1,0 +1,18 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/wu-session-wake.md
+workflow_id: wu-session-wake
+orchestrator: composition layer
+inputs:
+- sessions.index.json path
+- poller output from tools/pr-batch-poller
+- per-project worktree and planning roots
+expectations:
+- joins merged PR rows to one persisted WU session manifest
+- dispatches wu-session-resumer once per merged session
+- does not batch post-merge session work inside the poller or scheduler
+outputs:
+- one wu-session-resumer log per merged session
+non_goals:
+- does not implement the scheduler runtime
+- does not change pr-batch-poller schema
+- does not inline post-merge checks or spawn successor WUs

@@ -35,7 +35,7 @@ SVG icons go inline in the header. Keep them 24x24, stroke color `#5a4e3a`.
 
 ## Running Sub-Agents
 
-Sub-agents are invoked via the `agents` binary (`~/.local/bin/agents`), not through Claude Code's built-in Agent tool. The binary is the CLI mode of [Oulipoly Agent Runner](https://github.com/nestharus/agent-runner).
+Sub-agents are invoked via the `agents` binary (`~/.local/bin/agents`). The binary is the CLI mode of [Oulipoly Agent Runner](https://github.com/nestharus/agent-runner).
 
 ### CLI Syntax
 
@@ -73,8 +73,8 @@ Model configs are TOML files in `~/.config/oulipoly-agent-runner/models/` (one p
 
 ```toml
 # Single provider
-command = "claude"
-args = ["-p", "--model", "haiku"]
+command = "codex"
+args = ["exec", "--model", "gpt-5"]
 prompt_mode = "stdin"
 ```
 
@@ -99,7 +99,7 @@ Load balancing is automatic: round-robin with error avoidance.
 |-------|---------|-------------------|
 | `gpt-xhigh` | Auditing (best at systematic cross-referencing) | 2 at a time |
 | `gpt-high` | Research, outlining, concept extraction, general analysis | No hard limit |
-| `claude-opus` | Alignment checks, editing, tenet evaluation, Mermaid diagrams | As available |
+| `gpt-xhigh` | Alignment checks, editing, tenet evaluation, Mermaid diagrams | As available |
 | `gemini-high` | SVG visual planning, art direction (Gemini 3.1 Pro, HIGH thinking) | Rate limited |
 | `gemini-medium` | SVG generation, visual tasks (Gemini 3.1 Pro, MEDIUM thinking) | Rate limited |
 | `gemini-low` | Quick SVG drafts, iteration, visual review (Gemini 3.1 Pro, LOW thinking) | Rate limited |
@@ -243,9 +243,9 @@ If a concept cannot be traced to a tenet or to continuity, it is either:
 
 The pattern: audit the current state, research what's missing, then edit via sub-agents.
 
-### Phase 1: Audit (GPT-xhigh)
+### Phase 1: Audit (gpt-xhigh)
 
-GPT is better than Opus at auditing. Use `gpt-xhigh` for audit tasks. **Max 2 xhigh agents at a time.**
+Use `gpt-xhigh` for audit tasks. **Max 2 xhigh agents at a time.**
 
 Each audit targets **one specific concern** and searches the **entire document**. The audit prompt must be extremely detailed about what the concern is, what correct looks like, and what to report.
 
@@ -282,7 +282,7 @@ Run audits in parallel pairs. Wait for both to complete before launching the nex
 
 ### Phase 2: Research (sub-agents)
 
-Use Claude's Agent tool or `agents --model gpt-high` for research tasks: web search, paper lookup, competitive analysis. Research agents should return findings, not edit files.
+Use `agents --model gpt-high` for research tasks: web search, paper lookup, competitive analysis. Research agents should return findings, not edit files.
 
 ### Phase 3: Context File
 
@@ -304,9 +304,9 @@ cat > /tmp/rework-context.md << 'EOF'
 EOF
 ```
 
-### Phase 4: Edit (Claude sub-agents, one per chapter)
+### Phase 4: Edit (gpt-high sub-agents, one per chapter)
 
-Use Claude's Agent tool to launch **one sub-agent per chapter/section**. Each agent reads the context file and its assigned section, then makes targeted edits.
+Use `agents --model gpt-high` to launch **one sub-agent per chapter/section**. Each agent reads the context file and its assigned section, then makes targeted edits.
 
 Sub-agents can run in parallel since they edit non-overlapping sections of the same file (the Edit tool uses exact string matching, not line numbers).
 
@@ -326,7 +326,7 @@ python3 md_to_pdf.py
 ### Principles
 
 - **One concern per audit agent** — multi-concern audits lose accuracy. The audit itself is a many-to-many problem; keep it one-to-one.
-- **GPT-xhigh for auditing, Claude for editing** — GPT excels at systematic cross-referencing. Claude excels at targeted prose edits that match existing tone.
+- **gpt-xhigh for auditing, gpt-high for editing** — use the deeper model for systematic cross-referencing and the standard high model for targeted prose edits that match existing tone.
 - **Audit prompts must be exhaustive** — the more detail about what correct looks like, the more accurate the audit. Vague prompts produce vague results.
 - **Context files over mega-prompts** — sub-agents read context files rather than receiving all findings inline. Keeps prompts focused.
 - **Rework, don't patch** — when a section has conceptual problems, rewrite the prose around the correct idea. Word-swapping ("difficulty" → "terrain") without reworking the surrounding sentences produces incoherent text.
@@ -413,7 +413,7 @@ Review extracted concept lists for meaning drift across chapters. Does the same 
 For every concept in the book, verify it traces to one or more of the 4 core tenets. Identify orphans that don't trace. Evaluate orphans: truly a new tenet, or a misframed instance of an existing one?
 
 **Input:** Compiled concept lists from QW6, Core Tenets definitions
-**Agent:** `claude-opus` — Opus performs alignment checks. The prompt must include the full tenet definitions from the Core Tenets section.
+**Agent:** `gpt-xhigh` — performs alignment checks. The prompt must include the full tenet definitions from the Core Tenets section.
 **Process:**
 1. For each extracted concept, determine which tenet(s) it implements and at what layer
 2. Identify concepts that don't cleanly trace to any tenet
@@ -437,7 +437,7 @@ Compare the book's concept coverage against the system-synthesis and known AI pr
 
 Identify opportunities to explain concepts visually. Humans are visual — minimize text, maximize visualization. Text explains the WHY; visualization explains the HOW and the WHAT. Visualize whenever possible.
 
-**Agent:** `claude-opus` — reads each section, identifies what is being explained (a process, a structure, a comparison, an interaction, a flow, a relationship) and whether a diagram would explain it better than prose.
+**Agent:** `gpt-xhigh` — reads each section, identifies what is being explained (a process, a structure, a comparison, an interaction, a flow, a relationship) and whether a diagram would explain it better than prose.
 **Framing:** This is opportunity-driven, not gap-driven. The question is not "what's missing?" but "what could be communicated visually?" Default to visualizing — only leave as text when the concept is purely about reasoning or motivation (the why).
 **Criteria:** Any how or what being explained in prose is a visualization opportunity. Processes, flows, structures, comparisons, interactions, relationships, lifecycles, hierarchies, state changes.
 **Fix:** Add diagrams (use `gemini-high` for SVG generation). Reduce surrounding prose to the why — remove prose that restates what the diagram shows.
@@ -446,7 +446,7 @@ Identify opportunities to explain concepts visually. Humans are visual — minim
 
 Detect near-duplication between visuals (diagrams, tables) and their surrounding text. Visuals and text should complement each other, not restate the same information.
 
-**Agent:** `claude-opus` — reads each diagram/table and its surrounding text context (2-3 paragraphs before and after).
+**Agent:** `gpt-xhigh` — reads each diagram/table and its surrounding text context (2-3 paragraphs before and after).
 **Check for three duplication modes:**
 1. **Diagram-text duplication** — the text fully restates what the diagram shows. Text should explain the WHY; the diagram should show the HOW/WHAT. If the text says everything the diagram says, either reduce the text or remove the diagram.
 2. **Diagram-table duplication** — a diagram and table present identical information. Keep whichever communicates better; if both add value, ensure they show different facets (e.g., diagram shows structure, table shows details).
@@ -467,7 +467,7 @@ Systematic text editing review. Run 6 practice-category reviews per chapter in p
 **Process:** One chapter at a time. For each chapter:
 1. Run all 6 review agents in parallel (`gpt-high`, one per practice)
 2. Collect findings into a context file
-3. Run `claude-opus` edit agent to fix findings
+3. Run `gpt-xhigh` edit agent to fix findings
 4. Rerun reviews for the chapter
 5. Repeat until all 6 reviews return PASS
 
@@ -523,7 +523,7 @@ Deep structural review for content quality. Unlike QW12 (surface-level mechanics
 **Process:** One chapter at a time. For each chapter:
 1. Run structural review agent (`gpt-high`) with the 6-category detection template
 2. Collect findings (MUST-FIX and SHOULD-FIX)
-3. Apply fixes with editorial judgment (`claude-opus`)
+3. Apply fixes with editorial judgment (`gpt-xhigh`)
 4. Rerun review for the chapter
 5. Repeat until findings are resolved
 
@@ -563,12 +563,12 @@ The book uses three tiers of visual content, each produced by a different model 
 
 **Decision rule:** If the figure shows a specific sequence of steps, a loop with named stages, or a hierarchy of named items — use a diagram. If it shows a metaphor, a relationship, or a concept the reader grasps as a gestalt — use a picture. When evaluating, ask: "Is this showing *what something is like* (concept → picture) or *how something works step-by-step* (algorithm → diagram)?"
 
-### Tier 1: Diagrams (Claude)
+### Tier 1: Diagrams (gpt-high)
 
-Mermaid diagrams for system flows, architecture, and process illustrations. Claude (Opus) generates the Mermaid source. Rendered via the diagram site.
+Mermaid diagrams for system flows, architecture, and process illustrations. `gpt-high` generates the Mermaid source. Rendered via the diagram site.
 
 ```bash
-# Claude generates mermaid source in prose editing sub-agents
+# gpt-high generates mermaid source in prose editing sub-agents
 # Diagrams go in execution-philosophy/diagrams/
 ```
 
@@ -605,12 +605,12 @@ This eliminates the most common SVG failure modes (misaligned arrows, overlappin
 agents --model gemini-high --file /tmp/diagram-prompt.md --project .
 ```
 
-### Tier 2b: Communication Risk Review (Opus)
+### Tier 2b: Communication Risk Review (gpt-xhigh)
 
-After Gemini's self-correcting loop produces a clean SVG, Opus evaluates the diagram against the communication axis. The question: "What are the odds a reader will not understand this diagram in context?"
+After Gemini's self-correcting loop produces a clean SVG, `gpt-xhigh` evaluates the diagram against the communication axis. The question: "What are the odds a reader will not understand this diagram in context?"
 
 **Workflow:**
-1. Opus reads the rendered PNG + the surrounding text from the book
+1. `gpt-xhigh` reads the rendered PNG + the surrounding text from the book
 2. Evaluates: Does the diagram clarify or confuse? Does it match what the text explains? Will a reader unfamiliar with the concept understand it?
 3. If communication risk is HIGH: feed specific issues back to Gemini for another self-correcting round
 4. If LOW: diagram is ready for integration
@@ -619,7 +619,7 @@ This is risk assessment on the communication axis — not aesthetic judgment.
 
 ### Tier 2c: Illustrated Figure Pipeline (Gemini → Seedream i2i)
 
-For book figures that need hand-drawn editorial illustration (not SVG diagrams). Gemini does ALL visual planning; seedream i2i generates the final image; Opus does communication risk review.
+For book figures that need hand-drawn editorial illustration (not SVG diagrams). Gemini does ALL visual planning; seedream i2i generates the final image; `gpt-xhigh` does communication risk review.
 
 **Art Style**: Friendly hand-drawn editorial illustration — soft rounded shapes, characters/people, pastel colors, cartoon-like but professional. NOT abstract geometric, NOT boxes-and-arrows, NOT photorealistic, NOT anime. Reference: `diagrams/hand-drawn-essay-illustration_23-2150314529.avif`.
 
@@ -637,7 +637,7 @@ For book figures that need hand-drawn editorial illustration (not SVG diagrams).
    - "No text no words no labels no letters" (labels added in post)
    - Do NOT pass the style reference image to seedream — it copies characters literally
 
-5. **Communication Risk Review** (`claude-opus`): Opus evaluates the generated image against the communication axis AND the engagement axis. Pass: the generated image, surrounding book text, figure caption, AND `research/figure-best-practices.md`. Opus must assess:
+5. **Communication Risk Review** (`gpt-xhigh`): evaluates the generated image against the communication axis AND the engagement axis. Pass: the generated image, surrounding book text, figure caption, AND `research/figure-best-practices.md`. The reviewer must assess:
    - Communication: Could a reader misinterpret? What's confusing, broken, contradictory?
    - Engagement: Does the figure follow best practices (asymmetry, varying sizes, visual rhythm, depth cues)? Would a reader skip it because it's visually dead?
    - The risk assessor must understand that visual engagement rules (S-curves, asymmetry, winding paths) serve reader attention even when the text describes "linear" processes. Figures are not literal translations of text — they are visual communication with their own rules.
@@ -668,7 +668,7 @@ For book figures that need hand-drawn editorial illustration (not SVG diagrams).
    - The hand-drawn editorial style with flat colors and ink outlines compresses exceptionally well to 256-color palette — dithering hides the reduction
 
 **Key constraints:**
-- Gemini does ALL visual work (interpretation, SVGs, labels). Claude/GPT are bad at art direction.
+- Gemini does ALL visual work (interpretation, SVGs, labels). Text-first review models are not the visual art-direction authority.
 - Gemini and seedream can both run in parallel.
 - Validation happens at the SVG stage (steps 2, 3) — SVGs are correctable, seedream output is not.
 - Best practices reference: `research/figure-best-practices.md` — asymmetry over symmetry, varying sizes, S-curves, labels near what they depict, no uniform repeated shapes.
@@ -707,7 +707,7 @@ agents --model seedance-i2v '{"prompt": "Slowly animate the flow: highlight each
 ```
 Gemini (SVG, self-correcting) ─── generate → convert → inspect → fix → repeat
   ↓ clean SVG
-Opus (communication risk) ───── evaluate diagram + text context on communication axis
+gpt-xhigh (communication risk) ─ evaluate diagram + text context on communication axis
   ↓ approved or fed back to Gemini
 Gemini (art direction) ──────── write Seedream prompts for image generation
 Seedream (Image) ────────────── photorealistic / textured images from Gemini prompts
@@ -723,7 +723,7 @@ Seedance (Video) ────────────── animated explanation
 | Complex diagram (cycles, multi-element) | `gemini-high` (self-correcting) | Needs high reasoning for layout |
 | Standard diagram (ladders, spectrums) | `gemini-medium` (self-correcting) | Balance of quality and speed |
 | Quick SVG iteration / review | `gemini-low` | Speed over polish |
-| Communication risk review | `claude-opus` | Evaluates diagram clarity in context |
+| Communication risk review | `gpt-xhigh` | Evaluates diagram clarity in context |
 | Art direction for Seedream | `gemini-high` | Creative brief → image prompt |
 | Photorealistic illustration | `seedream-t2i` | Text-to-image for standalone visuals |
 | Polish an SVG into a final image | `seedream-i2i` | Image-to-image refinement |
@@ -777,18 +777,18 @@ After fixing stability (QW7) and alignment (QW8) issues, re-run QW6-QW8 to verif
 |-----------|-------|-----|
 | Auditing (systematic cross-referencing) | `gpt-xhigh` | Best at exhaustive search across large documents |
 | Concept extraction | `gpt-high` | Fast, accurate summarization |
-| Alignment checks | `claude-opus` | Best at evaluating whether concepts trace to principles |
+| Alignment checks | `gpt-xhigh` | Best at evaluating whether concepts trace to principles |
 | Stability analysis | `gpt-xhigh` | Cross-referencing meaning across sections |
 | Coverage gap detection | `gpt-xhigh` | Cross-referencing book against system |
 | Text quality review (per-chapter) | `gpt-high` | Parallel practice reviews, mechanical rule checking |
 | Structural editing review | `gpt-high` | Deep content review (knowledge, coherence, argument) |
-| Text quality fixes | `claude-opus` | Targeted edits matching existing tone |
-| Structural editing fixes | `claude-opus` | Editorial judgment for content-level rewrites |
-| Editing prose | `claude-opus` | Best at targeted edits matching existing tone |
-| Mermaid diagrams | `claude-opus` | Structural accuracy for system flows |
+| Text quality fixes | `gpt-xhigh` | Targeted edits matching existing tone |
+| Structural editing fixes | `gpt-xhigh` | Editorial judgment for content-level rewrites |
+| Editing prose | `gpt-xhigh` | Best at targeted edits matching existing tone |
+| Mermaid diagrams | `gpt-xhigh` | Structural accuracy for system flows |
 | SVG visual planning / art direction | `gemini-high` | Best SVG generation, high reasoning for visual design |
 | SVG iteration | `gemini-low` / `gemini-medium` | Speed for refinement cycles |
-| Visual risk review | `claude-opus` | Communication + engagement risk (must receive best practices as context) |
+| Visual risk review | `gpt-xhigh` | Communication + engagement risk (must receive best practices as context) |
 | Figure interpretation / composition / concept art / labels | `gemini-high` | All visual planning — self-correcting SVG loops |
 | Figure generation | `seedream-i2i` | Transform composition + concept art into illustrated figures |
 | Cover art textures | `seedream-t2i` | Standalone texture/pattern generation only |

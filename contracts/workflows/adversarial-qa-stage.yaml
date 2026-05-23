@@ -1,0 +1,20 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/adversarial-qa-stage.md
+workflow_id: adversarial-qa-stage
+orchestrator: adversarial-qa-driver
+inputs:
+- stage_url, health_check_url, use_case_dossier_path, run_id, planning_dir, ticket_system, browser identity, credentials or roles, feature_flags, local_log_paths, and selected ticket-operator routing inputs
+- manual or scheduled dispatch context for a staged application surface only
+expectations:
+- runs setup, normal-usage regression sweep, adversarial probing, bug report filing, and summary report as separate phases
+- files complete evidence-backed bugs and hands their trigger evidence to RCA consumers without fixing stage bugs inside this workflow
+- keeps production and prototype branches outside scope
+outputs:
+- planning_dir/adversarial-qa/run-id/summary.md
+- planning_dir/adversarial-qa/run-id/evidence/ run bundle with screenshots, videos, logs, bug drafts, and per-finding PDFs
+- tracker bug URLs or BLOCKED and NEEDS_INPUT artifacts
+non_goals:
+- does not run against production
+- does not run against prototype branches
+- does not fix bugs in stage
+- does not add CI jobs, release gates, or ticket-backend API behavior

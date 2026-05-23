@@ -1,0 +1,78 @@
+schema: operator-contract-v1
+source: agents/pr-justification-value-assessor.md
+model: gpt-xhigh
+description: Per-thread value assessor for PR justification. Weighs how much a change buys relative to keeping it in this PR. May dispatch a gpt-high research sub-agent. Does not explore the codebase itself.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: Open
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: threads
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: with
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: researcher
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: evidence
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: from
+  type: string
+  required: true
+  default_source: caller
+  description: Open threads with researcher evidence (from `threads.json`)
+- name: Prior
+  type: string
+  required: true
+  default_source: caller
+  description: Prior-round history
+- name: round
+  type: string
+  required: true
+  default_source: caller
+  description: Prior-round history
+- name: history
+  type: string
+  required: true
+  default_source: caller
+  description: Prior-round history
+- name: audit_history_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Value assessor` role history before scoring.'
+- name: Value
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Value assessor` role history before scoring.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

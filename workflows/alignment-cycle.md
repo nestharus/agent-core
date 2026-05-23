@@ -70,7 +70,7 @@ This is **not** the proposer. The user (or a separate proposer dispatch) updates
 ## Principles
 
 - **Separate agents for separate concerns.** Alignment (judge) ≠ expansion (synthesis). Both expansion stages are split: classify (judge) and integrate (synthesis).
-- **Opus never synthesizes** (per `~/ai/models/roles.md`). Alignment + classify run on `claude-opus`. Integrate runs on `gpt-high`.
+- **Deep-review agents do not synthesize** (per `~/ai/models/roles.md`). Alignment + classify run on `gpt-xhigh`. Integrate runs on `gpt-high`.
 - **Conditional skipping.** Stage 1b only runs if Stage 1 produced surfaces. Stage 2b only runs if Stage 2 produced surfaces. Stage 1b-integrate only runs if Stage 1b-classify emitted at least one non-discard verdict. Stage 2b-integrate only runs if Stage 2b-classify emitted at least one A or B verdict and did not write `philosophy-decisions.md`.
 - **User-input gate is owned by classify.** Stage 2b-classify writes `philosophy-decisions.md` when concerns require user input (C-tension, D-new-axis, E-contradiction). The orchestrator surfaces it to the root as a NEEDS_INPUT new-value-question.
 - **The expansion stages do not re-run Stage 1 / Stage 2 in the same cycle.** Updated `problem.md` / `philosophy.md` content is evaluated in the next full cycle.
@@ -82,11 +82,11 @@ This is **not** the proposer. The user (or a separate proposer dispatch) updates
 Before Stage 1, the orchestrator may run an empty-state prelude when seed documents are missing. If `problem.md` is absent, it dispatches [`problem-bootstrap`](../agents/problem-bootstrap.md) (`gpt-high`) with `brief_path`, `problem_path`, `axis_table_path`, and `scratch_dir`; if `philosophy.md` is absent after `problem.md` exists, it dispatches [`philosophy-bootstrap`](../agents/philosophy-bootstrap.md) (`gpt-high`) with `brief_path`, `problem_path`, `philosophy_path`, and `scratch_dir`. Bootstrap `BLOCKED` or `NEEDS_INPUT` markers halt the cycle; otherwise the existing Stage 1 / 1b / 2 / 2b topology proceeds unchanged.
 
 ```
-Stage 1                — problem-alignment       (claude-opus)  → problem-review.md (always), problem-surfaces.md (conditional)
-  Stage 1b-classify    — problem-expansion-classify  (claude-opus)  → problem-classification.md
+Stage 1                — problem-alignment       (gpt-xhigh)  → problem-review.md (always), problem-surfaces.md (conditional)
+  Stage 1b-classify    — problem-expansion-classify  (gpt-xhigh)  → problem-classification.md
     Stage 1b-integrate — problem-expansion-integrate (gpt-high)     → updates problem.md + axis table
-Stage 2                — philosophy-alignment    (claude-opus)  → philosophy-review.md (always), philosophy-surfaces.md (conditional)
-  Stage 2b-classify    — philosophy-expansion-classify (claude-opus) → philosophy-classification.md, philosophy-decisions.md (conditional)
+Stage 2                — philosophy-alignment    (gpt-xhigh)  → philosophy-review.md (always), philosophy-surfaces.md (conditional)
+  Stage 2b-classify    — philosophy-expansion-classify (gpt-xhigh) → philosophy-classification.md, philosophy-decisions.md (conditional)
     Stage 2b-integrate — philosophy-expansion-integrate (gpt-high)   → updates philosophy.md
 Run report
 ```
@@ -96,7 +96,7 @@ Run report
 ### Stage 1 — Problem alignment review
 
 - Operator: [`~/ai/agents/problem-alignment.md`](../agents/problem-alignment.md)
-- Model: `claude-opus`
+- Model: `gpt-xhigh`
 - Inputs: project's `problem.md`, `proposal.md`, project axis reference table (`<project>/product-strategy/problem-axis-table.md` or equivalent — passed as runtime input).
 - Outputs: `problem-review.md` (always); `problem-surfaces.md` (only if the proposal reveals new problem surfaces).
 
@@ -104,7 +104,7 @@ Run report
 
 - Skip if Stage 1 did not produce `problem-surfaces.md`.
 - Operator: [`~/ai/agents/problem-expansion-classify.md`](../agents/problem-expansion-classify.md)
-- Model: `claude-opus`
+- Model: `gpt-xhigh`
 - Outputs: `problem-classification.md` (per-surface verdict: `discard / already-covered`, `discard / proposal-specific`, `discard / out-of-scope`, `new-axis`, or `axis-expansion`).
 - Does NOT modify `problem.md` or the axis table.
 
@@ -121,7 +121,7 @@ Run report
 
 - Skip if `problem-review.md` reports zero axes-aligned (nothing to review for philosophy alignment).
 - Operator: [`~/ai/agents/philosophy-alignment.md`](../agents/philosophy-alignment.md)
-- Model: `claude-opus`
+- Model: `gpt-xhigh`
 - Inputs: project's `philosophy.md`, `proposal.md`, `problem-review.md`.
 - Outputs: `philosophy-review.md` (always); `philosophy-surfaces.md` (only if the proposal reveals new philosophical concerns).
 
@@ -129,7 +129,7 @@ Run report
 
 - Skip if Stage 2 did not produce `philosophy-surfaces.md`.
 - Operator: [`~/ai/agents/philosophy-expansion-classify.md`](../agents/philosophy-expansion-classify.md)
-- Model: `claude-opus`
+- Model: `gpt-xhigh`
 - Outputs: `philosophy-classification.md` (per-concern verdict: A absorbable, B compatible-addition, C tension, D new-axis, E contradiction); `philosophy-decisions.md` (only when any C/D/E exists; user-input gate).
 - If `philosophy-decisions.md` is written, the orchestrator halts after this sub-stage and surfaces the artifact to the root as a NEEDS_INPUT new-value-question.
 
@@ -149,7 +149,7 @@ After all stages complete (or halt at the user-input gate), the orchestrator wri
 
 ## Gate ownership
 
-- Each Stage's "did the proposal align?" question is a **model gate** owned by the alignment operator (claude-opus). No human gate within the cycle.
+- Each Stage's "did the proposal align?" question is a **model gate** owned by the alignment operator (gpt-xhigh). No human gate within the cycle.
 - The **only human gate** in the cycle is `philosophy-decisions.md` when Stage 2b-classify writes it (NEEDS_INPUT new-value-question to root).
 
 ## Cycle re-run policy

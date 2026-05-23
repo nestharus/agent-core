@@ -1,0 +1,89 @@
+schema: operator-contract-v1
+source: agents/prototype-orchestrator.md
+model: gpt-xhigh
+description: Orchestrate a build-prototype workflow run end-to-end (~/ai/workflows/build-prototype.md). P1 hack/explore (parallel agent dispatch, no gates), P2 stabilize, P3 present (commit hygiene + risk profile + spawned tickets retroactively), P4 hand-off (file tickets via jira-operator, update project risk profile, apply branch disposition). Used when implementation-pipeline-orchestrator defers due to unclear framing, OR when roadmap workflow needs a Layer 2/3 feasibility prototype.
+inputs:
+- name: prototype_id
+  type: string
+  required: true
+  default_source: caller
+  description: prototype id
+- name: question
+  type: string
+  required: true
+  default_source: caller
+  description: question
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller | derived
+  description: worktree path
+- name: planning_dir
+  type: path
+  required: true
+  default_source: caller | derived
+  description: planning dir
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller | derived
+  description: scratch dir
+- name: jira_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: jira issue key
+- name: linear_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: linear issue key
+- name: ticket_system
+  type: enum
+  required: false
+  default_source: caller | derived
+  description: ticket system
+- name: defer_source
+  type: string
+  required: false
+  default_source: caller
+  description: defer source
+defaults: []
+secrets:
+- JIRA_API_KEY
+- LINEAR_API_KEY
+outputs:
+- task: build-prototype
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- prototype-worktree-create
+- prototype-agent-dispatches
+- dossier-writes
+- ticket-comments-and-creates-via-ticket-operator
+- residual-direct-jira-issue-link
+must_delegate:
+- prototype-vector-dispatches
+- ticket-system-comments
+- ticket-system-creates
+may_direct:
+- prototype-local-file-validation
+- jira-issue-link-until-acr-282
+- operation: jira-issue-link
+  rationale: 'Residual direct Jira /issueLink API call is tracked by ACR-282 until jira-operator task=link exists and prototype-orchestrator migrates to it: https://linear.app/oulipoly/issue/ACR-282/add-jira-operator-tasklink-and-migrate-prototype-orchestrator-off.'
+  cleanup_tracker: ACR-282
+forbidden_direct:
+- new-direct-ticket-writes-outside-declared-exception
+- direct-jira-issue-link-after-acr-282

@@ -49,7 +49,7 @@ Each step is a separate agent invocation. Agents do not self-review. Reviewers d
 
 Adds sections the target audience needs from communication research.
 
-**A1. Content revision** (`claude-opus`) — adds missing sections. Writes editing report.
+**A1. Content revision** (`gpt-xhigh`) — adds missing sections. Writes editing report.
 **Human gate** — user approves content additions.
 
 ### Phase B: Analysis (parallel, read-only)
@@ -65,17 +65,17 @@ Each category gets its own fix agent + reviewer. Running one category per agent 
 
 Per category, the fix pass: read violation report filtered to this category → fix every instance → report what was changed. Then the review pass: scan document fresh for the same category → report any remaining instances.
 
-**C1. Em dash fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C2. Banned opener fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C3. Triad fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C4. Pseudo list fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C5. Repeated opener fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C6. Repeated frame fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C7. Cliche fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C8. Moralizing/status fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C9. Performative sentence fixes** (`claude-opus` fix → `gpt-high` reviewer)
-**C10. Hedging fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
-**C11. Filler/throat-clearing fixes** (`claude-opus` fix → `gpt-high` reviewer) — only if B2 found any
+**C1. Em dash fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C2. Banned opener fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C3. Triad fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C4. Pseudo list fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C5. Repeated opener fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C6. Repeated frame fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C7. Cliche fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C8. Moralizing/status fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C9. Performative sentence fixes** (`gpt-xhigh` fix → `gpt-high` reviewer)
+**C10. Hedging fixes** (`gpt-xhigh` fix → `gpt-high` reviewer) — only if B2 found any
+**C11. Filler/throat-clearing fixes** (`gpt-xhigh` fix → `gpt-high` reviewer) — only if B2 found any
 
 If a reviewer finds remaining violations in its category, the orchestrator re-runs the fix agent with the reviewer's findings. Iterate until the reviewer returns no remaining violations.
 
@@ -85,34 +85,34 @@ If a reviewer finds remaining violations in its category, the orchestrator re-ru
 
 Each structural concern from the skeleton analysis gets its own fix agent + reviewer.
 
-**D1. Hook placement** (`claude-opus` fix → `claude-opus` reviewer) — does the opening create tension tied to the hypothesis?
-**D2. Reframe consolidation** (`claude-opus` fix → `claude-opus` reviewer) — is the reframe stated once, crisply, early?
-**D3. Container section framing** (`claude-opus` fix → `claude-opus` reviewer) — do container sections have framing prose?
-**D4. Border bridges** (`claude-opus` fix → `claude-opus` reviewer) — per specific border flagged in skeleton analysis
-**D5. Table framing** (`claude-opus` fix → `claude-opus` reviewer) — do tables have prose making their argument explicit?
+**D1. Hook placement** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — does the opening create tension tied to the hypothesis?
+**D2. Reframe consolidation** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — is the reframe stated once, crisply, early?
+**D3. Container section framing** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — do container sections have framing prose?
+**D4. Border bridges** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — per specific border flagged in skeleton analysis
+**D5. Table framing** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — do tables have prose making their argument explicit?
 
-Reviewers are opus because structural quality is judgment, not pattern-matching.
+Reviewers use `gpt-xhigh` because structural quality is judgment, not pattern-matching.
 
 ### Phase E: Flow and Cohesion (Rubric 3)
 
-**E1. Paragraph cohesion pass** (`claude-opus` fix → `claude-opus` reviewer) — each paragraph develops one idea, known-to-new pattern.
-**E2. Causality pass** (`claude-opus` fix → `claude-opus` reviewer) — every major claim has a concrete "because".
-**E3. Cognitive load pass** (`claude-opus` fix → `claude-opus` reviewer) — concrete before abstract, cash out implications.
+**E1. Paragraph cohesion pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — each paragraph develops one idea, known-to-new pattern.
+**E2. Causality pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — every major claim has a concrete "because".
+**E3. Cognitive load pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — concrete before abstract, cash out implications.
 
 ### Phase F: Adversarial Robustness (Rubric 4)
 
-**F1. Intent alignment** (`claude-opus`) — writes private sentences (not published), disciplines scope.
-**F2. Pushback pass** (`claude-opus` fix → `claude-opus` reviewer) — strongest objection addressed.
-**F3. Worst case reader test** (`claude-opus` fix → `claude-opus` reviewer) — hostile reader accusation preempted or contained.
-**F4. Quote test** (`claude-opus` fix → `claude-opus` reviewer) — 3 random sentences, revise any usable against intent.
-**F5. Evidence toggle** (`claude-opus` fix → `claude-opus` reviewer) — every empirical claim cited, labeled hypothesis, or labeled anecdote.
+**F1. Intent alignment** (`gpt-xhigh`) — writes private sentences (not published), disciplines scope.
+**F2. Pushback pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — strongest objection addressed.
+**F3. Worst case reader test** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — hostile reader accusation preempted or contained.
+**F4. Quote test** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — 3 random sentences, revise any usable against intent.
+**F5. Evidence toggle** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — every empirical claim cited, labeled hypothesis, or labeled anecdote.
 
 ### Phase G: Editorial
 
 **G1. Soft AI tells rescan** (`gpt-high`) — find remaining comma-heavy sentences, repeated structures, parallel overuse, default negative language, closure signals.
-**G2. Soft tell fixes** (`claude-opus` fix → `gpt-high` reviewer).
-**G3. Tempo pass** (`claude-opus` fix → `claude-opus` reviewer) — metronomic cadence, rhythm device clusters, rationed pattern budgets.
-**G4. Tightening pass** (`claude-opus` fix → `claude-opus` reviewer) — compression, tone consistency.
+**G2. Soft tell fixes** (`gpt-xhigh` fix → `gpt-high` reviewer).
+**G3. Tempo pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — metronomic cadence, rhythm device clusters, rationed pattern budgets.
+**G4. Tightening pass** (`gpt-xhigh` fix → `gpt-xhigh` reviewer) — compression, tone consistency.
 
 ### Phase H: Restart Check
 
@@ -122,7 +122,7 @@ Restart from Phase C as needed until no major structural changes are introduced;
 
 ### Phase I: Quality Gate
 
-**I1. Independent quality gate** (`claude-opus` — a fresh agent that did NOT participate in any earlier stage) — runs the Final Check from WRITING_SKILL_MASTER.md plus document-type-specific checks. Returns PASS or FAIL with specific findings.
+**I1. Independent quality gate** (`gpt-xhigh` — a fresh agent that did NOT participate in any earlier stage) — runs the Final Check from WRITING_SKILL_MASTER.md plus document-type-specific checks. Returns PASS or FAIL with specific findings.
 
 If FAIL: orchestrator identifies which phase's concern failed, re-runs that phase's fix agent with the gate's findings, re-runs the gate.
 
@@ -136,14 +136,14 @@ Once gate passes, `python3 scripts/render-pitch-deck.py "product-strategy/[docum
 
 | Agent type | Model | Rationale |
 |---|---|---|
-| Content revision | `claude-opus` | Strategic judgment, adding substantive content |
+| Content revision | `gpt-xhigh` | Strategic judgment, adding substantive content |
 | Skeleton / scan agents | `gpt-high` | Pattern matching, high controllability |
-| Mechanical ban fixes | `claude-opus` | Creative rewriting to preserve meaning |
+| Mechanical ban fixes | `gpt-xhigh` | Creative rewriting to preserve meaning |
 | Mechanical fix reviewers | `gpt-high` | Pattern detection, high controllability |
-| Structural fixes (D/E/F) | `claude-opus` | Writing judgment |
-| Structural reviewers | `claude-opus` | Judgment, not pattern matching |
-| Editorial | `claude-opus` | Voice and rhythm |
-| Quality gate | `claude-opus` | Independent judgment |
+| Structural fixes (D/E/F) | `gpt-xhigh` | Writing judgment |
+| Structural reviewers | `gpt-xhigh` | Judgment, not pattern matching |
+| Editorial | `gpt-xhigh` | Voice and rhythm |
+| Quality gate | `gpt-xhigh` | Independent judgment |
 
 ---
 

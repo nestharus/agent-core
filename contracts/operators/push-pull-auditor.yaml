@@ -1,0 +1,73 @@
+schema: operator-contract-v1
+source: agents/push-pull-auditor.md
+model: gpt-high
+description: Audit push-vs-pull system coupling and report uncontrolled-source coupler findings with evidence and decoupling direction.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: Required `repo_root=<path>` - repository root that owns the changed code, config, workflow, or deployment evidence.
+- name: diff_path
+  type: string
+  required: true
+  default_source: caller
+  description: Required `diff_path=<path>` - unified diff or equivalent change evidence used to identify touched files/components and evidence anchors.
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: Required `output_path=<path>` - Markdown audit report destination; this is the only path this operator writes.
+- name: base_ref
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `base_ref=<ref>` - base revision for resolving changed surfaces or source ownership.
+- name: head_ref
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `head_ref=<ref>` - head revision for resolving changed surfaces or source ownership.
+- name: changed_files_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `changed_files_path=<path>` - explicit changed-file inventory when the diff is partial or externally produced.
+- name: proposal_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `proposal_path=<path>` - proposal context for planned pull sites and declared interface intent.
+- name: problem_map_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `problem_map_path=<path>` - problem-map context for scope, touched surfaces, and deployment topology notes.
+- name: risk_profile_path
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `risk_profile_path=<path>` - risk-profile context for blast radius and ambiguity notes.
+- name: code_quality_ref
+  type: string
+  required: false
+  default_source: caller
+  description: Optional `code_quality_ref=<path>` - default `~/ai/conventions/code-quality.md`; A1 metric source to read before scoring.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

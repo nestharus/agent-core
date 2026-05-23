@@ -12,7 +12,7 @@ Caller dispatch prompts MAY provide contract-shaped inputs from the operator's `
 
 ## Dispatcher read-protocol meta-rule
 
-Orchestrators MUST resolve the relevant structured spec before asking session metadata or the user for any input named by the contract: read the project-wrapper `## Contract` block when execution is in a project scope with a current wrapper, otherwise read the base operator `## Contract` block. Wrapper defaults apply before base defaults, and unresolved required inputs become `BLOCKED:missing-required-input` or `NEEDS_INPUT:<artifact>`. This paragraph is the canonical authority future DP-013 entries reference for project wrapper and base operator contract resolution.
+Orchestrators MUST resolve the relevant structured spec before asking session metadata or the user for any input named by the contract: read the project-wrapper optimized sidecar when execution is in a project scope with a current wrapper, otherwise read the base operator sidecar; if a sidecar is missing, fall back to that file's `## Contract` block. Wrapper defaults apply before base defaults, and unresolved required inputs become `BLOCKED:missing-required-input` or `NEEDS_INPUT:<artifact>`. This paragraph is the canonical authority future DP-013 entries reference for project wrapper and base operator contract resolution.
 
 ## What dispatch prompts may contain
 

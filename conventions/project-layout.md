@@ -53,16 +53,16 @@ between active workflows.
 
 ## Tooling implications
 
-- Claude Code derives its project-memory directory from the cwd
-  (`~/.claude*/projects/-home-nes-projects-<name>-trunk/`).
-  Rename the memory directory if the project moves between
-  layouts.
+- Provider CLIs may derive session-state directories from the cwd.
+  Treat provider-local state as disposable cache; durable project
+  guidance belongs in versioned `AGENTS.md`, operator contracts,
+  workflow docs, or project work logs.
 - CI workflows assume the repo's working directory is the
   current cwd of the worker; they don't reference any
   umbrella-level path.
 - `git worktree add` typically takes absolute paths
-  (per `feedback_worktree_paths.md` memory). With this layout,
-  worktrees go to `~/projects/<name>/worktrees/<branch>/`.
+  With this layout, worktrees go to
+  `~/projects/<name>/worktrees/<branch>/`.
 
 ## When to apply
 
@@ -72,8 +72,9 @@ between active workflows.
   when worktrees become a regular pattern. The migration is a
   filesystem operation: `mkdir trunk/`, move all current
   contents into `trunk/` except `planning/` and `worktrees/`,
-  rename Claude Code's project-memory directory. One-time cost,
-  reversible by `mv` back.
+  leave provider-local session state behind unless there is a
+  deliberate migration reason. One-time cost, reversible by `mv`
+  back.
 
 ## Multi-repo umbrella variant
 

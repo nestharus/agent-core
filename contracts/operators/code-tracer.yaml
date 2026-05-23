@@ -1,0 +1,113 @@
+schema: operator-contract-v1
+source: agents/code-tracer.md
+model: gpt-high
+description: Cross-language code tracer. Takes a surface (file, symbol, endpoint, file-write, env var, IPC channel, queue topic) and produces a graph of readers, callers, contracts, and consumers across GitHub workflows, shell, PowerShell, Python, TypeScript/JavaScript, SQL, and any other language present in the project. Used by Phase 2.5 (duplicates inventory + cross-language trace) and Phase 5 (hookpoints in exhaustive mode). Builds tracing recipes per project on the fly when no prior recipe exists.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: surface
+  type: string
+  required: true
+  default_source: caller
+  description: "`surface` \u2014 the starting point. One of:"
+- name: file
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: path
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: relative
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: to
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: repo
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: root
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: trace
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: readers
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: writers
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: that
+  type: string
+  required: true
+  default_source: caller
+  description: "**file path** (relative to repo root) \u2014 trace readers/writers of that file"
+- name: python
+  type: string
+  required: true
+  default_source: caller
+  description: "**symbol** in the form `<lang>:<module>:<name>` (e.g. `python:scripts.distribution.invalidate_cloudfront:invalidate_cloudfront`) \u2014 trace callers"
+- name: GET
+  type: string
+  required: true
+  default_source: caller
+  description: "**endpoint** in the form `<method> <path>` (e.g. `GET /api/quotations/:id`) \u2014 trace from the route handler back to every caller (typically TS frontend) and forward to every consumer of the response shape"
+- name: wf
+  type: string
+  required: true
+  default_source: caller
+  description: "**file-write target** in the form `wf:<path>` (e.g. `wf:s3://rfq-distribution-us/{channel}/docker/latest.json`) \u2014 trace producers and consumers"
+- name: env
+  type: string
+  required: true
+  default_source: caller
+  description: "**env var** in the form `env:<name>` \u2014 trace every place the env var is read or written across all languages"
+- name: cmd
+  type: string
+  required: true
+  default_source: caller
+  description: "**CLI invocation** in the form `cmd:<argv0>` (e.g. `cmd:windows_updater.exe`) \u2014 trace producers (build pipelines) and consumers (callers of the CLI)"
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: "`repo_root` \u2014 absolute path to the repository root. For multi-repo projects, supply ONE repo root per dispatch; cross-repo tracing is multiple dispatches with results joined."
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: "`output_path` \u2014 absolute path the report writes to. Inside `${planning_dir}` for orchestrator-driven runs."
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

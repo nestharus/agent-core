@@ -1,0 +1,18 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/work-manager-ticket-draft-audit.md
+workflow_id: work-manager-ticket-draft-audit
+orchestrator: work-manager-ticket-filing-operator or root orchestrator before backend ticket create
+inputs:
+- N1-shaped work-manager-ticket-draft-evidence bundle path
+- worktree path, model, prompt path, log path, audit report path, scratch dir, planning dir
+- runner/orchestrator currentness and session graph evidence when load-bearing
+expectations:
+- verifies bundle currentness before dispatching the independent pre-posting critic
+- dispatches work-manager-ticket-brief-auditor through the approved non-interactive agents CLI shape
+- writes a pre-posting audit report path before any backend create handoff
+outputs:
+- N3 prompt path, log path, and report path
+- LOW/MEDIUM/HIGH/NEEDS_INPUT/BLOCKED audit result consumed by the filing operator
+non_goals:
+- does not post tickets, mutate backend state, or replace Linear/Jira create contracts
+- does not replace workflow-process-auditor for completed-run procedure review

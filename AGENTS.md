@@ -1,11 +1,5 @@
 # `~/ai/` Master Routing & Topology
 
-## Declared roles
-
-`orchestration`, `accessor`, `formatter`.
-
-This file-local declaration reflects AGENTS.md ownership of shared routing order, pointer access to operator contracts, and catalog summary formatting.
-
 Purpose: shared routing and workflow topology for any project that uses `~/ai/` as its workflow library.
 
 Project `AGENTS.md` files should reference this file for the generic routing layer, then add only repo-specific overrides, operators, infrastructure, and exceptions.
@@ -44,7 +38,7 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 
 ## Operator Routing Table
 
-Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-orchestrator`, and `rfq/jira-operator` carry valid `## Contract` blocks as of ACR-278.
+Optimized contract sidecars live under `contracts/operators/` and `contracts/workflows/`. Dispatchers read those first and fall back to an operator `## Contract` block or workflow `workflow_dispatch_contract` frontmatter only when a sidecar is missing.
 
 ### AGENTS maintenance
 
@@ -52,22 +46,22 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   File: [~/ai/agents/agentsmd-curator.md](agents/agentsmd-curator.md) | Inputs: `mode`, `repo_root`, `agents_md?`, `agents_dir?`, `findings_to_fix?`, `operator_file?`, `routing_entry?` | Model: `gpt-high`
 
 - `agentsmd-maintenance-orchestrator` - Run the full AGENTS maintenance loop when the shared operator catalog or routing layer needs audit, triage, risk-gating, and verification.
-  File: [~/ai/agents/agentsmd-maintenance-orchestrator.md](agents/agentsmd-maintenance-orchestrator.md) | Inputs: `repo_root`, `agents_md?`, `agents_dir?`, `triage_policy?`, `risk_gate_required?` | Model: `gpt-high`
+  File: [~/ai/agents/agentsmd-maintenance-orchestrator.md](agents/agentsmd-maintenance-orchestrator.md) | Inputs: `repo_root`, `agents_md?`, `agents_dir?`, `triage_policy?`, `risk_gate_required?` | Model: `gpt-xhigh`
 
 - `workflow-design-auditor` - Audit workflow document design against the shared design-pattern corpus; does not audit runtime execution.
-  File: [~/ai/agents/workflow-design-auditor.md](agents/workflow-design-auditor.md) | Inputs: `workflow_file`, `repo_root`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+  File: [~/ai/agents/workflow-design-auditor.md](agents/workflow-design-auditor.md) | Inputs: `workflow_file`, `repo_root`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-xhigh`
 
 - `agent-design-auditor` - Audit operator prompt design, operator-file-format conformance, and single-concern shape; does not maintain AGENTS routing.
-  File: [~/ai/agents/agent-design-auditor.md](agents/agent-design-auditor.md) | Inputs: `operator_file`, `repo_root`, `operator_format_ref?`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+  File: [~/ai/agents/agent-design-auditor.md](agents/agent-design-auditor.md) | Inputs: `operator_file`, `repo_root`, `operator_format_ref?`, `design_patterns_ref?`, `context_files?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-xhigh`
 
 - `workflow-reviewer` - Verify that a multi-step operator run actually followed its required procedure and produced the expected outputs.
-  File: [~/ai/agents/workflow-reviewer.md](agents/workflow-reviewer.md) | Inputs: `operator_file`, `step_log`, `expected_outputs?`, `mode?` | Model: `claude-opus`
+  File: [~/ai/agents/workflow-reviewer.md](agents/workflow-reviewer.md) | Inputs: `operator_file`, `step_log`, `expected_outputs?`, `mode?` | Model: `gpt-xhigh`
 
 - `process-tree-auditor` - Audit an `agents trace --json` process tree plus companion artifacts to verify root-delegated workflow execution.
   File: [~/ai/agents/process-tree-auditor.md](agents/process-tree-auditor.md) | Inputs: `operator_file`, `process_tree_path`, `root_invocation_uuid`, `subtree_root_uuid?`, `expected_process`, `companion_artifacts`, `audit_history_path?`, `mode?`, `report_path?` | Model: `gpt-high`
 
 - `workflow-process-auditor` - Audit workflow run artifacts for procedure adherence; consumes process-tree reports as evidence but does not replace `process-tree-auditor`.
-  File: [~/ai/agents/workflow-process-auditor.md](agents/workflow-process-auditor.md) | Inputs: `workflow_file`, `run_artifacts`, `repo_root`, `process_tree_report_path?`, `expected_process_path?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-high`
+  File: [~/ai/agents/workflow-process-auditor.md](agents/workflow-process-auditor.md) | Inputs: `workflow_file`, `run_artifacts`, `repo_root`, `process_tree_report_path?`, `expected_process_path?`, `audit_history_path?`, `report_path?`, `mode?` | Model: `gpt-xhigh`
 
 ### Coverage / behavior / test authoring
 
@@ -75,13 +69,13 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   File: [~/ai/agents/coverage-analyzer.md](agents/coverage-analyzer.md) | Inputs: `task`, `worktree_path`, `scope?` | Model: `gpt-high`
 
 - `coverage-auditor` - Judge test quality after coverage analysis or new test work, especially for captured behavior, dead tests, or low-value assertions.
-  File: [~/ai/agents/coverage-auditor.md](agents/coverage-auditor.md) | Inputs: `task`, `worktree_path`, `test_files?`, `behavior_specs?` | Model: `claude-opus`
+  File: [~/ai/agents/coverage-auditor.md](agents/coverage-auditor.md) | Inputs: `task`, `worktree_path`, `test_files?`, `behavior_specs?` | Model: `gpt-xhigh`
 
 - `coverage-expansion-operator` - Orchestrate coverage expansion from uncovered code through P0 selection, behavior investigation, test writing, strict xfails, and report artifacts.
   File: [~/ai/agents/coverage-expansion-operator.md](agents/coverage-expansion-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_root?`, `spec_dir?`, `scope?`, `coverage_report?`, `agents_dir?`, `report_slug?` | Model: `gpt-high`
 
 - `risk-assessor` - Rank uncovered code by outage potential, blast radius, and business value before choosing what to test first.
-  File: [~/ai/agents/risk-assessor.md](agents/risk-assessor.md) | Inputs: `uncovered_areas`, `worktree_path`, `coverage_data?` | Model: `claude-opus`
+  File: [~/ai/agents/risk-assessor.md](agents/risk-assessor.md) | Inputs: `uncovered_areas`, `worktree_path`, `coverage_data?` | Model: `gpt-xhigh`
 
 - `behavior-investigator` - Research intended behavior for suspicious or uncovered code before any test is written.
   File: [~/ai/agents/behavior-investigator.md](agents/behavior-investigator.md) | Inputs: `target`, `repo_root`, `planning_root?`, `context?` | Model: `gpt-high`
@@ -113,7 +107,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 ### Incident / RCA
 
 - `rca-orchestrator` - Orchestrate the full RCA workflow from trigger classification through reproduction, split root-cause/fix/application dispatches, verify-or-return, and downstream incident lifecycle handoff.
-  File: [~/ai/agents/rca-orchestrator.md](agents/rca-orchestrator.md) | Inputs: `incident_id?`, `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `trigger_command?`, `ticket_system?` | Model: `claude-opus`
+  File: [~/ai/agents/rca-orchestrator.md](agents/rca-orchestrator.md) | Inputs: `incident_id?`, `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `trigger_command?`, `ticket_system?` | Model: `gpt-xhigh`
 
 - `incident-investigator` - Investigate an incident from a brief, evidence directory, and read-only repository, then write evidence-backed findings without mutating code or external systems.
   File: [~/ai/agents/incident-investigator.md](agents/incident-investigator.md) | Inputs: `incident_brief_path`, `evidence_dir`, `repo_root`, `findings_path?` | Model: `gpt-high`
@@ -124,7 +118,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   Model: gpt-high
 
 - `prototype-rca-orchestrator` - Run the light two-agent prototype RCA loop for one failed behavior test or QA walkthrough observation, then hand back after targeted verification.
-  File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?` | Model: `claude-opus`
+  File: [~/ai/agents/prototype-rca-orchestrator.md](agents/prototype-rca-orchestrator.md) | Inputs: `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `handback_callback`, `trigger_command?`, `qa_use_case_id?` | Model: `gpt-xhigh`
 
 ### Regression Investigation
 
@@ -155,7 +149,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
 
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
-  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-high`
+  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-medium`
 
 - `commit-hygiene-operator` - Audit or rewrite a branch's commits into small, testable, reviewable history without changing the cumulative diff.
   File: [~/ai/agents/commit-hygiene-operator.md](agents/commit-hygiene-operator.md) | Inputs: `branch`, `base`, `mode`, `target_commit_plan?`, `repo_root`, `worktrees_root?`, `worktree_path?`, `python_bin?` | Model: `gpt-high`
@@ -167,16 +161,16 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
   File: [~/ai/agents/pr-justification-gauntlet.md](agents/pr-justification-gauntlet.md) | Inputs: `pr_number`, `work_dir`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `pr_meta_path?`, `diff_path?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-interrogator` - Read only the PR and open or press threads for any change that is not obviously justified in this PR.
-  File: [~/ai/agents/pr-justification-interrogator.md](agents/pr-justification-interrogator.md) | Inputs: `pr metadata`, `diff`, `threads.json?`, `audit_history_path?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-interrogator.md](agents/pr-justification-interrogator.md) | Inputs: `pr metadata`, `diff`, `threads.json?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-researcher` - Gather evidence from planning docs, Jira, related PRs, and git history for each open justification thread.
   File: [~/ai/agents/pr-justification-researcher.md](agents/pr-justification-researcher.md) | Inputs: `repo_root`, `planning_root?`, `jira_url`, `jira_project`, `jira_account_email`, `threads.json`, `prior_history?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-value-assessor` - Score the benefit and cost of keeping each challenged change in the current PR.
-  File: [~/ai/agents/pr-justification-value-assessor.md](agents/pr-justification-value-assessor.md) | Inputs: `threads.json`, `prior_history?`, `audit_history_path?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-value-assessor.md](agents/pr-justification-value-assessor.md) | Inputs: `threads.json`, `prior_history?`, `audit_history_path?` | Model: `gpt-xhigh`
 
 - `pr-justification-adjudicator` - Decide when a justification thread is settled and cull it as `drop`, `backlog`, `keep`, or continue to another round.
-  File: [~/ai/agents/pr-justification-adjudicator.md](agents/pr-justification-adjudicator.md) | Inputs: `threads.json`, `round history`, `audit_history_path?` | Model: `claude-opus`
+  File: [~/ai/agents/pr-justification-adjudicator.md](agents/pr-justification-adjudicator.md) | Inputs: `threads.json`, `round history`, `audit_history_path?` | Model: `gpt-high`
 
 - `decision-encoder` - Maintain canonical audit history after revise/review rounds by encoding findings, role determinations, watch signals, and summarization tail.
   File: [~/ai/agents/decision-encoder.md](agents/decision-encoder.md) | Inputs: `audit_history_path`, `round_number`, `artifact_under_review`, `round_artifacts`, `role_outputs`, `mode?` | Model: `gpt-high`
@@ -190,7 +184,7 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 ### Implementation pipeline orchestration
 
 - `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, performs inherited estimate read from the selected ticket backend, requires Phase 3 estimate refinement, performs ticket write-back for the refined estimate, and enforces the violation-escalation policy (rewind → split → shrink) autonomously. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions and (for foreign repositories only) PR merge remain user-owned.
-  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?` | Model: `claude-opus`
+  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?` | Model: `gpt-xhigh`
 
 - `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
   File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
@@ -198,12 +192,12 @@ Priority-0 contract backfill status: `jira-operator`, `implementation-pipeline-o
 ### Refactoring strategies
 
 - `refactoring-commit-history-orchestrator` - Strategic incremental refactoring by commit-history since last refactor milestone; use when scoping is derived from milestone-to-HEAD degradation evidence rather than incident-triggered or seed-and-fan-out initiation.
-  File: [~/ai/agents/refactoring-commit-history-orchestrator.md](agents/refactoring-commit-history-orchestrator.md) | Workflow: [~/ai/workflows/refactoring-commit-history.md](workflows/refactoring-commit-history.md) | Convention: [~/ai/conventions/refactoring-commit-history-scoping.md](conventions/refactoring-commit-history-scoping.md) | Inputs: `target`, `target_surface?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `integration_branch_ref`, `history_base_ref`, `milestone_search_policy`, `degradation_signal_sources`, `package_bounds`, `manager_flavor`, `package_size_override?` | Model: `claude-opus`
+  File: [~/ai/agents/refactoring-commit-history-orchestrator.md](agents/refactoring-commit-history-orchestrator.md) | Workflow: [~/ai/workflows/refactoring-commit-history.md](workflows/refactoring-commit-history.md) | Convention: [~/ai/conventions/refactoring-commit-history-scoping.md](conventions/refactoring-commit-history-scoping.md) | Inputs: `target`, `target_surface?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `integration_branch_ref`, `history_base_ref`, `milestone_search_policy`, `degradation_signal_sources`, `package_bounds`, `manager_flavor`, `package_size_override?` | Model: `gpt-xhigh`
 
 ### Release management
 
 - `release-orchestrator` - Orchestrate a staged release lifecycle across cut, freeze, hotfix, promote, tag, and reconcile phases.
-  File: [~/ai/agents/release-orchestrator.md](agents/release-orchestrator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `tag_pattern`, `qa_lane_id`, `manifest_path?`, `release_manifest_path?`, `freeze_window`, `qa_evidence_path`, `required_checks_policy`, `settings_state_or_runbook_ticket`, `hotfix_policy`, `promotion_approval`, `reconcile_obligations`, `ticket_system`, `jira_url?`, `jira_project?`, `jira_account_email?`, `jira_issue_key?`, `jira_release_key?`, `linear_team_key?`, `linear_project_id?`, `linear_issue_key?`, `linear_release_key?`, `release_ticket_key?` | Model: `claude-opus`
+  File: [~/ai/agents/release-orchestrator.md](agents/release-orchestrator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `release_id`, `develop_branch_name`, `main_branch_name`, `release_branch_name`, `tag_pattern`, `qa_lane_id`, `manifest_path?`, `release_manifest_path?`, `freeze_window`, `qa_evidence_path`, `required_checks_policy`, `settings_state_or_runbook_ticket`, `hotfix_policy`, `promotion_approval`, `reconcile_obligations`, `ticket_system`, `jira_url?`, `jira_project?`, `jira_account_email?`, `jira_issue_key?`, `jira_release_key?`, `linear_team_key?`, `linear_project_id?`, `linear_issue_key?`, `linear_release_key?`, `release_ticket_key?` | Model: `gpt-xhigh`
 
 - `release-cut-operator` - Release branch cut mechanics. Wired in `~/ai/agents/release-orchestrator.md` § Phase 1 - cut.
   File: [~/ai/agents/release-cut-operator.md](agents/release-cut-operator.md) | Inputs: `repo_root`, `worktree_path`, `scratch_dir`, `release_id`, `develop_branch_name`, `release_branch_name`, `manifest_path?`, `release_manifest_path?`, `required_checks_policy`, `settings_state_or_runbook_ticket` | Model: `gpt-high`
@@ -228,7 +222,7 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
   File: [~/ai/agents/philosophy-bootstrap.md](agents/philosophy-bootstrap.md) | Inputs: `brief_path`, `problem_path`, `philosophy_path`, `scratch_dir` | Model: `gpt-high`
 
 - `alignment-cycle-orchestrator` - Run the proposal alignment review cycle: Stage 1 problem-alignment, Stage 1b-classify + 1b-integrate (problem expansion), Stage 2 philosophy-alignment, Stage 2b-classify + 2b-integrate (philosophy expansion). Halts at 2b-classify if `philosophy-decisions.md` is written (user-input gate). Produces a run report.
-  File: [~/ai/agents/alignment-cycle-orchestrator.md](agents/alignment-cycle-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, axis tables, scratch dir | Model: `claude-opus`
+  File: [~/ai/agents/alignment-cycle-orchestrator.md](agents/alignment-cycle-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, axis tables, scratch dir | Model: `gpt-xhigh`
 
 - `proposer` - Write or update `proposal.md` as a system-design document grounded in `problem.md` + `philosophy.md`. Brownfield revisions consume `problem-review.md` + `philosophy-review.md`. Stack/build-order content is roadmap-/DECISIONS-layer concern, not proposal content.
   File: [~/ai/agents/proposer.md](agents/proposer.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, optional review files | Model: `gpt-high`
@@ -243,7 +237,7 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
   File: [~/ai/agents/problem-expansion-integrate.md](agents/problem-expansion-integrate.md) | Inputs: `problem-classification.md`, `problem-surfaces.md`, `problem.md`, project axis table | Model: `gpt-high`
 
 - `philosophy-alignment` - Stage 2 alignment review: read `philosophy.md` + `proposal.md` + `problem-review.md`; produce `philosophy-review.md` (always) and `philosophy-surfaces.md` (when new philosophical concerns are discovered).
-  File: [~/ai/agents/philosophy-alignment.md](agents/philosophy-alignment.md) | Inputs: `philosophy.md`, `proposal.md`, `problem-review.md` | Model: `claude-opus`
+  File: [~/ai/agents/philosophy-alignment.md](agents/philosophy-alignment.md) | Inputs: `philosophy.md`, `proposal.md`, `problem-review.md` | Model: `gpt-xhigh`
 
 - `philosophy-expansion-classify` - Stage 2b-classify (judge): classify each concern as A absorbable, B compatible-addition, C tension, D new-axis, or E contradiction. Writes `philosophy-classification.md` (always) and `philosophy-decisions.md` (only when any C/D/E surface user-input concerns). Does NOT modify `philosophy.md`.
   File: [~/ai/agents/philosophy-expansion-classify.md](agents/philosophy-expansion-classify.md) | Inputs: `philosophy-surfaces.md`, `philosophy.md`, `philosophy-alignment.md` | Model: `gpt-xhigh`
@@ -256,7 +250,7 @@ The alignment cycle drives a project's `problem.md` ↔ `philosophy.md` ↔ `pro
 The roadmap workflow cascades from market research (Layer 0) through ticket regeneration (Layer 4). Each layer has 3x risk gates (per-risk model assignment per `workflows/roadmap.md`, all-LOW required) before advancing.
 
 - `roadmap-orchestrator` - Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.
-  File: [~/ai/agents/roadmap-orchestrator.md](agents/roadmap-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, `DECISIONS.md`, scratch dir | Model: `claude-opus`
+  File: [~/ai/agents/roadmap-orchestrator.md](agents/roadmap-orchestrator.md) | Inputs: project paths to `problem.md`, `philosophy.md`, `proposal.md`, `DECISIONS.md`, scratch dir | Model: `gpt-xhigh`
 
 - `executive-roadmap-proposer` - Layer 1: write/update `executive-roadmap.md` from problem + philosophy + proposal + market research. Strategic ordering of value slices and milestones.
   File: [~/ai/agents/executive-roadmap-proposer.md](agents/executive-roadmap-proposer.md) | Inputs: `problem.md`, `philosophy.md`, `proposal.md`, `market-research.md`, optional risk reports | Model: `gpt-high`
@@ -360,7 +354,7 @@ Wrong shapes:
 
 ```bash
 # Wrong: -m combined with -a shadows the agent's frontmatter model.
-agents -m claude-opus -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md
+agents -m gpt-xhigh -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md
 
 # Wrong: composition between the parent shell and the agents invocation.
 bash -c "python << EOF
@@ -418,11 +412,11 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 
 ## Model Roles
 
-See [`~/ai/models/roles.md`](models/roles.md) for the authoritative matrix. Default is `gpt-high`; `claude-opus` is for intent/alignment judgements only.
+See [`~/ai/models/roles.md`](models/roles.md) for the authoritative matrix. Default is `gpt-high`; `gpt-xhigh` is for orchestration, alignment, and deep judgement gates.
 
 ## Operator File Format
 
-See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for frontmatter, `## Contract` call-interface blocks, and body skeleton guidance.
+See [`~/ai/agents/operator-file-format.md`](agents/operator-file-format.md) for frontmatter, optimized contract sidecars, `## Contract` fallback blocks, and body skeleton guidance.
 
 ## How Projects Extend This
 
@@ -434,7 +428,7 @@ Projects organized for agent-driven workflows use the
 The git repository sits at `trunk/`; the project's own `AGENTS.md`
 lives at `<project>/trunk/AGENTS.md`.
 
-Project-specific operator wrappers live in `<project>/trunk/agents/`, reference `~/ai/agents/<name>.md` as their base procedure, and carry wrapper defaults in their `## Contract` block. See [`~/ai/conventions/bootstrap-pattern.md`](conventions/bootstrap-pattern.md) § Closed-path dispatch for the wrapper-first contract-block read order.
+Project-specific operator wrappers live in `<project>/trunk/agents/`, reference `~/ai/agents/<name>.md` as their base procedure, and carry wrapper defaults in their optimized sidecar or `## Contract` block. See [`~/ai/conventions/bootstrap-pattern.md`](conventions/bootstrap-pattern.md) § Closed-path dispatch for the wrapper-first contract-surface read order.
 
 ### Per-Project Policy
 
@@ -442,7 +436,7 @@ A project's own `AGENTS.md` declares the per-project policy knobs the orchestrat
 
 - `ticket_system`: `jira` or `linear` — selects the ticket backend per [`~/ai/agents/implementation-pipeline-orchestrator.md`](agents/implementation-pipeline-orchestrator.md) § Ticket System Pluggability.
 - Linear projects declare `linear_team_key` (and optionally `linear_project_id`).
-- Jira projects may declare project policy values, but category-local Jira execution defaults should live in the project wrapper `## Contract` when a wrapper exists.
+- Jira projects may declare project policy values, but category-local Jira execution defaults should live in the project wrapper contract when a wrapper exists.
 - `skip_problem_map_gate` (boolean, default `false`) — see the orchestrator file's Optional Inputs.
 - `auto_merge_after_phase_9` (boolean, default `true`) — see the orchestrator file's Optional Inputs. Default-on; foreign repos opt out via their `AGENTS.md`.
 

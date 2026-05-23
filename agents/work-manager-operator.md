@@ -1,5 +1,5 @@
 ---
-description: 'Manage a long-running backlog of Work Units across an ecosystem. Dispatch implementation-pipeline-orchestrator per WU, track state in the selected ticket backend, sequence dispatches, surface frictions as tickets, delegate investigations to single-shot opus runs. Manager-of-orchestrators, not orchestrator-of-WU.'
+description: 'Manage a long-running backlog of Work Units across an ecosystem. Dispatch implementation-pipeline-orchestrator per WU, track state in the selected ticket backend, sequence dispatches, surface frictions as tickets, delegate investigations to bounded gpt-xhigh runs. Manager-of-orchestrators, not orchestrator-of-WU.'
 model: gpt-xhigh
 output_format: ''
 ---
@@ -277,7 +277,7 @@ For every WU dispatched via implementation-pipeline-orchestrator:
 
 When ambiguous whether a feature is must-have vs nice-to-have, ask the user explicitly which bucket. Don't strictly serialize — dispatch in parallel where slots allow — but newly-Todo items in a higher priority bucket should jump the queue ahead of already-Todo lower-priority items.
 
-**Memory note.** The manager updates this operator file when the user's prioritization or dispatch rules change. Do not encode operating rules in `~/.claude*/projects/.../memory/` — those are session-local; this file is the canonical, version-controlled source of truth.
+**Durable-state note.** The manager updates this operator file when the user's prioritization or dispatch rules change. Do not encode operating rules in provider-local session caches; those are session-local. This file is the canonical, version-controlled source of truth.
 
 ## Delegation Patterns
 
@@ -291,7 +291,7 @@ The full implementation pipeline runs. Manager pauses dispatching adjacent WUs t
 
 `agents -m gpt-xhigh -f <investigation-prompt.md>`
 
-Single-shot opus run. Work is done in opus's bash tool directly; no sub-agent delegation surface is available. The investigation prompt MUST include:
+Single-shot `gpt-xhigh` run. Work is done directly in that invocation; no nested delegation surface is available. The investigation prompt MUST include:
 
 - A **strict output contract**: a single structured summary block. No reasoning trail, no quoted API responses, no raw JSON dumps in the result. The manager only sees the final block.
 	- **Forbidden behaviors**: do not modify code, do not transition real tickets, do not mutate repository state.

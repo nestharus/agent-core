@@ -137,7 +137,7 @@ For parallel-fanout research, after Phase 2 returns and before Phase 3 synthesis
 The coordinator, or the single researcher in single-agent mode, integrates the
 findings into one deliverable.
 
-- Synthesis is `gpt-high`. Not `claude-opus`. See `~/ai/models/roles.md`.
+- Synthesis is `gpt-high`. Not `gpt-xhigh`. See `~/ai/models/roles.md`.
 - Synthesis is construction, not judgement.
 - Output structure: question -> evidence -> options with tradeoffs ->
   recommendation.
@@ -189,7 +189,7 @@ When the question is specifically about UI, UX, or visual patterns:
 - Request implementation approaches, wiring details, failure modes, and
   tradeoffs.
 - Keep synthesis on `gpt-high`.
-- Use `claude-opus` only for adversarial review of the synthesized design, not
+- Use `gpt-xhigh` only for adversarial review of the synthesized design, not
   for synthesis.
 
 ## Output Location

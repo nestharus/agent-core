@@ -36,7 +36,7 @@ These rules drive every audit and edit you make.
 
 **Operator files (`${agents_dir}/*.md`) contain:**
 - Frontmatter: `description`, `model`, `output_format`
-- `## Contract` with a fenced `operator-contract-v1` YAML call interface for inputs, defaults, errors, delegation, and side effects
+- optimized contract sidecar or `## Contract` block with a fenced `operator-contract-v1` YAML call interface for inputs, defaults, errors, delegation, and side effects
 - Use When / Do Not Use When
 - Required Inputs as human-readable prose that points to, and does not conflict with, the structured `## Contract`
 - Non-Negotiables (rules that must hold regardless of input)
@@ -51,7 +51,7 @@ These rules drive every audit and edit you make.
 - Workflow steps in AGENTS.md reference operators by `agents/<name>.md` (relative)
 - The model named in a workflow step matches the operator file's frontmatter `model` (or is an explicit override stated in the workflow row)
 - No procedural drift — if an operator's procedure changes, the AGENTS.md row must still describe the same shape (inputs/outputs/model)
-- AGENTS routing summaries SHOULD point to the operator's `## Contract` block rather than duplicate the input schema.
+- AGENTS routing summaries SHOULD point to the operator's contract surface rather than duplicate the input schema.
 
 ## Use When
 
@@ -114,10 +114,10 @@ Default to `audit` if mode is not specified.
    - Does the named `agents/<name>.md` exist?
    - Does its frontmatter `model` match the workflow row's model (or is the row an explicit override)?
    - Classify the operator row/file as `new-operator`, `project-wrapper`, `edited-high-risk`, or `trivial-minimum-body`. Promoted high-risk signals are external services, credentials, branch topology, releases, PRs, tickets, or worktrees; use the same classification terms and blocking semantics as `agent-design-auditor.md`.
-   - Does the operator file contain a `## Contract` block with `schema: operator-contract-v1`? If not, emit `severity: BLOCKING`, `class: catalog-row-missing-contract` for `new-operator`, `project-wrapper`, and `edited-high-risk`; emit an advisory finding for `trivial-minimum-body` operators outside those promoted categories per `operator-file-format.md` § `Minimum Body`.
-   - Does the AGENTS.md row duplicate Required Inputs prose that conflicts with the operator's `## Contract` `inputs:` field set? If so, emit `severity: MAJOR`, `class: catalog-row-contract-input-conflict`, upgraded to `BLOCKING` when the conflict causes unsafe invocation of a promoted high-risk operator.
-   - Are any brief routing input summaries still consistent with the operator's `## Contract` and `Required Inputs` prose?
-   - The high-risk missing-contract fixture format in `evals/acr-279-lint-promotion-regression/fixtures/high-risk-operator-missing-contract.md` is the regression reference: ticket/external-service operator signals with no `## Contract` must produce `ACR279-CURATOR-MISSING-CONTRACT-BLOCKING` or an equivalent BLOCKING finding.
+   - Does the operator expose a contract surface with `schema: operator-contract-v1`, either in `contracts/operators/<operator>.yaml` or in a `## Contract` block? If not, emit `severity: BLOCKING`, `class: catalog-row-missing-contract` for `new-operator`, `project-wrapper`, and `edited-high-risk`; emit an advisory finding for `trivial-minimum-body` operators outside those promoted categories per `operator-file-format.md` § `Minimum Body`.
+   - Does the AGENTS.md row duplicate Required Inputs prose that conflicts with the operator contract `inputs:` field set? If so, emit `severity: MAJOR`, `class: catalog-row-contract-input-conflict`, upgraded to `BLOCKING` when the conflict causes unsafe invocation of a promoted high-risk operator.
+   - Are any brief routing input summaries still consistent with the operator contract and `Required Inputs` prose?
+   - The high-risk missing-contract fixture format in `evals/acr-279-lint-promotion-regression/fixtures/high-risk-operator-missing-contract.md` is the regression reference: ticket/external-service operator signals with no contract surface must produce `ACR279-CURATOR-MISSING-CONTRACT-BLOCKING` or an equivalent BLOCKING finding.
 
 3. **Operator discoverability check.** For each `${agents_dir}/*.md`:
    - Is it reachable from AGENTS.md routing?
@@ -152,7 +152,7 @@ Default to `audit` if mode is not specified.
 2. **Plan edits.** For each finding to fix, write the specific edit:
    - Move section X from AGENTS.md to operator Y (with exact byte ranges + destination)
    - Add routing entry for orphan operator Z
-   - Fix model mismatch in row W (AGENTS.md says `claude-opus`; operator says `gpt-high`)
+   - Fix model mismatch in row W (AGENTS.md says `gpt-xhigh`; operator says `gpt-high`)
 
 3. **Output the diff plan.** Show the user/orchestrator what will change before touching files.
 
@@ -187,9 +187,9 @@ These are the patterns the curator most often encounters. Familiarity speeds aud
 | Decision table for one operator embedded in AGENTS.md | MAJOR | Move to that operator file's Decision Table section |
 | Detailed example walkthrough in AGENTS.md | MAJOR | Move to operator (or to a dedicated docs file outside AGENTS.md) |
 | Cross-reference uses absolute path (`${agents_dir}/foo.md`) | MINOR | Change to relative `agents/foo.md` |
-| Operator row points to a new operator, project wrapper, or edited high-risk operator with no valid `## Contract` block | BLOCKING | Add or repair the `operator-contract-v1` block before the routing row can pass |
-| Operator row points to a trivial/minimum-body operator outside the promoted categories with no `## Contract` block | advisory | Point to the missing contract without blocking solely for the richer body skeleton |
-| AGENTS row input prose conflicts with operator `## Contract` inputs | MAJOR, BLOCKING when unsafe for high-risk operators | Replace the row's duplicate schema with a pointer to the operator contract |
+| Operator row points to a new operator, project wrapper, or edited high-risk operator with no valid contract surface | BLOCKING | Add or repair the `operator-contract-v1` sidecar or block before the routing row can pass |
+| Operator row points to a trivial/minimum-body operator outside the promoted categories with no contract surface | advisory | Point to the missing contract without blocking solely for the richer body skeleton |
+| AGENTS row input prose conflicts with operator contract inputs | MAJOR, BLOCKING when unsafe for high-risk operators | Replace the row's duplicate schema with a pointer to the operator contract |
 
 ## Stop Conditions
 

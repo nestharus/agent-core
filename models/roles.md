@@ -6,25 +6,18 @@ Do not restate the matrix there.
 
 ## The mental model
 
-> GPT proposes "these are what solve these problems."
->
-> Opus states "do they now? I'll be the judge of that."
-
-- **GPT** (`gpt-high`): Default proposer, builder, researcher, implementer, and checklist auditor. Use it for evidence gathering, case enumeration, implementation, tests, and most artifact construction.
-- **Opus** (`claude-opus`): Judgement, purpose-fit review, and high-stakes external prose. Use it when the task depends on intent judgement on narrow gates (shortcut risk, supported-surface risk), adversarial writing review, ticket-system prose, or PR prose.
-- **gpt-xhigh**: Orchestration, alignment, deep-reasoning audits, and risk-assessment work where reasoning depth across many inputs is the bottleneck.
-- **Opus is not the default synthesizer**, but shipped exceptions exist where writing quality or judgement-heavy routing is the point.
-- Synthesis is usually construction; route it to `gpt-high` unless a workflow/operator explicitly owns a narrower Opus exception.
+- **`gpt-high`** is the default worker: proposer, builder, researcher, implementer, checklist auditor, and external-facing prose author.
+- **`gpt-xhigh`** is the deep-reasoning route: orchestrators, alignment, risk assessment, purpose-fit judgement, and high-stakes review gates.
+- **`gpt-medium`** is the fast automation route for bounded, structured operator loops.
+- Legacy provider-specific model ids are deprecated for shared routing. Do not add new provider-specific assignments to operational docs; update the operator frontmatter and this matrix instead.
 
 ## Matrix
 
 | Model | Role | Use for |
 |---|---|---|
-| `gpt-high` | **Default.** Proposer/builder/auditor. | RCA, research, most synthesis, proposals, hookpoint analysis, implementation, test writing, implementation-pipeline audit risk, behavior investigation, CodeRabbit comment fixing when not delegated to gpt-medium, commit hygiene, test-audit gate, multi-concern PR review, justification PR review, and roadmap ticket-file generation. Use it for work that gathers evidence, enumerates cases, builds internal artifacts, or checks presence against a checklist unless a workflow/operator names a narrower exception. |
-| `gpt-xhigh` | Orchestrators, deep-reasoning auditors, alignment, and risk-assessment work. | All `*-orchestrator` operators that route a workflow end-to-end; proof-risk, scope-risk, coverage, risk-assessor, philosophy-alignment, workflow-reviewer, agent-design / workflow-design / workflow-process auditors, work-manager ticket-brief auditor, rebase-drift-checker; multi-file proposals spanning subsystems; research that needs deep reasoning across many sources before delegation; strategic synthesis where reasoning depth is the bottleneck. |
-| `claude-opus` | Judge / reviewer / external-prose specialist. | Use for shortcut risk, supported-surface risk, adversarial writing reviews, PR title/body writing, ticket-system read/comment/create/search/transition operators, and other intent-judgement or external-prose tasks. Orchestrators no longer default to Opus; see `gpt-xhigh`. |
+| `gpt-high` | **Default.** Proposer/builder/auditor/writer. | RCA evidence gathering, research, most synthesis, proposals, hookpoint analysis, implementation, test writing, audit risk, behavior investigation, commit hygiene, test-audit gate, multi-concern PR review, justification PR review, ticket prose, PR prose, and roadmap ticket-file generation. Use it for work that gathers evidence, enumerates cases, builds artifacts, checks presence against a checklist, or writes external-facing prose unless a workflow/operator names a narrower exception. |
+| `gpt-xhigh` | Orchestrators, deep-reasoning auditors, alignment, and risk-assessment work. | All `*-orchestrator` operators that route a workflow end-to-end; proof risk, scope risk, shortcut risk, supported-surface risk, coverage audit, risk assessor, philosophy/problem alignment, workflow reviewer, agent-design / workflow-design / workflow-process auditors, work-manager ticket-brief auditor, rebase-drift-checker; multi-file proposals spanning subsystems; research that needs deep reasoning across many sources before delegation; strategic synthesis where reasoning depth is the bottleneck. |
 | `gpt-medium` | Fast, structured per-comment automation. | CodeRabbit operator + per-comment fixer driving the PR-mode review loop. |
-| `claude-sonnet` | Light checks, summaries, fast passes. | Quick sanity checks, diff summaries, formatting work. |
 
 ## Phase-by-phase assignment (implementation pipeline)
 
@@ -39,8 +32,8 @@ This table is the authoritative source for pipeline phase ownership.
 | Proposal | `gpt-high` | Propose |
 | Audit risk | `gpt-high` | Presence/checklist: validations, tests, migrations, contracts |
 | Scope risk | `gpt-xhigh` | Intent + estimate-delta reasoning: does this stay within the stated scope, including the >2x inherited estimate-delta signal? |
-| Shortcut risk | `claude-opus` | Intent: do the shortcuts compromise the underlying purpose? |
-| Supported-surface risk | `claude-opus` | Intent: does this still serve the supported surface? |
+| Shortcut risk | `gpt-xhigh` | Intent: do the shortcuts compromise the underlying purpose? |
+| Supported-surface risk | `gpt-xhigh` | Intent: does this still serve the supported surface? |
 | Proof risk | `gpt-xhigh` | Runtime-claim to proof-method evidence-class match. |
 | Hookpoint research | `gpt-high` | Analysis |
 | Implementation | `gpt-high` | Build |
@@ -50,7 +43,7 @@ This table is the authoritative source for pipeline phase ownership.
 | Commit-hygiene check | `gpt-high` | Checklist against small-testable-commit rules |
 | Multi-concern PR review | `gpt-high` | Decide whether the PR should be split. |
 | Justification PR review | `gpt-high` | Decide whether every change justifies its presence. |
-| PR writing | `claude-opus` | External-reader writing quality. |
+| PR writing | `gpt-high` | External-reader writing quality. |
 | Alignment gate (skill/ai-workflow) | `gpt-xhigh` | Direction check: is this going the right way? |
 | Orchestrator (any `*-orchestrator`) | `gpt-xhigh` | Routes a workflow end-to-end; depth-of-reasoning is the bottleneck. |
 
@@ -81,20 +74,21 @@ Rules:
 - The coordinator delegates research.
 - For research fanout, the coordinator **does** synthesize.
 - For research fanout, synthesis stays with the coordinator because synthesis is construction.
-- This does not override workflow/operator-specific Opus assignments for ticket-system prose or PR prose.
+- This does not override workflow/operator-specific `gpt-xhigh` assignments for judgement-heavy gates.
 
 A single agent that tries to do both deep research and synthesis across parallel findings produces shallow work.
 Split the roles.
 
-## When Opus is NOT the right choice
+## When `gpt-xhigh` is NOT the right choice
 
-Reach for Opus when the question is:
+Reach for `gpt-xhigh` when the question is:
 
+- Does this route the whole workflow correctly?
 - Do the shortcuts compromise the underlying purpose?
 - Does this still serve the supported surface?
-- Does this PR/ticket prose need external-reader quality?
+- Does this require deep alignment or risk reasoning across many inputs?
 
-Do **not** reach for Opus when the question is:
+Do **not** reach for `gpt-xhigh` when the question is:
 
 - Is the evidence present?
 - Does this match a checklist?
@@ -106,9 +100,9 @@ Scoped routing summary:
 
 - Evidence / checklist / presence checks: `gpt-high`
 - Internal construction / integration / synthesis: `gpt-high`
-- PR prose and ticket-system prose: `claude-opus`
-- Quick summaries / fast passes: `claude-sonnet`
-- Opus construction is exceptional and must be named by frontmatter or workflow dispatch.
+- PR prose and ticket-system prose: `gpt-high`
+- Quick summaries / fast passes: `gpt-medium`
+- `gpt-xhigh` construction is exceptional and must be named by frontmatter or workflow dispatch.
 
 ## Invocation
 

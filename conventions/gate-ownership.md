@@ -45,7 +45,7 @@ This table is cited by
 | Problem research (optional) | Model - orchestrator advances when framing artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Synthesize user needs (optional) | Model - orchestrator advances when synthesis artifact is non-empty and free of unresolved new-value questions | No default human gate. |
 | Existing-state risk profile (Phase 2.5) | **Human** | User confirms the `problem map` names the right current terrain. **First of the two surviving human gates** in the implementation pipeline. |
-| Proposal | Model - audit (`gpt-high`) + scope (`gpt-xhigh`) + shortcut (`claude-opus`) + supported-surface (`claude-opus`) + proof-risk (`gpt-xhigh`) in parallel | The risk assessment is the review. No human gate. |
+| Proposal | Model - audit (`gpt-high`) + scope (`gpt-xhigh`) + shortcut (`gpt-xhigh`) + supported-surface (`gpt-xhigh`) + proof-risk (`gpt-xhigh`) in parallel | The risk assessment is the review. No human gate. |
 | Alignment (optional) | Model - `gpt-xhigh` | Direction check. Returns `ALIGNED`, `MISALIGNED`, or `NEEDS_REVISION`. |
 | Hookpoint research | Model - orchestrator advances when artifact is non-empty, contains the four required sections, and does not invalidate the approved problem map | No default human gate. Returning to Phase 2.5 re-engages the problem-map human gate. |
 | Implementation | Continuous (test suite, CI, smoke, tests-first encoding artifacts) | No explicit gate. Failures block the pipeline, and Step 6b must produce risk-annotated tests plus any required residual-risk artifact before Step 6c writes code. |

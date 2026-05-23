@@ -58,12 +58,12 @@ root orchestrator or workflow operator invoking agents CLI
 ## Pre-dispatch contract resolution
 
 1. Resolve the selected operator path: use the project wrapper when execution is in project scope and the wrapper is current; otherwise use the base operator.
-2. Read the operator's `## Contract` block. Parse the fenced YAML and validate `schema: operator-contract-v1`.
+2. Read the operator contract sidecar when present at `contracts/operators/<operator-name>.yaml`; otherwise read the operator's `## Contract` block. Parse the YAML and validate `schema: operator-contract-v1`.
 3. Apply `defaults:` to the input set and verify all required inputs are present from defaults or caller-supplied values.
 4. Honor the `must_delegate:` and `forbidden_direct:` boundaries when constructing the dispatch prompt; do not inline procedure that belongs to the operator.
 5. Then invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
 
-The `workflow_dispatch_contract` frontmatter, where present in workflow files, is the sibling workflow contract surface. The operator `## Contract` block is the analogous surface for operator dispatch.
+The workflow sidecar at `contracts/workflows/<workflow-id>.yaml`, when present, is the optimized workflow dispatch surface. Otherwise use the `workflow_dispatch_contract` frontmatter. The operator contract sidecar is the analogous optimized surface for operator dispatch.
 
 ## Standard invocation shape
 
@@ -78,7 +78,7 @@ agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
 - `-a <agent.md>`: path or named-agent reference; the `model:` value in the agent's frontmatter selects the model. **Do not** combine with `-m` — `-m` shadows the frontmatter and silently defeats any model rebalancing.
-- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `gpt-medium`, `claude-opus`, `claude-sonnet`, or similar. Only used when there is no `-a`. See `~/ai/models/roles.md` for selection guidance.
+- `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `gpt-medium`, or another configured model id. Only used when there is no `-a`. See `~/ai/models/roles.md` for selection guidance.
 - `-p <worktree-path>`: the agent's working directory; for branch work or tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
 - `2>&1 | tee <log-path>`: capture stdout and stderr into a log file for review.
@@ -99,7 +99,6 @@ Use the README for other invocation forms. In `~/ai/`, the patterns above are th
 
 All sub-agent invocation goes through the `agents` CLI.
 
-- Claude models are invoked as `claude-opus` or `claude-sonnet` through the CLI.
 - Pipeline docs should describe model choice, prompt shape, working directory, and log capture.
 - CLI reference details stay in `/home/nes/projects/agent-runner/README.md`, not in `~/ai/`.
 

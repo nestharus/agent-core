@@ -1,0 +1,68 @@
+schema: operator-contract-v1
+source: agents/workflow-design-auditor.md
+model: gpt-xhigh
+description: Audit workflow document design against the shared design-pattern corpus. Reports LOW/MEDIUM/HIGH findings with citations. Read-only.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: workflow_file
+  type: string
+  required: true
+  default_source: caller
+  description: '`workflow_file=<path>` required.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root=<path>` required.'
+- name: design_patterns_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`design_patterns_ref=~/ai/conventions/design-patterns.md` required unless the caller supplies an equivalent project-local reference.'
+- name: workflow_index_ref
+  type: string
+  required: false
+  default_source: caller
+  description: '`workflow_index_ref=<path>` optional, default `~/ai/workflows/index.json` when auditing shared workflows.'
+- name: context_files
+  type: string
+  required: false
+  default_source: caller
+  description: '`context_files=<paths>` optional.'
+- name: audit_history_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path=<path>` optional, read-only.'
+- name: report_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`report_path=<path>` optional, default supplied by the caller or `workflow-design-audit.md` in the audit bundle.'
+- name: mode
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` optional, default `blocking`.'
+- name: blocking
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` optional, default `blocking`.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

@@ -1,0 +1,21 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/refactoring.md
+workflow_id: refactoring
+orchestrator: refactoring-orchestrator
+inputs:
+- target_list
+- repo_root
+- worktree_path
+- planning_dir
+- scratch_dir
+- integration_branch_ref
+- slice_bounds
+expectations:
+- per-PR cycle output lands on the integration buffer
+outputs:
+- per-PR cycle dispatch evidence
+- integration-buffer commit
+non_goals:
+- does not implement cross-file auditor analysis
+- does not manage integration-branch lifecycle cadence
+- does not enumerate existing shims

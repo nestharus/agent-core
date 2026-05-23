@@ -1,0 +1,18 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/build-prototype.md
+workflow_id: build-prototype
+orchestrator: prototype-orchestrator
+inputs:
+- prototype question, project planning path, branch or worktree context, and any defer-source ticket
+- evidence that the implementation pipeline or roadmap layer is too unclear to scope directly
+expectations:
+- uses unconstrained exploration to arrive at a concrete answer before imposing review discipline
+- stabilizes the demonstrable state and organizes findings into a prototype dossier
+- runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene
+outputs:
+- dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md
+- recommended downstream tickets, roadmap revisions, or scope-cut decisions
+non_goals:
+- does not bypass the implementation pipeline for ordinary well-scoped work
+- does not treat the prototype branch as the load-bearing deliverable
+- does not run proposal-based PR review gates during the hack phase

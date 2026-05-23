@@ -1,0 +1,58 @@
+schema: operator-contract-v1
+source: agents/commit-history-analyzer.md
+model: gpt-high
+description: Read-only commit history analyzer for regression windows and surface-specific history evidence
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: investigation_window
+  type: string
+  required: true
+  default_source: caller
+  description: '`investigation_window` - commit range or date range.'
+- name: surface_scope_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`surface_scope_path` - file listing implicated paths or surfaces.'
+- name: regression_introduction_sha
+  type: string
+  required: true
+  default_source: caller
+  description: '`regression_introduction_sha` - suspected or known introduction commit, if available.'
+- name: fix_sha
+  type: string
+  required: true
+  default_source: caller
+  description: '`fix_sha` - suspected or known fix commit, if available.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root` - repository root for read-only git inspection.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` - durable planning artifact root for context.'
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`output_path` - report destination.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

@@ -1,0 +1,93 @@
+schema: operator-contract-v1
+source: agents/workflow-process-auditor.md
+model: gpt-xhigh
+description: Audit workflow run artifacts for procedure adherence without replacing process-tree topology review. Reports LOW/MEDIUM/HIGH findings. Read-only.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: workflow_file
+  type: string
+  required: true
+  default_source: caller
+  description: '`workflow_file=<path>` (required) - written workflow procedure to audit against.'
+- name: run_artifacts
+  type: string
+  required: true
+  default_source: caller
+  description: '`run_artifacts=<path or paths>` (required) - manifest, directory, or explicit path list containing prompts, logs, phase outputs, gate reports, question/answer artifacts, status artifacts, and other companion evidence.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root=<path>` (required) - repository root for resolving repository-relative workflow and artifact references.'
+- name: process_tree_report_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`process_tree_report_path=<path>` (optional/conditionally required) - process-tree audit report to consume when the workflow required process-tree review or topology proof is part of the procedure.'
+- name: expected_process_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`expected_process_path=<path>` (optional/conditionally required) - expected-process manifest context when the caller expects this auditor to check that process-tree evidence covered specific phase nodes.'
+- name: audit_history_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path=<path>` (optional/conditionally required) - audit-history context for repeated revise/review loops.'
+- name: report_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`report_path=<path>` (required for successful emission) - writable Markdown report destination. The AGENTS routing row lists this as optional because some callers may infer a default, but this operator must have a destination before it can finish successfully.'
+- name: mode
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` returns HIGH for material procedure violations; `advisory` records findings without blocking except for unreadable or malformed required inputs.'
+- name: blocking
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` returns HIGH for material procedure violations; `advisory` records findings without blocking except for unreadable or malformed required inputs.'
+- name: advisory
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` returns HIGH for material procedure violations; `advisory` records findings without blocking except for unreadable or malformed required inputs.'
+- name: target_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`target_ref=<branch|commit|invocation uuid|artifact id>` (conditional context) - run identity when the report will seed `plug_existing_review` or another target-ref-sensitive workflow.'
+- name: plug_existing_review
+  type: string
+  required: true
+  default_source: caller
+  description: '`target_ref=<branch|commit|invocation uuid|artifact id>` (conditional context) - run identity when the report will seed `plug_existing_review` or another target-ref-sensitive workflow.'
+- name: process_tree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`process_tree_path=<path>` (raw-trace advisory only) - raw trace JSON may be used only when no process-tree report exists and the caller explicitly asks for advisory trace context. If supplied, use the same field names documented by `process-tree-auditor`; do not define a new trace envelope.'
+- name: step_log
+  type: string
+  required: true
+  default_source: caller
+  description: '`step_log=<path>` (supporting-only) - one companion artifact inside a broader runtime evidence bundle. A lone step log routes to `workflow-reviewer`.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

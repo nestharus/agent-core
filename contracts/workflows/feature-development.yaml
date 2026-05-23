@@ -1,0 +1,17 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/feature-development.md
+workflow_id: feature-development
+orchestrator: feature-orchestrator
+inputs:
+- feature brief or approved roadmap, scoped ticket list, repo root, trunk branch, feature branch name, worktrees root, planning root, scratch root, ticket-backend inputs, and selected manager flavor
+- optional prototype dossier path, QA target descriptor, and evidence-pack context
+expectations:
+- coordinates a feature lifecycle above individual WUs while dispatching implementation-pipeline-orchestrator once per scoped ticket
+- keeps ticket PRs targeted to the feature branch and assembles evidence packs for ticket PRs and the final feature PR
+outputs:
+- feature branch pushed to origin
+- per-ticket implementation-pipeline runs and ticket PR list
+- final feature-to-trunk PR with evidence pack, QA verdict or placeholder, prototype payload when applicable, and outcome record
+non_goals:
+- does not replace roadmap, prototype, implementation-pipeline, PR-review, or CodeRabbit workflows
+- does not inline ticket decomposition or implementation-pipeline phases

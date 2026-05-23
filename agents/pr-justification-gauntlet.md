@@ -209,7 +209,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 1. Resolve the intended operator name and file path from workflow context and the current project scope.
 2. Prefer the current project's wrapper when one exists for that operator and task, for example `~/projects/<name>/agents/<operator>.md` before `~/ai/agents/<operator>.md`.
-3. Read the selected operator file's `## Contract` block.
+3. Read the selected operator contract sidecar when present; otherwise read the selected operator file's `## Contract` block.
 4. Apply wrapper or base defaults only from declared `defaults:` entries, and apply secrets only from declared `secrets:` entries. Do not fill defaults from session metadata or ambient environment values unless the selected contract declares that source.
 5. Validate that every required input for the chosen task is present after declared defaults are applied.
 6. Refuse direct operations covered by the selected contract's `must_delegate:` list unless the contract explicitly allows the direct operation through `may_direct:`.
@@ -234,7 +234,7 @@ sequence, update `threads.json`, then decide whether to loop.
 
 If `audit_history_path` exists, read it before writing round prompts and include the role-relevant section in each sub-agent prompt. After the adjudicator result for each round, run `decision-encoder` to append the round summary, role histories, decision-register entry, watch signals, and summarization tail. `threads.json` remains the operational thread state; audit history is the cross-role revise/review history.
 
-#### 1a. Interrogator (`claude-opus`)
+#### 1a. Interrogator (`gpt-xhigh`)
 
 ```bash
 ROUND=$((ROUND + 1))
@@ -257,7 +257,7 @@ EOF
 
 # Launch
 agents -a ${agents_dir}/pr-justification-interrogator.md \
-  -m claude-opus -p "$repo_root" \
+  -m gpt-xhigh -p "$repo_root" \
   -f "$RD/interrogator-prompt.md" > "$RD/interrogator-result.md" 2>&1
 ```
 
@@ -298,7 +298,7 @@ agents -a ${agents_dir}/pr-justification-researcher.md \
 After the researcher runs, append its per-thread evidence into each thread's
 `history[$ROUND].researcher_evidence` in `threads.json`.
 
-#### 1c. Value assessor (`claude-opus`, with optional `gpt-high` sub-agents)
+#### 1c. Value assessor (`gpt-xhigh`, with optional `gpt-high` sub-agents)
 
 ```bash
 cat > "$RD/value-assessor-prompt.md" <<EOF
@@ -315,13 +315,13 @@ yourself.
 EOF
 
 agents -a ${agents_dir}/pr-justification-value-assessor.md \
-  -m claude-opus -p "$repo_root" \
+  -m gpt-xhigh -p "$repo_root" \
   -f "$RD/value-assessor-prompt.md" > "$RD/value-assessor-result.md" 2>&1
 ```
 
 Merge per-thread value into `history[$ROUND].value` in `threads.json`.
 
-#### 1d. Adjudicator (`claude-opus`)
+#### 1d. Adjudicator (`gpt-xhigh`)
 
 ```bash
 cat > "$RD/adjudicator-prompt.md" <<EOF
@@ -343,7 +343,7 @@ Cull any thread where further rounds will not change the outcome.
 EOF
 
 agents -a ${agents_dir}/pr-justification-adjudicator.md \
-  -m claude-opus -p "$repo_root" \
+  -m gpt-xhigh -p "$repo_root" \
   -f "$RD/adjudicator-prompt.md" > "$RD/adjudicator-result.md" 2>&1
 ```
 

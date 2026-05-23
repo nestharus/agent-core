@@ -1,0 +1,87 @@
+schema: operator-contract-v1
+source: agents/release-promote-operator.md
+model: gpt-high
+description: Promote a frozen release candidate to main and run tag mechanics under release-orchestrator control
+inputs:
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: release_id
+  type: string
+  required: true
+  default_source: caller
+  description: release id
+- name: manifest_path
+  type: path
+  required: false
+  default_source: caller
+  description: manifest path
+- name: release_manifest_path
+  type: path
+  required: false
+  default_source: caller
+  description: release manifest path
+- name: release_branch_name
+  type: string
+  required: true
+  default_source: caller
+  description: release branch name
+- name: main_branch_name
+  type: string
+  required: true
+  default_source: caller
+  description: main branch name
+- name: tag_pattern
+  type: string
+  required: true
+  default_source: caller
+  description: tag pattern
+- name: qa_evidence_path
+  type: path
+  required: true
+  default_source: caller
+  description: qa evidence path
+- name: promotion_approval
+  type: string
+  required: true
+  default_source: caller
+  description: promotion approval
+defaults: []
+secrets: []
+outputs:
+- task: promote
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- git-ff-promotion
+- git-tag-create-or-record
+- release-manifest-write
+must_delegate:
+- release-orchestrator-for-publication-boundary
+may_direct:
+- release-branch-read
+- tag-state-read
+- release-manifest-read
+forbidden_direct:
+- inline-rfq-release-policy-generalization
+notes:
+- 'ACR-283 tracks extraction of RFQ-embedded release policy: https://linear.app/oulipoly/issue/ACR-283/extract-project-specific-release-policy-from-shared-release. This contract documents current behavior without generalizing RFQ-specific release paths.'

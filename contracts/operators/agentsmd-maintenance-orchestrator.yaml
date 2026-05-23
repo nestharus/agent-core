@@ -1,0 +1,68 @@
+schema: operator-contract-v1
+source: agents/agentsmd-maintenance-orchestrator.md
+model: gpt-xhigh
+description: 'Owns the AGENTS.md maintenance workflow: inventory, audit, triage, plan, risk-gate, apply, verify. Dispatches agentsmd-curator and risk-assessment sub-agents; reconciles findings; writes a maintenance report. Does not directly edit AGENTS.md or operator files.'
+inputs:
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: agents_md
+  type: path
+  required: false
+  default_source: base
+  description: agents md
+- name: agents_dir
+  type: path
+  required: false
+  default_source: base
+  description: agents dir
+- name: triage_policy
+  type: enum
+  required: false
+  default_source: base
+  description: triage policy
+- name: risk_gate_required
+  type: bool
+  required: false
+  default_source: base
+  description: risk gate required
+defaults:
+- name: agents_md
+  value: ${repo_root}/AGENTS.md
+  source: base
+- name: agents_dir
+  value: ~/ai/agents
+  source: base
+- name: triage_policy
+  value: major+
+  source: base
+- name: risk_gate_required
+  value: true
+  source: base
+secrets: []
+outputs:
+- task: maintain-agentsmd
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- agentsmd-edit-via-curator
+- operator-file-edit-via-curator
+- maintenance-report-writes
+must_delegate:
+- agentsmd-curator
+- workflow-reviewer
+- risk-gate-children
+may_direct:
+- agentsmd-read
+- operator-inventory-read
+forbidden_direct:
+- direct-curator-owned-edits

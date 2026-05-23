@@ -1,0 +1,128 @@
+schema: operator-contract-v1
+source: agents/adversarial-qa-driver.md
+model: gpt-high
+description: Drive stage-only adversarial QA and file complete evidence-backed bug reports
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: stage_url
+  type: string
+  required: true
+  default_source: caller
+  description: '`stage_url` (required): staged application URL under test.'
+- name: health_check_url
+  type: string
+  required: true
+  default_source: caller
+  description: '`health_check_url` (required): readiness URL checked before browser work.'
+- name: use_case_dossier_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`use_case_dossier_path` (required): documented normal-usage flows and expected behavior.'
+- name: run_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`run_id` (required): stable run slug used in output paths.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` or `evidence_dir_root` (required): root for run bundles.'
+- name: evidence_dir_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` or `evidence_dir_root` (required): root for run bundles.'
+- name: ticket_system
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` (required): `linear` or `jira`.'
+- name: linear
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` (required): `linear` or `jira`.'
+- name: jira
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` (required): `linear` or `jira`.'
+- name: linear_team_key
+  type: string
+  required: false
+  default_source: caller
+  description: '`${ticket_operator}` routing inputs (required): for Linear, `linear_team_key` and optional `linear_project_id`; for JIRA, `jira_url`, `jira_project`, `jira_account_email`, and related project routing values.'
+- name: linear_project_id
+  type: string
+  required: false
+  default_source: caller
+  description: '`${ticket_operator}` routing inputs (required): for Linear, `linear_team_key` and optional `linear_project_id`; for JIRA, `jira_url`, `jira_project`, `jira_account_email`, and related project routing values.'
+- name: jira_url
+  type: string
+  required: false
+  default_source: caller
+  description: '`${ticket_operator}` routing inputs (required): for Linear, `linear_team_key` and optional `linear_project_id`; for JIRA, `jira_url`, `jira_project`, `jira_account_email`, and related project routing values.'
+- name: jira_project
+  type: string
+  required: false
+  default_source: caller
+  description: '`${ticket_operator}` routing inputs (required): for Linear, `linear_team_key` and optional `linear_project_id`; for JIRA, `jira_url`, `jira_project`, `jira_account_email`, and related project routing values.'
+- name: jira_account_email
+  type: string
+  required: false
+  default_source: caller
+  description: '`${ticket_operator}` routing inputs (required): for Linear, `linear_team_key` and optional `linear_project_id`; for JIRA, `jira_url`, `jira_project`, `jira_account_email`, and related project routing values.'
+- name: browser
+  type: string
+  required: true
+  default_source: caller
+  description: '`browser` or `browser_identity` (required): browser engine, viewport, user agent, and agent identity.'
+- name: browser_identity
+  type: string
+  required: true
+  default_source: caller
+  description: '`browser` or `browser_identity` (required): browser engine, viewport, user agent, and agent identity.'
+- name: credentials_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`credentials_path`, credentials, roles, or `role_bindings` (required): account and permission coverage.'
+- name: role_bindings
+  type: string
+  required: true
+  default_source: caller
+  description: '`credentials_path`, credentials, roles, or `role_bindings` (required): account and permission coverage.'
+- name: feature_flags
+  type: string
+  required: true
+  default_source: caller
+  description: '`feature_flags` (required): enabled, disabled, and unknown flags for the stage run.'
+- name: local_log_paths
+  type: string
+  required: false
+  default_source: caller
+  description: '`local_log_paths` or `log_capture_path` (optional): local app, terminal, service, browser-console, or server logs to include when available.'
+- name: log_capture_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`local_log_paths` or `log_capture_path` (optional): local app, terminal, service, browser-console, or server logs to include when available.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.
