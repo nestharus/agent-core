@@ -138,3 +138,19 @@ For agents expected to run longer than about 30 seconds:
 - `agents trace --json` is for post-run inspection, audit evidence, session topology, and eval input. It is not the active completion-wait primitive for a running child.
 
 For parallel risk gates, dispatch all rounds as separate Bash-background tool calls, then collect outputs sequentially after their task notifications arrive.
+
+## Long-running / parallel agents on runtimes WITHOUT native background (opencode)
+
+The mechanism above (`run_in_background=True` + a Bash task-completion notification) only exists when the dispatching orchestrator runs inside the Claude Code harness or the `claude` CLI. When the orchestrator itself runs on a runtime whose bash tool has **no background flag and no completion callback** — notably **opencode** (gpt-*), which additionally kills a foreground bash command at a timeout — that mechanism is unavailable, and a long foreground `agents … | tee` child dispatch is KILLED mid-run. On such runtimes the orchestrator MUST use the tmux-backed dispatch helpers instead:
+
+```bash
+# Launch — non-blocking, detached; the child runs OUTSIDE opencode's bash timeout, unbounded:
+agents-bg <handle> -a <agent.md> -p <worktree> -f <prompt>      # or  -m <model>  for ad-hoc
+# Poll — instant, safe in a loop; prints RUNNING, or DONE rc=<n> + the child's captured output:
+agents-bg-poll <handle>
+# Sequential convenience (blocks via short polls): agents-bg-wait <handle>
+```
+
+Parallel fan-out: launch every child with `agents-bg` (each returns immediately), then loop — `agents-bg-poll <handle>` for each, with a short `sleep` between rounds — until all are `DONE`, then read each handle's captured log. The helpers live at `~/.local/bin/agents-bg{,-poll,-wait}` and write per-handle log/done/rc files under `${AGENTS_BG_DIR:-~/.agents-bg}`.
+
+**Scope of the prohibitions above:** the "do not poll / no wrapper script / no shell `&`/`disown`/`wait` / no trace-loop" rules govern runtimes that PROVIDE the Bash task-completion notification (harness, `claude`). On a no-native-background runtime (opencode) the `agents-bg` helpers — which use **tmux-detached** sessions, NOT shell `&`/`disown`, and a bounded `agents-bg-poll` loop, NOT trace-polling — are the REQUIRED mechanism, not a forbidden one. They preserve full `2>&1` capture (each child's stdout/stderr is teed to its handle log) and parent-visible `OULIPOLY_*` markers in that log. Do NOT fall back to foreground `agents … | tee` on opencode for any child expected to exceed the bash timeout, and do NOT use raw `&`/`nohup` (those are session-tied and orphan the child).
