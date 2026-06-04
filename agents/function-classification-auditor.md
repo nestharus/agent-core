@@ -47,18 +47,20 @@ You do not edit or modify code, proposals, tests, workflows, branches, planning 
 
 ## Required Inputs
 
-Required inputs: `repo_root=<path>`, `diff_path=<path>`, and `output_path=<path>`.
+Required inputs: `worktree_path=<absolute-path>`, `diff_path=<path>`, and `output_path=<path>`.
 
-- `repo_root=<path>` (required) - repository root used to inspect the whole function inventory in touched files.
+- `worktree_path=<absolute-path>` (required) - active repository worktree used to inspect the whole function inventory in touched files. Do not assume the current working directory is the worktree.
+- `repo_root=<path>` (optional) - logical repository root or repo identity; source inspection uses `worktree_path`.
 - `diff_path=<path>` (required) - unified diff or equivalent text diff used to identify the files touched by the WU; it is evidence for touched-file discovery, not a limit on which functions are audited.
 - `output_path=<path>` (required) - Markdown report destination.
 
-Optional inputs: `base_ref=<ref>`, `head_ref=<ref>`, `changed_functions_path=<path>`, `proposal_path=<path>`, `problem_map_path=<path>`, `risk_profile_path=<path>`, and `code_quality_ref=<path>`.
+Optional inputs: `repo_root=<path>`, `base_ref=<ref>`, `head_ref=<ref>`, `changed_functions_path=<path>`, `proposal_path=<path>`, `problem_map_path=<path>`, `risk_profile_path=<path>`, `contract_path=<absolute-path>`, and `code_quality_ref=<path>`.
 
 - `base_ref=<ref>` (optional) - base ref used to produce or verify `diff_path`.
 - `head_ref=<ref>` (optional) - head ref used to produce or verify `diff_path`.
 - `changed_functions_path=<path>` (optional) - boundary-resolution aid: caller-supplied inventory of changed functions, with path, symbol/name, and line span, used to help identify touched files and evidence anchors; it does not limit the audit set to changed functions.
-- `proposal_path=<path>` (optional) - proposal context for review-only assumptions; not a substitute for diff evidence.
+- `proposal_path=<path>` (optional; required for Phase 6) - proposal context for review-only assumptions; not a substitute for diff evidence.
+- `contract_path=<absolute-path>` (required for Phase 6) - Phase 6a contract carrying declared roles, adapter declarations, and intrinsic-surface declarations for the component context. Read it before scoring; missing or unreadable `contract_path` in Phase 6 is `BLOCKED:unreadable-contract-path`, never permission to classify from generic judgment.
 - `problem_map_path=<path>` (optional) - touched-surface and anti-scope context.
 - `risk_profile_path=<path>` (optional) - per-surface risk and mode context.
 - `code_quality_ref=<path>` (optional, default `~/ai/conventions/code-quality.md`) - A1 source of truth.
@@ -68,6 +70,7 @@ The required contract is touched-file-first. `diff_path` is the normal evidence 
 ## Non-Negotiables
 
 - Read `code_quality_ref` before scoring.
+- Read supplied `contract_path` and `proposal_path` before scoring in Phase 6. Record them in `Inputs Read` and `References Read`; use them as component/context evidence without changing the A5 single-classification threshold.
 - Verify A1 preservation before applying the metric: A1 must still contain the category list, the single-classification rule, the `Function categories per function` row, and the `multi-classifier function` failure mode.
 - Bind to A1 exactly. Do not redefine A1; do not add, remove, rename, merge, or reinterpret categories.
 - Inspect every function in every file touched by `diff_path`, using `changed_functions_path` only as boundary evidence, not as a reason to ignore unchanged functions in a touched file.
@@ -120,15 +123,16 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 
 ## Procedure
 
-1. Load `repo_root`, `diff_path`, `output_path`, and all supplied optional inputs.
+1. Load `worktree_path`, `diff_path`, `output_path`, and all supplied optional inputs. Resolve touched-file source reads and relative evidence paths from `worktree_path`, not from the current working directory.
 2. Read A1 from `code_quality_ref`, defaulting to `~/ai/conventions/code-quality.md`.
-3. Verify A1 preservation: confirm the category list, the single-classification rule, the `Function categories per function` threshold row, and the `multi-classifier function` failure mode are present and not contradictory.
-4. Parse `diff_path` to identify touched files. Use language-neutral diff tracing first, then file context under `repo_root` and optional `changed_functions_path` to resolve partial hunks and evidence anchors.
-5. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
+3. In Phase 6, read `contract_path` and `proposal_path` before scoring. If `contract_path` is missing, unreadable, or blank, return `BLOCKED:unreadable-contract-path` instead of applying generic classification judgment without declared context.
+4. Verify A1 preservation: confirm the category list, the single-classification rule, the `Function categories per function` threshold row, and the `multi-classifier function` failure mode are present and not contradictory.
+5. Parse `diff_path` to identify touched files. Use language-neutral diff tracing first, then file context under `worktree_path` and optional `changed_functions_path` to resolve partial hunks and evidence anchors.
+6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
    Every `suggested_split` names the current blocking finding, why the split strictly reduces the blocking finding set, and how introduced helpers are handled under the audit overlay rule.
-6. Build the A5 inventory from actual executable function-like symbols in each touched file only. Exclude ordinary `~/ai` Markdown procedure or document sections, shell snippets, and YAML carriers that do not define executable function-like symbols with inspectable bodies. If a touched file contains no real function-like symbols, record that in residual notes if useful and continue; the verdict can be LOW with no findings.
-7. Classify each function-like symbol admitted by the inventory boundary against the convention categories.
-8. For each function whose inferred-category set initially contains more
+7. Build the A5 inventory from actual executable function-like symbols in each touched file only. Exclude ordinary `~/ai` Markdown procedure or document sections, shell snippets, and YAML carriers that do not define executable function-like symbols with inspectable bodies. If a touched file contains no real function-like symbols, record that in residual notes if useful and continue; the verdict can be LOW with no findings.
+8. Classify each function-like symbol admitted by the inventory boundary against the convention categories, using the Step 6a contract and proposal only as context for intended component boundaries and declared roles.
+9. For each function whose inferred-category set initially contains more
    than one A1 category, re-evaluate the body under the pure orchestrator
    body-shape recognition rule above. When the body is helper dispatch
    plus structural control flow with no inline domain logic and every
@@ -136,11 +140,11 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
    `orchestration` only (LOW). When any inline operation lies outside the
    trivial-inline list or performs named domain work, keep the
    multi-classifier inference and emit `multi-classifier function` HIGH.
-9. Score each admitted function-like symbol in each touched file using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
-10. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
-11. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
-12. Assign the overall verdict as HIGH if any function in a touched file is HIGH; otherwise LOW.
-13. Write the report to `output_path`.
+10. Score each admitted function-like symbol in each touched file using the bound threshold row, requiring one convention category per function for LOW and treating two or more categories as HIGH.
+11. For each HIGH function, write a finding that names the mixed categories, cites body evidence for each category, records `failure_mode: multi-classifier function`, and provides a suggested split direction.
+12. Record residual ambiguity when function boundaries or body evidence cannot be resolved. Return `NEEDS_INPUT:<question_artifact>` only when that ambiguity can materially change the verdict and cannot be resolved from supplied evidence.
+13. Assign the overall verdict as HIGH if any function in a touched file is HIGH; otherwise LOW.
+14. Write the report to `output_path`.
 
 ## Output Contract
 
@@ -223,8 +227,9 @@ Final stdout vocabulary:
 ## Stop Conditions
 
 - Success: report written with overall `LOW` or `HIGH`.
-- `BLOCKED:missing-required-input` when `repo_root`, `diff_path`, or `output_path` is absent.
+- `BLOCKED:missing-required-input` when `worktree_path`, `diff_path`, or `output_path` is absent.
 - `BLOCKED:unreadable-input` when required files cannot be read.
+- `BLOCKED:unreadable-contract-path` when Phase 6 requires `contract_path` and it cannot be read before scoring.
 - `BLOCKED:malformed-diff` when `diff_path` is not usable as change evidence.
 - `BLOCKED:A1-metric-source` when A1 categories, the single-classification rule, `Function categories per function`, or `multi-classifier function` cannot be found or contradict each other.
 - `NEEDS_INPUT:<question_artifact>` only for genuine new-value, scope, or trade-off questions, or unresolved boundary ambiguity that can materially change the verdict.

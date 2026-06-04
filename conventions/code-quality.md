@@ -166,6 +166,12 @@ When a component declared role set is present, the same subset-check semantic ap
 
 A component declared role set is the union of per-file roles the component legitimately covers as part of one coordinated change; it does not extend the A1 vocabulary, alter LOW/MEDIUM/HIGH semantics, or replace per-file declared roles where those exist for the files in the component.
 
+### Phase 6 contract visibility for code-quality auditors
+
+When `~/ai/workflows/implementation-pipeline.md` invokes Phase 6 per-component code-quality, every auditor in `## Auditor Set` must receive and read absolute `worktree_path`, `contract_path`, and `proposal_path` before scoring. The Step 6a contract is the preferred carrier for `## Component declared roles`, `## Adapter declarations`, and `## Intrinsic-surface declarations`; the approved proposal is the secondary context carrier where this convention already permits proposal-carried declarations or proof context.
+
+If the supplied `contract_path` is missing, unreadable, blank, malformed for the declaration family being consumed, or inaccessible because the auditor was dispatched from a working directory that cannot reach both `worktree_path` and `planning_dir`, the auditor returns `BLOCKED:<reason>`. It must not infer roles, adapter status, intrinsic-surface status, proof scope, validation scope, or common-interface ownership from names, paths, or generic judgment when the Phase 6 contract was required but not read.
+
 ## Declared-role examples
 
 - LOW: `agents/implementation-pipeline-orchestrator.md` may touch `orchestration` and `parser` work because `agents/*-orchestrator.md` defaults to declared roles `orchestration`, `parser`.

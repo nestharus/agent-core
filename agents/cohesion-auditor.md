@@ -29,15 +29,16 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 
 ## Required Inputs
 
-- `repo_root=<path>` (required) - repository root to inspect.
+- `worktree_path=<absolute-path>` (required) - active repository worktree to inspect for source and relative evidence paths. Do not assume the current working directory is the worktree.
+- `repo_root=<path>` (optional) - logical repository root or repo identity; source inspection uses `worktree_path`.
 - `planning_dir=<path>` (required) - planning artifact root for this WU.
 - `wu_id=<id>` (required) - Work Unit identifier used to derive the default report path.
-- `proposal_path=<path>` (required for Phase 4) - proposal artifact under review.
+- `proposal_path=<path>` (required for Phase 4 and Phase 6) - proposal artifact under review.
 - `problem_map_path=<path>` (required for Phase 4) - approved problem-map context.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels; this helps resolve the touched file/component set.
 - `diff_path=<path>` (required for a blocking verdict; equivalent changed-file evidence accepted) - diff or WU-owned evidence used to identify touched files/components and current evidence for ad-hoc or later PR/diff invocations.
-- `contract_path=<path>` (optional) - Phase 6a contract. When present and the invocation scope is a multi-file WU component, read the `## Component declared roles` section for a component-level declared role set per `~/ai/conventions/code-quality.md` § Declared roles § Component declared roles (multi-file WU components).
+- `contract_path=<absolute-path>` (required for Phase 6) - Phase 6a contract. When the invocation scope is a multi-file WU component, read the `## Component declared roles` section for a component-level declared role set per `~/ai/conventions/code-quality.md` § Declared roles § Component declared roles (multi-file WU components). In Phase 6, missing or unreadable `contract_path` is `BLOCKED:unreadable-contract-path`, never permission to use count-only generic scoring.
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-cohesion.md`) - report destination.
 
 Proposal, problem-map, risk-profile, touched-surface, diff, and code-trace inputs identify touched files/components and provide context. They do not narrow the audit target below the whole touched file/component.
@@ -45,6 +46,7 @@ Proposal, problem-map, risk-profile, touched-surface, diff, and code-trace input
 ## Non-Negotiables
 
 - Read `~/ai/conventions/code-quality.md`, `~/ai/conventions/proposer-critic-pattern.md`, `~/ai/conventions/risk-profile.md`, and `~/ai/workflows/implementation-pipeline.md` before scoring.
+- Read supplied `contract_path` and `proposal_path` before scoring in Phase 6. Record them in `Inputs Read` and `References Read`.
 - Bind to A1 exactly. Quote and apply only the cohesion row in the metric binding below.
 - Every non-LOW score, meaning every HIGH score, requires evidence the next reader can verify.
 - Evidence must name a path, symbol, module/package, proposal claim, touched-surface line, diff hunk, or code-trace edge.
@@ -74,18 +76,19 @@ Phase 4 runs through `workflows/code-quality.md`; this operator may be selected 
 
 ## Procedure
 
-1. Load all required inputs and optional evidence files that were supplied.
+1. Load all required inputs and optional evidence files that were supplied. Resolve source files and relative diff evidence from `worktree_path`, not from the current working directory.
 2. Read the four required references: `code-quality.md`, `proposer-critic-pattern.md`, `risk-profile.md`, and `implementation-pipeline.md`.
-3. Verify that A1 still contains `Cohesion by classifications touched`.
-4. Resolve the touched file/component set from `diff_path`, `touched_surfaces_path`, changed-file evidence, module/crate/package layout, and any explicit labels in the touched-surface enumeration.
-5. Extract A1 classifications across the whole touched file/component, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
-6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
+3. In Phase 6, read `contract_path` and `proposal_path` before scoring. If `contract_path` is missing, unreadable, blank, or lacks a parseable declaration section needed for the component-level role decision, return `BLOCKED:unreadable-contract-path` or `BLOCKED:malformed-contract-path` instead of falling back to generic judgment.
+4. Verify that A1 still contains `Cohesion by classifications touched`.
+5. Resolve the touched file/component set from `diff_path`, `touched_surfaces_path`, changed-file evidence, module/crate/package layout under `worktree_path`, and any explicit labels in the touched-surface enumeration.
+6. Extract A1 classifications across the whole touched file/component, using the Step 6a contract, proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
+7. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
    Every non-LOW cohesion finding inside a touched file/component is blocking, including pre-existing findings. Emit residual rows only for genuinely context-only evidence outside the touched file/component set.
-7. If cohesion-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` and keep the expanded context out of the cohesion verdict target.
-8. Score per-component cohesion using the A1 cohesion row.
-9. Assign the overall verdict as the worst applicable score.
-10. Attach evidence for every non-LOW component score.
-11. Write the report to `output_path`.
+8. If cohesion-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` and keep the expanded context out of the cohesion verdict target.
+9. Score per-component cohesion using the A1 cohesion row.
+10. Assign the overall verdict as the worst applicable score.
+11. Attach evidence for every non-LOW component score.
+12. Write the report to `output_path`.
 
 ## Output Format
 
@@ -108,7 +111,7 @@ Final stdout: `LOW`, `HIGH`, `NEEDS_INPUT:<question_artifact>`, or `BLOCKED:<rea
 ## Stop Conditions
 
 - Success: report written with an overall verdict of `LOW` or `HIGH`.
-- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, or the A1 metric row is absent.
+- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, the Phase 6 contract is required but unreadable, or the A1 metric row is absent.
 - `NEEDS_INPUT:<question_artifact>`: only for a genuine new value, scope, or trade-off question, such as multiple plausible component boundaries that materially change the verdict and cannot be resolved from evidence.
 
 ## Escalation

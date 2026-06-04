@@ -86,7 +86,7 @@ apply-gate-set
 - Mode-specific artifacts:
   - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, runtime claim, scope, and cycle id.
   - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, estimate delta flag, touched-surface evidence, and bootstrap-exception refs when claimed.
-  - `implementation-phase-6`: Step 6b output index, Step 6a contract, Step 6b/6c prompts and logs, component diff, component scope, runtime claim, and side-channel or derivation evidence when applicable.
+  - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, runtime claim, and side-channel or derivation evidence when applicable.
   - `implementation-phase-8`: actual branch or PR diff, proposal/proof-plan refs, prior join refs when present, runtime claim, supported-surface inventory context, and base/head identity.
 
 ## Outputs
@@ -120,7 +120,7 @@ apply-gate-set
 
 `implementation-phase-4` runs after Phase 3 proposal and estimate update. It requires proposal-risk rows, supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality, valid bootstrap-exception ratification when claimed, join manifest, process-tree evidence, and audit-history records.
 
-`implementation-phase-6` runs after Step 6c component evidence exists. It requires Step 6b/6c provenance, tests-contract alignment refs, per-component code-quality, applicable prototype/derivation/halt/swap/non-applicability records, join evidence, process-tree audit #2 projection, and audit-history records.
+`implementation-phase-6` runs after Step 6c component evidence exists. It requires Step 6b/6c provenance, tests-contract alignment refs, per-component code-quality, applicable prototype/derivation/halt/swap/non-applicability records, join evidence, process-tree audit #2 projection, and audit-history records. Per-component code-quality child auditors run with `-p ${code_quality_dispatch_dir}`, where `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; their prompts include absolute `worktree_path`, `contract_path`, and `proposal_path` so the outside-worktree Step 6a contract is read before scoring.
 
 `implementation-phase-8` runs on the actual branch or PR diff after readiness. It requires PR-review rows, actual-diff code-quality, proof-risk/validation-integrity runtime-claim transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins, and process-tree audit #3 projection.
 

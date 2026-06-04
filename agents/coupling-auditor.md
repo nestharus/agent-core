@@ -33,15 +33,16 @@ You are a critic, not a proposer. Per `~/ai/conventions/proposer-critic-pattern.
 
 ## Required Inputs
 
-- `repo_root=<path>` (required) - repository root to inspect.
+- `worktree_path=<absolute-path>` (required) - active repository worktree to inspect for source and relative evidence paths. Do not assume the current working directory is the worktree.
+- `repo_root=<path>` (optional) - logical repository root or repo identity; source inspection uses `worktree_path`.
 - `planning_dir=<path>` (required) - planning artifact root for this WU.
 - `wu_id=<id>` (required) - Work Unit identifier used to derive the default report path.
-- `proposal_path=<path>` (required for Phase 4) - proposal artifact under review.
+- `proposal_path=<path>` (required for Phase 4 and Phase 6) - proposal artifact under review.
 - `problem_map_path=<path>` (required for Phase 4) - approved problem-map context.
 - `risk_profile_path=<path>` (required for Phase 4) - Phase 2.5 risk profile, following `~/ai/conventions/risk-profile.md`.
 - `touched_surfaces_path=<path>` (required) - Markdown or text list of touched files, modules, packages, components, and known component labels; this helps resolve the touched file/component set.
 - `diff_path=<path>` (required for a blocking verdict; equivalent changed-file evidence accepted) - diff or WU-owned evidence used to identify touched files/components and current evidence for ad-hoc or later PR/diff invocations.
-- `contract_path=<path>` (optional) - Phase 6a contract. When present, read exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections for declaration carriers per `~/ai/conventions/code-quality.md`.
+- `contract_path=<absolute-path>` (required for Phase 6) - Phase 6a contract. Read exact `## Adapter declarations` and `## Intrinsic-surface declarations` sections for declaration carriers per `~/ai/conventions/code-quality.md`. In Phase 6, missing or unreadable `contract_path` is `BLOCKED:unreadable-contract-path`, never permission to infer adapter or intrinsic-surface status.
 - `code_trace_paths=<paths>` (optional) - existing trace reports that identify dependency edges.
 - `output_path=<path>` (optional, default `${planning_dir}/risk/${wu_id_lower}-coupling.md`) - report destination.
 
@@ -51,6 +52,7 @@ Adjacent declaration lookup via `contract_path` or `proposal_path` is blocking w
 ## Non-Negotiables
 
 - Read `~/ai/conventions/code-quality.md`, `~/ai/conventions/proposer-critic-pattern.md`, `~/ai/conventions/risk-profile.md`, and `~/ai/workflows/implementation-pipeline.md` before scoring.
+- Read supplied `contract_path` and `proposal_path` before scoring in Phase 6. Record them in `Inputs Read` and `References Read`.
 - Bind to A1 exactly. Quote and apply only the coupling row in the metric binding below.
 - Every non-LOW score, meaning every MEDIUM or HIGH score, requires evidence the next reader can verify.
 - Evidence must name a path, symbol, module/package, proposal claim, touched-surface line, diff hunk, or code-trace edge.
@@ -90,12 +92,13 @@ Phase 4 runs through `~/ai/workflows/code-quality.md`. Phase 6 current-layer cou
 
 ## Procedure
 
-1. Load all required inputs and optional evidence files that were supplied.
+1. Load all required inputs and optional evidence files that were supplied. Resolve source files and relative diff evidence from `worktree_path`, not from the current working directory.
 2. Read the four required references: `code-quality.md`, `proposer-critic-pattern.md`, `risk-profile.md`, and `implementation-pipeline.md`.
-3. Verify that A1 still contains `Coupling by distinct external symbols/modules referenced`.
-4. Resolve the touched file/component set into candidate component boundaries using `diff_path`, touched-surface enumeration, changed-file evidence, module/crate/package layout, and any explicit labels in the touched-surface enumeration.
-5. Extract symbols, external references, dependency edges, adjacent declarations, and declaration carriers from the whole touched file/component, using proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
-6. Load and validate adapter and intrinsic-surface declarations:
+3. In Phase 6, read `contract_path` and `proposal_path` before scoring. If `contract_path` is missing, unreadable, or blank, return `BLOCKED:unreadable-contract-path` instead of falling back to raw generic coupling. If declaration entries are present but malformed, return the declaration-specific `BLOCKED` reason below.
+4. Verify that A1 still contains `Coupling by distinct external symbols/modules referenced`.
+5. Resolve the touched file/component set into candidate component boundaries using `diff_path`, touched-surface enumeration, changed-file evidence, module/crate/package layout under `worktree_path`, and any explicit labels in the touched-surface enumeration.
+6. Extract symbols, external references, dependency edges, adjacent declarations, and declaration carriers from the whole touched file/component, using the Step 6a contract, proposal, problem map, touched-surface enumeration, and optional code-trace reports as context.
+7. Load and validate adapter and intrinsic-surface declarations:
    - Load candidate adapter declarations from `contract_path` exact `## Adapter declarations` when `contract_path` is present, otherwise from `proposal_path` exact `## Adapter declarations` when present.
    - Load candidate intrinsic-surface declarations from `contract_path` exact `## Intrinsic-surface declarations` when `contract_path` is present, otherwise from `proposal_path` exact `## Intrinsic-surface declarations` when present.
    - Validate each declaration shape: an `adapter_declarations:` entry must name `component`, set `role: adapter`, and provide a non-empty `Translates:` list of stable external contract surfaces.
@@ -103,13 +106,13 @@ Phase 4 runs through `~/ai/workflows/code-quality.md`. Phase 6 current-layer cou
    - On malformed entries in either declaration family, emit a fail-closed stop condition naming the offending entry.
    - Resolve matching declarations from both declaration families to the component boundaries from step 4.
    - Do not infer adapter or intrinsic-surface status for undeclared components.
-7. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
+8. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
    Adjacent declaration, subordination, or Markdown-operator references inside touched files/components are blocking when they meet the coupling threshold. References discovered only through context outside the touched set become residual/tracker material; a fix must not create a new blocking finding on a helper declaration or adjacent context surface unless that helper/context surface is itself inside touched ownership or independently touched by the fix overlay.
-8. If pair-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
-9. Score per-pair coupling using the A1 coupling row, applying the adapter-aware distinct-contract rule first to components with a valid matching adapter declaration, the intrinsic-surface domain rule second to components with a valid matching intrinsic-surface declaration, and the raw non-declared rule otherwise.
-10. Assign the overall verdict as the worst applicable score.
-11. Attach evidence for every non-LOW component-pair score.
-12. Write the report to `output_path`.
+9. If pair-boundary context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
+10. Score per-pair coupling using the A1 coupling row, applying the adapter-aware distinct-contract rule first to components with a valid matching adapter declaration, the intrinsic-surface domain rule second to components with a valid matching intrinsic-surface declaration, and the raw non-declared rule otherwise.
+11. Assign the overall verdict as the worst applicable score.
+12. Attach evidence for every non-LOW component-pair score.
+13. Write the report to `output_path`.
 
 ## Output Format
 
@@ -131,7 +134,7 @@ Final stdout: `LOW`, `MEDIUM`, `HIGH`, `NEEDS_INPUT:<question_artifact>`, or `BL
 ## Stop Conditions
 
 - Success: report written with an overall verdict of `LOW`, `MEDIUM`, or `HIGH`.
-- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, the A1 metric row is absent, or a declaration is malformed. Name the offending declaration entry in the reason.
+- `BLOCKED:<reason>`: required files cannot be read, input files are malformed, the Phase 6 contract is required but unreadable, the A1 metric row is absent, or a declaration is malformed. Name the offending declaration entry in the reason.
 - `BLOCKED:malformed-adapter-declaration:<component>:<reason>`: an `adapter_declarations:` entry is malformed, including missing `component`, missing or non-`adapter` role, missing or empty `Translates:`, or a component name that cannot be resolved to the candidate component boundaries.
 - `BLOCKED:malformed-intrinsic-surface-declaration:<component>:<reason>`: an `intrinsic_surface_declarations:` entry is malformed, including missing `component`, missing or non-`intrinsic-surface` role, missing `Domain:`, more than one `Domain:`, missing or empty `Owns:`, or a component name that cannot be resolved to the candidate component boundaries.
 - `NEEDS_INPUT:<question_artifact>`: only for a genuine new value, scope, or trade-off question, such as multiple plausible component boundaries, conflicting declarations, or malformed declaration evidence whose intended correction materially changes the verdict and cannot be resolved from evidence. Name the offending declaration entry in the question artifact.

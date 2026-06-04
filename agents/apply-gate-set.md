@@ -67,7 +67,7 @@ All caller modes require:
 
 `implementation-phase-4` additionally requires `proposal_path`, `problem_map_path`, `risk_profile_path`, supported-surface context, estimate delta flag, touched-surface evidence, proof-plan or runtime-claim context when applicable, and bootstrap decision refs when a bootstrap exception is claimed.
 
-`implementation-phase-6` additionally requires the Step 6b output index, Step 6b and Step 6c prompt/log refs, Step 6a contract ref, hookpoint refs when applicable, component slug/scope, actual component diff, runtime claim, and side-channel or derivation/halt/swap refs when applicable.
+`implementation-phase-6` additionally requires the Step 6b output index, Step 6b and Step 6c prompt/log refs, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, hookpoint refs when applicable, component slug/scope, actual component diff, runtime claim, and side-channel or derivation/halt/swap refs when applicable. `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; it is used only for code-quality child auditor dispatch so those children can reach both source and planning artifacts.
 
 `implementation-phase-8` additionally requires actual branch or PR diff, proposal/proof-plan refs, Phase 4 and Phase 6 join refs when present, supported-surface inventory context, trace evidence, and current base/head identity.
 
@@ -104,6 +104,8 @@ A bootstrap-exception row may ratify Phase 4 code-quality only through `~/ai/con
 Run after Step 6c has produced component evidence and Step 6b test/eval-spec evidence has been consumed. Required rows include Step 6b/6c provenance, tests-contract alignment refs, per-component code-quality rows, applicable prototype/derivation/halt/swap/non-applicability records, join evidence, process-tree audit #2 projection, and audit-history records.
 
 The Step 6b output index and any side-channel bundle are load-bearing evidence. Model-authored claims that Step 6c consumed Step 6b output are not sufficient without file-backed side-channel or process-tree companion evidence.
+
+Implementation Phase 6 code-quality child dispatch is fail-closed for contract visibility. Before dispatching any of `cohesion-auditor`, `coupling-auditor`, `function-classification-auditor`, `push-pull-auditor`, `validation-integrity-auditor`, or `proof-risk-auditor`, verify `code_quality_dispatch_dir`, `worktree_path`, `contract_path`, and `proposal_path` are supplied as absolute paths, that `code_quality_dispatch_dir` contains both `worktree_path` and `planning_dir`, and that `code_quality_dispatch_dir` is not inside `worktree_path`. Dispatch each of the six with `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>`. Each prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`, and must state that an unreadable Step 6a contract is `BLOCKED:unreadable-contract-path`, never a reason to use generic judgment.
 
 ### implementation-phase-8
 
@@ -313,14 +315,14 @@ Each required gate row must be backed by one of:
 - a valid bootstrap-exception ratification row;
 - a valid inventory-resolution row that preserves unsettled ACR-285 or ACR-286 readings.
 
-Host built-in sub-agents and Task-style child invocations are out of contract. Child work must use non-interactive `agents -m <model> -f <prompt-file>` dispatch shape, with any required worktree/project context supplied by the caller or prompt, and must never use bare `agents`.
+Host built-in sub-agents and Task-style child invocations are out of contract. Child work must use non-interactive `agents -m <model> -f <prompt-file>` dispatch shape, with any required worktree/project context supplied by the caller or prompt, and must never use bare `agents`. Implementation Phase 6 code-quality child work is the exception that must include `-p ${code_quality_dispatch_dir}` per `### implementation-phase-6`, because the auditor working directory must reach both `worktree_path` source and the outside-worktree `planning_dir` contract.
 
 ## Procedure
 
 1. Load inputs, validate `caller_mode`, and verify every required path is readable or every required output root is writable.
 2. Resolve mode-specific required gates, applicability rows, skip requests, ratification requests, inventory-resolution needs, and currentness-key inputs.
 3. Build child prompt files and dispatch manifests before child work whenever a child gate must run.
-4. Dispatch required children with `agents -m <model> -f <prompt-file>` and durable log capture, or consume caller-supplied canonical artifacts only after stat/hash/currentness verification.
+4. Dispatch required children with `agents -m <model> -f <prompt-file>` and durable log capture, or consume caller-supplied canonical artifacts only after stat/hash/currentness verification. For implementation Phase 6 code-quality children, dispatch with `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt-file>` and preserve the same prompt, log, and invocation UUID evidence in the manifest.
 5. Parse child verdicts, preserve raw verdicts, normalize blocking status, and reject missing or malformed canonical outputs.
 6. Write manifest rows for required gates, optional gates, applicability, non-applicability, skip, bootstrap-exception, inventory-resolution, stale-refusal, and aggregate outcome.
 7. Build the expected-process manifest by projecting join rows into `process-tree-auditor` schema.

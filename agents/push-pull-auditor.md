@@ -34,13 +34,15 @@ Do not edit code, proposals, tests, workflows, branches, routing files, or plann
 
 ## Required Inputs
 
-- Required `repo_root=<path>` - repository root that owns the changed code, config, workflow, or deployment evidence.
+- Required `worktree_path=<absolute-path>` - active repository worktree that owns the changed code, config, workflow, or deployment evidence. Do not assume the current working directory is the worktree.
 - Required `diff_path=<path>` - unified diff or equivalent change evidence used to identify touched files/components and evidence anchors.
 - Required `output_path=<path>` - Markdown audit report destination; this is the only path this operator writes.
+- Optional `repo_root=<path>` - logical repository root or repo identity; source inspection uses `worktree_path`.
 - Optional `base_ref=<ref>` - base revision for resolving changed surfaces or source ownership.
 - Optional `head_ref=<ref>` - head revision for resolving changed surfaces or source ownership.
 - Optional `changed_files_path=<path>` - explicit changed-file inventory when the diff is partial or externally produced.
-- Optional `proposal_path=<path>` - proposal context for planned pull sites and declared interface intent.
+- Optional `proposal_path=<path>` - proposal context for planned pull sites and declared interface intent. Required in Phase 6 per-component code-quality.
+- Optional `contract_path=<absolute-path>` - Phase 6a contract carrying declared roles, adapter declarations, intrinsic-surface declarations, schemas, and common-interface evidence. Required in Phase 6 per-component code-quality; missing or unreadable `contract_path` is `BLOCKED:unreadable-contract-path`, never permission to use generic ownership judgment.
 - Optional `problem_map_path=<path>` - problem-map context for scope, touched surfaces, and deployment topology notes.
 - Optional `risk_profile_path=<path>` - risk-profile context for blast radius and ambiguity notes.
 - Optional `code_quality_ref=<path>` - default `~/ai/conventions/code-quality.md`; A1 metric source to read before scoring.
@@ -50,6 +52,7 @@ Do not edit code, proposals, tests, workflows, branches, routing files, or plann
 ## Non-Negotiables
 
 - Read A1 from `~/ai/conventions/code-quality.md` before scoring any pull site.
+- Read supplied `contract_path` and `proposal_path` before scoring in Phase 6. Record them in `Inputs Read` and `References Read` and use them as common-interface and declared-owner context when applicable.
 - Verify A1 preservation before scoring: the Push-vs-pull system coupling section, the session-graph Pull-vs-Push Policy disambiguator, the `uncontrolled-source coupler` failure mode, and the Numerical thresholds section must still exist.
 - Do not redefine A1, must not redefine A1, and never replace the A1 rule with local scoring language.
 - Scan every visible pull site in touched files/components at code-level scope and deployment-level scope.
@@ -80,14 +83,15 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
 
 ## Procedure
 
-1. Load supplied inputs: `repo_root`, `diff_path`, `output_path`, and every optional context file or ref that was provided.
+1. Load supplied inputs: `worktree_path`, `diff_path`, `output_path`, and every optional context file or ref that was provided. Resolve source files and relative evidence paths from `worktree_path`, not from the current working directory.
 2. Read A1 from `code_quality_ref` before scoring, defaulting to `~/ai/conventions/code-quality.md`.
-3. Verify Push-vs-pull system coupling text, the session-graph Pull-vs-Push Policy disambiguator, the `uncontrolled-source coupler` failure mode, and numerical thresholds before scoring. Return `BLOCKED:A1-metric-source` if the metric source is missing or contradictory.
-4. Parse the diff and changed evidence to identify touched files/components, then inspect every code-level pull/read site in those touched files/components plus every touched deployment-level pull site involving service, database, cache, filesystem, private endpoint, or service-topology reads.
-5. Keep the review touched-file/component-first under `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`; prior pull-site concerns inside touched files/components are blocking, while pull sites outside the touched set are residual/context unless independently touched.
-6. If ownership, topology, or interface context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
-7. Classify each pull site by evidence: source-control proof, common-interface proof, or neither. Source-control proof means the consumer controls the source or a declared owner inside the same controlled boundary controls it. Common-interface proof means the producer pushes into a common interface and the consumer pulls from that interface.
-7a. For each generated-artifact pull site, inspect the cited canonical
+3. In Phase 6, read `contract_path` and `proposal_path` before scoring. If `contract_path` is missing, unreadable, or blank, return `BLOCKED:unreadable-contract-path` instead of applying generic ownership judgment.
+4. Verify Push-vs-pull system coupling text, the session-graph Pull-vs-Push Policy disambiguator, the `uncontrolled-source coupler` failure mode, and numerical thresholds before scoring. Return `BLOCKED:A1-metric-source` if the metric source is missing or contradictory.
+5. Parse the diff and changed evidence to identify touched files/components, then inspect every code-level pull/read site in those touched files/components plus every touched deployment-level pull site involving service, database, cache, filesystem, private endpoint, or service-topology reads.
+6. Keep the review touched-file/component-first under `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`; prior pull-site concerns inside touched files/components are blocking, while pull sites outside the touched set are residual/context unless independently touched.
+7. If ownership, topology, or interface context is needed, cite `workflows/auditor-surface-expansion.md` `## Procedure` without copying that workflow contract.
+8. Classify each pull site by evidence: source-control proof, common-interface proof, or neither. Source-control proof means the consumer controls the source or a declared owner inside the same controlled boundary controls it. Common-interface proof means the producer pushes into a common interface and the consumer pulls from that interface. In Phase 6, consider Step 6a contract declarations and proposal surfaces before deciding ownership/interface proof is absent.
+8a. For each generated-artifact pull site, inspect the cited canonical
     `~/ai` workflow, convention, or orchestrator Markdown file for a
     dedicated `## Schema`, `## Format`, `## Output Paths`, or
     phase-specific schema-declaration section that declares the parsed
@@ -98,8 +102,8 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
     canonical-doc-as-schema rule. When the pull mixes declared shape
     with undeclared private layout, split: declared-schema portion LOW,
     undeclared portion HIGH per the private-source recipe.
-8. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
-9. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
+9. Score each pull site LOW or HIGH per the Metric Binding recipes. Missing ownership/interface proof at a concrete pull site scores HIGH with `failure_mode: uncontrolled-source coupler`.
+10. Write findings with `id`, `puller`, `source`, `implicit_contract_evidence`, `missing_proof`, `decoupling_direction`, and `failure_mode`; assign the overall verdict; write the report to `output_path`.
 
 ## Output Contract
 
@@ -146,8 +150,9 @@ Overall verdict is HIGH if any pull site is HIGH; otherwise LOW. There is no MED
 ## Stop Conditions
 
 - success: report written to `output_path` with overall verdict LOW or HIGH.
-- `BLOCKED:missing-required-input`: `repo_root`, usable `diff_path`, or `output_path` is missing.
+- `BLOCKED:missing-required-input`: `worktree_path`, usable `diff_path`, or `output_path` is missing.
 - `BLOCKED:unreadable-input`: a required path cannot be read.
+- `BLOCKED:unreadable-contract-path`: Phase 6 requires `contract_path` and it cannot be read before scoring.
 - `BLOCKED:malformed-diff`: supplied change evidence cannot be parsed enough to identify changed surfaces.
 - `BLOCKED:A1-metric-source`: A1 Push-vs-pull system coupling, the session-graph disambiguator, the failure mode, or threshold context is missing or contradictory.
 - `BLOCKED:unwritable-output`: `output_path` cannot be written.

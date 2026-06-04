@@ -4,8 +4,9 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller"
   inputs:
-    - "repo_root, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout"
+    - "repo_root, worktree_path, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout"
     - "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, proof_plan_excerpt, runtime_claim, and wu_id"
+    - "required Phase 6 per-component evidence: code_quality_dispatch_dir, contract_path, proposal_path, worktree_path, component_slug, and component scope"
     - "optional PR/RCA evidence: dossier_diff_path, decisions_path, runtime_artifact_evidence_path, and validation-surface context"
     - "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
   expectations:
@@ -31,8 +32,9 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 
 ### Inputs
 
-- repo_root, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout
+- repo_root, worktree_path, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout
 - optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, proof_plan_excerpt, runtime_claim, and wu_id
+- required Phase 6 per-component evidence: code_quality_dispatch_dir, contract_path, proposal_path, worktree_path, component_slug, and component scope
 - optional PR/RCA evidence: dossier_diff_path, decisions_path, runtime_artifact_evidence_path, and validation-surface context
 - optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref
 
@@ -86,11 +88,14 @@ Coordinate a composite gate over the code-quality surface by treating `~/ai/conv
 ## Required Inputs
 
 - `repo_root=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; points to the repository being reviewed.
+- `worktree_path=<absolute-path>`: required for pipeline-callable invocations; points to the active worktree used for source and relative evidence resolution. Auditors must not assume their current working directory is the worktree.
 - `diff_path=<path>`: required for PR-review and ad-hoc invocations, and required in Phase 4 when A4/A5 are selected; contains a unified diff or equivalent text change artifact used to identify touched files/components and evidence anchors.
 - `touched_surfaces_path=<path>`: required for Phase 4, PR-review, and ad-hoc invocations; lists changed files, module/package/component labels, and known component boundaries.
-- `scratch_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores prompts and logs.
-- `planning_dir=<path>`: required for Phase 4 pipeline-callable invocations; stores durable reports, findings, manifest, and aggregate output.
-- `proposal_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required.
+- `scratch_dir=<path>`: required for pipeline-callable invocations; stores prompts and logs.
+- `planning_dir=<path>`: required for pipeline-callable invocations; stores durable reports, findings, manifest, and aggregate output.
+- `proposal_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required. Required in Phase 6 per-component mode and passed to every selected auditor.
+- `contract_path=<absolute-path>`: required in Phase 6 per-component mode; this is the Step 6a contract under `${planning_dir}/contracts/`. Every selected auditor must read it before scoring.
+- `code_quality_dispatch_dir=<absolute-path>`: required in Phase 6 per-component mode; nearest existing common ancestor of absolute `worktree_path` and `planning_dir`, used as the `agents -p` working directory for every child auditor dispatch.
 - `proof_plan_excerpt=<text-or-path>`: required when proof-plan/runtime-claim context is selected, including Phase 8 actual-diff callers.
 - `runtime_claim=<text>`: required when validation-integrity is selected, including Phase 8 actual-diff callers and RCA dossier contexts.
 - `dossier_diff_path=<path>`: required when validation-integrity runs in RCA dossier mode.
@@ -107,6 +112,8 @@ Coordinate a composite gate over the code-quality surface by treating `~/ai/conv
 - `code_quality_ref=<path>`: optional reference override; defaults to `~/ai/conventions/code-quality.md`.
 
 Dispatch prompts apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`: `diff_path`, changed-file inventories, changed-function inventories, proposal, problem-map, risk-profile, touched-surface, trace, and inventory paths identify the touched files/components and supply evidence. They do not narrow the blocking target below the whole touched file/component.
+
+In Phase 6 per-component mode, the dispatch manifest must record `code_quality_dispatch_dir` and every child dispatch must use `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt> 2>&1 | tee <log>`. The child prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`. Missing, unreadable, blank, or malformed `contract_path` is `BLOCKED:unreadable-contract-path`; it is never permission to score from generic judgment.
 
 ## Output Paths
 
@@ -135,12 +142,12 @@ Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; t
 
 | Concern | Auditor | Model | Prompt path | Log path | Report path | Required | Applicability inputs |
 |---|---|---|---|---|---|---:|---|
-| A4 | push-pull-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/push-pull-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/push-pull-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/push-pull-auditor.md` | true | `repo_root`, `diff_path`, touched surface evidence |
-| A5 | function-classification-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/function-classification-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/function-classification-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/function-classification-auditor.md` | true | `repo_root`, `diff_path`, touched surface evidence |
-| A6 | cohesion-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/cohesion-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/cohesion-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/cohesion-auditor.md` | true | `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path` |
-| A6 | coupling-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/coupling-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/coupling-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/coupling-auditor.md` | true | `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path` |
-| ACR-254 | validation-integrity-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/validation-integrity-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/validation-integrity-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/validation-integrity-auditor.md` | context-dependent | PR diff or RCA dossier diff context plus `runtime_claim`; optional `decisions_path`, `runtime_artifact_evidence_path` |
-| ACR-254 | proof-risk-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/proof-risk-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/proof-risk-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/proof-risk-auditor.md` | context-dependent | `proposal_path` or RCA fix-decision artifact with `## Proof plan`; `proof_plan_excerpt`, `runtime_claim` when supplied by caller |
+| A4 | push-pull-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/push-pull-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/push-pull-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/push-pull-auditor.md` | true | `worktree_path`, `diff_path`, touched surface evidence; Phase 6 also `contract_path`, `proposal_path` |
+| A5 | function-classification-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/function-classification-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/function-classification-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/function-classification-auditor.md` | true | `worktree_path`, `diff_path`, touched surface evidence; Phase 6 also `contract_path`, `proposal_path` |
+| A6 | cohesion-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/cohesion-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/cohesion-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/cohesion-auditor.md` | true | `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path`; Phase 6 also `contract_path`, `proposal_path` |
+| A6 | coupling-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/coupling-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/coupling-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/coupling-auditor.md` | true | `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path`; Phase 6 also `contract_path`, `proposal_path` |
+| ACR-254 | validation-integrity-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/validation-integrity-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/validation-integrity-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/validation-integrity-auditor.md` | context-dependent | PR diff or RCA dossier diff context plus `runtime_claim` and `worktree_path`; Phase 6 also `contract_path`, `proposal_path`; optional `decisions_path`, `runtime_artifact_evidence_path` |
+| ACR-254 | proof-risk-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/proof-risk-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/proof-risk-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/proof-risk-auditor.md` | context-dependent | `proposal_path` or RCA fix-decision artifact with `## Proof plan`, `worktree_path`; Phase 6 also `contract_path`; `proof_plan_excerpt`, `runtime_claim` when supplied by caller |
 
 `Required=false` is allowed only with a written applicability reason in the manifest. Optionality records evidence applicability; it is not a way to demote relevant A1 or ACR-254 review. `validation-integrity-auditor` is `Required=true` when PR/diff/RCA evidence exists with validation-surface change risk or runtime-claim context. `proof-risk-auditor` is `Required=true` when proposal, proof-plan, RCA fix-decision, or runtime-claim context exists. In Phase 8 actual-PR-diff callers, both ACR-254 rows are always `Required=true`: the Phase 3 `## Proof plan` requirement supplies runtime-claim context, and the proposal cited by the PR body's close-keyword footer is the proof-risk artifact under review.
 
@@ -150,29 +157,33 @@ Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; t
 
 Auditor path: `~/ai/agents/push-pull-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `diff_path`, `output_path`; `diff_path` identifies touched files/components.
-- Optional inputs: `base_ref`, `head_ref`, `changed_files_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+- Required inputs: `worktree_path`, `diff_path`, `output_path`; `diff_path` identifies touched files/components.
+- Optional inputs: `repo_root`, `base_ref`, `head_ref`, `changed_files_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 
 ### A5 - Function classification
 
 Auditor path: `~/ai/agents/function-classification-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `diff_path`, `output_path`; A5 audits every function in touched files.
-- Optional inputs: `changed_functions_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+- Required inputs: `worktree_path`, `diff_path`, `output_path`; A5 audits every function in touched files.
+- Optional inputs: `repo_root`, `changed_functions_path`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_quality_ref`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 
 ### A6 - Cohesion
 
 Auditor path: `~/ai/agents/cohesion-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
-- Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `output_path`.
+- Required inputs: `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
+- Context inputs: `repo_root`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `output_path`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 
 ### A6 - Coupling
 
 Auditor path: `~/ai/agents/coupling-auditor.md`. Model: `gpt-high`.
 
-- Required inputs: `repo_root`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
-- Context inputs: `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_trace_paths`, `output_path`.
+- Required inputs: `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, and `diff_path` or equivalent changed-file evidence used to identify touched files/components.
+- Context inputs: `repo_root`, `proposal_path`, `problem_map_path`, `risk_profile_path`, `code_trace_paths`, `output_path`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 
 ### ACR-254 - Validation integrity
 
@@ -180,6 +191,7 @@ Auditor path: `~/ai/agents/validation-integrity-auditor.md`. Model: `gpt-high`.
 
 - Required in `pr-diff` mode when the invocation includes actual PR diff context, validation-surface change risk, or runtime-claim context. Required inputs: `mode=pr-diff`, `diff_path`, `runtime_claim`, `report_path`, and `worktree_path`.
 - Required in `rca-dossier` mode when the invocation includes RCA verification evidence. Required inputs: `mode=rca-dossier`, `dossier_diff_path`, `runtime_claim`, `report_path`, and `worktree_path`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 - Optional ratification inputs: `decisions_path` and `runtime_artifact_evidence_path`.
 - Phase 4 proposal-time callers usually record `Required=false` with a reason when no actual PR diff or RCA dossier evidence exists yet.
 - Phase 6 per-component callers set `Required=true` when the component diff has validation-surface change risk or runtime-claim context; otherwise they record `Required=false` with a written reason.
@@ -191,6 +203,7 @@ Auditor path: `~/ai/agents/proof-risk-auditor.md`. Model: `gpt-high`.
 
 - Required when the invocation includes `proposal_path`, RCA fix-decision artifact, `proof_plan_excerpt`, or runtime-claim/proof-plan context.
 - Required inputs: `mode=phase-3-proposal` for implementation-pipeline proposals or `mode=rca-fix-decision` for RCA fix-decision artifacts, plus `proposal_path`, `report_path`, and `worktree_path`.
+- Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 - Phase 4 proposal-time callers set `Required=true` for the approved Phase 3 proposal.
 - Phase 6 per-component callers set `Required=true` only when component-local proof-plan/runtime-claim context exists; otherwise they record `Required=false` with a written reason.
 - Phase 8 actual-PR-diff callers set `Required=true` and validate the proposal cited in the PR body's close-keyword footer against the actual shipped diff context.
