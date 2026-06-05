@@ -139,18 +139,24 @@ For agents expected to run longer than about 30 seconds:
 
 For parallel risk gates, dispatch all rounds as separate Bash-background tool calls, then collect outputs sequentially after their task notifications arrive.
 
-## Long-running / parallel agents on runtimes WITHOUT native background (opencode)
+## Long-running / parallel agents on opencode runtimes (agent-bash spooler — DO NOT POLL)
 
-The mechanism above (`run_in_background=True` + a Bash task-completion notification) only exists when the dispatching orchestrator runs inside the Claude Code harness or the `claude` CLI. When the orchestrator itself runs on a runtime whose bash tool has **no background flag and no completion callback** — notably **opencode** (gpt-*), which additionally kills a foreground bash command at a timeout — that mechanism is unavailable, and a long foreground `agents … | tee` child dispatch is KILLED mid-run. On such runtimes the orchestrator MUST use the tmux-backed dispatch helpers instead:
+On opencode (gpt-*) runtimes, the bash tool is the **agent-bash spooler**: every command runs detached in the
+background automatically (no opencode bash timeout applies) and the completion is **delivered back to you** by
+agent-runner — you do not poll and you do not manage the child.
 
-```bash
-# Launch — non-blocking, detached; the child runs OUTSIDE opencode's bash timeout, unbounded:
-agents-bg <handle> -a <agent.md> -p <worktree> -f <prompt>      # or  -m <model>  for ad-hoc
-# Poll — instant, safe in a loop; prints RUNNING, or DONE rc=<n> + the child's captured output:
-agents-bg-poll <handle>
-# Sequential convenience (blocks via short polls): agents-bg-wait <handle>
-```
+- **Dispatch exactly the canonical shape** through the bash tool:
+  `agents -a <agent.md> -p <worktree> -f <prompt> 2>&1 | tee <log>`. The spooler returns quickly: short commands
+  return their output in-call; long ones return a `handle` and keep running detached.
+- **Delivery is push, not poll.** When the child completes, agent-runner resolves your session and delivers an
+  `[OULIPOLY NOTIFICATIONS]` envelope: headless sessions are **resumed** with it at the next turn; live interactive
+  (PTY) sessions receive it **injected as input**. Continue other work after dispatching; the result arrives.
+- A returned `handle` may be checked once opportunistically (call bash with `{handle}`), but DO NOT loop-poll —
+  the wake is the completion mechanism.
+- **Deprecated:** `agents-bg`, `agents-bg-poll`, `agents-bg-wait` (the old tmux stopgap). Do not use them and do not
+  poll their logs. Do NOT use raw `&`/`nohup` (session-tied, orphans the child).
 
-Parallel fan-out: launch every child with `agents-bg` (each returns immediately), then loop — `agents-bg-poll <handle>` for each, with a short `sleep` between rounds — until all are `DONE`, then read each handle's captured log. The helpers live at `~/.local/bin/agents-bg{,-poll,-wait}` and write per-handle log/done/rc files under `${AGENTS_BG_DIR:-~/.agents-bg}`.
-
-**Scope of the prohibitions above:** the "do not poll / no wrapper script / no shell `&`/`disown`/`wait` / no trace-loop" rules govern runtimes that PROVIDE the Bash task-completion notification (harness, `claude`). On a no-native-background runtime (opencode) the `agents-bg` helpers — which use **tmux-detached** sessions, NOT shell `&`/`disown`, and a bounded `agents-bg-poll` loop, NOT trace-polling — are the REQUIRED mechanism, not a forbidden one. They preserve full `2>&1` capture (each child's stdout/stderr is teed to its handle log) and parent-visible `OULIPOLY_*` markers in that log. Do NOT fall back to foreground `agents … | tee` on opencode for any child expected to exceed the bash timeout, and do NOT use raw `&`/`nohup` (those are session-tied and orphan the child).
+The "do not poll / no wrapper script / no shell `&`/`disown`/`wait` / no trace-loop" prohibitions above now apply on
+ALL runtimes: Claude harness runtimes use `run_in_background=True` + the Bash completion notification; opencode
+runtimes use the agent-bash spooler + agent-runner wake. Parallel fan-out on opencode: dispatch each child as its own
+bash call (each returns fast), continue working, and handle each completion envelope as it is delivered.
