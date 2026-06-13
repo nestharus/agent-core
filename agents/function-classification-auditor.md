@@ -89,6 +89,8 @@ The A1 category list is `orchestration`, `filter`, `validator`, `predicate`, `ma
 
 **Inventory-scope recognition.** An A5 inventory item is an actual executable function-like symbol with a body: a function, method, closure, lambda, shell function definition, or equivalent language-level symbol in source or product code. Ordinary `~/ai` Markdown procedure prose, structural headings, workflow phases, operator prompt sections, convention narrative sections, shell snippets, and YAML carriers are excluded from A5 function inventory unless they define an actual executable function-like symbol with an inspectable body. Responsibilities described by a containing Markdown procedure section are not attributed to a contained source function unless those responsibilities are present in that function's body.
 
+**Test-file exclusion.** Per `~/ai/conventions/code-quality.md` § `Test-file scope`, test code is out of A5 scope: the single-classification metric does not fit a test fixture's arrange-act-assert body shape. Recognize test code by language-neutral test convention — test directories (`tests/`, `test/`, `__tests__/`, `spec/`), test-suffixed or test-prefixed filenames (`*_test.*`, `*.test.*`, `*.spec.*`, `test_*.*`), and symbols guarded by a test-only attribute or harness (`#[cfg(test)]` modules, `#[test]` functions) — and exclude the recognized function-like symbols from the A5 inventory whether or not the test code is the WU's deliverable. Recognition is by convention, not the mere appearance of "test" in a name: a file unconditionally compiled into the production build (e.g. a plain `mod foo_test_support;` with no test guard) is production code and is scored. A production file with an inline `#[cfg(test)] mod tests { … }` has only its test-guarded symbols excluded; its production functions are still scored. Record each excluded test file in `Residual Ambiguity / Stop-Condition Notes` with reason `excluded: test file (A1 metric does not fit test-fixture shape)`. A touched set that is entirely test files yields a LOW verdict with no scored findings and an explicit excluded-files note.
+
 For each function in a touched file, infer which A1 category or categories the function body performs. The scoring question is exactly one A1 category per function. A function with exactly one inferred category is LOW. A function with two or more inferred categories is HIGH and must be reported as `multi-classifier function`, even when the function predates the current diff.
 
 **Pure orchestrator body-shape recognition.** A function whose body,
@@ -130,7 +132,7 @@ MEDIUM is not valid for the core `Function categories per function` metric becau
 5. Parse `diff_path` to identify touched files. Use language-neutral diff tracing first, then file context under `worktree_path` and optional `changed_functions_path` to resolve partial hunks and evidence anchors.
 6. Apply `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership` as the canonical blocking/residual rule.
    Every `suggested_split` names the current blocking finding, why the split strictly reduces the blocking finding set, and how introduced helpers are handled under the audit overlay rule.
-7. Build the A5 inventory from actual executable function-like symbols in each touched file only. Exclude ordinary `~/ai` Markdown procedure or document sections, shell snippets, and YAML carriers that do not define executable function-like symbols with inspectable bodies. If a touched file contains no real function-like symbols, record that in residual notes if useful and continue; the verdict can be LOW with no findings.
+7. Build the A5 inventory from actual executable function-like symbols in each touched file only. Exclude ordinary `~/ai` Markdown procedure or document sections, shell snippets, and YAML carriers that do not define executable function-like symbols with inspectable bodies. Exclude test files per the Test-file exclusion rule in Metric Binding, recording each in residual notes. If a touched file contains no real function-like symbols, record that in residual notes if useful and continue; the verdict can be LOW with no findings.
 8. Classify each function-like symbol admitted by the inventory boundary against the convention categories, using the Step 6a contract and proposal only as context for intended component boundaries and declared roles.
 9. For each function whose inferred-category set initially contains more
    than one A1 category, re-evaluate the body under the pure orchestrator
@@ -154,7 +156,9 @@ Default report path: none. `output_path` is required to avoid inventing caller-s
 
 Report shape:
 
-`## Functions In Touched Files` lists only actual executable function-like symbols admitted by the inventory boundary. Excluded Markdown procedure headings or sections are not rows in `Functions In Touched Files` or `Multi-Classifier Findings`; they may appear in `Residual Ambiguity / Stop-Condition Notes` only to explain inventory exclusion or unresolved boundary ambiguity.
+`## Functions In Touched Files` accounts for every actual executable function-like symbol admitted by the inventory boundary, but is **bounded so it never enumerates one row per LOW function**. Enumerating every function individually on a large diff (hundreds of functions across dozens of files) produces a report so large it stalls the auditor's result emission; the bounded form below preserves full HIGH evidence and a complete inspected-count accounting without that failure mode. Excluded Markdown procedure headings or sections are not rows here or in `Multi-Classifier Findings`; they may appear in `Residual Ambiguity / Stop-Condition Notes` only to explain inventory exclusion or unresolved boundary ambiguity.
+
+**Output bound.** In `## Functions In Touched Files`, enumerate one row only for each HIGH (multi-classifier) function. Account for LOW functions per file as a single coverage row giving the count of LOW functions inspected, not one row each. This keeps the report small and bounded on large diffs while still proving every function was inspected. Every HIGH function listed here must also appear in `## Multi-Classifier Findings` with full per-category evidence; the verdict semantics are unchanged — HIGH if any scored (production, non-test) function is multi-classifier, otherwise LOW.
 
 ```md
 # Function Classification Audit
@@ -164,8 +168,14 @@ Report shape:
  ## References Read
 
  ## Functions In Touched Files
-| Path | Function / symbol | Line span or diff hunk | Inferred category | Verdict | Evidence |
-|---|---|---|---|---|---|
+
+ ### LOW coverage (per file)
+| Path | LOW functions inspected | Test file excluded? |
+|---|---|---|
+
+ ### HIGH functions (enumerated individually)
+| Path | Function / symbol | Line span or diff hunk | Categories mixed | Evidence |
+|---|---|---|---|---|
 
  ## Multi-Classifier Findings
 | ID | Path | Function / symbol | Categories mixed | Evidence | Suggested split | Blocking or residual | Finding origin | Domain relation |

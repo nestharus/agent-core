@@ -26,6 +26,16 @@ Diffs, changed-function inventories, traces, proposals, risks, callers, callees,
 
 ACR-249 changes judgment scope only. The existing A1 categories, numerical thresholds, LOW-only disposition policy, bootstrap exception, and ACR-156 oscillation handling remain authoritative in their existing sections.
 
+### Test-file scope
+
+The A1 metrics in this convention — single-classification, cohesion, coupling, and push-vs-pull — describe production code shape. Test files do not have that shape: a test's natural body arranges a fixture, exercises the unit, and asserts an outcome, so the single-classification, external-symbol-count, and source-coupling metrics report findings that do not correspond to a real defect. Auditing test files against these metrics is therefore out of scope for every auditor in `## Auditor Set`.
+
+Each auditor recognizes test code by language-neutral test convention — test directories (e.g. `tests/`, `test/`, `__tests__/`, `spec/`), test-suffixed or test-prefixed filenames (e.g. `*_test.*`, `*.test.*`, `*.spec.*`, `test_*.*`), and symbols guarded by a test-only attribute or harness (e.g. `#[cfg(test)]` modules, `#[test]` functions) — and excludes the recognized function-like symbols, components, and declarations from the scored inventory. This exclusion holds whether or not the test code is the WU's primary deliverable: the metric does not fit test-fixture shape in either case. Recognition is by convention, not by the mere appearance of the word "test" in a name: a file unconditionally compiled into the production build (e.g. a plain `mod foo_test_support;` with no test guard) is production code and is scored normally.
+
+A production file may contain an inline test harness (e.g. a `#[cfg(test)] mod tests { … }`). In that case only the test-guarded function-like symbols are excluded; the production function-like symbols in the same file are scored normally under whole-file ownership.
+
+Exclusion is observable, not silent: an auditor records each excluded test file in its residual/stop-condition notes with the reason `excluded: test file (A1 metric does not fit test-fixture shape)`. A WU whose touched set is entirely test files therefore reaches a `LOW` verdict with no scored findings and an explicit excluded-files note. A production (non-test) file in the same touched set is scored normally under whole-file ownership; the test-file exclusion never narrows the blocking target inside a touched production file.
+
 ## Auditor Set
 
 The canonical A1 auditor inventory for composite fanout routing is:
