@@ -58,7 +58,7 @@ agents [OPTIONS] [AGENT] [PROMPT...]
 
 ```bash
 # Model + prompt file (standard for audits)
-agents --model gpt-xhigh --file /tmp/audit-prompt.md --project .
+agents --model gpt-high --file /tmp/audit-prompt.md --project .
 
 # Inline prompt
 agents --model gpt-high "Summarize the key findings"
@@ -84,11 +84,11 @@ prompt_mode = "arg"
 
 [[providers]]
 command = "codex"
-args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.4", "-c", "model_reasoning_effort=xhigh"]
+args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.4", "-c", "model_reasoning_effort=high"]
 
 [[providers]]
 command = "codex2"
-args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.4", "-c", "model_reasoning_effort=xhigh"]
+args = ["exec", "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.4", "-c", "model_reasoning_effort=high"]
 ```
 
 Load balancing is automatic: round-robin with error avoidance.
@@ -97,9 +97,9 @@ Load balancing is automatic: round-robin with error avoidance.
 
 | Model | Use for | Concurrency limit |
 |-------|---------|-------------------|
-| `gpt-xhigh` | Auditing (best at systematic cross-referencing) | 2 at a time |
+| `gpt-high` | Auditing (best at systematic cross-referencing) | 2 at a time |
 | `gpt-high` | Research, outlining, concept extraction, general analysis | No hard limit |
-| `gpt-xhigh` | Alignment checks, editing, tenet evaluation, Mermaid diagrams | As available |
+| `gpt-high` | Alignment checks, editing, tenet evaluation, Mermaid diagrams | As available |
 | `gemini-high` | SVG visual planning, art direction (Gemini 3.1 Pro, HIGH thinking) | Rate limited |
 | `gemini-medium` | SVG generation, visual tasks (Gemini 3.1 Pro, MEDIUM thinking) | Rate limited |
 | `gemini-low` | Quick SVG drafts, iteration, visual review (Gemini 3.1 Pro, LOW thinking) | Rate limited |
@@ -243,9 +243,9 @@ If a concept cannot be traced to a tenet or to continuity, it is either:
 
 The pattern: audit the current state, research what's missing, then edit via sub-agents.
 
-### Phase 1: Audit (gpt-xhigh)
+### Phase 1: Audit (gpt-high)
 
-Use `gpt-xhigh` for audit tasks. **Max 2 xhigh agents at a time.**
+Use `gpt-high` for audit tasks. **Max 2 audit agents at a time.**
 
 Each audit targets **one specific concern** and searches the **entire document**. The audit prompt must be extremely detailed about what the concern is, what correct looks like, and what to report.
 
@@ -275,7 +275,7 @@ Be exhaustive. Do not skip any section.
 EOF
 
 # Run it
-agents --model gpt-xhigh --file /tmp/audit-concern-name.md --project .
+agents --model gpt-high --file /tmp/audit-concern-name.md --project .
 ```
 
 Run audits in parallel pairs. Wait for both to complete before launching the next pair.
@@ -326,7 +326,7 @@ python3 md_to_pdf.py
 ### Principles
 
 - **One concern per audit agent** — multi-concern audits lose accuracy. The audit itself is a many-to-many problem; keep it one-to-one.
-- **gpt-xhigh for auditing, gpt-high for editing** — use the deeper model for systematic cross-referencing and the standard high model for targeted prose edits that match existing tone.
+- **Separate `gpt-high` auditing and editing invocations** — audits perform systematic cross-referencing; editors make targeted prose changes that match existing tone.
 - **Audit prompts must be exhaustive** — the more detail about what correct looks like, the more accurate the audit. Vague prompts produce vague results.
 - **Context files over mega-prompts** — sub-agents read context files rather than receiving all findings inline. Keeps prompts focused.
 - **Rework, don't patch** — when a section has conceptual problems, rewrite the prose around the correct idea. Word-swapping ("difficulty" → "terrain") without reworking the surrounding sentences produces incoherent text.
@@ -358,7 +358,7 @@ These detect and fix problems across the full document. Run in order; later work
 Build a canonical glossary of key concepts. Foundation for all other workflows.
 
 **Output:** `.workspace/concept-registry.md`
-**Agent:** `gpt-xhigh` — extract all key concepts, canonical terms, definitions, first-definition locations.
+**Agent:** `gpt-high` — extract all key concepts, canonical terms, definitions, first-definition locations.
 **Maintenance:** Update after any structural edit.
 
 ### QW2: Dependency Check
@@ -366,7 +366,7 @@ Build a canonical glossary of key concepts. Foundation for all other workflows.
 For each key term, verify first use comes after first definition. Flag violations.
 
 **Input:** Concept registry
-**Agent:** Programmatic or `gpt-xhigh`
+**Agent:** Programmatic or `gpt-high`
 **Fix:** Reorder, add inline previews, or move definitions earlier.
 
 ### QW3: Framing Consistency Audit
@@ -374,21 +374,21 @@ For each key term, verify first use comes after first definition. Flag violation
 For each concept in the registry, find every passage that defines/describes/characterizes it. Compare pairwise for drift.
 
 **Input:** Concept registry
-**Agent:** `gpt-xhigh` — one concept per audit run (one-to-one, not many-to-many)
+**Agent:** `gpt-high` — one concept per audit run (one-to-one, not many-to-many)
 **Fix:** Pick canonical framing, update drifted passages, mark intentional lens changes.
 
 ### QW4: Repetition Audit
 
 Find passage pairs that make the same point. Classify each as functional reinforcement vs harmful repetition.
 
-**Agent:** `gpt-xhigh` — full document scan
+**Agent:** `gpt-high` — full document scan
 **Fix:** Merge, compress, or give the recurrence a new pedagogical job.
 
 ### QW5: Values Alignment Audit
 
 For each chapter, check prose against the 7 communication values. Flag specific violations.
 
-**Agent:** `gpt-xhigh` — one chapter per audit, values document as context
+**Agent:** `gpt-high` — one chapter per audit, values document as context
 **Fix:** Rework flagged passages per the violated value.
 
 ### QW6: Concept Extraction
@@ -404,7 +404,7 @@ Extract core ideas from each section of the book as terse lists. Foundation for 
 Review extracted concept lists for meaning drift across chapters. Does the same concept mean the same thing everywhere?
 
 **Input:** Compiled concept lists from QW6
-**Agent:** `gpt-xhigh` — reads concept lists AND the full book, checks each concept that appears in multiple chapters for meaning consistency.
+**Agent:** `gpt-high` — reads concept lists AND the full book, checks each concept that appears in multiple chapters for meaning consistency.
 **Check for:** meaning shift, terminology drift, contradictions, framing compression in later chapters.
 **Fix:** Use tenet definitions (Core Tenets section above) as the reference for what concepts SHOULD mean. Rework drifted passages to match.
 
@@ -413,7 +413,7 @@ Review extracted concept lists for meaning drift across chapters. Does the same 
 For every concept in the book, verify it traces to one or more of the 4 core tenets. Identify orphans that don't trace. Evaluate orphans: truly a new tenet, or a misframed instance of an existing one?
 
 **Input:** Compiled concept lists from QW6, Core Tenets definitions
-**Agent:** `gpt-xhigh` — performs alignment checks. The prompt must include the full tenet definitions from the Core Tenets section.
+**Agent:** `gpt-high` — performs alignment checks. The prompt must include the full tenet definitions from the Core Tenets section.
 **Process:**
 1. For each extracted concept, determine which tenet(s) it implements and at what layer
 2. Identify concepts that don't cleanly trace to any tenet
@@ -429,7 +429,7 @@ For every concept in the book, verify it traces to one or more of the 4 core ten
 Compare the book's concept coverage against the system-synthesis and known AI problems. Identify gaps where the book should teach something it currently doesn't.
 
 **Input:** Tenet alignment results from QW8, `system-synthesis.md`
-**Agent:** `gpt-xhigh` — focus on AI problems the system encounters, not software engineering techniques.
+**Agent:** `gpt-high` — focus on AI problems the system encounters, not software engineering techniques.
 **Check for:** AI problems the system solves that the book doesn't teach, tenet strategies the book doesn't cover, missing layers where tenets should apply but don't.
 **Output:** `.workspace/concepts/coverage-gaps.md` — each gap with: what's missing, which tenet it serves, which Part/Chapter it belongs in, whether it needs a new section or can be woven into existing content.
 
@@ -437,7 +437,7 @@ Compare the book's concept coverage against the system-synthesis and known AI pr
 
 Identify opportunities to explain concepts visually. Humans are visual — minimize text, maximize visualization. Text explains the WHY; visualization explains the HOW and the WHAT. Visualize whenever possible.
 
-**Agent:** `gpt-xhigh` — reads each section, identifies what is being explained (a process, a structure, a comparison, an interaction, a flow, a relationship) and whether a diagram would explain it better than prose.
+**Agent:** `gpt-high` — reads each section, identifies what is being explained (a process, a structure, a comparison, an interaction, a flow, a relationship) and whether a diagram would explain it better than prose.
 **Framing:** This is opportunity-driven, not gap-driven. The question is not "what's missing?" but "what could be communicated visually?" Default to visualizing — only leave as text when the concept is purely about reasoning or motivation (the why).
 **Criteria:** Any how or what being explained in prose is a visualization opportunity. Processes, flows, structures, comparisons, interactions, relationships, lifecycles, hierarchies, state changes.
 **Fix:** Add diagrams (use `gemini-high` for SVG generation). Reduce surrounding prose to the why — remove prose that restates what the diagram shows.
@@ -446,7 +446,7 @@ Identify opportunities to explain concepts visually. Humans are visual — minim
 
 Detect near-duplication between visuals (diagrams, tables) and their surrounding text. Visuals and text should complement each other, not restate the same information.
 
-**Agent:** `gpt-xhigh` — reads each diagram/table and its surrounding text context (2-3 paragraphs before and after).
+**Agent:** `gpt-high` — reads each diagram/table and its surrounding text context (2-3 paragraphs before and after).
 **Check for three duplication modes:**
 1. **Diagram-text duplication** — the text fully restates what the diagram shows. Text should explain the WHY; the diagram should show the HOW/WHAT. If the text says everything the diagram says, either reduce the text or remove the diagram.
 2. **Diagram-table duplication** — a diagram and table present identical information. Keep whichever communicates better; if both add value, ensure they show different facets (e.g., diagram shows structure, table shows details).
@@ -467,7 +467,7 @@ Systematic text editing review. Run 6 practice-category reviews per chapter in p
 **Process:** One chapter at a time. For each chapter:
 1. Run all 6 review agents in parallel (`gpt-high`, one per practice)
 2. Collect findings into a context file
-3. Run `gpt-xhigh` edit agent to fix findings
+3. Run `gpt-high` edit agent to fix findings
 4. Rerun reviews for the chapter
 5. Repeat until all 6 reviews return PASS
 
@@ -523,7 +523,7 @@ Deep structural review for content quality. Unlike QW12 (surface-level mechanics
 **Process:** One chapter at a time. For each chapter:
 1. Run structural review agent (`gpt-high`) with the 6-category detection template
 2. Collect findings (MUST-FIX and SHOULD-FIX)
-3. Apply fixes with editorial judgment (`gpt-xhigh`)
+3. Apply fixes with editorial judgment (`gpt-high`)
 4. Rerun review for the chapter
 5. Repeat until findings are resolved
 
@@ -605,12 +605,12 @@ This eliminates the most common SVG failure modes (misaligned arrows, overlappin
 agents --model gemini-high --file /tmp/diagram-prompt.md --project .
 ```
 
-### Tier 2b: Communication Risk Review (gpt-xhigh)
+### Tier 2b: Communication Risk Review (gpt-high)
 
-After Gemini's self-correcting loop produces a clean SVG, `gpt-xhigh` evaluates the diagram against the communication axis. The question: "What are the odds a reader will not understand this diagram in context?"
+After Gemini's self-correcting loop produces a clean SVG, `gpt-high` evaluates the diagram against the communication axis. The question: "What are the odds a reader will not understand this diagram in context?"
 
 **Workflow:**
-1. `gpt-xhigh` reads the rendered PNG + the surrounding text from the book
+1. `gpt-high` reads the rendered PNG + the surrounding text from the book
 2. Evaluates: Does the diagram clarify or confuse? Does it match what the text explains? Will a reader unfamiliar with the concept understand it?
 3. If communication risk is HIGH: feed specific issues back to Gemini for another self-correcting round
 4. If LOW: diagram is ready for integration
@@ -619,7 +619,7 @@ This is risk assessment on the communication axis — not aesthetic judgment.
 
 ### Tier 2c: Illustrated Figure Pipeline (Gemini → Seedream i2i)
 
-For book figures that need hand-drawn editorial illustration (not SVG diagrams). Gemini does ALL visual planning; seedream i2i generates the final image; `gpt-xhigh` does communication risk review.
+For book figures that need hand-drawn editorial illustration (not SVG diagrams). Gemini does ALL visual planning; seedream i2i generates the final image; `gpt-high` does communication risk review.
 
 **Art Style**: Friendly hand-drawn editorial illustration — soft rounded shapes, characters/people, pastel colors, cartoon-like but professional. NOT abstract geometric, NOT boxes-and-arrows, NOT photorealistic, NOT anime. Reference: `diagrams/hand-drawn-essay-illustration_23-2150314529.avif`.
 
@@ -637,7 +637,7 @@ For book figures that need hand-drawn editorial illustration (not SVG diagrams).
    - "No text no words no labels no letters" (labels added in post)
    - Do NOT pass the style reference image to seedream — it copies characters literally
 
-5. **Communication Risk Review** (`gpt-xhigh`): evaluates the generated image against the communication axis AND the engagement axis. Pass: the generated image, surrounding book text, figure caption, AND `research/figure-best-practices.md`. The reviewer must assess:
+5. **Communication Risk Review** (`gpt-high`): evaluates the generated image against the communication axis AND the engagement axis. Pass: the generated image, surrounding book text, figure caption, AND `research/figure-best-practices.md`. The reviewer must assess:
    - Communication: Could a reader misinterpret? What's confusing, broken, contradictory?
    - Engagement: Does the figure follow best practices (asymmetry, varying sizes, visual rhythm, depth cues)? Would a reader skip it because it's visually dead?
    - The risk assessor must understand that visual engagement rules (S-curves, asymmetry, winding paths) serve reader attention even when the text describes "linear" processes. Figures are not literal translations of text — they are visual communication with their own rules.
@@ -707,7 +707,7 @@ agents --model seedance-i2v '{"prompt": "Slowly animate the flow: highlight each
 ```
 Gemini (SVG, self-correcting) ─── generate → convert → inspect → fix → repeat
   ↓ clean SVG
-gpt-xhigh (communication risk) ─ evaluate diagram + text context on communication axis
+gpt-high (communication risk) ─ evaluate diagram + text context on communication axis
   ↓ approved or fed back to Gemini
 Gemini (art direction) ──────── write Seedream prompts for image generation
 Seedream (Image) ────────────── photorealistic / textured images from Gemini prompts
@@ -723,7 +723,7 @@ Seedance (Video) ────────────── animated explanation
 | Complex diagram (cycles, multi-element) | `gemini-high` (self-correcting) | Needs high reasoning for layout |
 | Standard diagram (ladders, spectrums) | `gemini-medium` (self-correcting) | Balance of quality and speed |
 | Quick SVG iteration / review | `gemini-low` | Speed over polish |
-| Communication risk review | `gpt-xhigh` | Evaluates diagram clarity in context |
+| Communication risk review | `gpt-high` | Evaluates diagram clarity in context |
 | Art direction for Seedream | `gemini-high` | Creative brief → image prompt |
 | Photorealistic illustration | `seedream-t2i` | Text-to-image for standalone visuals |
 | Polish an SVG into a final image | `seedream-i2i` | Image-to-image refinement |
@@ -775,20 +775,20 @@ After fixing stability (QW7) and alignment (QW8) issues, re-run QW6-QW8 to verif
 
 | Task Type | Model | Why |
 |-----------|-------|-----|
-| Auditing (systematic cross-referencing) | `gpt-xhigh` | Best at exhaustive search across large documents |
+| Auditing (systematic cross-referencing) | `gpt-high` | Best at exhaustive search across large documents |
 | Concept extraction | `gpt-high` | Fast, accurate summarization |
-| Alignment checks | `gpt-xhigh` | Best at evaluating whether concepts trace to principles |
-| Stability analysis | `gpt-xhigh` | Cross-referencing meaning across sections |
-| Coverage gap detection | `gpt-xhigh` | Cross-referencing book against system |
+| Alignment checks | `gpt-high` | Best at evaluating whether concepts trace to principles |
+| Stability analysis | `gpt-high` | Cross-referencing meaning across sections |
+| Coverage gap detection | `gpt-high` | Cross-referencing book against system |
 | Text quality review (per-chapter) | `gpt-high` | Parallel practice reviews, mechanical rule checking |
 | Structural editing review | `gpt-high` | Deep content review (knowledge, coherence, argument) |
-| Text quality fixes | `gpt-xhigh` | Targeted edits matching existing tone |
-| Structural editing fixes | `gpt-xhigh` | Editorial judgment for content-level rewrites |
-| Editing prose | `gpt-xhigh` | Best at targeted edits matching existing tone |
-| Mermaid diagrams | `gpt-xhigh` | Structural accuracy for system flows |
+| Text quality fixes | `gpt-high` | Targeted edits matching existing tone |
+| Structural editing fixes | `gpt-high` | Editorial judgment for content-level rewrites |
+| Editing prose | `gpt-high` | Best at targeted edits matching existing tone |
+| Mermaid diagrams | `gpt-high` | Structural accuracy for system flows |
 | SVG visual planning / art direction | `gemini-high` | Best SVG generation, high reasoning for visual design |
 | SVG iteration | `gemini-low` / `gemini-medium` | Speed for refinement cycles |
-| Visual risk review | `gpt-xhigh` | Communication + engagement risk (must receive best practices as context) |
+| Visual risk review | `gpt-high` | Communication + engagement risk (must receive best practices as context) |
 | Figure interpretation / composition / concept art / labels | `gemini-high` | All visual planning — self-correcting SVG loops |
 | Figure generation | `seedream-i2i` | Transform composition + concept art into illustrated figures |
 | Cover art textures | `seedream-t2i` | Standalone texture/pattern generation only |

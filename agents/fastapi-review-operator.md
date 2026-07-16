@@ -12,7 +12,7 @@ architecture, state management, Pydantic contracts, and testing patterns. This i
 (`pr-review-operator.md`) passes its risk gate (all three LOW).
 
 You are the orchestrator — you write prompt files and launch 5 facet sub-agents via the
-`agents` CLI (all `gpt-xhigh`), synthesize their results, and post structured comments
+`agents` CLI (all `gpt-high`), synthesize their results, and post structured comments
 to GitHub.
 
 ## Use When
@@ -102,7 +102,7 @@ Skim `diff.txt` to identify FastAPI-relevant files:
 
 Enumerate the FastAPI-relevant files in a list for the facet prompts.
 
-### Phase 1: 5 facet reviews in parallel (gpt-xhigh)
+### Phase 1: 5 facet reviews in parallel (gpt-high)
 
 Write 5 prompt files and launch them in parallel via `agents`. All five share this
 **project context header** (inline into each prompt):
@@ -132,7 +132,7 @@ Read the file `$WORK_DIR/diff.txt` for the complete PR diff.
 For every facet: rate **framework-quality risk** as LOW / MEDIUM / HIGH. All five must be
 **LOW** for the PR to clear the FastAPI gate.
 
-#### 1a. Framework Idioms (`gpt-xhigh`)
+#### 1a. Framework Idioms (`gpt-high`)
 
 File: `$WORK_DIR/facet-framework.md`
 
@@ -178,10 +178,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" 2>&1 | tee "$WORK_DIR/result-framework.md"', run_in_background=True, description="Run FastAPI framework facet")
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/facet-framework.md" 2>&1 | tee "$WORK_DIR/result-framework.md"', run_in_background=True, description="Run FastAPI framework facet")
 ```
 
-#### 1b. Service / Controller / Repository Architecture (`gpt-xhigh`)
+#### 1b. Service / Controller / Repository Architecture (`gpt-high`)
 
 File: `$WORK_DIR/facet-architecture.md`
 
@@ -230,10 +230,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" 2>&1 | tee "$WORK_DIR/result-architecture.md"', run_in_background=True, description="Run FastAPI architecture facet")
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/facet-architecture.md" 2>&1 | tee "$WORK_DIR/result-architecture.md"', run_in_background=True, description="Run FastAPI architecture facet")
 ```
 
-#### 1c. State & Concurrency (`gpt-xhigh`)
+#### 1c. State & Concurrency (`gpt-high`)
 
 File: `$WORK_DIR/facet-state.md`
 
@@ -283,10 +283,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" 2>&1 | tee "$WORK_DIR/result-state.md"', run_in_background=True, description="Run FastAPI state facet")
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/facet-state.md" 2>&1 | tee "$WORK_DIR/result-state.md"', run_in_background=True, description="Run FastAPI state facet")
 ```
 
-#### 1d. Pydantic & API Contracts (`gpt-xhigh`)
+#### 1d. Pydantic & API Contracts (`gpt-high`)
 
 File: `$WORK_DIR/facet-pydantic.md`
 
@@ -337,10 +337,10 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" 2>&1 | tee "$WORK_DIR/result-pydantic.md"', run_in_background=True, description="Run FastAPI Pydantic facet")
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/facet-pydantic.md" 2>&1 | tee "$WORK_DIR/result-pydantic.md"', run_in_background=True, description="Run FastAPI Pydantic facet")
 ```
 
-#### 1e. Testing & Observability (`gpt-xhigh`)
+#### 1e. Testing & Observability (`gpt-high`)
 
 File: `$WORK_DIR/facet-testing.md`
 
@@ -390,7 +390,7 @@ Format:
 
 Launch:
 ```python
-Bash(command='agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" 2>&1 | tee "$WORK_DIR/result-testing.md"', run_in_background=True, description="Run FastAPI testing facet")
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/facet-testing.md" 2>&1 | tee "$WORK_DIR/result-testing.md"', run_in_background=True, description="Run FastAPI testing facet")
 ```
 
 `~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule for these facet launches. After all five task notifications arrive, collect the result files:
@@ -472,7 +472,7 @@ EOF
 
 If multiple facets return HIGH or the architecture finding is a fundamental
 layer violation (e.g., routers doing persistence, services raising `HTTPException`),
-escalate to a `gpt-high` proposal run that sketches the correct layering. Same flow
+dispatch a fresh `gpt-high` proposal run that sketches the correct layering. Same flow
 as primary Phase 5, but scoped to architecture — never rebuild the whole feature.
 
 ```bash

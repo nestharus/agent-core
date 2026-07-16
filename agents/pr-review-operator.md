@@ -178,7 +178,7 @@ All three prompts share this **project context header** (customize per PR):
 Read the file `<WORK_DIR>/diff.txt` for the complete diff.
 ```
 
-#### 1a. Audit Risk (`gpt-xhigh`)
+#### 1a. Audit Risk (`gpt-high`)
 
 File: `$WORK_DIR/risk-audit.md`
 
@@ -214,9 +214,9 @@ Format:
 **File**: [path:line if applicable]
 ```
 
-Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-audit.md" > "$WORK_DIR/result-audit.md" 2>&1`
+Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/risk-audit.md" > "$WORK_DIR/result-audit.md" 2>&1`
 
-#### 1b. Scope Risk (`gpt-xhigh`)
+#### 1b. Scope Risk (`gpt-high`)
 
 File: `$WORK_DIR/risk-scope.md`
 
@@ -261,9 +261,9 @@ Format:
 ...
 ```
 
-Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-scope.md" > "$WORK_DIR/result-scope.md" 2>&1`
+Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/risk-scope.md" > "$WORK_DIR/result-scope.md" 2>&1`
 
-#### 1c. Shortcut Risk (`gpt-xhigh`)
+#### 1c. Shortcut Risk (`gpt-high`)
 
 File: `$WORK_DIR/risk-shortcut.md`
 
@@ -298,7 +298,7 @@ Format:
 **File**: [path:line if applicable]
 ```
 
-Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
+Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/risk-shortcut.md" > "$WORK_DIR/result-shortcut.md" 2>&1`
 
 **Run all three in parallel** as separate Bash tool invocations with `run_in_background=True`, following `~/ai/workflows/agents-cli.md`. Collect the three results after their task notifications arrive.
 
@@ -385,7 +385,7 @@ determine whether Phase 5 posts `--request-changes`.
 Run after Phases 1-3 complete (or in parallel if you already have the diff).
 These two checks focus specifically on PR structure, not technical correctness.
 
-#### 4a. Multi-Concern Check (`gpt-xhigh`)
+#### 4a. Multi-Concern Check (`gpt-high`)
 
 File: `$WORK_DIR/pr-multiconcern.md`
 
@@ -417,7 +417,7 @@ into smaller PRs, each with a single concern. Operate on the actual diff.
 4. Final verdict: "cannot decompose further" OR specific decomposition with merge order
 ```
 
-Launch: `agents -m gpt-xhigh -p "$PROJECT_DIR" -f "$WORK_DIR/pr-multiconcern.md" > "$WORK_DIR/result-multiconcern.md" 2>&1`
+Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/pr-multiconcern.md" > "$WORK_DIR/result-multiconcern.md" 2>&1`
 
 #### 4b. Justification Gauntlet (`pr-justification-gauntlet.md`)
 
@@ -452,7 +452,7 @@ threads are culled or the gauntlet returns a blocking condition. Write the final
 EOF
 
 agents -a ${agents_dir}/pr-justification-gauntlet.md \
-  -m gpt-xhigh -p "$PROJECT_DIR" \
+  -m gpt-high -p "$PROJECT_DIR" \
   -f "$WORK_DIR/gauntlet-kickoff.md" \
   > "$WORK_DIR/result-justification.md" 2>&1
 ```
@@ -575,7 +575,7 @@ Synthesize all findings into a proposal prompt that:
 
 Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" > "$WORK_DIR/result-proposal.md" 2>&1`
 
-#### 6b. Risk-Assess the Proposal (3x `gpt-xhigh`)
+#### 6b. Risk-Assess the Proposal (3x `gpt-high`)
 
 Run the same 3x risk gate on the proposal (not a diff — the proposal text).
 Adapt the prompts: instead of "read the diff", say "read the proposal at

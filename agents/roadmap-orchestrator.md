@@ -1,6 +1,6 @@
 ---
 description: 'Run the roadmap workflow cascade: Layer 1 executive-roadmap (3x risk), Layer 2 engineering-roadmap (3x risk), Layer 3 per-phase ai-roadmaps (3x risk per phase), Layer 4 ticket regeneration. Dispatches sub-proposers and risk operators via the agents CLI; surfaces NEEDS_INPUT new-value-questions to the root.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -92,16 +92,16 @@ Model selection follows the guidance in `models/roles.md`. Roadmap risk-gate mod
 
 | Role | Model | Rationale |
 |---|---|---|
-| Research planning | `gpt-xhigh` (orchestrator) | Intent interpretation, question formulation |
+| Research planning | `gpt-high` (orchestrator) | Intent interpretation, question formulation |
 | Web research execution | `gpt-high` | Focused investigation via Firecrawl; high controllability |
-| Proposals (internal layers) | `gpt-high` | Constraint-aware design, systematic evaluation. Escalate to `gpt-xhigh` only on recurrence or stall |
+| Proposals (internal layers) | `gpt-high` | Constraint-aware design and systematic evaluation. On recurrence or stall, reframe or decompose before retrying. |
 | Public-facing documents | `gpt-high` | Executive roadmap, pitch deck — any artifact shown to stakeholders. Use the writer route unless the review gate needs deep judgement. |
-| Roadmap risk gates | See `workflows/roadmap.md` | Per-risk assignments: checklist/presence risks use `gpt-high`; intent/direction risks use `gpt-xhigh` |
+| Roadmap risk gates | See `workflows/roadmap.md` | Each risk gets an independent `gpt-high` judge. |
 | Synthesis | `gpt-high` | Merging research findings into structured reports |
 | Visual review | `gemini-high` | Screenshot or visual artifact review |
 
 **Anti-patterns:**
-- Do NOT pre-escalate to gpt-xhigh — gpt-high is the default proposer
+- Do not treat `gpt-high` as an escalation tier; it is the default proposer.
 - Do NOT use the orchestrator for mechanical synthesis — delegate to `gpt-high`.
 - Do NOT use reasoning models for extraction or scanning tasks
 
@@ -292,7 +292,7 @@ Run the executive roadmap proposer:
 agents -m gpt-high -p <worktree> -f product-strategy/executive\ roadmap\ proposer.md
 ```
 
-If the proposer fails or produces a roadmap that cannot pass risk after 2 revision cycles, escalate to gpt-xhigh for the next attempt.
+If the proposer fails or cannot pass risk after 2 revision cycles, reframe or decompose the work before dispatching a fresh `gpt-high` proposer.
 
 **Inputs provided to agent:**
 - `proposal.md`
@@ -323,8 +323,8 @@ git worktree add worktrees/exec-risk-completeness -b exec-risk-completeness
 
 ```python
 # Run in parallel with one Bash-background dispatch per child per ~/ai/workflows/agents-cli.md
-Bash(command="agents -m gpt-xhigh -p worktrees/exec-risk-market -f .tmp/executive-risk-market-misread.md 2>&1 | tee .tmp/executive-risk-market-misread.log", run_in_background=True, description="Run executive market risk review")
-Bash(command="agents -m gpt-xhigh -p worktrees/exec-risk-dependency -f .tmp/executive-risk-dependency-trap.md 2>&1 | tee .tmp/executive-risk-dependency-trap.log", run_in_background=True, description="Run executive dependency risk review")
+Bash(command="agents -m gpt-high -p worktrees/exec-risk-market -f .tmp/executive-risk-market-misread.md 2>&1 | tee .tmp/executive-risk-market-misread.log", run_in_background=True, description="Run executive market risk review")
+Bash(command="agents -m gpt-high -p worktrees/exec-risk-dependency -f .tmp/executive-risk-dependency-trap.md 2>&1 | tee .tmp/executive-risk-dependency-trap.log", run_in_background=True, description="Run executive dependency risk review")
 Bash(command="agents -m gpt-high -p worktrees/exec-risk-completeness -f .tmp/executive-risk-completeness.md 2>&1 | tee .tmp/executive-risk-completeness.log", run_in_background=True, description="Run executive completeness risk review")
 
 # After all task notifications arrive, collect outputs to plans/risk/
@@ -335,8 +335,8 @@ Bash(command="agents -m gpt-high -p worktrees/exec-risk-completeness -f .tmp/exe
 ```
 
 **Risk types:**
-1. **Market misread** (`gpt-xhigh`) — Are value assessments evidence-based?
-2. **Dependency trap** (`gpt-xhigh`) — Does the ordering create fragile critical paths?
+1. **Market misread** (`gpt-high`) — Are value assessments evidence-based?
+2. **Dependency trap** (`gpt-high`) — Does the ordering create fragile critical paths?
 3. **Completeness** (`gpt-high`) — Are all proposal subsystems covered?
 
 See `roadmap-risk-types.md` for full definitions.
@@ -409,8 +409,8 @@ agents -m gpt-high -p <worktree> -f product-strategy/engineering\ roadmap\ propo
 Same pattern as Stage 1b. Construct three prompts from `roadmap-risk-types.md`, section "Engineering Roadmap Risks."
 
 **Risk types:**
-1. **Integration** (`gpt-xhigh`) — Will independently-built slices integrate?
-2. **Drift** (`gpt-xhigh`) — Does engineering add/drop/reinterpret executive priorities?
+1. **Integration** (`gpt-high`) — Will independently-built slices integrate?
+2. **Drift** (`gpt-high`) — Does engineering add/drop/reinterpret executive priorities?
 3. **Feasibility** (`gpt-high`) — Are effort estimates realistic?
 
 **Prototype escape hatch for substrate feasibility.** Before accepting a non-LOW feasibility risk as a normal revision loop, check whether the engineering-feasibility report says the foundation substrate cannot be validated by document/code reading alone and needs running-code evidence. Treat either an explicit `PROTOTYPE_NEEDED` line or a HIGH/MEDIUM finding whose resolution path says "validate by building/running/integrating the substrate" as a prototype trigger.
@@ -467,8 +467,8 @@ agents -m gpt-high -p <worktree> -f product-strategy/ai\ roadmap\ proposer.md
 Same pattern. Construct three prompts from `roadmap-risk-types.md`, section "AI Roadmap Risks."
 
 **Risk types:**
-1. **Decomposition** (`gpt-xhigh`) — Are work unit boundaries clean?
-2. **Dependency** (`gpt-xhigh`) — Is the dependency graph acyclic?
+1. **Decomposition** (`gpt-high`) — Are work unit boundaries clean?
+2. **Dependency** (`gpt-high`) — Is the dependency graph acyclic?
 3. **Coverage** (`gpt-high`) — Is every engineering item decomposed?
 
 **Prototype escape hatch for WU decomposition.** Before accepting a non-LOW decomposition or dependency risk as a normal revision loop, check whether the report says a Work Unit contract, schema, hookpoint, or parallelization boundary cannot be named without trying the implementation. Treat either an explicit `PROTOTYPE_NEEDED` line or a HIGH/MEDIUM finding whose resolution path says "build a prototype to clarify decomposition" as a prototype trigger.

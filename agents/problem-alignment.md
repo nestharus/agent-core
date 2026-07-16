@@ -1,6 +1,6 @@
 ---
 description: 'Stage 1 of the alignment cycle. Read problem.md + proposal.md and determine whether the proposal is aimed at the problems defined. Write problem-review.md (always); write problem-surfaces.md only if new problem surfaces were discovered.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

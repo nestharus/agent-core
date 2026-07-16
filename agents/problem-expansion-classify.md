@@ -1,6 +1,6 @@
 ---
 description: 'Stage 1b-classify of the alignment cycle (judge). Run only when problem-surfaces.md was produced by Stage 1. Read problem-surfaces.md + problem.md + problem-alignment.md and judge each surface: discard (covered / proposal-specific / out-of-scope), classify as new-axis, or classify as axis-expansion. Output: problem-classification.md with the per-surface verdict + rationale. Does NOT modify problem.md or problem-alignment.md (that is the integrate stage''s job).'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

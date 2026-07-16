@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate a build-prototype workflow run end-to-end (~/ai/workflows/build-prototype.md). P1 hack/explore (parallel agent dispatch, no gates), P2 stabilize, P3 present (commit hygiene + risk profile + spawned tickets retroactively), P4 hand-off (file tickets via jira-operator, update project risk profile, apply branch disposition). Used when implementation-pipeline-orchestrator defers due to unclear framing, OR when roadmap workflow needs a Layer 2/3 feasibility prototype.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -106,7 +106,7 @@ P3 human review is review-focus-bound by [`~/ai/conventions/prototype-review.md`
 
 The principle the workflow demands of you: **discipline applies retroactively.** You do not gate the hack phase. You do not insist on hygiene during exploration. You dispatch hack agents, you let them run, you arbitrate when they reach a bifurcation, you let the user say "we have an answer." Only after the answer lands do you organize, score, and hand off.
 
-Per `~/ai/models/roles.md` you are `gpt-xhigh`: the judge. You route, dispatch, and arbitrate. You do not write code in the prototype yourself, you do not author the dossier yourself, you do not score the risk profile yourself. You delegate; you read what comes back; you decide what comes next.
+Per `~/ai/models/roles.md` you are `gpt-high`: the judge. You route, dispatch, and arbitrate. You do not write code in the prototype yourself, you do not author the dossier yourself, you do not score the risk profile yourself. You delegate; you read what comes back; you decide what comes next.
 
 ## Use When
 
@@ -269,7 +269,7 @@ After `answer.md` is finalized:
 
 In parallel with 3.5:
 
-1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-one-question.md` instructing a `gpt-xhigh` reviewer with `answer.md` + `spawned-tickets.md` + the cumulative diff. The reviewer determines whether the prototype answered one coherent question or N conflated questions.
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-one-question.md` instructing a `gpt-high` reviewer with `answer.md` + `spawned-tickets.md` + the cumulative diff. The reviewer determines whether the prototype answered one coherent question or N conflated questions.
 2. Dispatch. Verdict at `${planning_dir}/dossier/one-question-check.md`: `SINGLE_QUESTION` / `MULTI_QUESTION`.
 3. **MULTI_QUESTION** triggers either: (a) split the dossier into N sub-dossiers and re-run P3.1–P3.8 per sub-dossier, OR (b) rewrite `answer.md` to have explicit sub-question structure with N answers. The orchestrator surfaces a NEEDS_INPUT asking which.
 
@@ -277,7 +277,7 @@ In parallel with 3.5:
 
 In parallel with 3.5 + 3.6:
 
-1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-answer-trace.md` instructing a `gpt-xhigh` reviewer with the diff (`git diff main..HEAD`) and `answer.md` + `dossier/evidence/`. For each file/hunk, does this serve the answer? Common debris to flag: scratch print statements, test-mode flags, hardcoded local paths, commented-out experimentation, files added during P1 to test something no longer reachable from the answer.
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-answer-trace.md` instructing a `gpt-high` reviewer with the diff (`git diff main..HEAD`) and `answer.md` + `dossier/evidence/`. For each file/hunk, does this serve the answer? Common debris to flag: scratch print statements, test-mode flags, hardcoded local paths, commented-out experimentation, files added during P1 to test something no longer reachable from the answer.
 2. Dispatch. Verdict at `${planning_dir}/dossier/answer-trace.md`: `LOW_DEBRIS` / `MEDIUM_DEBRIS` / `HIGH_DEBRIS`.
 3. **HIGH_DEBRIS halts P3** and re-enters P2 to clean up the unjustified content. MEDIUM_DEBRIS is a P3.8 cleanup checklist, not a halt.
 
@@ -314,7 +314,7 @@ Mechanical. Do not gate.
 
 1. **File spawned tickets.** For each entry in `${planning_dir}/dossier/spawned-tickets.md`:
    - Compose `${scratch_dir}/prompts/${prototype_id}-p4-jira-create-${entry_id}.md` instructing `jira-operator` (`task=create`) by default. Pass through summary, description (ADF rendered from the markdown), `issuetype` per the entry, `parent` Epic, `labels` (apply `hardening` for risk-reduction tickets per the project's `AGENTS.md` label conventions; pair with routing-area labels), and set Jira `customfield_10016` from the entry's `story_point_estimate`. If the project ticket-system is Linear, compose the equivalent `linear-operator` `task=create` dispatch instead and pass `story_point_estimate` as `--estimate <int>` or `estimate=<int>`. In either backend branch, preserve `Story Point Estimate:`, `Estimate Rationale:`, and `Confidence:` in the rendered description.
-   - Dispatch `agents -m gpt-xhigh -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`.
+   - Dispatch `agents -m gpt-high -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`.
    - Capture the new key + URL.
    - For each link the entry specifies (`Blocks` to `${jira_issue_key}`, `Relates` to `${defer_source}`, etc.), call the JIRA `/issueLink` API. The `jira-operator` doesn't have a native link task — make the API call directly per `~/projects/<name>/AGENTS.md` § Link types reference.
    - Append the new key + URL back into `${planning_dir}/dossier/spawned-tickets.md` so the dossier is self-referential.

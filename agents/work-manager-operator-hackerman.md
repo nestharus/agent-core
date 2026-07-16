@@ -1,6 +1,6 @@
 ---
 description: 'Work Manager flavor rules for manager-hackerman: maximum speed, tight scope, functional-proof floor, explicitly accepted risk.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

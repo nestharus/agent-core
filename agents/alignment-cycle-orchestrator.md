@@ -1,6 +1,6 @@
 ---
 description: 'Run the proposal alignment review cycle against problem.md + philosophy.md, expand problem/philosophy when new surfaces are discovered, write philosophy-decisions.md when philosophy concerns require user input, and produce a run report. The orchestrator dispatches Stage 1 (problem alignment), Stage 1b (problem expansion), Stage 2 (philosophy alignment), and Stage 2b (philosophy expansion). It does NOT run the proposer; that is user-driven.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -148,11 +148,11 @@ Check whether `problem-surfaces.md` was produced by Stage 1.
 
 If it was not produced, skip this stage entirely — no new problem surfaces were discovered.
 
-If it was produced, run two sub-agents in sequence: **Stage 1b-classify (judge)** then **Stage 1b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-xhigh`, integrated text synthesis runs on `gpt-high`.
+If it was produced, run two sub-agents in sequence: **Stage 1b-classify (judge)** then **Stage 1b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-high`, integrated text synthesis runs on `gpt-high`.
 
 #### Stage 1b-classify
 
-Run a sub-agent with the instructions in `problem-expansion-classify.md` (model: `gpt-xhigh`).
+Run a sub-agent with the instructions in `problem-expansion-classify.md` (model: `gpt-high`).
 
 Provide the agent with:
 - `problem-surfaces.md` (the new surfaces)
@@ -205,11 +205,11 @@ Check whether `philosophy-surfaces.md` was produced by Stage 2.
 
 If it was not produced, skip this stage entirely — no new philosophical concerns were discovered.
 
-If it was produced, run two sub-agents in sequence: **Stage 2b-classify (judge)** then **Stage 2b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-xhigh`, integrated philosophy text synthesis runs on `gpt-high`. The user-input gate (`philosophy-decisions.md`) is owned by classify, not by integrate.
+If it was produced, run two sub-agents in sequence: **Stage 2b-classify (judge)** then **Stage 2b-integrate (synthesis)**. The split enforces the `~/ai/models/roles.md` rule that judges do not synthesize; classification judgment runs on `gpt-high`, integrated philosophy text synthesis runs on `gpt-high`. The user-input gate (`philosophy-decisions.md`) is owned by classify, not by integrate.
 
 #### Stage 2b-classify
 
-Run a sub-agent with the instructions in `philosophy-expansion-classify.md` (model: `gpt-xhigh`).
+Run a sub-agent with the instructions in `philosophy-expansion-classify.md` (model: `gpt-high`).
 
 Provide the agent with:
 - `philosophy-surfaces.md` (the new concerns)

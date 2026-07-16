@@ -152,7 +152,7 @@ Default to `audit` if mode is not specified.
 2. **Plan edits.** For each finding to fix, write the specific edit:
    - Move section X from AGENTS.md to operator Y (with exact byte ranges + destination)
    - Add routing entry for orphan operator Z
-   - Fix model mismatch in row W (AGENTS.md says `gpt-xhigh`; operator says `gpt-high`)
+   - Fix model mismatch in row W (AGENTS.md and operator frontmatter name different models)
 
 3. **Output the diff plan.** Show the user/orchestrator what will change before touching files.
 

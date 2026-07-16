@@ -1,6 +1,6 @@
 ---
 description: "Coordinate one per-PR refactor cycle against an integration buffer."
-model: gpt-xhigh
+model: gpt-high
 output_format: ""
 ---
 

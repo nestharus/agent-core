@@ -85,8 +85,8 @@ Choose based on how the question decomposes.
 ### Parallel-fanout (default for broad questions)
 
 - **Who**: one coordinator plus `gpt-high` researchers in parallel.
-- **Coordinator**: `gpt-high` by default; `gpt-xhigh` only when the problem is
-  very large.
+- **Coordinator**: `gpt-high`; broad questions use more focused researcher
+  branches rather than a different coordinator model.
 - **Coordinator role**: identify the sub-questions, write focused prompts,
   launch the researchers, then synthesize the findings into one deliverable.
 - **Researchers**: each receives one focused sub-question and returns
@@ -97,7 +97,7 @@ Choose based on how the question decomposes.
 
 ### Deep-reasoning escalation
 
-- **Who**: one `gpt-xhigh` researcher.
+- **Who**: one `gpt-high` researcher.
 - **When**: the question needs layered reasoning across many sources and cannot
   be cleanly split into independent sub-questions.
 - **Rule**: rare. If the question can be split, split it and use
@@ -137,7 +137,7 @@ For parallel-fanout research, after Phase 2 returns and before Phase 3 synthesis
 The coordinator, or the single researcher in single-agent mode, integrates the
 findings into one deliverable.
 
-- Synthesis is `gpt-high`. Not `gpt-xhigh`. See `~/ai/models/roles.md`.
+- Synthesis is a separate `gpt-high` invocation. See `~/ai/models/roles.md`.
 - Synthesis is construction, not judgement.
 - Output structure: question -> evidence -> options with tradeoffs ->
   recommendation.
@@ -189,8 +189,8 @@ When the question is specifically about UI, UX, or visual patterns:
 - Request implementation approaches, wiring details, failure modes, and
   tradeoffs.
 - Keep synthesis on `gpt-high`.
-- Use `gpt-xhigh` only for adversarial review of the synthesized design, not
-  for synthesis.
+- Use a separate `gpt-high` invocation for adversarial review of the
+  synthesized design; the synthesizer does not review its own work.
 
 ## Output Location
 

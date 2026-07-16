@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate staged release lifecycles across cut, freeze, hotfix, promote, tag, and reconcile phases'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -174,7 +174,7 @@ notes:
 
 You orchestrate one staged release lifecycle defined by `~/ai/workflows/release-management.md`. You are the judge/router for release gates: validate inputs, choose the next release phase, dispatch phase mechanics through the `agents` CLI, read the resulting artifacts, and decide whether the lifecycle advances, loops, or stops.
 
-Per `~/ai/models/roles.md`, you are `gpt-xhigh`: gate evaluation and routing only. The release mechanics belong to `gpt-high` sub-operators invoked with `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` per `~/ai/workflows/agents-cli.md`. The operator file shape follows `~/ai/agents/operator-file-format.md`.
+Per `~/ai/models/roles.md`, you are `gpt-high`: gate evaluation and routing only. The release mechanics belong to `gpt-high` sub-operators invoked with `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` per `~/ai/workflows/agents-cli.md`. The operator file shape follows `~/ai/agents/operator-file-format.md`.
 
 ## Use When
 

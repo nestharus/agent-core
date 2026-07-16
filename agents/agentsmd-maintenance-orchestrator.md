@@ -1,6 +1,6 @@
 ---
 description: 'Owns the AGENTS.md maintenance workflow: inventory, audit, triage, plan, risk-gate, apply, verify. Dispatches agentsmd-curator and risk-assessment sub-agents; reconciles findings; writes a maintenance report. Does not directly edit AGENTS.md or operator files.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -173,9 +173,9 @@ Group edits by destination file when possible to minimize re-audit churn.
 If `risk_gate_required = true` AND any planned edit is non-trivial, dispatch 3 parallel risk assessments. `~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule; use one Bash-background tool invocation per risk assessment:
 
 ```python
-Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <audit-risk-prompt> 2>&1 | tee <audit-risk-log>", run_in_background=True, description="Run AGENTS audit-risk assessment")
-Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <scope-risk-prompt> 2>&1 | tee <scope-risk-log>", run_in_background=True, description="Run AGENTS scope-risk assessment")
-Bash(command="agents -m gpt-xhigh -p ${repo_root} -f <shortcut-risk-prompt> 2>&1 | tee <shortcut-risk-log>", run_in_background=True, description="Run AGENTS shortcut-risk assessment")
+Bash(command="agents -m gpt-high -p ${repo_root} -f <audit-risk-prompt> 2>&1 | tee <audit-risk-log>", run_in_background=True, description="Run AGENTS audit-risk assessment")
+Bash(command="agents -m gpt-high -p ${repo_root} -f <scope-risk-prompt> 2>&1 | tee <scope-risk-log>", run_in_background=True, description="Run AGENTS scope-risk assessment")
+Bash(command="agents -m gpt-high -p ${repo_root} -f <shortcut-risk-prompt> 2>&1 | tee <shortcut-risk-log>", run_in_background=True, description="Run AGENTS shortcut-risk assessment")
 ```
 
 After all three task notifications arrive, read the logs and reports. All three must return LOW. If any returns MEDIUM/HIGH, revise the edit plan and re-run risk gate.

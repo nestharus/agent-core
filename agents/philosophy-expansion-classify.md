@@ -1,6 +1,6 @@
 ---
 description: 'Stage 2b-classify of the alignment cycle (judge). Run only when philosophy-surfaces.md was produced by Stage 2. Read philosophy-surfaces.md + philosophy.md + philosophy-alignment.md and judge each concern (A-absorbable / B-compatible / C-tension / D-new-axis / E-contradiction). Write philosophy-classification.md (always) and philosophy-decisions.md (only when concerns require user input: tensions, new axes, contradictions). Does NOT modify philosophy.md (that is the integrate stage''s job).'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

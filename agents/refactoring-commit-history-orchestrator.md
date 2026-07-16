@@ -1,6 +1,6 @@
 ---
 description: 'Coordinate commit-history-driven refactoring scoping and per-package handoff.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

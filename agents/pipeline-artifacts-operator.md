@@ -201,7 +201,7 @@ When kicking off a background model run, do not create a wrapper script. Use the
 
 ```python
 Bash(
-    command='agents -m gpt-xhigh -p "${worktree_path}" -f "${worktree_path}/<PHASE>.prompt.md" 2>&1 | tee "${worktree_path}/<PHASE>.log"',
+    command='agents -m gpt-high -p "${worktree_path}" -f "${worktree_path}/<PHASE>.prompt.md" 2>&1 | tee "${worktree_path}/<PHASE>.log"',
     run_in_background=True,
     description="Run <PHASE> operator"
 )

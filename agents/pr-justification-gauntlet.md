@@ -234,7 +234,7 @@ sequence, update `threads.json`, then decide whether to loop.
 
 If `audit_history_path` exists, read it before writing round prompts and include the role-relevant section in each sub-agent prompt. After the adjudicator result for each round, run `decision-encoder` to append the round summary, role histories, decision-register entry, watch signals, and summarization tail. `threads.json` remains the operational thread state; audit history is the cross-role revise/review history.
 
-#### 1a. Interrogator (`gpt-xhigh`)
+#### 1a. Interrogator (`gpt-high`)
 
 ```bash
 ROUND=$((ROUND + 1))
@@ -257,7 +257,7 @@ EOF
 
 # Launch
 agents -a ${agents_dir}/pr-justification-interrogator.md \
-  -m gpt-xhigh -p "$repo_root" \
+  -m gpt-high -p "$repo_root" \
   -f "$RD/interrogator-prompt.md" > "$RD/interrogator-result.md" 2>&1
 ```
 
@@ -298,7 +298,7 @@ agents -a ${agents_dir}/pr-justification-researcher.md \
 After the researcher runs, append its per-thread evidence into each thread's
 `history[$ROUND].researcher_evidence` in `threads.json`.
 
-#### 1c. Value assessor (`gpt-xhigh`, with optional `gpt-high` sub-agents)
+#### 1c. Value assessor (`gpt-high`, with optional `gpt-high` sub-agents)
 
 ```bash
 cat > "$RD/value-assessor-prompt.md" <<EOF
@@ -315,13 +315,13 @@ yourself.
 EOF
 
 agents -a ${agents_dir}/pr-justification-value-assessor.md \
-  -m gpt-xhigh -p "$repo_root" \
+  -m gpt-high -p "$repo_root" \
   -f "$RD/value-assessor-prompt.md" > "$RD/value-assessor-result.md" 2>&1
 ```
 
 Merge per-thread value into `history[$ROUND].value` in `threads.json`.
 
-#### 1d. Adjudicator (`gpt-xhigh`)
+#### 1d. Adjudicator (`gpt-high`)
 
 ```bash
 cat > "$RD/adjudicator-prompt.md" <<EOF
@@ -343,7 +343,7 @@ Cull any thread where further rounds will not change the outcome.
 EOF
 
 agents -a ${agents_dir}/pr-justification-adjudicator.md \
-  -m gpt-xhigh -p "$repo_root" \
+  -m gpt-high -p "$repo_root" \
   -f "$RD/adjudicator-prompt.md" > "$RD/adjudicator-result.md" 2>&1
 ```
 

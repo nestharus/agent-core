@@ -69,7 +69,7 @@ The `agents` CLI (`~/.local/bin/agents`) runs external models.
 agents -m gpt-high -p <worktree-path> "your prompt"
 # Run from a prompt file:
 agents -m gpt-high -p <worktree-path> -f prompt.md
-# Available models: gpt-high, gpt-medium, gpt-low, gpt-xhigh,
+# Available models: gpt-high, gpt-medium, gpt-low,
 #   claude-opus, claude-sonnet, claude-haiku,
 ```
 Distinct: Same external CLI family, but shortened and paired with a strong worktree-isolation rule for parallel writers.
@@ -355,7 +355,7 @@ Semantic difference summary: Substantive drift. `server-manager` preserves the s
 ```text
 For open-ended investigation:
 1. **Scope** — define what question needs answering
-2. **Research agent** (`gpt-high` or `gpt-xhigh` for deep research) —
+2. **Research agent** (`gpt-high`) —
    investigate, produce a report
 3. **Synthesis** (this session) — integrate findings into project context
 4. **Decision** — user decides next steps based on findings
@@ -390,19 +390,19 @@ Semantic difference summary: Substantive drift. The shared backbone is scope →
 | Model | Use for |
 |-------|---------|
 | `gpt-high` | RCA, proposals, research, hookpoint analysis, implementation |
-| `gpt-xhigh` | Coordination and deep reasoning (see below) |
+| `gpt-high` | Coordination and deep reasoning (see below) |
 | `claude-opus` | Risk assessments, PR reviews, alignment reviews, synthesis |
 | `claude-sonnet` | Quick checks, summaries |
 **CRITICAL**: No single agent should both research AND synthesize for
 ```
-Distinct: Defines the canonical coordinator/researcher split (`gpt-xhigh` vs `gpt-high`) and bans single-agent deep-research/synthesis combos.
+Distinct: Defines the canonical coordinator/researcher role split and bans single-agent deep-research/synthesis combos.
 - videos — Model roles — `/home/nes/projects/videos/AGENTS.md` (L277-294)
 ```text
 Mirrors `~/work/AGENTS.md` and `~/projects/server-manager/AGENTS.md`:
 | Model | Role |
 |---|---|
 | `gpt-high` | RCA, proposals, research, hookpoint analysis, implementation |
-| `gpt-xhigh` | Coordinator for large tasks |
+| `gpt-high` | Coordinator for large tasks |
 | `claude-opus` | Risk assessments, reviews, alignment, synthesis |
 | `claude-sonnet` | Quick checks, summaries |
 ```
@@ -684,7 +684,7 @@ Semantic difference summary: Substantive drift. Same approval model, but `server
 - L333-343 "Important Rules" — QA mode is mandatory — all eval runs use qamode: true so dispatched agents are intercepted, not live Observe, report, stop — when monitoring an eval: do NOT manually write artifacts Generalizable? Y — reusable eval-guardrail rules.
 - L344-355 "Current Wave 1 Results (7 scenarios)" — Current Wave 1 Results (7 scenarios) Generalizable? N — time-sensitive results snapshot. STALE? eval results snapshot (“Current Wave 1 Results”) is inherently time-sensitive.
 - L356-367 "Files" — Artifact/path index for the agentic eval harness, judge agent, temp investigation folder, and current design prompt. Generalizable? Y — reusable artifact-index pattern.
-- L368-375 "Cycle Detection Reference" — Common dismissal patterns from history: Tests / pyproject.toml absent from zip — tests/ included in bundle as of R118. pyproject.toml ships under src/. Model names in models.md — gpt5.4high and gpt5.4xhigh are current na Generalizable? Y — reusable cycle-detection reference pattern.
+- L368-375 "Cycle Detection Reference" — Common dismissal patterns from history: Tests / pyproject.toml absent from zip — tests/ included in bundle as of R118. pyproject.toml ships under src/. Model name in models.md — gpt5.4high is current na Generalizable? Y — reusable cycle-detection reference pattern.
 - L376-388 "Files" — Artifact/path index for the audit-response bundle, zip file, audit prompt, history, and governance catalogs. Generalizable? Y — reusable artifact-index pattern.
 - L426-433 "Open Design: Blocker Resolution Phase" — ~/work/tmp/executionphilosophy/blockerresolutiondesign.md — Design document for the blocker resolution phase and postimplementation verification/testing system. QA runs 89 revealed that sections blocked at the readiness  Generalizable? Y — general blocker-resolution design pattern.
 - L434-437 "System Visualization" — We are currently building visual representations of the system so a human can review what was built and validate that the right thing exists. Two locations are involved: Generalizable? Y — reusable system-visualization pattern.
@@ -1098,4 +1098,3 @@ Question for user: Should opening/pushing PRs be treated as a routine autonomous
 - `~/ai/patterns/design-package-workflow.md`
 - `~/ai/patterns/system-visualization.md`
 - `~/ai/patterns/visual-regression.md`
-

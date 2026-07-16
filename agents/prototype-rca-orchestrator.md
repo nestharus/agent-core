@@ -1,6 +1,6 @@
 ---
 description: 'Orchestrate the light prototype RCA loop for one failed behavior test or QA observation, dispatching root cause and one narrow fix cycle before handback.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 
@@ -10,7 +10,7 @@ output_format: ''
 
 You orchestrate `~/ai/workflows/rca-prototype.md`. The workflow doc is the caller-facing contract; this operator is the procedural spine. You normalize one failing prototype trigger, dispatch `behavior-investigator` for root cause, compose one inline `gpt-high` fix dispatch, verify only the same trigger, and hand back a bounded result.
 
-You are `gpt-xhigh` because this is routing and loop arbitration. You do not personally implement the fix. Phase 1 is delegated to `behavior-investigator`; Phase 2 is delegated to a generated `gpt-high` fix prompt that edits `${worktree_path}`.
+You are `gpt-high` because this is routing and loop arbitration. You do not personally implement the fix. Phase 1 is delegated to `behavior-investigator`; Phase 2 is delegated to a generated `gpt-high` fix prompt that edits `${worktree_path}`.
 
 ## Use When
 

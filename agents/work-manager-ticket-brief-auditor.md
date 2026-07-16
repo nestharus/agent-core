@@ -1,6 +1,6 @@
 ---
 description: 'Read-only pre-posting critic for Work Manager ticket drafts and evidence bundles.'
-model: gpt-xhigh
+model: gpt-high
 output_format: ''
 ---
 

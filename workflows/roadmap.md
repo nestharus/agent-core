@@ -82,8 +82,8 @@ Do not use this workflow for:
 
 - **Separate agents for separate concerns.** Research, proposal, risk, and
   synthesis are distinct invocations.
-- **Synthesis stays with `gpt-high`.** `gpt-xhigh` judges; it does not
-  integrate.
+- **Synthesis stays with a dedicated `gpt-high` invocation.** Risk judges are
+  separate `gpt-high` invocations and do not integrate their own findings.
 - **The risk gate is the review.** Do not add a redundant human proposal review
   on top of model risk gates.
 - **All risks must return `LOW`.** If any report returns `MEDIUM` or `HIGH`,
@@ -101,7 +101,7 @@ Do not use this workflow for:
 
 ### Layer 0 - Market research
 
-- **Orchestrator** (`gpt-xhigh`): identifies which research questions need
+- **Orchestrator** (`gpt-high`): identifies which research questions need
   answering for the planned expansion or revision.
 - **Web research execution**: `gpt-high` researchers in parallel via Firecrawl
   MCP or equivalent.
@@ -120,9 +120,9 @@ Do not use this workflow for:
 - **Proposer** (`gpt-high`): strategic ordering of product moves with rationale,
   dependencies, anti-goals, and intended outcomes.
 - **Risk gates** (parallel, 3x):
-  - Market misread (`gpt-xhigh`): does the ordering still hold if the market
+  - Market misread (`gpt-high`): does the ordering still hold if the market
     reads differ from the current assumptions?
-  - Dependency trap (`gpt-xhigh`): are we sequencing moves that hide a
+  - Dependency trap (`gpt-high`): are we sequencing moves that hide a
     downstream blocker or unscheduled prerequisite?
   - Completeness (`gpt-high`): is every promised outcome traceable to a planned
     item in the ordering?
@@ -144,9 +144,9 @@ Do not use this workflow for:
 - **Risk gates** (parallel, 3x):
   - Feasibility (`gpt-high`): does the ordering match what the codebase can
     actually support without hidden rewrites not on the plan?
-  - Integration (`gpt-xhigh`): do the milestones fit together coherently, or
+  - Integration (`gpt-high`): do the milestones fit together coherently, or
     does each milestone assume a different system?
-  - Drift (`gpt-xhigh`): does the engineering roadmap still implement the
+  - Drift (`gpt-high`): does the engineering roadmap still implement the
     executive roadmap it claims to serve?
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 2 gate.
@@ -162,11 +162,11 @@ Do not use this workflow for:
 - **Output shape**: slices should be coherent, schedulable, and explicit about
   prior-slice dependencies.
 - **Risk gates** (parallel, 3x):
-  - Decomposition (`gpt-xhigh`): is each slice cohesive and self-contained,
+  - Decomposition (`gpt-high`): is each slice cohesive and self-contained,
     or does it require mid-slice context handoff?
   - Coverage (`gpt-high`): does every engineering-roadmap item map to at least
     one AI slice? Require a crosswalk.
-  - Dependency (`gpt-xhigh`): do the slices linearize cleanly, or do they
+  - Dependency (`gpt-high`): do the slices linearize cleanly, or do they
     depend on parallel-agent coordination the pipeline cannot model well?
 - **Revision rule**: all three must return `LOW`; otherwise revise and re-run
   the full Layer 3 gate.
@@ -194,25 +194,25 @@ Do not use this workflow for:
 
 Risk-type routing in this workflow is layer-specific.
 Presence and checklist-style risks go to `gpt-high`.
-Intent and direction-style risks go to `gpt-xhigh`.
+Intent and direction-style risks go to `gpt-high`.
 See `~/ai/models/roles.md`.
 
 | Layer | Risk type | Model | What it checks |
 |---|---|---|---|
-| Executive | Market misread | `gpt-xhigh` | Does the ordering hold if the market signals differ from our read? |
-| Executive | Dependency trap | `gpt-xhigh` | Does a later item secretly depend on something not scheduled? |
+| Executive | Market misread | `gpt-high` | Does the ordering hold if the market signals differ from our read? |
+| Executive | Dependency trap | `gpt-high` | Does a later item secretly depend on something not scheduled? |
 | Executive | Completeness | `gpt-high` | Is every promised outcome traceable to a scheduled item? |
 | Engineering | Feasibility | `gpt-high` | Does the ordering match what the codebase can support? |
-| Engineering | Integration | `gpt-xhigh` | Do the milestones fit coherently, or does each assume a different system? |
-| Engineering | Drift | `gpt-xhigh` | Does this roadmap still implement the executive roadmap it claims to? |
-| AI | Decomposition | `gpt-xhigh` | Is each slice cohesive and self-contained? |
+| Engineering | Integration | `gpt-high` | Do the milestones fit coherently, or does each assume a different system? |
+| Engineering | Drift | `gpt-high` | Does this roadmap still implement the executive roadmap it claims to? |
+| AI | Decomposition | `gpt-high` | Is each slice cohesive and self-contained? |
 | AI | Coverage | `gpt-high` | Does every engineering item map to at least one AI slice? |
-| AI | Dependency | `gpt-xhigh` | Do the slices linearize cleanly? |
+| AI | Dependency | `gpt-high` | Do the slices linearize cleanly? |
 
 ## Rules
 
-- **Do not default all risks to `gpt-xhigh`.** Follow the layer-specific
-  presence-vs-intent split above.
+- **Do not combine risk concerns because they share `gpt-high`.** Preserve the
+  layer-specific presence-vs-intent split above as separate invocations.
 - **Proposers do not write their own risk reports.** They propose and revise.
   Separate agents judge.
 - **Deep-review agents do not synthesize.** This applies to market-research synthesis,
