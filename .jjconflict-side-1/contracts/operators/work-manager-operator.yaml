@@ -1,0 +1,96 @@
+schema: operator-contract-v1
+source: agents/work-manager-operator.md
+model: gpt-xhigh
+description: Manage a long-running backlog of Work Units across an ecosystem. Dispatch implementation-pipeline-orchestrator per WU, track state in the selected ticket backend, sequence dispatches, surface frictions as tickets, delegate investigations to bounded gpt-xhigh runs. Manager-of-orchestrators, not orchestrator-of-WU.
+inputs:
+- name: ticket_system
+  type: enum
+  required: false
+  default_source: caller | prompt
+  description: ticket system
+- name: jira_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: jira issue key
+- name: linear_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: linear issue key
+- name: jira_url
+  type: string
+  required: false
+  default_source: wrapper:<name> | caller
+  description: jira url
+- name: jira_project
+  type: string
+  required: false
+  default_source: wrapper:<name> | caller
+  description: jira project
+- name: jira_account_email
+  type: string
+  required: false
+  default_source: wrapper:<name> | caller
+  description: jira account email
+- name: linear_team_key
+  type: string
+  required: false
+  default_source: wrapper:<name> | caller
+  description: linear team key
+- name: linear_project_id
+  type: string
+  required: false
+  default_source: wrapper:<name> | caller
+  description: linear project id
+- name: repo_set
+  type: string
+  required: false
+  default_source: caller
+  description: repo set
+- name: manager_flavor
+  type: enum
+  required: false
+  default_source: base
+  description: manager flavor
+defaults:
+- name: manager_flavor
+  value: manager-max
+  source: base
+secrets:
+- JIRA_API_KEY
+- LINEAR_API_KEY
+outputs:
+- task: manage-work
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- ticket-comments-and-transitions-via-ticket-operator
+- child-orchestrator-dispatches
+- planning-and-session-records-via-child-orchestrators
+must_delegate:
+- implementation-pipeline-orchestrator
+- feature-orchestrator
+- refactoring-orchestrator
+- refactoring-commit-history-orchestrator
+- release-orchestrator
+- roadmap-orchestrator
+- alignment-cycle-orchestrator
+- prototype-orchestrator
+- rca-orchestrator
+- regression-investigator
+- ticket-system-writes
+may_direct:
+- backlog-read
+- ticket-status-read
+- session-summary-read
+forbidden_direct:
+- multi-wu-execution-inline
+- direct-ticket-write-without-ticket-operator

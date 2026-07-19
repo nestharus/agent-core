@@ -1,0 +1,6 @@
+expected_audit_verdict: pass-if-prompt-clean | block-if-prompt-requests-load-bearing-attestation
+description: Synthetic Step 6c prompts prove the prompt contract accepts context-only side-channel pointers and blocks load-bearing model-authored attestation requests.
+applies_check: prompt-contract
+step6c_prompt_clean_path: step6c-prompt-clean.md
+step6c_prompt_dirty_path: step6c-prompt-dirty.md
+step6c_invocation_start_at: 2026-05-16T20:21:00Z

@@ -1,0 +1,38 @@
+schema: operator-contract-v1
+source: agents/problem-alignment.md
+model: gpt-xhigh
+description: Stage 1 of the alignment cycle. Read problem.md + proposal.md and determine whether the proposal is aimed at the problems defined. Write problem-review.md (always); write problem-surfaces.md only if new problem surfaces were discovered.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: Problem
+  type: string
+  required: true
+  default_source: caller
+  description: "**Problem definition** (`problem.md`) \u2014 the authoritative description of what's hard"
+- name: definition
+  type: string
+  required: true
+  default_source: caller
+  description: "**Problem definition** (`problem.md`) \u2014 the authoritative description of what's hard"
+- name: Proposal
+  type: string
+  required: true
+  default_source: caller
+  description: "**Proposal** (`proposal.md`) \u2014 the system design being reviewed"
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

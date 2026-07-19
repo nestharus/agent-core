@@ -1,0 +1,33 @@
+schema: operator-contract-v1
+source: agents/problem-expansion-classify.md
+model: gpt-xhigh
+description: 'Stage 1b-classify of the alignment cycle (judge). Run only when problem-surfaces.md was produced by Stage 1. Read problem-surfaces.md + problem.md + problem-alignment.md and judge each surface: discard (covered / proposal-specific / out-of-scope), classify as new-axis, or classify as axis-expansion. Output: problem-classification.md with the per-surface verdict + rationale. Does NOT modify problem.md or problem-alignment.md (that is the integrate stage''s job).'
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: problem
+  type: string
+  required: true
+  default_source: caller
+  description: "**Problem surfaces** (`problem-surfaces.md`) \u2014 new surfaces discovered by Stage 1 problem-alignment."
+- name: definition
+  type: string
+  required: true
+  default_source: caller
+  description: "**Problem definition** (`problem.md`) \u2014 current problem definition."
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

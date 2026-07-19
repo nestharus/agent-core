@@ -1,0 +1,18 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/apply-gate-set.md
+workflow_id: apply-gate-set
+orchestrator: apply-gate-set
+inputs:
+- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts
+- child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
+expectations:
+- dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest
+- projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows
+- preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts
+outputs:
+- mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records
+- file-first evidence suitable for RCA or implementation-pipeline caller consumption
+non_goals:
+- does not wire RCA or implementation-pipeline callers
+- does not replace PR-review, code-quality, process-tree, proof-risk, validation-integrity, readiness, or supported-surface gates
+- does not author eval specs, pytest tests, verifier scripts, hotfix-skip convention detail, or currentness invalidation rules

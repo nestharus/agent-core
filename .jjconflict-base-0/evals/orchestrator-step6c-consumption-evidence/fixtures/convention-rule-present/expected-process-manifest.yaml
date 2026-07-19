@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/convention-rule-present/expected-side-file.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/convention-rule-present/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 2
+  side_file_sha256: d7d2a7040135e14a2f5f53fa75b9bc12e40893e795456794a2df259871947b8c
+  source_index_sha256: cb4ea8f49df74febf89f289bda8055b0586fc60528917913c5a5dd90027267da
+  projected_at: 2026-05-16T20:40:00Z
+  step6c_invocation_uuid: 44444444-4444-4444-8444-444444444444
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/convention-rule-present-step6c.md
+  step6c_log_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/logs/convention-rule-present-step6c.log

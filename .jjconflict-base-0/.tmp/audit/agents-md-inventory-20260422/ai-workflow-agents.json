@@ -1,0 +1,293 @@
+{
+  "line_count": 260,
+  "headings": [
+    {
+      "level": 1,
+      "title": "AI Agent Entry Point",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "Documentation Modules",
+      "start": 17
+    },
+    {
+      "level": 2,
+      "title": "How To Run And Understand Python Tests Correctly",
+      "start": 32
+    },
+    {
+      "level": 2,
+      "title": "How To Generate OpenAPI Schema (app/)",
+      "start": 36
+    },
+    {
+      "level": 2,
+      "title": "How To Execute Python Tools Correctly",
+      "start": 40
+    },
+    {
+      "level": 3,
+      "title": "How To Write Documentation Correctly",
+      "start": 48
+    },
+    {
+      "level": 2,
+      "title": "How To Add Python Dependencies Correctly",
+      "start": 53
+    },
+    {
+      "level": 2,
+      "title": "How To Add Models Correctly",
+      "start": 57
+    },
+    {
+      "level": 2,
+      "title": "How To Write Agents Correctly",
+      "start": 61
+    },
+    {
+      "level": 2,
+      "title": "How To Execute Agents Correctly",
+      "start": 65
+    },
+    {
+      "level": 2,
+      "title": "Plan Execution Guidelines",
+      "start": 69
+    },
+    {
+      "level": 3,
+      "title": "No Deferred Stubs Without Plan Authorization",
+      "start": 75
+    },
+    {
+      "level": 3,
+      "title": "Task Decomposition for Complex Plans",
+      "start": 108
+    },
+    {
+      "level": 3,
+      "title": "Reporting Incomplete Implementation",
+      "start": 134
+    },
+    {
+      "level": 2,
+      "title": "No Backwards Compatibility",
+      "start": 147
+    },
+    {
+      "level": 3,
+      "title": "Forbidden Patterns",
+      "start": 152
+    },
+    {
+      "level": 3,
+      "title": "When Updating Code",
+      "start": 168
+    },
+    {
+      "level": 2,
+      "title": "External Repositories",
+      "start": 183
+    },
+    {
+      "level": 2,
+      "title": "External Resources",
+      "start": 189
+    },
+    {
+      "level": 2,
+      "title": "Git Commit Signing",
+      "start": 208
+    },
+    {
+      "level": 2,
+      "title": "Git Commit Authorship",
+      "start": 232
+    },
+    {
+      "level": 2,
+      "title": "Git Branch Naming for Linear Integration",
+      "start": 245
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "AI Agent Entry Point",
+      "start": 1,
+      "end": 16,
+      "line_count": 16,
+      "text": "# AI Agent Entry Point\n\n**CRITICAL: This is the only AGENTS.md file. Do not search for others.\nFollow ALL instructions in this file exactly. These are mandatory rules,\nnot suggestions.**\n\n**If you do not know how to accomplish a task, check the \"How To\" list\nbelow for a relevant guide.**\n\n**MANDATORY: The \"How To\" sections below link to documentation files.\nWhen you first need to perform a task, read its linked file once. Do not\nread files for tasks you are not performing. Do not re-read on repeat\ntasks.**\n\nApplication Documentation (app/ code) read `docs/architecture/project-overview.md`.\n"
+    },
+    {
+      "level": 2,
+      "title": "Documentation Modules",
+      "start": 17,
+      "end": 31,
+      "line_count": 15,
+      "text": "## Documentation Modules\n\nThis repository organizes documentation into focused modules. Consult the\nrelevant module for detailed guidance on specific tasks.\n\n| Module | Path | Description |\n|--------|------|-------------|\n| **Usage** | `docs/usage/` | Using the application |\n| **Development** | `docs/development/` | Writing code, docstrings, FastAPI |\n| **Testing** | `docs/testing/` | Writing and running test code |\n| **Architecture** | `docs/architecture/` | Folder structure, services,\n  endpoints |\n| **Processes** | `docs/processes/` | Git releases, code reviews,\n  protocols |\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Run And Understand Python Tests Correctly",
+      "start": 32,
+      "end": 35,
+      "line_count": 4,
+      "text": "## How To Run And Understand Python Tests Correctly\n\n[`docs/testing/python-tests.md`](docs/testing/python-tests.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Generate OpenAPI Schema (app/)",
+      "start": 36,
+      "end": 39,
+      "line_count": 4,
+      "text": "## How To Generate OpenAPI Schema (app/)\n\n[`docs/development/generate-openapi.md`](docs/development/generate-openapi.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Execute Python Tools Correctly",
+      "start": 40,
+      "end": 47,
+      "line_count": 8,
+      "text": "## How To Execute Python Tools Correctly\n\nDo not invoke `python` or `python3` directly outside `uv run`. Always use\n`uv run <entry-point>` for modules that have entry points defined in\n`pyproject.toml` (e.g., `uv run agents`, `uv run spec`, `uv run lint`).\nOnly use `uv run python -m` for stdlib modules, external packages, or\ninline `-c` commands that have no entry point.\n"
+    },
+    {
+      "level": 3,
+      "title": "How To Write Documentation Correctly",
+      "start": 48,
+      "end": 52,
+      "line_count": 5,
+      "text": "### How To Write Documentation Correctly\n\nWhen documenting Python commands in markdown files, toml files, or README\nfiles, always use the `uv run <entry-point>` pattern for project modules.\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Add Python Dependencies Correctly",
+      "start": 53,
+      "end": 56,
+      "line_count": 4,
+      "text": "## How To Add Python Dependencies Correctly\n\n[`docs/development/adding-dependencies.md`](docs/development/adding-dependencies.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Add Models Correctly",
+      "start": 57,
+      "end": 60,
+      "line_count": 4,
+      "text": "## How To Add Models Correctly\n\n[`docs/development/adding-models.md`](docs/development/adding-models.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Write Agents Correctly",
+      "start": 61,
+      "end": 64,
+      "line_count": 4,
+      "text": "## How To Write Agents Correctly\n\n[`docs/development/writing-agents.md`](docs/development/writing-agents.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "How To Execute Agents Correctly",
+      "start": 65,
+      "end": 68,
+      "line_count": 4,
+      "text": "## How To Execute Agents Correctly\n\n[`docs/development/executing-agents.md`](docs/development/executing-agents.md)\n"
+    },
+    {
+      "level": 2,
+      "title": "Plan Execution Guidelines",
+      "start": 69,
+      "end": 74,
+      "line_count": 6,
+      "text": "## Plan Execution Guidelines\n\nWhen executing tasks from implementation plans (files in `docs/plans/`),\nagents must follow these strict rules to ensure complete and consistent\nimplementation.\n"
+    },
+    {
+      "level": 3,
+      "title": "No Deferred Stubs Without Plan Authorization",
+      "start": 75,
+      "end": 107,
+      "line_count": 33,
+      "text": "### No Deferred Stubs Without Plan Authorization\n\n**CRITICAL**: Do NOT create placeholder stubs, TODO comments, or deferred\nimplementations unless the plan explicitly indicates the item is planned\nfor a later task.\n\n* **Before creating a stub**: Check if the functionality is specified in\n  the current task\n* **If specified in current task**: Implement it fully, even if it\n  requires more effort\n* **If specified in a later task**: Note that in a comment with the task\n  reference\n* **If implementation is blocked**: Document what is blocking and what is\n  needed to proceed\n\nBad example (unauthorized stub):\n\n```python\ndef resolve_entity(entity_mention: str) -> str:\n    # TODO: Integrate with variant_resolver\n    return entity_mention  # Placeholder\n```\n\nGood example (plan-authorized deferral):\n\n```python\ndef resolve_entity(entity_mention: str) -> str:\n    # Entity resolution rules are in Task 9\n    # (fact_redesign_plan.md lines 172-189)\n    # This task (Task 6) uses pass-through until Task 9 is implemented\n    return entity_mention\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Task Decomposition for Complex Plans",
+      "start": 108,
+      "end": 133,
+      "line_count": 26,
+      "text": "### Task Decomposition for Complex Plans\n\nFor plans with many requirements, the primary agent should:\n\n1. **Save the plan to `.tmp/`**: Split the plan into numbered task files\n2. **Delegate to sub-agents**: Use the `Task` tool with\n   `subagent_type=\"general-purpose\"` to delegate individual tasks\n3. **Review each completion**: After each sub-agent returns, verify the task\n   was fully implemented before proceeding to the next task\n4. **Track incomplete items**: If a sub-agent reports blockers, record them\n   and either resolve them before continuing or escalate to the user\n\nExample workflow:\n\n```text\n1. Read docs/plans/my_feature_plan.md\n2. Write task files:\n   - .tmp/my_feature/task_1.md\n   - .tmp/my_feature/task_2.md\n   - .tmp/my_feature/task_3.md\n3. Delegate Task 1 to sub-agent\n4. Review sub-agent output for Task 1\n5. Delegate Task 2 to sub-agent\n6. ...\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Reporting Incomplete Implementation",
+      "start": 134,
+      "end": 146,
+      "line_count": 13,
+      "text": "### Reporting Incomplete Implementation\n\nIf implementation cannot be completed, you MUST report:\n\n* What was completed\n* What could NOT be completed\n* WHY it could not be completed (missing dependency, unclear requirement,\n  etc.)\n* What is needed to complete it\n\nDo NOT silently skip requirements or create stubs without explicit\nacknowledgment.\n"
+    },
+    {
+      "level": 2,
+      "title": "No Backwards Compatibility",
+      "start": 147,
+      "end": 151,
+      "line_count": 5,
+      "text": "## No Backwards Compatibility\n\n**CRITICAL**: This project has a strict NO BACKWARDS COMPATIBILITY policy.\nAlways prioritize optimal implementations over legacy support.\n"
+    },
+    {
+      "level": 3,
+      "title": "Forbidden Patterns",
+      "start": 152,
+      "end": 167,
+      "line_count": 16,
+      "text": "### Forbidden Patterns\n\nDo NOT use any of these backwards-compatibility patterns:\n\n* **Backwards-compatibility shims**: Adapter layers, deprecated aliases, or\n  compatibility wrappers\n* **Deprecated aliases**: `old_name = new_name  # For backwards compatibility`\n* **Version checks**: `if version < 2: use_old_method() else: use_new_method()`\n* **Dual support**: Accepting both old and new formats/arguments\n* **Compatibility layers**: Adapter classes or wrapper functions for old\n  interfaces\n* **Re-exports**: Keeping old import paths working via re-exports\n* **Unused parameters**: `def func(new_param, old_param=None):  # old_param ignored`\n* **Legacy pattern support**: Maintaining old code that depends on\n  deprecated patterns\n"
+    },
+    {
+      "level": 3,
+      "title": "When Updating Code",
+      "start": 168,
+      "end": 182,
+      "line_count": 15,
+      "text": "### When Updating Code\n\n1. **Find all usages**: Use grep/search to find every reference to the code\n   being changed\n2. **Update all usages**: Modify every call site to use the new pattern\n3. **Delete old code**: Remove the old implementation entirely\u2014do not keep\n   it alongside new code\n4. **Run tests**: Ensure all tests pass with the new implementation\n5. **No fallbacks**: Do not add fallback logic \"just in case\"\n\nAlways choose the best solution for current requirements, not the one that\npreserves old patterns. This policy ensures the codebase stays clean,\nmaintainable, and free of technical debt from accumulated compatibility\nlayers.\n"
+    },
+    {
+      "level": 2,
+      "title": "External Repositories",
+      "start": 183,
+      "end": 188,
+      "line_count": 6,
+      "text": "## External Repositories\n\nThe `.repositories/` directory contains cloned external repositories that\nthe root tooling can work with. Each subdirectory is an independent git\nrepository. This directory is git-ignored from the root project.\n"
+    },
+    {
+      "level": 2,
+      "title": "External Resources",
+      "start": 189,
+      "end": 207,
+      "line_count": 19,
+      "text": "## External Resources\n\nWhen stuck on implementation details, library usage, or unfamiliar patterns,\nuse the Firecrawl MCP tools to search the web for documentation and\nexamples:\n\n* **Search**: `mcp__firecrawl__firecrawl_search` - Search for documentation,\n  Stack Overflow answers, or best practices\n* **Scrape**: `mcp__firecrawl__firecrawl_scrape` - Fetch and read specific\n  documentation pages\n\nExamples of when to use Firecrawl:\n\n* Unfamiliar with pyfakefs test patterns? Search for\n  \"pyfakefs modules_to_reload pytest\"\n* Need FastAPI middleware examples? Search for\n  \"FastAPI middleware authentication 2025\"\n* Library API unclear? Scrape the official documentation page\n"
+    },
+    {
+      "level": 2,
+      "title": "Git Commit Signing",
+      "start": 208,
+      "end": 231,
+      "line_count": 24,
+      "text": "## Git Commit Signing\n\nAll commits are automatically GPG-signed using the configured signing key.\nThis is required by the repository's branch protection rules.\n\n**Current configuration** (already set globally):\n\n```bash\ngit config --global user.signingkey 2AAAEEBD97F32BFE\ngit config --global commit.gpgsign true\n```\n\n**Key location**: `~/.gnupg/` (RSA 4096-bit, no passphrase)\n\n**GitHub verification**: The public key must be added to GitHub at\n[https://github.com/settings/keys](https://github.com/settings/keys) for\nsignatures to show as \"Verified\".\n\nTo export the public key:\n\n```bash\ngpg --armor --export contact@nestharus.com\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "Git Commit Authorship",
+      "start": 232,
+      "end": 244,
+      "line_count": 13,
+      "text": "## Git Commit Authorship\n\nWhen creating git commits, agents must NOT add themselves as authors or\nco-authors:\n\n* **No Co-Authored-By**: Do not add `Co-Authored-By: Claude <noreply@anthropic.com>`\n  or similar lines\n* **No Generated-By footers**: Do not add `Generated with [Claude Code]` or\n  similar attribution footers\n* **Use configured identity only**: All commits must use only the git\n  username and email configured in the repository (from `git config user.name`\n  and `git config user.email`)\n"
+    },
+    {
+      "level": 2,
+      "title": "Git Branch Naming for Linear Integration",
+      "start": 245,
+      "end": 260,
+      "line_count": 16,
+      "text": "## Git Branch Naming for Linear Integration\n\nWhen creating branches for Linear tickets, the ticket ID casing must be\npreserved exactly:\n\n* **Correct**: `NES-47-rest-to-mcp-bridge` (ticket ID `NES-47` keeps\n  uppercase)\n* **Wrong**: `nes-47-rest-to-mcp-bridge` (lowercase breaks automatic\n  linking)\n\n**Branch format**: `<TICKET-ID>-<description>` where:\n\n* `<TICKET-ID>` preserves exact casing from Linear (e.g., `NES-47`,\n  `PROJ-123`)\n* `<description>` is lowercase with hyphens, derived from ticket title\n* Total length must not exceed 50 characters"
+    }
+  ]
+}

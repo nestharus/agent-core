@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-tampered-side-file
+No model-authored statement can repair a tampered side-file digest.

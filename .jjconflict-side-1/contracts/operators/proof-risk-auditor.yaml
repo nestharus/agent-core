@@ -1,0 +1,43 @@
+schema: operator-contract-v1
+source: agents/proof-risk-auditor.md
+model: gpt-xhigh
+description: Audit proposal and RCA fix-decision proof plans for runtime-claim evidence-class mismatch.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: mode
+  type: string
+  required: true
+  default_source: caller
+  description: '`mode=<phase-3-proposal|rca-fix-decision>` (required) - selects the artifact context.'
+- name: proposal_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`proposal_path=<absolute-path>` (required) - Phase 3 proposal or RCA fix-decision artifact under review.'
+- name: report_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`report_path=<absolute-path>` (required) - Markdown report destination; this is the only path you write.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path=<absolute-path>` (required) - repository worktree used to resolve relative evidence paths.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

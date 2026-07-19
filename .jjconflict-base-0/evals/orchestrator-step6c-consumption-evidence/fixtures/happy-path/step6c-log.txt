@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-happy-path
+The Step 6c log is topology evidence only for this fixture.

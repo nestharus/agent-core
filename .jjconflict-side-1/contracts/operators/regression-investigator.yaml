@@ -1,0 +1,103 @@
+schema: operator-contract-v1
+source: agents/regression-investigator.md
+model: gpt-xhigh
+description: Read-only regression investigation orchestrator that composes incident, history, A1, and pattern evidence without mutating source
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: incident_artifact_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`incident_artifact_path` - incident brief, RCA findings, post-mortem, QA report, or equivalent.'
+- name: incident_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`incident_id` - stable slug for output paths.'
+- name: surface_scope_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`surface_scope_path` - scoped list of implicated files or surfaces.'
+- name: investigation_window
+  type: string
+  required: true
+  default_source: caller
+  description: '`investigation_window` - commit range or date range.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root` - readable repository root.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path` - branch worktree for path resolution; no source edits.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` - durable artifact root.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`scratch_dir` - prompt, log, and question root.'
+- name: ticket_system
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` - `linear`, `jira`, or `file-only`.'
+- name: linear
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` - `linear`, `jira`, or `file-only`.'
+- name: jira
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system` - `linear`, `jira`, or `file-only`.'
+- name: linear_team_key
+  type: string
+  required: true
+  default_source: caller
+  description: '`linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email` - ticket routing fields as applicable.'
+- name: linear_project_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email` - ticket routing fields as applicable.'
+- name: jira_url
+  type: string
+  required: true
+  default_source: caller
+  description: '`linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email` - ticket routing fields as applicable.'
+- name: jira_project
+  type: string
+  required: true
+  default_source: caller
+  description: '`linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email` - ticket routing fields as applicable.'
+- name: jira_account_email
+  type: string
+  required: true
+  default_source: caller
+  description: '`linear_team_key`, `linear_project_id`, `jira_url`, `jira_project`, `jira_account_email` - ticket routing fields as applicable.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

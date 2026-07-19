@@ -1,0 +1,20 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/project-bootstrap.md
+workflow_id: project-bootstrap
+orchestrator: Work Manager or root coordinator
+inputs:
+- target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger
+- evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting
+expectations:
+- runs the open path against shared operators before trusting a project-specific wrapper
+- emits or refreshes thin project-local wrappers only when stable project facts justify them
+- emits a wrapper contract surface with inherits, base_procedure, and project defaults
+- uses qualitative stale-wrapper signals to choose closed path or re-bootstrap
+outputs:
+- project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions
+- optional project-local wrapper with valid operator-contract-v1 block and optional project AGENTS routing/policy update
+- NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct
+non_goals:
+- does not redefine bootstrap-pattern lifecycle vocabulary
+- does not implement category-specific linter, ticket, code-quality, alias, or routing bootstraps
+- does not migrate existing project-local wrappers

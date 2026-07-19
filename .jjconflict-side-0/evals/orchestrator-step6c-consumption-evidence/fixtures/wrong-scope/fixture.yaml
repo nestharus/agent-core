@@ -1,0 +1,4 @@
+expected_audit_verdict: block-level-scope-mismatch
+description: The manifest claims child `level-child-a`, but the side-file rows are parent-scope absolute paths, proving Audit #2 must enforce level scope rather than accepting byte-current rows alone.
+applies_check: Audit #2 check 10 - level-scope correctness
+step6c_invocation_start_at: 2026-05-16T20:11:00Z

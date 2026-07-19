@@ -1,0 +1,14 @@
+side_channel_evidence_bundle:
+  schema_version: 1
+  level_id: none
+  side_file_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/model-attestation-only-fail/declared-side-file-does-not-exist.txt
+  source_step6b_output_index_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/model-attestation-only-fail/step6b-output-index.md
+  projection_helper_identity: ~/ai/workflows/step6c-consumption-side-file.md
+  projection_schema_version: 1
+  canonical_row_count: 3
+  side_file_sha256: 728a12edb8ecfc3532ba94438f121dcef152961b8eda03e41ecae2833046b3c4
+  source_index_sha256: 4cb16e65ecf43061a8292b92f66f6993378d544b74dc2c0dcc69f43047a62cc5
+  projected_at: 2026-05-16T20:12:00Z
+  step6c_invocation_uuid: 77777777-7777-4777-8777-777777777777
+  step6c_prompt_path: /home/nes/projects/agent-runner/planning/acr-247-runtime-consumed-side-channel/.scratch/prompts/fixtures/attestation-step6c.md
+  step6c_log_path: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/model-attestation-only-fail/step6c-log.txt

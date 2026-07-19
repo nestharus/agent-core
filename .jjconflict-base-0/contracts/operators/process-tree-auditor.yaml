@@ -1,0 +1,88 @@
+schema: operator-contract-v1
+source: agents/process-tree-auditor.md
+model: gpt-high
+description: Audit an agents process tree against workflow execution requirements using trace JSON plus companion artifacts. Reports blocking and advisory workflow-execution violations. Read-only except for its report.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: operator_file
+  type: string
+  required: true
+  default_source: caller
+  description: '`operator_file=<path>` (required) - operator or workflow procedure whose execution is being audited.'
+- name: process_tree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`process_tree_path=<path>` (required) - saved JSON output from `agents trace --json <root_invocation_uuid>`.'
+- name: agents
+  type: string
+  required: true
+  default_source: caller
+  description: '`process_tree_path=<path>` (required) - saved JSON output from `agents trace --json <root_invocation_uuid>`.'
+- name: root_invocation_uuid
+  type: string
+  required: true
+  default_source: caller
+  description: '`root_invocation_uuid=<uuid>` (required) - invocation UUID used to produce the trace.'
+- name: subtree_root_uuid
+  type: string
+  required: false
+  default_source: caller
+  description: '`subtree_root_uuid=<uuid>` (optional) - node UUID that scopes the audit to a subtree inside the saved trace. When absent, audit from `root_invocation_uuid`.'
+- name: expected_process
+  type: string
+  required: true
+  default_source: caller
+  description: '`expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs. Canonical-output rows live inside this manifest, not as a separate top-level input.'
+- name: companion_artifacts
+  type: string
+  required: true
+  default_source: caller
+  description: '`companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree.'
+- name: audit_history_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context and qualifying canonical-output deletion or replacement lineage evidence. This operator reads it but does not update it.'
+- name: mode
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.'
+- name: blocking
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.'
+- name: FAIL
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.'
+- name: advisory
+  type: string
+  required: false
+  default_source: caller
+  description: '`mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.'
+- name: report_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

@@ -1,0 +1,17 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/eval-runtime.md
+workflow_id: eval-runtime
+orchestrator: eval-runner
+inputs:
+- eval_id, trace locator, mode on-trace post-merge or on-demand, planning_dir, and workflow selection evidence
+- normalized evidence sources such as process-tree reports, prompts, logs, audit bundles, and trace JSON when present
+expectations:
+- resolves trace evidence, normalizes it into semantic fields, executes the selected eval when runnable, and validates finding shape
+- stores markdown and JSON reports without mutating pipeline, CI, scheduler, or ticket backends
+outputs:
+- planning_dir eval findings markdown report
+- machine-readable eval JSON report
+- validation errors, behavior findings, no-finding results, or NEEDS_INPUT evidence
+non_goals:
+- does not add CI jobs, cron jobs, CLI runtime code, or ticket-backend writes
+- does not implement eval code, trace parser code, fixture code, or pipeline hooks

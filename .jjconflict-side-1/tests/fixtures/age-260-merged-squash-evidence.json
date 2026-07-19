@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "base_ref_name": "main",
+      "branch": "age-113-launch-shape-regression",
+      "branch_out_sha": "e2c44b090d552093bb08c6149b92ce266dfe8d35",
+      "head_sha": "7d9b6519c0afb58677452c261a4373f0a0840951",
+      "merge_method": "SQUASH",
+      "merge_method_command": [
+        "gh",
+        "api",
+        "--method",
+        "PUT",
+        "repos/nestharus/agent-runner/pulls/92/merge",
+        "-f",
+        "merge_method=squash",
+        "-f",
+        "sha=7d9b6519c0afb58677452c261a4373f0a0840951"
+      ],
+      "merge_sha": "4d0d168ac83c85d11470cad9a8e98ed2ef6040ae",
+      "merged_at": "2026-05-16T12:25:23Z",
+      "parent_sha": "9066a106b0908e654280011b1bac8aa65ca561d7",
+      "pr_url": "https://github.com/nestharus/agent-runner/pull/92",
+      "repo_root": "/home/nes/projects/agent-runner/trunk"
+    },
+    {
+      "base_ref_name": "main",
+      "branch": "age-134-main-rs-cleanup",
+      "branch_out_sha": "451070a551e77d790c4b4e5ac9262ec9a28a074e",
+      "head_sha": "f0c9e94952906ea9defec7feaee602ac6e1b5932",
+      "merge_method": "SQUASH",
+      "merge_method_command": [
+        "gh",
+        "api",
+        "--method",
+        "PUT",
+        "repos/nestharus/agent-runner/pulls/107/merge",
+        "-f",
+        "merge_method=squash",
+        "-f",
+        "sha=f0c9e94952906ea9defec7feaee602ac6e1b5932"
+      ],
+      "merge_sha": "9d4e2df4f1134a055f952a482deaa02371e1bf15",
+      "merged_at": "2026-05-18T12:22:24Z",
+      "parent_sha": "4e720e149c43c84374781bd5c8dc94dc647da8a4",
+      "pr_url": "https://github.com/nestharus/agent-runner/pull/107",
+      "repo_root": "/home/nes/projects/agent-runner/trunk"
+    },
+    {
+      "base_ref_name": "main",
+      "branch": "age-178-toml-provider-field",
+      "branch_out_sha": "44c6107915bb0ec64ac633d7f5dc6628a362008e",
+      "head_sha": "d412647cba58747f089d87178588a935022db0cd",
+      "merge_method": "SQUASH",
+      "merge_method_command": [
+        "gh",
+        "api",
+        "--method",
+        "PUT",
+        "repos/nestharus/agent-runner/pulls/138/merge",
+        "-f",
+        "merge_method=squash",
+        "-f",
+        "sha=d412647cba58747f089d87178588a935022db0cd"
+      ],
+      "merge_sha": "14242c03a0e26127c59daab81b9a4354a01f927d",
+      "merged_at": "2026-05-23T15:10:16Z",
+      "parent_sha": "df5de14040cca7e248aa48470430b58d2cd84b8b",
+      "pr_url": "https://github.com/nestharus/agent-runner/pull/138",
+      "repo_root": "/home/nes/projects/agent-runner/trunk"
+    }
+  ],
+  "schema": "age-260-frozen-squash-evidence-v1"
+}

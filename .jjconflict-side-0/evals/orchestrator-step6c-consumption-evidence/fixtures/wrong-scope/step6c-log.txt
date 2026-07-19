@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-wrong-scope
+Scope is decided by manifest level_id plus side-file rows, not by model narration.

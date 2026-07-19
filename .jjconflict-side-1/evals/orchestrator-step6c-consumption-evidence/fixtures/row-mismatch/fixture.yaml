@@ -1,0 +1,4 @@
+expected_audit_verdict: block-reprojection-mismatch
+description: The side-file has the correct number of rows and matching manifest sha, but one row is not present in the current Step 6b output index, so byte-for-byte re-projection must block.
+applies_check: Audit #2 check 7 - re-projection equivalence
+step6c_invocation_start_at: 2026-05-16T20:09:00Z

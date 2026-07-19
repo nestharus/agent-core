@@ -1,0 +1,153 @@
+schema: operator-contract-v1
+source: agents/work-manager-ticket-brief-auditor.md
+model: gpt-xhigh
+description: Read-only pre-posting critic for Work Manager ticket drafts and evidence bundles.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: boundary_convention
+  type: string
+  required: true
+  default_source: caller
+  description: '`boundary_convention=/home/nes/ai/conventions/work-manager-ticket-brief-boundary.md`.'
+- name: evidence_bundle_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`evidence_bundle_path=<absolute path>` containing the canonical `work_manager_ticket_draft_evidence` fields.'
+- name: work_manager_ticket_draft_evidence
+  type: string
+  required: true
+  default_source: caller
+  description: '`evidence_bundle_path=<absolute path>` containing the canonical `work_manager_ticket_draft_evidence` fields.'
+- name: report_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`report_path=<absolute path>` where this auditor must write its Markdown report.'
+- name: mode
+  type: string
+  required: true
+  default_source: caller
+  description: '`mode=blocking|advisory`, default `blocking`.'
+- name: blocking
+  type: string
+  required: true
+  default_source: caller
+  description: '`mode=blocking|advisory`, default `blocking`.'
+- name: draft_brief_path
+  type: string
+  required: true
+  default_source: caller
+  description: 'Concrete paths from the bundle: `draft_brief_path`, `route_decision_path`, `source_evidence_paths`, `producer_invocation.prompt_path`, `producer_invocation.log_path`, and any backend invocation evidence supplied by the caller.'
+- name: route_decision_path
+  type: string
+  required: true
+  default_source: caller
+  description: 'Concrete paths from the bundle: `draft_brief_path`, `route_decision_path`, `source_evidence_paths`, `producer_invocation.prompt_path`, `producer_invocation.log_path`, and any backend invocation evidence supplied by the caller.'
+- name: source_evidence_paths
+  type: string
+  required: true
+  default_source: caller
+  description: 'Concrete paths from the bundle: `draft_brief_path`, `route_decision_path`, `source_evidence_paths`, `producer_invocation.prompt_path`, `producer_invocation.log_path`, and any backend invocation evidence supplied by the caller.'
+- name: Runner
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: orchestrator
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: evidence
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: for
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: currentness
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: consumption
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: the
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: caller
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: treats
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: path
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: presence
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: freshness
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: read
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: status
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: as
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: load
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+- name: bearing
+  type: string
+  required: true
+  default_source: caller
+  description: Runner/orchestrator evidence for currentness and consumption when the caller treats path presence, freshness, or read status as load-bearing.
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

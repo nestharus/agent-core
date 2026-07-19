@@ -1,0 +1,68 @@
+schema: operator-contract-v1
+source: agents/eval-runner.md
+model: gpt-high
+description: Run future trace-consuming eval detectors against declared trace evidence and write local finding reports without mutating pipeline or product state.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: eval_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`eval_id`: target eval ID or list of eval IDs.'
+- name: trace_locator
+  type: string
+  required: true
+  default_source: caller
+  description: '`trace_locator`: session ID, root invocation UUID, saved `agents trace --json` path, or planning artifact that resolves to trace evidence.'
+- name: agents
+  type: string
+  required: true
+  default_source: caller
+  description: '`trace_locator`: session ID, root invocation UUID, saved `agents trace --json` path, or planning artifact that resolves to trace evidence.'
+- name: output_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`output_paths`: markdown report path and machine-readable JSON report path.'
+- name: mode
+  type: string
+  required: true
+  default_source: caller
+  description: '`mode`: `on-trace`, `post-merge`, or `on-demand`.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir`: root for companion artifacts and default report sink.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path`: read-only context path when diff or file evidence is needed.'
+- name: active_manager_flavor
+  type: string
+  required: true
+  default_source: caller
+  description: '`active_manager_flavor?`: declared flavor when the eval is flavor-sensitive.'
+- name: policy_source_paths
+  type: string
+  required: true
+  default_source: caller
+  description: '`policy_source_paths?`: manager flavor or workflow policy files supplied by the caller.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

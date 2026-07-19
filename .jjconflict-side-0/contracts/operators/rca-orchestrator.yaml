@@ -1,0 +1,98 @@
+schema: operator-contract-v1
+source: agents/rca-orchestrator.md
+model: gpt-xhigh
+description: Orchestrate the full RCA workflow from trigger classification through reproduction, root-cause/fix/application split, verification, and downstream incident handoff.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: incident_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`incident_id?`: tracker key, URL, incident slug, or incident handle.'
+- name: failure_id
+  type: string
+  required: true
+  default_source: caller
+  description: '`failure_id`: stable slug used for canonical artifact paths.'
+- name: trigger_type
+  type: string
+  required: true
+  default_source: caller
+  description: '`trigger_type`: exactly `failing_test` or `incident`.'
+- name: failing_test
+  type: string
+  required: true
+  default_source: caller
+  description: '`trigger_type`: exactly `failing_test` or `incident`.'
+- name: incident
+  type: string
+  required: true
+  default_source: caller
+  description: '`trigger_type`: exactly `failing_test` or `incident`.'
+- name: trigger_evidence_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`trigger_evidence_path`: absolute path to failing test output, incident brief, log bundle, QA observation, or other concrete trigger evidence.'
+- name: trigger_command
+  type: string
+  required: true
+  default_source: caller
+  description: '`trigger_command?`: required for `trigger_type=failing_test`; filled by Phase 1 for `trigger_type=incident`.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`: absolute repository root for investigation.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path`: writable worktree for reproduction tests and Phase 5 application.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`scratch_dir`: transient prompts, logs, and question artifacts.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir`: durable RCA artifact root.'
+- name: audit_history_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.'
+- name: ticket_system
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
+- name: linear
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
+- name: jira
+  type: string
+  required: true
+  default_source: caller
+  description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

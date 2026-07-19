@@ -1,0 +1,6 @@
+OULIPOLY_INVOCATION={"source":"fixture-provider","id":"9e69e8cc-616d-4640-bf1d-96f5391b1a2e"}
+OULIPOLY_SESSION={"agent_runner_chain_id":"fixture-chain","agent_runner_invocation_id":"9e69e8cc-616d-4640-bf1d-96f5391b1a2e","id":"fixture-legacy","provider_name":"fixture-provider","provider_session_id":"fixture-session","resume_input_id":null,"session_id":"fixture-session"}
+Verdict: PASS
+
+# Canonical provider report
+OULIPOLY_RESULT={"error_category":null,"exit_code":0,"finished_at":"2026-07-18T00:00:00Z","id":"9e69e8cc-616d-4640-bf1d-96f5391b1a2e","status":"succeeded","success":true,"terminal_reason":null}

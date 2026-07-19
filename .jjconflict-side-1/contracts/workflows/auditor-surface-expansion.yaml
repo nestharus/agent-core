@@ -1,0 +1,13 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/auditor-surface-expansion.md
+workflow_id: auditor-surface-expansion
+orchestrator: source A1 auditor
+inputs:
+- source auditor report context, bounded question, repo_root, scratch_dir, planning_dir, and evidence paths
+expectations:
+- collects bounded context for the source auditor without changing the review target
+outputs:
+- context artifact consumed by the source auditor
+non_goals:
+- does not implement a concrete research operator
+- does not own final auditor verdicts

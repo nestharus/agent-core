@@ -1,0 +1,78 @@
+schema: operator-contract-v1
+source: agents/pr-justification-gauntlet.md
+model: gpt-high
+description: "Multi-round adversarial justification workflow for PR review. Interrogator \u2194 researcher exchange with value assessment and per-thread drop/backlog/keep adjudication."
+inputs:
+- name: pr_number
+  type: int
+  required: true
+  default_source: caller
+  description: pr number
+- name: work_dir
+  type: path
+  required: true
+  default_source: caller
+  description: work dir
+- name: repo
+  type: string
+  required: false
+  default_source: derived | caller
+  description: repo
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: planning_root
+  type: path
+  required: false
+  default_source: base
+  description: planning root
+- name: pr_meta_path
+  type: path
+  required: false
+  default_source: derived
+  description: pr meta path
+- name: diff_path
+  type: path
+  required: false
+  default_source: derived
+  description: diff path
+- name: audit_history_path
+  type: path
+  required: false
+  default_source: derived
+  description: audit history path
+defaults:
+- name: planning_root
+  value: ${repo_root}/planning
+  source: base
+- name: pr_meta_path
+  value: ${work_dir}/pr-meta.json
+  source: base
+- name: diff_path
+  value: ${work_dir}/diff.txt
+  source: base
+secrets: []
+outputs:
+- task: run-gauntlet
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- justification-scratch-artifacts
+must_delegate:
+- pr-justification-interrogator
+- pr-justification-researcher
+- pr-justification-value-assessor
+- pr-justification-adjudicator
+may_direct:
+- thread-state-read
+forbidden_direct:
+- inline-role-substitution

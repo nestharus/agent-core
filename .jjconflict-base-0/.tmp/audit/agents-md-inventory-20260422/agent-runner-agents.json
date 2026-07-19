@@ -1,0 +1,293 @@
+{
+  "line_count": 295,
+  "headings": [
+    {
+      "level": 1,
+      "title": "Oulipoly Plane \u2014 Agent Entry Point",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "What This Is",
+      "start": 3
+    },
+    {
+      "level": 2,
+      "title": "Tech Stack",
+      "start": 14
+    },
+    {
+      "level": 2,
+      "title": "Design System: Ollie",
+      "start": 26
+    },
+    {
+      "level": 3,
+      "title": "Brand Colors (from Ollie's body)",
+      "start": 32
+    },
+    {
+      "level": 3,
+      "title": "Integrated Components",
+      "start": 41
+    },
+    {
+      "level": 3,
+      "title": "CSS Animations (in `src/app.css`)",
+      "start": 48
+    },
+    {
+      "level": 3,
+      "title": "Color Token Migration: COMPLETE",
+      "start": 58
+    },
+    {
+      "level": 2,
+      "title": "Current UI Architecture",
+      "start": 65
+    },
+    {
+      "level": 3,
+      "title": "Model Naming Convention",
+      "start": 89
+    },
+    {
+      "level": 3,
+      "title": "Input Schema System",
+      "start": 95
+    },
+    {
+      "level": 3,
+      "title": "Model Command Syntax",
+      "start": 118
+    },
+    {
+      "level": 2,
+      "title": "Design Workflow",
+      "start": 152
+    },
+    {
+      "level": 3,
+      "title": "External Design Directory",
+      "start": 154
+    },
+    {
+      "level": 3,
+      "title": "How Design Packages Work",
+      "start": 189
+    },
+    {
+      "level": 3,
+      "title": "Designer Tendencies to Steer Away From",
+      "start": 201
+    },
+    {
+      "level": 3,
+      "title": "Design Deliverables Already Received",
+      "start": 208
+    },
+    {
+      "level": 2,
+      "title": "Remaining TODO(design) Comments",
+      "start": 220
+    },
+    {
+      "level": 2,
+      "title": "UX Direction: Task-Centric Home Screen",
+      "start": 235
+    },
+    {
+      "level": 2,
+      "title": "Commands",
+      "start": 249
+    },
+    {
+      "level": 2,
+      "title": "Tauri Backend Structure",
+      "start": 269
+    },
+    {
+      "level": 2,
+      "title": "E2E Test Infrastructure",
+      "start": 288
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "Oulipoly Plane \u2014 Agent Entry Point",
+      "start": 1,
+      "end": 2,
+      "line_count": 2,
+      "text": "# Oulipoly Plane \u2014 Agent Entry Point\n"
+    },
+    {
+      "level": 2,
+      "title": "What This Is",
+      "start": 3,
+      "end": 13,
+      "line_count": 11,
+      "text": "## What This Is\n\n**Oulipoly Plane** is a desktop control plane for AI coding agent CLIs\n(Claude, Codex, Gemini, OpenCode). It handles discovery, configuration,\nload balancing, and monitoring. Built with **Tauri v2** (Rust backend) +\n**SolidJS** (frontend) + **Ark UI** components + **Tailwind CSS v4**.\n\nOulipoly derives from **Oulipo** \u2014 a movement combining mathematics and\nart through constrained writing. The brand evokes precision, creativity\nwithin structure, mathematical elegance, playful geometry.\n"
+    },
+    {
+      "level": 2,
+      "title": "Tech Stack",
+      "start": 14,
+      "end": 25,
+      "line_count": 12,
+      "text": "## Tech Stack\n\n| Layer | Tech | Notes |\n|-------|------|-------|\n| Backend | Rust + Tauri v2 | `src-tauri/` \u2014 state DB, CLI detection, setup agent, model discovery |\n| Frontend | SolidJS + TypeScript | `src/` \u2014 reactive UI with signals |\n| Components | Ark UI (headless) | Dialog, Field, Steps, Progress, Popover, Switch, Checkbox |\n| Styling | Tailwind CSS v4 | `@theme` tokens in `src/app.css`, `tailwind-variants` for component styles |\n| Icons | FontAwesome (sharp-solid) | Via `@fortawesome/sharp-solid-svg-icons` + custom SVG components |\n| Testing | Vitest (unit) + Playwright (E2E) | `src/__tests__/` and `e2e/` |\n| Build | Vite + Bun | `bun run dev`, `bun run build`, `bun run test` |\n"
+    },
+    {
+      "level": 2,
+      "title": "Design System: Ollie",
+      "start": 26,
+      "end": 31,
+      "line_count": 6,
+      "text": "## Design System: Ollie\n\nThe app has a mascot character called **Ollie** \u2014 a geometric polyhedron\nhead built from pastel SVG shapes with a \"boil filter\" (feTurbulence +\nfeDisplacementMap) for a hand-drawn wobble aesthetic.\n"
+    },
+    {
+      "level": 3,
+      "title": "Brand Colors (from Ollie's body)",
+      "start": 32,
+      "end": 40,
+      "line_count": 9,
+      "text": "### Brand Colors (from Ollie's body)\n\n```\n--color-brand-blue:    #4fc3f7  (cyan facet, also --color-accent)\n--color-brand-purple:  #b388ff  (purple facet)\n--color-brand-yellow:  #ffd54f  (yellow facet)\n--color-brand-orange:  #ff8a65  (orange facet)\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Integrated Components",
+      "start": 41,
+      "end": 47,
+      "line_count": 7,
+      "text": "### Integrated Components\n\n| Component | File | Description |\n|-----------|------|-------------|\n| **OllieSvg** | `src/components/OllieSvg.tsx` | Portrait head with bob + blink animations, boil filter |\n| **InlineSpinner** | `src/components/InlineSpinner.tsx` | Diamond-shaped spinner cycling through all 4 brand colors |\n"
+    },
+    {
+      "level": 3,
+      "title": "CSS Animations (in `src/app.css`)",
+      "start": 48,
+      "end": 57,
+      "line_count": 10,
+      "text": "### CSS Animations (in `src/app.css`)\n\n| Animation | Usage |\n|-----------|-------|\n| `ollie-bob` | 3s portrait head bob |\n| `ollie-blink` | 4s eye blink cycle |\n| `ollie-spin` | 1.5s diamond spin with color cycling |\n| `fade-up` | 0.3s entrance animation, staggered on dashboard rows |\n| `slide-in-right` | 0.2s panel slide-in |\n"
+    },
+    {
+      "level": 3,
+      "title": "Color Token Migration: COMPLETE",
+      "start": 58,
+      "end": 64,
+      "line_count": 7,
+      "text": "### Color Token Migration: COMPLETE\n\nAll components use Tailwind theme tokens (`text-text`, `bg-accent`,\n`text-error`, etc.) instead of hardcoded hex values. The only remaining\nraw hex values are intentional blue-tinted surface variants (`#16213e`,\n`#0f3460`, `#1e2a4a`, `#2a3a5e`) that don't have generic token equivalents.\n"
+    },
+    {
+      "level": 2,
+      "title": "Current UI Architecture",
+      "start": 65,
+      "end": 88,
+      "line_count": 24,
+      "text": "## Current UI Architecture\n\n```\nApp.tsx\n\u251c\u2500\u2500 SetupView (first-run wizard)\n\u2502   \u2514\u2500\u2500 SetupSession (streaming event handler)\n\u2502       \u251c\u2500\u2500 StatusBar (with InlineSpinner)\n\u2502       \u251c\u2500\u2500 ProgressBar (Ark UI Progress)\n\u2502       \u251c\u2500\u2500 FormRenderer (dynamic forms)\n\u2502       \u251c\u2500\u2500 WizardStepper (Ark UI Steps)\n\u2502       \u251c\u2500\u2500 CliSelector (checkbox selection)\n\u2502       \u251c\u2500\u2500 OAuthFlow (auth instructions)\n\u2502       \u251c\u2500\u2500 ApiKeyEntry (key input)\n\u2502       \u251c\u2500\u2500 ConfirmDialog (yes/no)\n\u2502       \u2514\u2500\u2500 ResultDisplay (detection summary, test results)\n\u2502\n\u2514\u2500\u2500 PoolsView (pool/model management \u2014 currently the home page)\n    \u251c\u2500\u2500 PoolCard (per-pool row with command tags, model dropdown)\n    \u2502   \u2514\u2500\u2500 Popover (Ark UI, grouped model list with facet chips)\n    \u251c\u2500\u2500 ModelPanel (Ark UI Dialog, slide-in editor)\n    \u251c\u2500\u2500 PoolSettingsPanel (flag toggles)\n    \u2514\u2500\u2500 SetupSession (inline for add-pool flow)\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Model Naming Convention",
+      "start": 89,
+      "end": 94,
+      "line_count": 6,
+      "text": "### Model Naming Convention\n\nModels use `group~facet` format (e.g., `claude~high`, `codex~low`). The\n`~` separator triggers grouping in the UI via `src/lib/grouping.ts`.\nStandalone models without `~` render as single entries.\n"
+    },
+    {
+      "level": 3,
+      "title": "Input Schema System",
+      "start": 95,
+      "end": 117,
+      "line_count": 23,
+      "text": "### Input Schema System\n\nModels can declare typed input parameters via `[[inputs]]` in their TOML\nconfigs. The runner validates user-supplied `-i key=value` flags against\nthe schema and maps them to CLI flags on the wrapped command.\n\n**How inputs flow:**\n1. The `default_input = true` input receives the positional prompt (args, `--file`, or stdin)\n2. Named inputs (`-i key=value`) are validated against the schema\n3. Each input's `flag` field determines the CLI flag passed to the command (e.g., `flag = \"--size\"`)\n4. Inputs without a `flag` field default to `--{name}`\n5. Repeated `-i` with the same key collects into an array\n6. Inputs with `default` values are passed automatically when not overridden\n7. Unknown inputs pass through as `--key value`\n\n**Input types:** `string`, `integer` (with min/max), `number` (with min/max),\n`boolean`, `enum` (with options list), `array` (with item_type, min/max items).\n\n**Multimodal models** (image/video generation) use wrapper scripts as their\n`command`. The scripts handle HTTP APIs, polling, downloading \u2014 the runner\njust validates inputs and passes flags through. Stdout is raw `Vec<u8>` so\nbinary data (images, videos) can flow through without corruption.\n"
+    },
+    {
+      "level": 3,
+      "title": "Model Command Syntax",
+      "start": 118,
+      "end": 151,
+      "line_count": 34,
+      "text": "### Model Command Syntax\n\nThe `command` field in model TOML configs supports multi-token strings.\nThe **last token** is extracted as the provider name for pool grouping\nand display. Earlier tokens are treated as a command prefix (e.g., for\nsetting or unsetting environment variables).\n\n**Simple command** \u2014 provider is the command itself:\n```toml\ncommand = \"claude\"\n# Provider name: \"claude\"\n```\n\n**Prefixed command** \u2014 provider is the last token:\n```toml\ncommand = \"env -u CLAUDECODE claude\"\n# Provider name: \"claude\"\n```\n\n**Double-quoted tokens** \u2014 use `\"...\"` when a token contains spaces.\nQuotes are stripped during shell splitting. This works on Linux, macOS,\nand Windows:\n```toml\ncommand = 'env -u CLAUDECODE \"my provider\"'\n# Provider name: \"my provider\"\n```\n\nThe full command string (including prefix) is passed to the OS for\nexecution. Only the extracted provider name is used for pool grouping\n(`derive_pools` in `lib.rs`) and display (`PoolCard.tsx`).\n\nParsing is handled by `shell_split()` and `provider_name()` in\n`src-tauri/src/executor/cli.rs`.\n"
+    },
+    {
+      "level": 2,
+      "title": "Design Workflow",
+      "start": 152,
+      "end": 153,
+      "line_count": 2,
+      "text": "## Design Workflow\n"
+    },
+    {
+      "level": 3,
+      "title": "External Design Directory",
+      "start": 154,
+      "end": 188,
+      "line_count": 35,
+      "text": "### External Design Directory\n\n**Location**: `~/work/tmp/oulipoly-e2e/`\n\nThis directory contains all design work, organized as packages for an\nexternal design model (LLM that generates SVGs, animations, CSS). It is\nNOT inside the git repo \u2014 it's a working area for design iteration.\n\n```\n~/work/tmp/oulipoly-e2e/\n\u251c\u2500\u2500 design-audit.md          # What's answered vs open from design deliverables\n\u251c\u2500\u2500 dashboard-rethink.md     # Task-centric home screen UX concept\n\u251c\u2500\u2500 packages/                # Individual design packages for the designer\n\u2502   \u251c\u2500\u2500 01-mascot/           # ANSWERED \u2014 Ollie exists\n\u2502   \u251c\u2500\u2500 02-brand-identity/   # PARTIAL \u2014 palette yes, wordmark no\n\u2502   \u251c\u2500\u2500 03-ollie-animations/ # MOSTLY ANSWERED \u2014 has design deliverables\n\u2502   \u2502   \u2514\u2500\u2500 designs/         # Designer's HTML mockups + notes\n\u2502   \u2502       \u251c\u2500\u2500 design 1.html\n\u2502   \u2502       \u251c\u2500\u2500 design 2.html\n\u2502   \u2502       \u2514\u2500\u2500 notes.md     # User's feedback on what's aligned/not\n\u2502   \u251c\u2500\u2500 04-progress-bar/     # NEEDS DESIGN\n\u2502   \u251c\u2500\u2500 06-empty-states/     # NEEDS DESIGN\n\u2502   \u251c\u2500\u2500 09-dashboard/        # SUPERSEDED by UX rethink\n\u2502   \u251c\u2500\u2500 10-oauth-flow/       # PARTIAL \u2014 lock SVG yes, step indicators no\n\u2502   \u251c\u2500\u2500 11-indicators/       # NEEDS DESIGN\n\u2502   \u251c\u2500\u2500 12-ollie-error/      # NEW \u2014 error pose animation\n\u2502   \u251c\u2500\u2500 13-ollie-empty/      # NEW \u2014 empty state pose\n\u2502   \u251c\u2500\u2500 14-home-screen/      # NEW \u2014 task-centric action cards\n\u2502   \u251c\u2500\u2500 15-wordmark/         # NEW \u2014 logo/wordmark\n\u2502   \u251c\u2500\u2500 16-inline-indicators/ # NEW \u2014 success/error/warning icons\n\u2502   \u2514\u2500\u2500 17-oauth-steps/      # NEW \u2014 OAuth flow step indicators\n\u251c\u2500\u2500 catalog/                 # Organized screenshots from E2E tests\n\u2514\u2500\u2500 results/                 # Raw test results\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "How Design Packages Work",
+      "start": 189,
+      "end": 200,
+      "line_count": 12,
+      "text": "### How Design Packages Work\n\nEach package is a focused ask for the design model (a separate LLM).\nA package contains:\n- `brief.md` \u2014 what's needed, constraints, references\n- Screenshots of current UI state\n- `robot-concept.jpg` \u2014 Ollie reference image\n- Optional `reference-*.html` \u2014 existing animation code for context\n\n**Key principle**: The designer loses detail on full-page redesigns.\nPackages must target ONE specific piece. Give HTML for animations.\n"
+    },
+    {
+      "level": 3,
+      "title": "Designer Tendencies to Steer Away From",
+      "start": 201,
+      "end": 207,
+      "line_count": 7,
+      "text": "### Designer Tendencies to Steer Away From\n\n1. **Chatlog/conversational UI** \u2014 app is NOT a chat interface\n2. **Sidebar navigation** \u2014 app does too few things for persistent nav\n3. **Full-page redesigns** \u2014 designer drops detail at page scale\n4. **Conflicting elements** \u2014 sometimes generates elements that fight each other\n"
+    },
+    {
+      "level": 3,
+      "title": "Design Deliverables Already Received",
+      "start": 208,
+      "end": 219,
+      "line_count": 12,
+      "text": "### Design Deliverables Already Received\n\nTwo HTML mockups from the designer live in\n`~/work/tmp/oulipoly-e2e/packages/03-ollie-animations/designs/`:\n\n- `design 1.html` \u2014 Interactive flow, input required, inline message\n- `design 2.html` \u2014 Auto-discovery flow, active task panel, input required\n- `notes.md` \u2014 User's analysis of what's aligned and what's not\n\nThese contain the source SVGs and animations that were extracted into\n`OllieSvg.tsx`, `InlineSpinner.tsx`, and the CSS keyframes.\n"
+    },
+    {
+      "level": 2,
+      "title": "Remaining TODO(design) Comments",
+      "start": 220,
+      "end": 234,
+      "line_count": 15,
+      "text": "## Remaining TODO(design) Comments\n\nThese mark places where the UI needs design work that hasn't been done yet:\n\n| File | What's Needed |\n|------|---------------|\n| `src/views/PoolsView.tsx` | Should become \"Configure\" sub-screen, not the home page |\n| `src/views/SetupView.tsx` | Searching/progress/error Ollie animations (full-body, needs design) |\n| `src/components/ProgressBar.tsx` | Ollie walking companion alongside progress bar |\n| `src/components/OAuthFlow.tsx` | Step indicators, lock SVG, confused Ollie pose |\n| `src/components/ResultDisplay.tsx` | Custom animated indicator SVGs for success/error |\n| `src/components/ModelPanel.tsx` | Empty space background treatment |\n| `src/components/PoolCard.tsx` | Per-tool visual differentiation (lower priority) |\n| `src/App.tsx` | Wordmark/logo branding in header |\n"
+    },
+    {
+      "level": 2,
+      "title": "UX Direction: Task-Centric Home Screen",
+      "start": 235,
+      "end": 248,
+      "line_count": 14,
+      "text": "## UX Direction: Task-Centric Home Screen\n\n**Read**: `~/work/tmp/oulipoly-e2e/dashboard-rethink.md`\n\nThe current app opens to PoolsView (configuration management). The plan\nis to replace this with a task-centric home screen:\n\n- **Three action cards**: Run, Status, Configure\n- **Ollie as status indicator**: expression reflects system health\n- **PoolsView becomes \"Configure\"** sub-screen\n- **New views needed**: HomeView, StatusView\n- **New Tauri commands needed**: `get_system_health()`, `get_quota_status()`,\n  `get_recent_invocations()`, `get_invocation_stats()`\n"
+    },
+    {
+      "level": 2,
+      "title": "Commands",
+      "start": 249,
+      "end": 268,
+      "line_count": 20,
+      "text": "## Commands\n\n```bash\n# Development\nbun run dev              # Start Vite dev server (frontend only)\ncargo tauri dev          # Start full Tauri app (frontend + backend)\n\n# Testing\nbun run test             # Vitest unit tests\nbun run test:e2e         # Playwright E2E tests\nbunx tsc --noEmit        # TypeScript type check\n\n# Build\nbun run build            # Production build\ncargo tauri build        # Full app build\n\n# E2E screenshots\nbunx playwright test e2e/screenshots.spec.ts  # Generate screenshot catalog\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "Tauri Backend Structure",
+      "start": 269,
+      "end": 287,
+      "line_count": 19,
+      "text": "## Tauri Backend Structure\n\n```\nsrc-tauri/src/\n\u251c\u2500\u2500 main.rs              # Entry point + CLI arg parsing (-m, -i, -f, -p)\n\u251c\u2500\u2500 lib.rs               # Tauri command handlers (IPC bridge)\n\u251c\u2500\u2500 config/              # Model + agent config (TOML files)\n\u2502   \u251c\u2500\u2500 model.rs         # ModelConfig, InputDef, InputType, TOML parsing\n\u2502   \u2514\u2500\u2500 agent.rs         # AgentConfig\n\u251c\u2500\u2500 state/               # SQLite state DB (invocations, health, accounts)\n\u251c\u2500\u2500 setup/               # CLI detection, setup wizard agent, memory\n\u251c\u2500\u2500 discovery/           # Model discovery pipeline\n\u251c\u2500\u2500 balancer/            # Load balancing across providers\n\u251c\u2500\u2500 executor/            # CLI execution engine\n\u2502   \u251c\u2500\u2500 mod.rs           # ExecutionResult, dispatch (execute / execute_with_inputs)\n\u2502   \u2514\u2500\u2500 cli.rs           # Flag resolution, input validation, subprocess execution\n\u2514\u2500\u2500 diagnostics/         # Error classification (LLM + heuristic fallback)\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "E2E Test Infrastructure",
+      "start": 288,
+      "end": 295,
+      "line_count": 8,
+      "text": "## E2E Test Infrastructure\n\nTests use a Tauri mock builder that injects fake `window.__TAURI_INTERNALS__`\nvia `page.addInitScript()`. See `e2e/fixtures/tauri-mock.ts` for the mock\nbuilder and `e2e/fixtures/scenarios.ts` for pre-built mock configurations.\n\nScenarios: `FRESH_USER`, `CONFIGURED_USER`, `SINGLE_CLI`, `ERROR_SETUP`,\n`EMPTY_POOLS`."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+schema: operator-contract-v1
+source: agents/behavior-investigator.md
+model: gpt-high
+description: "Investigate intended behavior of uncovered code from commits, PRs, tickets, and product goals \u2014 never assume current behavior is correct"
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: target
+  type: string
+  required: true
+  default_source: caller
+  description: '`target`: File path + function/class/block to investigate (e.g., `src/api/pricing.py:calculate_markup`)'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`: Path to the codebase'
+- name: context
+  type: string
+  required: false
+  default_source: caller
+  description: '`context` (optional): What triggered this investigation (risk-assessor output, suspicious trace, failing test command, node ID, CI log, red-phase report, assertion diff, structured failure evidence, etc.). When context already contains a deterministic failing signal, do not ask for a second reproduction artifact; proceed to intended-behavior or root-cause investigation from that signal.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

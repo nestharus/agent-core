@@ -1,0 +1,98 @@
+schema: operator-contract-v1
+source: agents/trace-recorder.md
+model: gpt-high
+description: Record Playwright traces for ambiguous behaviors, document frame-by-frame workflows, formulate human review questions
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path`: Path to the codebase'
+- name: app_url
+  type: string
+  required: true
+  default_source: caller
+  description: '`app_url`: URL where the app is running (e.g., `http://localhost:3000`)'
+- name: http
+  type: string
+  required: true
+  default_source: caller
+  description: '`app_url`: URL where the app is running (e.g., `http://localhost:3000`)'
+- name: questions
+  type: string
+  required: true
+  default_source: caller
+  description: '`questions`: List of question records to record evidence for. Each record has:'
+- name: qid
+  type: string
+  required: true
+  default_source: caller
+  description: "`qid` \u2014 stable question id (e.g., `q-2026-04-21-lead-time-one-bound`)"
+- name: question_type
+  type: string
+  required: true
+  default_source: caller
+  description: "`question_type` \u2014 `state` or `behavior`. This operator only handles `behavior`; skip `state` questions and let the orchestrator capture a single annotated screenshot for those."
+- name: state
+  type: string
+  required: true
+  default_source: caller
+  description: "`question_type` \u2014 `state` or `behavior`. This operator only handles `behavior`; skip `state` questions and let the orchestrator capture a single annotated screenshot for those."
+- name: behavior
+  type: string
+  required: true
+  default_source: caller
+  description: "`question_type` \u2014 `state` or `behavior`. This operator only handles `behavior`; skip `state` questions and let the orchestrator capture a single annotated screenshot for those."
+- name: where_route
+  type: string
+  required: true
+  default_source: caller
+  description: "`where_route`, `where_component`, `where_selector` \u2014 locator from behavior-investigator"
+- name: where_component
+  type: string
+  required: true
+  default_source: caller
+  description: "`where_route`, `where_component`, `where_selector` \u2014 locator from behavior-investigator"
+- name: where_selector
+  type: string
+  required: true
+  default_source: caller
+  description: "`where_route`, `where_component`, `where_selector` \u2014 locator from behavior-investigator"
+- name: user_workflow
+  type: string
+  required: true
+  default_source: caller
+  description: "`user_workflow` \u2014 click path to reach the element"
+- name: decision_needed
+  type: string
+  required: true
+  default_source: caller
+  description: "`decision_needed` \u2014 the specific yes/no or A-vs-B question"
+- name: ambiguity
+  type: string
+  required: true
+  default_source: caller
+  description: "`ambiguity` \u2014 what specifically is ambiguous"
+- name: output_root
+  type: string
+  required: false
+  default_source: caller
+  description: '`output_root` (optional, default `/tmp/traces`): root directory for output. The orchestrator usually points this at the run''s `questions/` directory so frames sit next to the question manifest.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

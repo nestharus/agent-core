@@ -1,0 +1,73 @@
+schema: operator-contract-v1
+source: agents/function-classification-auditor.md
+model: gpt-high
+description: Audit every function in touched files against A1 function-classification rules and report multi-classifier functions with evidence and split direction.
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root=<path>` (required) - repository root used to inspect the whole function inventory in touched files.'
+- name: diff_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`diff_path=<path>` (required) - unified diff or equivalent text diff used to identify the files touched by the WU; it is evidence for touched-file discovery, not a limit on which functions are audited.'
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`output_path=<path>` (required) - Markdown report destination.'
+- name: base_ref
+  type: string
+  required: false
+  default_source: caller
+  description: '`base_ref=<ref>` (optional) - base ref used to produce or verify `diff_path`.'
+- name: head_ref
+  type: string
+  required: false
+  default_source: caller
+  description: '`head_ref=<ref>` (optional) - head ref used to produce or verify `diff_path`.'
+- name: changed_functions_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`changed_functions_path=<path>` (optional) - boundary-resolution aid: caller-supplied inventory of changed functions, with path, symbol/name, and line span, used to help identify touched files and evidence anchors; it does not limit the audit set to changed functions.'
+- name: proposal_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`proposal_path=<path>` (optional) - proposal context for review-only assumptions; not a substitute for diff evidence.'
+- name: problem_map_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`problem_map_path=<path>` (optional) - touched-surface and anti-scope context.'
+- name: risk_profile_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`risk_profile_path=<path>` (optional) - per-surface risk and mode context.'
+- name: code_quality_ref
+  type: string
+  required: false
+  default_source: caller
+  description: '`code_quality_ref=<path>` (optional, default `~/ai/conventions/code-quality.md`) - A1 source of truth.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

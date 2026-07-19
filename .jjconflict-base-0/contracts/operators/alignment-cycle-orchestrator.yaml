@@ -1,0 +1,67 @@
+schema: operator-contract-v1
+source: agents/alignment-cycle-orchestrator.md
+model: gpt-xhigh
+description: Run the proposal alignment review cycle against problem.md + philosophy.md, expand problem/philosophy when new surfaces are discovered, write philosophy-decisions.md when philosophy concerns require user input, and produce a run report. The orchestrator dispatches Stage 1 (problem alignment), Stage 1b (problem expansion), Stage 2 (philosophy alignment), and Stage 2b (philosophy expansion). It does NOT run the proposer; that is user-driven.
+inputs:
+- name: problem_path
+  type: path
+  required: true
+  default_source: caller
+  description: problem path
+- name: philosophy_path
+  type: path
+  required: true
+  default_source: caller
+  description: philosophy path
+- name: proposal_path
+  type: path
+  required: true
+  default_source: caller
+  description: proposal path
+- name: axis_table_path
+  type: path
+  required: true
+  default_source: caller
+  description: axis table path
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: brief_path
+  type: path
+  required: false
+  default_source: caller
+  description: brief path
+defaults: []
+secrets: []
+outputs:
+- task: run-alignment-cycle
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- strategy-doc-updates-via-integrators
+- alignment-review-dispatches
+- classification-dispatches
+must_delegate:
+- problem-bootstrap
+- philosophy-bootstrap
+- problem-alignment
+- problem-expansion-classify
+- problem-expansion-integrate
+- philosophy-alignment
+- philosophy-expansion-classify
+- philosophy-expansion-integrate
+may_direct:
+- strategy-doc-read
+- stage-output-validation
+forbidden_direct:
+- proposer-execution
+- resolving-user-owned-philosophy-decisions

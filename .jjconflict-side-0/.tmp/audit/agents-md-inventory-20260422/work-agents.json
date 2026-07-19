@@ -1,0 +1,436 @@
+{
+  "line_count": 552,
+  "headings": [
+    {
+      "level": 1,
+      "title": "Work Folder \u2014 Agent Instructions",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "Cross-session work log \u2014 READ FIRST",
+      "start": 8
+    },
+    {
+      "level": 2,
+      "title": "Specialist Agents",
+      "start": 16
+    },
+    {
+      "level": 3,
+      "title": "Routing Table",
+      "start": 23
+    },
+    {
+      "level": 3,
+      "title": "How to Invoke",
+      "start": 51
+    },
+    {
+      "level": 3,
+      "title": "When NOT to Delegate",
+      "start": 58
+    },
+    {
+      "level": 2,
+      "title": "Active Projects",
+      "start": 64
+    },
+    {
+      "level": 3,
+      "title": "uv/pip packaging migration",
+      "start": 91
+    },
+    {
+      "level": 2,
+      "title": "Folder Structure",
+      "start": 101
+    },
+    {
+      "level": 2,
+      "title": "Branch Flow",
+      "start": 127
+    },
+    {
+      "level": 3,
+      "title": "Project branch documentation",
+      "start": 139
+    },
+    {
+      "level": 2,
+      "title": "Running External Models",
+      "start": 156
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 180
+    },
+    {
+      "level": 2,
+      "title": "CodeRabbit Review Loop",
+      "start": 213
+    },
+    {
+      "level": 2,
+      "title": "Post-CodeRabbit Review Gates (steps 10 + 11 + 12)",
+      "start": 219
+    },
+    {
+      "level": 2,
+      "title": "PR Review Workflow",
+      "start": 253
+    },
+    {
+      "level": 2,
+      "title": "Workflow Step Reporting & Review",
+      "start": 282
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 288
+    },
+    {
+      "level": 3,
+      "title": "CLI Syntax",
+      "start": 292
+    },
+    {
+      "level": 3,
+      "title": "Common Patterns",
+      "start": 310
+    },
+    {
+      "level": 3,
+      "title": "Agent File Format",
+      "start": 326
+    },
+    {
+      "level": 3,
+      "title": "Input Schema",
+      "start": 338
+    },
+    {
+      "level": 3,
+      "title": "Multimodal Models",
+      "start": 365
+    },
+    {
+      "level": 3,
+      "title": "Running in Background",
+      "start": 387
+    },
+    {
+      "level": 3,
+      "title": "File naming for prompts, responses, and wrappers",
+      "start": 401
+    },
+    {
+      "level": 3,
+      "title": "Available Models",
+      "start": 407
+    },
+    {
+      "level": 2,
+      "title": "Adding Tasks",
+      "start": 411
+    },
+    {
+      "level": 2,
+      "title": "Infrastructure Reference",
+      "start": 422
+    },
+    {
+      "level": 3,
+      "title": "JIRA",
+      "start": 424
+    },
+    {
+      "level": 3,
+      "title": "Railway API",
+      "start": 496
+    },
+    {
+      "level": 3,
+      "title": "AWS Access",
+      "start": 516
+    },
+    {
+      "level": 3,
+      "title": "Tailscale Network & Self-Hosted Runners",
+      "start": 531
+    },
+    {
+      "level": 2,
+      "title": "Global Constraints",
+      "start": 546
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "Work Folder \u2014 Agent Instructions",
+      "start": 1,
+      "end": 7,
+      "line_count": 7,
+      "text": "# Work Folder \u2014 Agent Instructions\n\nThis folder manages planning, task packaging, and git worktrees for the\nRFQ Automation platform. The agent working here does NOT implement code\nor run tests \u2014 it organizes planning documents, creates task folders for\nexternal models, manages worktree rebases, and maintains project state.\n"
+    },
+    {
+      "level": 2,
+      "title": "Cross-session work log \u2014 READ FIRST",
+      "start": 8,
+      "end": 15,
+      "line_count": 8,
+      "text": "## Cross-session work log \u2014 READ FIRST\n\n`~/work/rfqautomation-linux/WORK_LOG.md` (gitignored) holds cross-session\ncontext that used to live in the disabled memory tool: user feedback to\napply going forward, decisions on open questions, pointers to active\ninitiatives, and durable how-tos for tooling. Read it at the start of\nevery session and append new entries on top as they come up.\n"
+    },
+    {
+      "level": 2,
+      "title": "Specialist Agents",
+      "start": 16,
+      "end": 22,
+      "line_count": 7,
+      "text": "## Specialist Agents\n\nProcedural knowledge lives in `~/work/agents/*.md`. Read the agent file\nand pass its content as the prompt when spawning a sub-agent via the\nClaude Code Agent tool. The sub-agent gets full procedure in-context\nwithout needing to read external files.\n"
+    },
+    {
+      "level": 3,
+      "title": "Routing Table",
+      "start": 23,
+      "end": 50,
+      "line_count": 28,
+      "text": "### Routing Table\n\n| Cue | Agent | Inputs | Mode |\n|-----|-------|--------|------|\n| E2E tests need triggering, failing, screenshots, local repro | `agents/e2e-operator.md` | worktree_path, branch, task, scenario? | Tool-enabled |\n| QA: unit tests, report regeneration, Gemini visual QA, schema verification | `agents/qa-operator.md` | task, worktree_path or artifact_path, run_id?, focus? | Tool-enabled |\n| Create/list/sync/remove worktrees | `agents/worktree-operator.md` | task, name, base_branch? | Tool-enabled |\n| Rebase, squash, multi-parent deps, integration branches, jj | `agents/jj-operator.md` | task, branch, target?, parents? | Tool-enabled |\n| Reorganize PR commits: split/reorder/rewrite for review readability, per-commit test verification, force-push | `agents/commit-hygiene-operator.md` | mode (`reorganize` or `audit`), branch, base, target_commit_plan? | Tool-enabled |\n| Audit/edit AGENTS.md and the agents/ ecosystem against architecture rules (procedures live in operators; AGENTS.md is routing+topology only) | `agents/agentsmd-curator.md` | mode (`audit` / `edit` / `add-operator`), agentsmd_path, agents_dir, findings_to_fix? | Tool-enabled |\n| Read/comment/transition JIRA issues on lamaai.atlassian.net (e.g., INFA-34); auth via $JIRA_API_KEY + aaron.solomon@scint.ai | `agents/jira-operator.md` | task (`read` / `comment` / `transition` / `search` / `create`), issue_key, body? / target_status? / jql? | Tool-enabled |\n| AGENTS.md maintenance workflow: inventory\u2192audit\u2192triage\u2192plan\u2192risk-gate\u2192apply\u2192verify; dispatches curator + risk sub-agents | `agents/agentsmd-maintenance-orchestrator.md` | agentsmd_path, agents_dir, triage_policy?, risk_gate_required? | Tool-enabled |\n| Run CodeRabbit review loop on a branch; iterate until value drops to zero (3-6 passes typical); never push during loop | `agents/coderabbit-operator.md` | branch, base, worktree-path, test-command?, max-passes? | Tool-enabled |\n| Verify a workflow execution complied with its operator procedure (read-only, post-execution review of step logs) | `agents/workflow-reviewer.md` | operator_file, step_log, expected_outputs?, mode? | Tool-enabled |\n| Manage pipeline scratch artifact naming + .gitignore in a worktree (setup / audit / cleanup) | `agents/pipeline-artifacts-operator.md` | worktree-path, mode | Tool-enabled |\n| Package task folder for external model | `agents/task-packager.md` | task_name, task_type, paths | Tool-enabled |\n| Review PR: risk assessment, research, decomposition, post comments | `agents/pr-review-operator.md` | pr_number, repo?, project_dir? | Tool-enabled |\n| Multi-round adversarial PR justification workflow: interrogator \u2194 researcher \u2194 value assessor \u2194 adjudicator, per-thread drop/backlog/keep (used by pr-review-operator Phase 4b, never alone) | `agents/pr-justification-gauntlet.md` | pr_number, work_dir, repo?, project_dir?, planning_dir? | Tool-enabled |\n| Sub-agents of the justification gauntlet (never invoked directly by humans): conservative interrogator, evidence researcher, value assessor, per-round adjudicator | `agents/pr-justification-interrogator.md`, `agents/pr-justification-researcher.md`, `agents/pr-justification-value-assessor.md`, `agents/pr-justification-adjudicator.md` | thread state from the gauntlet | Tool-enabled |\n| Secondary FastAPI review: framework idioms, service/controller/repo architecture, state+concurrency, Pydantic contracts, testing+observability (runs after primary passes) | `agents/fastapi-review-operator.md` | pr_number, repo?, project_dir? | Tool-enabled |\n| Version bump, Docker/Windows build, promote, dry-run | `agents/release-operator.md` | task, version? | Tool-enabled |\n| Measure coverage, map gaps, find dead/low-value tests | `agents/coverage-analyzer.md` | task, worktree_path, scope? | Tool-enabled |\n| Investigate intended behavior from commits/tickets/goals | `agents/behavior-investigator.md` | target, worktree_path, context? | Tool-enabled |\n| Assess risk + value of uncovered code, priority ranking | `agents/risk-assessor.md` | uncovered_areas, worktree_path, coverage_data? | Tool-enabled |\n| Record Playwright traces for ambiguous behaviors, human review docs | `agents/trace-recorder.md` | workflow, worktree_path, app_url, ambiguity, questions | Tool-enabled |\n| Write tests for VERIFIED intended behavior only | `agents/test-writer.md` | behavior_spec, worktree_path, test_type, target | Tool-enabled |\n| Audit existing tests: flag unverified captures, dead tests, low-value | `agents/coverage-auditor.md` | task, worktree_path, test_files?, behavior_specs? | Tool-enabled |\n"
+    },
+    {
+      "level": 3,
+      "title": "How to Invoke",
+      "start": 51,
+      "end": 57,
+      "line_count": 7,
+      "text": "### How to Invoke\n\n1. Read the agent file: `Read ~/work/agents/<agent>.md`\n2. Construct a prompt combining the agent file content + dynamic context (branch names, paths, specific task)\n3. Spawn via Agent tool with the combined prompt\n4. The sub-agent has full procedure knowledge and tool access \u2014 it handles the rest\n"
+    },
+    {
+      "level": 3,
+      "title": "When NOT to Delegate",
+      "start": 58,
+      "end": 63,
+      "line_count": 6,
+      "text": "### When NOT to Delegate\n\n- Quick single-command operations (e.g., `git worktree list`) \u2014 just run them directly\n- Reading/inspecting files \u2014 use Read/Grep directly\n- Ambiguous requests \u2014 clarify with the user first, then delegate\n"
+    },
+    {
+      "level": 2,
+      "title": "Active Projects",
+      "start": 64,
+      "end": 90,
+      "line_count": 27,
+      "text": "## Active Projects\n\n| JIRA | Project | Status | Location | Depends On |\n|------|---------|--------|----------|------------|\n| \u2014 | Release workflow redesign | Superseded \u2014 merged into updater + release channels (INFA-27) | \u2014 | \u2014 |\n| \u2014 | Docker image split + distribution | Superseded \u2014 absorbed into updater + release channels (INFA-27) | \u2014 | \u2014 |\n| [INFA-8](https://lamaai.atlassian.net/browse/INFA-8) | Installer bootstrap | In Progress \u2014 PRs open (RFQautomation) + branch ready (RFQinstallation) | `planning/distribution/proposals/installer-*.md` | INFA-27 |\n| [INFA-9](https://lamaai.atlassian.net/browse/INFA-9) | Centralized logging | To Do \u2014 design approved (all risks LOW), tasks ready | `planning/logging/` | \u2014 (PRs #349, #350, #353, #355, #357 to be closed) |\n| [INFA-10](https://lamaai.atlassian.net/browse/INFA-10) | uv/pip packaging migration | To Do \u2014 blocked on 5 design docs, risk NOT PASSING | `planning/distribution/proposals/uv-manifest-packaging.md` | INFA-27 + INFA-8 (Milestone 4) |\n| [INFA-11](https://lamaai.atlassian.net/browse/INFA-11) | E2E testing framework | In Progress \u2014 tasks 00-22 defined | `planning/e2e/` | \u2014 |\n| [INFA-12](https://lamaai.atlassian.net/browse/INFA-12) | Cloud deployment | To Do \u2014 Railway (compute) + Supabase (database), MVP 10 users | `planning/cloud/` | \u2014 |\n| [INFA-13](https://lamaai.atlassian.net/browse/INFA-13) | Auth overhaul (Logto + Authlib + PyCasbin) | In Progress \u2014 Phase 1 (Logto + new auth layer) | `tmp/auth/` | \u2014 |\n| [INFA-14](https://lamaai.atlassian.net/browse/INFA-14) | Model serving + deployment | In Progress \u2014 GHCR+ORAS registry, Phases 1-3b done | `tmp/model-serving/`, `tmp/model-deployment/` | \u2014 |\n| [INFA-15](https://lamaai.atlassian.net/browse/INFA-15) | Video streaming + deployment | To Do \u2014 design complete, streaming blocks deployment | `tmp/video-streaming/`, `tmp/video-deployment/` | \u2014 |\n| [INFA-16](https://lamaai.atlassian.net/browse/INFA-16) | Wheel-based build pipeline | In Progress \u2014 implementation done, PR pending | `tmp/wheel task/` | \u2014 |\n| [INFA-17](https://lamaai.atlassian.net/browse/INFA-17) | S3 storage reduction (lifecycles + Lambda) | In Progress \u2014 retention Lambda design proposed | `planning/distribution/proposals/design-s3-release-retention-cleanup.md` | \u2014 |\n| [INFA-18](https://lamaai.atlassian.net/browse/INFA-18) | License + patch server | In Progress \u2014 T00-T26 defined across 4 waves | `planning/distribution/TASK_INDEX.md` | \u2014 |\n| [INFA-19](https://lamaai.atlassian.net/browse/INFA-19) | Tamper-proof audit logging | To Do \u2014 compliance requirement, HMAC hash chain | `planning/product/PRODUCT-tamper-proof-activity-logs.md` | INFA-21 |\n| [INFA-20](https://lamaai.atlassian.net/browse/INFA-20) | Vulnerability scanning + supply chain security | To Do \u2014 Trivy + Dependabot/Renovate + Sigstore | `planning/distribution/proposals/design-supply-chain-security.md` | INFA-10 |\n| [INFA-21](https://lamaai.atlassian.net/browse/INFA-21) | Database versioning (schema migrations) | To Do \u2014 prerequisite for audit logging | \u2014 | \u2014 |\n| [INFA-22](https://lamaai.atlassian.net/browse/INFA-22) | Product expansion (feature backlog) | Backlog \u2014 proposals not yet approved | `planning/product/`, `planning/product/expansion/` | \u2014 |\n| [INFA-23](https://lamaai.atlassian.net/browse/INFA-23) | Unified E2E reports | In Progress \u2014 6 PRs open (#371-#376), 5 remaining blocked on merges | `planning/e2e-report-fixes-initiative.md` | \u2014 |\n| [INFA-26](https://lamaai.atlassian.net/browse/INFA-26) | Build + distribution consolidation | In Progress \u2014 PRs #202, #228, #231-#233, #237, #239 | \u2014 | \u2014 |\n| [INFA-27](https://lamaai.atlassian.net/browse/INFA-27) | Updater testing + release channels | In Progress \u2014 updater E2E, Docker hardening, release channels | `integration/upgrade-e2e-*`, `integration/docker-hardening-*` | \u2014 |\n| [INFA-28](https://lamaai.atlassian.net/browse/INFA-28) | License config bug | In Progress \u2014 atomic writes + conflict detection, PRs #312, #313 | \u2014 | \u2014 |\n| [INFA-29](https://lamaai.atlassian.net/browse/INFA-29) | Updater/supervisor self-update + rollback | To Do \u2014 blocked on feat/e2e-updater-recovery; covers manual-update-only supervisor problem (Linux internal v3.5.009 shipped, Windows v3.5.009 still broken) | \u2014 | feat/e2e-updater-recovery |\n| [INFA-35](https://lamaai.atlassian.net/browse/INFA-35) | DB state source-of-truth unification | To Do \u2014 drafted after INFA-29 cache-trigger-race PR; port all Python-driven DDL into patch.yaml migrations, rebuild test image from migrations, delete schema.sql | `planning/design/database-schema-source-of-truth.md` | \u2014 |"
+    },
+    {
+      "level": 3,
+      "title": "uv/pip packaging migration",
+      "start": 91,
+      "end": 100,
+      "line_count": 10,
+      "text": "### uv/pip packaging migration\nReplace PyInstaller + zip packaging with `uv sync --frozen` and a private PyPI registry on S3. Risk assessment: NOT PASSING (Audit MEDIUM, Scope HIGH, Shortcut HIGH). Blocked on 5 design documents:\n1. Offline/cache-seeding strategy for air-gapped on-prem customers\n2. Torch GPU/CPU variant selection via uv extra indexes\n3. Windows service model without PyInstaller (pythonw.exe? nssm? embedded Python distribution?)\n4. Third-party package mirroring strategy (full mirror vs selective vs proxy vs managed service)\n5. Supply chain security: vulnerability scanning, automated patching, package integrity (Dependabot, Trivy, Renovate, Sigstore)\n\nAfter those are resolved, re-scope milestone 1 as: private registry + one internal package published + one end-to-end install proof-of-concept.\n"
+    },
+    {
+      "level": 2,
+      "title": "Folder Structure",
+      "start": 101,
+      "end": 126,
+      "line_count": 26,
+      "text": "## Folder Structure\n\n```\n~/work/\n  rfqautomation-linux/          # App repo \u2014 on main (never commit here directly)\n  rfqinstallation-linux/        # Installation/setup repo\n  agents/                       # Specialist agent files\n  worktrees/                    # Git worktrees \u2014 one per active task\n  planning/\n    e2e/                        # E2E testing project\n      tasks/                    #   Task definitions (00-22)\n      execution-order.md        #   Dependency graph, phases\n      OVERVIEW.md               #   Executive overview\n      decisions.md              #   Decision log (D1-D25)\n    cloud/                      # Cloud deployment (Railway + Supabase, NOT AWS)\n      complete-stack-architecture.md\n      executive-roadmap.md\n      roadmap-mvp.md            #   MVP for 10 users\n    design/                     # Risk analysis and design docs\n    distribution/               # License server + patch server initiative\n    product/                    # Product enhancements\n      expansion/                #   Product expansion roadmap (tasks 00-18)\n  Startup Package/              # App seed data (Excel files)\n  e2e-local-settings.zip        # Gitignored secrets for E2E tests\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "Branch Flow",
+      "start": 127,
+      "end": 138,
+      "line_count": 12,
+      "text": "## Branch Flow\n\n```\nfeat/<name> (worktree) \u2192 draft PR \u2192 review \u2192 main\n```\n\n- **`main`** \u2014 protected. All work merges here via reviewed PRs.\n- **`feat/<name>`** \u2014 feature branches created from `main` in worktrees.\n- **`basis/<name>`** \u2014 multi-parent basis branches (managed by jj-operator).\n- **`integration/<name>`** \u2014 temporary integration branches for cross-PR testing.\n- **All PRs opened in draft mode.**\n"
+    },
+    {
+      "level": 3,
+      "title": "Project branch documentation",
+      "start": 139,
+      "end": 155,
+      "line_count": 17,
+      "text": "### Project branch documentation\n\nWhen a project spans multiple PRs with dependencies, maintain a tracking\nfile in `planning/` that maps:\n\n```markdown\n## Branch Map \u2014 <Project Name>\n\n| Branch | PR | Parents | Status |\n|--------|-----|---------|--------|\n| feat/phase-1 | #NNN | main | draft |\n| feat/phase-2 | #NNN | main | draft |\n| basis/phase-3-deps | \u2014 | feat/phase-1 + feat/phase-2 | local |\n| feat/phase-3 | #NNN | basis/phase-3-deps | draft |\n| integration/project | \u2014 | all of above | testing |\n```\n"
+    },
+    {
+      "level": 2,
+      "title": "Running External Models",
+      "start": 156,
+      "end": 179,
+      "line_count": 24,
+      "text": "## Running External Models\n\nThe `agents` CLI (`~/.local/bin/agents`) runs external models and agents.\n\n```bash\n# Run a model directly (no agent file needed):\nagents -m gpt-high -p /home/nes/work/rfqautomation-linux \"your prompt here\"\nagents -m claude-opus -p /home/nes/work/rfqautomation-linux \"your prompt here\"\n\n# Run from a prompt file:\nagents -m gpt-high -p /home/nes/work/rfqautomation-linux -f prompt.md\n\n# Run a named agent (from agents/ directory):\nagents my-agent \"prompt args\"\n\n# Available models: gpt-high, gpt-medium, gpt-low, gpt-xhigh,\n#   claude-opus, claude-sonnet, claude-haiku,\n#   gemini-high, gemini-pro-high, gemini-flash-high\n# Config: ~/.config/oulipoly-agent-runner/models/\n```\n\nModels have tool access (file read/write, bash, search) and operate on the\n`-p` project directory. They run to completion and print results to stdout.\n"
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 180,
+      "end": 212,
+      "line_count": 33,
+      "text": "## Implementation & Bug-Fix Workflow\n\nAll code changes follow the same pipeline. Bugs start with RCA; features skip it.\n\n| Step | Model | Role |\n|------|-------|------|\n| 1. RCA (bugs only) | `gpt-high` | Investigate root cause. Read code, trace failure, produce report. Do NOT propose fixes. |\n| 2. Proposal | `gpt-high` | Propose a fix/feature based on findings. Write a design proposal. Do NOT implement. |\n| 3. Risk assessment | 3x `claude-opus` | Three sub-agents **in parallel**: audit risk + scope risk + shortcut risk. All must return **LOW**. If MEDIUM/HIGH, revise proposal and re-run. |\n| 4. Research | `gpt-high` | **Only after all three risks are LOW.** Research hookpoints in the codebase. Understand what exists. Avoid building parallel systems. |\n| 5. Test discovery | `agents/test-discovery.md` (`gpt-high`) | **After research, before implement.** Discover candidate governing tests for changed files. Output is a heuristic map \u2014 absence of a hit does NOT prove absence of a test; the implementer must verify before relying on it to skip new test work. A mechanical AST pass also enumerates touched public symbols (add/remove/rename) and flags any whose name has zero references in the candidate test set. Advisory \u2014 does not block. |\n| 6. Red-phase gate | `agents/red-phase-gate.md` (`gpt-high` orchestrator) | **After test discovery, before implement.** Run newly-authored tests against HEAD and classify the red-phase state. Advisory \u2014 informs the implementer whether their tests target new behavior or mirror current behavior. Does not block. **Consumer: implementer only.** |\n| 7. Implement | `gpt-high` | **Only after research completes.** Launch implementation sub-agents. |\n| 8. Green-phase validation | `agents/green-phase-gate.md` (`gpt-high` orchestrator) | **After implement, before CodeRabbit.** Rerun the red-phase node IDs against the implemented HEAD. Classify each as turned-green, still-red, or regressed. Advisory \u2014 informs the implementer whether their implementation satisfies its own red-phase tests. Does not block. **Consumer: implementer only.** |\n| 9. CodeRabbit review | CLI | **After green-phase validation.** Run `coderabbit review --plain --base main` in a loop: fix findings, `git commit --amend --no-edit`, rerun. Keep amending until CodeRabbit stops producing **valuable** findings \u2014 not until the report is empty. Design-preference churn and nitpicks that the prior pass already addressed are signals to stop. |\n| 10. Test-audit gate | `agents/test-audit-gate.md` (`gpt-high` orchestrator) invoking 3x audit sub-agents in parallel | **After CodeRabbit converges, on the actual diff.** Run spec-alignment, test-quality, and coverage-delta audits in parallel. Both `FAIL` and `PARTIAL` block PR opening. `PASS` required in pr-review mode; in implementation mode, coverage-delta may be `PARTIAL` because there is no CI baseline pre-push \u2014 that specific `PARTIAL` does not block. |\n| 11. Multi-concern review | `claude-opus` | **After step 10 records the audit evidence, on the actual diff.** Can this PR be decomposed into smaller single-concern PRs? Output is a split plan (one PR per concern, in dependency order) or an explicit \"cannot decompose further\". Runs against `git diff main..HEAD`, not the proposal. |\n| 12. Justification review | `claude-opus` | **In parallel with step 11.** What deserves to be in this PR? What does not? Flags scope creep, incidental cleanups, and unrelated defects that should be their own PR. Together with steps 10 and 11 this is the final gate before opening PRs. |\n| 13. Commit hygiene | `agents/commit-hygiene-operator.md` (`claude-opus`) | **After steps 10, 11, 12 agree on the split.** Audit each PR's commit sequence and reorganize if needed. Even single-PR diffs benefit from per-commit organization \u2014 a 600-line PR with one giant commit is not reviewable; the same 600 lines as 8 logical commits is. Operator handles split/reorder/message-rewrite + per-commit verification. |\n| 14. Draft PR(s) | `gh` CLI | **After steps 10, 11, 12, and 13 agree.** Open one or more **draft** PRs against `main`. One PR per concern the reviewers isolated; dependency order. A single-concern change is one PR. |\n\n**Principles:**\n- Separate agents for separate concerns \u2014 RCA agents don't propose, proposal agents don't implement\n- Zero-risk gate \u2014 all three risk assessments must be LOW before proceeding\n- Shortcut detection \u2014 the shortcut risk assessment checks whether the proposal itself introduces hacks, duplicated logic, hardcoded values, source-vs-artifact confusion, or symptom-masking workarounds. A proposal that fixes one shortcut by introducing another fails this gate.\n- **No compatibility shims** \u2014 never introduce backward-compatibility shims, feature flags for old behavior, or transitional code paths. Ship the change cleanly. Rely on thorough testing, not gradual rollout.\n- Research before implementation \u2014 find hookpoints, avoid parallel systems\n- Iterate until it passes \u2014 don't implement a proposal that hasn't passed risk assessment\n- CodeRabbit stops when findings are valueless, not when the report is empty \u2014 track per-pass value (real architectural fixes vs design-preference churn) and stop when a pass returns only churn. Skip findings with documented rationale when needed; don't chase flip-flops\n- Post-CodeRabbit review gates are the PR-opening gate \u2014 the test-audit, multi-concern, and justification reviews in steps 10, 11, and 12 run on the **actual diff**, not the proposal, because proposals can look clean while the diff bundles unrelated cleanups\n- Commit hygiene is part of PR prep, not optional \u2014 a PR that survives steps 10+11+12 with bundled or unstructured commits still fails reviewability. Step 13 is the explicit gate that catches \"the diff is right but the commits are noise\"\n- Draft-only \u2014 all PRs opened by this pipeline are drafts; promotion to \"ready for review\" is a human decision\n"
+    },
+    {
+      "level": 2,
+      "title": "CodeRabbit Review Loop",
+      "start": 213,
+      "end": 218,
+      "line_count": 6,
+      "text": "## CodeRabbit Review Loop\n\nCodeRabbit CLI is step 9 of the implementation pipeline. It iterates until per-pass value drops to zero (typically 3\u20136 passes), amending a single commit so each pass reviews a clean diff against `main`. The branch is never pushed during the loop.\n\n\u2192 see `agents/coderabbit-operator.md` for the pass procedure, convergence detection, pre-pass sanity checks, and rate-limit handling.\n"
+    },
+    {
+      "level": 2,
+      "title": "Post-CodeRabbit Review Gates (steps 10 + 11 + 12)",
+      "start": 219,
+      "end": 252,
+      "line_count": 34,
+      "text": "## Post-CodeRabbit Review Gates (steps 10 + 11 + 12)\n\nOnce CodeRabbit converges, run three gates **in parallel** on the actual\ndiff before opening any PRs:\n\nThe **test-audit gate** runs `agents/test-audit-gate.md` on the actual diff\nand synthesizes spec-alignment, test-quality, and coverage-delta audits.\nBoth `FAIL` and `PARTIAL` from the test-audit gate block PR opening, except\nthe implementation-mode coverage-delta `PARTIAL` which is acknowledged.\n\n1. **Multi-concern review.** Can this PR be split into smaller PRs, one per\n   concern, in dependency order? Reviewer outputs either a split plan\n   (PR 1: X, PR 2: Y, PR 2 depends on PR 1) or \"cannot decompose further\".\n2. **Justification review.** For every hunk in the diff, does it deserve to\n   be in this PR? Reviewer flags scope creep, incidental cleanups, and\n   unrelated defects that should ship separately.\n\nAll three gates run on `git diff main..HEAD`, not on the proposal or the RCA.\nProposals can look clean while the implementation diff bundles extra\nconcerns.\n\nThe orchestrator reconciles the three reports:\n\n- If the test-audit gate returns `FAIL` or a blocking `PARTIAL` \u2192 do not\n  open a PR yet; fix the blocking issue first.\n- If the test-audit gate passes and both structural reviews say \"single\n  concern, minimal\" \u2192 open one draft PR.\n- If the test-audit gate passes and one or both structural reviews surface\n  a split \u2192 open one draft PR per concern, in\n  dependency order. Use `basis/<name>` branches when a later PR depends on\n  an earlier one (see \"Project branch documentation\" above).\n- If the structural reviews disagree, the more conservative split wins\n  (prefer smaller PRs over larger ones).\n"
+    },
+    {
+      "level": 2,
+      "title": "PR Review Workflow",
+      "start": 253,
+      "end": 281,
+      "line_count": 29,
+      "text": "## PR Review Workflow\n\nAfter implementation and CodeRabbit, before merging, all PRs go through the\nfull review pipeline. **Use `agents/pr-review-operator.md` to run this.**\n\n| Phase | Model | Role |\n|-------|-------|------|\n| 1. Risk assessment (3x parallel) | `claude-opus` | Audit risk + scope risk + shortcut risk. All must return **LOW**. |\n| 2. Research verification | `gpt-high` | Verify the PR's technical approach against the codebase. Run in parallel with Phase 1. |\n| 3. Test-audit gate | `agents/test-audit-gate.md` (`gpt-high` orchestrator) | Run spec-alignment, test-quality, and coverage-delta audits on the actual PR diff. `FAIL` and `PARTIAL` block the gate in PR review. |\n| 4. Multi-concern check | `claude-opus` | Can this PR be decomposed into smaller PRs with single concerns? |\n| 5. Justification check | `claude-opus` | What deserves to be in this PR? What does not? |\n| 6. Commit hygiene check | `agents/commit-hygiene-operator.md` (`claude-opus`) in audit-only mode | Even if multi-concern says \"cannot decompose further,\" are the PR's commits organized for incremental review? Operator runs in read-only audit mode here and posts findings; reorganization is the PR author's responsibility, not the reviewer's. |\n| 7. Synthesize & post | Orchestrator | Post test-audit and risk-gate summaries, findings, decomposition, commit-hygiene observations, and questions as PR comments. |\n| 8. Proposal loop (conditional) | `gpt-high` + 3x `claude-opus` | If the approach is fundamentally flawed, propose an alternative and risk-assess it. |\n| 9. Domain-specific research (conditional) | `gpt-high` | Verify external-domain claims when the PR touches compliance, standards, or protocol-heavy behavior. |\n\n**Rules:**\n- Run on the actual diff, not the proposal \u2014 proposals can look reasonable while the diff bundles too much\n- All three risk assessments must be LOW for the PR to pass the gate\n- The test-audit gate runs in parallel with Phases 1 and 2, and `FAIL` / `PARTIAL` block PR approval in review mode\n- A PR that touches N independent concerns should be split into N PRs\n- Dependency order matters \u2014 if PR B depends on PR A, A merges first\n- A large deletion (removing old code) is its own PR, separate from the addition that replaces it\n- Additive changes (new params, new functions) go before behavioral changes (swapping the implementation)\n- A PR that survives multi-concern + justification with messy commits still fails reviewability \u2014 request commit reorganization (see `agents/commit-hygiene-operator.md`)\n- If the multi-concern check says \"cannot decompose further\" AND commits are organized, the PR is ready for merge\n- All findings get posted to the PR \u2014 reviews are not just internal reports\n"
+    },
+    {
+      "level": 2,
+      "title": "Workflow Step Reporting & Review",
+      "start": 282,
+      "end": 287,
+      "line_count": 6,
+      "text": "## Workflow Step Reporting & Review\n\nMulti-step workflows must state each concrete action as it is performed (not summaries), and a separate reviewer agent verifies compliance against the operator's procedure after the workflow finishes.\n\n\u2192 see `agents/workflow-reviewer.md` for the step-reporting format, the when-to-review cases, and the review procedure.\n"
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 288,
+      "end": 291,
+      "line_count": 4,
+      "text": "## Running Sub-Agents\n\nSub-agents are invoked via the `agents` binary (`~/.local/bin/agents`), not through Claude Code's built-in Agent tool. The binary is the CLI mode of [Oulipoly Agent Runner](https://github.com/nestharus/agent-runner).\n"
+    },
+    {
+      "level": 3,
+      "title": "CLI Syntax",
+      "start": 292,
+      "end": 309,
+      "line_count": 18,
+      "text": "### CLI Syntax\n\n```bash\nagents [OPTIONS] [AGENT] [PROMPT...]\n```\n\n| Option | Description |\n|--------|-------------|\n| `-m, --model <MODEL>` | Execute a model directly (no agent file) |\n| `-a, --agent-file <AGENT_FILE>` | Path to an agent `.md` file |\n| `-f, --file <FILE>` | Read prompt from file |\n| `-p, --project <PROJECT>` | Working directory |\n| `-i, --input <KEY=VALUE>` | Pass model inputs as key=value (repeatable) |\n| `--models-dir <MODELS_DIR>` | Override models directory |\n| `--agents-dir <AGENTS_DIR>` | Override agents directory |\n\n**Prompt resolution priority:** `--file` > positional arguments > stdin\n"
+    },
+    {
+      "level": 3,
+      "title": "Common Patterns",
+      "start": 310,
+      "end": 325,
+      "line_count": 16,
+      "text": "### Common Patterns\n\n```bash\n# Model + prompt file (pipeline standard)\nagents --model gpt-high --file prompt.md\n\n# Agent file + model override\nagents --agent-file ~/work/agents/e2e-operator.md --model claude-opus --file prompt.md\n\n# Pipe prompt from stdin\ncat spec.md | agents --model glm\n\n# Set working directory\nagents --model gpt-high -p /path/to/repo --file prompt.md\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Agent File Format",
+      "start": 326,
+      "end": 337,
+      "line_count": 12,
+      "text": "### Agent File Format\n\n```markdown\n---\ndescription: 'One-line description'\nmodel: claude-opus\noutput_format: ''\n---\n\nSystem prompt / instructions here.\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Input Schema",
+      "start": 338,
+      "end": 364,
+      "line_count": 27,
+      "text": "### Input Schema\n\nModels can declare typed input parameters via `[[inputs]]` in their TOML configs. The runner validates user-supplied `-i key=value` flags against the schema and maps them to CLI flags on the wrapped command.\n\n| Field | Required | Description |\n|-------|----------|-------------|\n| `name` | yes | Input identifier |\n| `type` | yes | `string`, `integer`, `number`, `boolean`, `enum`, `array` |\n| `flag` | no | CLI flag to pass to the command (e.g. `\"--size\"`) |\n| `required` | no | Fail if not provided and no default |\n| `default_input` | no | This is the unnamed positional input (the \"prompt\") |\n| `default` | no | Default value when not provided by user |\n| `description` | no | Human/AI-readable description |\n| `options` | enum only | List of valid values |\n| `min` / `max` | integer/number | Value range bounds |\n| `item_type` | array only | Type of array elements |\n| `min_items` / `max_items` | array only | Array length bounds |\n\n**How inputs flow:**\n- The `default_input` receives the positional prompt (args, `--file`, or stdin)\n- Named inputs (`-i key=value`) are validated against the schema, then passed as `--flag value` to the command\n- Repeated `-i` with the same key collects into an array (e.g. `-i images=a.png -i images=b.png`)\n- Inputs with defaults are passed automatically when not overridden\n- Unknown inputs pass through as `--key value`\n\n**Stdout is raw bytes** \u2014 commands can output binary data (images, videos) and it passes through unmodified. Pipe to a file to save: `agents -m seedream-t2i \"A cat\" > cat.jpeg`\n"
+    },
+    {
+      "level": 3,
+      "title": "Multimodal Models",
+      "start": 365,
+      "end": 386,
+      "line_count": 22,
+      "text": "### Multimodal Models\n\nImage/video generation models use wrapper scripts as their `command`. The scripts handle HTTP APIs, polling, downloading \u2014 the runner just validates inputs and passes flags through.\n\n```bash\n# Generate an image (raw bytes on stdout, pipe to file)\nagents -m seedream-t2i \"A sunset over mountains\" > sunset.jpeg\n\n# Generate a video\nagents -m seedance-t2v-low -i duration=5 -i resolution=480p \"A whale swimming\" > whale.mp4\n\n# Image-to-video with source image\nagents -m seedance-i2v-fast -i image=./photo.jpg \"Slow camera orbit\" > orbit.mp4\n\n# Image editing with reference images\nagents -m seedream-i2i -i image=input.png \"Make it warmer\" > edited.jpeg\n\n# Chain: generate an image then animate it\nagents -m seedream-t2i \"A cat painting\" > cat.jpeg\nagents -m seedance-i2v-low -i image=cat.jpeg \"The cat blinks slowly\" > cat.mp4\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "Running in Background",
+      "start": 387,
+      "end": 400,
+      "line_count": 14,
+      "text": "### Running in Background\n\nUse the Claude Code Agent tool with `run_in_background: true`. Do NOT use `while pgrep` loops \u2014 you will be notified when the agent completes.\n\nFor file output from background bash commands, write the wrapper inside the worktree (see \"File naming\" below):\n```bash\nWT=~/work/worktrees/<name>\ncat > \"$WT/.run-agents.sh\" << 'EOF'\n#!/bin/bash\n~/.local/bin/agents --model gpt-xhigh --file \"$1\" > \"$2\" 2>&1\nEOF\nchmod +x \"$WT/.run-agents.sh\" && \"$WT/.run-agents.sh\" \"$WT/PROPOSAL.prompt.md\" \"$WT/PROPOSAL.md\"\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "File naming for prompts, responses, and wrappers",
+      "start": 401,
+      "end": 406,
+      "line_count": 6,
+      "text": "### File naming for prompts, responses, and wrappers\n\nPipeline scratch (prompts, responses, wrapper scripts, per-phase outputs) lives inside the worktree \u2014 never bare in `/tmp/` \u2014 to prevent cross-session filename collisions that have previously shipped bad work to background agents.\n\n\u2192 see `agents/pipeline-artifacts-operator.md` for the standard filename catalogue, `.gitignore` block, setup / audit / cleanup procedures, read-before-write policy, and background-task wrapper naming.\n"
+    },
+    {
+      "level": 3,
+      "title": "Available Models",
+      "start": 407,
+      "end": 410,
+      "line_count": 4,
+      "text": "### Available Models\n\nSee `~/.config/oulipoly-agent-runner/models/` for the full list. Model selection guidance is in `src/models.md`.\n"
+    },
+    {
+      "level": 2,
+      "title": "Adding Tasks",
+      "start": 411,
+      "end": 421,
+      "line_count": 11,
+      "text": "## Adding Tasks\n\n| Type | Location | Naming |\n|------|----------|--------|\n| E2E | `planning/e2e/tasks/` | `NN-short-name.md` (next number) |\n| Cloud | `planning/cloud/` | Update relevant file (no numbered tasks) |\n| Product enhancement | `planning/product/` | `PRODUCT-enhancement-<name>.md` |\n| Product expansion | `planning/product/expansion/tasks/` | `NN-short-name.md` |\n\nTask numbers are stable \u2014 never reuse. Dropped tasks get `.DROPPED` suffix.\n"
+    },
+    {
+      "level": 2,
+      "title": "Infrastructure Reference",
+      "start": 422,
+      "end": 423,
+      "line_count": 2,
+      "text": "## Infrastructure Reference\n"
+    },
+    {
+      "level": 3,
+      "title": "JIRA",
+      "start": 424,
+      "end": 495,
+      "line_count": 72,
+      "text": "### JIRA\n\nTwo project boards, each team-managed (next-gen):\n\n| Project | Key | Board | Scope | Issue types (board-visible) |\n|---------|-----|-------|-------|-----------------------------|\n| Infrastructure | `INFA` | [INFA board (#34)](https://lamaai.atlassian.net/jira/software/projects/INFA/boards/34) | CI/build, deployment, distribution, updater, release pipeline, infra tooling | `Task` (Epics are timeline/backlog only) |\n| QA Testing | `KAN` | [KAN board (#1)](https://lamaai.atlassian.net/jira/software/projects/KAN/boards/1) | Frontend UX bugs, product bugs surfaced by QA or E2E, test-side fixes/harmonization, cross-scenario baseline drift | `Bug`, `Feature` |\n\n**Routing rule of thumb:** if a ticket is about how the app *behaves from the user's perspective* or about E2E/QA tests themselves, file in `KAN`. If it is about how the app gets *built, shipped, or kept running* (CI, artifacts, updater, releases, deployment), file in `INFA`. When in doubt, file in the board the person reviewing it lives on.\n\n**Auth:** Basic auth \u2014 `$AZURE_EMAIL:$JIRA_API_KEY`\n**API base:** `https://lamaai.atlassian.net/rest/api/3`\n\n```bash\n# List all INFA issues\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  \"https://lamaai.atlassian.net/rest/agile/1.0/board/34/issue?maxResults=50\" \\\n  -H \"Accept: application/json\"\n\n# List all KAN issues\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  \"https://lamaai.atlassian.net/rest/agile/1.0/board/1/issue?maxResults=50\" \\\n  -H \"Accept: application/json\"\n\n# Create an INFA task\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -X POST \"https://lamaai.atlassian.net/rest/api/3/issue\" \\\n  -d '{\"fields\":{\"project\":{\"key\":\"INFA\"},\"summary\":\"...\",\"issuetype\":{\"name\":\"Task\"}}}'\n\n# Create a KAN bug\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -X POST \"https://lamaai.atlassian.net/rest/api/3/issue\" \\\n  -d '{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"...\",\"issuetype\":{\"name\":\"Bug\"}}}'\n\n# Attach a file to a KAN ticket (screenshots etc.)\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  -H \"X-Atlassian-Token: no-check\" \\\n  -X POST \"https://lamaai.atlassian.net/rest/api/3/issue/KAN-NNN/attachments\" \\\n  -F \"file=@/path/to/screenshot.png\"\n\n# Add a comment (ADF format)\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -X POST \"https://lamaai.atlassian.net/rest/api/3/issue/<KEY>/comment\" \\\n  -d '{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"...\"}]}]}}'\n\n# Transition an issue (INFA: 11=To Do, 21=In Progress, 31=Done \u2014 KAN uses the same ids)\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -X POST \"https://lamaai.atlassian.net/rest/api/3/issue/<KEY>/transitions\" \\\n  -d '{\"transition\":{\"id\":\"21\"}}'\n\n# List transitions available from current status\ncurl -s -u \"$AZURE_EMAIL:$JIRA_API_KEY\" \\\n  \"https://lamaai.atlassian.net/rest/api/3/issue/<KEY>/transitions\" \\\n  -H \"Accept: application/json\"\n```\n\n**Link types (both projects):** `Blocks` (10000), `Cloners` (10001), `Duplicate` (10002), `Relates` (10003).\n\n**Moving an issue between INFA and KAN:** the REST API does not expose cross-project move for team-managed projects. The supported workaround is:\n\n1. Clone \u2014 POST `/issue` in the target project with the same `summary` + ADF `description` + appropriate `issuetype` (INFA \u2192 KAN maps `Task` \u2192 `Bug`, typically).\n2. Link \u2014 POST `/issueLink` with `{\"type\":{\"name\":\"Cloners\"},\"inwardIssue\":{\"key\":\"<new>\"},\"outwardIssue\":{\"key\":\"<old>\"}}`.\n3. Comment on the old issue pointing at the new key with a `<link>` mark in the ADF body.\n4. Transition the old issue to `Done` (transition id `31`).\n\n**PATCH via REST API for body/title updates:** `gh pr edit` and similar wrappers sometimes fail on this tenant with `Projects (classic) is being deprecated` GraphQL errors. Use `gh api -X PATCH /repos/<owner>/<repo>/pulls/<N> --input <json>` with `{\"body\": \"...\"}` to bypass.\n"
+    },
+    {
+      "level": 3,
+      "title": "Railway API",
+      "start": 496,
+      "end": 515,
+      "line_count": 20,
+      "text": "### Railway API\n\n**Token:** `RAILWAY_TOKEN` in shell env. Use GraphQL API, not Railway CLI.\n\n**Endpoint:** `https://backboard.railway.app/graphql/v2`\n**Auth:** `Authorization: Bearer $RAILWAY_TOKEN`\n\n```bash\n# List projects\ncurl -s -H \"Authorization: Bearer $RAILWAY_TOKEN\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"query\":\"{ projects { edges { node { id name } } } }\"}' \\\n  https://backboard.railway.app/graphql/v2\n```\n\n**Current projects:**\n- `rfq/production` (`9dd09c0b-d01a-44f9-bb2f-a790fcba1d8f`) \u2014 empty\n- `rfq/staging` (`d3b33915-f6ff-4b4a-8aad-ed4d865bde04`) \u2014 services: rfq-postgres, rfq-app, rfq-oauth\n- `platform` (`9dd83dcc-578b-49d5-8ae0-31b5560357f8`) \u2014 empty\n"
+    },
+    {
+      "level": 3,
+      "title": "AWS Access",
+      "start": 516,
+      "end": 530,
+      "line_count": 15,
+      "text": "### AWS Access\n\n| Key | Env var prefix | Purpose |\n|-----|---------------|---------|\n| Customer app | `AWS_KEY` / `AWS_SECRET` | S3 for RFQ app (customer buckets) |\n| Dev | `AWS_DEV_ACCESS_KEY_ID` / `AWS_DEV_SECRET_ACCESS_KEY` | Dev/CLI \u2014 IAM `aaron-solomon` (permanent) |\n| GitHub | `AWS_GITHUB_ACCESS_KEY_ID` / `AWS_GITHUB_SECRET_ACCESS_KEY` | S3 promotion write (CI) |\n\nShell env has `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` set to OpenTofu state backend. Use dev key with:\n```bash\nAWS_ACCESS_KEY_ID=\"\" AWS_SECRET_ACCESS_KEY=\"\" aws s3 ls --profile default\n```\n\n**Account:** `629108221537` | **Region:** `us-east-1`\n"
+    },
+    {
+      "level": 3,
+      "title": "Tailscale Network & Self-Hosted Runners",
+      "start": 531,
+      "end": 545,
+      "line_count": 15,
+      "text": "### Tailscale Network & Self-Hosted Runners\n\n| Host | Tailscale IP | OS | Role |\n|------|-------------|-----|------|\n| `gamez-4` (current) | `100.66.160.118` | Linux (WSL2) | Dev workstation, Claude Code |\n| `lamaai-dev` | `100.99.190.69` | Linux | Self-hosted GitHub Actions runner (lama-server) |\n| `lamamini` | `100.101.41.6` | Linux (WSL2) | Self-hosted GitHub Actions runner (LAMA_MINI) \u2014 E2E |\n| `lama-mini` | `100.89.222.122` | Windows | Self-hosted GitHub Actions runner (LAMA_MINI) \u2014 Windows builds |\n\nSSH: `sshpass -p \"$LAMAMINI_PASSWORD\" ssh rfq_user@<lamamini-ip>` or `sshpass -p \"$LAMAAI_DEV_PASSWORD\" ssh rfq_user@<lamaai-dev-ip>` (user `rfq_user`)\n\n**LAMA_MINI runner setup:**\n- WSL runner: `LAMA-MINI-WSL` \u2014 labels `self-hosted, linux, x64, e2e, wsl2, lama-mini` \u2014 active\n- Windows runner: `LAMA_MINI` \u2014 labels `self-hosted, x64, windows` \u2014 active\n"
+    },
+    {
+      "level": 2,
+      "title": "Global Constraints",
+      "start": 546,
+      "end": 552,
+      "line_count": 7,
+      "text": "## Global Constraints\n\n- **`rfqautomation-linux/` stays on `main`** \u2014 all work in worktrees\n- **All PRs opened in draft mode**\n- **Cloud stack is Railway (compute) + Supabase (database)** \u2014 separate services, not AWS\n- **MVP targets 10 users** \u2014 defer anything not needed at that scale\n- **Never introduce required env vars for on-prem** \u2014 customers auto-update and don't modify `.env`. Hardcode defaults; env vars override, not define."
+    }
+  ]
+}

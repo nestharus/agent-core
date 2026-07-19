@@ -1,0 +1,68 @@
+schema: operator-contract-v1
+source: agents/prototype-research-planner.md
+model: gpt-high
+description: Run the prototype research planning workflow for behaviors, UX, contracts, expectations, avenues, and anti-scope
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: originating
+  type: string
+  required: true
+  default_source: caller
+  description: '`originating context` (required): bug report, feature ambiguity, architectural unknown, stakeholder request, defer dossier, or similar source.'
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root` (required): target repository root for reading conventions and test placement.'
+- name: worktree_path
+  type: string
+  required: true
+  default_source: caller
+  description: '`worktree_path` (required): checkout where project test conventions can be inspected.'
+- name: planning_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`planning_dir` (required): durable planning root where research-plan and proposal artifacts are written.'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`scratch_dir` (required): temporary prompt, log, and audit-output location.'
+- name: user
+  type: string
+  required: false
+  default_source: caller
+  description: '`user preferences` (optional): explicit preferences to preserve in the plan.'
+- name: defer
+  type: string
+  required: false
+  default_source: caller
+  description: '`defer dossier` (optional): implementation-pipeline handoff context.'
+- name: downstream
+  type: string
+  required: true
+  default_source: caller
+  description: '`downstream consumer target` (required): normally `prototype-orchestrator.md` Phase P0.'
+- name: prototype
+  type: string
+  required: true
+  default_source: caller
+  description: '`downstream consumer target` (required): normally `prototype-orchestrator.md` Phase P0.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

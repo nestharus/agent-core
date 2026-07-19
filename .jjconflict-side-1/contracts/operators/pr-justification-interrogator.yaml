@@ -1,0 +1,98 @@
+schema: operator-contract-v1
+source: agents/pr-justification-interrogator.md
+model: gpt-high
+description: 'Conservative PR interrogator: reads the PR only, demands absolute justification for every change, opens threads for anything extraneous. No research, no recommendations.'
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: PR
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: metadata
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: title
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: description
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: files
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: additions
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: deletions
+  type: string
+  required: true
+  default_source: caller
+  description: PR metadata (title, description, files, additions/deletions)
+- name: The
+  type: string
+  required: true
+  default_source: caller
+  description: The full diff file
+- name: full
+  type: string
+  required: true
+  default_source: caller
+  description: The full diff file
+- name: diff
+  type: string
+  required: true
+  default_source: caller
+  description: The full diff file
+- name: file
+  type: string
+  required: true
+  default_source: caller
+  description: The full diff file
+- name: Current
+  type: string
+  required: true
+  default_source: caller
+  description: Current `threads.json` with history of prior rounds
+- name: threads
+  type: string
+  required: true
+  default_source: caller
+  description: Current `threads.json` with history of prior rounds
+- name: audit_history_path
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Interrogator` role history before pressing existing threads.'
+- name: Interrogator
+  type: string
+  required: false
+  default_source: caller
+  description: '`audit_history_path` (optional): canonical audit-history file. If present, read the shared round summaries, active watch signals, and the `Interrogator` role history before pressing existing threads.'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

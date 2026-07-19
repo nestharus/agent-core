@@ -1,0 +1,53 @@
+schema: operator-contract-v1
+source: agents/test-discovery.md
+model: gpt-high
+description: "Discover existing tests that cover changed product files via mechanical grep. Advisory only \u2014 never blocks, never classifies test quality."
+contract_status: minimum-generated-from-operator-sections
+inputs:
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: '`repo_root`: repo checkout'
+- name: scratch_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`scratch_dir`: writable directory for the report'
+- name: base_ref
+  type: string
+  required: true
+  default_source: caller
+  description: '`base_ref` (default `origin/main`): merge-base target'
+- name: spec_dir
+  type: string
+  required: true
+  default_source: caller
+  description: '`spec_dir` (default `${planning_root}/coverage`): spec directory (recorded, not consumed)'
+- name: product_globs
+  type: string
+  required: true
+  default_source: caller
+  description: '`product_globs` (default `[''backend/**/*.py'', ''frontend/src/**/*.{js,jsx,ts,tsx}'']`)'
+- name: test_roots
+  type: string
+  required: true
+  default_source: caller
+  description: '`test_roots` (default: project-specific test roots)'
+defaults: []
+outputs:
+- task: default
+  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

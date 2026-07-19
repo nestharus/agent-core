@@ -1,0 +1,56 @@
+schema: operator-contract-v1
+source: agents/pipeline-artifacts-operator.md
+model: gpt-high
+description: Manage pipeline scratch artifact naming and gitignore in worktrees. Standard filenames inside a configured worktree for prompts, responses, logs, and per-phase outputs. Prevents cross-session collisions on /tmp.
+inputs:
+- name: mode
+  type: enum
+  required: true
+  default_source: caller
+  description: mode
+- name: repo_root
+  type: path
+  required: false
+  default_source: caller
+  description: repo root
+- name: worktrees_root
+  type: path
+  required: false
+  default_source: base
+  description: worktrees root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+defaults:
+- name: worktrees_root
+  value: ${repo_root}/worktrees
+  source: base
+secrets: []
+outputs:
+- task: setup
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: audit
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+- task: cleanup
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- worktree-gitignore-edit
+- worktree-scratch-cleanup
+must_delegate:
+- pipeline-artifact-convention-mutation
+may_direct:
+- artifact-catalog-read
+forbidden_direct:
+- dispatch-wrapper-script-generation

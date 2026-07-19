@@ -1,0 +1,4 @@
+expected_audit_verdict: block-side-file-sha-mismatch
+description: The manifest records the canonical side-file digest, but the side-file bytes have been modified after projection, so Audit #2 must block before re-projection.
+applies_check: Audit #2 check 6 - side-file sha currentness
+step6c_invocation_start_at: 2026-05-16T20:03:00Z

@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-missing-side-file
+The side-file is absent; topology log content is not load-bearing evidence.

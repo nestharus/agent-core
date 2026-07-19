@@ -1,0 +1,2025 @@
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import os
+import copy
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+
+TOOL_DIR = Path(__file__).resolve().parents[1] / "tools" / "wu-session-migration"
+SPEC = importlib.util.spec_from_file_location(
+    "wu_session_migration", TOOL_DIR / "wu_session_migration.py"
+)
+assert SPEC is not None and SPEC.loader is not None
+MIGRATION = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MIGRATION)
+ApplyError = MIGRATION.ApplyError
+InputError = MIGRATION.InputError
+apply_plan = MIGRATION.apply_plan
+build_plan = MIGRATION.build_plan
+
+
+A = "a" * 40
+B = "b" * 40
+C = "c" * 40
+D = "d" * 40
+E = "e" * 40
+REAL_INVENTORY = Path(
+    "/home/nes/projects/agent-runner/planning/"
+    "hourly-suspicious-process-investigator-feature/.scratch/"
+    "age-260-session-migration-inventory.json"
+)
+REAL_INVENTORY_SHA256 = "f48f87265635fb362a37294071cef7f8d016c5ad502a4cda27491a835f262622"
+FROZEN_REAL_SQUASH_EVIDENCE = (
+    Path(__file__).resolve().parent / "fixtures" / "age-260-merged-squash-evidence.json"
+)
+
+
+@pytest.fixture(autouse=True)
+def isolated_transaction_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("WU_SESSION_MIGRATION_STATE_DIR", str(tmp_path / "transaction-state"))
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    yield
+    setattr(MIGRATION, "FAULT_HOOK", None)
+
+
+def _json_bytes(value: object) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _digest(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_json_bytes(value))
+
+
+def _capture(command: list[str], payload: object) -> dict[str, object]:
+    return {
+        "command": command,
+        "captured_at": "2026-07-19T00:00:00+00:00",
+        "payload": payload,
+        "payload_sha256": _digest(_canonical_bytes(payload)),
+    }
+
+
+def _merge_method_capture(
+    pr_url: str,
+    head_sha: str,
+    merge_sha: str,
+    method: str,
+    command: list[str] | None = None,
+) -> dict[str, object]:
+    if command is None:
+        parsed = pr_url.removeprefix("https://github.com/").split("/")
+        command = [
+            "gh",
+            "api",
+            "--method",
+            "PUT",
+            f"repos/{parsed[0]}/{parsed[1]}/pulls/{parsed[3]}/merge",
+            "-f",
+            f"merge_method={method.lower()}",
+            "-f",
+            f"sha={head_sha}",
+        ]
+    return {
+        "source": "github-merge-operation-response",
+        **_capture(
+            command,
+            {
+                "sha": merge_sha,
+                "merged": True,
+                "message": "Pull Request successfully merged",
+            },
+        ),
+    }
+
+
+def _evidence(
+    pr_url: str,
+    branch: str,
+    base: str,
+    *,
+    state: str = "OPEN",
+    head: str = B,
+    merge_sha: str | None = None,
+    merged_at: str | None = None,
+    parents: list[str] | None = None,
+    merge_method: str | None = None,
+    merge_method_command: list[str] | None = None,
+    branch_out: tuple[str, str, Path] | None = None,
+) -> dict[str, object]:
+    payload = {
+        "url": pr_url,
+        "state": state,
+        "headRefName": branch,
+        "headRefOid": head,
+        "baseRefName": base,
+        "baseRefOid": C,
+        "mergeCommit": {"oid": merge_sha} if merge_sha else None,
+        "mergedAt": merged_at,
+    }
+    record: dict[str, object] = {
+        "provider": _capture(["gh", "pr", "view", pr_url, "--json", "fields"], payload),
+        "merge_commit": None,
+        "merge_method": None,
+        "branch_out": None,
+    }
+    if merge_sha:
+        repository = branch_out[2] if branch_out else Path("/trusted/repo")
+        text = " ".join([merge_sha, *(parents or [])])
+        record["merge_commit"] = _capture(
+            ["git", "-C", str(repository), "show", "-s", "--format=%H %P", merge_sha],
+            text,
+        )
+        if merge_method is not None:
+            record["merge_method"] = _merge_method_capture(
+                pr_url,
+                head,
+                merge_sha,
+                merge_method,
+                merge_method_command,
+            )
+    if branch_out:
+        requested, resolved, repository = branch_out
+        record["branch_out"] = _capture(
+            ["git", "-C", str(repository), "rev-parse", "--verify", f"{requested}^{{commit}}"],
+            {
+                "repository": str(repository),
+                "requested_oid": requested,
+                "resolved_oid": resolved,
+            },
+        )
+    return record
+
+
+def _complete_fixture(tmp_path: Path) -> dict[str, Any]:
+    projects = [tmp_path / f"project-{index}" for index in range(7)]
+    planning_roots = [project / "planning" for project in projects]
+    index_paths = [root / "sessions.index.json" for root in planning_roots]
+    index_documents: dict[Path, dict[str, Any]] = {
+        path: {"sessions": []} for path in index_paths
+    }
+    manifests: list[dict[str, Any]] = []
+    manifest_documents: dict[Path, dict[str, Any] | None] = {}
+    cohort: list[dict[str, Any]] = []
+    index_rows: list[dict[str, Any]] = []
+    evidence: dict[str, Any] = {
+        "schema": MIGRATION.PR_EVIDENCE_SCHEMA,
+        "prs": {},
+    }
+
+    for index in range(42):
+        planning = planning_roots[index % 7]
+        path = planning / f"session-{index:03d}" / "session.json"
+        branch = "age-1" if index == 0 else f"branch-{index:03d}"
+        ticket = "AGE-1" if index == 0 else f"AGE-{index + 1}"
+        pr_url = (
+            "https://github.com/example/repo/pull/1"
+            if index == 0
+            else f"https://github.com/example/repo/pull/{index + 1}"
+        )
+        base = f"base-{index:03d}"
+        is_refusal = index >= 39
+        is_merged = 36 <= index <= 38
+        persisted_base = base if index < 25 else None
+        document: dict[str, Any] = {
+            "session_id": f"session-{index:03d}",
+            "ticket_id": None if is_refusal else ticket,
+            "ticket_system": "none" if is_refusal else "linear",
+            "branch": branch,
+            "branch_out_sha": A,
+            "draft_pr_url": pr_url,
+            "draft_pr_head_sha": B,
+            "worktree_path": str(projects[index % 7] / "worktrees" / branch),
+            "planning_dir": str(path.parent),
+            "scratch_dir": str(path.parent / ".scratch"),
+            "closed_at": None,
+        }
+        if persisted_base is not None:
+            document["base_branch"] = persisted_base
+        if is_merged:
+            document["merge_sha"] = E
+        manifest_documents[path] = document
+        classification = (
+            "merged but wake incomplete" if is_merged else "draft/open dormant and wakeable"
+        )
+        manifests.append(
+            {
+                "path": str(path),
+                "readable": True,
+                "classification": classification,
+                "fields": dict(document),
+            }
+        )
+        candidate: dict[str, Any] = {
+            "manifest_path": str(path),
+            "derived_session_manifest_path": str(path),
+            "classification": classification,
+            "ticket_id": None if is_refusal else ticket,
+            "ticket_system": "none" if is_refusal else "linear",
+            "branch": branch,
+            "branch_out_sha": A,
+            "persisted_head_sha": B,
+            "persisted_or_derived_base_branch": persisted_base,
+            "persisted_or_derived_pre_merge_base_sha": C if index in {36, 37} else None,
+            "pr_url": pr_url,
+            "merge_sha": E if is_merged else None,
+            "existing_index_rows": [],
+            "explicit_refusal_reasons": ["unprovable identity"] if is_refusal else [],
+            "fully_derivable_from_persisted_evidence": index in {36, 37},
+            "later_trusted_pr_query_requirements": ["trusted provider status"]
+            if index < 36 or index == 38
+            else [],
+        }
+        cohort.append(candidate)
+        if not is_refusal:
+            if is_merged:
+                evidence["prs"][pr_url] = _evidence(
+                    pr_url,
+                    branch,
+                    persisted_base or base,
+                    state="MERGED",
+                    merge_sha=E,
+                    merged_at="2026-07-18T12:00:00Z",
+                    parents=[C, B],
+                    branch_out=(A, A, projects[index % 7]),
+                )
+            else:
+                evidence["prs"][pr_url] = _evidence(
+                    pr_url,
+                    branch,
+                    persisted_base or base,
+                    branch_out=(A, A, projects[index % 7]),
+                )
+
+    # Exactly 30 distinct cohort manifests are indexed with two duplicate aliases.
+    for index in range(30):
+        candidate = cohort[index]
+        index_path = index_paths[index % 7]
+        row = {
+            "ticket_id": candidate["ticket_id"],
+            "ticket_system": candidate["ticket_system"],
+            "branch": candidate["branch"],
+            "draft_pr_url": candidate["pr_url"],
+            "draft_pr_head_sha": B,
+            "manifest_path": candidate["manifest_path"],
+        }
+        if candidate["persisted_or_derived_base_branch"] is not None:
+            row["base_branch"] = candidate["persisted_or_derived_base_branch"]
+        copies = 2 if index in {0, 1} else 1
+        for _ in range(copies):
+            locator_index = len(index_documents[index_path]["sessions"])
+            index_documents[index_path]["sessions"].append(dict(row))
+            locator = f"sessions[{locator_index}]"
+            candidate["existing_index_rows"].append(
+                {"index_path": str(index_path), "row_locator": locator}
+            )
+            index_rows.append(
+                {
+                    "index_path": str(index_path),
+                    "row_locator": locator,
+                    "classification": "draft/open dormant and wakeable",
+                    "linked_manifest_path": candidate["manifest_path"],
+                    "fields": dict(row),
+                }
+            )
+
+    noncohort_specs = [
+        (179, "already closed/post-merge complete", 76),
+        (82, "pre-PR/incomplete", 40),
+        (2, "abandoned/ambiguous", 1),
+        (1, "malformed/unreadable", 3),
+    ]
+    next_manifest = 42
+    for manifest_count, classification, row_count in noncohort_specs:
+        category_paths: list[Path] = []
+        for _ in range(manifest_count):
+            planning = planning_roots[next_manifest % 7]
+            path = planning / f"history-{next_manifest:03d}" / "session.json"
+            if classification == "malformed/unreadable":
+                manifest_documents[path] = None
+                fields: dict[str, Any] = {}
+                readable = False
+            else:
+                document = {
+                    "session_id": f"history-{next_manifest:03d}",
+                    "branch": f"history-{next_manifest:03d}",
+                    "closed_at": "2026-07-01T00:00:00Z"
+                    if classification == "already closed/post-merge complete"
+                    else None,
+                }
+                manifest_documents[path] = document
+                fields = dict(document)
+                readable = True
+            manifests.append(
+                {
+                    "path": str(path),
+                    "readable": readable,
+                    "classification": classification,
+                    "fields": fields,
+                }
+            )
+            category_paths.append(path)
+            next_manifest += 1
+        for row_index in range(row_count):
+            index_path = index_paths[(len(index_rows) + row_index) % 7]
+            row: dict[str, Any] = {
+                "ticket_id": f"HIST-{classification[:2]}-{row_index}",
+                "branch": f"history-row-{classification[:2]}-{row_index}",
+            }
+            linked: str | None = None
+            if classification != "malformed/unreadable":
+                linked = str(category_paths[row_index % len(category_paths)])
+                row["manifest_path"] = linked
+            locator_index = len(index_documents[index_path]["sessions"])
+            index_documents[index_path]["sessions"].append(row)
+            index_rows.append(
+                {
+                    "index_path": str(index_path),
+                    "row_locator": f"sessions[{locator_index}]",
+                    "classification": classification,
+                    "linked_manifest_path": linked,
+                    "fields": dict(row),
+                }
+            )
+
+    assert len(manifests) == 306
+    assert len(index_rows) == 152
+    index_files = [
+        {"path": str(path), "row_count": len(index_documents[path]["sessions"])}
+        for path in index_paths
+    ]
+    inventory = {
+        "schema": MIGRATION.INVENTORY_SCHEMA,
+        "scope": "fixture",
+        "counts": {
+            **MIGRATION.EXPECTED_COUNTS,
+            "manifest_classifications": {
+                "already closed/post-merge complete": 179,
+                "draft/open dormant and wakeable": 39,
+                "merged but wake incomplete": 3,
+                "pre-PR/incomplete": 82,
+                "abandoned/ambiguous": 2,
+                "malformed/unreadable": 1,
+            },
+            "index_row_classifications": {
+                "already closed/post-merge complete": 76,
+                "draft/open dormant and wakeable": 32,
+                "pre-PR/incomplete": 40,
+                "abandoned/ambiguous": 1,
+                "malformed/unreadable": 3,
+            },
+        },
+        "manifests": manifests,
+        "index_files": index_files,
+        "index_rows": index_rows,
+        "migration_cohort": cohort,
+    }
+    dispositions = {
+        "schema": MIGRATION.DISPOSITION_SCHEMA,
+        "dispositions": [
+            {
+                "manifest_path": cohort[index]["manifest_path"],
+                "reason": "Manager accepts loss of wake automation for unprovable identity.",
+                "accepted_breakage": True,
+                "owner": "manager",
+            }
+            for index in range(39, 42)
+        ],
+    }
+    resolutions = {
+        "schema": MIGRATION.CONFLICT_RESOLUTION_SCHEMA,
+        "resolutions": [],
+    }
+    fixture = {
+        "inventory_path": tmp_path / "inventory.json",
+        "evidence_path": tmp_path / "evidence.json",
+        "dispositions_path": tmp_path / "dispositions.json",
+        "resolutions_path": tmp_path / "resolutions.json",
+        "plan_path": tmp_path / "plan.json",
+        "inventory": inventory,
+        "evidence": evidence,
+        "dispositions": dispositions,
+        "resolutions": resolutions,
+        "manifest_documents": manifest_documents,
+        "index_documents": index_documents,
+        "manifest_paths": [Path(row["path"]) for row in manifests],
+        "index_paths": index_paths,
+        "cohort": cohort,
+    }
+    _persist(fixture)
+    return fixture
+
+
+def _persist(fixture: dict[str, Any]) -> str:
+    for path, document in fixture["manifest_documents"].items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if document is None:
+            path.write_text("{ malformed\n", encoding="utf-8")
+        else:
+            _write_json(path, document)
+    for path, document in fixture["index_documents"].items():
+        _write_json(path, document)
+    _write_json(fixture["inventory_path"], fixture["inventory"])
+    digest = _digest(fixture["inventory_path"].read_bytes())
+    fixture["evidence"]["reviewed_inventory_sha256"] = digest
+    _write_json(fixture["evidence_path"], fixture["evidence"])
+    _write_json(fixture["dispositions_path"], fixture["dispositions"])
+    _write_json(fixture["resolutions_path"], fixture["resolutions"])
+    fixture["reviewed_digest"] = digest
+    return digest
+
+
+def _plan(fixture: dict[str, Any], *, plan_path: Path | None = None) -> dict[str, Any]:
+    return build_plan(
+        fixture["inventory_path"],
+        fixture["evidence_path"],
+        fixture["dispositions_path"],
+        fixture["reviewed_digest"],
+        fixture["resolutions_path"],
+        plan_path,
+    )
+
+
+def _write_plan(fixture: dict[str, Any], plan: dict[str, Any]) -> Path:
+    _write_json(fixture["plan_path"], plan)
+    return fixture["plan_path"]
+
+
+def _target(fixture: dict[str, Any], index: int = 0) -> tuple[dict[str, Any], Path, dict[str, Any]]:
+    candidate = fixture["cohort"][index]
+    path = Path(candidate["manifest_path"])
+    document = fixture["manifest_documents"][path]
+    assert isinstance(document, dict)
+    return candidate, path, document
+
+
+def _refresh_manifest_inventory(fixture: dict[str, Any], path: Path) -> None:
+    row = next(item for item in fixture["inventory"]["manifests"] if item["path"] == str(path))
+    document = fixture["manifest_documents"][path]
+    assert isinstance(document, dict)
+    row["fields"] = dict(document)
+
+
+def _refresh_index_inventory(fixture: dict[str, Any], key: tuple[str, str]) -> None:
+    index_path = Path(key[0])
+    locator = key[1]
+    position = int(locator.removeprefix("sessions[").removesuffix("]"))
+    row = fixture["index_documents"][index_path]["sessions"][position]
+    inventory_row = next(
+        item
+        for item in fixture["inventory"]["index_rows"]
+        if (item["index_path"], item["row_locator"]) == key
+    )
+    inventory_row["fields"] = dict(row)
+
+
+def _runtime_manifest(planning_root: Path) -> tuple[Path, dict[str, Any]]:
+    manifest_path = planning_root / "AGE-260" / "session.json"
+    manifest_path.parent.mkdir(parents=True)
+    return manifest_path, {
+        "session_id": "runtime-session",
+        "ticket_id": "AGE-260",
+        "ticket_system": "linear",
+        "branch": "age-260-runtime",
+        "base_branch": "main",
+        "branch_out_sha": A,
+        "repo_root": str(planning_root.parent / "trunk"),
+        "worktree_path": str(planning_root.parent / "worktrees" / "age-260-runtime"),
+        "planning_dir": str(manifest_path.parent),
+        "scratch_dir": str(manifest_path.parent / ".scratch"),
+        "session_manifest_path": str(manifest_path),
+        "phase_history": [],
+        "draft_pr_url": None,
+        "draft_pr_number": None,
+        "draft_pr_head_sha": None,
+        "pr_open_base_sha": None,
+        "pre_merge_base_sha": None,
+        "merge_sha": None,
+        "post_merge_base_sha": None,
+        "merged_at": None,
+        "post_merge": {},
+        "successor_session_brief": None,
+        "closed_at": None,
+    }
+
+
+def _active_row(manifest: dict[str, Any], manifest_path: Path) -> dict[str, Any]:
+    return MIGRATION._canonical_index_row(manifest, manifest_path)
+
+
+def _row_identity(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: row[key] for key in MIGRATION.ROW_IDENTITY_KEYS}
+
+
+def _write_runtime_request(
+    request_path: Path,
+    operation: str,
+    planning_root: Path,
+    manifest_path: Path,
+    index_path: Path,
+    replacement_manifest: dict[str, Any],
+    replacement_index: dict[str, Any],
+    row_identity: dict[str, Any] | None,
+) -> Path:
+    request = {
+        "schema": MIGRATION.RUNTIME_REQUEST_SCHEMA,
+        "operation": operation,
+        "planning_root": str(planning_root),
+        "manifest_path": str(manifest_path),
+        "index_path": str(index_path),
+        "row_identity": row_identity,
+        "sources": {
+            "manifest": MIGRATION.runtime_source_identity(manifest_path),
+            "index": MIGRATION.runtime_source_identity(index_path),
+        },
+        "replacement_manifest": replacement_manifest,
+        "replacement_index": replacement_index,
+        "input_set_sha256": "",
+        "payload_sha256": "",
+    }
+    request["input_set_sha256"], request["payload_sha256"] = MIGRATION.runtime_request_digests(request)
+    _write_json(request_path, request)
+    return request_path
+
+
+def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
+    planning_root = tmp_path / "project" / "planning"
+    planning_root.mkdir(parents=True)
+    manifest_path, initial_manifest = _runtime_manifest(planning_root)
+    active_path = planning_root / "sessions.active-wake.json"
+    operations = ["phase0-init", "phase7-upsert", "phase9-update", "resumer-update", "resumer-close"]
+
+    for operation in operations:
+        if operation == "phase0-init":
+            replacement_manifest = copy.deepcopy(initial_manifest)
+            replacement_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": []}
+            index_path = active_path
+            identity = None
+        else:
+            current_manifest = json.loads(manifest_path.read_text())
+            replacement_manifest = copy.deepcopy(current_manifest)
+            index_path = active_path
+            if operation == "phase7-upsert":
+                replacement_manifest.update(
+                    {
+                        "draft_pr_url": "https://github.com/example/repo/pull/260",
+                        "draft_pr_number": 260,
+                        "draft_pr_head_sha": B,
+                        "pr_open_base_sha": C,
+                        "phase_history": ["phase7"],
+                    }
+                )
+            elif operation == "phase9-update":
+                replacement_manifest.update(
+                    {
+                        "phase_8_reviewed_is_draft": True,
+                        "phase_8_reviewed_base_sha": C,
+                        "phase_8_reviewed_head_sha": B,
+                        "phase_9_currentness_result": "PASS",
+                        "phase_history": ["phase7", "phase9"],
+                    }
+                )
+            elif operation == "resumer-update":
+                replacement_manifest.update(
+                    {
+                        "pre_merge_base_sha": C,
+                        "merge_sha": E,
+                        "merged_at": "2026-07-19T00:00:00Z",
+                        "phase_history": ["phase7", "phase9", "wake"],
+                    }
+                )
+            else:
+                replacement_manifest.update(
+                    {
+                        "closed_at": "2026-07-19T01:00:00Z",
+                        "post_merge": {"tests": "PASS"},
+                        "phase_history": ["phase7", "phase9", "wake", "closed"],
+                    }
+                )
+            row = _active_row(replacement_manifest, manifest_path)
+            identity = _row_identity(row)
+            if operation == "phase7-upsert":
+                replacement_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": [row]}
+            else:
+                replacement_index = json.loads(active_path.read_text())
+                if operation == "resumer-close":
+                    replacement_index["sessions"] = []
+                else:
+                    replacement_index["sessions"] = [row]
+        request_path = _write_runtime_request(
+            tmp_path / "requests" / f"{operation}.json",
+            operation,
+            planning_root,
+            manifest_path,
+            index_path,
+            replacement_manifest,
+            replacement_index,
+            identity,
+        )
+        if operation == target_operation:
+            return {
+                "operation": operation,
+                "request_path": request_path,
+                "planning_root": planning_root,
+                "manifest_path": manifest_path,
+                "index_path": index_path,
+                "replacement_manifest": replacement_manifest,
+                "replacement_index": replacement_index,
+            }
+        MIGRATION.apply_runtime_request(request_path, operation)
+    raise AssertionError(target_operation)
+
+
+def _transaction_artifacts(paths: list[Path]) -> list[Path]:
+    artifacts: list[Path] = []
+    for path in paths:
+        artifacts.extend(path.parent.glob(f".{path.name}.*.backup"))
+        artifacts.extend(path.parent.glob(f".{path.name}.*.replacement"))
+    return artifacts
+
+
+def test_open_dry_run_is_deterministic_no_write_and_builds_seven_active_indexes(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    before = {path: path.read_bytes() for path in fixture["manifest_paths"] + fixture["index_paths"]}
+
+    first = _plan(fixture, plan_path=fixture["plan_path"])
+    second = _plan(fixture, plan_path=fixture["plan_path"])
+
+    assert first == second
+    assert first["eligible"] is True
+    assert first["rows"][0]["verdict"] == "migrated-open"
+    assert first["rows"][0]["pre_merge_base_sha"] is None
+    assert len(first["active_index_paths"]) == 7
+    assert {path: path.read_bytes() for path in before} == before
+    assert not any(Path(path).exists() for path in first["active_index_paths"])
+
+
+def test_apply_writes_canonical_manifest_and_active_index_but_preserves_source_index(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    _, manifest_path, _ = _target(fixture)
+    source_indexes = {path: path.read_bytes() for path in fixture["index_paths"]}
+    plan = _plan(fixture)
+
+    apply_plan(_write_plan(fixture, plan))
+
+    manifest = json.loads(manifest_path.read_text())
+    active_path = fixture["index_paths"][0].with_name("sessions.active-wake.json")
+    active = json.loads(active_path.read_text())
+    assert active["schema"] == MIGRATION.ACTIVE_INDEX_SCHEMA
+    row = next(item for item in active["sessions"] if item["session_manifest_path"] == str(manifest_path))
+    assert row["draft_pr_head_sha"] == B
+    assert manifest["pre_merge_base_sha"] is None
+    assert manifest["session_manifest_path"] == str(manifest_path)
+    assert not MIGRATION.RETIRED_KEYS & set(manifest)
+    assert {path: path.read_bytes() for path in source_indexes} == source_indexes
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_active_indexes_exclude_history_placeholders_and_accepted_breakage(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    plan = _plan(fixture)
+    apply_plan(_write_plan(fixture, plan))
+
+    active_rows = []
+    for source in fixture["index_paths"]:
+        active = json.loads(source.with_name("sessions.active-wake.json").read_text())
+        active_rows.extend(active["sessions"])
+    assert len(active_rows) == 39
+    assert all(row["ticket_id"] is not None for row in active_rows)
+    assert all("history-row" not in row["branch"] for row in active_rows)
+    assert all(Path(row["session_manifest_path"]).name == "session.json" for row in active_rows)
+
+
+@pytest.mark.parametrize(
+    ("state", "merge_sha", "merged_at", "merge_capture"),
+    [
+        ("OPEN", E, None, None),
+        ("CLOSED", None, "2026-07-18T12:00:00Z", None),
+        ("OPEN", None, None, _capture(["git", "show"], f"{E} {C}")),
+    ],
+)
+def test_unmerged_state_rejects_any_merge_evidence(
+    tmp_path: Path,
+    state: str,
+    merge_sha: str | None,
+    merged_at: str | None,
+    merge_capture: dict[str, object] | None,
+):
+    fixture = _complete_fixture(tmp_path)
+    candidate, _, _ = _target(fixture)
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    payload = record["provider"]["payload"]
+    payload["state"] = state
+    payload["mergeCommit"] = {"oid": merge_sha} if merge_sha else None
+    payload["mergedAt"] = merged_at
+    record["provider"]["payload_sha256"] = _digest(_canonical_bytes(payload))
+    record["merge_commit"] = merge_capture
+    _persist(fixture)
+
+    plan = _plan(fixture)
+
+    assert plan["eligible"] is False
+    assert plan["rows"][0]["reason"] == "contradictory-pr-state-evidence"
+
+
+@pytest.mark.parametrize(
+    ("parents", "head", "merge_sha", "merge_method", "reason"),
+    [
+        ([C, B], B, E, None, None),
+        ([C], B, E, "SQUASH", None),
+        ([C], B, E, None, "missing-or-malformed-merge-method-capture"),
+        ([C], B, E, "REBASE", "ambiguous-pre-merge-base"),
+        ([C], B, E, "MERGE", "ambiguous-pre-merge-base"),
+        ([C], E, E, "SQUASH", "ambiguous-pre-merge-base"),
+        ([C, D, B], B, E, None, "ambiguous-pre-merge-base"),
+        ([C, D], B, E, None, "ambiguous-pre-merge-base"),
+    ],
+)
+def test_merged_state_accepts_only_evidence_backed_merge_or_squash_shape(
+    tmp_path: Path,
+    parents: list[str],
+    head: str,
+    merge_sha: str,
+    merge_method: str | None,
+    reason: str | None,
+):
+    fixture = _complete_fixture(tmp_path)
+    candidate, path, manifest = _target(fixture)
+    candidate["classification"] = "merged but wake incomplete"
+    candidate["merge_sha"] = merge_sha
+    manifest["merge_sha"] = merge_sha
+    _refresh_manifest_inventory(fixture, path)
+    fixture["evidence"]["prs"][candidate["pr_url"]] = _evidence(
+        candidate["pr_url"], candidate["branch"], candidate["persisted_or_derived_base_branch"],
+        state="MERGED",
+        head=head,
+        merge_sha=merge_sha,
+        merged_at="2026-07-18T12:00:00Z",
+        parents=parents,
+        merge_method=merge_method,
+        branch_out=(A, A, path.parents[2]),
+    )
+    _persist(fixture)
+
+    plan = _plan(fixture)
+
+    if reason:
+        assert plan["eligible"] is False
+        assert plan["rows"][0]["reason"] == reason
+    else:
+        assert plan["rows"][0]["verdict"] == "migrated-merged"
+        assert plan["rows"][0]["pre_merge_base_sha"] == C
+
+
+def test_persisted_pre_merge_baseline_conflict_is_refused(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, path, manifest = _target(fixture, 36)
+    candidate["persisted_or_derived_pre_merge_base_sha"] = D
+    manifest["pre_merge_base_sha"] = D
+    _refresh_manifest_inventory(fixture, path)
+    _persist(fixture)
+
+    plan = _plan(fixture)
+
+    row = next(item for item in plan["rows"] if item["manifest_path"] == str(path))
+    assert row["reason"] == "persisted-pre-merge-base-conflict"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("extra", "missing-or-malformed-merge-method-capture"),
+        ("digest", "merge-method-capture-digest-mismatch"),
+        ("source", "unsupported-merge-method-capture-source"),
+    ],
+)
+def test_one_parent_merge_method_capture_is_closed_and_hash_bound(
+    mutation: str, reason: str, tmp_path: Path
+):
+    fixture = _complete_fixture(tmp_path)
+    candidate, path, manifest = _target(fixture)
+    candidate["classification"] = "merged but wake incomplete"
+    candidate["merge_sha"] = E
+    manifest["merge_sha"] = E
+    _refresh_manifest_inventory(fixture, path)
+    record = _evidence(
+        candidate["pr_url"],
+        candidate["branch"],
+        candidate["persisted_or_derived_base_branch"],
+        state="MERGED",
+        merge_sha=E,
+        merged_at="2026-07-18T12:00:00Z",
+        parents=[C],
+        merge_method="SQUASH",
+        branch_out=(A, A, path.parents[2]),
+    )
+    capture = record["merge_method"]
+    assert isinstance(capture, dict)
+    if mutation == "extra":
+        capture["extra"] = True
+    elif mutation == "digest":
+        capture["payload"]["message"] = "tampered"
+    else:
+        capture["source"] = "local-topology-inference"
+    fixture["evidence"]["prs"][candidate["pr_url"]] = record
+    _persist(fixture)
+
+    assert _plan(fixture)["rows"][0]["reason"] == reason
+
+
+def test_abbreviated_branch_out_requires_hash_bound_repository_resolution(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, path, manifest = _target(fixture)
+    candidate["branch_out_sha"] = "aaaaaaa"
+    manifest["branch_out_sha"] = "aaaaaaa"
+    _refresh_manifest_inventory(fixture, path)
+    _persist(fixture)
+    refused = _plan(fixture)
+    assert refused["rows"][0]["reason"] == "branch-out-requires-trusted-repository-resolution"
+
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    record["branch_out"] = _capture(
+        ["git", "-C", str(path.parents[2]), "rev-parse", "--verify", "aaaaaaa^{commit}"],
+        {"repository": str(path.parents[2]), "requested_oid": "aaaaaaa", "resolved_oid": A},
+    )
+    _persist(fixture)
+    accepted = _plan(fixture)
+    assert accepted["rows"][0]["verdict"] == "migrated-open"
+
+
+def test_exact_locator_head_conflict_refuses_even_with_accepted_breakage(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, _, _ = _target(fixture)
+    locator = candidate["existing_index_rows"][0]
+    key = (locator["index_path"], locator["row_locator"])
+    index = int(key[1].removeprefix("sessions[").removesuffix("]"))
+    fixture["index_documents"][Path(key[0])]["sessions"][index]["draft_pr_head_sha"] = D
+    _refresh_index_inventory(fixture, key)
+    candidate["explicit_refusal_reasons"] = ["head conflict"]
+    fixture["dispositions"]["dispositions"].append(
+        {
+            "manifest_path": candidate["manifest_path"],
+            "reason": "Accepted loss is not a conflict resolution.",
+            "accepted_breakage": True,
+            "owner": "manager",
+        }
+    )
+    # Preserve the reviewed aggregate of three explicit refusals by moving one old refusal out.
+    old = fixture["cohort"][39]
+    old["explicit_refusal_reasons"] = []
+    old["later_trusted_pr_query_requirements"] = ["trusted provider status"]
+    fixture["dispositions"]["dispositions"] = [
+        row for row in fixture["dispositions"]["dispositions"] if row["manifest_path"] != old["manifest_path"]
+    ]
+    fixture["evidence"]["prs"][old["pr_url"]] = _evidence(
+        old["pr_url"], old["branch"], f"base-{39:03d}"
+    )
+    _persist(fixture)
+
+    plan = _plan(fixture)
+
+    assert plan["rows"][0]["verdict"] == "refused"
+    assert "source-identity-conflict" in plan["rows"][0]["reason"]
+
+
+def test_manager_conflict_resolution_must_hash_discarded_row_and_retained_identity(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, _, _ = _target(fixture)
+    locator = candidate["existing_index_rows"][0]
+    key = (locator["index_path"], locator["row_locator"])
+    position = int(key[1].removeprefix("sessions[").removesuffix("]"))
+    source_row = fixture["index_documents"][Path(key[0])]["sessions"][position]
+    source_row["draft_pr_head_sha"] = D
+    _refresh_index_inventory(fixture, key)
+    fixture["resolutions"]["resolutions"] = [
+        {
+            "index_path": key[0],
+            "row_locator": key[1],
+            "owner": "manager",
+            "conflict_resolution": True,
+            "reason": "Retain manifest/provider attempt after independent review.",
+            "discarded_row_sha256": _digest(_canonical_bytes(source_row)),
+            "retained_identity": {
+                "manifest_path": candidate["manifest_path"],
+                "ticket_id": candidate["ticket_id"],
+                "ticket_system": candidate["ticket_system"],
+                "branch": candidate["branch"],
+                "pr_url": candidate["pr_url"],
+                "head_sha": candidate["persisted_head_sha"],
+                "base_branch": candidate["persisted_or_derived_base_branch"],
+            },
+        }
+    ]
+    _persist(fixture)
+
+    plan = _plan(fixture)
+
+    assert plan["rows"][0]["verdict"] == "migrated-open"
+
+
+@pytest.mark.parametrize("mutation", ["truncate-manifests", "add-cohort", "bad-count", "duplicate-locator"])
+def test_complete_inventory_reconciliation_rejects_truncation_additions_and_duplicates(
+    tmp_path: Path, mutation: str
+):
+    fixture = _complete_fixture(tmp_path)
+    inventory = fixture["inventory"]
+    if mutation == "truncate-manifests":
+        inventory["manifests"].pop()
+    elif mutation == "add-cohort":
+        inventory["migration_cohort"].append(dict(inventory["migration_cohort"][0]))
+    elif mutation == "bad-count":
+        inventory["counts"]["index_rows"] = 151
+    else:
+        inventory["index_rows"][1]["index_path"] = inventory["index_rows"][0]["index_path"]
+        inventory["index_rows"][1]["row_locator"] = inventory["index_rows"][0]["row_locator"]
+    _write_json(fixture["inventory_path"], inventory)
+    digest = _digest(fixture["inventory_path"].read_bytes())
+
+    with pytest.raises(InputError):
+        build_plan(
+            fixture["inventory_path"], fixture["evidence_path"], fixture["dispositions_path"],
+            digest, fixture["resolutions_path"], fixture["plan_path"]
+        )
+
+
+def test_reviewed_inventory_digest_is_mandatory_and_exact(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    with pytest.raises(InputError, match="reviewed inventory SHA-256 mismatch"):
+        build_plan(
+            fixture["inventory_path"], fixture["evidence_path"], fixture["dispositions_path"],
+            "0" * 64, fixture["resolutions_path"], fixture["plan_path"]
+        )
+
+
+@pytest.mark.parametrize("collision", ["manifest", "index", "inventory", "inside-planning"])
+def test_plan_destination_rejects_source_aliases_and_managed_tree(collision: str, tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    if collision == "manifest":
+        plan_path = fixture["manifest_paths"][0]
+    elif collision == "index":
+        plan_path = fixture["index_paths"][0]
+    elif collision == "inventory":
+        plan_path = fixture["inventory_path"]
+    else:
+        plan_path = fixture["index_paths"][0].parent / "scratch" / "plan.json"
+        plan_path.parent.mkdir()
+    with pytest.raises(InputError):
+        _plan(fixture, plan_path=plan_path)
+
+
+def test_plan_destination_rejects_existing_inode_alias(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    alias = tmp_path / "plan-hardlink.json"
+    os.link(fixture["inventory_path"], alias)
+    with pytest.raises(InputError, match="inode aliases"):
+        _plan(fixture, plan_path=alias)
+
+
+def test_symlink_source_and_path_escape_are_refused(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    source = fixture["manifest_paths"][0]
+    real = source.with_name("real-session.json")
+    source.rename(real)
+    source.symlink_to(real)
+    with pytest.raises(InputError, match="symlink"):
+        _plan(fixture)
+
+    fixture = _complete_fixture(tmp_path / "escape-case")
+    fixture["inventory"]["migration_cohort"][0]["manifest_path"] = str(tmp_path / "outside" / "session.json")
+    _write_json(fixture["inventory_path"], fixture["inventory"])
+    fixture["reviewed_digest"] = _digest(fixture["inventory_path"].read_bytes())
+    with pytest.raises(InputError, match="does not reconcile"):
+        _plan(fixture)
+
+
+def test_duplicate_inode_alias_is_refused(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    first, second = fixture["manifest_paths"][:2]
+    second.unlink()
+    os.link(first, second)
+    with pytest.raises(InputError, match="device/inode"):
+        _plan(fixture)
+
+
+def test_second_identity_check_prevents_overwriting_concurrent_writer(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    plan = _plan(fixture)
+    source_write = next(write for write in plan["writes"] if write["source_exists"])
+    path = Path(source_write["path"])
+    concurrent = b'{"concurrent": true}\n'
+
+    def race(point: str, index: int) -> None:
+        if point == "stage" and index == 1:
+            path.write_bytes(concurrent)
+
+    setattr(MIGRATION, "FAULT_HOOK", race)
+    with pytest.raises(ApplyError, match="stale source identity"):
+        apply_plan(_write_plan(fixture, plan))
+    assert path.read_bytes() == concurrent
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_post_journal_source_mutation_is_preserved_and_never_replaced(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase9-update")
+    path = case["manifest_path"]
+    concurrent = b'{"post_journal": true}\n'
+
+    def race(point: str, index: int) -> None:
+        if (point, index) == ("journal-transition", 0):
+            path.write_bytes(concurrent)
+
+    setattr(MIGRATION, "FAULT_HOOK", race)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+    assert path.read_bytes() == concurrent
+    assert MIGRATION._journal_path().exists()
+
+
+def test_later_pre_replacement_mutation_rolls_back_earlier_target_and_is_preserved(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    manifest_before = case["manifest_path"].read_bytes()
+    index_path = case["index_path"]
+    concurrent = b'{"later_target": true}\n'
+
+    def race(point: str, index: int) -> None:
+        if (point, index) == ("replacement", 1):
+            index_path.write_bytes(concurrent)
+
+    setattr(MIGRATION, "FAULT_HOOK", race)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+    assert case["manifest_path"].read_bytes() == manifest_before
+    assert index_path.read_bytes() == concurrent
+    assert MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize(
+    ("point", "index"),
+    [
+        ("stage", 0),
+        ("stage", 1),
+        ("replace", 0),
+        ("replace", 1),
+        ("directory-fsync", 0),
+        ("directory-fsync", 1),
+        ("journal", 0),
+        ("journal", 1),
+    ],
+)
+def test_fault_injection_rolls_back_every_target(point: str, index: int, tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    plan = _plan(fixture)
+    before = {
+        Path(write["path"]): Path(write["path"]).read_bytes() if Path(write["path"]).exists() else None
+        for write in plan["writes"]
+    }
+
+    def fail(actual_point: str, actual_index: int) -> None:
+        if (actual_point, actual_index) == (point, index):
+            raise OSError(f"fault {point}:{index}")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError):
+        apply_plan(_write_plan(fixture, plan))
+    for path, original in before.items():
+        assert path.read_bytes() == original if original is not None else not path.exists()
+
+
+def test_rollback_failure_is_aggregated_and_later_recovery_completes(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    plan = _plan(fixture)
+    plan_path = _write_plan(fixture, plan)
+    original = Path(plan["writes"][0]["path"]).read_bytes()
+
+    def fail(point: str, index: int) -> None:
+        if (point, index) in {("directory-fsync", 1), ("rollback", 0)}:
+            raise OSError(f"fault {point}:{index}")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        apply_plan(plan_path)
+    assert MIGRATION._journal_path().exists()
+
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    MIGRATION.recover_incomplete_transaction()
+    assert Path(plan["writes"][0]["path"]).read_bytes() == original
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_subprocess_interruption_is_recovered_before_next_apply(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    plan = _plan(fixture)
+    plan_path = _write_plan(fixture, plan)
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "directory-fsync:0"
+    command = [sys.executable, str(TOOL_DIR), "apply", "--plan", str(plan_path)]
+
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    assert MIGRATION._journal_path().exists()
+
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    dry_run_command = [
+        sys.executable,
+        str(TOOL_DIR),
+        "dry-run",
+        "--inventory",
+        str(fixture["inventory_path"]),
+        "--reviewed-inventory-sha256",
+        fixture["reviewed_digest"],
+        "--pr-evidence",
+        str(fixture["evidence_path"]),
+        "--dispositions",
+        str(fixture["dispositions_path"]),
+        "--conflict-resolutions",
+        str(fixture["resolutions_path"]),
+        "--plan",
+        str(plan_path),
+    ]
+    recovered = subprocess.run(dry_run_command, env=env, text=True, capture_output=True)
+    assert recovered.returncode == 0, recovered.stderr
+    applied = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert applied.returncode == 0, applied.stderr
+    assert not MIGRATION._journal_path().exists()
+    assert all(Path(path).exists() for path in plan["active_index_paths"])
+
+
+def test_multi_parent_recovery_rolls_back_reachable_target_before_later_completion(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    paths = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() for path in paths}
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "journal-transition:2"
+
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    assert case["manifest_path"].read_bytes() == _json_bytes(case["replacement_manifest"])
+    assert case["index_path"].read_bytes() == _json_bytes(case["replacement_index"])
+
+    parent = case["manifest_path"].parent
+    unavailable_parent = parent.with_name(f"{parent.name}-unavailable")
+    parent.rename(unavailable_parent)
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    try:
+        recovered = subprocess.run(command, env=env, text=True, capture_output=True)
+
+        assert recovered.returncode == 3
+        assert "Traceback" not in recovered.stderr
+        assert str(case["manifest_path"]) in recovered.stderr
+        assert (unavailable_parent / "session.json").read_bytes() == _json_bytes(
+            case["replacement_manifest"]
+        )
+        assert case["index_path"].read_bytes() == before[case["index_path"]]
+        assert MIGRATION._journal_path().exists()
+    finally:
+        unavailable_parent.rename(parent)
+
+    completed = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert completed.returncode == 3
+    assert "Traceback" not in completed.stderr
+    assert {path: path.read_bytes() for path in paths} == before
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_cli_exit_classes_and_plan_output_io_are_concise(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    malformed = tmp_path / "malformed-plan.json"
+    malformed.write_text("{", encoding="utf-8")
+    assert MIGRATION.main(["apply", "--plan", str(malformed)]) == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+    fixture = _complete_fixture(tmp_path / "fixture")
+    bad_output = tmp_path / "missing-parent" / "plan.json"
+    code = MIGRATION.main(
+        [
+            "dry-run", "--inventory", str(fixture["inventory_path"]),
+            "--reviewed-inventory-sha256", fixture["reviewed_digest"],
+            "--pr-evidence", str(fixture["evidence_path"]),
+            "--dispositions", str(fixture["dispositions_path"]),
+            "--conflict-resolutions", str(fixture["resolutions_path"]),
+            "--plan", str(bad_output),
+        ]
+    )
+    assert code == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_cli_returns_one_for_refusal_and_three_for_stale_apply(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, manifest_path, _ = _target(fixture)
+    del fixture["evidence"]["prs"][candidate["pr_url"]]
+    _persist(fixture)
+    args = [
+        "dry-run", "--inventory", str(fixture["inventory_path"]),
+        "--reviewed-inventory-sha256", fixture["reviewed_digest"],
+        "--pr-evidence", str(fixture["evidence_path"]),
+        "--dispositions", str(fixture["dispositions_path"]),
+        "--conflict-resolutions", str(fixture["resolutions_path"]),
+        "--plan", str(fixture["plan_path"]),
+    ]
+    assert MIGRATION.main(args) == 1
+
+    fixture = _complete_fixture(tmp_path / "stale")
+    plan = _plan(fixture)
+    _write_plan(fixture, plan)
+    manifest_path = Path(fixture["cohort"][0]["manifest_path"])
+    manifest_path.write_text("{}\n", encoding="utf-8")
+    assert MIGRATION.main(["apply", "--plan", str(fixture["plan_path"])]) == 3
+
+
+def test_dry_run_recomputes_raw_capture_digest_and_command(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, _, _ = _target(fixture)
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    record["provider"]["payload"]["headRefOid"] = D
+    _persist(fixture)
+    digest_refusal = _plan(fixture)
+    assert digest_refusal["rows"][0]["reason"] == "provider-capture-digest-mismatch"
+
+    fixture = _complete_fixture(tmp_path / "command")
+    candidate, _, _ = _target(fixture)
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    record["provider"]["command"] = ["printf", "fake"]
+    _persist(fixture)
+    command_refusal = _plan(fixture)
+    assert command_refusal["rows"][0]["reason"] == "provider-capture-command-mismatch"
+
+
+def test_raw_merged_state_and_full_branch_out_resolution_are_required(tmp_path: Path):
+    fixture = _complete_fixture(tmp_path)
+    candidate, _, _ = _target(fixture, 36)
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    assert record["provider"]["payload"]["state"] == "MERGED"
+    accepted = next(
+        row for row in _plan(fixture)["rows"] if row["manifest_path"] == candidate["manifest_path"]
+    )
+    assert accepted["verdict"] == "migrated-merged"
+
+    record["branch_out"] = None
+    _persist(fixture)
+    refused = _plan(fixture)
+    row = next(item for item in refused["rows"] if item["manifest_path"] == candidate["manifest_path"])
+    assert row["reason"] == "branch-out-requires-trusted-repository-resolution"
+
+
+@pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
+def test_runtime_writer_operations_execute_nominally(operation: str, tmp_path: Path):
+    case = _runtime_case(tmp_path, operation)
+
+    code = MIGRATION.main([operation, "--request", str(case["request_path"])])
+
+    assert code == 0
+    assert json.loads(case["manifest_path"].read_text()) == case["replacement_manifest"]
+    assert json.loads(case["index_path"].read_text()) == case["replacement_index"]
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
+def test_runtime_writer_operations_roll_back_cross_file_failure(operation: str, tmp_path: Path):
+    case = _runtime_case(tmp_path, operation)
+    paths = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() if path.exists() else None for path in paths}
+
+    def fail(point: str, index: int) -> None:
+        if (point, index) == ("commit-parent-fsync", 0):
+            raise OSError("runtime commit fault")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError):
+        MIGRATION.apply_runtime_request(case["request_path"], operation)
+    setattr(MIGRATION, "FAULT_HOOK", None)
+
+    assert {path: path.read_bytes() if path.exists() else None for path in paths} == before
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
+def test_runtime_writer_operations_recover_subprocess_interruption(operation: str, tmp_path: Path):
+    case = _runtime_case(tmp_path, operation)
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "commit-parent-fsync:0"
+    command = [sys.executable, str(TOOL_DIR), operation, "--request", str(case["request_path"])]
+
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    assert MIGRATION._journal_path().exists()
+
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    recovered_stale = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert recovered_stale.returncode == (0 if operation == "phase0-init" else 3)
+    assert "Traceback" not in recovered_stale.stderr
+    assert not MIGRATION._journal_path().exists()
+    if recovered_stale.returncode == 0:
+        return
+    refreshed = _write_runtime_request(
+        case["request_path"],
+        operation,
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        case["replacement_index"],
+        None
+        if operation == "phase0-init"
+        else _row_identity(_active_row(case["replacement_manifest"], case["manifest_path"])),
+    )
+    completed = subprocess.run(
+        [sys.executable, str(TOOL_DIR), operation, "--request", str(refreshed)],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("point", "index"),
+    [
+        ("backup-create", 0),
+        ("backup-file-fsync", 0),
+        ("backup-parent-fsync", 0),
+        ("replacement-create", 0),
+        ("replacement-file-fsync", 0),
+        ("replacement-parent-fsync", 0),
+        ("journal-create", 0),
+        ("journal-write", 0),
+        ("journal-file-fsync", 0),
+        ("journal-replace", 0),
+        ("journal-parent-fsync", 0),
+        ("journal-transition", 0),
+        ("replacement", 0),
+        ("commit-parent-fsync", 0),
+    ],
+)
+def test_shared_transaction_fault_stages_restore_sources(point: str, index: int, tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase9-update")
+    paths = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() for path in paths}
+
+    def fail(actual_point: str, actual_index: int) -> None:
+        if (actual_point, actual_index) == (point, index):
+            raise OSError(f"fault {point}:{index}")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    if MIGRATION._journal_path().exists():
+        MIGRATION.recover_incomplete_transaction()
+    assert {path: path.read_bytes() for path in paths} == before
+
+
+@pytest.mark.parametrize(
+    ("point", "artifact"),
+    [("backup-write", "backup"), ("replacement-write", "replacement")],
+)
+def test_partial_identity_unbound_transaction_artifact_is_preserved(
+    point: str, artifact: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    paths = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() for path in paths}
+
+    def fail(actual_point: str, actual_index: int) -> None:
+        if (actual_point, actual_index) == (point, 0):
+            raise OSError(f"fault {point}:0")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    artifact_path = Path(journal["ordered_targets"][0][f"{artifact}_path"])
+
+    assert artifact_path.exists()
+    with pytest.raises(ApplyError, match="identity-unbound transaction artifact"):
+        MIGRATION.recover_incomplete_transaction()
+    assert artifact_path.exists()
+    assert MIGRATION._journal_path().exists()
+    assert {path: path.read_bytes() for path in paths} == before
+
+
+@pytest.mark.parametrize(
+    ("operation", "rollback_point"),
+    [("phase0-init", "rollback-unlink"), ("phase9-update", "rollback-replace"), ("phase9-update", "rollback-parent-fsync")],
+)
+def test_rollback_stage_failures_retain_journal_and_recover(
+    operation: str, rollback_point: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation)
+    paths = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() if path.exists() else None for path in paths}
+
+    def fail(point: str, index: int) -> None:
+        if (point, index) in {("commit-parent-fsync", 0), (rollback_point, 0)}:
+            raise OSError(f"fault {point}:{index}")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], operation)
+    assert MIGRATION._journal_path().exists()
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    MIGRATION.recover_incomplete_transaction()
+    assert {path: path.read_bytes() if path.exists() else None for path in paths} == before
+
+
+def test_committed_cleanup_failure_retains_recoverable_journal(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase9-update")
+
+    def fail(point: str, index: int) -> None:
+        if (point, index) == ("cleanup-unlink", 0):
+            raise OSError("cleanup fault")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    assert MIGRATION._journal_path().exists()
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    MIGRATION.recover_incomplete_transaction()
+    assert json.loads(case["manifest_path"].read_text()) == case["replacement_manifest"]
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_recovery_subprocess_interruption_is_retried_without_target_mutation(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase9-update")
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "commit-parent-fsync:0"
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "recovery:1"
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    assert MIGRATION._journal_path().exists()
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    recovered = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert recovered.returncode == 3
+    assert "Traceback" not in recovered.stderr
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize(
+    ("interrupt", "retry_code"),
+    [
+        ("backup-create:0", 0),
+        ("backup-file-fsync:0", 0),
+        ("backup-parent-fsync:0", 0),
+        ("replacement-create:0", 0),
+        ("replacement-file-fsync:0", 0),
+        ("replacement-parent-fsync:0", 0),
+        ("journal-transition:0", 0),
+        ("journal-transition:1", 3),
+        ("journal-transition:2", 3),
+        ("journal-transition:3", 3),
+        ("cleanup-unlink:0", 3),
+    ],
+)
+def test_subprocess_interruptions_cover_staging_commit_progress_and_committed_cleanup(
+    interrupt: str, retry_code: int, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = interrupt
+
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    assert MIGRATION._journal_path().exists()
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+
+    retried = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert retried.returncode == retry_code
+    assert "Traceback" not in retried.stderr
+    assert not MIGRATION._journal_path().exists()
+    assert not _transaction_artifacts([case["manifest_path"], case["index_path"]])
+
+
+@pytest.mark.parametrize(
+    ("artifact", "interrupt"),
+    [
+        ("backup", "backup-file-fsync:0"),
+        ("replacement", "replacement-file-fsync:0"),
+    ],
+)
+def test_matching_identity_unbound_transaction_artifact_is_cleaned(
+    artifact: str, interrupt: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = interrupt
+
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    target = journal["ordered_targets"][0]
+    assert target[f"{artifact}_device"] is None
+    assert Path(target[f"{artifact}_path"]).exists()
+
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    recovered = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert recovered.returncode == 0, recovered.stderr
+    assert not MIGRATION._journal_path().exists()
+    assert not _transaction_artifacts([case["manifest_path"], case["index_path"]])
+
+
+@pytest.mark.parametrize("artifact", ["backup", "replacement"])
+def test_foreign_identity_unbound_staging_artifact_is_preserved(
+    artifact: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "stage:0"
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    target = journal["ordered_targets"][0]
+    artifact_path = Path(target[f"{artifact}_path"])
+    foreign = b"foreign identity-unbound artifact\n"
+    artifact_path.write_bytes(foreign)
+    assert target[f"{artifact}_device"] is None
+
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    refused = subprocess.run(command, env=env, text=True, capture_output=True)
+
+    assert refused.returncode == 3
+    assert "Traceback" not in refused.stderr
+    assert "recovery failures" in refused.stderr
+    assert str(artifact_path) in refused.stderr
+    assert artifact_path.read_bytes() == foreign
+    assert MIGRATION._journal_path().exists()
+
+
+def test_runtime_request_closed_schema_rejects_unknown_keys_without_mutation(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase7-upsert")
+    request = json.loads(case["request_path"].read_text())
+    request["extra"] = True
+    _write_json(case["request_path"], request)
+    before = case["manifest_path"].read_bytes()
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])],
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert case["manifest_path"].read_bytes() == before
+
+
+@pytest.mark.parametrize("mutation", ["nested-manifest", "alternate-index", "manifest-planning-dir"])
+def test_runtime_request_rejects_noncanonical_manifest_root_index_relationship(
+    mutation: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase7-upsert")
+    manifest_path = case["manifest_path"]
+    index_path = case["index_path"]
+    replacement_manifest = copy.deepcopy(case["replacement_manifest"])
+    if mutation == "nested-manifest":
+        manifest_path = case["planning_root"] / "nested" / "AGE-260" / "session.json"
+        manifest_path.parent.mkdir(parents=True)
+        replacement_manifest["planning_dir"] = str(manifest_path.parent)
+        replacement_manifest["session_manifest_path"] = str(manifest_path)
+    elif mutation == "alternate-index":
+        index_path = case["planning_root"] / "nested" / "sessions.active-wake.json"
+        index_path.parent.mkdir()
+    else:
+        other_planning = case["planning_root"] / "OTHER"
+        other_planning.mkdir()
+        replacement_manifest["planning_dir"] = str(other_planning)
+    request_path = _write_runtime_request(
+        tmp_path / f"{mutation}.json",
+        case["operation"],
+        case["planning_root"],
+        manifest_path,
+        index_path,
+        replacement_manifest,
+        case["replacement_index"],
+        _row_identity(_active_row(replacement_manifest, manifest_path)),
+    )
+    before = case["manifest_path"].read_bytes()
+
+    result = MIGRATION.main([case["operation"], "--request", str(request_path)])
+
+    assert result == 2
+    assert case["manifest_path"].read_bytes() == before
+
+
+def _other_runtime_row(
+    case: dict[str, Any], tmp_path: Path, *, cross_root: bool = False
+) -> dict[str, Any]:
+    planning_root = (
+        tmp_path / "other-project" / "planning" if cross_root else case["planning_root"]
+    )
+    planning_dir = planning_root / "OTHER"
+    planning_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = planning_dir / "session.json"
+    manifest = copy.deepcopy(case["replacement_manifest"])
+    manifest.update(
+        {
+            "ticket_id": "AGE-OTHER",
+            "branch": "age-other",
+            "draft_pr_url": "https://github.com/example/repo/pull/999",
+            "planning_dir": str(planning_dir),
+            "session_manifest_path": str(manifest_path),
+        }
+    )
+    _write_json(manifest_path, manifest)
+    return _active_row(manifest, manifest_path)
+
+
+@pytest.mark.parametrize("duplicate", ["wake", "manifest", "ticket-branch"])
+def test_runtime_request_rejects_duplicate_active_index_joins(
+    duplicate: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    source_index = json.loads(case["index_path"].read_text())
+    first = source_index["sessions"][0]
+    second = _other_runtime_row(case, tmp_path)
+    if duplicate == "wake":
+        second["draft_pr_url"] = first["draft_pr_url"]
+        second["branch"] = first["branch"]
+    elif duplicate == "manifest":
+        second["session_manifest_path"] = first["session_manifest_path"]
+        second["planning_dir"] = first["planning_dir"]
+    else:
+        second["ticket_id"] = first["ticket_id"]
+        second["branch"] = first["branch"]
+    source_index["sessions"].append(second)
+    _write_json(case["index_path"], source_index)
+    request_path = _write_runtime_request(
+        tmp_path / f"duplicate-{duplicate}.json",
+        case["operation"],
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        source_index,
+        _row_identity(_active_row(case["replacement_manifest"], case["manifest_path"])),
+    )
+
+    assert MIGRATION.main([case["operation"], "--request", str(request_path)]) == 2
+
+
+def test_runtime_request_rejects_cross_root_active_row_path(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase9-update")
+    source_index = json.loads(case["index_path"].read_text())
+    source_index["sessions"].append(_other_runtime_row(case, tmp_path, cross_root=True))
+    _write_json(case["index_path"], source_index)
+    request_path = _write_runtime_request(
+        tmp_path / "cross-root.json",
+        case["operation"],
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        source_index,
+        _row_identity(_active_row(case["replacement_manifest"], case["manifest_path"])),
+    )
+
+    assert MIGRATION.main([case["operation"], "--request", str(request_path)]) == 2
+
+
+@pytest.mark.parametrize("collision", ["wake", "manifest", "ticket-branch"])
+def test_phase7_upsert_rejects_any_existing_join_collision(
+    collision: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase7-upsert")
+    replacement_row = _active_row(case["replacement_manifest"], case["manifest_path"])
+    existing = _other_runtime_row(case, tmp_path)
+    if collision == "wake":
+        existing["draft_pr_url"] = replacement_row["draft_pr_url"]
+        existing["branch"] = replacement_row["branch"]
+    elif collision == "manifest":
+        existing["session_manifest_path"] = replacement_row["session_manifest_path"]
+        existing["planning_dir"] = replacement_row["planning_dir"]
+    else:
+        existing["ticket_id"] = replacement_row["ticket_id"]
+        existing["branch"] = replacement_row["branch"]
+    source_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": [existing]}
+    _write_json(case["index_path"], source_index)
+    requested_index = {
+        "schema": MIGRATION.ACTIVE_INDEX_SCHEMA,
+        "sessions": [existing, replacement_row],
+    }
+    request_path = _write_runtime_request(
+        tmp_path / f"collision-{collision}.json",
+        case["operation"],
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        requested_index,
+        _row_identity(replacement_row),
+    )
+
+    assert MIGRATION.main([case["operation"], "--request", str(request_path)]) == 2
+
+
+def test_malformed_committed_recovery_journal_is_concise_and_retained(tmp_path: Path):
+    state_root = MIGRATION._state_root()
+    state_root.mkdir(parents=True)
+    _write_json(
+        MIGRATION._journal_path(),
+        {"schema": MIGRATION.JOURNAL_SCHEMA, "phase": "committed", "ordered_targets": [{}]},
+    )
+    missing_plan = tmp_path / "missing-plan.json"
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL_DIR), "apply", "--plan", str(missing_plan)],
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 3
+    assert "Traceback" not in result.stderr
+    assert "recovery journal" in result.stderr
+    assert MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize("redirect", ["path", "backup_path", "replacement_path"])
+def test_recovery_journal_redirected_paths_are_refused_and_retained(
+    redirect: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "journal-transition:0"
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    interrupted = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert interrupted.returncode == 97
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    journal["ordered_targets"][0][redirect] = str(tmp_path / "redirected" / "session.json")
+    _write_json(MIGRATION._journal_path(), journal)
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+
+    refused = subprocess.run(command, env=env, text=True, capture_output=True)
+
+    assert refused.returncode == 3
+    assert "Traceback" not in refused.stderr
+    assert "projection mismatch" in refused.stderr
+    assert MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize("mutation", ["unknown-target-key", "duplicate-target", "substituted-plan"])
+def test_recovery_journal_unknown_duplicate_and_substituted_bindings_are_refused(
+    mutation: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase9-update")
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "journal-transition:0"
+    command = [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(case["request_path"])]
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    if mutation == "substituted-plan":
+        request = json.loads(case["request_path"].read_text())
+        request["replacement_manifest"]["phase_history"].append("substituted")
+        _write_json(case["request_path"], request)
+    else:
+        journal = json.loads(MIGRATION._journal_path().read_text())
+        if mutation == "unknown-target-key":
+            journal["ordered_targets"][0]["extra"] = True
+        else:
+            journal["ordered_targets"].append(copy.deepcopy(journal["ordered_targets"][0]))
+        _write_json(MIGRATION._journal_path(), journal)
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+
+    refused = subprocess.run(command, env=env, text=True, capture_output=True)
+
+    assert refused.returncode == 3
+    assert "Traceback" not in refused.stderr
+    assert MIGRATION._journal_path().exists()
+
+
+def test_held_parent_retarget_after_final_source_check_changes_no_substitute_path(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase0-init")
+    original_parent = case["manifest_path"].parent
+    held_parent = original_parent.with_name("AGE-260-held")
+    substitute_payload = b'{"substitute": true}\n'
+
+    def retarget(point: str, index: int) -> None:
+        if (point, index) != ("after-final-source-check", 0):
+            return
+        original_parent.rename(held_parent)
+        original_parent.mkdir()
+        (original_parent / "session.json").write_bytes(substitute_payload)
+
+    setattr(MIGRATION, "FAULT_HOOK", retarget)
+    with pytest.raises(ApplyError, match="held parent identity changed"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+    assert (original_parent / "session.json").read_bytes() == substitute_payload
+    assert not (held_parent / "session.json").exists()
+    assert MIGRATION._journal_path().exists()
+
+
+def _full_test_oid(value: str) -> str:
+    return value if len(value) in {40, 64} else value + ("0" * (40 - len(value)))
+
+
+def _frozen_real_squash_cases() -> list[dict[str, Any]]:
+    document = json.loads(FROZEN_REAL_SQUASH_EVIDENCE.read_text())
+    assert document["schema"] == "age-260-frozen-squash-evidence-v1"
+    return document["cases"]
+
+
+def _frozen_real_squash_record(case: dict[str, Any]) -> dict[str, object]:
+    return _evidence(
+        case["pr_url"],
+        case["branch"],
+        case["base_ref_name"],
+        state="MERGED",
+        head=case["head_sha"],
+        merge_sha=case["merge_sha"],
+        merged_at=case["merged_at"],
+        parents=[case["parent_sha"]],
+        merge_method=case["merge_method"],
+        merge_method_command=case["merge_method_command"],
+        branch_out=(case["branch_out_sha"], case["branch_out_sha"], Path(case["repo_root"])),
+    )
+
+
+@pytest.mark.parametrize("case", _frozen_real_squash_cases(), ids=lambda row: row["branch"])
+def test_frozen_real_one_parent_squash_evidence_is_accepted(case: dict[str, Any]):
+    evidence = MIGRATION._derive_and_validate_evidence(_frozen_real_squash_record(case))
+
+    assert evidence["state"] == "MERGED"
+    assert evidence["merge_shape"] == "SQUASH"
+    assert evidence["merge_sha"] == case["merge_sha"]
+    assert evidence["merge_parents"] == [case["parent_sha"]]
+    assert evidence["merge_sha"] != evidence["head_sha"]
+
+
+def _real_evidence_document(inventory: dict[str, Any]) -> dict[str, Any]:
+    frozen = {case["pr_url"]: case for case in _frozen_real_squash_cases()}
+    records: dict[str, Any] = {}
+    for candidate in inventory["migration_cohort"]:
+        if candidate["explicit_refusal_reasons"]:
+            continue
+        if candidate["pr_url"] in frozen:
+            records[candidate["pr_url"]] = _frozen_real_squash_record(frozen[candidate["pr_url"]])
+            continue
+        manifest_path = Path(candidate["manifest_path"])
+        manifest = json.loads(manifest_path.read_text())
+        repo_root = Path(manifest.get("repo_root") or MIGRATION._manifest_repo_root(manifest_path))
+        head = _full_test_oid(candidate["persisted_head_sha"])
+        branch_out = candidate["branch_out_sha"]
+        base = (
+            candidate.get("persisted_or_derived_base_branch")
+            or manifest.get("base_branch")
+            or "main"
+        )
+        records[candidate["pr_url"]] = _evidence(
+            candidate["pr_url"],
+            candidate["branch"],
+            base,
+            head=head,
+            branch_out=(branch_out, _full_test_oid(branch_out), repo_root),
+        )
+    return {
+        "schema": MIGRATION.PR_EVIDENCE_SCHEMA,
+        "reviewed_inventory_sha256": REAL_INVENTORY_SHA256,
+        "prs": records,
+    }
+
+
+def _real_conflict_resolutions(
+    inventory: dict[str, Any], evidence_document: dict[str, Any]
+) -> dict[str, Any]:
+    context = MIGRATION._validate_inventory(inventory, REAL_INVENTORY)
+    resolutions: dict[tuple[str, str], dict[str, Any]] = {}
+    for candidate in inventory["migration_cohort"]:
+        manifest = context["documents"][Path(candidate["manifest_path"])]
+        locator_rows = MIGRATION._resolve_candidate_locators(
+            candidate,
+            context["documents"],
+            context["inventory_rows"],
+        )
+        conflicts = MIGRATION._identity_conflicts(candidate, manifest, locator_rows, None)
+        record = evidence_document["prs"].get(candidate["pr_url"])
+        if record is not None:
+            evidence = MIGRATION._derive_and_validate_evidence(record)
+            conflicts.extend(
+                MIGRATION._identity_conflicts(candidate, manifest, locator_rows, evidence)
+            )
+        rows = dict(locator_rows)
+        for locator, _field in conflicts:
+            if locator is None or locator in resolutions:
+                continue
+            source_row = rows[locator]
+            resolutions[locator] = {
+                "index_path": locator[0],
+                "row_locator": locator[1],
+                "conflict_resolution": True,
+                "owner": "manager",
+                "reason": "Frozen read-only integration fixture resolves the reviewed source conflict.",
+                "discarded_row_sha256": _digest(_canonical_bytes(source_row)),
+                "retained_identity": {
+                    "manifest_path": candidate.get("manifest_path"),
+                    "ticket_id": candidate.get("ticket_id"),
+                    "ticket_system": candidate.get("ticket_system"),
+                    "branch": candidate.get("branch"),
+                    "pr_url": candidate.get("pr_url"),
+                    "head_sha": candidate.get("persisted_head_sha"),
+                    "base_branch": candidate.get("persisted_or_derived_base_branch"),
+                },
+            }
+    return {
+        "schema": MIGRATION.CONFLICT_RESOLUTION_SCHEMA,
+        "resolutions": list(resolutions.values()),
+    }
+
+
+@pytest.mark.skipif(not REAL_INVENTORY.is_file(), reason="reviewed AGE-260 inventory unavailable")
+def test_real_inventory_supports_evidence_complete_active_cohort_and_is_read_only(
+    tmp_path: Path,
+):
+    inventory = json.loads(REAL_INVENTORY.read_text())
+    evidence_path = tmp_path / "real-evidence.json"
+    dispositions_path = tmp_path / "real-dispositions.json"
+    resolutions_path = tmp_path / "real-resolutions.json"
+    evidence_document = _real_evidence_document(inventory)
+    _write_json(evidence_path, evidence_document)
+    refusal_paths = [
+        row["manifest_path"]
+        for row in inventory["migration_cohort"]
+        if row["explicit_refusal_reasons"]
+    ]
+    _write_json(
+        dispositions_path,
+        {
+            "schema": MIGRATION.DISPOSITION_SCHEMA,
+            "dispositions": [
+                {
+                    "manifest_path": path,
+                    "reason": "Read-only integration fixture accepted-breakage proof.",
+                    "accepted_breakage": True,
+                    "owner": "manager",
+                }
+                for path in refusal_paths
+            ],
+        },
+    )
+    resolutions_document = _real_conflict_resolutions(inventory, evidence_document)
+    _write_json(resolutions_path, resolutions_document)
+    source_paths = [Path(row["path"]) for row in inventory["manifests"]] + [
+        Path(row["path"]) for row in inventory["index_files"]
+    ]
+    before = {path: (_digest(path.read_bytes()), path.stat().st_ino) for path in source_paths}
+
+    first = build_plan(
+        REAL_INVENTORY, evidence_path, dispositions_path, REAL_INVENTORY_SHA256, resolutions_path,
+        tmp_path / "real-plan.json"
+    )
+    second = build_plan(
+        REAL_INVENTORY, evidence_path, dispositions_path, REAL_INVENTORY_SHA256, resolutions_path,
+        tmp_path / "real-plan.json"
+    )
+
+    assert first == second
+    assert first["validated_counts"] == MIGRATION.EXPECTED_COUNTS
+    assert len(first["rows"]) == 42
+    assert len(first["source_index_paths"]) == 7
+    cloud = next(row for row in first["rows"] if row["branch"] == "CLOUD-259-session-store-scoped-acquisition")
+    assert cloud["verdict"] == "migrated-open"
+    resume_fix = next(row for row in first["rows"] if row["branch"] == "s11-m2c-resume-fix")
+    assert resume_fix["verdict"] == "excluded-accepted-breakage"
+    assert first["eligible"] is True
+    merged = {row["branch"]: row for row in first["rows"] if row["verdict"] == "migrated-merged"}
+    assert set(merged) == {case["branch"] for case in _frozen_real_squash_cases()}
+    assert {
+        branch: row["pre_merge_base_sha"] for branch, row in merged.items()
+    } == {case["branch"]: case["parent_sha"] for case in _frozen_real_squash_cases()}
+    proposed_active = [
+        write["replacement"] for write in first["writes"] if write["path"].endswith("sessions.active-wake.json")
+    ]
+    assert len(proposed_active) == 7
+    assert sum(len(index["sessions"]) for index in proposed_active) == 39
+    assert {row["verdict"] for row in first["rows"]} == {
+        "migrated-open",
+        "migrated-merged",
+        "excluded-accepted-breakage",
+    }
+    assert {path: (_digest(path.read_bytes()), path.stat().st_ino) for path in source_paths} == before

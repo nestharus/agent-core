@@ -1,0 +1,3 @@
+consumed: /home/nes/projects/ai/worktrees/acr-247-runtime-consumed-side-channel/evals/orchestrator-step6c-consumption-evidence/fixtures/convention-rule-present/step6b-output-index.md
+consumed: fixture-convention-rule-present
+consumed: fixture-convention-target

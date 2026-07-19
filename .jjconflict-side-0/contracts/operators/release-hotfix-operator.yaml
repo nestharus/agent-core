@@ -1,0 +1,100 @@
+schema: operator-contract-v1
+source: agents/release-hotfix-operator.md
+model: gpt-high
+description: Handle release hotfix cherry-picks with blast-radius and rehearsal evidence gates
+inputs:
+- name: repo_root
+  type: path
+  required: true
+  default_source: caller
+  description: repo root
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: worktree path
+- name: scratch_dir
+  type: path
+  required: true
+  default_source: caller
+  description: scratch dir
+- name: release_id
+  type: string
+  required: true
+  default_source: caller
+  description: release id
+- name: manifest_path
+  type: path
+  required: false
+  default_source: caller
+  description: manifest path
+- name: release_manifest_path
+  type: path
+  required: false
+  default_source: caller
+  description: release manifest path
+- name: release_branch_name
+  type: string
+  required: true
+  default_source: caller
+  description: release branch name
+- name: hotfix_commit_sha
+  type: string
+  required: true
+  default_source: caller
+  description: hotfix commit sha
+- name: blast_radius_classification
+  type: string
+  required: true
+  default_source: caller
+  description: blast radius classification
+- name: hotfix_policy
+  type: string
+  required: true
+  default_source: caller
+  description: hotfix policy
+- name: qa_evidence_path
+  type: path
+  required: true
+  default_source: caller
+  description: qa evidence path
+- name: promotion_approval
+  type: string
+  required: true
+  default_source: caller
+  description: promotion approval
+- name: rehearsal_record_path
+  type: path
+  required: false
+  default_source: caller
+  description: rehearsal record path
+- name: hotfix_branch_name
+  type: string
+  required: false
+  default_source: caller
+  description: hotfix branch name
+defaults: []
+secrets: []
+outputs:
+- task: hotfix
+  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
+  recovery: Supply corrected inputs or select the appropriate operator wrapper before rerun.
+- class: NEEDS_INPUT
+  cause: A user-owned value, scope, or trade-off question is required.
+  recovery: Answer the emitted question artifact and resume.
+side_effects:
+- hotfix-cherry-pick-or-equivalence-record
+- release-manifest-write
+must_delegate:
+- release-orchestrator-for-policy-and-ticket-boundary
+may_direct:
+- release-branch-read
+- release-manifest-read
+forbidden_direct:
+- inline-rfq-release-policy-generalization
+notes:
+- 'ACR-283 tracks extraction of RFQ-embedded release policy: https://linear.app/oulipoly/issue/ACR-283/extract-project-specific-release-policy-from-shared-release. This contract documents current behavior without generalizing RFQ-specific release paths.'

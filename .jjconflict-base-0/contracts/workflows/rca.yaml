@@ -1,0 +1,23 @@
+schema: workflow-dispatch-contract-v1
+source: workflows/rca.md
+workflow_id: rca
+orchestrator: rca-orchestrator
+inputs:
+- incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed
+- for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis
+- for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly
+- post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid
+expectations:
+- 'runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle'
+- uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS
+- returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts
+outputs:
+- reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and RCA-scoped gate-set artifacts
+- gate-set dispatch manifest, join manifest, aggregate report, child report index, expected-process manifest, process-tree report reference or non-applicability record, audit-history records, and optional ticket-comment payload
+- post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds after current Phase 6.5 PASS
+- NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed
+non_goals:
+- does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator
+- does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring
+- does not make ticket comments canonical; comments are mirrors of file-backed gate evidence
+- does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+

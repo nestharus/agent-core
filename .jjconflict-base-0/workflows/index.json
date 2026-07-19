@@ -1,0 +1,861 @@
+{
+  "aliases": [
+    {
+      "alias": "feature",
+      "normalized_alias": "feature",
+      "target": {
+        "path": "workflows/feature-development.md",
+        "workflow_id": "feature-development"
+      },
+      "workflow_id": "feature-development"
+    },
+    {
+      "alias": "multi-ticket-feature",
+      "normalized_alias": "multi ticket feature",
+      "target": {
+        "path": "workflows/feature-development.md",
+        "workflow_id": "feature-development"
+      },
+      "workflow_id": "feature-development"
+    },
+    {
+      "alias": "refactor",
+      "normalized_alias": "refactor",
+      "target": {
+        "path": "workflows/refactoring.md",
+        "workflow_id": "refactoring"
+      },
+      "workflow_id": "refactoring"
+    },
+    {
+      "alias": "flavor: regression-investigation",
+      "normalized_alias": "flavor regression investigation",
+      "target": {
+        "path": "workflows/regression-investigation.md",
+        "workflow_id": "regression-investigation"
+      },
+      "workflow_id": "regression-investigation"
+    }
+  ],
+  "generated_from": "workflows/*.md",
+  "schema_version": 1,
+  "workflows": {
+    "adversarial-qa-stage": {
+      "path": "workflows/adversarial-qa-stage.md",
+      "workflow": {
+        "id": "adversarial-qa-stage"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs setup, normal-usage regression sweep, adversarial probing, bug report filing, and summary report as separate phases",
+          "files complete evidence-backed bugs and hands their trigger evidence to RCA consumers without fixing stage bugs inside this workflow",
+          "keeps production and prototype branches outside scope"
+        ],
+        "inputs": [
+          "stage_url, health_check_url, use_case_dossier_path, run_id, planning_dir, ticket_system, browser identity, credentials or roles, feature_flags, local_log_paths, and selected ticket-operator routing inputs",
+          "manual or scheduled dispatch context for a staged application surface only"
+        ],
+        "non_goals": [
+          "does not run against production",
+          "does not run against prototype branches",
+          "does not fix bugs in stage",
+          "does not add CI jobs, release gates, or ticket-backend API behavior"
+        ],
+        "orchestrator": "adversarial-qa-driver",
+        "outputs": [
+          "planning_dir/adversarial-qa/run-id/summary.md",
+          "planning_dir/adversarial-qa/run-id/evidence/ run bundle with screenshots, videos, logs, bug drafts, and per-finding PDFs",
+          "tracker bug URLs or BLOCKED and NEEDS_INPUT artifacts"
+        ]
+      }
+    },
+    "agents-cli": {
+      "path": "workflows/agents-cli.md",
+      "workflow": {
+        "id": "agents-cli"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "standardizes agents CLI invocation and tee-based log capture for pipeline work",
+          "routes delegated user questions through the root-owned question artifact convention",
+          "requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only"
+        ],
+        "inputs": [
+          "model name, worktree path, prompt file, and log path for an agent dispatch",
+          "sub-agent delegation, question-handling, or parallel-writer context"
+        ],
+        "non_goals": [
+          "does not replace the agent-runner README as the authoritative CLI reference",
+          "does not define model role selection beyond pointing to the model-role matrix"
+        ],
+        "orchestrator": "root orchestrator or workflow operator invoking agents CLI",
+        "outputs": [
+          "consistent agents command shape for prompts, logs, and long-running background work",
+          "stable prompt and log naming conventions for post-run review"
+        ]
+      }
+    },
+    "alignment-cycle": {
+      "path": "workflows/alignment-cycle.md",
+      "workflow": {
+        "id": "alignment-cycle"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "reviews proposal alignment against the problem definition and product philosophy",
+          "splits judgement from synthesis through classify and integrate stages",
+          "halts only when philosophy decisions require root-surfaced user input"
+        ],
+        "inputs": [
+          "project problem.md, philosophy.md, proposal.md, and axis reference table",
+          "scratch directory for problem, philosophy, classification, and run-report artifacts",
+          "project_root for resolving ${project_root}/DECISIONS.md decision records"
+        ],
+        "non_goals": [
+          "does not author or update proposal.md as the proposer",
+          "does not re-run alignment stages inside the same cycle after integrations"
+        ],
+        "orchestrator": "alignment-cycle-orchestrator",
+        "outputs": [
+          "problem-review.md and optional problem-surfaces.md or problem-classification.md artifacts",
+          "updated problem.md and project axis reference table when Stage 1b-integrate runs",
+          "philosophy-review.md and optional philosophy-surfaces.md, philosophy-classification.md, or philosophy-decisions.md artifacts",
+          "updated philosophy.md when Stage 2b-integrate runs",
+          "run-report.md describing completed stages, skips, and open NEEDS_INPUT artifacts"
+        ]
+      }
+    },
+    "apply-gate-set": {
+      "path": "workflows/apply-gate-set.md",
+      "workflow": {
+        "id": "apply-gate-set"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest",
+          "projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows",
+          "preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts"
+        ],
+        "inputs": [
+          "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts",
+          "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
+        ],
+        "non_goals": [
+          "does not wire RCA or implementation-pipeline callers",
+          "does not replace PR-review, code-quality, process-tree, proof-risk, validation-integrity, readiness, or supported-surface gates",
+          "does not author eval specs, pytest tests, verifier scripts, hotfix-skip convention detail, or currentness invalidation rules"
+        ],
+        "orchestrator": "apply-gate-set",
+        "outputs": [
+          "mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records",
+          "file-first evidence suitable for RCA or implementation-pipeline caller consumption"
+        ]
+      }
+    },
+    "audit": {
+      "path": "workflows/audit.md",
+      "workflow": {
+        "id": "audit"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "dispatches applicable audit/checker operators for one current target set and writes a durable audit bundle",
+          "aggregates source reports without replacing their procedures or verdict vocabularies",
+          "preserves audit-history ownership and process-tree topology boundaries"
+        ],
+        "inputs": [
+          "target type, target paths or target manifest, target identity, repo/worktree context, scratch or audit work directory",
+          "design-pattern and operator-format references for design targets, runtime evidence for process targets, and merged-base/problem-map evidence for rebase-drift targets"
+        ],
+        "non_goals": [
+          "does not replace Phase 4 risk gates, PR review gates, workflow-reviewer, or process-tree topology audit",
+          "does not implement fixes, revise target artifacts, or run historical audits unless explicitly invoked",
+          "does not own implementation-pipeline entry-mode policy"
+        ],
+        "orchestrator": "root audit coordinator or implementation-pipeline-orchestrator",
+        "outputs": [
+          "dispatch manifest, child prompts/logs/reports, normalized findings, aggregate audit report",
+          "role outputs suitable for proposer revision or decision-encoder when the caller enters a revise/review loop"
+        ]
+      }
+    },
+    "auditor-surface-expansion": {
+      "path": "workflows/auditor-surface-expansion.md",
+      "workflow": {
+        "id": "auditor-surface-expansion"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "collects bounded context for the source auditor without changing the review target"
+        ],
+        "inputs": [
+          "source auditor report context, bounded question, repo_root, scratch_dir, planning_dir, and evidence paths"
+        ],
+        "non_goals": [
+          "does not implement a concrete research operator",
+          "does not own final auditor verdicts"
+        ],
+        "orchestrator": "source A1 auditor",
+        "outputs": [
+          "context artifact consumed by the source auditor"
+        ]
+      }
+    },
+    "build-prototype": {
+      "path": "workflows/build-prototype.md",
+      "workflow": {
+        "id": "build-prototype"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "uses unconstrained exploration to arrive at a concrete answer before imposing review discipline",
+          "stabilizes the demonstrable state and organizes findings into a prototype dossier",
+          "runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene"
+        ],
+        "inputs": [
+          "prototype question, project planning path, branch or worktree context, and any defer-source ticket",
+          "evidence that the implementation pipeline or roadmap layer is too unclear to scope directly"
+        ],
+        "non_goals": [
+          "does not bypass the implementation pipeline for ordinary well-scoped work",
+          "does not treat the prototype branch as the load-bearing deliverable",
+          "does not run proposal-based PR review gates during the hack phase"
+        ],
+        "orchestrator": "prototype-orchestrator",
+        "outputs": [
+          "dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md",
+          "recommended downstream tickets, roadmap revisions, or scope-cut decisions"
+        ]
+      }
+    },
+    "code-quality": {
+      "path": "workflows/code-quality.md",
+      "workflow": {
+        "id": "code-quality"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "dispatches each auditor named in conventions/code-quality.md ## Auditor Set and writes a durable code-quality bundle",
+          "aggregates child verdicts to LOW/MEDIUM/HIGH worst-case while preserving NEEDS_INPUT/BLOCKED stop states",
+          "preserves the convention as the single rule reference; does not redefine A1"
+        ],
+        "inputs": [
+          "repo_root, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout",
+          "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, and wu_id",
+          "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
+        ],
+        "non_goals": [
+          "does not implement fixes, edit child auditors, or replace child auditor procedures",
+          "does not redefine A1 or duplicate the convention's rule descriptions",
+          "does not replace the caller's owning gate policy; implementation-pipeline Phase 4 entry is wired in ~/ai/agents/implementation-pipeline-orchestrator.md \u00a7 Phase 4 code-quality gate"
+        ],
+        "orchestrator": "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller",
+        "outputs": [
+          "dispatch manifest, child prompts/logs/reports, normalized findings.json plus findings.md, and aggregate-code-quality.md",
+          "role outputs suitable for proposer revision, decision-encoder, or PR-review consumption"
+        ]
+      }
+    },
+    "eval-runtime": {
+      "path": "workflows/eval-runtime.md",
+      "workflow": {
+        "id": "eval-runtime"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "resolves trace evidence, normalizes it into semantic fields, executes the selected eval when runnable, and validates finding shape",
+          "stores markdown and JSON reports without mutating pipeline, CI, scheduler, or ticket backends"
+        ],
+        "inputs": [
+          "eval_id, trace locator, mode on-trace post-merge or on-demand, planning_dir, and workflow selection evidence",
+          "normalized evidence sources such as process-tree reports, prompts, logs, audit bundles, and trace JSON when present"
+        ],
+        "non_goals": [
+          "does not add CI jobs, cron jobs, CLI runtime code, or ticket-backend writes",
+          "does not implement eval code, trace parser code, fixture code, or pipeline hooks"
+        ],
+        "orchestrator": "eval-runner",
+        "outputs": [
+          "planning_dir eval findings markdown report",
+          "machine-readable eval JSON report",
+          "validation errors, behavior findings, no-finding results, or NEEDS_INPUT evidence"
+        ]
+      }
+    },
+    "feature-development": {
+      "path": "workflows/feature-development.md",
+      "workflow": {
+        "id": "feature-development"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "coordinates a feature lifecycle above individual WUs while dispatching implementation-pipeline-orchestrator once per scoped ticket",
+          "keeps ticket PRs targeted to the feature branch and assembles evidence packs for ticket PRs and the final feature PR"
+        ],
+        "inputs": [
+          "feature brief or approved roadmap, scoped ticket list, repo root, trunk branch, feature branch name, worktrees root, planning root, scratch root, ticket-backend inputs, and selected manager flavor",
+          "optional prototype dossier path, QA target descriptor, and evidence-pack context"
+        ],
+        "non_goals": [
+          "does not replace roadmap, prototype, implementation-pipeline, PR-review, or CodeRabbit workflows",
+          "does not inline ticket decomposition or implementation-pipeline phases"
+        ],
+        "orchestrator": "feature-orchestrator",
+        "outputs": [
+          "feature branch pushed to origin",
+          "per-ticket implementation-pipeline runs and ticket PR list",
+          "final feature-to-trunk PR with evidence pack, QA verdict or placeholder, prototype payload when applicable, and outcome record"
+        ]
+      }
+    },
+    "implementation-pipeline": {
+      "path": "workflows/implementation-pipeline.md",
+      "workflow": {
+        "id": "implementation-pipeline"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs research, proposal, shared apply-gate-set risk/review boundaries, hookpoint, implementation, readiness, PR, and audit phases",
+          "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
+          "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
+          "dispatches apply-gate-set with caller_mode implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
+          "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
+        ],
+        "inputs": [
+          "ticket id and branch, worktree, scratch, and planning paths",
+          "non-empty ticket description from the configured Jira or Linear ticket system",
+          "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
+        ],
+        "non_goals": [
+          "does not use git-resident ticket files as the source of truth",
+          "does not skip phases implicitly",
+          "does not inline the orchestrator role into the root conversation"
+        ],
+        "orchestrator": "implementation-pipeline-orchestrator",
+        "outputs": [
+          "planning artifacts under the per-WU planning directory",
+          "tested repository diff and draft PR URL when the work proceeds",
+          "ticket comments and audit-history closure evidence at PR and finalization points"
+        ]
+      }
+    },
+    "linter-bootstrap": {
+      "path": "workflows/linter-bootstrap.md",
+      "workflow": {
+        "id": "linter-bootstrap"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "inventories existing target-project CI/linter coverage against A1 code-quality rules",
+          "researches existing ecosystem linters or rule packages for uncovered lint-enforceable A1 rules",
+          "writes a setup-PR proposal mapping proposed lint additions to A1 coverage and residual gaps"
+        ],
+        "inputs": [
+          "target project root or worktree path plus planning directory for linter-bootstrap artifacts",
+          "A1 code-quality convention path or pinned revision and optional per-language scope"
+        ],
+        "non_goals": [
+          "does not bootstrap a concrete project's linters while running only the workflow definition",
+          "does not create or define a linter-inventory-agent operator; inventory runs inline unless caller supplies an external artifact",
+          "does not enforce A1 rules that lack existing linter ecosystem coverage"
+        ],
+        "orchestrator": "root orchestrator or workflow operator invoking linter-bootstrap",
+        "outputs": [
+          "linter coverage inventory artifact under ${planning_dir}/research/linter-bootstrap-inventory.md",
+          "per-rule ecosystem research artifact under ${planning_dir}/research/linter-bootstrap-research.md",
+          "setup-PR proposal artifact under ${planning_dir}/proposals/linter-bootstrap-setup-pr.md"
+        ]
+      }
+    },
+    "pr-review": {
+      "path": "workflows/pr-review.md",
+      "workflow": {
+        "id": "pr-review"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks",
+          "runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone",
+          "routes repeated fix or gate loops through audit-history and process-tree review"
+        ],
+        "inputs": [
+          "actual branch diff or PR, approved proposal package, test evidence, and audit-history context",
+          "base branch or true stacked parent for comparison"
+        ],
+        "non_goals": [
+          "does not review prototype work that lacks a proposal contract",
+          "does not treat human review as a substitute for model-owned gates",
+          "does not allow findings to remain optional commentary before the PR advances"
+        ],
+        "orchestrator": "pr-review-operator",
+        "outputs": [
+          "gate verdicts and actionable findings for the next fix pass or decomposition",
+          "synthesized PR-review comment when posting is in scope",
+          "process-tree-auditor evidence before synthesis or downstream PR movement"
+        ]
+      }
+    },
+    "project-bootstrap": {
+      "path": "workflows/project-bootstrap.md",
+      "workflow": {
+        "id": "project-bootstrap"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs the open path against shared operators before trusting a project-specific wrapper",
+          "emits or refreshes thin project-local wrappers only when stable project facts justify them",
+          "uses qualitative stale-wrapper signals to choose closed path or re-bootstrap"
+        ],
+        "inputs": [
+          "target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger",
+          "evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting"
+        ],
+        "non_goals": [
+          "does not redefine bootstrap-pattern lifecycle vocabulary",
+          "does not implement category-specific linter, ticket, code-quality, alias, or routing bootstraps",
+          "does not migrate existing project-local wrappers"
+        ],
+        "orchestrator": "Work Manager or root coordinator",
+        "outputs": [
+          "project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions",
+          "optional project-local wrapper and optional project AGENTS routing/policy update",
+          "NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct"
+        ]
+      }
+    },
+    "prototype-research-planning": {
+      "path": "workflows/prototype-research-planning.md",
+      "workflow": {
+        "id": "prototype-research-planning"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "produces a research-plan bundle (behaviors / UX / contracts / expectations / fluid avenues / anti-scope) and a prototype-proposal that captures behaviors, UX flows, contracts, and approved fluid avenues without making implementation commitments",
+          "halts at the proposal-approval gate until durable approval evidence exists",
+          "post-approval, ships behavior tests only -- never procedural / lifecycle / race / retry / internal-invariant tests"
+        ],
+        "inputs": [
+          "originating context (bug report, feature ambiguity, architectural unknown, stakeholder request, defer dossier)",
+          "project repo_root, worktree_path, planning_dir, scratch_dir",
+          "optional user preferences",
+          "optional defer dossier from implementation-pipeline Phase 2.5 defer-to-prototype branch",
+          "downstream consumer target (normally prototype-orchestrator.md Phase P0)"
+        ],
+        "non_goals": [
+          "does not perform market research, comparable-product analysis, or philosophy/values capture",
+          "does not run a 4-layer roadmap cascade or generate sub-tickets",
+          "does not run risk-gate cycles inside the prototype workflow",
+          "does not pick implementation details, libraries, or architecture for the prototype",
+          "does not specify final UI design",
+          "does not introduce machine-enforcement framing",
+          "does not declare itself as the merge gate; the prototype branch's disposition is owned downstream"
+        ],
+        "orchestrator": "prototype-research-planner",
+        "outputs": [
+          "behaviors.md, ux.md, contracts.md, expectations.md, avenues.md, anti-scope.md, prototype-proposal.md, approval evidence, behavior tests at appropriate E2E/integration/component levels",
+          "Phase 7 handoff summary feeding prototype input context to prototype-orchestrator.md Phase P0 (which then proceeds into build-prototype.md Phase P1)"
+        ]
+      }
+    },
+    "prototype-validation-shipping": {
+      "path": "workflows/prototype-validation-shipping.md",
+      "workflow": {
+        "id": "prototype-validation-shipping"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "keeps product code and behavior tests on the truth branch and eval scaffolding on the eval branch",
+          "gates each phase advance on contract-validator acceptance, behavior-test passage, QA walkthrough proof, and deep rebuild verification",
+          "routes failing behavior tests through the light prototype RCA workflow and applies only RCA-supplied fixes"
+        ],
+        "inputs": [
+          "truth branch and truth worktree path",
+          "eval branch and eval worktree path",
+          "planning path and scratch path",
+          "proposal or dossier reference",
+          "behavior-test manifest",
+          "base branch",
+          "registry target",
+          "prototype slug",
+          "package output paths"
+        ],
+        "non_goals": [
+          "does not discover or stabilize a prototype answer (see workflows/build-prototype.md)",
+          "does not ship production implementation work (see workflows/implementation-pipeline.md)",
+          "does not run adversarial QA or production-pipeline gates against the eval surface"
+        ],
+        "orchestrator": "prototype-validation-orchestrator",
+        "outputs": [
+          "eval branch with compose, Dockerfile, README, and eval helper scripts",
+          "proof bundle covering behavior tests, QA walkthrough, deep rebuild, and package material",
+          "one proof-focused draft PR shipping the stabilized prototype"
+        ]
+      }
+    },
+    "rca": {
+      "path": "workflows/rca.md",
+      "workflow": {
+        "id": "rca"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle",
+          "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS",
+          "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts"
+        ],
+        "inputs": [
+          "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed",
+          "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis",
+          "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly",
+          "post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid"
+        ],
+        "non_goals": [
+          "does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
+          "does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring",
+          "does not make ticket comments canonical; comments are mirrors of file-backed gate evidence",
+          "does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+"
+        ],
+        "orchestrator": "rca-orchestrator",
+        "outputs": [
+          "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and RCA-scoped gate-set artifacts",
+          "gate-set dispatch manifest, join manifest, aggregate report, child report index, expected-process manifest, process-tree report reference or non-applicability record, audit-history records, and optional ticket-comment payload",
+          "post-mortem, action-item ticket index, runbook outputs, tracker comments, and close-or-pending record when downstream lifecycle proceeds after current Phase 6.5 PASS",
+          "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed"
+        ]
+      }
+    },
+    "rca-prototype": {
+      "path": "workflows/rca-prototype.md",
+      "workflow": {
+        "id": "rca-prototype"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs a light two-phase prototype RCA loop: root cause the already-observed failure, dispatch one narrow fix, verify only the same trigger, and hand back",
+          "treats the failing behavior test or QA observation/screenshot as the reproduction signal"
+        ],
+        "inputs": [
+          "failure_id, trigger_type test or qa, trigger_evidence_path, repo_root, worktree_path, planning_dir, scratch_dir, handback_callback, and the trigger-specific rerun or QA selector"
+        ],
+        "non_goals": [
+          "does not replace the full production RCA workflow and does not broaden the failing prototype trigger into unrelated validation work"
+        ],
+        "orchestrator": "prototype-rca-orchestrator",
+        "outputs": [
+          "per-iteration RCA and fix artifacts under ${planning_dir}/rca/, targeted rerun logs under ${scratch_dir}/logs/, and a handback envelope"
+        ]
+      }
+    },
+    "refactoring": {
+      "path": "workflows/refactoring.md",
+      "workflow": {
+        "id": "refactoring"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "per-PR cycle output lands on the integration buffer"
+        ],
+        "inputs": [
+          "target_list",
+          "repo_root",
+          "worktree_path",
+          "planning_dir",
+          "scratch_dir",
+          "integration_branch_ref",
+          "slice_bounds"
+        ],
+        "non_goals": [
+          "does not implement cross-file auditor analysis",
+          "does not manage integration-branch lifecycle cadence",
+          "does not enumerate existing shims"
+        ],
+        "orchestrator": "refactoring-orchestrator",
+        "outputs": [
+          "per-PR cycle dispatch evidence",
+          "integration-buffer commit"
+        ]
+      }
+    },
+    "refactoring-commit-history": {
+      "path": "workflows/refactoring-commit-history.md",
+      "workflow": {
+        "id": "refactoring-commit-history"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "finds the last refactor milestone for the target surface",
+          "analyzes commits since that milestone for structural degradation",
+          "packages corrective refactors into independently reviewable PR plans that inherit the base refactoring and implementation-pipeline gates"
+        ],
+        "inputs": [
+          "target surface (accepts either target or target_surface), repo_root, worktree_path, planning_dir, scratch_dir, integration_branch_ref, history_base_ref",
+          "milestone_search_policy, degradation_signal_sources, package_bounds, manager_flavor, and optional package_size_override"
+        ],
+        "non_goals": [
+          "does not modify the base ACR-179 refactoring substrate",
+          "does not design incident-driven or seed-and-fan-out sibling strategies",
+          "does not introduce behavior or feature changes",
+          "does not add scheduler or ticket-automation hooks"
+        ],
+        "orchestrator": "refactoring-commit-history-orchestrator",
+        "outputs": [
+          "last-refactor milestone evidence",
+          "history degradation inventory",
+          "bounded package plan with gate obligations",
+          "handoff inputs for ACR-179 per-package execution"
+        ]
+      }
+    },
+    "regression-investigation": {
+      "path": "workflows/regression-investigation.md",
+      "workflow": {
+        "id": "regression-investigation"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "investigates the codebase conditions around one known regression without replacing RCA, code-quality, audit, or risk-reduction workflows",
+          "dispatches read-only commit-history and pattern-audit children, compares A1 coupling/cohesion evidence at incident commit and trunk, and synthesizes findings",
+          "files or prepares remediation ticket payloads only after findings.json and findings.md are complete"
+        ],
+        "inputs": [
+          "incident_artifact_path, incident_id, surface_scope_path, investigation_window, repo_root, worktree_path, planning_dir, scratch_dir, and ticket_system",
+          "Linear fields linear_team_key and linear_project_id or Jira fields jira_url, jira_project, and jira_account_email",
+          "optional regression_introduction_sha, fix_sha, evidence_dir, current_ref, historical_ref, and max_followup_tickets"
+        ],
+        "non_goals": [
+          "does not run application code, mutate source under audit, redefine A1, replace RCA, replace code-quality, replace audit, or replace risk-reduction",
+          "does not implement remediation tickets inline"
+        ],
+        "orchestrator": "regression-investigator",
+        "outputs": [
+          "regression-investigation artifacts under ${planning_dir}/regression-investigation/<incident_id>/",
+          "child prompt and log artifacts under ${scratch_dir}/prompts/ and ${scratch_dir}/logs/",
+          "NEEDS_INPUT question artifacts under ${scratch_dir}/questions/ or BLOCKED stop-state evidence when required inputs are absent"
+        ]
+      }
+    },
+    "release-management": {
+      "path": "workflows/release-management.md",
+      "workflow": {
+        "id": "release-management"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs the release lifecycle in phase order: cut, freeze, hotfix-cherry-pick, promote, tag, reconcile",
+          "keeps settings and Tier-3 approvals human-owned while model-owned release operators handle documented release mechanics",
+          "records release evidence, hotfix exceptions, tags, and reconciliation closure state without project-specific configuration"
+        ],
+        "inputs": [
+          "repo_root, worktree_path, scratch_dir, and planning_dir for repository context and artifact layout",
+          "release_id, develop_branch_name, main_branch_name, release_branch_name, and optional hotfix_branch_name for branch topology",
+          "release_manifest_path, freeze_window, qa_evidence_path, required_checks_policy, settings_state_or_runbook_ticket, hotfix_policy, promotion_approval, and reconcile_obligations"
+        ],
+        "non_goals": [
+          "does not author release-orchestrator or release sub-operator files",
+          "does not edit AGENTS.md, project wrappers, conventions, repository settings, or live release infrastructure",
+          "does not replace implementation, PR review, audit, CodeRabbit, or tiered-approval workflows"
+        ],
+        "orchestrator": "release-orchestrator",
+        "outputs": [
+          "release branch, hotfix branch when used, promotion evidence, version tag, and updated release manifest",
+          "settings runbook tickets, QA evidence records, exception records, and reconcile closure evidence",
+          "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when a human-owned gate or unresolved release risk halts the lifecycle"
+        ]
+      }
+    },
+    "research": {
+      "path": "workflows/research.md",
+      "workflow": {
+        "id": "research"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "collects primary-source evidence before forming options or recommendations",
+          "keeps research factual and separate from solution proposal design",
+          "synthesizes findings once into a traceable report with assumptions and tradeoffs"
+        ],
+        "inputs": [
+          "focused research question, scope constraints, output location, and source requirements",
+          "optional decomposition into single-agent, parallel-fanout, or deep-reasoning shape"
+        ],
+        "non_goals": [
+          "does not design or implement the solution",
+          "does not cite derivative summaries when primary sources are available",
+          "does not advance past inconclusive evidence that needs user-owned reframing"
+        ],
+        "orchestrator": "research coordinator or implementation-pipeline Phase 1",
+        "outputs": [
+          "planning research report with question, evidence, options, recommendation, and open risks",
+          "raw finding artifacts for parallel-fanout sub-questions when used",
+          "optional draft problem map and assumption register for downstream proposal work"
+        ]
+      }
+    },
+    "risk-reduction": {
+      "path": "workflows/risk-reduction.md",
+      "workflow": {
+        "id": "risk-reduction"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "picks one risk-reduction item from the aggregate project risk profile",
+          "chooses the narrowest lever that measurably lowers the named risk axis",
+          "re-scores the affected surface after the work lands"
+        ],
+        "inputs": [
+          "project planning risk-profile.md with evidence-backed MEDIUM or HIGH entries",
+          "one selected risk axis and surface to reduce through a small ticket"
+        ],
+        "non_goals": [
+          "does not run without an evidence-backed aggregate risk profile",
+          "does not run concurrently with an implementation WU on the same surface",
+          "does not claim success without re-scoring the original axis"
+        ],
+        "orchestrator": "local risk-reduction orchestrator",
+        "outputs": [
+          "hardening or risk-reduction ticket tied to one axis and one surface",
+          "tests, contract docs, consolidation, lifecycle documentation, or deprecation work",
+          "updated project risk profile showing removal or downgrade of the risk entry"
+        ]
+      }
+    },
+    "roadmap": {
+      "path": "workflows/roadmap.md",
+      "workflow": {
+        "id": "roadmap"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "cascades from market framing through executive, engineering, AI, and ticket-generation layers",
+          "runs three fresh risk gates per roadmap layer and requires all LOW verdicts before advancing",
+          "routes prototype escape hatches when feasibility or decomposition cannot be proven by research alone"
+        ],
+        "inputs": [
+          "problem, philosophy, proposal, DECISIONS, market research, and engineering research artifacts",
+          "current roadmap layer to expand or revise and scratch path for risk-gate outputs"
+        ],
+        "non_goals": [
+          "does not bootstrap a first product pipeline from nothing",
+          "does not handle small features inside an existing product area",
+          "does not continue when product framing must reset through alignment"
+        ],
+        "orchestrator": "roadmap-orchestrator",
+        "outputs": [
+          "market-research.md, executive-roadmap.md, engineering-roadmap.md, and phase ai-roadmap files",
+          "generated implementation tickets for approved AI roadmap slices, including story-point estimate/source/rationale per SLICE and unsized INIT tickets",
+          "risk-gate reports and process-tree-auditor evidence at each gated layer"
+        ]
+      }
+    },
+    "tiered-approval": {
+      "path": "workflows/tiered-approval.md",
+      "workflow": {
+        "id": "tiered-approval"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "classifies actions into read, confined-write, or visible-write tiers",
+          "requires explicit per-action approval before Tier 3 visible writes unless a runbook pre-authorizes the exact action",
+          "keeps approval questions root-owned when delegated agents need user input"
+        ],
+        "inputs": [
+          "candidate action, current state, audience visibility, reversal path, and any pre-authorized runbook",
+          "caller-supplied project_decisions_path or equivalent when pre-authorization is claimed"
+        ],
+        "non_goals": [
+          "does not batch multiple visible actions into one approval",
+          "does not treat ambiguous user replies as approval",
+          "does not let one agent both propose and execute a Tier 3 action without human approval"
+        ],
+        "orchestrator": "root orchestrator before visible external actions",
+        "outputs": [
+          "approval request with state, reversal path, and concrete action for Tier 3 work",
+          "execution log details for approved or pre-authorized visible actions",
+          "clear Tier 2 treatment for routine draft PR creation and maintenance"
+        ]
+      }
+    },
+    "verified-rebase": {
+      "path": "workflows/verified-rebase.md",
+      "workflow": {
+        "id": "verified-rebase"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "produces a deterministic bundle for rebase review",
+          "computes mechanical provenance from predicted tree, actual tree, conflicts, and range-diff output",
+          "does not push and does not resolve conflicts"
+        ],
+        "inputs": [
+          "BRANCH and TARGET refs for the rebase",
+          "optional SOURCE and PARENT_BUNDLE for scoped or stacked rebases"
+        ],
+        "non_goals": [
+          "does not provide a plain rebase fallback",
+          "does not decide whether the caller should push",
+          "does not judge semantic correctness of conflict resolutions"
+        ],
+        "orchestrator": "jj-operator",
+        "outputs": [
+          "bundle under .tmp/verified-rebase/<branch-slug>/<timestamp>/",
+          "stdout verdict CLEAN, DIRTY-EXPLAINED, DIRTY-UNPROVENANCED, or BLOCKED",
+          "local refs/pre-rebase/<branch> rollback anchor and rollback.sh helper"
+        ]
+      }
+    },
+    "writing pipeline orchestrator": {
+      "path": "workflows/writing pipeline orchestrator.md",
+      "workflow": {
+        "id": "writing pipeline orchestrator"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "runs content, analysis, mechanical-ban fixes, editorial fixes, rubric fixes, and quality gate as separate agent invocations",
+          "uses reviewers to verify fixes after each category rather than allowing agents to self-review"
+        ],
+        "inputs": [
+          "draft public-facing document, writing craft reference, communication research, and reviewer/fixer prompt files",
+          "human approval for content additions before mechanical and editorial phases proceed"
+        ],
+        "non_goals": [
+          "does not merge separate violation categories into one fixing agent",
+          "does not let reviewers mutate the document",
+          "does not bypass the human content gate"
+        ],
+        "orchestrator": "writing pipeline orchestrator",
+        "outputs": [
+          "editing reports for each pipeline phase",
+          "review reports for each fix category",
+          "final quality gate report"
+        ]
+      }
+    },
+    "wu-session-wake": {
+      "path": "workflows/wu-session-wake.md",
+      "workflow": {
+        "id": "wu-session-wake"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "joins merged PR rows to one persisted WU session manifest",
+          "dispatches wu-session-resumer once per merged session",
+          "does not batch post-merge session work inside the poller or scheduler"
+        ],
+        "inputs": [
+          "sessions.index.json path",
+          "poller output from tools/pr-batch-poller",
+          "per-project worktree and planning roots"
+        ],
+        "non_goals": [
+          "does not implement the scheduler runtime",
+          "does not change pr-batch-poller schema",
+          "does not inline post-merge checks or spawn successor WUs"
+        ],
+        "orchestrator": "composition layer",
+        "outputs": [
+          "one wu-session-resumer log per merged session"
+        ]
+      }
+    }
+  }
+}

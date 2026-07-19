@@ -1,0 +1,79 @@
+schema: operator-contract-v1
+source: agents/prototype-test-pr-writer.md
+model: gpt-medium
+description: Author draft PR title/body files for fail-expected prototype-test contract PRs.
+contract_status: minimum-generated-from-operator-sections
+base_procedure: ~/ai/agents/pr-writer.md
+inputs:
+- name: prototype_test_branch_ref
+  type: string
+  required: true
+  default_source: caller
+  description: prototype_test_branch_ref
+- name: base
+  type: string
+  required: true
+  default_source: caller
+  description: base
+- name: repo_root
+  type: string
+  required: true
+  default_source: caller
+  description: repo_root
+- name: dossier_answer_path
+  type: string
+  required: true
+  default_source: caller
+  description: dossier_answer_path
+- name: proof_test_audit_path
+  type: string
+  required: true
+  default_source: caller
+  description: proof_test_audit_path
+- name: spawned_tickets_path
+  type: string
+  required: true
+  default_source: caller
+  description: spawned_tickets_path
+- name: test_manifest_path
+  type: string
+  required: true
+  default_source: caller
+  description: test_manifest_path
+- name: pending_marker_convention_path
+  type: string
+  required: true
+  default_source: caller
+  description: pending_marker_convention_path
+- name: implementation_ticket_urls
+  type: string
+  required: true
+  default_source: caller
+  description: implementation_ticket_urls
+- name: output_path
+  type: string
+  required: true
+  default_source: caller
+  description: output_path
+- name: main
+  type: string
+  required: true
+  default_source: caller
+  description: '`base` - target branch for the draft PR; caller supplies the repository default branch or an explicit review target, but this must not be hard-coded to `main`.'
+defaults: []
+outputs:
+- task: default
+  success_shape: ${output_path}.title, ${output_path}
+  wrote_lines: []
+errors:
+- class: BLOCKED
+  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
+  recovery: Provide the missing input or route to the correct operator.
+- class: NEEDS_INPUT
+  cause: A user-owned decision is required before safe completion.
+  recovery: Write the question artifact when the operator convention requires one, then stop.
+side_effects:
+- Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+- Do not bypass the operator body, anti-scope, or stop conditions.

@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "kind": "age-255-estimate-clamp-successor-manifest",
+  "source_ticket": "AGE-255",
+  "source_proposal": "/home/nes/projects/agent-runner/planning/hourly-suspicious-process-investigator-feature/age-255/proposals/age-255-AGE-255.md",
+  "source_refined_estimate": 40,
+  "linear_readback": 21,
+  "original_disposition": "proposed-meta-decomposition-tracker",
+  "feature_branch": "feature/hourly-suspicious-process-investigator",
+  "manager_flavor": "manager-max",
+  "successors": [
+    {
+      "successor_id": "AGE255-S01-ATTEMPT-SEAMS",
+      "title": "Extract balanced and resume attempt-execution seams",
+      "brief_path": "/home/nes/projects/agent-runner/planning/hourly-suspicious-process-investigator-feature/age-255/decomposition/briefs/AGE255-S01-ATTEMPT-SEAMS.md",
+      "route": "refactoring",
+      "estimate": 13,
+      "estimate_source": "layer-3-slice",
+      "estimate_rationale": "Two HIGH-debt attempt owners must be split behind one shared execution-scope contract while the four-case C-03 lifecycle matrix proves exact output and finalization preservation.",
+      "depends_on": [],
+      "surfaces": ["S2", "S3", "S9"],
+      "characterization_ids": ["C-03"],
+      "new_behavior_ids": [],
+      "runtime_proof_ids": [],
+      "ticket_key": "AGE-257",
+      "ticket_url": "https://linear.app/oulipoly/issue/AGE-257/extract-balanced-and-resume-attempt-execution-seams"
+    },
+    {
+      "successor_id": "AGE255-S02-COMPLETION-ADAPTERS",
+      "title": "Extract generic completion storage and post-enqueue delivery adapter",
+      "brief_path": "/home/nes/projects/agent-runner/planning/hourly-suspicious-process-investigator-feature/age-255/decomposition/briefs/AGE255-S02-COMPLETION-ADAPTERS.md",
+      "route": "refactoring",
+      "estimate": 13,
+      "estimate_source": "layer-3-slice",
+      "estimate_rationale": "The 2,687-line mailbox owner and 740-line notify owner require an atomic generic completion and delivery extraction with exact SQLite, payload, PTY, and wake preservation.",
+      "depends_on": [],
+      "surfaces": ["S7", "S8", "S9"],
+      "characterization_ids": ["C-02"],
+      "new_behavior_ids": [],
+      "runtime_proof_ids": [],
+      "ticket_key": "AGE-256",
+      "ticket_url": "https://linear.app/oulipoly/issue/AGE-256/extract-generic-completion-storage-and-post-enqueue-delivery-adapter"
+    },
+    {
+      "successor_id": "AGE255-S03-STARTUP-PRELUDE",
+      "title": "Extract dispatch startup prelude",
+      "brief_path": "/home/nes/projects/agent-runner/planning/hourly-suspicious-process-investigator-feature/age-255/decomposition/briefs/AGE255-S03-STARTUP-PRELUDE.md",
+      "route": "refactoring",
+      "estimate": 8,
+      "estimate_source": "layer-3-slice",
+      "estimate_rationale": "The broad dispatch component needs one contract-bounded startup-maintenance extraction with exact call-order, state, diagnostic, exit, and output preservation before marker suppression is added.",
+      "depends_on": [],
+      "surfaces": ["S5", "S9"],
+      "characterization_ids": [],
+      "new_behavior_ids": [],
+      "runtime_proof_ids": [],
+      "ticket_key": "AGE-258",
+      "ticket_url": "https://linear.app/oulipoly/issue/AGE-258/extract-dispatch-startup-prelude"
+    },
+    {
+      "successor_id": "AGE255-S04-INVESTIGATOR-FEATURE",
+      "title": "Implement and prove the hourly suspicious-process investigator",
+      "brief_path": "/home/nes/projects/agent-runner/planning/hourly-suspicious-process-investigator-feature/age-255/decomposition/briefs/AGE255-S04-INVESTIGATOR-FEATURE.md",
+      "route": "implementation-pipeline",
+      "estimate": 21,
+      "estimate_source": "layer-3-slice",
+      "estimate_rationale": "After the three debt-heavy seams land, one capped WU can coherently own all nine exhaustive feature surfaces, nineteen behavior contracts, and fifteen matching service/runtime proofs.",
+      "depends_on": [
+        "AGE255-S01-ATTEMPT-SEAMS",
+        "AGE255-S02-COMPLETION-ADAPTERS",
+        "AGE255-S03-STARTUP-PRELUDE"
+      ],
+      "surfaces": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"],
+      "characterization_ids": ["C-01", "C-02", "C-03"],
+      "new_behavior_ids": [
+        "N-01", "N-02", "N-03", "N-04", "N-05", "N-06", "N-07", "N-08", "N-09", "N-10",
+        "N-11", "N-12", "N-13", "N-14", "N-15", "N-16", "N-17", "N-18", "N-19"
+      ],
+      "runtime_proof_ids": [
+        "R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10",
+        "R-11", "R-12", "R-13", "R-14", "R-15"
+      ],
+      "ticket_key": "AGE-259",
+      "ticket_url": "https://linear.app/oulipoly/issue/AGE-259/implement-and-prove-the-hourly-suspicious-process-investigator"
+    }
+  ],
+  "coverage_summary": {
+    "surfaces": {
+      "required": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"],
+      "allocations": {
+        "S1": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S2": ["AGE255-S01-ATTEMPT-SEAMS", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S3": ["AGE255-S01-ATTEMPT-SEAMS", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S4": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S5": ["AGE255-S03-STARTUP-PRELUDE", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S6": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S7": ["AGE255-S02-COMPLETION-ADAPTERS", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S8": ["AGE255-S02-COMPLETION-ADAPTERS", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "S9": ["AGE255-S01-ATTEMPT-SEAMS", "AGE255-S02-COMPLETION-ADAPTERS", "AGE255-S03-STARTUP-PRELUDE", "AGE255-S04-INVESTIGATOR-FEATURE"]
+      },
+      "unallocated": [],
+      "complete": true
+    },
+    "characterization_ids": {
+      "required": ["C-01", "C-02", "C-03"],
+      "allocations": {
+        "C-01": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "C-02": ["AGE255-S02-COMPLETION-ADAPTERS", "AGE255-S04-INVESTIGATOR-FEATURE"],
+        "C-03": ["AGE255-S01-ATTEMPT-SEAMS", "AGE255-S04-INVESTIGATOR-FEATURE"]
+      },
+      "unallocated": [],
+      "complete": true
+    },
+    "new_behavior_ids": {
+      "required": [
+        "N-01", "N-02", "N-03", "N-04", "N-05", "N-06", "N-07", "N-08", "N-09", "N-10",
+        "N-11", "N-12", "N-13", "N-14", "N-15", "N-16", "N-17", "N-18", "N-19"
+      ],
+      "allocations": {
+        "N-01": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-02": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-03": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-04": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-05": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-06": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-07": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-08": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-09": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-10": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-11": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-12": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-13": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-14": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-15": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-16": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-17": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-18": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "N-19": ["AGE255-S04-INVESTIGATOR-FEATURE"]
+      },
+      "unallocated": [],
+      "complete": true
+    },
+    "runtime_proof_ids": {
+      "required": [
+        "R-01", "R-02", "R-03", "R-04", "R-05", "R-06", "R-07", "R-08", "R-09", "R-10",
+        "R-11", "R-12", "R-13", "R-14", "R-15"
+      ],
+      "allocations": {
+        "R-01": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-02": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-03": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-04": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-05": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-06": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-07": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-08": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-09": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-10": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-11": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-12": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-13": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-14": ["AGE255-S04-INVESTIGATOR-FEATURE"],
+        "R-15": ["AGE255-S04-INVESTIGATOR-FEATURE"]
+      },
+      "unallocated": [],
+      "complete": true
+    },
+    "all_required_ids_allocated": true
+  },
+  "handoff": {
+    "coordinator": "feature-development",
+    "feature_branch": "feature/hourly-suspicious-process-investigator",
+    "fresh_per_ticket_worktrees": true,
+    "fresh_per_ticket_planning_dirs": true,
+    "fresh_per_ticket_scratch_dirs": true,
+    "fresh_owning_workflow_entry": true,
+    "prior_age_255_artifacts_are_context_only": true,
+    "owning_routes": {
+      "AGE255-S01-ATTEMPT-SEAMS": "refactoring",
+      "AGE255-S02-COMPLETION-ADAPTERS": "refactoring",
+      "AGE255-S03-STARTUP-PRELUDE": "refactoring",
+      "AGE255-S04-INVESTIGATOR-FEATURE": "implementation-pipeline"
+    }
+  }
+}

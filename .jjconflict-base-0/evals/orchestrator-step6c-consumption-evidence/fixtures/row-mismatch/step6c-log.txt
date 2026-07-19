@@ -1,0 +1,2 @@
+OULIPOLY_INVOCATION synthetic-row-mismatch
+The side-file row set, not this log, is the evidence carrier.

@@ -1,0 +1,449 @@
+{
+  "line_count": 593,
+  "headings": [
+    {
+      "level": 1,
+      "title": "AGENTS.md \u2014 Humility Discord Server Project",
+      "start": 1
+    },
+    {
+      "level": 2,
+      "title": "Project",
+      "start": 9
+    },
+    {
+      "level": 2,
+      "title": "The Live Server Principle",
+      "start": 18
+    },
+    {
+      "level": 2,
+      "title": "Workflows",
+      "start": 35
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 51
+    },
+    {
+      "level": 3,
+      "title": "Principles",
+      "start": 68
+    },
+    {
+      "level": 3,
+      "title": "Gate ownership per phase",
+      "start": 82
+    },
+    {
+      "level": 2,
+      "title": "Implementation Workflow \u2014 Test/Code Agent Separation",
+      "start": 111
+    },
+    {
+      "level": 3,
+      "title": "Per-feature PR workflow",
+      "start": 119
+    },
+    {
+      "level": 3,
+      "title": "Optimistic locking in tests",
+      "start": 144
+    },
+    {
+      "level": 2,
+      "title": "CodeRabbit Review Loop",
+      "start": 155
+    },
+    {
+      "level": 2,
+      "title": "PR Review Workflow",
+      "start": 176
+    },
+    {
+      "level": 2,
+      "title": "Bug Investigation Workflow (RCA-First)",
+      "start": 197
+    },
+    {
+      "level": 2,
+      "title": "Server Inspection Workflow",
+      "start": 206
+    },
+    {
+      "level": 2,
+      "title": "Integration Triage Workflow",
+      "start": 216
+    },
+    {
+      "level": 2,
+      "title": "Mutation Safety Workflow",
+      "start": 232
+    },
+    {
+      "level": 2,
+      "title": "Research Workflow",
+      "start": 245
+    },
+    {
+      "level": 2,
+      "title": "Deployment Workflow",
+      "start": 257
+    },
+    {
+      "level": 2,
+      "title": "Prototyping Workflow",
+      "start": 270
+    },
+    {
+      "level": 2,
+      "title": "Writing Pipeline",
+      "start": 294
+    },
+    {
+      "level": 2,
+      "title": "Product Strategy Workflow",
+      "start": 330
+    },
+    {
+      "level": 2,
+      "title": "Model Roles",
+      "start": 379
+    },
+    {
+      "level": 3,
+      "title": "No Super Agents",
+      "start": 388
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 417
+    },
+    {
+      "level": 2,
+      "title": "Architecture (Three Services)",
+      "start": 452
+    },
+    {
+      "level": 3,
+      "title": "API-First Design Rule",
+      "start": 483
+    },
+    {
+      "level": 3,
+      "title": "Key Patterns from References",
+      "start": 490
+    },
+    {
+      "level": 2,
+      "title": "Infrastructure Reference",
+      "start": 515
+    },
+    {
+      "level": 3,
+      "title": "Discord",
+      "start": 517
+    },
+    {
+      "level": 3,
+      "title": "Hosting",
+      "start": 524
+    },
+    {
+      "level": 2,
+      "title": "When to Ask the User",
+      "start": 530
+    },
+    {
+      "level": 2,
+      "title": "No Backwards Compatibility",
+      "start": 564
+    },
+    {
+      "level": 2,
+      "title": "No Deferred Stubs",
+      "start": 579
+    },
+    {
+      "level": 2,
+      "title": "Git Conventions",
+      "start": 587
+    }
+  ],
+  "sections": [
+    {
+      "level": 1,
+      "title": "AGENTS.md \u2014 Humility Discord Server Project",
+      "start": 1,
+      "end": 8,
+      "line_count": 8,
+      "text": "# AGENTS.md \u2014 Humility Discord Server Project\n\nGuidance for coding agents working on this project. Modeled on\n`~/work/AGENTS.md` and `~/projects/visual-code-editor/AGENTS.md`,\nadapted for Discord server management.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Project",
+      "start": 9,
+      "end": 17,
+      "line_count": 9,
+      "text": "## Project\n\nDiscord server management for the \"Humility\" guild (id `960634531159896064`).\nLong-term goal: a cloud-hosted daemon that handles applications,\ntickets, moderation, role management, and server organization \u2014 with\nClaude Code as the orchestrating interface.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "The Live Server Principle",
+      "start": 18,
+      "end": 34,
+      "line_count": 17,
+      "text": "## The Live Server Principle\n\nThis project operates on a live Discord server with real users.\nEvery action falls into one of three tiers:\n\n| Tier | Examples | Authorization |\n|------|----------|---------------|\n| 1 \u2014 Read | List channels, read messages, fetch member list, inspect roles | Always allowed |\n| 2 \u2014 Confined write | Create/edit files locally, commit to git, run tests | Always allowed |\n| 3 \u2014 Visible write | Send messages, create channels, modify roles, kick/ban, change permissions | **Requires explicit per-action user approval** unless a runbook has been pre-authorized in `DECISIONS.md` |\n\n**Tier 3 rule**: Before executing any action visible to Discord users,\ndescribe exactly what will happen and wait for explicit confirmation.\nNo batching \u2014 each visible action is approved individually.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Workflows",
+      "start": 35,
+      "end": 50,
+      "line_count": 16,
+      "text": "## Workflows\n\nPick the workflow that matches the situation. If unclear, ask the user.\n\n| Cue | Workflow |\n|-----|----------|\n| \"What does the server look like?\" / audit / inspect | Server Inspection |\n| New feature, enhancement, refactor | Implementation & Bug-Fix |\n| Something is broken, errors in logs | Bug Investigation (RCA-first) |\n| External service is down / bot not responding | Integration Triage |\n| Need to change something users can see | Mutation Safety |\n| \"Research X\" / \"What are the options for Y\" | Research |\n| Deploying, updating infra, changing hosting | Deployment |\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Implementation & Bug-Fix Workflow",
+      "start": 51,
+      "end": 67,
+      "line_count": 17,
+      "text": "## Implementation & Bug-Fix Workflow\n\nThe 5-phase pipeline. Features skip RCA; bugs start with it. Nothing\nis skipped except by explicit decision recorded in `DECISIONS.md`.\n\n| Phase | Model | Artifact | Role |\n|-------|-------|----------|------|\n| 0. RCA (bugs only) | `gpt-high` | `research/NN-rca.md` | Investigate root cause. Read code, trace failure, produce report. **Do NOT propose fixes.** |\n| 1. Problem research | `gpt-high` | `research/NN-*.md` | Document problem space with evidence. **Do NOT design solutions.** |\n| 2. Synthesize user needs | `claude-opus` (this session, orchestrator) | `research/NN-*-needs.md` | Map research to Humility's specific context. Flag gaps. |\n| 3. Proposal | `gpt-high` | `proposals/NN-*.md` | Propose a design/scope. Include architecture, tradeoffs, anti-scope. **Do NOT implement.** |\n| 4. Risk assessment | 3x `claude-opus` in parallel | `risk/NN-{audit,scope,shortcut}.md` | Three sub-agents: audit risk + scope risk + shortcut risk. **All must return LOW.** If MEDIUM/HIGH, revise proposal and re-run. |\n| 5. Hookpoint research | `gpt-high` | `research/NN-hookpoints.md` | **Only after risk LOW.** Map proposal to existing code. Find what's reusable, what's parallel, what to delete. |\n| 6. Implementation | `gpt-high` | code | **Only after hookpoints.** Launch implementation using test/code separation. |\n| 7. CodeRabbit review | CLI | review comments | Rerun until clean. Amend same commit. |\n| 8. PR review | `claude-opus` | review comments | Multi-concern check + justification check. Split oversized PRs. |\n"
+    },
+    {
+      "level": 3,
+      "title": "Principles",
+      "start": 68,
+      "end": 81,
+      "line_count": 14,
+      "text": "### Principles\n\n- **Separate agents for separate concerns.** RCA agents don't propose;\n  proposal agents don't implement. This is how you avoid the\n  solution-fixation trap.\n- **Zero-risk gate.** All three risk assessments must return LOW before\n  implementation starts. Shortcut risk flags proposals that introduce\n  their own shortcuts.\n- **No compatibility shims** anywhere in the pipeline.\n- **Research before implementation.** Hookpoints (phase 5) finds what\n  exists so the implementation doesn't build parallel systems.\n- **Iterate until it passes.** Don't implement a proposal that hasn't\n  cleared risk.\n"
+    },
+    {
+      "level": 3,
+      "title": "Gate ownership per phase",
+      "start": 82,
+      "end": 110,
+      "line_count": 29,
+      "text": "### Gate ownership per phase\n\nDifferent phases have different gates. Some are model-gated, some are\nhuman-gated. Getting this wrong burns cycles and erodes trust.\n\n| Phase | Gate owner | What the gate does |\n|---|---|---|\n| 0. RCA (bugs) | **Human** | User decides if the bug is worth fixing at all |\n| 1. Problem research | **Human** | User confirms scope framing \u2014 did the research find the right problems? |\n| 2. Synthesis | **Human** | User confirms the mapping to their actual needs and answers any open questions |\n| 3. Proposal | **3x `claude-opus` parallel** \u2014 audit + scope + shortcut risk | The risk assessment IS the review. No human gate here. |\n| 4. Hookpoint research | **Human** | User confirms which pre-existing code survives |\n| 5. Implementation | (continuous) | Test suite + CI + daemon smoke |\n| 6. CodeRabbit | **Model** | Rerun until clean |\n| 7. PR review | **`claude-opus`** multi-concern + justification check | Split oversized PRs |\n\n**Rule of thumb**: phases that set scope belong to the user; phases\nthat validate design or code belong to agents. Do not ask for user\nreview where a risk gate or PR review is the correct control.\n\nRisk phase specifically:\n- All three risks must return **LOW**\n- If any is MEDIUM or HIGH, revise proposal and re-run the full risk\n  gate \u2014 do not cherry-pick which risks to address\n- If a risk is LOW but surfaces a concern worth discussing, raise it\n  to the user as an observation, not a gate\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Implementation Workflow \u2014 Test/Code Agent Separation",
+      "start": 111,
+      "end": 118,
+      "line_count": 8,
+      "text": "## Implementation Workflow \u2014 Test/Code Agent Separation\n\n**CRITICAL**: The test writer MUST be a different agent invocation\nfrom the code writer. This ensures tests encode intent from the\ncontract, not from the implementation. If the same agent writes both,\ntests tend to mirror the implementation instead of validating the\ncontract.\n"
+    },
+    {
+      "level": 3,
+      "title": "Per-feature PR workflow",
+      "start": 119,
+      "end": 143,
+      "line_count": 25,
+      "text": "### Per-feature PR workflow\n\nEach feature PR goes through this sequence:\n\n| Step | Agent | Input | Output |\n|------|-------|-------|--------|\n| 1. Define contract | Orchestrator (this session) | Proposal subsystem design | Pydantic schemas, endpoint signatures, command definitions |\n| 2. Write tests | `gpt-high` (test agent) | Contracts ONLY \u2014 no implementation code | `tests/` files that encode expected behavior |\n| 3. Write code | `gpt-high` (code agent, separate invocation) | Contracts + test files | Implementation that makes tests pass |\n| 4. Verify | CI (local pytest run) | Tests + code | Green/red |\n| 5. Review | CodeRabbit | PR diff | Review comments |\n\n**Key rules**:\n- The test agent ONLY sees the contracts (Pydantic models, endpoint\n  signatures, CLI command definitions). It does NOT see the service/\n  repository/infrastructure implementation.\n- The code agent sees both the contracts AND the tests. Its job is\n  to make the tests pass while following the layered architecture.\n- If tests fail after step 3, the code agent is re-invoked with the\n  test output. The test agent is NOT re-invoked (tests encode intent,\n  not implementation \u2014 if a test is wrong, it's the contract's fault,\n  not the test's).\n- Tests use `pytest` with `httpx.AsyncClient` for API endpoints and\n  mock/fixture patterns for Discord interactions.\n"
+    },
+    {
+      "level": 3,
+      "title": "Optimistic locking in tests",
+      "start": 144,
+      "end": 154,
+      "line_count": 11,
+      "text": "### Optimistic locking in tests\n\nTests MUST verify optimistic locking behavior for versioned entities\n(from the java-interview-setup pattern):\n- Read entity -> get version N\n- Update with version N -> succeeds, version becomes N+1\n- Update with stale version N -> returns 409 Conflict\n- This is a contract-level behavior, so the test agent writes it.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "CodeRabbit Review Loop",
+      "start": 155,
+      "end": 175,
+      "line_count": 21,
+      "text": "## CodeRabbit Review Loop\n\nCodeRabbit CLI is a formal stage in the per-feature PR workflow.\nOne pass is NOT enough \u2014 keep rerunning until the review is clean.\n\n```bash\ncoderabbit review --plain --base main --cwd <project-dir>\n\n# Iterate until clean:\n# 1. Fix findings\n# 2. Run tests\ngit commit --amend --no-edit\ngit push --force-with-lease\ncoderabbit review --plain --base main --cwd <project-dir>\n```\n\nKeep amending the same commit so CodeRabbit always reviews a single\nclean diff against main.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "PR Review Workflow",
+      "start": 176,
+      "end": 196,
+      "line_count": 21,
+      "text": "## PR Review Workflow\n\nAfter implementation and CodeRabbit, before merging, all PRs go through\ndecomposition review.\n\n| Step | Model | Role |\n|------|-------|------|\n| 1. Multi-concern check | `claude-opus` | Can this PR be decomposed into smaller PRs with single concerns? Identify each concern, the lines/functions involved, and dependency order. |\n| 2. Justification check | `claude-opus` | What deserves to be in this PR? What does not? Anything separable goes to its own PR. |\n\n**Rules:**\n- Run on the actual diff, not the proposal \u2014 proposals can look\n  reasonable while the diff bundles too much\n- A PR that touches N independent concerns should be split into N PRs\n- Dependency order matters \u2014 if PR B depends on PR A, A merges first\n- A large deletion is its own PR, separate from the addition that replaces it\n- Additive changes go before behavioral changes\n- If multi-concern check says \"cannot decompose further\", PR is ready for merge\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Bug Investigation Workflow (RCA-First)",
+      "start": 197,
+      "end": 205,
+      "line_count": 9,
+      "text": "## Bug Investigation Workflow (RCA-First)\n\n1. **RCA agent** (`gpt-high`) \u2014 investigate root cause. Read code, trace\n   the failure path, produce a report. Do NOT propose fixes.\n2. Feed RCA report into the Implementation & Bug-Fix pipeline at phase 3\n   (Proposal).\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Server Inspection Workflow",
+      "start": 206,
+      "end": 215,
+      "line_count": 10,
+      "text": "## Server Inspection Workflow\n\nRead-only audit of the Discord server state. Tier 1 only.\n\n1. Fetch current state (channels, roles, members, permissions)\n2. Produce a structured report\n3. Compare against expected state if a reference exists\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Integration Triage Workflow",
+      "start": 216,
+      "end": 231,
+      "line_count": 16,
+      "text": "## Integration Triage Workflow\n\nWhen an external service or bot is unresponsive:\n\n1. **Check status** \u2014 is the service actually down? Check endpoints,\n   status pages, logs.\n2. **Identify impact** \u2014 what functionality is lost?\n3. **Document** \u2014 log the outage, affected features, and workaround\n   if any.\n4. **Mitigate** \u2014 if a workaround exists, propose it (follows Mutation\n   Safety if it changes anything visible).\n5. **Recover** \u2014 when service returns, verify functionality is restored.\n6. **Post-mortem** \u2014 update docs with lessons learned.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Mutation Safety Workflow",
+      "start": 232,
+      "end": 244,
+      "line_count": 13,
+      "text": "## Mutation Safety Workflow\n\nFor any Tier 3 action (visible to Discord users):\n\n1. **State** \u2014 describe the current state of what will change\n2. **Reversal path** \u2014 describe how to undo the change if it goes wrong\n3. **Ask user** \u2014 present the action, current state, and reversal path\n4. **Wait for explicit yes** \u2014 do not proceed on ambiguous responses\n5. **Execute + verify** \u2014 perform the action, then verify the result\n6. **No batching** \u2014 each visible action is its own cycle\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Research Workflow",
+      "start": 245,
+      "end": 256,
+      "line_count": 12,
+      "text": "## Research Workflow\n\nFor open-ended investigation:\n\n1. **Scope** \u2014 define what question needs answering\n2. **Research agent** (`gpt-high` or `gpt-xhigh` for deep research) \u2014\n   investigate, produce a report\n3. **Synthesis** (this session) \u2014 integrate findings into project context\n4. **Decision** \u2014 user decides next steps based on findings\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Deployment Workflow",
+      "start": 257,
+      "end": 269,
+      "line_count": 13,
+      "text": "## Deployment Workflow\n\nFor infrastructure changes:\n\n1. **Proposal** \u2014 describe what changes and why\n2. **Risk assessment** \u2014 3x risk (same as implementation)\n3. **Dry run** \u2014 test in staging/preview if possible\n4. **Execute** \u2014 apply changes\n5. **Verify** \u2014 confirm everything works\n6. **Document** \u2014 update infrastructure reference\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Prototyping Workflow",
+      "start": 270,
+      "end": 293,
+      "line_count": 24,
+      "text": "## Prototyping Workflow\n\nRuns between strategic roadmap approval and production implementation when\na slice has wide magnitude uncertainty or unknown external dependencies.\nSee `prototyping/orchestrator.md` for the full process.\n\n**Prototyping is NOT implementation.** It cares about discovery, not\ncorrectness. Prototype code is disposable. Production code is written\nfresh using prototype findings as input.\n\nFive stages:\n\n1. Scope the prototype (human gate \u2014 user approves the questions and budget)\n2. Pre-prototype research (`gpt-high`, `prototyping/research agent.md`)\n3. Build the prototype (`gpt-high`, `prototyping/prototype agent.md`)\n4. Synthesize findings (`claude-opus`, `prototyping/findings agent.md`)\n5. Propose roadmap updates (`gpt-high`, `prototyping/roadmap-update agent.md`)\n6. Human gate \u2014 user applies updates, commissions follow-ups, or moves to implementation\n\nNo 3x risk gate. Prototype artifacts live in `prototyping/<slug>/prototype/`\nand are not shipped.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Writing Pipeline",
+      "start": 294,
+      "end": 329,
+      "line_count": 36,
+      "text": "## Writing Pipeline\n\nMulti-agent writing quality system for public-facing documents. See\n`product-strategy/writing pipeline orchestrator.md` for the full process\nand `product-strategy/WRITING_SKILL_MASTER.md` for the craft reference.\n\nApplies to: executive roadmap, pitch deck, and any future public documents.\n\n**Phase A: Content Revision**\n1. Content revision (`claude-opus`, `writing content agent.md`)\n   \u2014 adds missing sections from communication research\n2. Human gate \u2014 user approves content additions\n\n**Phase B: Writing Quality (sequential, per rubric)**\n3. Skeleton extraction (`gpt-high`) \u2014 structural analysis\n4. Non-negotiable scan (`gpt-high`) \u2014 hard ban violations\n5. Rubric 1: Story beats (`claude-opus`, `writing rubric agent.md`)\n6. Rubric 2: AI tell filter (`claude-opus`, `writing rubric agent.md`)\n7. Rubric 3: Flow and cohesion (`claude-opus`, `writing rubric agent.md`)\n8. Rubric 4: Adversarial robustness (`claude-opus`, `writing rubric agent.md`)\n9. Tempo and editorial (`claude-opus`, `writing editorial agent.md`)\n10. Restart check \u2014 if major edits, re-run from step 4. Max 3 cycles.\n\n**Phase C: Quality Gate**\n11. Quality gate (`claude-opus`, `writing quality gate agent.md`)\n    \u2014 PASS/FAIL with specific findings. Separate reviewer.\n12. PDF rendering \u2014 `python scripts/render-pitch-deck.py`\n\n**Gate: Human** \u2014 user reviews the PDF before distribution.\n\nCommunication research per document type:\n- Executive roadmap: `research/exec-roadmap-communication.md`\n- Pitch deck: `research/pitch-deck-communication.md`\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Product Strategy Workflow",
+      "start": 330,
+      "end": 378,
+      "line_count": 49,
+      "text": "## Product Strategy Workflow\n\nFor strategic product decisions, use the alignment loop in\n`product-strategy/`. See `product-strategy/orchestrator.md` for the\nfull process.\n\n**CRITICAL**: Each stage is a SEPARATE sub-agent invocation. Claude Code\nacts as the orchestrator, NOT a single mega-agent. Do not collapse the\nmulti-stage workflow into a single agent.\n\nPipeline after alignment converges \u2014 see\n`product-strategy/roadmap orchestrator.md` for the full process:\n\n**Layer 0: Market Research**\n1. Research planning (orchestrator \u2014 identifies research questions)\n2. Web research execution (`gpt-high` \u00d7 N parallel, via Firecrawl MCP)\n3. Market research synthesis (`gpt-high`, `market research agent.md`)\n4. Surface check \u2192 product strategy re-entry if surfaces found\n\n**Layer 1: Executive Roadmap**\n5. Executive roadmap proposal (`gpt-high`, `executive roadmap proposer.md`)\n6. 3x executive risk assessment (`claude-opus`, parallel):\n   market misread, dependency trap, completeness\n7. Human gate \u2014 user approves strategic ordering\n\n**Layer 2: Engineering Roadmap**\n8. Engineering codebase research (`gpt-high`, `engineering research agent.md`)\n9. Engineering roadmap proposal (`gpt-high`, `engineering roadmap proposer.md`)\n10. 3x engineering risk assessment (`claude-opus`, parallel):\n    feasibility, integration, drift\n11. Human gate \u2014 user resolves ordering disagreements\n\n**Layer 3: AI-Optimized Roadmap**\n12. AI roadmap proposal (`gpt-high`, `ai roadmap proposer.md`)\n13. 3x AI risk assessment (`claude-opus`, parallel):\n    decomposition, coverage, dependency\n14. Model gate \u2014 orchestrator validates completeness\n\n**Layer 4: Ticket Generation**\n15. Ticket generation (`gpt-high`, `ticket generation agent.md`)\n16. Human gate \u2014 user reviews tickets\n\nRisk types per layer are defined in `product-strategy/roadmap risk types.md`.\nAll risk assessments must return LOW. If any returns MEDIUM/HIGH, the\nproposer revises and the full risk gate re-runs. See the roadmap\norchestrator for resolution paths per risk type.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Model Roles",
+      "start": 379,
+      "end": 387,
+      "line_count": 9,
+      "text": "## Model Roles\n\n| Model | Use for |\n|-------|---------|\n| `gpt-high` | RCA, proposals, research, hookpoint analysis, implementation |\n| `gpt-xhigh` | Coordination and deep reasoning (see below) |\n| `claude-opus` | Risk assessments, PR reviews, alignment reviews, synthesis |\n| `claude-sonnet` | Quick checks, summaries |\n"
+    },
+    {
+      "level": 3,
+      "title": "No Super Agents",
+      "start": 388,
+      "end": 416,
+      "line_count": 29,
+      "text": "### No Super Agents\n\n**CRITICAL**: No single agent should both research AND synthesize for\nlarge tasks. Large tasks use a coordinator/researcher split:\n\n- `gpt-xhigh` acts as **coordinator** \u2014 identifies what questions need\n  answering, writes research prompts, launches `gpt-high` agents,\n  synthesizes their findings into the deliverable.\n- `gpt-high` acts as **researcher** \u2014 receives a focused question,\n  investigates, returns findings.\n\nThe coordinator does NOT do deep research itself. It delegates research\nto `gpt-high` agents via the `agents` CLI:\n\n```bash\n# Coordinator writes a prompt, launches a researcher:\n~/.local/bin/agents -m gpt-high -p <project> -f .tmp/<research-prompt>.md\n```\n\nThis applies to:\n- Proposal writing (coordinator patches proposal, researchers answer gaps)\n- Problem space investigation (coordinator identifies axes, researchers\n  gather evidence)\n- Any task that requires both broad reasoning and detailed research\n\nA single agent trying to do both produces shallow work. Split the roles.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Running Sub-Agents",
+      "start": 417,
+      "end": 451,
+      "line_count": 35,
+      "text": "## Running Sub-Agents\n\nThe `agents` CLI (`~/.local/bin/agents`) runs external models.\n\n```bash\n# Run a model with a prompt:\nagents -m gpt-high -p <worktree-path> \"your prompt\"\n\n# Run from a prompt file:\nagents -m gpt-high -p <worktree-path> -f prompt.md\n\n# Available models: gpt-high, gpt-medium, gpt-low, gpt-xhigh,\n#   claude-opus, claude-sonnet, claude-haiku,\n#   gemini-high, gemini-pro-high, gemini-flash-high\n```\n\n**CRITICAL \u2014 Worktree Isolation**: When running multiple agents in\nparallel, each agent MUST operate on its own git worktree. The `-p`\nflag must point to a worktree directory, NOT the shared project root.\n\n```bash\n# Create a worktree for an agent:\ngit worktree add worktrees/<branch> -b <branch>\n\n# Point the agent at the worktree:\nagents -m gpt-high -p worktrees/<branch> -f prompt.md\n\n# After agent completes, merge the worktree branch and clean up:\ngit worktree remove worktrees/<branch>\n```\n\nNever run parallel agents writing to the same directory.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Architecture (Three Services)",
+      "start": 452,
+      "end": 482,
+      "line_count": 31,
+      "text": "## Architecture (Three Services)\n\n```\nservices/\n  api/          # FastAPI \u2014 the mutation gateway. Both UI and Discord daemon call it.\n    api/        # endpoints (versioned: v1/)\n    contracts/  # Pydantic schemas / DTOs\n    core/       # factory, settings, dependencies, middleware\n    services/   # business logic\n    repositories/  # database access\n    infrastructure/  # external clients (Google Vision, Gemini, etc.)\n\n  discord/      # discord.py daemon \u2014 gateway adapter\n    # Translates Discord interactions (slash commands, buttons, modals, threads)\n    # into API calls or direct DB writes. Posts embeds, manages threads.\n\napps/\n  web/          # TanStack Start/Router frontend\n    # Application forms (richer than Discord modals)\n    # Officer review dashboards\n    # Activity tracking views + correction UI\n    # Chapter management admin panels\n\npackages/\n  shared-types/ # TypeScript contracts (generated from OpenAPI)\n\nmigrations/     # Alembic for Postgres schema\ndocs/           # planning docs\nplans/          # plans and research\n```\n"
+    },
+    {
+      "level": 3,
+      "title": "API-First Design Rule",
+      "start": 483,
+      "end": 489,
+      "line_count": 7,
+      "text": "### API-First Design Rule\n\n- Human UI and agent API are BOTH first-class surfaces\n- The UI is a client of the API, not the only way to operate the system\n- Every UI action has a corresponding structured API endpoint\n- OpenAPI/Pydantic contracts make the surface agent-friendly\n"
+    },
+    {
+      "level": 3,
+      "title": "Key Patterns from References",
+      "start": 490,
+      "end": 514,
+      "line_count": 25,
+      "text": "### Key Patterns from References\n\nFrom `ai-workflow/app`:\n- Layered: api -> services -> repositories, with contracts and core as cross-cutting\n- Factory pattern for app creation\n- Settings via Pydantic\n- Dependency injection via FastAPI Depends\n\nFrom `java-interview-setup`:\n- VersionedEntity base class -> optimistic locking via version column\n- AuditInfo / AuditorContextHolder -> audit trail with actor context\n- EntityValidator -> validation at the domain layer\n- Mapper pattern -> entity <-> DTO conversion\n- Projections -> query-specific read models\n\nFrom `ui-designer`:\n- Bun + Turborepo for TypeScript workspace management\n- Changesets for versioning\n- Lefthook for git hooks\n- Vitest + Playwright for testing\n- Soft assertions convention\n- TanStack Query 5\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Infrastructure Reference",
+      "start": 515,
+      "end": 516,
+      "line_count": 2,
+      "text": "## Infrastructure Reference\n"
+    },
+    {
+      "level": 3,
+      "title": "Discord",
+      "start": 517,
+      "end": 523,
+      "line_count": 7,
+      "text": "### Discord\n\n| Item | Value |\n|------|-------|\n| Guild ID | `960634531159896064` |\n| Guild name | Humility |\n"
+    },
+    {
+      "level": 3,
+      "title": "Hosting",
+      "start": 524,
+      "end": 529,
+      "line_count": 6,
+      "text": "### Hosting\n\nPlatform decisions will be recorded in `DECISIONS.md` as they are made.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "When to Ask the User",
+      "start": 530,
+      "end": 563,
+      "line_count": 34,
+      "text": "## When to Ask the User\n\nNot in the middle of a phase. Phases are self-contained \u2014 you give\nthe external model a complete prompt and get back a complete artifact.\n**Not at every phase boundary either** \u2014 only at phase boundaries\nwhere the user is the gate owner (see Gate ownership per phase above).\n\nAsk the user:\n\n- **At human-gated phase boundaries** \u2014 research, synthesis,\n  hookpoint findings. They confirm scope and framing before the\n  pipeline advances. This is NOT every phase; proposal phase is\n  model-gated.\n- **Before tier-3 destructive actions** \u2014 per-action, with action +\n  blast radius + reversal path in one message.\n- **When blocked on credentials or external action** \u2014 things only the\n  user can physically do (log into a website, click a Discord dialog,\n  pay a bill, create a staging Discord guild).\n- **When two clearly-defined paths have different irreversible\n  consequences** \u2014 present both, let them choose. Don't flood with\n  six variants.\n\nDo **not** ask the user:\n\n- To review a proposal \u2014 that's what the 3x risk gate is for\n- Things you can verify with `discord_cli.py`\n- Things that are already in `NOTES.md` or `DECISIONS.md`\n- Minor design decisions that fit within a phase's scope \u2014 make a call,\n  document in `DECISIONS.md`, keep moving\n- \"Is this OK?\" checks on every action. Overasking erodes trust faster\n  than occasional mistakes\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "No Backwards Compatibility",
+      "start": 564,
+      "end": 578,
+      "line_count": 15,
+      "text": "## No Backwards Compatibility\n\n**CRITICAL**: Never introduce backward-compatibility shims, feature\nflags for old behavior, transitional code paths, deprecated aliases,\nre-exports, or dual support. Ship changes cleanly.\n\nWhen updating code:\n1. Find all usages\n2. Update all call sites\n3. Delete old code\n4. Run tests\n5. No fallbacks\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "No Deferred Stubs",
+      "start": 579,
+      "end": 586,
+      "line_count": 8,
+      "text": "## No Deferred Stubs\n\nDo not create placeholder stubs or TODO comments unless the\nimplementation plan explicitly indicates the item is planned for a\nlater task. Implement fully or document what's blocking.\n\n---\n"
+    },
+    {
+      "level": 2,
+      "title": "Git Conventions",
+      "start": 587,
+      "end": 593,
+      "line_count": 7,
+      "text": "## Git Conventions\n\n- All work in worktrees \u2014 main checkout stays clean\n- All PRs opened in draft mode\n- GPG-signed commits (key `2AAAEEBD97F32BFE`)\n- No Co-Authored-By lines \u2014 agents do not add themselves as authors\n- Branch naming: `feat/<description>` or `<TICKET-ID>-<description>`"
+    }
+  ]
+}
