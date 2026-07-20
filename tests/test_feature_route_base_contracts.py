@@ -8012,6 +8012,8 @@ def test_manual_merge_baseline_is_derived_at_wake_not_guessed():
     assert "`pre_merge_base_sha` is optional" in wake
     assert "`base_ref_oid` is current PR/base status evidence and is not `pre_merge_base_sha`" in wake
     assert "omit/null means the resumer must derive it from trusted merge evidence" in wake
+    assert "derive the poller's `<owner>/<repo>#<number>` identifier" in wake
+    assert "without replacing the stored URL" in wake
 
     resumer_contract = _load_yaml("contracts/operators/wu-session-resumer.yaml")
     assert _input(resumer_contract, "pre_merge_base_sha")["required"] is False
