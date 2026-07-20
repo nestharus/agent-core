@@ -1334,7 +1334,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "trigger_result": None,
         }
 
-        if final_outcome in {"approved", "changes_requested"}:
+        if final_outcome == "approved":
             terminal_reason = str(final_outcome)
             iterations.append(iteration)
             break
