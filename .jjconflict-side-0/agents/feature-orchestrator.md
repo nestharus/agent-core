@@ -57,7 +57,7 @@ inputs:
     default_source: caller
     description: "Absolute directory for feature dispatch and trace artifacts."
   - name: scoped_ticket_list
-    type: string
+    type: string_list
     required: true
     default_source: caller
     description: "Non-empty unique ticket identities defining the exact feature scope."
@@ -107,7 +107,7 @@ inputs:
     default_source: caller
     description: "One of manager-max, manager-pragmatic, or manager-hackerman."
   - name: acceptance_evidence_paths
-    type: string
+    type: path_list
     required: true
     default_source: caller
     description: "Readable feature acceptance evidence paths consumed by the integrated-scope gate."

@@ -2437,6 +2437,8 @@ def test_feature_invocation_is_canonical_explicit_and_credential_free():
     assert _input(contract, "feature_branch")["required"] is True
     assert _input(contract, "feature_worktree_path")["required"] is True
     assert _input(contract, "child_worktrees_root")["required"] is True
+    assert _input(contract, "scoped_ticket_list")["type"] == "string_list"
+    assert _input(contract, "acceptance_evidence_paths")["type"] == "path_list"
     assert contract["defaults"] == [
         {
             "name": "audit_history_path",
