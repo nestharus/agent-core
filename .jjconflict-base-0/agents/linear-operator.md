@@ -27,10 +27,10 @@ inputs:
     default_source: caller
     description: "body"
   - name: operation
-    type: string
+    type: enum
     required: false
     default_source: caller
-    description: "Optional comment operation; comment-readback activates producer-authenticated evidence."
+    description: "When supplied, must be comment-readback; omission selects ordinary comment behavior."
   - name: target_status
     type: string
     required: false
@@ -200,6 +200,7 @@ You read, comment on, create, and transition Linear issues using the ported Line
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment`, `transition`, and `apply-labels`).
 - `target_status` (for `transition`): destination state name for the routine manager-owned path. The closed routine set is exactly `Todo`, `In Progress`, and `Done`, sourced from `clients.linear.client.ROUTINE_MANAGER_OWNED_STATES`; out-of-set values are out-of-contract and the operator returns `BLOCKED`.
 - `body` (for `comment`): markdown body — Linear renders Markdown natively, no ADF.
+- `operation` (for `comment`, optional): omit for an ordinary comment or pass exactly `comment-readback` for producer-authenticated evidence. Any other value is out-of-contract and returns `BLOCKED`; `comment-readback` requires `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`.
 - `output_path` (for `read`): destination file path the operator must write the rendered ticket to (used by orchestrator Phase 0 bootstrap).
 - `brief_path` (for `create`): path to a markdown brief whose contents become the issue description verbatim. The orchestrator validates that the rendered description is non-empty; scope and boundaries are derived later in Phase 2.5 / Phase 3 / Step 6a, not pre-declared in the brief.
 - `summary` (for `create`): one-line title for the issue.

@@ -19,10 +19,10 @@ inputs:
   default_source: caller
   description: body
 - name: operation
-  type: string
+  type: enum
   required: false
   default_source: caller
-  description: Optional comment operation; comment-readback activates producer-authenticated evidence.
+  description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
 - name: target_status
   type: string
   required: false

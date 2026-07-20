@@ -5657,6 +5657,15 @@ def test_ticket_operators_share_closed_comment_readback_schema_and_contract_inpu
         )
         assert "ticket-operation-result-v1" in comment_output["success_shape"]
 
+    linear_contract = _operator_contract("linear-operator")
+    operation_input = next(
+        item for item in linear_contract["inputs"] if item["name"] == "operation"
+    )
+    assert operation_input["type"] == "enum"
+    assert "must be comment-readback" in operation_input["description"]
+    linear_required_inputs = _section("agents/linear-operator.md", "## Required Inputs")
+    assert "Any other value is out-of-contract and returns `BLOCKED`" in linear_required_inputs
+
 
 def test_phase_9_named_ticket_dispatch_validates_and_transports_producer_result():
     phase_9 = _section(
