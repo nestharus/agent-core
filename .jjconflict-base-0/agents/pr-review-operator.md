@@ -223,6 +223,43 @@ BASE_BRANCH=$(printf '%s' "$PR_META_JSON" | jq -r .baseRefName)
 BASE_SHA=$(printf '%s' "$PR_META_JSON" | jq -r .baseRefOid)
 HEAD_BRANCH=$(printf '%s' "$PR_META_JSON" | jq -r .headRefName)
 HEAD_SHA=$(printf '%s' "$PR_META_JSON" | jq -r .headRefOid)
+
+if [ "${base_branch+x}" = x ] && { [ -z "$base_branch" ] || [ "$base_branch" != "$BASE_BRANCH" ]; }; then
+  printf 'BLOCKED:invalid-base-ref\n' >&2
+  exit 1
+fi
+if [ "${base_sha+x}" = x ] && { [ -z "$base_sha" ] || [ "$base_sha" != "$BASE_SHA" ]; }; then
+  printf 'BLOCKED:invalid-base-ref\n' >&2
+  exit 1
+fi
+if [ "${base_ref+x}" = x ]; then
+  RESOLVED_CALLER_BASE_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${base_ref}^{commit}" 2>/dev/null) || {
+    printf 'BLOCKED:invalid-base-ref\n' >&2
+    exit 1
+  }
+  if [ -z "$base_ref" ] || [ "$RESOLVED_CALLER_BASE_SHA" != "$BASE_SHA" ]; then
+    printf 'BLOCKED:invalid-base-ref\n' >&2
+    exit 1
+  fi
+fi
+if [ "${head_branch+x}" = x ] && { [ -z "$head_branch" ] || [ "$head_branch" != "$HEAD_BRANCH" ]; }; then
+  printf 'BLOCKED:invalid-head-ref\n' >&2
+  exit 1
+fi
+if [ "${head_sha+x}" = x ] && { [ -z "$head_sha" ] || [ "$head_sha" != "$HEAD_SHA" ]; }; then
+  printf 'BLOCKED:invalid-head-ref\n' >&2
+  exit 1
+fi
+if [ "${head_ref+x}" = x ]; then
+  RESOLVED_CALLER_HEAD_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${head_ref}^{commit}" 2>/dev/null) || {
+    printf 'BLOCKED:invalid-head-ref\n' >&2
+    exit 1
+  }
+  if [ -z "$head_ref" ] || [ "$RESOLVED_CALLER_HEAD_SHA" != "$HEAD_SHA" ]; then
+    printf 'BLOCKED:invalid-head-ref\n' >&2
+    exit 1
+  fi
+fi
 RUN_MANIFEST=$(python3 ~/ai/tools/operational_contracts.py init-pr-review-run \
   --review-root "$REVIEW_ROOT" \
   --source-repo-root "$SOURCE_REPO_ROOT" \
