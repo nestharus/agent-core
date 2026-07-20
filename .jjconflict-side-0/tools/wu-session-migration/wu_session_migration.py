@@ -1080,9 +1080,10 @@ def capture_evidence(
             "gh",
             "pr",
             "view",
-            pr_url,
             "--json",
             "url,state,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,mergedAt",
+            "--",
+            pr_url,
         ]
         payload = _run_json_command(command)
         capture: dict[str, Any] = {
@@ -1411,9 +1412,10 @@ def _derive_and_validate_evidence(record: Mapping[str, Any]) -> dict[str, Any]:
     provider_command = provider["command"]
     if (
         provider_command[:3] != ["gh", "pr", "view"]
-        or len(provider_command) < 6
-        or provider_command[3] != pr_url
-        or "--json" not in provider_command
+        or len(provider_command) != 7
+        or provider_command[3] != "--json"
+        or provider_command[5] != "--"
+        or provider_command[6] != pr_url
     ):
         raise MigrationError("provider-capture-command-mismatch")
     raw_state = payload.get("state")

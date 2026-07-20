@@ -134,7 +134,9 @@ def _evidence(
         "mergedAt": merged_at,
     }
     record: dict[str, object] = {
-        "provider": _capture(["gh", "pr", "view", pr_url, "--json", "fields"], payload),
+        "provider": _capture(
+            ["gh", "pr", "view", "--json", "fields", "--", pr_url], payload
+        ),
         "merge_commit": None,
         "merge_method": None,
         "branch_out": None,
