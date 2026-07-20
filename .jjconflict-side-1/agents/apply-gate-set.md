@@ -222,8 +222,8 @@ Per expected child or child group, include:
 - `blocking_if_missing`
 - `canonical_output_path`
 - `expected_verdict`
-- `expected_sha256`
-- `producing_invocation_uuid`
+- `expected_sha256` (post-dispatch join field; absent or `null` in the pre-dispatch skeleton)
+- `producing_invocation_uuid` (post-dispatch join field; absent or `null` in the pre-dispatch skeleton)
 - `companion_artifacts`
 - `topology_mode`
 - `notes`
@@ -231,12 +231,12 @@ Per expected child or child group, include:
 Projection rules:
 
 - `canonical_output_path` copies from the join row.
-- `sha256` projects to `expected_sha256`.
+- After the child returns, verified join-row `sha256` projects to `expected_sha256`, and the UUID parsed from the complete child log projects to `producing_invocation_uuid`. Both fields are required in the frozen post-dispatch evidence for a dispatched child with canonical output.
 - Expected verdict comes from the child gate contract or an allowed exception row, never from a narrative claim.
 - Requiredness follows caller mode and row applicability.
 - Skip and bootstrap rows project as explicit exception evidence; they do not pretend the skipped or non-LOW gate produced a LOW verdict.
 - Topology mode records whether the row requires direct child invocation, external artifact consumption, side-channel evidence, or caller-supplied prior gate output.
-- Write the expected-process skeleton before child dispatch. After each child returns, freeze its actual invocation UUID and canonical output hash in dispatch/join evidence; never invent a UUID pre-dispatch.
+- Write the expected-process skeleton before child dispatch with stable declarations only. After each child returns, freeze its actual invocation UUID and canonical output hash in dispatch/join evidence and complete the corresponding post-dispatch join fields; never invent a UUID or output hash pre-dispatch.
 - Capture the raw trace at `process_tree_path`, dispatch `process-tree-auditor` independently, and require PASS before aggregate acceptance. The final result hashes the dispatch manifest, join manifest, aggregate report, expected process, raw trace, process-tree report, and every consumed child output.
 
 ## RCA contract adapter
