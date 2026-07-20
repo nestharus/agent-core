@@ -601,14 +601,15 @@ threads are culled or the gauntlet returns a blocking condition. Write the final
 \`\$work_dir/justification/final-verdict.md\` beginning with
 \`# Justification Gauntlet Verdict\`.
 EOF
-
-agents -a ${agents_dir}/pr-justification-gauntlet.md \
-  -p "$PROJECT_DIR" \
-  -f "$WORK_DIR/gauntlet-kickoff.md" \
-  2>&1 | tee "$WORK_DIR/result-justification.log"
 ```
 
-This is a file-producing child: its complete envelope is `result-justification.log`, while its separately written canonical output is `$WORK_DIR/justification/final-verdict.md`. Output: final verdict at that canonical path with
+Dispatch the named child through one parent-visible Bash-background tool invocation:
+
+```python
+Bash(command='agents -a ${agents_dir}/pr-justification-gauntlet.md -p "$PROJECT_DIR" -f "$WORK_DIR/gauntlet-kickoff.md" 2>&1 | tee "$WORK_DIR/result-justification.log"', run_in_background=True, description="Run PR justification gauntlet")
+```
+
+After its task notification arrives, consume the file-producing child: its complete envelope is `result-justification.log`, while its separately written canonical output is `$WORK_DIR/justification/final-verdict.md`. Output: final verdict at that canonical path with
 per-thread `drop | backlog | keep`. The caller (this operator) folds
 that verdict into the PR review comment body (see Phase 5c).
 
