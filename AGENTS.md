@@ -36,6 +36,12 @@ Projects organized for agent-driven workflows follow the umbrella layout `~/proj
 - `worktree_path`, `scratch_dir`, `planning_dir` semantics for an orchestrator-driven WU: [`~/ai/agents/implementation-pipeline-orchestrator.md`](agents/implementation-pipeline-orchestrator.md) § Required Inputs.
 - Machine-local planning artifacts live outside the worktree/repo diff; do not add new `.gitignore` rules for this WU's machine-local planning artifacts; upload durable outputs to the ticket when they need to survive.
 
+## Mailbox Recovery
+
+Agent-bash completion notifications are durable mailbox rows. If delivery repeats or floods, contain it with `oulipoly-agent-runner mailbox pause --session-id <id>`, then use `status`, `list`, `search`, and bounded `show --include-artifacts --max-bytes <n>` commands to review the queue.
+
+After review, acknowledge only the intended inclusive range with `mailbox ack --session-id <id> --from-seq <first> --to-seq <last>`; newer rows remain pending. Use `mailbox resume --session-id <id>` when recovery is complete. Do not acknowledge unread rows, edit `pid-identity.db` directly, or rebuild/downgrade `state.db` as mailbox recovery.
+
 ## Operator Routing Table
 
 Optimized contract sidecars live under `contracts/operators/` and `contracts/workflows/`. Dispatchers read those first and fall back to an operator `## Contract` block or workflow `workflow_dispatch_contract` frontmatter only when a sidecar is missing.
