@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/apply-gate-set.md
 model: gpt-medium
-description: 'Shared active gate-set owner per ACR-277 Shape 1: dispatches required gate children, owns join-manifest schema with currentness + skip + ratification + inventory-resolution rows, owns process-tree expected-process projection per caller mode, transports runtime claim and dossier/actual diff into code-quality/proof-risk/validation-integrity children, refuses silent convention-only inheritance. ACR-287 wires rca-post-apply; ACR-288 wires implementation-phase-4/6/8 separately.'
+description: Shared active gate-set owner that verifies implementation Phase 4 estimate write/no-write disposition, dispatches required gate children, owns join/currentness/exception rows and expected-process projection, and refuses silent inheritance.
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: caller_mode
@@ -64,6 +64,21 @@ inputs:
   required: true
   default_source: caller
   description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
+- name: estimate_delta_flag
+  type: string
+  required: false
+  default_source: caller
+  description: Complete inherited/refined/over_2x/rationale mapping required for implementation-phase-4; null inherited values retain over_2x unknown.
+- name: estimate_writeback_disposition_ref
+  type: path
+  required: false
+  default_source: caller
+  description: Canonical phase-3-estimate-writeback-v1 artifact required for implementation-phase-4.
+- name: cold_start_disposition_ref
+  type: path
+  required: false
+  default_source: caller
+  description: Durable answered-question evidence required for implementation-phase-4 when the inherited estimate is null.
 - name: Output
   type: string
   required: true
