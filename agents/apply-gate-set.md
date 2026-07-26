@@ -1,5 +1,5 @@
 ---
-description: 'Shared active gate-set owner per ACR-277 Shape 1: dispatches required gate children, owns join-manifest schema with currentness + skip + ratification + inventory-resolution rows, owns process-tree expected-process projection per caller mode, transports runtime claim and dossier/actual diff into code-quality/proof-risk/validation-integrity children, refuses silent convention-only inheritance. ACR-287 wires rca-post-apply; ACR-288 wires implementation-phase-4/6/8 separately.'
+description: 'Shared active gate-set owner: dispatches required gate children, verifies Phase 3 estimate write/no-write disposition for implementation Phase 4, owns join-manifest/currentness/exception rows and process-tree expected-process projection, and refuses silent convention-only inheritance.'
 model: gpt-xhigh
 output_format: ''
 ---
@@ -39,7 +39,7 @@ File-first artifacts are canonical. Linear, Jira, PR, or incident comments may m
 ## Use When
 
 - `rca-post-apply`: after RCA applies a fix and has original-signal verification plus verification-critic evidence, before downstream incident lifecycle handoff.
-- `implementation-phase-4`: after Phase 3 proposal and estimate update, before Phase 5 hookpoint research.
+- `implementation-phase-4`: after Phase 3 proposal and verified estimate write/no-write disposition, before Phase 5 hookpoint research.
 - `implementation-phase-6`: after Step 6b/6c evidence exists for the component or level under review, before component closure into readiness.
 - `implementation-phase-8`: with the actual branch or PR diff after readiness, before draft PR movement.
 
@@ -65,7 +65,7 @@ All caller modes require:
 
 `rca-post-apply` additionally requires `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `runtime_claim_ref`, `scope_ref`, and `cycle_id`.
 
-`implementation-phase-4` additionally requires `proposal_path`, `problem_map_path`, `risk_profile_path`, supported-surface context, estimate delta flag, touched-surface evidence, proof-plan or runtime-claim context when applicable, and bootstrap decision refs when a bootstrap exception is claimed.
+`implementation-phase-4` additionally requires `proposal_path`, `problem_map_path`, `risk_profile_path`, supported-surface context, the complete estimate delta flag, `estimate_writeback_disposition_ref`, `cold_start_disposition_ref` when the inherited estimate is null, touched-surface evidence, proof-plan or runtime-claim context when applicable, and bootstrap decision refs when a bootstrap exception is claimed.
 
 `implementation-phase-6` additionally requires the Step 6b output index, Step 6b and Step 6c prompt/log refs, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, hookpoint refs when applicable, component slug/scope, actual component diff, runtime claim, and side-channel or derivation/halt/swap refs when applicable. `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; it is used only for code-quality child auditor dispatch so those children can reach both source and planning artifacts.
 
@@ -95,7 +95,11 @@ Outputs are RCA-scoped dispatch manifest, join manifest, aggregate report, child
 
 ### implementation-phase-4
 
-Run after Phase 3 has produced the approved proposal package and estimate refinement, before Phase 5 hookpoint research. Required rows include proposal-risk and supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality aggregate, bootstrap-exception ratification when claimed, join manifest, expected-process projection, process-tree report ref, and audit-history records.
+Run after Phase 3 has produced the approved proposal package, estimate refinement, and `${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json`, before Phase 5 hookpoint research. Required rows include `phase-3-estimate-writeback`, proposal-risk and supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality aggregate, bootstrap-exception ratification when claimed, join manifest, expected-process projection, process-tree report ref, and audit-history records.
+
+The `phase-3-estimate-writeback` row is `required_gate` for `disposition=write_verified` and `non_applicability` for `disposition=no_write_policy_disabled`. Both variants point `canonical_output_path` to the disposition artifact and pin its SHA-256/currentness identity. The write variant requires the recorded successful mutation invocation or a migration record with exact current issue/field/value readback. The no-write variant requires exact wrapper-precedence `estimate_mutation_enabled=false`, matching resolved operator/optimized-contract paths and hashes, `update_estimate_dispatch_expected=false`, and `update_estimate_dispatch_executed=false`; it must not be synthesized from task, backend, network, authorization, or validation failure.
+
+For a null inherited estimate, require a current `cold_start_disposition_ref`, preserve the complete `estimate_delta_flag`, and pass `over_2x=unknown` plus absolute scope evidence into scope-risk. Normalizing `unknown` to `false`, omitting the no-baseline disposition, or dropping the writeback-disposition reference is blocking.
 
 A bootstrap-exception row may ratify Phase 4 code-quality only through `~/ai/conventions/code-quality.md` § `Bootstrap exception`; it preserves the raw non-LOW child verdict and records the separate ratification row.
 
@@ -159,6 +163,7 @@ Per expected child or child group, include:
 - `answer_artifacts`
 - `continuation_evidence`
 - `blocking_if_missing`
+- `blocking_if_present`
 - `canonical_output_path`
 - `expected_verdict`
 - `expected_sha256`
@@ -173,6 +178,7 @@ Projection rules:
 - `sha256` projects to `expected_sha256`.
 - Expected verdict comes from the child gate contract or an allowed exception row, never from a narrative claim.
 - Requiredness follows caller mode and row applicability.
+- `blocking_if_present: true` declares a forbidden invocation pattern. For `no_write_policy_disabled`, project an update-estimate node/group with `required: false`, `blocking_if_missing: false`, the selected ticket operator and task identity, and `blocking_if_present: true`; any matching trace child blocks even when all positive rows pass.
 - Skip and bootstrap rows project as explicit exception evidence; they do not pretend the skipped or non-LOW gate produced a LOW verdict.
 - Topology mode records whether the row requires direct child invocation, external artifact consumption, side-channel evidence, or caller-supplied prior gate output.
 
@@ -315,18 +321,20 @@ Each required gate row must be backed by one of:
 - a valid bootstrap-exception ratification row;
 - a valid inventory-resolution row that preserves unsettled ACR-285 or ACR-286 readings.
 
+Policy-disabled estimate non-applicability additionally requires negative process evidence: a current expected-process forbidden node/group for the selected ticket operator's `task=update-estimate` and a process-tree result proving no matching child ran. Narrative, an absent prompt file, or `update_estimate_dispatch_executed=false` inside the disposition artifact alone is insufficient. A matching child is an unexpected mutation attempt and blocks Phase 4.
+
 Host built-in sub-agents and Task-style child invocations are out of contract. Child work must use non-interactive `agents -m <model> -f <prompt-file>` dispatch shape, with any required worktree/project context supplied by the caller or prompt, and must never use bare `agents`. Implementation Phase 6 code-quality child work is the exception that must include `-p ${code_quality_dispatch_dir}` per `### implementation-phase-6`, because the auditor working directory must reach both `worktree_path` source and the outside-worktree `planning_dir` contract.
 
 ## Procedure
 
 1. Load inputs, validate `caller_mode`, and verify every required path is readable or every required output root is writable.
-2. Resolve mode-specific required gates, applicability rows, skip requests, ratification requests, inventory-resolution needs, and currentness-key inputs.
+2. Resolve mode-specific required gates, applicability rows, skip requests, ratification requests, inventory-resolution needs, and currentness-key inputs. For `implementation-phase-4`, parse and hash the estimate-writeback disposition first, cross-check it against the proposal, ticket snapshot, resolved contract/operator identities, policy source, estimate field, cold-start reference, and complete delta flag, and refuse every other Phase 4 row if that check is missing, stale, malformed, or contradictory.
 3. Build child prompt files and dispatch manifests before child work whenever a child gate must run.
 4. Dispatch required children with `agents -m <model> -f <prompt-file>` and durable log capture, or consume caller-supplied canonical artifacts only after stat/hash/currentness verification. For implementation Phase 6 code-quality children, dispatch with `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt-file>` and preserve the same prompt, log, and invocation UUID evidence in the manifest.
 5. Parse child verdicts, preserve raw verdicts, normalize blocking status, and reject missing or malformed canonical outputs.
 6. Write manifest rows for required gates, optional gates, applicability, non-applicability, skip, bootstrap-exception, inventory-resolution, stale-refusal, and aggregate outcome.
-7. Build the expected-process manifest by projecting join rows into `process-tree-auditor` schema.
-8. Run or require process-tree audit evidence when the caller mode requires it; process-tree findings become manifest rows and audit-history inputs.
+7. Build the expected-process manifest by projecting join rows into `process-tree-auditor` schema. A policy-disabled estimate row projects a forbidden `task=update-estimate` child with `blocking_if_present: true`; a write-verified row projects its required producing invocation, or external prior-invocation/readback evidence for a valid migration reuse.
+8. Run or require process-tree audit evidence when the caller mode requires it; process-tree findings become manifest rows and audit-history inputs. Reject an unexpected estimate-write child on the no-write path before returning `PASS`.
 9. Append audit-history records using the canonical audit-history schema.
 10. Return the output contract to the caller with terminal status, artifact paths, blocking rows, and next action.
 

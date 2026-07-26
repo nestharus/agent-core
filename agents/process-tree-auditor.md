@@ -1,5 +1,5 @@
 ---
-description: 'Audit an agents process tree against workflow execution requirements using trace JSON plus companion artifacts. Reports blocking and advisory workflow-execution violations. Read-only except for its report.'
+description: 'Audit an agents process tree against workflow execution requirements, including forbidden-child expectations, using trace JSON plus companion artifacts. Reports blocking and advisory workflow-execution violations. Read-only except for its report.'
 model: gpt-high
 output_format: ''
 ---
@@ -66,6 +66,7 @@ Use Markdown or JSON. Required fields per expected node or child group:
 - `answer_artifacts`: expected answer artifact paths or `none`.
 - `continuation_evidence`: resume or fallback continuation artifact paths when an answer was required.
 - `blocking_if_missing`: `true` or `false`.
+- `blocking_if_present`: optional `true` or `false`; when true, the node/group is forbidden and any matching trace child is a blocking violation. It is valid only with `required: false`.
 - `notes`: structural mapping or manifest-side interpretation only (e.g., expected-node mapping, Phase 6 producer/consumer relationship). NOT a slot for audited-run narrative or skip-rationale from the executing agent.
 
 Optional canonical-output row fields for verdict-bearing artifacts consumed as gates:
@@ -109,6 +110,8 @@ Allow PASS only when checks 1-10 pass. Check 11 never blocks an otherwise valid 
 
 If the manifest is absent or too vague to map expected work to tree nodes, return `NEEDS_INPUT`.
 
+For a forbidden node/group (`required: false`, `blocking_if_present: true`), the manifest must provide enough operator, task, prompt, or log identity to match without guessing. Map the identity against every child in the audited subtree. Zero matches passes that negative expectation; one or more matches is `unexpected_forbidden_child` and blocking, regardless of child terminal status. A forbidden node cannot use `blocking_if_missing: true`, and contradictory required/forbidden flags make the manifest malformed.
+
 ## Non-Negotiables
 
 - Read `~/ai/conventions/workflow-execution-violations.md`.
@@ -144,9 +147,11 @@ Check:
 
 ### Step 3: Map Expected Process To Nodes
 
-Using `expected_process`, map each required phase, child role, or sub-orchestrator to one or more trace nodes under `subtree_root_uuid` when supplied, otherwise under `root_invocation_uuid`.
+Using `expected_process`, map each required phase, child role, sub-orchestrator, and forbidden child pattern to trace nodes under `subtree_root_uuid` when supplied, otherwise under `root_invocation_uuid`.
 
 Check model, source/provider when relevant, parent/child relationship, timing order, and required independence. Use companion prompts and logs to resolve labels that are not present in trace metadata.
+
+For each `blocking_if_present: true` pattern, require zero matches. Report every match by invocation UUID and matched operator/task/prompt evidence; do not treat a succeeded, failed, or cancelled forbidden child as harmless.
 
 If the trace proves topology but companion artifacts are missing for procedure or output proof, record the topology result and return `NEEDS_INPUT` for the missing evidence when it is required.
 
@@ -193,6 +198,8 @@ Classify each finding as:
 - `needs_input`: required evidence is missing or too vague to decide.
 
 Canonical-output missing, unreadable, malformed verdict, verdict mismatch, hash mismatch, and failed replacement checks are blocking gate-consumption failures for canonical rows. Advisory mode may downgrade ordinary findings, but it cannot convert an untrusted canonical gate report into PASS.
+
+An `unexpected_forbidden_child` is always blocking, including in advisory mode, because it proves a workflow side effect or prohibited attempt occurred on a path whose disposition required absence.
 
 Include the evidence source:
 
@@ -265,7 +272,7 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 
 Final stdout:
 
-- `PASS` when every required process element is mapped, succeeded or stopped as expected, ordinary required outputs are verified, and canonical-output rows pass current stat/read/verdict/hash checks or accepted lineage.
+- `PASS` when every required process element is mapped, succeeded or stopped as expected, every forbidden-child pattern has zero matches, ordinary required outputs are verified, and canonical-output rows pass current stat/read/verdict/hash checks or accepted lineage.
 - `FAIL:<count> violations` when one or more blocking violations are present.
 - `NEEDS_INPUT:<missing fields or artifacts>` when required evidence is absent or too vague to audit.
 - `BLOCKED:<reason>` when required files cannot be read or parsed.

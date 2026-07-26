@@ -5,12 +5,13 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: apply-gate-set
   inputs:
-    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts"
+    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
     - "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
   expectations:
     - "dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest"
     - "projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows"
     - "preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts"
+    - "requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children"
   outputs:
     - "mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records"
     - "file-first evidence suitable for RCA or implementation-pipeline caller consumption"
@@ -58,7 +59,7 @@ apply-gate-set
 
 ### Inputs
 
-- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts
+- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
 - child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
 
 ### Expectations
@@ -66,6 +67,7 @@ apply-gate-set
 - dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest
 - projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows
 - preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts
+- requires `phase-3-estimate-writeback` as verified success or policy-disabled non-applicability and rejects forbidden `update-estimate` children
 
 ### Outputs
 
@@ -85,7 +87,7 @@ apply-gate-set
 - Trace/currentness inputs: process-tree trace path when required, root invocation UUID, `cycle_id`, `head_sha`, `base_ref`, diff hash, scope hash, runtime-claim hash, producing invocation UUIDs, and verified-at timestamps.
 - Mode-specific artifacts:
   - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, runtime claim, scope, and cycle id.
-  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, estimate delta flag, touched-surface evidence, and bootstrap-exception refs when claimed.
+  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, and bootstrap-exception refs when claimed.
   - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, runtime claim, and side-channel or derivation evidence when applicable.
   - `implementation-phase-8`: actual branch or PR diff, proposal/proof-plan refs, prior join refs when present, runtime claim, supported-surface inventory context, and base/head identity.
 
@@ -118,7 +120,9 @@ apply-gate-set
 
 `rca-post-apply` runs after RCA applies the fix and has current original-signal verification and verification-critic evidence. It requires actual-diff PR-review-style rows, code-quality, proof/runtime rows where applicable, process-tree evidence, skip/ratification/currentness rows, and inventory-resolution rows.
 
-`implementation-phase-4` runs after Phase 3 proposal and estimate update. It requires proposal-risk rows, supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality, valid bootstrap-exception ratification when claimed, join manifest, process-tree evidence, and audit-history records.
+`implementation-phase-4` runs after Phase 3 proposal and estimate write/no-write disposition. It requires a `phase-3-estimate-writeback` row plus proposal-risk rows, supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality, valid bootstrap-exception ratification when claimed, join manifest, process-tree evidence, and audit-history records. The row accepts only verified mutation success or contract-bound `no_write_policy_disabled`; null inherited estimates retain `over_2x: unknown` and require the recorded cold-start disposition.
+
+For `no_write_policy_disabled`, the expected-process manifest contains a selected-ticket-operator `task=update-estimate` pattern with `required: false`, `blocking_if_missing: false`, and `blocking_if_present: true`. A matching child is blocking. For `write_verified`, the manifest requires the producing update invocation, or current exact issue/field/value readback when a migration record proves an earlier verified mutation was reused without a duplicate write.
 
 `implementation-phase-6` runs after Step 6c component evidence exists. It requires Step 6b/6c provenance, tests-contract alignment refs, per-component code-quality, applicable prototype/derivation/halt/swap/non-applicability records, join evidence, process-tree audit #2 projection, and audit-history records. Per-component code-quality child auditors run with `-p ${code_quality_dispatch_dir}`, where `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; their prompts include absolute `worktree_path`, `contract_path`, and `proposal_path` so the outside-worktree Step 6a contract is read before scoring.
 
@@ -127,12 +131,12 @@ apply-gate-set
 ## Procedure
 
 1. Validate required inputs and resolve `caller_mode`.
-2. Select mode-scoped required gates and row contracts.
+2. Select mode-scoped required gates and row contracts; Phase 4 validates the estimate disposition and its currentness before other gate rows.
 3. Build child prompts, dispatch manifest, and expected output paths.
 4. Dispatch required children through the active operator or verify current caller-supplied canonical outputs.
 5. Stat, hash, parse, and normalize every canonical output.
 6. Write join-manifest rows for gates, applicability, skips, bootstrap exceptions, inventory resolution, stale refusals, and aggregate result.
-7. Project manifest rows into expected-process evidence.
+7. Project manifest rows into expected-process evidence, including forbidden-child evidence for policy-disabled estimate non-applicability.
 8. Require process-tree audit evidence where the caller mode requires it.
 9. Append audit-history records and return terminal status to the caller.
 

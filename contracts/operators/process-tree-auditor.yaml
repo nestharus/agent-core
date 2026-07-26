@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/process-tree-auditor.md
 model: gpt-high
-description: Audit an agents process tree against workflow execution requirements using trace JSON plus companion artifacts. Reports blocking and advisory workflow-execution violations. Read-only except for its report.
+description: Audit an agents process tree against workflow execution requirements, including forbidden-child expectations, using trace JSON plus companion artifacts. Reports blocking and advisory workflow-execution violations. Read-only except for its report.
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: operator_file
