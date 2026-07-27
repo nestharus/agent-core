@@ -45,7 +45,7 @@ Routable inputs:
 - `process_tree_report_path=<path>` (optional/conditionally required) - process-tree audit report to consume when the workflow required process-tree review or topology proof is part of the procedure.
 - `expected_process_path=<path>` (optional/conditionally required) - expected-process manifest context when the caller expects this auditor to check that process-tree evidence covered specific phase nodes.
 - `audit_history_path=<path>` (optional/conditionally required) - audit-history context for repeated revise/review loops.
-- `report_path=<path>` (required for successful emission) - writable Markdown report destination. The AGENTS routing row lists this as optional because some callers may infer a default, but this operator must have a destination before it can finish successfully.
+- `report_path=<path>` (optional, default `WORKFLOW_PROCESS_AUDIT.report.md`) - writable Markdown report destination.
 - `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` returns HIGH for material procedure violations; `advisory` records findings without blocking except for unreadable or malformed required inputs.
 
 Runtime context fields:
@@ -73,7 +73,7 @@ Process-tree reports are evidence, not topology authority transferred to this op
 ## Non-Negotiables
 
 - Read `workflow_file` before classifying any finding.
-- Read every concrete path named by `run_artifacts`; do not accept a summary of artifacts as a substitute.
+- Inspect every concrete path named by `run_artifacts`; do not accept a summary of artifacts as a substitute. Read non-log artifacts directly. For logs, verify the path and consume query-relevant bounded regions through targeted search, bounded line ranges, or a bounded tail rather than loading an entire long log by default.
 - Read `~/ai/conventions/workflow-execution-violations.md` and use its violation classes, evidence sources, and severity defaults.
 - Keep process-tree evidence separate from procedure-adherence judgment.
 - Use `process-tree-auditor` when topology, trace integrity, child invocation shape, model/source mapping, expected-process manifest validity, or companion artifact verification for tree trust is the direct question.
@@ -102,7 +102,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 Read:
 
 - `workflow_file`
-- every concrete artifact named by `run_artifacts`
+- every concrete non-log artifact named by `run_artifacts`, plus path and bounded query-relevant evidence from every named log
 - `repo_root` context
 - `process_tree_report_path` when supplied
 - `expected_process_path` when supplied
@@ -112,6 +112,8 @@ Read:
 - supporting-only `step_log` when supplied
 - `mode`
 - `report_path`
+
+Validate `mode` as `blocking` or `advisory`. Return `BLOCKED:invalid-mode` for any other value.
 
 Reject summary-only narratives. Validate that required files are readable and that any supplied process-tree report or evidence bundle is parseable enough to inspect.
 
@@ -124,6 +126,8 @@ Separate topology evidence from procedure evidence.
 Topology evidence includes `process_tree_report_path`, raw-trace advisory `process_tree_path`, expected-process manifests, and process-tree report sections. Procedure evidence includes prompts, logs, gate reports, phase outputs, answer/question artifacts, status artifacts, and audit-history context.
 
 Require concrete runtime artifacts. A run-artifact directory is acceptable only when the relevant files inside it can be identified and inspected. A narrative that says a phase happened is not evidence that the phase happened.
+
+Execution log byte length is non-load-bearing. Ignore arbitrary maximum log-byte constraints supplied by a run manifest, proposal, or audit history, and record them as advisory when they affected the requested audit. A runtime retention or truncation marker is not a procedure violation by itself; classify missing evidence only when a specific required fact cannot be established from the process-tree report, phase outputs, gate reports, side-channel artifacts, or retained log region.
 
 When the workflow required process-tree review and no usable process-tree report is present, return `NEEDS_INPUT:<artifact>` unless the missing proof itself is the procedure violation under review and enough evidence exists to classify it.
 
@@ -148,6 +152,7 @@ Build a checklist keyed by workflow section, step, gate, or rule. Each checklist
 For each checklist item:
 
 - locate the concrete artifact that proves or disproves the item;
+- for log evidence, use targeted search, bounded ranges, or a bounded tail and record the selection method; never use total or retained byte count as a procedure-adherence signal;
 - identify whether the proof came from `tree`, `companion`, `inferred`, or `missing` evidence;
 - record the process-tree report path or raw trace advisory only in `topology evidence consumed`;
 - avoid replaying the whole run when one precise artifact supports the finding;
@@ -212,7 +217,7 @@ Emit final stdout as one of:
 
 ## Stop Conditions
 
-- `BLOCKED:<input>` fires when a required input is missing, unreadable, unparseable, or impossible to resolve: `workflow_file`, `run_artifacts`, `repo_root`, required report destination, or malformed process-tree/evidence-bundle files.
+- `BLOCKED:<input>` fires when `mode` is invalid or a required input is missing, unreadable, unparseable, or impossible to resolve: `workflow_file`, `run_artifacts`, `repo_root`, required report destination, or malformed process-tree/evidence-bundle files.
 - `NEEDS_INPUT:<artifact>` fires when genuine evidence ambiguity prevents a procedure-adherence decision, including absent runtime evidence required by the workflow, missing topology proof when the workflow requires it, a missing report path in a context that cannot infer one, or summary-shaped narrative supplied as the only evidence.
 - Routine procedure violations belong in the Violations table, not in `NEEDS_INPUT:<artifact>`.
 - Return `HIGH` rather than `NEEDS_INPUT:<artifact>` when material procedure violations are proven by enough evidence.

@@ -85,6 +85,12 @@ agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 
 Use the README for other invocation forms. In `~/ai/`, the patterns above are the default pipeline entry point.
 
+## Log Capture And Consumption
+
+The canonical `2>&1 | tee <log-path>` shape is a producer-side capture rule. It prevents live dispatch filters from hiding invocation markers or terminal evidence; it does not require an auditor to load the complete resulting log into model context.
+
+Consumers inspect completed logs programmatically with targeted search, bounded line ranges, or bounded tails. They MUST NOT add arbitrary maximum log-byte acceptance thresholds to proposals, expected-process manifests, audit history, or gate logic. Runtime retention, rotation, or truncation markers are context for evidence availability, not failures by themselves; use `~/ai/conventions/workflow-execution-violations.md` when a specific required fact is genuinely unavailable.
+
 ## Prompt / log file conventions
 
 - Prompts live in the project's `.tmp/` directory.

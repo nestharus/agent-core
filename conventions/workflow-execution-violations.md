@@ -17,6 +17,14 @@ Audited-run narrative notes or rationale are not valid `tree`, `companion`, or `
 
 When a required review depends on missing evidence, fail closed with `NEEDS_INPUT` or a blocking violation. Do not convert missing evidence into a pass.
 
+### Log Evidence Consumption
+
+Execution logs are streams, not size-bounded gate artifacts. A log's byte length is not evidence that a workflow passed or failed. Callers, proposals, expected-process manifests, and audit history MUST NOT impose an arbitrary maximum log-byte threshold as an audit acceptance condition. If one is supplied, the auditor ignores it for the verdict and records the invalid constraint as advisory when it affected the requested audit.
+
+Keep producer-side capture separate from auditor-side consumption. A dispatch may capture the complete stream with the canonical `2>&1 | tee <log-path>` shape, while an auditor consumes only the evidence needed for its checks. For a long log, first inspect file metadata and any runtime retention marker, then use targeted search, bounded line ranges, or a bounded tail. Do not load the entire log into model context by default.
+
+A runtime-retained tail, rotation marker, or truncation marker is not a violation by itself. It becomes a missing-evidence problem only when a specific required fact cannot be established from the process tree, canonical outputs, side-channel artifacts, reports, or retained log region. Classify that unavailable fact under the existing evidence and severity rules; never infer missing evidence solely from total or retained byte count.
+
 ## Severity Defaults
 
 Use these severities unless a workflow states a stricter rule:
@@ -145,4 +153,4 @@ Each finding records:
 - one-sentence summary
 - required next action
 
-Reports should include only the evidence needed for downstream trust. Do not paste full process trees or long logs when node IDs and artifact paths are enough.
+Reports should include only the evidence needed for downstream trust. Do not paste full process trees or long logs when node IDs, artifact paths, and bounded excerpts are enough.
