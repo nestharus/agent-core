@@ -86,6 +86,8 @@ Optional canonical-output row fields for verdict-bearing artifacts consumed as g
 
 For join-manifest composition, the verdict expectation comes from the gate contract, not from `verdict_line`. Treat `verdict_line` as prior observed evidence only.
 
+`log` fields identify companion evidence; they do not define a whole-file ingestion requirement. Log-byte ceilings in the manifest are invalid and non-load-bearing. Ignore them for `PASS | FAIL | NEEDS_INPUT`, and report an advisory `invalid_log_size_constraint` when such a ceiling affected the requested audit. Audit the required facts through trace metadata, canonical artifacts, targeted searches, bounded ranges, or retained log tails instead.
+
 Step 6b output indexes, raw findings, dispatch manifests, generated tickets, and other non-verdict artifacts remain ordinary `expected_outputs` unless a caller defines a real verdict contract.
 
 For Phase 6 audits, the manifest must include `step6b-test-writer` and `step6c-code-writer` expected nodes, separate mapped invocations, the Step 6b prompt/log/output index paths, the Step 6c prompt/log paths, the Step 6b output paths, and evidence that Step 6c consumed the Step 6b output index plus every Step 6b output-index row Step 6c implemented. For ACR-247 side-channel runs, the canonical carrier is a `side_channel_evidence_bundle:` entry produced by `~/ai/workflows/step6c-consumption-side-file.md`; the manifest-declared side-file is load-bearing, and the Step 6c log is topology-only for prompt path, log path, and invocation UUID joins. Historical relaxed-position log-row evidence may still be read for completed pre-ACR-247 audit-history references, but new Phase 6 dispatches must use the side-channel bundle. The Step 6c expected node must identify the Step 6b expected node as its output producer in `notes` or an equivalent manifest field. Use `blocking_if_missing: true` for the Step 6b and Step 6c evidence.
@@ -123,12 +125,16 @@ For a forbidden node/group (`required: false`, `blocking_if_present: true`), the
 - Do not treat missing trace data as harmless. If the workflow required tree review and required evidence is absent, return `NEEDS_INPUT` or `FAIL`.
 - The audited-run narrative is not evidence and cannot turn missing artifacts, skipped phases, or absent outputs into PASS.
 - Keep root context small: report the minimum subtree evidence needed to support each finding, not a full transcript-style replay.
+- Never use an execution log's total or retained byte length as pass/fail evidence. Producer-side complete capture and auditor-side bounded consumption are separate concerns.
+- Inspect long logs with targeted search, bounded line ranges, or a bounded tail. A runtime retention or truncation marker is not a violation unless a specific required fact is unavailable from all allowed evidence sources.
 
 ## Procedure
 
 ### Step 1: Load Inputs
 
-Read `operator_file`, `process_tree_path`, `expected_process`, every `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied. Load ordinary expected nodes and any canonical rows containing `canonical_output_path`, `expected_verdict`, and optional `expected_sha256`; when `audit_history_path` is present, keep its deletion/replacement entries available for Step 4.
+Read `operator_file`, `process_tree_path`, `expected_process`, every non-log `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied. For each log entry, verify the path and inspect only query-relevant bounded regions; do not load an entire long log by default. Load ordinary expected nodes and any canonical rows containing `canonical_output_path`, `expected_verdict`, and optional `expected_sha256`; when `audit_history_path` is present, keep its deletion/replacement entries available for Step 4.
+
+Validate `mode` as `blocking` or `advisory`. Return `BLOCKED:invalid-mode` for any other value.
 
 Audited-run notes or rationale are excluded from the allowed audit-input set.
 
@@ -160,6 +166,9 @@ If the trace proves topology but companion artifacts are missing for procedure o
 For each expected prompt, log, gate report, status, or output:
 
 - verify that ordinary artifacts exist, or that an ordinary non-canonical supplied status appears in a supplied log/report;
+- for each log, record its path, observed size, bounded selection method, and whether a runtime retention marker is present; use targeted search, bounded ranges, or a bounded tail to inspect only evidence relevant to the expected node;
+- ignore any expected-process maximum log-byte field for the audit verdict and record `invalid_log_size_constraint` as advisory when the invalid field affected the requested audit;
+- when a retained or truncated log omits a required fact, search for that fact in tree metadata, canonical outputs, side-channel artifacts, and reports before classifying the specific fact as missing evidence;
 - verify that it belongs to the mapped node or expected child group when the evidence is available;
 - verify ordinary required verdicts such as `LOW`, `ALIGNED`, `PASS`, `SINGLE_CONCERN`, or workflow-specific equivalents;
 - verify isolation evidence by scanning companion prompts/logs for sibling `agents ... -p <path> ...` invocations and declared write intent; flag concurrent tracked-file writers that share a worktree or project root, or return `NEEDS_INPUT` when a required isolation check lacks path/write evidence;
@@ -249,6 +258,10 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 | Artifact | Expected by | Present | Result |
 |---|---|---:|---|
 
+## Log Evidence Consumption
+| Log path | Observed bytes | Selection method | Retention marker | Required evidence result |
+|---|---:|---|---:|---|
+
 ## Canonical Output Verification
 | Expected id | Canonical path | Present | Readable | Parsed verdict | Expected verdict | Current sha256 | Expected sha256 | Deletion/replacement evidence | Result |
 |---|---|---:|---:|---|---|---|---|---|---|
@@ -275,4 +288,4 @@ Final stdout:
 - `PASS` when every required process element is mapped, succeeded or stopped as expected, every forbidden-child pattern has zero matches, ordinary required outputs are verified, and canonical-output rows pass current stat/read/verdict/hash checks or accepted lineage.
 - `FAIL:<count> violations` when one or more blocking violations are present.
 - `NEEDS_INPUT:<missing fields or artifacts>` when required evidence is absent or too vague to audit.
-- `BLOCKED:<reason>` when required files cannot be read or parsed.
+- `BLOCKED:<reason>` when `mode` is invalid or required files cannot be read or parsed.
