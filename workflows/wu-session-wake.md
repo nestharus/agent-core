@@ -17,6 +17,9 @@ workflow_dispatch_contract:
     - "verifies the multi-row expected process and process tree before aggregate completion"
     - "joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS"
     - "blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending"
+    - "validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root"
+    - "treats a batch containing only valid non-merged skipped rows as a successful audited no-op"
+    - "uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch"
   outputs:
     - "${planning_root}/wake-runs/${run_id}/composition-report.json"
     - "${planning_root}/wake-runs/${run_id}/expected-process.json"
@@ -52,6 +55,9 @@ expectations:
   - "verifies the multi-row expected process and process tree before aggregate completion"
   - "joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS"
   - "blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending"
+  - "validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root"
+  - "treats a batch containing only valid non-merged skipped rows as a successful audited no-op"
+  - "uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch"
 outputs:
   - "${planning_root}/wake-runs/${run_id}/composition-report.json"
   - "${planning_root}/wake-runs/${run_id}/expected-process.json"
@@ -68,16 +74,16 @@ non_goals:
 
 ## Procedure
 
-1. Start one root `wu-session-wake` invocation with caller-owned unique `run_id`. Do not accept a caller-provided current invocation UUID. Inside the root, parse the runner-provided `OULIPOLY_PARENT_INVOCATION` JSON with duplicate-key rejection and require exactly one non-blank UUID `id`; set `wake_invocation_uuid` to that value. Missing, malformed, duplicate-keyed, non-UUID, or later trace-root mismatch is `BLOCKED:wake-runtime-invocation-identity-unavailable`. Create `${planning_root}/wake-runs/${run_id}/composition-report.json` before row dispatch and update it atomically after each classification or child result.
-2. Read only the canonical project wake index at `${planning_root}/sessions.active-wake.json`; `${planning_root}/sessions.index.json` is historical/source inventory and is never a wake input. Require `schema=wu-sessions-active-wake-v1`, take the shared cutover lock at `~/.local/state/ai/wu-session-migration/cutover.lock` while reading one stable index snapshot, and reject a stale migration journal before polling. Each row must use only canonical fields and name `ticket_id`, `ticket_system`, `branch`, `base_branch`, `draft_pr_url`, full `draft_pr_head_sha`, `pr_open_base_sha`, `session_manifest_path`, full `branch_out_sha`, `worktree_path`, and `planning_dir`. `pre_merge_base_sha` is optional: automated merges persist it immediately before merge; OPEN manual/external sessions leave it null for trusted wake-time derivation. Accepted-breakage, closed, pre-PR, malformed-placeholder, or conflict-refused rows are invalid in this index rather than runtime skip candidates. Missing identity fields block dispatch, but a null pre-merge SHA does not.
+1. Start one root `wu-session-wake` invocation with caller-owned unique `run_id`. Require `run_id` to match the canonical safe-token regex `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` exactly; do not trim, slugify, or normalize an invalid value. Canonicalize the absolute no-symlink `planning_root`, derive `wake_run_root=${planning_root}/wake-runs/${run_id}`, and require `realpath -m -- "${wake_run_root}"` to remain strictly below `realpath -- "${planning_root}"` before creating anything. A token or containment failure is `BLOCKED:unsafe-wake-path`. Do not accept a caller-provided current invocation UUID. Inside the root, parse the runner-provided `OULIPOLY_PARENT_INVOCATION` JSON with duplicate-key rejection and require exactly one non-blank UUID `id`; set `wake_invocation_uuid` to that value. Missing, malformed, duplicate-keyed, non-UUID, or later trace-root mismatch is `BLOCKED:wake-runtime-invocation-identity-unavailable`. Create `${wake_run_root}/composition-report.json` before row dispatch and update it atomically after each classification or child result.
+2. Read only the canonical project wake index at `${planning_root}/sessions.active-wake.json`; `${planning_root}/sessions.index.json` is historical/source inventory and is never a wake input. Require `schema=wu-sessions-active-wake-v1`, take the shared cutover lock at `~/.local/state/ai/wu-session-migration/cutover.lock` while reading one stable index snapshot, and reject a stale migration journal before polling. Each row must use only canonical fields and name `ticket_id`, `ticket_system`, `branch`, `base_branch`, `draft_pr_url`, full `draft_pr_head_sha`, `pr_open_base_sha`, `session_manifest_path`, full `branch_out_sha`, `worktree_path`, and `planning_dir`. Require every `ticket_id` to match `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$` exactly. Canonicalize each row's `planning_dir`, generated prompt path, and generated log path without following a symlinked component; require all three to remain strictly below the canonical `planning_root` before output or dispatch. `pre_merge_base_sha` is optional: automated merges persist it immediately before merge; OPEN manual/external sessions leave it null for trusted wake-time derivation. Accepted-breakage, closed, pre-PR, malformed-placeholder, conflict-refused, unsafe-token, or escaping-path rows are invalid in this index rather than runtime skip candidates. Missing identity fields block dispatch, but a null pre-merge SHA does not.
 3. For each indexed `draft_pr_url`, require the canonical `https://github.com/<owner>/<repo>/pull/<number>` shape and derive the poller's `<owner>/<repo>#<number>` identifier without replacing the stored URL. Block malformed or non-GitHub URLs, then run `~/ai/tools/pr-batch-poller/` with the derived identifiers. The poller returns PR status rows only; it does not read session manifests or dispatch agents.
-4. Join each poller row to exactly one session-index row by poller `pr_url == draft_pr_url` and poller `head_ref_name == branch`. Require poller full `head_sha == draft_pr_head_sha` and `base_ref_name == base_branch`; `base_ref_oid` is current PR/base status evidence and is not `pre_merge_base_sha`. Record non-merged rows as skipped. Ambiguous, missing, error, or mismatched joins are blocked and must be reported rather than guessed.
+4. Join each poller row to exactly one active-index row by poller `pr_url == draft_pr_url` and poller `head_ref_name == branch`, then read that row's exact `session_manifest_path`. Require poller full `head_sha == draft_pr_head_sha` and `base_ref_name == base_branch`; `base_ref_oid` is current PR/base status evidence and is not `pre_merge_base_sha`. Require the manifest identity fields to equal the active row and require manifest `pre_merge_base_sha` to equal active-index `pre_merge_base_sha`, including null equality; `BLOCKED:pre-merge-base-source-mismatch` is returned before prompt creation on any difference. The active index is the sole source passed to the resumer. Record non-merged rows as legitimately skipped. A batch with one or more such skipped rows, zero merged rows, and no blocked inputs is a successful no-op: continue through the empty expected-process/dispatch/trace audit with zero resumer nodes and report success rather than blocking for lack of a child. Ambiguous, missing, error, or mismatched joins are blocked and must be reported rather than guessed.
 5. For every uniquely joined `merged=true` row, compose `${planning_dir}/prompts/${ticket_id}-wu-session-resume-${run_id}.md` instructing `wu-session-resumer` to consume:
    - `pr_url` from the poller row
    - `merge_sha` from the poller row
    - `head_sha` from the poller row, matching manifest `draft_pr_head_sha`
    - `base_branch` from the session index and manifest, matching poller `base_ref_name`
-   - optional `pre_merge_base_sha` from the session index or manifest; omit/null means the resumer must derive it from trusted merge evidence
+   - optional `pre_merge_base_sha` from the active index after exact manifest equality validation; omit/null means the resumer must derive it from trusted merge evidence
    - `branch_name` from `head_ref_name`
    - `ticket_id` from the session index
    - exact `session_manifest_path`
@@ -86,7 +92,7 @@ non_goals:
 7. Dispatch each expected resumer exactly once, using run-scoped paths:
 
 ```bash
-agents -a wu-session-resumer -p ${worktree_path} -f ${planning_dir}/prompts/${ticket_id}-wu-session-resume-${run_id}.md 2>&1 | tee ${planning_dir}/logs/${ticket_id}-wu-session-resume-${run_id}.log
+agents -a wu-session-resumer -p "${worktree_path}" -f "${planning_dir}/prompts/${ticket_id}-wu-session-resume-${run_id}.md" 2>&1 | tee "${planning_dir}/logs/${ticket_id}-wu-session-resume-${run_id}.log"
 ```
 
 8. For each completed child log, parse exactly one valid `OULIPOLY_INVOCATION` marker and capture its actual child UUID only after dispatch. Reject missing, duplicate, malformed, repeated-across-rows, or root-equal UUIDs. Parse only the same current log's final sentinel. Accept exactly `wu-session-resumer: closed; manifest=<path>` or `wu-session-resumer: handoff-prepared; manifest=<path>; brief=<path>`. Require returned manifest equals the joined row's exact `session_manifest_path`; for handoff, require the returned brief equals the manifest's current `successor_session_brief` and exists. A stale, shorthand, wrong-row, duplicate, `BLOCKED:`, or `NEEDS_INPUT:` result cannot close the row.
@@ -172,9 +178,9 @@ This is a root-delegated fanout/join workflow. The aggregate consumes multiple r
 
 ## Stop Conditions
 
-- `wu-session-wake: success; report=<absolute-path>`: all dispatchable rows returned an exact current success sentinel, all row identities matched, and exact process-tree report/stdout PASS is current. Only a valid canonical OPEN row that currently polls non-merged may remain pending without blocking; every excluded or accepted-breakage classification present in the active index blocks aggregate correctness.
+- `wu-session-wake: success; report=<absolute-path>`: all dispatchable rows returned an exact current success sentinel, all row identities matched, and exact process-tree report/stdout PASS is current. A batch containing only legitimately skipped non-merged rows and no blocked input is a successful audited no-op with zero resumer nodes. Only a valid canonical OPEN row that currently polls non-merged may remain pending without blocking; every excluded or accepted-breakage classification present in the active index blocks aggregate correctness.
 - `wu-session-wake: partial; report=<absolute-path>`: at least one row completed and at least one row is blocked or needs input; exact process-tree report/stdout PASS must still account for every expected dispatch.
-- `wu-session-wake: blocked; report=<absolute-path>`: global input/report/expected-process/process-tree validation failed, no joined row completed, or exactly-once topology could not be proven.
+- `wu-session-wake: blocked; report=<absolute-path>`: global input/report/expected-process/process-tree validation failed, a dispatchable merged row did not complete, or exactly-once topology could not be proven. The legitimate skipped-only no-op is not blocked.
 
 ## Anti-scope
 

@@ -6,12 +6,12 @@ inputs:
 - {name: pr_number, type: int, required: true, default_source: caller, description: pr number}
 - {name: repo, type: string, required: false, default_source: derived | caller, description: repo}
 - {name: repo_root, type: path, required: true, default_source: caller, description: repo root}
-- {name: base_branch, type: string, required: false, default_source: derived | caller, description: 'Expected provider base branch name; derived from the PR when omitted.'}
-- {name: base_ref, type: string, required: false, default_source: derived | caller, description: 'Freshly fetched remote base ref; an explicit value must match provider baseRefOid and never falls back.'}
-- {name: base_sha, type: string, required: false, default_source: derived | caller, description: 'Expected full provider base OID; derived from the PR when omitted.'}
-- {name: head_branch, type: string, required: false, default_source: derived | caller, description: 'Expected provider head branch name; derived from the PR when omitted.'}
-- {name: head_ref, type: string, required: false, default_source: derived | caller, description: 'Exact fetched PR head ref; derived from the pull ref when omitted.'}
-- {name: head_sha, type: string, required: false, default_source: derived | caller, description: 'Expected full provider head OID; derived from the PR when omitted.'}
+- {name: base_branch, type: string, required: true, default_source: caller, description: 'Caller-supplied expected provider base branch name; provider data verifies but never replaces it.'}
+- {name: base_ref, type: string, required: true, default_source: caller, description: 'Caller-supplied fetched remote base ref; it must resolve to provider baseRefOid and never falls back.'}
+- {name: base_sha, type: string, required: true, default_source: caller, description: 'Caller-supplied full expected provider base OID.'}
+- {name: head_branch, type: string, required: true, default_source: caller, description: 'Caller-supplied expected provider head branch name.'}
+- {name: head_ref, type: string, required: true, default_source: caller, description: 'Caller-supplied exact fetched PR head ref.'}
+- {name: head_sha, type: string, required: true, default_source: caller, description: 'Caller-supplied full expected provider head OID.'}
 - {name: local_coverage_command, type: string, required: true, default_source: caller, description: Non-blank project coverage command passed unchanged to test-audit-gate.}
 - {name: review_dir, type: path, required: false, default_source: base, description: 'Stable lineage root only; each invocation derives a new immutable run root from exact PR/base/head/invocation identity beneath it.'}
 - {name: planning_root, type: path, required: false, default_source: base, description: planning root}

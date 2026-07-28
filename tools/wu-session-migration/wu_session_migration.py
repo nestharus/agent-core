@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 PLAN_SCHEMA = "wu-session-migration-plan-v1"
 INVENTORY_SCHEMA = "age-260-session-migration-inventory-v1"
 PR_EVIDENCE_SCHEMA = "wu-session-pr-evidence-v2"
+PR_PROVIDER_JSON_SELECTOR = "url,state,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,mergedAt"
 DISPOSITION_SCHEMA = "wu-session-cutover-dispositions-v1"
 CONFLICT_RESOLUTION_SCHEMA = "wu-session-conflict-resolutions-v1"
 ACTIVE_INDEX_SCHEMA = "wu-sessions-active-wake-v1"
@@ -1081,7 +1082,7 @@ def capture_evidence(
             "pr",
             "view",
             "--json",
-            "url,state,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,mergedAt",
+            PR_PROVIDER_JSON_SELECTOR,
             "--",
             pr_url,
         ]
@@ -1414,6 +1415,7 @@ def _derive_and_validate_evidence(record: Mapping[str, Any]) -> dict[str, Any]:
         provider_command[:3] != ["gh", "pr", "view"]
         or len(provider_command) != 7
         or provider_command[3] != "--json"
+        or provider_command[4] != PR_PROVIDER_JSON_SELECTOR
         or provider_command[5] != "--"
         or provider_command[6] != pr_url
     ):

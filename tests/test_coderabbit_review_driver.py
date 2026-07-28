@@ -69,6 +69,18 @@ def test_changes_requested_review_is_terminal_even_when_later_commented_review_e
     assert driver.review_decision_outcome(signal["decision"]) == "changes_requested"
 
 
+def test_changes_requested_without_actionable_comments_escalates_instead_of_polling() -> None:
+    assert driver.changes_requested_without_actionable_comments(
+        "CHANGES_REQUESTED", "changes_requested", []
+    )
+    assert not driver.changes_requested_without_actionable_comments(
+        "NONE", "pending", []
+    )
+    assert not driver.changes_requested_without_actionable_comments(
+        "CHANGES_REQUESTED", "changes_requested", [{"comment_id": 1}]
+    )
+
+
 def test_summary_comment_approved_marker_is_terminal_fallback() -> None:
     body = (
         driver.SUMMARY_COMMENT_MARKER

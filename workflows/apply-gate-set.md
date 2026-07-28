@@ -7,13 +7,15 @@ workflow_dispatch_contract:
   inputs:
     - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
     - "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
+    - "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
   expectations:
     - "dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest"
+    - "writes expected-process before fanout, joins actual child UUIDs afterward, captures raw trace, and independently audits/hashes every consumed output before aggregate acceptance; Phase 8 additionally production-validates the nested test-audit proof"
     - "projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows"
     - "preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts"
     - "requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children"
   outputs:
-    - "mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records"
+    - "apply-gate-set-result-v1 plus mode-scoped dispatch/join/aggregate/expected-process/raw-trace/process-audit artifacts and hashes"
     - "file-first evidence suitable for RCA or implementation-pipeline caller consumption"
   non_goals:
     - "does not wire RCA or implementation-pipeline callers"
@@ -61,17 +63,19 @@ apply-gate-set
 
 - caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
 - child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
+- implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command
 
 ### Expectations
 
 - dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest
+- writes expected-process before fanout, joins actual child UUIDs afterward, captures raw trace, and independently audits/hashes every consumed output before aggregate acceptance; Phase 8 additionally production-validates the nested test-audit proof
 - projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows
 - preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts
 - requires `phase-3-estimate-writeback` as verified success or policy-disabled non-applicability and rejects forbidden `update-estimate` children
 
 ### Outputs
 
-- mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records
+- apply-gate-set-result-v1 plus mode-scoped dispatch/join/aggregate/expected-process/raw-trace/process-audit artifacts and hashes
 - file-first evidence suitable for RCA or implementation-pipeline caller consumption
 
 ### Non-goals
@@ -84,7 +88,7 @@ apply-gate-set
 
 - `caller_mode`: `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
-- Trace/currentness inputs: process-tree trace path when required, root invocation UUID, `cycle_id`, `head_sha`, `base_ref`, diff hash, scope hash, runtime-claim hash, producing invocation UUIDs, and verified-at timestamps.
+- Trace/currentness inputs: runtime-derived root invocation UUID, `cycle_id`, full `head_sha`, diff/scope/runtime/contract/report hashes, producing invocation UUIDs, and verified-at timestamps. Implementation modes also require exact `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; Phase 8 requires non-blank `local_coverage_command`.
 - Mode-specific artifacts:
   - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, runtime claim, scope, and cycle id.
   - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, and bootstrap-exception refs when claimed.
@@ -97,7 +101,8 @@ apply-gate-set
 - Canonical join manifest.
 - Aggregate report.
 - Expected-process manifest for `~/ai/agents/process-tree-auditor.md`.
-- Process-tree report reference or explicit mode-scoped non-applicability record.
+- Required independent process-tree report.
+- Raw process-tree trace and stable `apply-gate-set-result-v1` with artifact SHA-256 map.
 - Audit-history records following `~/ai/conventions/audit-history.md`.
 - Optional caller-owned ticket or PR comment payload that mirrors canonical file-backed evidence.
 
@@ -126,19 +131,19 @@ For `no_write_policy_disabled`, the expected-process manifest contains a selecte
 
 `implementation-phase-6` runs after Step 6c component evidence exists. It requires Step 6b/6c provenance, tests-contract alignment refs, per-component code-quality, applicable prototype/derivation/halt/swap/non-applicability records, join evidence, process-tree audit #2 projection, and audit-history records. Per-component code-quality child auditors run with `-p ${code_quality_dispatch_dir}`, where `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; their prompts include absolute `worktree_path`, `contract_path`, and `proposal_path` so the outside-worktree Step 6a contract is read before scoring.
 
-`implementation-phase-8` runs on the actual branch or PR diff after readiness. It requires PR-review rows, actual-diff code-quality, proof-risk/validation-integrity runtime-claim transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins, and process-tree audit #3 projection.
+`implementation-phase-8` runs on the already-open exact Phase 7 PR after readiness. It transports the same freshly fetched base/head branch/ref/full SHA bundle and `local_coverage_command` through PR review to test audit, and requires current provider identity plus process-tree audit #3.
 
 ## Procedure
 
 1. Validate required inputs and resolve `caller_mode`.
 2. Select mode-scoped required gates and row contracts; Phase 4 validates the estimate disposition and its currentness before other gate rows.
-3. Build child prompts, dispatch manifest, and expected output paths.
+3. Build child prompts, dispatch manifest, expected-process skeleton, and expected output paths before fanout.
 4. Dispatch required children through the active operator or verify current caller-supplied canonical outputs.
 5. Stat, hash, parse, and normalize every canonical output.
 6. Write join-manifest rows for gates, applicability, skips, bootstrap exceptions, inventory resolution, stale refusals, and aggregate result.
-7. Project manifest rows into expected-process evidence, including forbidden-child evidence for policy-disabled estimate non-applicability.
-8. Require process-tree audit evidence where the caller mode requires it.
-9. Append audit-history records and return terminal status to the caller.
+7. Join actual child UUIDs/output hashes to stable expected nodes and freeze manifests, including forbidden-child evidence for policy-disabled estimate non-applicability.
+8. Capture raw trace, run the independent process-tree audit, and require current PASS for every caller mode.
+9. Append audit history and write the stable result envelope with all artifact hashes before returning status.
 
 ## Manifest schema reference
 

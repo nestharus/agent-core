@@ -1256,6 +1256,14 @@ def select_actionable_comments(poll_result: dict[str, Any]) -> list[dict[str, An
     ]
 
 
+def changes_requested_without_actionable_comments(
+    review_decision: str, outcome: Any, actionable_comments: list[dict[str, Any]]
+) -> bool:
+    return not actionable_comments and (
+        review_decision.upper() == "CHANGES_REQUESTED" or outcome == "changes_requested"
+    )
+
+
 def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     repo = Repo.parse(args.repo)
     enabled, enabled_payload = repo_label_enabled(repo, args.label)
@@ -1339,6 +1347,15 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iterations.append(iteration)
             break
 
+        if changes_requested_without_actionable_comments(
+            final_review_decision, final_outcome, actionable_comments
+        ):
+            terminal_reason = "changes_requested_without_actionable_comments"
+            iteration["needs_caller_decision"] = True
+            iteration["escalation_reason"] = terminal_reason
+            iterations.append(iteration)
+            break
+
         if not actionable_comments:
             iterations.append(iteration)
             print(
@@ -1416,6 +1433,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         iterations.append(iteration)
         iteration_index += 1
 
+    needs_caller_decision = terminal_reason == "changes_requested_without_actionable_comments"
     return {
         "repo": repo.slug,
         "pr_num": args.pr_num,
@@ -1423,10 +1441,10 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "enabled": enabled_payload,
         "loop_started_at": loop_started_at,
         "loop_completed_at": utc_now(),
-        "terminal": True,
+        "terminal": not needs_caller_decision,
         "terminal_reason": terminal_reason,
         "outcome": terminal_reason,
-        "needs_caller_decision": False,
+        "needs_caller_decision": needs_caller_decision,
         "review_decision": final_review_decision,
         "initial_trigger_decision": trigger_decision,
         "initial_trigger_result": initial_trigger,

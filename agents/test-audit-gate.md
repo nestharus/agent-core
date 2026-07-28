@@ -29,13 +29,13 @@ inputs:
   - name: base_ref
     type: string
     required: false
-    default_source: base
-    description: "Parent ref used for the reviewed diff and baseline coverage worktree; explicit invalid values block without fallback."
+    default_source: derived
+    description: "Parent ref used for the reviewed diff and baseline coverage worktree; derived only as refs/remotes/origin/${base_branch} from the required caller-owned base branch when omitted."
   - name: base_branch
     type: string
-    required: false
+    required: true
     default_source: caller
-    description: "Short provider base name; required with pinned PR-review composition."
+    description: "Caller-owned short provider base name; missing or blank values block and no default branch is inferred."
   - name: base_sha
     type: string
     required: false
@@ -87,9 +87,6 @@ inputs:
     default_source: caller
     description: "pr number (used only for synthesis labeling)"
 defaults:
-  - name: base_ref
-    value: origin/main
-    source: base
   - name: planning_root
     value: ${repo_root}/planning
     source: base
@@ -176,7 +173,7 @@ spec alignment, test quality, and coverage delta.
 - Spec `PASS` requires positive evidence: for each changed product file, cite at least one spec anchor and one matching diff/file location. Absence of contradiction is `PARTIAL`, not `PASS`.
 - Test-quality `FAIL` is reserved for changed tests classified `CAPTURED_BEHAVIOR` or `HARMFUL`. Missing evidence, no changed tests, or only `STRUCTURAL` / `DEAD` evidence is `PARTIAL`.
 - Coverage-delta uses locally-generated coverage runs against the PR HEAD and the merge base. Do not fetch CI workflow artifacts. Do not call `gh api .../actions/workflows/...` or `aws s3 cp` for coverage.
-- Resolve `base_ref=origin/main` only when the caller omits it, preserving standalone callers. An explicitly supplied empty, missing, or unresolvable ref is `BLOCKED:invalid-base-ref`; do not retry with `origin/main` or another default.
+- Require non-blank caller-owned `base_branch`. When `base_ref` is omitted, derive only `refs/remotes/origin/${base_branch}` after fetching that exact branch; never infer `main`, `origin/main`, or the repository default branch. An explicitly supplied empty, mismatched, or unresolvable ref is `BLOCKED:invalid-base-ref` without fallback.
 - PR-review composition supplies the full base/head branch/ref/SHA identity. Resolve both refs, require exact full-SHA equality, and never use ambient `HEAD`; any mismatch is `BLOCKED:pinned-review-identity-mismatch`.
 - In `pr-review` mode, blank or absent `local_coverage_command` is `BLOCKED:missing-local-coverage-command` before coverage work.
 - Every `agents` invocation tees its complete merged runner stream to a dedicated `.log` containing exactly one valid `OULIPOLY_INVOCATION` marker and one terminal successful `OULIPOLY_RESULT` sentinel. A `.log` path never aliases a canonical `.md` report.
@@ -206,8 +203,9 @@ spec alignment, test quality, and coverage delta.
 - `--input mode=implementation|pr-review` (required) — gate mode.
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input scratch_dir=<path>` (required) — writable directory for prompt files and reports.
-- `--input base_ref=<ref>` (optional, compatibility default `origin/main`) — actual parent ref for the reviewed diff and baseline coverage worktree. Implementation-pipeline and PR-review compositions must pass the PR's actual parent explicitly. An explicit invalid value blocks without fallback.
-- `--input base_branch/base_sha/head_branch/head_ref/head_sha` (required together for PR-review composition) — pinned provider identity; explicit mismatch blocks without fallback.
+- `--input base_branch=<short-branch>` (required) — caller-owned parent/trunk policy for every mode; omission or blank input blocks without fallback.
+- `--input base_ref=<ref>` (optional, derived only as `refs/remotes/origin/${base_branch}`) — actual parent ref for the reviewed diff and baseline coverage worktree. An explicit empty, invalid, or differently named value blocks without fallback.
+- `--input base_sha/head_branch/head_ref/head_sha` (required together for PR-review composition) — pinned provider identity; explicit mismatch blocks without fallback.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs root used to derive the default coverage spec directory.
 - `--input spec_dir=<path>` (optional, default `${planning_root}/coverage`) — directory containing `spec-*.md`.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated coverage audits.
@@ -235,16 +233,24 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 ### 1. Prepare Diff Inputs
 
-For a composed PR review, freshly fetch `refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`, resolve both pinned refs, and diff only the full commit pair. Standalone implementation mode may derive `head_ref=HEAD`; PR-review mode may not.
+Freshly fetch the required caller-owned `refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`. Derive an omitted `base_ref` only from that exact branch, resolve both pinned refs, and diff only the full commit pair. Standalone implementation mode may derive `head_ref=HEAD`; PR-review mode may not.
 
 ```bash
 cd "$repo_root"
-if [ -n "${base_branch:-}" ]; then
-  git fetch origin "refs/heads/${base_branch}:refs/remotes/origin/${base_branch}" || {
-    printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_branch"
-    exit 0
-  }
+if [ -z "${base_branch+x}" ] || [ -z "${base_branch//[[:space:]]/}" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-branch\n'
+  exit 0
 fi
+derived_base_ref="refs/remotes/origin/${base_branch}"
+git fetch origin "refs/heads/${base_branch}:${derived_base_ref}" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_branch"
+  exit 0
+}
+if [ "${base_ref+x}" = x ] && { [ -z "$base_ref" ] || [ "$base_ref" != "$derived_base_ref" ]; }; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_ref"
+  exit 0
+fi
+base_ref="${base_ref:-$derived_base_ref}"
 resolved_base_ref=$(git rev-parse --verify "${base_ref}^{commit}") || {
   printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_ref"
   exit 0

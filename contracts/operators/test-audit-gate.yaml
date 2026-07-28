@@ -21,13 +21,13 @@ inputs:
 - name: base_ref
   type: string
   required: false
-  default_source: base
-  description: Parent ref used for the reviewed diff and baseline coverage worktree; explicit invalid values block without fallback.
+  default_source: derived
+  description: Parent ref used for the reviewed diff and baseline coverage worktree; derived only as refs/remotes/origin/${base_branch} from the required caller-owned base branch when omitted.
 - name: base_branch
   type: string
-  required: false
+  required: true
   default_source: caller
-  description: Short provider base name; required with pinned PR-review composition.
+  description: Caller-owned short provider base name; missing or blank values block and no default branch is inferred.
 - name: base_sha
   type: string
   required: false
@@ -79,9 +79,6 @@ inputs:
   default_source: caller
   description: pr number (used only for synthesis labeling)
 defaults:
-- name: base_ref
-  value: origin/main
-  source: base
 - name: planning_root
   value: ${repo_root}/planning
   source: base

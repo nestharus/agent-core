@@ -48,6 +48,11 @@ inputs:
     required: false
     default_source: caller
     description: Markdown brief used to create a ticket when no issue key is supplied.
+  - name: wu_brief_context_path
+    type: path
+    required: false
+    default_source: caller
+    description: Readable context brief accepted only with an existing issue key; never authorizes Phase 0 ticket creation.
   - name: ticket_system
     type: enum
     required: false
@@ -108,13 +113,18 @@ inputs:
     required: false
     default_source: base
     description: normal, review_first, or plug_existing_review.
+  - name: audit_workflow_path
+    type: path
+    required: false
+    default_source: base
+    description: Audit workflow dispatched by review_first and staleness re-audit paths.
   - name: audit_target_type
     type: enum
     required: false
     default_source: caller
     description: Audit target type for review_first mode.
   - name: audit_target_paths
-    type: path
+    type: path_list
     required: false
     default_source: caller
     description: Audit target paths for review_first mode.
@@ -128,26 +138,121 @@ inputs:
     required: false
     default_source: caller
     description: Current target ref for currentness certification.
+  - name: design_patterns_ref
+    type: path
+    required: false
+    default_source: base
+    description: Design-pattern corpus for workflow and operator audit targets.
+  - name: operator_format_ref
+    type: path
+    required: false
+    default_source: base
+    description: Operator-format reference for operator audit targets.
+  - name: audit_slug
+    type: string
+    required: false
+    default_source: derived
+    description: Audit artifact slug, defaulting to <target_slug>-<target_ref_slug>-audit.
+  - name: audit_report_bundle_path
+    type: path
+    required: false
+    default_source: derived
+    description: Durable review_first bundle root, defaulting to ${planning_dir}/audit/${audit_slug}/.
   - name: existing_review_bundle_path
     type: path
     required: false
     default_source: caller
     description: Existing review bundle for plug_existing_review mode.
+  - name: existing_review_bundle_schema
+    type: string
+    required: false
+    default_source: base
+    description: Imported bundle schema; the supported value is nes-design-audit-v1.
+  - name: reviewed_target_paths
+    type: path_list
+    required: false
+    default_source: caller
+    description: Target paths or manifest reference certified by the imported review bundle.
+  - name: reviewed_target_ref
+    type: string
+    required: false
+    default_source: caller
+    description: Target ref or id certified by the imported review bundle.
+  - name: current_target_ref
+    type: string
+    required: false
+    default_source: caller
+    description: Current target ref or id used to validate imported-review currentness.
   - name: review_staleness_policy
     type: enum
     required: false
     default_source: base
     description: exact-match, required, or allow-with-drift-report.
+  - name: review_staleness_fallback
+    type: enum
+    required: false
+    default_source: base
+    description: needs_input or rerun_review_first when imported evidence is stale.
+  - name: proposer_fix_scope
+    type: path_list_or_target_list
+    required: false
+    default_source: caller
+    description: Optional audited target items that bound proposer remediation.
+  - name: workflow_file
+    type: path
+    required: false
+    default_source: caller
+    description: Workflow definition required for runtime audit targets.
+  - name: run_artifacts
+    type: path_list
+    required: false
+    default_source: caller
+    description: Runtime run artifacts accepted by workflow-process-auditor.
+  - name: runtime_artifacts_path
+    type: path
+    required: false
+    default_source: caller
+    description: Runtime evidence bundle path used instead of run_artifacts.
+  - name: process_tree_report_path
+    type: path
+    required: false
+    default_source: caller
+    description: Existing process-tree report for a runtime audit target.
+  - name: expected_process_path
+    type: path
+    required: false
+    default_source: caller
+    description: Expected-process evidence for a runtime audit target.
+  - name: root_invocation_uuid
+    type: string
+    required: false
+    default_source: caller
+    description: External runtime-audit target UUID only; never the current implementation run identity.
+  - name: generated_report_timestamp
+    type: string
+    required: false
+    default_source: caller
+    description: Timestamp used with runtime artifact identity for currentness certification.
   - name: tickets_first_variant
     type: bool
     required: false
     default_source: base
-    description: Enables Phase 8.5 human-local-review gate.
+    description: Migration-only no-op; true does not add a Phase 8.5 gate or change behavior.
   - name: branch_name
     type: string
     required: false
     default_source: derived
     description: Working branch name.
+  - name: base_branch
+    type: string
+    required: true
+    default_source: caller
+    description: Caller-owned parent branch for worktree creation, provenance, diff and rebase baselines, review, PR targeting, merge verification, and post-merge evidence; never inferred from a default branch.
+  - name: local_coverage_command
+    type: string
+    required: false
+    default_source: caller
+    description: Project coverage command required for Phase 8 PR-review test audit and passed unchanged through all providers.
   - name: predecessor_session_manifest_path
     type: path
     required: false
@@ -168,6 +273,11 @@ inputs:
     required: false
     default_source: base
     description: Enables direct ready-and-merge after Phase 9.
+  - name: route_attempt_number
+    type: int
+    required: false
+    default_source: base
+    description: Positive owning-route attempt identity; feature-orchestrator supplies its exact numbered attempt.
 defaults:
   - name: pipeline_entry_mode
     value: normal
@@ -181,8 +291,20 @@ defaults:
   - name: auto_merge_after_phase_9
     value: true
     source: base
+  - name: route_attempt_number
+    value: 1
+    source: base
   - name: audit_workflow_path
     value: ~/ai/workflows/audit.md
+    source: base
+  - name: existing_review_bundle_schema
+    value: nes-design-audit-v1
+    source: base
+  - name: review_staleness_policy
+    value: exact-match
+    source: base
+  - name: review_staleness_fallback
+    value: needs_input
     source: base
   - name: operator_format_ref
     value: ~/ai/agents/operator-file-format.md
@@ -193,26 +315,47 @@ defaults:
 secrets: []
 outputs:
   - task: run-pipeline
-    success_shape: Phase 9 draft PR URL recorded, audit-history closed, decisions tail synced.
+    success_shape: "implementation-pipeline-result-v1 with VERIFIED_DRAFT_PR or VERIFIED_MERGED, exact ticket/backend/route-attempt and provider branch/ref/full-SHA identity, base_branch equal to the dispatched base, base_ref equal to that base's fetched refs/remotes/origin identity, reviewed/current provider base_ref_name equal to the same exact branch even when OIDs coincide, immutable caller-owned ticket-operation-expected-context-v1 path/hash, validated producer-owned ticket-operation-result-v1 path/hash, current owned Phase 4/6/8 process-proof paths/hashes usable as feature-route-attempt-proof-v1 companions, boolean is_draft and phase_8_reviewed_is_draft, immutable phase_8_reviewed_base_sha and phase_8_reviewed_head_sha, final Phase 9 equality result with provider/fetched/reviewed base-head equality recording both fetched SHAs, pr_open_base_sha, pre_merge_base_sha equal to the Phase 8 reviewed base when captured, merge_sha, refreshed remote base SHA as post_merge_base_sha, merge reachability proof, first-parent proof, process evidence, and artifact hashes; merge fields are null only for draft outcome."
     wrote_lines:
       - ${planning_dir}/session.json
+      - ${planning_dir}/../sessions.active-wake.json initialized empty in Phase 0 and populated after exact Phase 7 PR acquisition
+      - ${scratch_dir}/session-writes/phase0-init.json
+      - ${scratch_dir}/session-writes/phase7-upsert.json
+      - ${scratch_dir}/session-writes/phase9-update.json
       - ${planning_dir}/audit-history.md
       - ${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json
       - ${scratch_dir}/pr-url.txt
+      - ${planning_dir}/phase-8-reviewed-pr.json
+      - ${planning_dir}/phase-9-currentness.json
+      - ${planning_dir}/phase-9-ready-restoration.json
+      - ${planning_dir}/ticket-operations/${wu_lower}-phase-9-expected-context.json
+      - ${planning_dir}/ticket-operations/${wu_lower}-phase-9-comment.json
+      - ${planning_dir}/ticket-operations/${wu_lower}-phase-9-validation.json
+      - ${planning_dir}/implementation-pipeline-result.json
 errors:
   - class: BLOCKED
-    cause: Phase refusal, malformed artifact, missing required input after contract resolution, or process-tree blocking verdict.
+    cause: Phase refusal, malformed artifact, invalid or stale estimate-mutation policy/disposition, missing required input after contract resolution, or process-tree blocking verdict.
     recovery: Repair the blocked input or artifact and rerun the affected phase.
   - class: NEEDS_INPUT
     cause: New value, scope, or trade-off question written as an absolute question artifact path.
     recovery: Root answers the question artifact and resumes.
 side_effects:
   - git-worktree-create
+  - git-worktree-delete
+  - git-hard-reset-wu-branch
+  - git-force-push-with-lease-wu-branch
+  - git-local-branch-delete
+  - git-remote-branch-delete
   - planning-dir-writes
+  - closed-schema-runtime-write-requests-and-wu-session-migration-invocation
   - scratch-dir-writes
   - ticket-system-writes-via-ticket-operator
   - git-push-origin
+  - git-fetch-origin
   - gh-pr-create
+  - gh-pr-ready-when-auto-merge-enabled
+  - gh-pr-ready-undo-before-pre-merge-replay
+  - gh-pr-squash-merge-when-auto-merge-enabled
 must_delegate:
   - ticket-operator-resolution
   - contract-resolution
@@ -274,13 +417,14 @@ Before any `${ticket_operator}` dispatch, resolve the selected operator contract
 - `worktree_path` — absolute path to the per-WU worktree. Default placement depends on the project's layout (see `~/ai/conventions/project-layout.md`):
   - Single-repo projects: `<repo_root>/worktrees/impl-<wu_lower>` or `~/projects/<name>/worktrees/<branch>/`.
   - Multi-repo umbrella projects: `~/projects/<name>/trunk/<repo>-worktrees/<branch>/`.
-  Created from `main` if it does not exist. The branch name follows the project's branch convention (`impl-<wu_lower>` for default projects, `<TICKET-ID>-<short>` for tickets-first-variant projects). When the brief supplies a non-default branch name, the orchestrator uses it verbatim instead of `impl-<wu_lower>` in every reference (worktree creation, `git push origin <branch>`, ticket cross-link comments, contract slug derivation).
+  Created from `${base_branch}` if it does not exist. The branch name follows the project's branch convention (`impl-<wu_lower>` for default projects, `<TICKET-ID>-<short>` for tickets-first-variant projects). When the brief supplies a non-default branch name, the orchestrator uses it verbatim instead of `impl-<wu_lower>` in every reference (worktree creation, `git push origin <branch>`, ticket cross-link comments, contract slug derivation).
 - `scratch_dir` — absolute path to the per-WU scratch directory. Houses prompts, logs, question artifacts, the rendered `ticket.md`, and `phase6/` index/log outputs. Project-local: typically `<repo_root>/tmp/scratch/<wu_lower>/` for single-repo projects, `~/projects/<name>/planning/<branch>/.scratch/` for umbrella projects.
 - `planning_dir` — absolute path to the per-WU **planning artifact** directory. Houses `research/`, `proposals/`, `risk/`, `contracts/`, `alignment/`, `code-quality/`, and `audit-history.md`. **MUST live outside `worktree_path`** so planning content never enters the PR diff. For umbrella projects, this is `~/projects/<name>/planning/<branch>/`. For legacy single-repo projects that have not migrated, `planning_dir` may equal `${scratch_dir}` or `${worktree_path}` (transitional defaults — the migration goal is to lift planning into a project-level `planning/` peer per `~/ai/conventions/project-layout.md`). Tests (Phase 6b) and product code (Phase 6c) still write to `worktree_path` — only planning artifacts move.
 
 ## Optional Inputs
 
 - `wu_brief_path` — absolute path to a markdown brief used by Phase 0 to draft a ticket via `${ticket_operator}` (`task=create`) when no `*_issue_key` input is supplied. The brief provides problem context and any known constraints to seed the ticket; scope and boundaries are derived later in Phase 2.5 / Phase 3 / Step 6a, not pre-declared in the brief. The brief is consumed once and not retained as a source of truth — the chosen ticket system (JIRA or Linear) is the source of truth after creation.
+- `wu_brief_context_path` — absolute readable non-empty package/context brief accepted only when exactly one existing backend-matching issue key is supplied. Copy its pinned content/hash to `${scratch_dir}/wu-brief-context.md` for downstream research/proposal prompts while the issue remains the sole ticket source. It never sets `ticket_id`, never substitutes for `wu_brief_path`, and never authorizes `task=create`; context without an issue key or with a cold-start `wu_brief_path` is `BLOCKED:invalid-wu-brief-context` before ticket dispatch.
 - `audit_history_path` — `${planning_dir}/audit-history.md`. Created on the first revise/review loop.
 
 Entry-mode inputs live here because they are audit/planning context, not branch-topology switches:
@@ -305,14 +449,23 @@ Entry-mode inputs live here because they are audit/planning context, not branch-
 | `review_staleness_policy` | enum `exact-match|required|allow-with-drift-report`, default `exact-match` | `plug_existing_review` | Unknown: `BLOCKED`; `required` is self-sufficient and reruns `review_first` before proposal work; `exact-match` and `allow-with-drift-report` failures follow the fallback policy below. |
 | `review_staleness_fallback` | enum `needs_input|rerun_review_first`, default `needs_input` | `plug_existing_review` | Unknown: `BLOCKED`; ignored when `review_staleness_policy=required`; otherwise `needs_input` emits a question and `rerun_review_first` dispatches audit. |
 | `proposer_fix_scope` | path list/target item list, optional | entry modes | Ambiguous scope that changes value/tradeoff: `NEEDS_INPUT`; otherwise default to audited target items. |
-| Runtime evidence fields | paths/UUIDs/timestamps per `audit.md` | runtime targets | Missing currentness evidence: `NEEDS_INPUT`; unreadable artifacts: `BLOCKED`. |
+| `workflow_file` | path, no default | runtime targets | Missing/unreadable: `NEEDS_INPUT` for a user-owned target, otherwise `BLOCKED`. |
+| `run_artifacts` | path list, no default | runtime targets | Required unless `runtime_artifacts_path` is supplied; unreadable artifacts: `BLOCKED`. |
+| `runtime_artifacts_path` | path, no default | runtime targets | Required unless `run_artifacts` is supplied; unreadable bundle: `BLOCKED`. |
+| `process_tree_report_path` | path, optional | runtime targets | A supplied unreadable report is `BLOCKED`; omission is allowed only when the routed audit does not require it. |
+| `expected_process_path` | path, optional | runtime targets | A supplied unreadable expected-process artifact is `BLOCKED`. |
+| `root_invocation_uuid` | UUID, optional unless topology currentness requires it | external runtime-audit targets only | Missing required runtime target identity: `NEEDS_INPUT`; malformed identity: `BLOCKED`. This never selects the current implementation run identity. |
+| `generated_report_timestamp` | ISO-8601 timestamp, optional unless currentness certification requires it | runtime targets | Missing required timestamp: `NEEDS_INPUT`; malformed timestamp: `BLOCKED`. |
 
 - `tickets_first_variant` — removed/no-op migration-compatible boolean (default `false`). Stale `true` inputs do not change behavior: the orchestrator proceeds through the default Phase 8 -> Phase 8.X -> Phase 9 draft PR flow and never inserts a Phase 8.5 gate.
 - `branch_name` — the working branch on `worktree_path`. Default `impl-<wu_lower>` for default projects. Projects may override with `<TICKET-ID>-<short>` per the project's branch-naming rule. The orchestrator uses this verbatim everywhere a branch name appears (worktree creation, push, optional review dispatch, PR-writer brief, ticket cross-link).
+- `base_branch` — required caller-owned WU parent and ticket PR base. Standalone, feature, refactoring, and stacked-WU callers pass the actual parent explicitly; no repository default branch is inferred. Once validated, this value is authoritative for all parent-sensitive lifecycle surfaces. A missing, blank, or unresolvable base halts with `BLOCKED:invalid-base-branch`; never retry or silently substitute `main` or another branch.
+- `local_coverage_command` — project command passed unchanged through Phase 8 `apply-gate-set` and `pr-review-operator` to `test-audit-gate`. It is conditionally required before Phase 8 fanout; a missing/blank value is `BLOCKED:missing-local-coverage-command` and ambient coverage artifacts are never reused.
 - `predecessor_session_manifest_path` — absolute path to a predecessor WU's `${planning_dir}/session.json` when this WU is spawned from a post-merge successor handoff. When supplied, Phase 0 validates the predecessor manifest and its `successor_session_brief`, imports carried context into `${scratch_dir}/predecessor-session.md`, and records the predecessor pointer in this WU's session manifest. Missing, unreadable, mismatched, or ambiguous predecessor evidence is `BLOCKED:invalid-predecessor-session`.
 - `models_dir` — passed through to `agents` invocations; usually omitted.
 - `skip_problem_map_gate` — boolean (default `false`). When `true`, Phase 2.5 step 6 (the problem-map human gate) is skipped and the orchestrator proceeds directly to step 8 (mode propagation). Project-level override; declare in the project's `AGENTS.md` (e.g., `~/ai/` itself opts out for its bootstrap flow). The defer-to-prototype detection (Phase 2.5 step 5) still runs and can still surface as a NEEDS_INPUT new-value question; this override only removes the routine "approve the problem map" step, not the genuine value-question escalation.
-- `auto_merge_after_phase_9` — boolean (default `true`). When `true`, after Phase 9 step 7 completes (draft PR opened + manifest updated + ticket cross-link comment posted), the orchestrator additionally runs `gh pr ready <pr_url>` then direct `gh pr merge --squash <pr_url>` unconditionally. It does not enable auto-wait behavior and does not detect branch protection; any command failure is surfaced as NEEDS_INPUT for the root. Project-level override; declare in the project's `AGENTS.md`. Default-on because merge of a non-foreign repository is not a user-owned action — the PR open + CodeRabbit + gates are the review surface, not a manual merge step. Foreign repositories (where the user does not control the merge gate) opt out by setting `auto_merge_after_phase_9: false` in their `AGENTS.md`.
+- `auto_merge_after_phase_9` — boolean (default `true`). When `true`, Phase 9 may promote and squash-merge the already-created Phase 7 draft PR only after the exact authorization, remote-base refresh, immediate pre-merge capture, PR identity re-read, and post-merge reachability checks in Phase 9. It does not enable auto-wait behavior or bypass branch protection. Public-audience promotion additionally requires a matching project pre-authorization under `~/ai/workflows/tiered-approval.md`; otherwise the operator returns the verified-draft outcome. Foreign repositories opt out by setting `auto_merge_after_phase_9: false`.
+- `route_attempt_number` — positive integer (default `1`). Feature-owned direct routes pass the exact immutable feature attempt number; Phase 9 binds it into ticket-operation evidence and the implementation result. Standalone and refactoring-owned one-child runs use the default unless their caller supplies a numbered owning attempt.
 
 ## Non-Negotiables
 
@@ -344,25 +497,29 @@ agents -m gpt-xhigh -p ${worktree_path} -f ${prompt} | head -3"
   2. Any sub-agent that emits `NEEDS_INPUT:<question_artifact>` per `~/ai/conventions/agent-questions-and-session-graph.md` whose question carries a **new value** flag (i.e. surfaces a previously-unevaluated value, scope, or trade-off question for the user). Procedural NEEDS_INPUT (missing input the orchestrator can supply) is resolved by the orchestrator, not the user.
 - **AskUserQuestion permission-denial citation.** For direct `AskUserQuestion` permission-denial on human-owned value/scope/trade-off or new-value questions, follow `~/ai/conventions/agent-questions-and-session-graph.md` § `AskUserQuestion Permission-Denial`: procedural permission-denial or NEEDS_INPUT that the orchestrator can resolve from supplied inputs stays inline; non-procedural questions return `NEEDS_INPUT:<absolute_artifact_path>` and halt per that convention.
 - All other human gates listed in `~/ai/workflows/implementation-pipeline.md` are removed for this orchestrator's runs.
-- **You are autonomous on destructive git ops.** When the violation-escalation policy requires a Tier-1 rewind, you may `git reset --hard` and `git push --force-with-lease origin main`, delete branches, and remove worktrees without asking the user. Record the rewind in `${worktree_path}/DECISIONS.md` before re-attempting the failed phase.
+- **You are autonomous on destructive git ops.** When the violation-escalation policy requires a Tier-1 rewind, you may `git reset --hard` and `git push --force-with-lease origin ${branch_name}`, delete branches, and remove worktrees without asking the user. Never force-push `${base_branch}` as part of a WU rewind. Record the rewind in `${worktree_path}/DECISIONS.md` before re-attempting the failed phase.
 - Per-WU prompts live in `${scratch_dir}/prompts/<wu>-<phase>.md`. Per-WU logs live in `${scratch_dir}/logs/<wu>-<phase>.log`.
+
+At every parent-sensitive rebase, diff, test, PR-authoring, review, terminal, or merge boundary, freshly fetch `refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`, set `base_ref=refs/remotes/origin/${base_branch}`, and resolve a full `base_sha`. Resolve `head_ref` and full `head_sha` for the same boundary. Keep this git-object identity separate from short `base_branch`/`branch_name`, which remain only provider names, ticket/session names, and `--base`/`--head` values. Pass the complete branch/ref/SHA bundle to every child that reads parent-sensitive evidence. If the fetched base advances, invalidate prior boundary evidence and rerun it; never reuse a prior SHA merely because the short branch name is unchanged.
+
+At startup, derive `implementation_invocation_uuid` from the runner-provided `OULIPOLY_PARENT_INVOCATION` JSON object. Require exactly one valid UUID `id`; absent, duplicate-key, malformed, non-UUID, or trace-root-mismatched data is `BLOCKED:runtime-invocation-identity-unavailable`. Never accept a caller-selected substitute. The optional `root_invocation_uuid` input names only an external runtime-audit target. Use `implementation_invocation_uuid` as the current WU `session_id` and pass it as `root_invocation_uuid=${implementation_invocation_uuid}` to every Phase 4, Phase 6, and Phase 8 `apply-gate-set` dispatch.
 
 ## Rebase Verification Gate
 
 Run this gate whenever the WU branch has been rebased or pulled with rebase after Phase 0 starts and before the orchestrator consumes any prior PASS/LOW state or advances to the next phase. The source convention is `~/ai/conventions/rebase-verification.md`; this section is the procedural wiring for that convention inside the implementation pipeline.
 
-1. Locate the verified-rebase bundle. Prefer the bundle path returned by `~/ai/workflows/verified-rebase.md`; otherwise use the newest `<repo_root>/.tmp/verified-rebase/<branch-slug>/<timestamp>/` whose `refs.json` names `${branch_name}` and whose `POST_TIP` equals the current branch tip. Required bundle files are `refs.json`, `target-delta.patch` or `main-delta.patch`, `branch-intended.patch`, `branch-actual.patch`, `residual.patch`, `range-diff.txt`, and `summary.md`. Missing bundle evidence is `BLOCKED:rebase-verification-bundle-missing`.
-2. Check #1, test re-run: compose `${scratch_dir}/prompts/${wu_lower}-rebase-test-rerun.md` from the project `AGENTS.md` test commands and any project-specific suite the ticket or proposal names. Dispatch: `agents -a test-audit-gate -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-test-rerun.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-test-rerun.log`. The prompt must require the agent to run the current post-rebase suite and write `${planning_dir}/risk/${wu_lower}-rebase-tests.md` with terminal verdict `PASS`, `FAIL`, or `BLOCKED`. `PASS` is required; `FAIL`, `BLOCKED`, missing, malformed, or stale reports halt before phase advance.
+1. Freshly fetch the parent, resolve `base_ref/base_sha` and `head_ref/head_sha`, then run verified rebase with `BRANCH=${branch_name}` and `TARGET=${base_ref}`. Locate the returned bundle, or use the newest `<repo_root>/.tmp/verified-rebase/<branch-slug>/<timestamp>/` whose `refs.json` names `${branch_name}`, resolves its target ref/SHA to `${base_ref}`/`${base_sha}`, and whose `POST_TIP` equals `head_sha`. Required bundle files are `refs.json`, the target-correct delta selected in step 5, `branch-intended.patch`, `branch-actual.patch`, `residual.patch`, `range-diff.txt`, and `summary.md`. A bundle for another target or missing bundle evidence is `BLOCKED:rebase-verification-bundle-missing`.
+2. Check #1, test re-run: compose `${scratch_dir}/prompts/${wu_lower}-rebase-test-rerun.md` from project test commands. Pass `base_branch`, `base_ref`, `base_sha`, `head_branch=${branch_name}`, `head_ref`, `head_sha`, and `local_coverage_command` explicitly to `test-audit-gate`; the child validates and uses those objects rather than ambient or default branch policy. Dispatch: `agents -a test-audit-gate -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-test-rerun.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-test-rerun.log`. Require current PASS bound to those SHAs.
 3. Check #2, coverage non-regression: compose `${scratch_dir}/prompts/${wu_lower}-rebase-coverage.md` instructing `coverage-analyzer` to use `task=regression-check`, `worktree_path=${worktree_path}`, the verified-rebase `PRE_TIP` and `POST_TIP` from `refs.json`, and the project's coverage command adapter from project `AGENTS.md` or existing coverage config. Dispatch: `agents -a coverage-analyzer -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-coverage.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-coverage.log`. The required artifact is `${planning_dir}/risk/${wu_lower}-rebase-coverage.md`; it must cite both refs, the exact coverage commands or the explicit adapter gap, and a terminal verdict `PASS`, `FAIL`, or `BLOCKED`. `PASS` is required. If no project coverage adapter exists, the verdict is `BLOCKED:coverage-adapter-missing`; do not treat missing coverage tooling as a pass.
 4. Check #3, behavior / contract verification: compose `${scratch_dir}/prompts/${wu_lower}-rebase-contract-verify.md` instructing `phase6-tests-contracts-alignment-reviewer` to read the Step 6a contract, `${scratch_dir}/phase6/step6b-output-index.md`, the Phase 6b test paths named in that index, the verified-rebase bundle refs, and the post-rebase test rerun report; re-run or verify every indexed test against the post-rebase tree; and write `${planning_dir}/risk/${wu_lower}-rebase-contract-verify.md`. Dispatch: `agents -a phase6-tests-contracts-alignment-reviewer -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-contract-verify.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-contract-verify.log`. The report must cite each contract section and indexed test it verified and contain exactly one terminal verdict: `PASS`, `FAIL`, or `BLOCKED`. `PASS` is required. `FAIL`, `BLOCKED`, missing, malformed, or stale reports halt before phase advance.
-5. Check #4, drift check: choose `merged_base_diff_path` as `${bundle}/main-delta.patch` when present, otherwise `${bundle}/target-delta.patch`; choose `problem_map_path=${planning_dir}/research/${wu_lower}-problem-map.md`; choose `report_path=${planning_dir}/risk/${wu_lower}-rebase-drift.md`. Compose `${scratch_dir}/prompts/${wu_lower}-rebase-drift.md` with those three inputs and the bundle provenance. Dispatch: `agents -a rebase-drift-checker -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-drift.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-drift.log`. The report path must exist and the final stdout verdict must be `rebase-drift: no drift; report=${planning_dir}/risk/${wu_lower}-rebase-drift.md` to clear. `rebase-drift: drift detected`, `BLOCKED:*`, missing report, malformed report, or stale report halts before phase advance.
+5. Check #4, drift check: resolve the bundle target identity before selecting an artifact. When the normalized resolved target is `main`, choose `${bundle}/main-delta.patch`. When `${base_branch}` resolves to any non-`main` target, choose `${bundle}/target-delta.patch`; `${bundle}/main-delta.patch` is not a presence-based fallback. A legacy `main-delta.patch` may represent a non-`main` target only when `refs.json` explicitly records that artifact as the target delta and records both a target ref equal to `${base_branch}` and a target SHA equal to the resolved base commit; otherwise halt with `BLOCKED:rebase-delta-target-mismatch`. Choose `problem_map_path=${planning_dir}/research/${wu_lower}-problem-map.md` and `report_path=${planning_dir}/risk/${wu_lower}-rebase-drift.md`. Compose `${scratch_dir}/prompts/${wu_lower}-rebase-drift.md` with those three inputs and the verified bundle target provenance. Dispatch: `agents -a rebase-drift-checker -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-rebase-drift.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-rebase-drift.log`. The report path must exist and the final stdout verdict must be `rebase-drift: no drift; report=${planning_dir}/risk/${wu_lower}-rebase-drift.md` to clear. `rebase-drift: drift detected`, `BLOCKED:*`, missing report, malformed report, or stale report halts before phase advance.
 6. Write `${planning_dir}/risk/${wu_lower}-rebase-verification.md` summarizing the verified-rebase bundle path, `PRE_TIP`, `POST_TIP`, the four report paths, terminal verdicts, and final disposition. All four checks must clear before the orchestrator advances. If any check fails, append `${planning_dir}/audit-history.md` with the failed check, report path, bundle path, refused phase transition, and disposition (`repair on branch`, `rewind`, or `re-enter Phase 2.5`) before taking the disposition.
 
 ## Procedure
 
 ### Phase 0 — Bootstrap
 
-1. Resolve inputs. Detect the ticket system per the Ticket System Pluggability table: if both `jira_issue_key` and `linear_issue_key` are provided, return `BLOCKED:exactly-one-ticket-system-required`. If only `jira_issue_key` is provided, set `ticket_system=jira`, resolve the current project wrapper contract first when project scope provides one, otherwise resolve the base Jira operator contract, set `ticket_operator` to that resolved operator path, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If only `linear_issue_key` is provided, set `ticket_system=linear`, resolve the selected Linear operator contract, set `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input.
+1. Resolve inputs and require a non-blank caller-owned `base_branch`. Fetch the exact parent with `git -C ${repo_root} fetch origin refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`, set `verified_remote_base_ref=refs/remotes/origin/${base_branch}`, and resolve that ref to exactly one commit before any worktree, diff, review, PR, ticket, or session operation. A missing, blank, or unresolvable value, or a missing remote parent branch, returns `BLOCKED:invalid-base-branch`; do not derive or fall back to `main` or another default branch. Detect the ticket system per the Ticket System Pluggability table: if both `jira_issue_key` and `linear_issue_key` are provided, return `BLOCKED:exactly-one-ticket-system-required`. If only `jira_issue_key` is provided, set `ticket_system=jira`, resolve the current project wrapper contract first when project scope provides one, otherwise resolve the base Jira operator contract, set `ticket_operator` to that resolved operator path, `ticket_id=${jira_issue_key}`, `wu_id = jira_issue_key`, `wu_lower = lowercase(jira_issue_key)` (e.g. `INFA-123 → infa-123`). If only `linear_issue_key` is provided, set `ticket_system=linear`, resolve the selected Linear operator contract, set `ticket_operator=linear-operator`, `ticket_id=${linear_issue_key}`, `wu_id = linear_issue_key`, `wu_lower = lowercase(linear_issue_key)` (e.g. `NES-34 → nes-34`). If neither key is provided AND `wu_brief_path` is missing, return `BLOCKED: jira_issue_key OR linear_issue_key OR wu_brief_path required`. If `wu_brief_path` is provided without a key, also require an explicit `ticket_system` input. If `wu_brief_context_path` is provided, require exactly one existing issue key, reject any simultaneous `wu_brief_path`, require the context file to be absolute/readable/non-empty, and pin its SHA-256 before any ticket dispatch; otherwise return `BLOCKED:invalid-wu-brief-context`.
    - Before dispatching `${ticket_operator}` for `task=read` or `task=create`, resolve required operator inputs in this order: project wrapper contract `defaults:` when the resolved operator is a project wrapper; base operator contract `defaults:`; caller-supplied input; `BLOCKED:missing-required-input` or `NEEDS_INPUT:<artifact>`.
    - Never use session metadata for Jira credential identity, including `jira_account_email`.
    - Resolve and validate the estimate-mutation policy before any Phase 3 ticket action. Compute SHA-256 for `resolved_operator_path` and `resolved_contract_path`, require the optimized contract's `source` to identify the resolved operator, select exactly one `estimate_writeback_disposition` by the policy rule above, and retain `estimate_field`, policy value/source, capability evidence when legacy-absent, and all path/hash identities for session manifest initialization. Reject caller/session policy values rather than merging them.
@@ -376,15 +533,17 @@ Run this gate whenever the WU branch has been rebased or pulled with rebase afte
    - Dispatch: `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-create.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-0-ticket-create.log`.
    - Parse the new key from the operator's output. Set `ticket_id`, `wu_id`, `wu_lower` from it (and the system-specific `${jira_issue_key}` or `${linear_issue_key}` for downstream substitution). Re-derive `worktree_path` and `scratch_dir` paths if they were defaulted from `wu_lower`.
 4. **Read the ticket from the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-read.md` instructing `${ticket_operator}` to perform `task=read` for `issue_key=${ticket_id}`, dump the description as Markdown (for `jira-operator` this means ADF→Markdown render; for `linear-operator` the description is already Markdown so it is passed through), and write to `${scratch_dir}/ticket.md` with YAML frontmatter containing `key`, `summary`, `status`, `parent`, `labels`, and the normalized inherited estimate metadata fields `story_point_estimate`, `estimate_source`, `estimate_rationale`, and `estimate_field`. The read prompt must also inspect the description plus latest relevant ticket comments for carry-forward payload fields from `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`; when any such payload is present, normalize it to `${scratch_dir}/ticket-prototype-evidence.md` with `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`. If the ticket references inherited prototype tests but the payload cannot be parsed into those fields, halt with `BLOCKED:invalid-ticket-prototype-evidence`. On Linear, `labels` must be real `get-issue` readback labels rather than a synthetic placeholder; on JIRA, `estimate_field` is the field resolved from the selected contract, and on Linear it identifies `estimate`. Dispatch: `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-0-ticket-read.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-0-ticket-read.log`. Verify `${scratch_dir}/ticket.md` exists and is non-empty, record the ticket-read producing invocation UUID, compute its SHA-256, and require the rendered `estimate_field` to equal the resolved contract field. A mismatch is `BLOCKED:estimate-field-contract-mismatch`.
+   - When `wu_brief_context_path` is present, copy its already-hashed content to `${scratch_dir}/wu-brief-context.md`, record source path/hash in the session manifest, and include it as context in downstream problem-map/proposal prompts. The issue read remains authoritative and step 3 cannot run because `ticket_id` was established from the existing issue key.
 5. **Validate the ticket is workable.** `${scratch_dir}/ticket.md` must exist and have a non-empty description. The orchestrator does not require pre-declared Code Boundary, Test Boundary, Acceptance Criteria, or Anti-scope sections — those are outputs of Phase 2.5 (problem map), Phase 3 (proposal), and Step 6a (contract), not inputs. If the ticket description is empty or the framing is so unclear that even a research agent could not infer a problem to investigate, emit a `NEEDS_INPUT` new-value question to the root rather than blocking. Do not edit the ticket system from the orchestrator to fix framing — the user revises the ticket and the orchestrator re-reads.
-6. If `${worktree_path}` does not exist: `git -C ${repo_root} worktree add ${worktree_path} -b ${branch_name} main` (where `${branch_name}` defaults to `impl-${wu_lower}` and is overridden by the brief for tickets-first-variant projects).
+6. **Establish branch-out provenance before worktree mutation.** Resolve `${verified_remote_base_ref}` to exactly one commit and retain it as `resolved_base_sha_at_spawn` before creating a branch or worktree. If `${worktree_path}` does not exist, set `branch_out_sha=${resolved_base_sha_at_spawn}`, then run `git -C ${repo_root} worktree add ${worktree_path} -b ${branch_name} ${resolved_base_sha_at_spawn}` (where `${branch_name}` defaults to `impl-${wu_lower}`). If the worktree already exists, verify it is on `${branch_name}`, derive `branch_out_sha` with `git merge-base --fork-point ${verified_remote_base_ref} HEAD`, or with the single result of `git merge-base --all ${verified_remote_base_ref} HEAD` only when fork-point evidence is unavailable. Require exactly one commit that is an ancestor of both `HEAD` and `${verified_remote_base_ref}`. Zero or multiple merge bases, a fork point outside either ancestry, or a configured PR parent that differs from `${base_branch}` is `BLOCKED:ambiguous-worktree-provenance` or `BLOCKED:worktree-base-mismatch`; never record the current base tip as an existing worktree's branch-out SHA.
 7. **Route central-checkout WU execution.** When `repo_root` is the central `~/ai` checkout (the same checkout as `/home/nes/ai`), the orchestrator routes mutable WU execution to the per-WU `worktree_path` and never operates phase dispatches with `worktree_path == repo_root` (cf. `conventions/worktree-isolation.md`).
 8. `mkdir -p ${planning_dir}/{research,proposals,risk,contracts,alignment,code-quality}` if those subdirs don't exist. Initialize `${planning_dir}/audit-history.md` (empty audit-history skeleton).
 9. Verify `~/ai/workflows/implementation-pipeline.md`, `~/ai/conventions/agent-questions-and-session-graph.md`, and `~/ai/conventions/audit-history.md` exist; abort if any is missing.
-10. **Initialize the WU session manifest.** Write `${planning_dir}/session.json` before the first delegated phase dispatch. The manifest records `session_id` from the root `agents trace --json` invocation UUID, `ticket_id`, `ticket_system`, `resolved_operator_path`, `resolved_operator_sha256`, `resolved_contract_path`, `resolved_contract_sha256`, `resolved_operator_contract_path`, `resolved_defaults_source` as a map of input to wrapper or base, `estimate_mutation_policy` with value/source/resolution/capability evidence, `estimate_field`, `estimate_writeback_disposition`, `phase_0_ticket_snapshot` with path/SHA-256/producing invocation UUID, `phase_3_estimate_writeback_ref=null`, `phase_3_estimate_writeback_sha256=null`, `cold_start_disposition_ref=null`, `branch=${branch_name}`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `branch_out_sha` from the current `main` at WU spawn, `spawned_at`, empty `phase_history`, `draft_pr_url=null`, `draft_pr_head_sha=null`, `merge_sha=null`, `merged_at=null`, empty `post_merge`, `successor_session_brief=null`, `predecessor_session_manifest_path` when supplied, and `closed_at=null`. Also create or update the aggregate index at `${planning_dir}/../sessions.index.json` with a row keyed by `ticket_id` and `branch`; the row points to `${planning_dir}/session.json`. Missing root invocation UUID, unresolved `branch_out_sha`, unresolved operator/contract identity, invalid estimate disposition, missing ticket snapshot identity, unwritable manifest, or unwritable index is `BLOCKED:session-manifest-init-failed`.
+10. **Initialize the WU session manifest.** Build the closed `wu-session-runtime-write-v1` request `${scratch_dir}/session-writes/phase0-init.json` for `operation=phase0-init`, with canonical planning root, exact `${planning_dir}/session.json` and `${planning_dir}/../sessions.active-wake.json` paths, null row identity, exact current source SHA-256/device/inode/mode records, the complete replacement manifest, the exact preserved or newly empty active-index projection, input-set digest, and payload digest. Require manifest `planning_dir == manifest_path.parent`, the declared project planning root to equal that session directory's exact parent, and every active row to remain under that root with unique PR/branch, manifest, and ticket/branch joins. The manifest records `session_id` from the root `agents trace --json` invocation UUID, `ticket_id`, `ticket_system`, `resolved_operator_path`, `resolved_contract_path`, `resolved_operator_contract_path`, `resolved_defaults_source` as a map of input to wrapper or base, `branch=${branch_name}`, `base_branch=${base_branch}`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, the verified `branch_out_sha` established in step 6, `spawned_at`, empty `phase_history`, `draft_pr_url=null`, `draft_pr_number=null`, `draft_pr_head_sha=null`, `pr_open_base_sha=null`, `phase_8_reviewed_base_sha=null`, `phase_8_reviewed_head_sha=null`, `phase_9_currentness_result=null`, `phase_9_currentness_path=null`, `phase_9_currentness_sha256=null`, `pre_merge_base_sha=null`, `merge_sha=null`, `post_merge_base_sha=null`, `merged_at=null`, empty `post_merge`, `successor_session_brief=null`, `predecessor_session_manifest_path` when supplied, and `closed_at=null`. Invoke exactly `python3 ~/ai/tools/wu-session-migration phase0-init --request ${scratch_dir}/session-writes/phase0-init.json`; do not write either target directly. The executable validates and interruption-recoverably writes the manifest while preserving historical `sessions.index.json`; it does not add a pre-PR active row. Missing identity, request rejection, or nonzero command exit is `BLOCKED:session-manifest-init-failed`.
+   - The `phase0-init` replacement manifest and request must also bind `resolved_operator_sha256`, `resolved_contract_sha256`, the selected `estimate_mutation_policy`, `estimate_field`, `estimate_writeback_disposition`, the Phase 0 ticket snapshot path/SHA-256/producing invocation UUID, and null `phase_3_estimate_writeback_ref`, `phase_3_estimate_writeback_sha256`, and `cold_start_disposition_ref`. Missing or stale operator, contract, ticket-snapshot, or estimate-disposition identity is `BLOCKED:session-manifest-init-failed`; the migration executable must not write either target.
 11. **Import predecessor handoff when supplied.** If `predecessor_session_manifest_path` is non-empty, read that manifest, verify it names this WU in either `successor_session_brief` or carried context, verify the referenced successor brief exists and cites the predecessor ticket, branch, PR URL, and merge SHA, then render `${scratch_dir}/predecessor-session.md` for downstream prompts. When the predecessor manifest or `${scratch_dir}/ticket-prototype-evidence.md` carries prototype-test PR fields, also render `${scratch_dir}/predecessor-prototype-evidence.md` with required keys from `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`: `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`. `test_paths_or_node_ids` must be a YAML sequence with one entry per test file path or node ID. Treat inherited test paths or node IDs as durable test-contract inputs, not optional context; dropping one without a manifest, spawned-ticket, or Step 6b output index strictly stronger equivalent supersession entry is a workflow violation. Do not spawn another WU from this step. On missing, unreadable, mismatched, stale, or ambiguous predecessor evidence, halt with `BLOCKED:invalid-predecessor-session`.
 12. **Entry-mode preflight.** After worktree/ticket bootstrap, parse `pipeline_entry_mode` as `normal` when absent. Unknown values return `BLOCKED:unknown-pipeline-entry-mode`; this is fail-closed and must not fall-closed into normal or audit-consuming behavior.
-13. **Normal-mode pollution guard.** In absent/normal mode, reject audit-only fields as `BLOCKED:entry-mode-input-conflict`. Audit-only fields are `audit_workflow_path`, `audit_target_type`, `audit_target_paths`, `audit_target_manifest`, `audit_target_ref`, `audit_report_bundle_path`, `existing_review_bundle_path`, `existing_review_bundle_schema`, `reviewed_target_paths`, `reviewed_target_ref`, `current_target_ref`, `review_staleness_policy`, `review_staleness_fallback`, and `proposer_fix_scope`. `audit_history_path` remains allowed loop memory.
+13. **Normal-mode pollution guard.** In absent/normal mode, reject non-default audit-only fields as `BLOCKED:entry-mode-input-conflict`. Audit-only fields are `audit_workflow_path`, `audit_target_type`, `audit_target_paths`, `audit_target_manifest`, `audit_target_ref`, `design_patterns_ref`, `operator_format_ref`, `audit_slug`, `audit_report_bundle_path`, `existing_review_bundle_path`, `existing_review_bundle_schema`, `reviewed_target_paths`, `reviewed_target_ref`, `current_target_ref`, `review_staleness_policy`, `review_staleness_fallback`, `proposer_fix_scope`, `workflow_file`, `run_artifacts`, `runtime_artifacts_path`, `process_tree_report_path`, `expected_process_path`, `root_invocation_uuid`, and `generated_report_timestamp`. Declared defaults that remain untouched are inert and do not cause a conflict. `audit_history_path` remains allowed loop memory.
 14. **`review_first` target preflight.** Validate `audit_workflow_path`, `audit_target_type`, `audit_target_paths` or `audit_target_manifest`, `audit_target_ref`, design/operator references, and output roots. A missing target identity or user-owned staleness choice writes `${scratch_dir}/questions/q-<uuidv4>.question.json` and returns `NEEDS_INPUT:<absolute_artifact_path>`; unreadable files or malformed output roots are `BLOCKED`.
 15. **`plug_existing_review` pre-Phase-3 validation.** Validate `existing_review_bundle_path`, `existing_review_bundle_schema=nes-design-audit-v1`, target identity, currentness, `review_staleness_policy`, and fallback policy before any Phase 3 prompt composition. Required-file validation includes `dispatch-manifest.md`, `aggregate-audit.md`, `findings.json`, `findings.md`, and per-auditor reports required by the manifest; `findings.json` is a required-file, and any missing-file is rejected BEFORE Phase 3 prompt composition.
 16. **Staleness preflight.** If `review_staleness_policy=required`, dispatch a fresh `review_first` audit before proposal work and treat the prior bundle as context. Otherwise, a stale bundle under `review_staleness_fallback=needs_input` writes `${scratch_dir}/questions/q-<uuidv4>.question.json` and returns `NEEDS_INPUT:<absolute_artifact_path>`; `review_staleness_fallback=rerun_review_first` dispatches a fresh audit. A stale bundle with `needs_input` cannot certify changed targets. Any user-owned staleness choice uses the same question artifact and `NEEDS_INPUT:<absolute_artifact_path>` contract.
@@ -514,9 +673,9 @@ After all six sub-steps land:
 
 ### Phase 4 — Risk Gates via apply-gate-set + Process-tree Audit #1
 
-1. Compose one prompt at `${scratch_dir}/prompts/${wu_lower}-phase-4-apply-gate-set.md` and dispatch the shared gate operator with `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-4-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-4-apply-gate-set.log`, or the model declared by the selected `apply-gate-set` operator contract if it differs. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
-2. The prompt names `caller_mode=implementation-phase-4` and supplies `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `audit_history_path`, trace/currentness identity, `currentness_policy_ref=~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema`, `proposal_path=${planning_dir}/proposals/${wu_lower}-${wu_id}.md`, `problem_map_path=${planning_dir}/research/${wu_lower}-problem-map.md`, `risk_profile_path=${planning_dir}/risk/${wu_lower}-risk-profile.md`, supported-surface context, `estimate_delta_flag`, `estimate_writeback_disposition_ref=${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json`, `cold_start_disposition_ref` when inherited is null, touched-surface evidence, proof-plan/runtime-claim context when applicable, and output paths including `${planning_dir}/risk/phase-4-join-manifest.json`.
-3. The Phase 4 gate inventory is load-bearing and must be named in the prompt and in the returned output contract: `phase-3-estimate-writeback`, `audit-risk`, `scope-risk`, `shortcut-risk`, `supported-surface-risk`, `proof-risk` as a distinct row or explicit ACR-285 `inventory-resolution` row, Phase 4 `code-quality`, `process-tree-audit-1`, and `bootstrap-exception-conditional`. The estimate-writeback row must verify either mutation success or authoritative policy-disabled non-applicability. On `no_write_policy_disabled`, the expected-process manifest marks an update-estimate child as forbidden and any matching child is blocking. On `write_verified`, it requires the recorded producing invocation or verified migration readback evidence. `apply-gate-set` dispatches or consumes the child gate evidence, writes the canonical join manifest, projects expected-process evidence, runs or requires process-tree audit #1, and returns `dispatch_manifest_path`, `join_manifest_path`, `aggregate_report_path`, `expected_process_path`, `process_tree_report_path`, blocking rows, exception rows, inventory-resolution rows, stale-refusal rows, and `next_action`.
+1. Freshly fetch and resolve the complete base/head branch/ref/full-SHA bundle, then compose `${scratch_dir}/prompts/${wu_lower}-phase-4-apply-gate-set.md` and dispatch `agents -a apply-gate-set -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-4-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-4-apply-gate-set.log`. The named operator's `gpt-xhigh` contract owns model selection; never combine `-m` with `-a`.
+2. The prompt names `caller_mode=implementation-phase-4`, supplies `root_invocation_uuid=${implementation_invocation_uuid}`, and supplies the complete base/head identity bundle, repository/artifact roots, runtime trace/currentness identity, proposal/problem/risk/scope/runtime inputs, contract/report hashes, mode-specific artifact mapping, and explicit dispatch/join/aggregate/expected-process/raw-trace/process-audit/result output paths. The mode-specific mapping must include the complete `estimate_delta_flag`, `estimate_writeback_disposition_ref=${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json`, and `cold_start_disposition_ref` when the inherited estimate is null.
+3. The Phase 4 gate inventory is load-bearing and must be named in the prompt and in the returned output contract: `phase-3-estimate-writeback`, `audit-risk`, `scope-risk`, `shortcut-risk`, `supported-surface-risk`, `proof-risk` as a distinct row or explicit ACR-285 `inventory-resolution` row, Phase 4 `code-quality`, `process-tree-audit-1`, and `bootstrap-exception-conditional`. The estimate-writeback row must verify mutation success or authoritative policy-disabled non-applicability. On `no_write_policy_disabled`, expected-process marks the selected ticket operator's `task=update-estimate` child as forbidden and any match blocks; on `write_verified`, it requires the producing invocation or exact migration readback evidence. `apply-gate-set` dispatches or consumes the child gate evidence, writes the canonical join manifest, projects expected-process evidence, runs process-tree audit #1, and returns `dispatch_manifest_path`, `join_manifest_path`, `aggregate_report_path`, `expected_process_path`, required `process_tree_report_path`, blocking rows, exception rows, inventory-resolution rows, stale-refusal rows, and `next_action`.
 4. The Phase 4 join manifest remains `${planning_dir}/risk/phase-4-join-manifest.json`. Every row must carry the currentness/integrity fields required by the Canonical Join Manifest Re-Verification rule and `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`: `canonical_output_path`, `size`, `mtime`, `sha256`, `verdict_line`, and `verified_at`, plus the operator schema fields that preserve `caller_mode`, raw/normalized verdicts, `producing_invocation_uuid`, applicability, ratification, inventory-resolution, stale-refusal, and blocking status. Row reuse follows `~/ai/conventions/apply-gate-set-currentness.md` § `Row-level re-verification`.
 5. The Phase 4 bootstrap-exception sub-gate remains orchestrator-owned. When Phase 4 code-quality returns `MEDIUM` or `HIGH` and the approved proposal declares a bootstrap exception, the orchestrator parses the proposal declaration, parses the matching `${worktree_path}/DECISIONS.md` heading and convention citation, and passes the ratification evidence to `apply-gate-set`. The operator writes the row using its manifest schema; it does not take over the proposer/orchestrator authority for the four-condition declaration. The raw non-LOW code-quality row remains visible beside any `bootstrap-exception` row, and the ratification row never rewrites the child verdict to `LOW`.
 6. Only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-4)` permits movement toward Phase 5. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, missing output paths, malformed manifests, process-tree blocking findings, non-LOW code-quality without valid ratification, or unresolved inventory-resolution rows block downstream movement and follow the returned repair route.
@@ -578,8 +737,8 @@ You (the orchestrator) own the contract. Compose `${planning_dir}/contracts/${wu
 #### Phase 6 post-Step-6c apply-gate-set
 
 1. Trigger condition: after Step 6a writes the contract, Step 6b emits tests or structural-verification eval specs plus `${scratch_dir}/phase6/step6b-output-index.md`, the Phase 6 test-contracts alignment review writes `${planning_dir}/alignment/${wu_lower}-tests-contracts.md` with verdict `ALIGNED`, the ACR-247 side-channel projection has written the manifest-declared side-file, and Step 6c has returned as a separate fresh invocation with a different invocation UUID from Step 6b.
-2. Compose one prompt at `${scratch_dir}/prompts/${wu_lower}-phase-6-apply-gate-set.md` and dispatch the shared gate operator with `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-6-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-6-apply-gate-set.log`, or the model declared by the selected `apply-gate-set` operator contract if it differs. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
-3. The prompt names `caller_mode=implementation-phase-6` and supplies `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `audit_history_path`, trace/currentness identity, `currentness_policy_ref=~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema`, `contract_path=${planning_dir}/contracts/${wu_lower}-${slug}.md`, `proposal_path=${planning_dir}/proposals/${wu_lower}-${wu_id}.md`, `code_quality_dispatch_dir=<nearest existing common ancestor of absolute worktree_path and planning_dir>`, `${scratch_dir}/phase6/step6b-output-index.md`, Step 6b prompt/log refs, Step 6c prompt/log refs, the Step 6c side-channel side-file and side-channel manifest ref, `${planning_dir}/alignment/${wu_lower}-tests-contracts.md`, hookpoint refs when applicable, current `level_id`, component slug/scope when applicable, actual component diff, runtime claim, derivation/no-trigger refs, halt/swap refs, and output roots for the mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree audit #2 report. `code_quality_dispatch_dir` is for the code-quality child auditors only; it must contain both `worktree_path` and `planning_dir` and must not be inside `worktree_path`. If it cannot be resolved without placing planning artifacts under the worktree, block with `BLOCKED:planning-dir-outside-worktree-invariant`.
+2. Freshly fetch and resolve the complete base/head branch/ref/full-SHA bundle, compose `${scratch_dir}/prompts/${wu_lower}-phase-6-apply-gate-set.md`, and dispatch `agents -a apply-gate-set -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-6-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-6-apply-gate-set.log`. Never combine `-m` with `-a`.
+3. The prompt names `caller_mode=implementation-phase-6`, supplies `root_invocation_uuid=${implementation_invocation_uuid}`, and supplies the complete base/head identity bundle, repository/artifact roots, trace/currentness identity, contract/proposal/code-quality dispatch paths, Step 6b/6c side-channel and alignment evidence, component diff/scope/runtime/derivation/halt/swap inputs, contract/report hashes, mode-specific artifact mapping, and explicit dispatch/join/aggregate/expected-process/raw-trace/process-audit/result paths. `code_quality_dispatch_dir` remains the nearest safe common ancestor of worktree and planning roots.
 4. The Phase 6 gate inventory is load-bearing and must be named in the prompt and in the returned output contract: Step 6b output-index evidence, Step 6c side-channel consumption evidence, tests-contract alignment, prototype-risk review, derivation/no-trigger evidence, Step 6c multi-layer derivation check, conditional coupling/cohesion evidence and `CouplingDecision` adjacency, per-component code-quality, child-framing/recursive-entry evidence when applicable, halt-state transition evidence or explicit non-applicability, process-tree-audit-2, and optional bootstrap-exception rows only when the convention permits them for the mode. Currentness keys follow `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`, and row reuse follows § `Row-level re-verification`. The operator represents conditional gates with applicability or non-applicability rows; missing artifacts are not silent non-applicability.
 5. Only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-6)` permits component close, child-recursion handoff, or movement toward Phase 7 readiness. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, missing output paths, malformed manifests, stale side-channel evidence, missing alignment evidence, invalid derivation or coupling evidence, non-LOW per-component code-quality without an allowed ratification row, missing halt/non-applicability evidence, or process-tree blocking findings block downstream movement and follow the returned repair route.
 6. The operator-owned Phase 6 expected-process manifest must prove separate Step 6b and Step 6c invocation UUIDs, timing order, output-index presence, Step 6b output paths, manifest-declared ACR-247 side-channel evidence produced before Step 6c dispatch, test-contract alignment timing and `ALIGNED` verdict, Step 6c prompt/log topology evidence, procedural-test handoff evidence for implementation-discovered obligations, derivation/no-trigger evidence, multi-layer derivation check, applicable prototype-risk and coupling/cohesion evidence, per-component code-quality rows, child-recursion rows when recursion ran, halt-state rows, and process-tree audit #2.
@@ -687,34 +846,53 @@ Before optional review dispatch, enforce the Phase 6 → Phase 7 `PrototypeSwapR
 6. On a missing, unreadable, blank, incomplete, stale (including overlay evidence that fails to prove currentness under step 5), missing-terminal-state, or missing-overlay-evidence artifact, or on a present artifact that contains neither a valid `PrototypeSwapRecord` shape nor an explicit non-applicability statement, append a violation entry to `${planning_dir}/audit-history.md` with `actor=implementation-pipeline-orchestrator`, phase `Phase 7`, violation code `prototype_swap_record_missing_or_invalid`, canonical path, refused action `Phase 7 optional review dispatch`, failed checks, and the question artifact path. Log the same violation to orchestrator stderr. The orchestrator must refuse Phase 7 optional review dispatch, write `${scratch_dir}/questions/q-<uuidv4>.question.json`, and halt with `NEEDS_INPUT:<absolute_question_artifact_path>`. This is a blocking `NEEDS_INPUT` for evidence repair, not a self-resolvable procedural question; the orchestrator must not generate or supply the missing artifact.
 7. On valid swap evidence or explicit non-applicability, allow the following Phase 7 gate to proceed.
 
-#### CodeRabbit script gate and review loop
+#### Draft PR acquisition and CodeRabbit review loop
 
-1. Resolve the GitHub repo as `owner/name`, then run:
+1. Resolve the GitHub repo as `owner/name`, push `branch_name`, freshly fetch `refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`, set `base_ref=refs/remotes/origin/${base_branch}`, resolve full `base_sha`, set `head_ref=refs/heads/${branch_name}`, and resolve full `head_sha`. Phase 7 acquires the one draft PR before CodeRabbit; Phase 9 cannot create another.
+2. If `${scratch_dir}/pr-url.txt` is present, read that candidate. Otherwise query OPEN PRs with exact `headRefName == ${branch_name}`; more than one is `BLOCKED:phase-7-pr-ambiguous`. If none exists, compose the PR-writer prompt and dispatch `agents -a pr-writer`. Supply `branch=${branch_name}`, `base=${base_branch}`, `base_ref`, `base_sha`, `head_ref`, `head_sha`, `repo_root=${worktree_path}`, `output_path=${scratch_dir}/pr-body.md`, context, optional stack/merged refs, and Linear key when applicable. Require title/body, then create exactly one PR with explicit `gh pr create --draft --base ${base_branch} --head ${branch_name} ...`.
+3. Query the exact selected PR for URL/number/state/isDraft/baseRefName/baseRefOid/headRefName/headRefOid. Require OPEN draft state, exact branch names, `baseRefOid == base_sha`, and `headRefOid == head_sha`. If the provider base advanced during author/create, invalidate this boundary and rerun after a fresh fetch; do not accept a differently based diff. Persist the URL to `${scratch_dir}/pr-url.txt` and number to `${scratch_dir}/pr-number.txt` only after equality passes.
+4. Record this pinned PR-acquisition snapshot as `pr_open_base_sha=base_sha` with full `draft_pr_head_sha=head_sha`; leave `pre_merge_base_sha=null`. Build the closed request `${scratch_dir}/session-writes/phase7-upsert.json` with exact source identities, exact complete manifest and active-index replacement projections, and the full PR URL/branch/ticket/manifest row identity. Invoke exactly `python3 ~/ai/tools/wu-session-migration phase7-upsert --request ${scratch_dir}/session-writes/phase7-upsert.json`; do not write either target directly. `pr_open_base_sha` is never coverage baseline or immediate-pre-merge evidence. Any request, recovery, collision, identity, projection, replace, or fsync refusal is `BLOCKED:active-wake-index-write-failed`.
+5. Run:
    `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`.
    Exit `1` is clean non-applicability: append an audit-history line and proceed directly to Phase 8 without CodeRabbit. Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
-2. Select the trigger mode. Use `incremental` for normal implementation-pipeline PR review, including re-runs after child fix commits. Use `full` only when the caller explicitly declares a code-audit or mass-cleanup invocation whose review target is whole files rather than the latest diff.
-3. Run the driver-owned loop:
+6. Select the trigger mode. Use `incremental` for normal implementation-pipeline PR review, including re-runs after child fix commits. Use `full` only when the caller explicitly declares a code-audit or mass-cleanup invocation whose review target is whole files rather than the latest diff.
+7. Run the driver-owned loop:
    `~/ai/tools/coderabbit_review_driver.py review-loop ${repo} ${pr_num} --worktree-path ${worktree_path} --mode ${coderabbit_trigger_mode}`.
    The driver posts the matching CodeRabbit @mention unless its `auto` initial-trigger policy detects an already-pending trigger acknowledgement newer than the latest CodeRabbit review. It waits for trigger acknowledgement, enforces the 300-second minimum cadence between loop-owned `poll` calls, persists comment bodies, dispatches one fixer invocation per actionable in-diff comment, aggregates the full structured outcome, pushes fixed commits, posts reply files, triggers incremental follow-up reviews, and loops until terminal.
-4. Interpret the final JSON:
+8. Interpret the final JSON:
    - `terminal_reason=approved` is CodeRabbit success; record `review_decision`, `bot_login` from the final iteration, and proceed.
    - `terminal_reason=no_value_provided` is CodeRabbit loop convergence; record the no-value decision and proceed unless the project has an explicit stricter policy.
    - `needs_caller_decision=true` means a per-comment fixer returned `rejected` or `deferred` for a valuable comment. Surface the verbatim `caller_decision_outcomes` to the root caller; do not re-trigger or merge until dispositioned.
    - Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
-5. The orchestrator must not call `poll` in its own loop, call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
-6. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`, and per-iteration prompts/outcomes live under `iter-{n}/`.
-7. The PR URL remains `${scratch_dir}/pr-url.txt`; Phase 9 reuses that PR instead of creating a duplicate.
+9. The orchestrator must not call `poll` in its own loop, call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
+10. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`, and per-iteration prompts/outcomes live under `iter-{n}/`.
+11. The PR URL and number remain `${scratch_dir}/pr-url.txt` and `${scratch_dir}/pr-number.txt`; Phase 9 must safely reuse and re-verify this PR rather than create a duplicate.
 
 ### Phase 8 — apply-gate-set PR-review Gates + Process-tree Audit #3
 
-1. Compose one prompt at `${scratch_dir}/prompts/${wu_lower}-phase-8-apply-gate-set.md` and dispatch the shared gate operator with `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-8-apply-gate-set.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-8-apply-gate-set.log`, or the model declared by the selected `apply-gate-set` operator contract if it differs. Do not use a host built-in sub-agent or Task invocation. Do not run bare `agents`.
-2. The prompt names `caller_mode=implementation-phase-8` and supplies `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `audit_history_path`, trace/currentness identity, `currentness_policy_ref=~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema`, actual branch or PR diff, proposal/proof-plan refs, runtime claim, supported-surface inventory context, base/head identity, prior Phase 4 and Phase 6 join refs when present, and output paths including `${planning_dir}/risk/phase-8-join-manifest.json`.
+1. After every CodeRabbit/fixer push, freshly fetch the remote base and resolve the complete base/head branch/ref/full-SHA bundle. Query the exact Phase 7 PR for URL/number/state/isDraft/baseRefName/baseRefOid/headRefName/headRefOid and require `state=OPEN`, exact boolean `isDraft=true`, exact URL/number, `baseRefName == base_branch`, `baseRefOid == base_sha`, `headRefName == branch_name`, and `headRefOid == head_sha`. Require non-blank `local_coverage_command`. Compute/hash the exact `${base_sha}...${head_sha}` diff; a changed provider identity or base advance invalidates earlier boundary evidence and blocks until rerun. Freeze this provider capture before fanout at `${planning_dir}/phase-8-reviewed-pr.json` using exactly the snake-case keys below, including boolean `is_draft=true`, consumed by `tools/operational_contracts.py`; set immutable session fields `phase_8_reviewed_is_draft=true`, `phase_8_reviewed_base_sha=${base_sha}`, `phase_8_reviewed_head_sha=${head_sha}`, plus the reviewed artifact path/hash. A Phase 8 rerun replaces this identity only after all parent-sensitive Phase 8 gates rerun against the new identity.
+
+```yaml
+phase_8_reviewed_pr_fields:
+  - pr_url
+  - pr_number
+  - state
+  - is_draft
+  - base_ref_name
+  - base_ref_oid
+  - head_ref_name
+  - head_ref_oid
+phase_8_reviewed_pr_required_values:
+  state: OPEN
+  is_draft: true
+```
+2. Compose `${scratch_dir}/prompts/${wu_lower}-phase-8-apply-gate-set.md` and dispatch `agents -a apply-gate-set -p ${worktree_path} -f ... 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-8-apply-gate-set.log`; the child-owned canonical apply-gate result remains the distinct prompted `${result_path}`. The prompt names `caller_mode=implementation-phase-8` and supplies `root_invocation_uuid=${implementation_invocation_uuid}`, repository/artifact roots, runtime currentness, exact PR URL/number/state, `base_branch`, `base_ref`, `base_sha`, `head_branch=${branch_name}`, `head_ref`, `head_sha`, `local_coverage_command`, exact diff hash, proposal/proof/runtime/supported-surface/prior-join inputs, contract/report hashes, mode-specific artifacts including `pr_review_lineage_root=${scratch_dir}/pr-review/${pr_number}`, and explicit dispatch/join/aggregate/expected-process/raw-trace/process-audit/result output paths. The PR-review child allocates a new exact PR/base/head/invocation-qualified run root below that lineage root on every Phase 8 rerun and returns `pr-review-result-v2`; no caller reuses a prior run's ref, worktree, log, output, or process proof. The same identity bundle must reach `pr-review-operator` and `test-audit-gate`; every invocation log/output pair, including `TEST_AUDIT_GATE.log` / `TEST_AUDIT_GATE.md`, remains distinct. The test-audit child must also return `TEST_AUDIT_RESULT.json` with a current production-validated nested expected/dispatch/root-trace/process-audit PASS for its exact three children; Phase 8 revalidates that result against the outer test-audit UUID and these same base/head SHAs. Any other base/head, missing nested proof, non-PASS nested audit, or aliased/stale artifact path is malformed and blocks Phase 9.
 3. The Phase 8 gate inventory is load-bearing and must be named in the prompt and in the returned output contract: PR-review `test-audit`, `multi-concern`, `justification`, `commit-hygiene`, Phase 8 actual-diff `code-quality`, proof-risk and validation-integrity runtime-claim transport where applicable, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness rechecks against prior joins, and `process-tree-audit-3`.
 4. The Phase 8 join manifest remains `${planning_dir}/risk/phase-8-join-manifest.json`. Every row must carry the currentness/integrity fields required by the Canonical Join Manifest Re-Verification rule and `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`: `canonical_output_path`, `size`, `mtime`, `sha256`, `verdict_line`, and `verified_at`, plus the operator schema fields that preserve `caller_mode`, raw/normalized verdicts, `producing_invocation_uuid`, applicability, inventory-resolution, stale-refusal, and blocking status. Row reuse follows `~/ai/conventions/apply-gate-set-currentness.md` § `Row-level re-verification`.
-5. Only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-8)` permits Phase 8.X closure judge dispatch or Phase 9 draft PR movement. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, missing output paths, malformed manifests, stale currentness rows, actual-diff code-quality non-LOW without an allowed ratification row, or process-tree blocking findings block downstream movement and follow the returned repair route.
+5. Only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-8)` permits Phase 8.X closure judge dispatch or Phase 9 ticket/terminal movement on the Phase 7 draft PR. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, missing output paths, malformed manifests, stale currentness rows, actual-diff code-quality non-LOW without an allowed ratification row, or process-tree blocking findings block downstream movement and follow the returned repair route.
 6. Preserve existing split and ACR-280 repair routing after the operator identifies a current, well-formed non-LOW or split result. If the `multi-concern` row says split, split the work and re-enter from the affected phase. For current semantic Phase 8 code-quality `MEDIUM` or `HIGH`, choose MOVE-and-import and record `STRATEGY_PHASE8_CODE_QUALITY_MOVE_AND_IMPORT`, in-place file-decomposition and record `STRATEGY_PHASE8_CODE_QUALITY_FILE_DECOMPOSITION`, in-WU remediation/helper extraction and record `STRATEGY_PHASE8_CODE_QUALITY_INWU`, or follow-up-ticket decomposition and record `STRATEGY_PHASE8_CODE_QUALITY_FOLLOWUP`. Follow-up tickets require current-WU narrowing and rerun or explicit `DECOMPOSED`; they never allow advance by themselves.
 
-Phase 8 gates are the substantive pre-PR review layer and are not followed by branch-local human revalidation before draft PR creation.
+Phase 8 gates are the substantive review of the exact draft PR opened in Phase 7. They are not a pre-PR layer and are not followed by branch-local human revalidation before Phase 9.
 
 ### Phase 8.X — Closure judge dispatch
 
@@ -746,7 +924,7 @@ ACR-125 capture must not dispatch `task=update-estimate` for actuals, must not w
 
 ### Canonical Join Manifest Re-Verification
 
-After any join manifest exists, every resume start, every phase join, every transition that consumes prior PASS state, and final PASS or final close MUST re-verify all existing join manifests. Here, `resume start` means any orchestrator invocation that continues from existing `${planning_dir}` or `${scratch_dir}` state instead of starting Phase 2.5 from empty state, and `prior PASS state` means any previously recorded LOW, non-blocking, or PASS gate/audit result used as evidence to advance. For each manifest entry, the orchestrator applies `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema` and § `Row-level re-verification`: re-stat `canonical_output_path`, recompute `size`, `mtime`, and `sha256`, re-read `verdict_line` from the canonical path on disk, and compare lifecycle, repository, scope, runtime-claim, contract/report, producer, policy, and exception-authority identity. A missing canonical path, stat mismatch (`size` or `mtime`), `sha256` mismatch, changed `verdict_line`, or currentness-key mismatch is `BLOCKED:join-manifest-mismatch` or the apply-gate-set returned `STALE_REFUSAL` as applicable.
+After any join manifest exists, every resume start, phase join, transition consuming prior PASS, and terminal return MUST re-verify all existing joins. Freshly fetch the active base first; a changed `base_sha` invalidates prior parent-sensitive evidence even when `base_branch` is unchanged. Re-stat/hash every canonical output, `expected_process_path`, raw `process_tree_path`, and `process_tree_report_path`; re-read verdicts; and compare lifecycle, repository, exact base/head SHAs, scope, runtime claim, contract/report, producer, policy, and exception authority. Any path/stat/hash/verdict/currentness mismatch is `BLOCKED:join-manifest-mismatch` or returned `STALE_REFUSAL`.
 
 On detection, append `${planning_dir}/audit-history.md` evidence naming the manifest path, gate name, canonical path, recorded values, observed values, and affected transition before any rerun, rewind, split, shrink, or escalation consumes the stale state.
 
@@ -767,44 +945,55 @@ Classify older sessions during that Phase 0 migration:
 - A session with later Phase 4/6/8 joins must add the new `phase-3-estimate-writeback` row by rerunning Phase 4 through `apply-gate-set`. Missing disposition, changed estimate, changed proposal, changed ticket snapshot, changed operator/contract identity, changed policy, changed estimate field, or failed exact readback invalidates Phase 4 and every later join that consumed it. Append the invalidation and migration lineage before rerun.
 - A policy-enabled backend failure remains a failed mutation and blocks. It never migrates to `no_write_policy_disabled`. A policy-disabled contract never reuses a historical mutation as authority for a new write.
 
-### Phase 9 — Draft PR
+### Phase 9 — Verified PR Outcome
 
 Phase 9 starts after Phase 8.X completion.
 
-1. `git push origin ${branch_name}`.
-2. **Reuse a Phase 7 PR when one exists.** If `${scratch_dir}/pr-url.txt` already contains a PR URL produced by the Phase 7 review operator, verify that the PR is open, targets the expected base, and uses `${branch_name}` as its head branch. On success, skip steps 3-6 and continue at the session-manifest update using the existing URL. On mismatch, missing PR, closed PR, wrong head, or wrong base, halt with `BLOCKED:phase-7-pr-mismatch`; do not create a duplicate PR.
-3. **Author the title and body via `pr-writer`.** Compose `${scratch_dir}/prompts/${wu_lower}-phase-9-pr-writer.md` instructing the writer to produce the title at `${scratch_dir}/pr-body.md.title` and the body at `${scratch_dir}/pr-body.md`. Inputs:
-   - `branch=${branch_name}`
-   - `base=main` (or the parent branch ref for stacked WUs — see below)
-   - `repo_root=${repo_root}`
-   - `output_path=${scratch_dir}/pr-body.md`
-   - `context_files=${planning_dir}/research/${wu_lower}-problem-map.md,${planning_dir}/proposals/${wu_lower}-${wu_id}.md,${planning_dir}/contracts/${wu_lower}-${slug}.md` (plus any RCA evidence path on the RCA track)
-   - `linear_issue_keys=${ticket_id}` if and only if `ticket_system=linear`; omit for `ticket_system=jira` and when no ticket system is selected
-   - `stack_parent_pr=<num>` if and only if `base` is the head branch of another open PR
-   - `merged_refs=<comma-separated>` if the body needs to cite merged-to-main PRs or commits for context
-   The optional `linear_issue_keys` input gives `pr-writer` the known Linear key for its close-keyword footer; the orchestrator still does not author or append PR body text. Dispatch: `agents -m gpt-xhigh -p ${worktree_path} -f ${scratch_dir}/prompts/${wu_lower}-phase-9-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-9-pr-writer.log`. Do NOT hand-author the body, do NOT use a `${wu_id}: ${slug}` title pattern (that's internal jargon the writer rejects), do NOT inline the body into the `gh` invocation.
-4. Verify both `${scratch_dir}/pr-body.md` and `${scratch_dir}/pr-body.md.title` exist and are non-empty. If `pr-writer` returned `BLOCKED:*` or `NEEDS_INPUT:*`, follow the orchestrator's NEEDS_INPUT-classification rule.
-5. `gh pr create --draft --title "$(cat ${scratch_dir}/pr-body.md.title)" --body-file ${scratch_dir}/pr-body.md`.
-6. Record the PR URL in `${scratch_dir}/pr-url.txt`.
-7. **Update the session manifest for draft PR dormancy.** Resolve the current branch head SHA after PR creation or reuse, then update `${planning_dir}/session.json` with `draft_pr_url`, `draft_pr_head_sha`, and a Phase 9 `phase_history` row. Update `${planning_dir}/../sessions.index.json` with PR URL, branch, head SHA, ticket id, and manifest path so the wake composition can later join poller rows to a session. Missing PR URL, unresolved head SHA, unwritable manifest, or unwritable index is `BLOCKED:session-manifest-pr-update-failed`.
-8. **Cross-link to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-phase-9-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a key-only comment body (ADF for JIRA, Markdown for Linear) containing the PR URL, base branch, head branch, and a one-line summary. Do not expand Linear project or label routing in Phase 9. Dispatch via `agents -m gpt-xhigh -p ${worktree_path} -f ${prompt} 2>&1 | tee ${log}`. The comment is the ticket-side announcement that a draft PR exists; the ticket is the source of truth for status, the PR is the source of truth for the diff.
+1. Load immutable `${planning_dir}/phase-8-reviewed-pr.json`, require its exact key set to equal `phase_8_reviewed_pr_fields`, require exact boolean `is_draft=true`, require its base/head OIDs equal session `phase_8_reviewed_base_sha` / `phase_8_reviewed_head_sha`, and require session `phase_8_reviewed_is_draft=true` plus the reviewed artifact path/hash. Push any Phase 7/8 fixer commits, freshly fetch both exact remote base and head branches, resolve terminal `base_ref/base_sha/head_ref/head_sha` from those fetched refs, and query the exact Phase 7 PR into a provider bundle. Run `python3 ~/ai/tools/operational_contracts.py validate-pr-currentness --reviewed ${planning_dir}/phase-8-reviewed-pr.json --immediate <provider-bundle> --fetched-base-sha ${base_sha} --fetched-head-sha ${head_sha} --context implementation-phase-9-entry --expected-draft true --output ${planning_dir}/phase-9-currentness.json`. Only `status=READY` and `final_equality_result=PASS` permit Phase 9 to continue. Any URL, number, OPEN draft state, base/head name, provider/fetched/reviewed base OID, or provider/fetched/reviewed head OID inequality writes `STALE_CURRENTNESS`, performs no subsequent ticket, ready, or merge side effect, invalidates Phase 8, and reruns every parent-sensitive Phase 8 gate. Phase 9 must not call `gh pr create`.
+2. Build the closed request `${scratch_dir}/session-writes/phase9-update.json` with immutable exact boolean `phase_8_reviewed_is_draft=true`, immutable reviewed base/head SHAs, reviewed artifact path/hash, currentness result/path/hash, Phase 9 history, exact source identities, the complete replacement manifest, the exact canonical active-row replacement, and full PR URL/branch/ticket/manifest row identity. Invoke exactly `python3 ~/ai/tools/wu-session-migration phase9-update --request ${scratch_dir}/session-writes/phase9-update.json`; do not write either target directly. The command refuses changes outside the Phase 9 allowlist and never rewrites historical `${planning_dir}/../sessions.index.json`. Keep `pre_merge_base_sha=null` unless the automated merge sequence below captures an equal Phase 8 reviewed base immediately before merge. For an externally/manual merged PR, it remains unresolved until trusted wake-time merge evidence derives and validates the immediate pre-merge parent; never copy `pr_open_base_sha` or a newly advanced base into it.
+3. **Cross-link to the ticket system with producer-authenticated readback.** Require positive `route_attempt_number`. Before ticket dispatch, atomically write immutable `${planning_dir}/ticket-operations/${wu_lower}-phase-9-expected-context.json` as the closed `ticket-operation-expected-context-v1` below and hash its completed bytes. `ticket_site_url` is exact resolved `${jira_url}` for Jira and `https://linear.app` for Linear. Its backend, exact ticket key, operation, owning route, attempt, PR URL/number, and reviewed base/head branch/ref/full-SHA values come only from the current Phase 9 caller identity; never derive them from producer output. Compose `${scratch_dir}/prompts/${wu_lower}-phase-9-ticket-comment.md` instructing the selected `${ticket_operator}` to perform `task=comment` and `operation=comment-readback` on exact `issue_key=${ticket_id}`. Supply the key-only comment body (ADF for Jira, Markdown for Linear), every exact expected-context value, `${planning_dir}/ticket-operations/${wu_lower}-phase-9-comment.json` as `operation_result_path`, and distinct producer operation-log/readback-output paths under `${scratch_dir}/ticket-operations/`. Dispatch the named operator with `agents -a ${ticket_operator} -p ${worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${wu_lower}-phase-9-ticket-comment.log`; never override its frontmatter model. The ticket operator must post the comment, immediately read back that exact remote comment from the same ticket, verify comment id/URL/body and ticket identity, and atomically write/return the closed `ticket-operation-result-v1` defined by both ticket operators. Run `python3 ~/ai/tools/operational_contracts.py validate-ticket-operation-result --result ${planning_dir}/ticket-operations/${wu_lower}-phase-9-comment.json --expected-context ${planning_dir}/ticket-operations/${wu_lower}-phase-9-expected-context.json --output ${planning_dir}/ticket-operations/${wu_lower}-phase-9-validation.json`. Require `status=VALID`, exact expected-context/result paths and current hashes in the validator output, and re-hash both immutable artifacts before every return, ready, or merge action. Missing expected context, malformed/non-PASS output, wrong ticket/backend/operation/attempt/PR/base/head, mismatched backend site or URL-encoded ticket identity, missing remote identity, failed readback, producer mismatch, stale support hash, or unknown key blocks Phase 9 before return, ready, or merge.
+4. When `auto_merge_after_phase_9=false`, finish Final closure, write `${planning_dir}/implementation-pipeline-result.json` as `implementation-pipeline-result-v1`, and return `VERIFIED_DRAFT_PR`. The fixed envelope contains `ticket_id`, `ticket_system`, `owning_route=implementation-pipeline`, exact `route_attempt_number`, status, PR/provider state, exact boolean `is_draft=true`, exact boolean `phase_8_reviewed_is_draft=true`, `base_branch` equal to the dispatched base, `base_ref=refs/remotes/origin/${base_branch}`, reviewed/current provider `baseRefName` equal to that same exact short branch even if another ref has the same OID, exact head branch/ref, base/head full SHAs, immutable `phase_8_reviewed_base_sha`, immutable `phase_8_reviewed_head_sha`, reviewed artifact path/hash, `phase_9_currentness_result=PASS`, currentness path/hash, `ticket_operation_expected_context_path` / `ticket_operation_expected_context_sha256`, the validated `ticket_operation_result_path` / `ticket_operation_result_sha256`, exact current `owned_process_proofs` rows for implementation Phase 4/6/8, `pr_open_base_sha`, null merge fields, session/audit paths, and an artifact SHA-256 map. Each owned proof row binds the child-owned expected-process, raw trace, and process-audit report path/hash; consumers verify current hashes but do not re-audit those internal workflows.
+5. When `auto_merge_after_phase_9=true`, require the configured project policy to authorize promotion/merge. Public-audience promotion additionally requires a matching pre-authorized runbook under `~/ai/workflows/tiered-approval.md`; otherwise auto-merge is inapplicable and the caller must use the verified-draft outcome. This condition is invocation policy, not a separate Phase 10.
+6. Freshly fetch both exact base and head branches, resolve both remote full SHAs, re-read the exact draft PR, write a complete provider bundle, and invoke `tools/operational_contracts.py validate-pr-currentness --fetched-base-sha ${freshly_fetched_base_sha} --fetched-head-sha ${freshly_fetched_head_sha}` against the immutable Phase 8 bundle before `gh pr ready`. Require exact PASS, including `is_draft=true`, `baseRefOid == freshly_fetched_base_sha == phase_8_reviewed_base_sha`, and `headRefOid == freshly_fetched_head_sha == phase_8_reviewed_head_sha`; otherwise preserve the stale refusal and perform no ready or merge command. Only that equality path may run exactly `gh pr ready "${pr_url}" --repo "${repo}"`.
+7. **Immediately before merge and after ready**, run `git fetch origin refs/heads/${base_branch}:refs/remotes/origin/${base_branch} refs/heads/${branch_name}:refs/remotes/origin/${branch_name}`, resolve `freshly_fetched_base_sha=$(git rev-parse refs/remotes/origin/${base_branch}^{commit})` and `freshly_fetched_head_sha=$(git rev-parse refs/remotes/origin/${branch_name}^{commit})`, and perform one provider capture of the exact PR URL/number, state, draft flag, base/head names, base OID, and head OID. Invoke `python3 ~/ai/tools/operational_contracts.py validate-pr-currentness --reviewed ${planning_dir}/phase-8-reviewed-pr.json --immediate <immediate-provider-bundle> --fetched-base-sha ${freshly_fetched_base_sha} --fetched-head-sha ${freshly_fetched_head_sha} --context implementation-phase-9-pre-merge --expected-draft false --output ${planning_dir}/phase-9-currentness.json`. Require `state=OPEN`, `is_draft=false`, exact URL/number/base/head names, `baseRefOid == freshly_fetched_base_sha == phase_8_reviewed_base_sha`, and `headRefOid == freshly_fetched_head_sha == phase_8_reviewed_head_sha`. The stable result records both fetched SHAs. Do not accept a post-ready base or head advance because the other object stayed unchanged.
 
-The draft PR is the WU's terminal artifact for projects that want a human PR review (default behavior). **There is no Phase 10 human-gate promotion in this orchestrator's flow** — promotion to ready-for-review is decoupled.
+   Every ready-command, post-ready fetch/query, currentness, or pre-merge persistence failure before the merge command starts must restore the exact PR to draft. Freeze the latest exact OPEN non-draft provider bundle as the restoration target; if the first post-ready query failed, use the immutable Phase 8 identity with only expected `is_draft=false` as the target. Run exactly `gh pr ready --undo "${pr_url}" --repo "${repo}"`, freshly fetch both exact branches, freshly re-query the same repository/PR, and invoke `tools/operational_contracts.py validate-ready-state-restoration` with `owner=implementation-auto-merge`, `merge_attempt_started=false`, the undo exit, re-query result, target/restored bundles, and fetched full base/head SHAs. Atomically write `${planning_dir}/phase-9-ready-restoration.json`. Only exact `RETURN_TO_PHASE_8` with OPEN `is_draft=true`, unchanged URL/number/state/base/head identity across undo, and restored OIDs equal to both fetches may invalidate Phase 8 and rerun every parent-sensitive Phase 8 gate. Any undo/re-query/identity/draft/validator failure returns `BLOCKED:ready-state-restoration-failed`, leaves `pre_merge_base_sha=null`, and never claims Phase 8 replay is available.
+8. Only after the step-7 validator returns exact PASS, assign `pre_merge_base_sha=${freshly_fetched_base_sha}`, require it still equals immutable `phase_8_reviewed_base_sha`, and atomically persist the PASS result/path/hash to the session manifest plus the equal pre-merge base to both session manifest and canonical wake index. A persistence failure follows the step-7 ready-state restoration path. Then run `gh pr merge --repo "${repo}" --squash "${pr_url}" --match-head-commit "${phase_8_reviewed_head_sha}"` without auto-wait behavior. Invocation of that merge command is the irreversible attempt boundary: after it starts, no `gh pr ready --undo` is permitted.
+9. Query the exact PR again and require exact URL identity, `state == MERGED`, `baseRefName == ${base_branch}`, `headRefName == ${branch_name}`, full `headRefOid` equal to the persisted head, and non-null full `mergeCommit.oid == merge_sha`. Refresh the remote base again with `git fetch origin refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`, resolve `post_merge_base_sha`, require `git merge-base --is-ancestor ${merge_sha} refs/remotes/origin/${base_branch}`, and require the squash commit's first parent equals the persisted `pre_merge_base_sha`. Atomically record `merge_sha`, `merged_at`, `post_merge_base_sha`, the refreshed remote ref, and the reachability/parent proofs in both manifest and canonical index row. A merge-command failure or any verification/persistence mismatch after invocation returns `BLOCKED:merge-attempt-started` with `replay_permitted=false`; it performs no undo and never treats a stale local branch or merge into another base as success.
+10. Finish Final closure and write the same `implementation-pipeline-result-v1` key set, including the unchanged expected-context path/hash, validated ticket-operation result path/hash, current owned Phase 4/6/8 process-proof paths/hashes, and exact route attempt, with `status=VERIFIED_MERGED`, provider MERGED state, exact boolean `is_draft=false`, exact boolean `phase_8_reviewed_is_draft=true`, immutable `phase_8_reviewed_base_sha`, immutable `phase_8_reviewed_head_sha`, reviewed artifact path/hash, `phase_9_currentness_result=PASS`, currentness path/hash, equal immediate `pre_merge_base_sha`, `merge_sha`, `post_merge_base_sha`, reachability/parent proofs, process paths, and artifact hashes. Successful stdout is exactly `implementation-pipeline: VERIFIED_DRAFT_PR; result=${planning_dir}/implementation-pipeline-result.json` or `implementation-pipeline: VERIFIED_MERGED; result=${planning_dir}/implementation-pipeline-result.json`.
 
-**Auto-merge override.** When `auto_merge_after_phase_9=true` (project-level opt-in via `AGENTS.md`), the orchestrator additionally executes after step 8:
+### Ticket Operation Expected Context Schema
 
-1. `gh pr ready ${pr_url}` — flip the PR from draft to ready-for-review.
-2. `gh pr merge --squash ${pr_url}` — directly squash-merge the PR without any preliminary classification or auto-wait behavior.
-3. If either command fails for any reason, surface the failure as a NEEDS_INPUT new-value question to the root and halt with `path=auto-merge-direct`, `selected_command=<the failing command>`, and `captured_output=<command stdout+stderr>`. Do not retry.
+```yaml
+schema: ticket-operation-expected-context-v1
+path: ${planning_dir}/ticket-operations/${wu_lower}-phase-9-expected-context.json
+required_fields: [schema, backend, ticket_site_url, ticket_key, operation, owning_route, attempt_number, pr_url, pr_number, reviewed_base_branch, reviewed_base_ref, reviewed_base_sha, reviewed_head_branch, reviewed_head_ref, reviewed_head_sha]
+additional_properties: false
+fixed_values:
+  operation: comment-readback
+  owning_route: implementation-pipeline
+write_order: write-and-hash-before-ticket-dispatch
+validator: tools/operational_contracts.py validate-ticket-operation-result --expected-context <path>
+```
 
-This override does NOT replace the Phase 8 audit gates — those still run and a `blocking` verdict still halts the pipeline. It only collapses the post-Phase-9 human review/merge step into an automated one for projects whose `AGENTS.md` declares the opt-in.
+### Implementation-Owned Process Proof Schema
+
+```yaml
+field: owned_process_proofs
+owner: implementation-pipeline
+exact_stage_order: [phase-4, phase-6, phase-8]
+row_required_fields: [owner, stage, expected_process_path, expected_process_sha256, process_tree_path, process_tree_sha256, process_tree_audit_path, process_tree_audit_sha256]
+consumer_rule: verify-current-path-hashes-without-re-auditing-child-internal-topology
+```
+
+Phase 9 is the terminal phase in this operator. There is no separate Phase 10. Phase 8 gates remain mandatory for both terminal outcomes.
 
 ### Final — Audit-history close + DECISIONS.md sync + ticket close-comment
 
 1. Append the closing entry to `${planning_dir}/audit-history.md`.
 2. If any phase was narrowed, terminated, sent back, or accepted with a residual: append to `${worktree_path}/DECISIONS.md` with WU id, phase, decision, justifying evidence path.
 3. Before posting, Final verifies calibration fields in the `## Final state` block, verifies `estimate_comparison_comment_ref`, and verifies the comment-reference vocabulary `<id | url | none>`. Final rejects `path`; none valid only when `ticket_system: jira`. If the missing/invalid/inconsistent calibration block or `estimate_comparison_comment_ref` check fails, Final halts, blocks Final close, and must not post the close-comment; resolution is to re-run the closure capture step.
-4. **Comment back to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-final-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a comment body (ADF for JIRA, Markdown for Linear) containing: PR URL, audit-history closing summary, any decision-tail entries appended in step 2, and one compact calibration line. Final close-comment includes inherited/refined/actual values inline on both backends: `Estimate calibration: inherited_story_point_estimate=<value or missing>; refined_story_point_estimate=<value>; actual_story_points=<value or unmeasured>; audit_history=<path or artifact reference>; estimate_comparison_comment_ref=<id|url|none>.` The Final close-comment references rather than repeats the full comparison. The orchestrator itself does not transition status; routine status transitions are manager-owned. For Linear-backed WUs, Done may come from close-keyword automation after merge; otherwise the manager applies Done through the selected ticket operator per project policy.
+4. **Comment back to the ticket system.** Compose `${scratch_dir}/prompts/${wu_lower}-final-ticket-comment.md` instructing `${ticket_operator}` to perform `task=comment` on `issue_key=${ticket_id}` with a comment body (ADF for JIRA, Markdown for Linear) containing: PR URL, `base_branch=${base_branch}`, verified merge SHA/base evidence when merged, audit-history closing summary, any decision-tail entries appended in step 2, and one compact calibration line. Final close-comment includes inherited/refined/actual values inline on both backends: `Estimate calibration: inherited_story_point_estimate=<value or missing>; refined_story_point_estimate=<value>; actual_story_points=<value or unmeasured>; audit_history=<path or artifact reference>; estimate_comparison_comment_ref=<id|url|none>.` The Final close-comment references rather than repeats the full comparison. The orchestrator itself does not transition status; routine status transitions are manager-owned. For Linear-backed WUs, Done may come from close-keyword automation after merge; otherwise the manager applies Done through the selected ticket operator per project policy.
 
 ## Violation Detection and Escalation
 
@@ -839,7 +1028,8 @@ Classify both trigger sources per `~/ai/conventions/agent-questions-and-session-
 
 ## Stop Conditions
 
-- **Success**: Phase 9 complete, draft PR URL recorded, audit-history closed.
+- **Success, manual/external merge path**: Phase 9 returns `VERIFIED_DRAFT_PR`; the exact draft PR identity and `pr_open_base_sha` are recorded, `pre_merge_base_sha` remains unresolved, and audit-history is closed.
+- **Success, automated merge path**: Phase 9 returns `VERIFIED_MERGED`; immediate pre-merge base, merge commit, refreshed remote base, and reachability/parent evidence are recorded, and audit-history is closed.
 - **Termination**: Phase 4 supported-surface termination rule fires (invalidated assumption sends back to research; non-positive value emits new-value-question to root then halts).
 - **Tier-3 exhaustion**: Three consecutive Tier-3 shrinks failed on the same WU. Emit a NEEDS_INPUT new-value-question to the root and halt.
 

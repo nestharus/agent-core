@@ -215,9 +215,9 @@ inputs:
   description: Working branch name.
 - name: base_branch
   type: string
-  required: false
-  default_source: base
-  description: Parent branch for worktree creation, provenance, diff and rebase baselines, review, PR targeting, merge verification, and post-merge evidence.
+  required: true
+  default_source: caller
+  description: Caller-owned parent branch for worktree creation, provenance, diff and rebase baselines, review, PR targeting, merge verification, and post-merge evidence; never inferred from a default branch.
 - name: local_coverage_command
   type: string
   required: false
@@ -260,9 +260,6 @@ defaults:
   source: base
 - name: auto_merge_after_phase_9
   value: true
-  source: base
-- name: base_branch
-  value: main
   source: base
 - name: route_attempt_number
   value: 1

@@ -135,7 +135,7 @@ def _evidence(
     }
     record: dict[str, object] = {
         "provider": _capture(
-            ["gh", "pr", "view", "--json", "fields", "--", pr_url], payload
+            ["gh", "pr", "view", "--json", MIGRATION.PR_PROVIDER_JSON_SELECTOR, "--", pr_url], payload
         ),
         "merge_commit": None,
         "merge_method": None,
@@ -1267,6 +1267,14 @@ def test_dry_run_recomputes_raw_capture_digest_and_command(tmp_path: Path):
     _persist(fixture)
     command_refusal = _plan(fixture)
     assert command_refusal["rows"][0]["reason"] == "provider-capture-command-mismatch"
+
+    fixture = _complete_fixture(tmp_path / "selector")
+    candidate, _, _ = _target(fixture)
+    record = fixture["evidence"]["prs"][candidate["pr_url"]]
+    record["provider"]["command"][4] = "url,state,headRefName"
+    _persist(fixture)
+    selector_refusal = _plan(fixture)
+    assert selector_refusal["rows"][0]["reason"] == "provider-capture-command-mismatch"
 
 
 def test_raw_merged_state_and_full_branch_out_resolution_are_required(tmp_path: Path):

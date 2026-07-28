@@ -1,4 +1,0 @@
-OULIPOLY_INVOCATION={"source":"fixture-provider","id":"9e69e8cc-616d-4640-bf1d-96f5391b1a2e"}
-OULIPOLY_SESSION={"agent_runner_invocation_id":"1b54b457-50cb-4f14-a6d0-b2bdfd4322ab"}
-Verdict: PASS
-OULIPOLY_RESULT={"error_category":null,"exit_code":0,"finished_at":"2026-07-18T00:00:00Z","id":"9e69e8cc-616d-4640-bf1d-96f5391b1a2e","status":"succeeded","success":true,"terminal_reason":null}

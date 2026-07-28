@@ -24,7 +24,7 @@ When in Work Manager mode, load the file matching the declared flavor at session
 
 Strategy selection happens before single-WU dispatch. If the request decomposes into 2+ tickets, has a user-facing surface, or ships behavioral change, route to [`~/ai/workflows/feature-development.md`](workflows/feature-development.md) and [`~/ai/agents/feature-orchestrator.md`](agents/feature-orchestrator.md), using [`~/ai/conventions/feature-development-workflow.md`](conventions/feature-development-workflow.md) as the strategy convention. Otherwise fall through to the existing single-WU implementation-pipeline, roadmap, prototype, PR review, release, RCA, AGENTS maintenance, or other operator-table routes as applicable. Manager flavor remains orthogonal: max/pragmatic/hackerman selects risk posture inside child WUs and final review.
 
-If the request is internal structure reshape with no intended external behavior change and requires refactoring-specific safety topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), route to [`~/ai/workflows/refactoring.md`](workflows/refactoring.md) and [`~/ai/agents/refactoring-orchestrator.md`](agents/refactoring-orchestrator.md), using [`~/ai/conventions/refactoring-workflow.md`](conventions/refactoring-workflow.md). This refactoring rule takes precedence over the 2+ tickets heuristic above: a multi-PR refactor that ships no behavioral change still routes here, not to feature-development. Behavior-shipping work routes to feature-development regardless of ticket count. Manager flavor remains orthogonal.
+If the request is internal structure reshape with no intended external behavior change and requires refactoring-specific safety topology (integration-buffer staging, contract-bounded slicing, encapsulate-first handling, shim lifecycle tracking), route to [`~/ai/workflows/refactoring.md`](workflows/refactoring.md) and [`~/ai/agents/refactoring-orchestrator.md`](agents/refactoring-orchestrator.md), using [`~/ai/conventions/refactoring-workflow.md`](conventions/refactoring-workflow.md). This refactoring rule takes precedence over the 2+ tickets heuristic above: a larger no-behavior-change refactor decomposes into separate one-child/one-PR refactoring WUs before dispatch, not an internal multi-child loop and not feature-development. Behavior-shipping work routes to feature-development regardless of ticket count. Manager flavor remains orthogonal.
 
 For startup routing, use [`~/ai/conventions/feature-development-workflow.md`](conventions/feature-development-workflow.md) `## Refactoring out of scope` as the feature/refactoring boundary reference.
 
@@ -89,8 +89,8 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `test-discovery` - Mechanically map changed product files to existing test files that mention them.
   File: [~/ai/agents/test-discovery.md](agents/test-discovery.md) | Inputs: `repo_root`, `scratch_dir`, `base_ref?`, `planning_root?`, `spec_dir?`, `product_globs?`, `test_roots?` | Model: `gpt-high`
 
-- `test-audit-gate` - Produce a blocking `PASS | PARTIAL | FAIL` from existing spec, test, and locally-generated coverage evidence.
-  File: [~/ai/agents/test-audit-gate.md](agents/test-audit-gate.md) | Inputs: `mode`, `repo_root`, `scratch_dir`, `planning_root?`, `spec_dir?`, `agents_dir?`, `repo?`, `local_coverage_command?`, `pr_number?` | Model: `gpt-high`
+- `test-audit-gate` - Produce a blocking `PASS | PARTIAL | FAIL` from existing spec, test, and locally-generated coverage evidence, with complete runner logs separated from canonical reports and an independently audited, production-validated three-child nested process proof.
+  File: [~/ai/agents/test-audit-gate.md](agents/test-audit-gate.md) | Inputs: `mode`, `repo_root`, `scratch_dir`, `base_branch`, `base_ref?` (derived only from the caller-owned base branch), `base_sha?`, `head_branch?`, `head_ref?`, `head_sha?`, `planning_root?`, `spec_dir?`, `agents_dir?`, `repo?`, `local_coverage_command?`, `pr_number?` | Model: `gpt-high`
 
 - `red-phase-gate` - Run newly authored tests against pre-implementation `HEAD` to confirm whether they are genuinely red.
   File: [~/ai/agents/red-phase-gate.md](agents/red-phase-gate.md) | Inputs: `project_dir`, `scratch_dir`, `base_ref?`, `new_test_nodeids?` | Model: `gpt-high`
@@ -146,7 +146,7 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 ### PR review / justification
 
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no closed-PR or planning-artifact references).
-  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `gpt-high`
+  File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `base_ref`, `base_sha`, `head_ref`, `head_sha`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `gpt-high`
 
 - `prototype-pr-writer` - Author a proof-focused draft PR body for a shippable-prototype PR, centered on shipped use-cases, behavior-test evidence, QA screenshots, observed-vs-expected notes, and deliverable bring-up material; this PR writer does not replace `pr-writer` for production implementation PRs.
   File: [~/ai/agents/prototype-pr-writer.md](agents/prototype-pr-writer.md) | Inputs: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, `deliverable_paths` | Model: `gpt-medium`
@@ -160,8 +160,8 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `commit-hygiene-operator` - Audit or rewrite a branch's commits into small, testable, reviewable history without changing the cumulative diff.
   File: [~/ai/agents/commit-hygiene-operator.md](agents/commit-hygiene-operator.md) | Inputs: `branch`, `base`, `mode`, `target_commit_plan?`, `repo_root`, `worktrees_root?`, `worktree_path?`, `python_bin?` | Model: `gpt-high`
 
-- `pr-review-operator` - Run the full PR review pipeline across risk, research, test-audit, decomposition, and posted review comments.
-  File: [~/ai/agents/pr-review-operator.md](agents/pr-review-operator.md) | Inputs: `pr_number`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `audit_history_path?` | Model: `gpt-high`
+- `pr-review-operator` - Run the full rerunnable PR review pipeline in an exact PR/base/head/invocation-qualified immutable checkout and artifact root, with separate runner logs/canonical outputs, production-validated nested test-audit proof, independently audited initial/conditional fanouts, unchanged-state posting recheck, and explicit repository/PR mutation targets.
+  File: [~/ai/agents/pr-review-operator.md](agents/pr-review-operator.md) | Inputs: `pr_number`, `repo_root`, `local_coverage_command`, `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, `head_sha`, `repo?`, `review_dir?`, `planning_root?`, `agents_dir?`, `audit_history_path?` | Model: `gpt-high`
 
 - `pr-justification-gauntlet` - Orchestrate the multi-round justification loop across interrogator, researcher, value assessment, and adjudication.
   File: [~/ai/agents/pr-justification-gauntlet.md](agents/pr-justification-gauntlet.md) | Inputs: `pr_number`, `work_dir`, `repo_root`, `repo?`, `planning_root?`, `agents_dir?`, `pr_meta_path?`, `diff_path?`, `audit_history_path?` | Model: `gpt-high`
@@ -189,16 +189,27 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 
 ### Implementation pipeline orchestration
 
-- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through the full implementation pipeline (Phase 2.5 → 3 → 4 → audit → 5 → 6a/6b/6c → audit → 7 → 8 → audit → 9). Dispatches every phase via the `agents` CLI, runs the three required `process-tree-auditor` audits, refines inherited estimates in Phase 3, and resolves the authoritative ticket-operator contract to either verified estimate write-back or auditable `no_write_policy_disabled` evidence before Phase 4. Missing, malformed, overridden, or failed-mutation policy never becomes no-write success. Default human gates are Phase 2.5 problem-map review and NEEDS_INPUT new-value questions; status transitions and (for foreign repositories only) PR merge remain user-owned.
-  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: `jira_issue_key?`, `linear_issue_key?`, `wu_brief_path?`, `ticket_system?`, `jira_url?`, `jira_project?`, `jira_account_email?`, `linear_team_key?`, `linear_project_id?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `audit_history_path?`, `pipeline_entry_mode?`, `audit_target_*?`, `existing_review_bundle_path?`, `review_staleness_policy?` | Model: `gpt-xhigh`
+- `apply-gate-set` - Own the active Phase 4/6/8 and RCA post-apply gate set, exact implementation identity transport, expected-process/trace audit, currentness joins, and stable hash-bound result envelope.
+  File: [~/ai/agents/apply-gate-set.md](agents/apply-gate-set.md) | Inputs: `caller_mode`, repository/artifact roots, runtime cycle identity, exact base/head branch/ref/SHA for implementation modes, scope/runtime/contract/report hashes, mode-specific artifacts, output paths, and `local_coverage_command?` for Phase 8 | Model: `gpt-xhigh`
 
-- `wu-session-resumer` - Wake one merged Work Unit session, run post-merge checks, cross-link the ticket, and close or prepare handoff.
-  File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `pre_merge_main_sha`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
+- `implementation-pipeline-orchestrator` - Orchestrate one Work Unit through Phase 9, acquiring one draft PR in Phase 7 and returning either a verified draft-PR or verified merged outcome. It refines inherited estimates in Phase 3 and resolves the authoritative ticket-operator contract to either verified estimate write-back or auditable `no_write_policy_disabled` evidence before Phase 4; missing, malformed, overridden, or failed-mutation policy never becomes no-write success. Phase 9 freezes caller-owned ticket/route/attempt/PR/reviewed expected context before dispatch, requires exact dispatched/result/provider base branch and fetched-ref names even when OIDs coincide, requires the producer-owned Jira/Linear comment-readback result to validate against it, and returns both path/hash pairs plus current Phase 4/6/8 process-proof path/hashes. There is no Phase 10; auto-merge preserves exact Phase 8 reviewed OPEN draft identity, restores draft state before any pre-merge replay, and permits no undo/replay after merge invocation.
+  File: [~/ai/agents/implementation-pipeline-orchestrator.md](agents/implementation-pipeline-orchestrator.md) | Inputs: ticket source/backend inputs, optional existing-issue-only `wu_brief_context_path?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, required caller-owned `base_branch`, `branch_name?`, `local_coverage_command?`, `pipeline_entry_mode?`, complete review-first/plug-existing-review target, bundle, currentness, staleness, runtime-evidence, and proposer-fix inputs, `tickets_first_variant?` (migration-only no-op), `skip_problem_map_gate?`, `auto_merge_after_phase_9?` | Model: `gpt-xhigh`
+
+- `wu-session-resumer` - Wake one merged Work Unit session only after independently proving exact merged PR/base/head/merge identity and refreshed-base containment, derive/validate supported manual-merge baseline evidence, run post-merge checks, cross-link the ticket, and close or prepare handoff.
+  File: [~/ai/agents/wu-session-resumer.md](agents/wu-session-resumer.md) | Inputs: `pr_url`, `merge_sha`, `head_sha`, `base_branch`, `pre_merge_base_sha?`, `branch_name`, `ticket_id`, `session_manifest_path`, `test_command?`, `coverage_command?` | Model: `gpt-high`
+
+### Feature orchestration
+
+- `feature-orchestrator` - Coordinate one feature branch across backend-bound routed tickets using serialized attempts, route-discriminated direct operators/results, one exact-feature-branch common two-stage production process validator, closed hash-bound attempt-proof envelopes joined to the manifest/index/route result, caller-context-bound direct ticket evidence, verified refactoring merge identity, exact draft promotion, restoration-proved replay, route-specific merge ownership, and a verified final PR-open handoff.
+  File: [~/ai/agents/feature-orchestrator.md](agents/feature-orchestrator.md) | Inputs: `feature_id`, `feature_scope_path`, `repo_root`, explicit `trunk_branch`, explicit `feature_branch`, `feature_worktree_path`, `child_worktrees_root`, `planning_dir`, `scratch_dir`, `scoped_ticket_list`, exactly one of `ticket_route_map?` or `successor_manifest_path?`, `ticket_system` plus matching backend configuration, `manager_flavor`, `acceptance_evidence_paths`, `post_merge_owner`, optional prototype/QA/evidence/audit-history context; runtime UUID is runner-derived | Model: `gpt-xhigh`
 
 ### Refactoring strategies
 
-- `refactoring-commit-history-orchestrator` - Strategic incremental refactoring by commit-history since last refactor milestone; use when scoping is derived from milestone-to-HEAD degradation evidence rather than incident-triggered or seed-and-fan-out initiation.
-  File: [~/ai/agents/refactoring-commit-history-orchestrator.md](agents/refactoring-commit-history-orchestrator.md) | Workflow: [~/ai/workflows/refactoring-commit-history.md](workflows/refactoring-commit-history.md) | Convention: [~/ai/conventions/refactoring-commit-history-scoping.md](conventions/refactoring-commit-history-scoping.md) | Inputs: `target`, `target_surface?`, `repo_root`, `worktree_path`, `scratch_dir`, `planning_dir`, `integration_branch_ref`, `history_base_ref`, `milestone_search_policy`, `degradation_signal_sources`, `package_bounds`, `manager_flavor`, `package_size_override?` | Model: `gpt-xhigh`
+- `refactoring-orchestrator` - Coordinate one contract-bounded refactoring WU, validate and pass the exact normalized branch/ticket/context/roots plus reviewed integration base to exactly one implementation child with auto-merge disabled, require integration/dispatched/observed/nested implementation base branch and fetched-ref names to match exactly even when OIDs coincide, require caller-context-bound ticket evidence and current implementation/refactoring-owned process-proof hashes, restore exact draft state before any pre-merge replay, solely own its one non-replayable guarded ticket-PR merge attempt, and return current audited `VERIFIED_MERGED` evidence.
+  File: [~/ai/agents/refactoring-orchestrator.md](agents/refactoring-orchestrator.md) | Inputs: exactly one of `jira_issue_key?` / `linear_issue_key?` / `wu_brief_path?`, optional existing-issue-only `wu_brief_context_path?`, required `ticket_system` plus matching backend configuration, `target_list`, `repo_root`, unique short `branch_name`, `worktree_path`, `planning_dir`, `scratch_dir`, exact short `trunk_branch`, short GitHub `integration_branch_ref`, canonical `protected_branches` containing both, `slice_bounds`, optional shim parameters/evidence, `shim_registry_path?` (default `~/ai/conventions/active-shims.md`), `audit_history_path?` (default `${planning_dir}/refactoring-audit-history.md`), `manager_flavor?`; runtime UUID is runner-derived | Model: `gpt-xhigh`
+
+- `refactoring-commit-history-orchestrator` - Strategic incremental refactoring by commit-history since last refactor milestone; `scope` freezes exact identities and fully executable package descriptors then stops, while `execute` validates descriptor/ref/path/dependency identity plus caller-owned existing-issue assignments before separate one-PR refactoring WUs.
+  File: [~/ai/agents/refactoring-commit-history-orchestrator.md](agents/refactoring-commit-history-orchestrator.md) | Workflow: [~/ai/workflows/refactoring-commit-history.md](workflows/refactoring-commit-history.md) | Convention: [~/ai/conventions/refactoring-commit-history-scoping.md](conventions/refactoring-commit-history-scoping.md) | Inputs: required `mode=scope|execute`, `ticket_system`, repository/artifact roots, exact `trunk_branch`, canonical `protected_branches`, and `manager_flavor`; scope-only target/history/integration/degradation/package inputs; execute-only immutable `package_source_request`, caller-owned `package_ticket_source_map`, `current_identity_path`, and matching backend child configuration; performs no ticket automation | Model: `gpt-xhigh`
 
 ### Release management
 
@@ -292,7 +303,7 @@ The roadmap workflow cascades from market research (Layer 0) through ticket rege
 
 ### External integration
 
-- `jira-operator` - Read, comment on, transition, search, create, or update-estimate Jira issues through the Atlassian REST API.
+- `jira-operator` - Read, comment on, transition, search, create, or update-estimate Jira issues through the Atlassian REST API; `operation=comment-readback` emits the shared producer-owned ticket-operation result.
   File: [~/ai/agents/jira-operator.md](agents/jira-operator.md) | See `agents/jira-operator.md` `## Contract` for inputs/defaults/errors/delegation. | Model: `gpt-medium`
 
 ### Writing / document authoring
@@ -375,7 +386,9 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 
 ## Workflow Topologies
 
-- Implementation pipeline (10-phase): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- Feature development (heterogeneous ticket routes and feature-branch integration): [`~/ai/workflows/feature-development.md`](workflows/feature-development.md)
+- Implementation pipeline (through Phase 9): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
+- Refactoring (contract-bounded slices over an explicit integration branch): [`~/ai/workflows/refactoring.md`](workflows/refactoring.md)
 - RCA workflow (full reproduction-first root-cause analysis with four-agent split, verify-or-return, and incident-to-close downstream lifecycle): [`~/ai/workflows/rca.md`](workflows/rca.md)
 - Regression investigation (post-incident codebase-risk archaeology): [`~/ai/workflows/regression-investigation.md`](workflows/regression-investigation.md)
 - Prototype RCA workflow (light two-agent root-cause/fix loop for one failed prototype trigger): [`~/ai/workflows/rca-prototype.md`](workflows/rca-prototype.md)
@@ -384,7 +397,6 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 - Alignment cycle (problem ↔ philosophy ↔ proposal review loop with classify/integrate split): [`~/ai/workflows/alignment-cycle.md`](workflows/alignment-cycle.md)
 - PR review gates (test-audit, multi-concern, justification, commit-hygiene): [`~/ai/workflows/pr-review.md`](workflows/pr-review.md)
 - Audit sub-workflow (target-typed design/process/drift audit coordination): [`~/ai/workflows/audit.md`](workflows/audit.md)
-- CodeRabbit loop (CLI-only, amend-only, stop at value-zero): [`~/ai/workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md)
 - Research (single-agent, parallel-fanout, deep-reasoning escalation): [`~/ai/workflows/research.md`](workflows/research.md)
 - Linter bootstrap (A1 linter coverage inventory, ecosystem research, and setup-PR proposal): [`~/ai/workflows/linter-bootstrap.md`](workflows/linter-bootstrap.md)
 - Code quality (A1 composite auditor fanout and aggregate verdict): [`~/ai/workflows/code-quality.md`](workflows/code-quality.md)

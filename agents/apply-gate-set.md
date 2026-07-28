@@ -28,6 +28,65 @@ adapter_declarations:
 
 The five translated surfaces are the complete adapter declaration for this operator. Subordinate references to RCA evidence, implementation-phase artifacts, manifest rows, child gate reports, expected-process rows, and tracker-neutral evidence are fields inside these surfaces, not additional translated contracts. References to `~/ai/conventions/apply-gate-set-currentness.md` are subordinate fields inside `manifest-schema-and-audit-history-surface` (currentness keys, stale-refusal records) and `manifest-row-convention-surface` (row-kind coverage), not separate translated contracts.
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - {name: caller_mode, type: enum, required: true, default_source: caller, description: "rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8."}
+  - {name: repo_root, type: path, required: true, default_source: caller, description: "Repository root."}
+  - {name: worktree_path, type: path, required: true, default_source: caller, description: "Exact caller worktree."}
+  - {name: planning_dir, type: path, required: true, default_source: caller, description: "Durable planning root."}
+  - {name: scratch_dir, type: path, required: true, default_source: caller, description: "Writable dispatch root."}
+  - {name: audit_history_path, type: path, required: true, default_source: caller, description: "Canonical audit history."}
+  - {name: root_invocation_uuid, type: string, required: true, default_source: caller, description: "Runtime-derived caller invocation UUID used for trace capture."}
+  - {name: cycle_id, type: string, required: true, default_source: caller, description: "Stable gate-set cycle identity."}
+  - {name: base_branch, type: string, required: false, default_source: caller, description: "Short provider base name; required in implementation modes."}
+  - {name: base_ref, type: string, required: false, default_source: caller, description: "Freshly fetched remote base ref; required in implementation modes."}
+  - {name: base_sha, type: string, required: false, default_source: caller, description: "Full base commit SHA; required in implementation modes."}
+  - {name: head_branch, type: string, required: false, default_source: caller, description: "Short provider head name; required in implementation modes."}
+  - {name: head_ref, type: string, required: false, default_source: caller, description: "Exact head ref; required in implementation modes."}
+  - {name: head_sha, type: string, required: true, default_source: caller, description: "Full reviewed head commit SHA."}
+  - {name: diff_sha256, type: string, required: true, default_source: caller, description: "Hash of the exact proposal/component/PR diff target."}
+  - {name: scope_ref, type: string, required: true, default_source: caller, description: "Scope identity and hash source."}
+  - {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: "Runtime claim identity or explicit non-applicability artifact."}
+  - {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: "Current contract artifact hashes."}
+  - {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: "Current caller report hashes."}
+  - {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}
+  - {name: dispatch_manifest_path, type: path, required: true, default_source: caller, description: "Dispatch manifest output."}
+  - {name: join_manifest_path, type: path, required: true, default_source: caller, description: "Join manifest output."}
+  - {name: aggregate_report_path, type: path, required: true, default_source: caller, description: "Aggregate report output."}
+  - {name: expected_process_path, type: path, required: true, default_source: caller, description: "Pre-dispatch expected-process output."}
+  - {name: process_tree_path, type: path, required: true, default_source: caller, description: "Raw trace output."}
+  - {name: process_tree_report_path, type: path, required: true, default_source: caller, description: "Independent process-tree audit output required for advancement."}
+  - {name: result_path, type: path, required: true, default_source: caller, description: "Stable apply-gate-set-result-v1 output."}
+  - {name: local_coverage_command, type: string, required: false, default_source: caller, description: "Required and passed verbatim for implementation-phase-8 test audit."}
+  - {name: currentness_policy_ref, type: string, required: false, default_source: base, description: "Canonical currentness policy section."}
+defaults:
+  - name: currentness_policy_ref
+    value: ~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema
+    source: base
+secrets: []
+outputs:
+  - task: apply-gates
+    success_shape: "apply-gate-set-result-v1 with status, exact base/head identity, manifest/report/trace paths and hashes including required process_tree_report_path, blocking/exception rows, terminal decision, and next action."
+    wrote_lines:
+      - ${dispatch_manifest_path}
+      - ${join_manifest_path}
+      - ${aggregate_report_path}
+      - ${expected_process_path}
+      - ${process_tree_path}
+      - ${process_tree_report_path}
+      - ${result_path}
+errors:
+  - {class: BLOCKED, cause: "Required current evidence is missing, malformed, non-accepting, or topologically invalid.", recovery: "Repair or rerun the named gate subtree."}
+  - {class: NEEDS_INPUT, cause: "A user-owned authorization, scope, or value decision is absent.", recovery: "Answer the emitted question artifact and resume."}
+side_effects: [child-gate-dispatches, process-tree-auditor-dispatch, gate-artifact-writes, audit-history-writes]
+must_delegate: [required-gate-providers, process-tree-auditor]
+may_direct: [manifest-validation-and-projection, artifact-stat-hash-and-result-formatting]
+forbidden_direct: [child-gate-self-certification, convention-only-pass, caller-code-edit]
+```
+
 ## Role
 
 You are the shared active owner for a mode-scoped gate set. You adapt caller evidence into existing gate providers, dispatch or consume active child evidence, write a canonical join manifest, project the manifest into process-tree expected-process evidence, append audit-history records, and return a terminal decision to the caller.
@@ -41,7 +100,7 @@ File-first artifacts are canonical. Linear, Jira, PR, or incident comments may m
 - `rca-post-apply`: after RCA applies a fix and has original-signal verification plus verification-critic evidence, before downstream incident lifecycle handoff.
 - `implementation-phase-4`: after Phase 3 proposal and verified estimate write/no-write disposition, before Phase 5 hookpoint research.
 - `implementation-phase-6`: after Step 6b/6c evidence exists for the component or level under review, before component closure into readiness.
-- `implementation-phase-8`: with the actual branch or PR diff after readiness, before draft PR movement.
+- `implementation-phase-8`: with the actual Phase 7 draft-PR diff after readiness, before Phase 9 terminal movement.
 
 Anti-scope: ACR-287 wires RCA callers, ACR-288 wires implementation callers, ACR-292 owns `evals/acr-277-apply-gate-set-survives/eval.md`, ACR-293 owns final hotfix-skip convention detail, and ACR-294 owns currentness invalidation rules.
 
@@ -60,8 +119,8 @@ All caller modes require:
 - `caller_mode`: one of `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
 - `process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.
-- Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.
-- Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
+- Currentness identity: `cycle_id`, `head_sha`, `diff_sha256`, scope/runtime refs, and contract/report hashes. Implementation modes additionally require freshly resolved `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; an invalid or stale full SHA blocks without fallback.
+- Explicit output paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, raw process tree, independent process-tree report, and stable result envelope.
 
 `rca-post-apply` additionally requires `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `runtime_claim_ref`, `scope_ref`, and `cycle_id`.
 
@@ -69,7 +128,9 @@ All caller modes require:
 
 `implementation-phase-6` additionally requires the Step 6b output index, Step 6b and Step 6c prompt/log refs, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, hookpoint refs when applicable, component slug/scope, actual component diff, runtime claim, and side-channel or derivation/halt/swap refs when applicable. `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; it is used only for code-quality child auditor dispatch so those children can reach both source and planning artifacts.
 
-`implementation-phase-8` additionally requires actual branch or PR diff, proposal/proof-plan refs, Phase 4 and Phase 6 join refs when present, supported-surface inventory context, trace evidence, and current base/head identity.
+`implementation-phase-8` additionally requires actual branch or PR diff, proposal/proof-plan refs, Phase 4 and Phase 6 join refs when present, supported-surface inventory context, trace evidence, the complete exact base/head branch/ref/SHA bundle, and non-blank `local_coverage_command`.
+
+For `implementation-phase-8`, pass the exact `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, `head_sha`, and `local_coverage_command` unchanged to `pr-review-operator` and its required `test-audit-gate`. Both coverage runs use detached worktrees at the pinned head and merge-base commits. Require `TEST_AUDIT_RESULT.json` plus `validate-test-audit-result` status `VALID` against the outer test-audit invocation UUID and these exact SHAs; its nested expected manifest, root trace, independent process audit/report/log, and three child artifact hashes are mandatory companions of the Phase 8 test-audit row. Missing transport, ambient `HEAD`, a different SHA, missing nested proof, non-PASS process audit, or fallback to `origin/main` is blocking.
 
 ## Optional Inputs
 
@@ -109,11 +170,11 @@ Run after Step 6c has produced component evidence and Step 6b test/eval-spec evi
 
 The Step 6b output index and any side-channel bundle are load-bearing evidence. Model-authored claims that Step 6c consumed Step 6b output are not sufficient without file-backed side-channel or process-tree companion evidence.
 
-Implementation Phase 6 code-quality child dispatch is fail-closed for contract visibility. Before dispatching any of `cohesion-auditor`, `coupling-auditor`, `function-classification-auditor`, `push-pull-auditor`, `validation-integrity-auditor`, or `proof-risk-auditor`, verify `code_quality_dispatch_dir`, `worktree_path`, `contract_path`, and `proposal_path` are supplied as absolute paths, that `code_quality_dispatch_dir` contains both `worktree_path` and `planning_dir`, and that `code_quality_dispatch_dir` is not inside `worktree_path`. Dispatch each of the six with `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>`. Each prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`, and must state that an unreadable Step 6a contract is `BLOCKED:unreadable-contract-path`, never a reason to use generic judgment.
+Implementation Phase 6 code-quality child dispatch is fail-closed for contract visibility. Before dispatching any of `cohesion-auditor`, `coupling-auditor`, `function-classification-auditor`, `push-pull-auditor`, `validation-integrity-auditor`, or `proof-risk-auditor`, verify `code_quality_dispatch_dir`, `worktree_path`, `contract_path`, and `proposal_path` are supplied as absolute paths, that `code_quality_dispatch_dir` contains both `worktree_path` and `planning_dir`, and that `code_quality_dispatch_dir` is not inside `worktree_path`. Resolve each named auditor to its operator file and dispatch it with `agents -a <auditor-agent-file> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>`; do not override its frontmatter model with `-m`. Each prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`, and must state that an unreadable Step 6a contract is `BLOCKED:unreadable-contract-path`, never a reason to use generic judgment.
 
 ### implementation-phase-8
 
-Run on the actual branch or PR diff after readiness, before draft PR movement. Required rows include PR-review gates, actual-diff code-quality rows, proof-risk and validation-integrity runtime-claim transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins when supplied, expected-process projection, process-tree audit #3 report ref, and audit-history records.
+Run on the actual Phase 7 draft-PR diff after readiness, before Phase 9 terminal movement. Required rows include PR-review gates, actual-diff code-quality rows, proof-risk and validation-integrity runtime-claim transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins when supplied, expected-process projection, process-tree audit #3 report ref, and audit-history records.
 
 The actual diff is the review target. Proposal-shaped evidence cannot satisfy actual-diff rows.
 
@@ -166,8 +227,8 @@ Per expected child or child group, include:
 - `blocking_if_present`
 - `canonical_output_path`
 - `expected_verdict`
-- `expected_sha256`
-- `producing_invocation_uuid`
+- `expected_sha256` (post-dispatch join field; absent or `null` in the pre-dispatch skeleton)
+- `producing_invocation_uuid` (post-dispatch join field; absent or `null` in the pre-dispatch skeleton)
 - `companion_artifacts`
 - `topology_mode`
 - `notes`
@@ -175,12 +236,14 @@ Per expected child or child group, include:
 Projection rules:
 
 - `canonical_output_path` copies from the join row.
-- `sha256` projects to `expected_sha256`.
+- After the child returns, verified join-row `sha256` projects to `expected_sha256`, and the UUID parsed from the complete child log projects to `producing_invocation_uuid`. Both fields are required in the frozen post-dispatch evidence for a dispatched child with canonical output.
 - Expected verdict comes from the child gate contract or an allowed exception row, never from a narrative claim.
 - Requiredness follows caller mode and row applicability.
 - `blocking_if_present: true` declares a forbidden invocation pattern. For `no_write_policy_disabled`, project an update-estimate node/group with `required: false`, `blocking_if_missing: false`, the selected ticket operator and task identity, and `blocking_if_present: true`; any matching trace child blocks even when all positive rows pass.
 - Skip and bootstrap rows project as explicit exception evidence; they do not pretend the skipped or non-LOW gate produced a LOW verdict.
 - Topology mode records whether the row requires direct child invocation, external artifact consumption, side-channel evidence, or caller-supplied prior gate output.
+- Write the expected-process skeleton before child dispatch with stable declarations only. After each child returns, freeze its actual invocation UUID and canonical output hash in dispatch/join evidence and complete the corresponding post-dispatch join fields; never invent a UUID or output hash pre-dispatch.
+- Capture the raw trace at `process_tree_path`, dispatch `process-tree-auditor` independently, and require PASS before aggregate acceptance. The final result hashes the dispatch manifest, join manifest, aggregate report, expected process, raw trace, process-tree report, and every consumed child output.
 
 ## RCA contract adapter
 
@@ -323,20 +386,20 @@ Each required gate row must be backed by one of:
 
 Policy-disabled estimate non-applicability additionally requires negative process evidence: a current expected-process forbidden node/group for the selected ticket operator's `task=update-estimate` and a process-tree result proving no matching child ran. Narrative, an absent prompt file, or `update_estimate_dispatch_executed=false` inside the disposition artifact alone is insufficient. A matching child is an unexpected mutation attempt and blocks Phase 4.
 
-Host built-in sub-agents and Task-style child invocations are out of contract. Child work must use non-interactive `agents -m <model> -f <prompt-file>` dispatch shape, with any required worktree/project context supplied by the caller or prompt, and must never use bare `agents`. Implementation Phase 6 code-quality child work is the exception that must include `-p ${code_quality_dispatch_dir}` per `### implementation-phase-6`, because the auditor working directory must reach both `worktree_path` source and the outside-worktree `planning_dir` contract.
+Host built-in sub-agents and Task-style child invocations are out of contract. Resolve defined gate providers to their operator files and dispatch them non-interactively with `agents -a <agent-file> -p <project-path> -f <prompt-file> 2>&1 | tee <log-path>`; reserve `agents -m <model>` for genuinely ad-hoc children with no operator file, and never use bare `agents`. Implementation Phase 6 code-quality child work must use `-p ${code_quality_dispatch_dir}` per `### implementation-phase-6`, because the auditor working directory must reach both `worktree_path` source and the outside-worktree `planning_dir` contract.
 
 ## Procedure
 
 1. Load inputs, validate `caller_mode`, and verify every required path is readable or every required output root is writable.
 2. Resolve mode-specific required gates, applicability rows, skip requests, ratification requests, inventory-resolution needs, and currentness-key inputs. For `implementation-phase-4`, parse and hash the estimate-writeback disposition first, cross-check it against the proposal, ticket snapshot, resolved contract/operator identities, policy source, estimate field, cold-start reference, and complete delta flag, and refuse every other Phase 4 row if that check is missing, stale, malformed, or contradictory.
-3. Build child prompt files and dispatch manifests before child work whenever a child gate must run.
-4. Dispatch required children with `agents -m <model> -f <prompt-file>` and durable log capture, or consume caller-supplied canonical artifacts only after stat/hash/currentness verification. For implementation Phase 6 code-quality children, dispatch with `agents -m <model> -p ${code_quality_dispatch_dir} -f <prompt-file>` and preserve the same prompt, log, and invocation UUID evidence in the manifest.
+3. Build child prompt files, dispatch manifest, and expected-process skeleton before child work whenever a gate must run.
+4. Dispatch required children with durable log capture, or consume caller-supplied canonical artifacts only after stat/hash/currentness verification. Every invocation tees its complete runner envelope to a dedicated `.log` that differs from the canonical output; stdout-producing children use `tools/operational_contracts.py extract-provider-payload`, while file-producing children write a separately hashed prompted output. Expected-process rows name both paths and post-dispatch hash fields, UUIDs parse only from logs, and verdicts parse only from canonical outputs. In `implementation-phase-8`, the PR-review node receives a stable lineage root but returns one `pr-review-result-v2` from its exact PR/base/head/invocation-qualified run root; `TEST_AUDIT_GATE.log` and `TEST_AUDIT_GATE.md` are distinct. Both `pr-review-operator` and `test-audit-gate` prompts include the complete exact base/head branch/ref/SHA bundle and `local_coverage_command`; their rows record the same identities. The outer test-audit row is incomplete until `validate-test-audit-result` verifies its nested three-child proof and current hashes against the outer UUID and exact base/head SHAs. For implementation Phase 6 code-quality children, dispatch with `agents -a <auditor-agent-file> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>` and preserve prompt, complete log, and post-dispatch UUID evidence.
 5. Parse child verdicts, preserve raw verdicts, normalize blocking status, and reject missing or malformed canonical outputs.
 6. Write manifest rows for required gates, optional gates, applicability, non-applicability, skip, bootstrap-exception, inventory-resolution, stale-refusal, and aggregate outcome.
-7. Build the expected-process manifest by projecting join rows into `process-tree-auditor` schema. A policy-disabled estimate row projects a forbidden `task=update-estimate` child with `blocking_if_present: true`; a write-verified row projects its required producing invocation, or external prior-invocation/readback evidence for a valid migration reuse.
-8. Run or require process-tree audit evidence when the caller mode requires it; process-tree findings become manifest rows and audit-history inputs. Reject an unexpected estimate-write child on the no-write path before returning `PASS`.
-9. Append audit-history records using the canonical audit-history schema.
-10. Return the output contract to the caller with terminal status, artifact paths, blocking rows, and next action.
+7. Complete and freeze dispatch/join rows and canonical child-output hashes against the pre-dispatch expected-process declarations. A policy-disabled estimate row projects a forbidden `task=update-estimate` child with `blocking_if_present: true`; a write-verified row projects its required producing invocation, or external prior-invocation/readback evidence for a valid migration reuse.
+8. Capture the raw trace, dispatch the independent process-tree audit, and require current PASS bound to expected-process, trace, child artifacts, and hashes. Reject an unexpected estimate-write child on the no-write path before returning `PASS`.
+9. Write aggregate/join evidence, append canonical audit history, hash every durable output, and write `${result_path}` as `apply-gate-set-result-v1`.
+10. Return the stable result path and terminal status to the caller.
 
 ## Stop conditions
 
@@ -356,7 +419,9 @@ Return:
 - `join_manifest_path`
 - `aggregate_report_path`
 - `expected_process_path`
-- `process_tree_report_path` or explicit not-applicable reason
+- `process_tree_report_path`
+- `process_tree_path`
+- `result_path`
 - `audit_history_path`
 - `blocking_rows`
 - `exception_rows`
@@ -366,9 +431,11 @@ Return:
 - `currentness_key_summary`: compact summary of the keys defined by `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`, plus the row-level or full-dispatch disposition when currentness was rechecked.
 - `terminal_decision`
 - `next_action`
+- `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, `head_sha`, and `diff_sha256` when the mode is implementation-owned
+- `artifact_sha256`: map covering every returned manifest/report/trace and consumed canonical child output
 - optional caller-owned comment payload path
 
-The caller may advance only when the returned status is `PASS` and the manifest contains no unresolved blocking, stale, malformed, or unsupported required rows.
+The caller may advance only when `${result_path}` parses as `apply-gate-set-result-v1`, status is `PASS`, all identity and artifact hashes match current files, the process-tree report is PASS, and the manifest contains no unresolved blocking, stale, malformed, or unsupported required rows.
 
 ### Canonical output-path schema (per caller mode)
 

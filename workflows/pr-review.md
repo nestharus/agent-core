@@ -5,7 +5,7 @@ workflow_dispatch_contract:
   orchestrator: "pr-review-operator"
   inputs:
     - "an OPEN PR number, stable review lineage root, approved proposal/test context, non-blank local_coverage_command, and optional audit history"
-    - "provider-derived or caller-expected base/head branch, fetched ref, and full OID identity; explicit mismatches block without fallback"
+    - "required caller-supplied base/head branch, fetched ref, and full OID identity; provider data verifies all six fields and never replaces missing or blank values"
   expectations:
     - "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks"
     - "Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base"
@@ -57,7 +57,7 @@ pr-review-operator
 ### Inputs
 
 - an OPEN PR number, stable review lineage root, approved proposal/test context, non-blank local_coverage_command, and optional audit history
-- provider-derived or caller-expected base/head branch, fetched ref, and full OID identity; explicit mismatches block without fallback
+- required caller-supplied base/head branch, fetched ref, and full OID identity; provider data verifies all six fields and never replaces missing or blank values
 
 ### Expectations
 

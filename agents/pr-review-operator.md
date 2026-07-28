@@ -28,34 +28,34 @@ inputs:
     description: "repo root"
   - name: base_branch
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Expected provider base branch name; derived from the PR when omitted."
+    required: true
+    default_source: caller
+    description: "Caller-supplied expected provider base branch name; provider data verifies but never replaces it."
   - name: base_ref
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Freshly fetched remote base ref; an explicit value must match provider baseRefOid and never falls back."
+    required: true
+    default_source: caller
+    description: "Caller-supplied fetched remote base ref; it must resolve to provider baseRefOid and never falls back."
   - name: base_sha
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Expected full provider base OID; derived from the PR when omitted."
+    required: true
+    default_source: caller
+    description: "Caller-supplied full expected provider base OID."
   - name: head_branch
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Expected provider head branch name; derived from the PR when omitted."
+    required: true
+    default_source: caller
+    description: "Caller-supplied expected provider head branch name."
   - name: head_ref
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Exact fetched PR head ref; derived from the pull ref when omitted."
+    required: true
+    default_source: caller
+    description: "Caller-supplied exact fetched PR head ref."
   - name: head_sha
     type: string
-    required: false
-    default_source: derived | caller
-    description: "Expected full provider head OID; derived from the PR when omitted."
+    required: true
+    default_source: caller
+    description: "Caller-supplied full expected provider head OID."
   - name: local_coverage_command
     type: string
     required: true
@@ -173,16 +173,14 @@ You are the orchestrator — you write prompt files and launch sub-agents via th
 - `pr_number`: The PR number to review (e.g., `390`)
 - `repo` (optional): Repository in `OWNER/REPO` format. If omitted, resolve it from the checkout's `origin` remote before running the review.
 - `repo_root` (required): Path to the repo checkout.
-- `base_ref` (optional): Explicit PR parent ref. When omitted, derive `origin/<baseRefName>` from queried PR metadata. When supplied, it must resolve to the same parent commit or the review blocks; no default-branch fallback is allowed.
-- `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, and `head_sha` (optional expectations): when supplied by Phase 8, every value must equal freshly fetched provider state. Standalone review derives the complete bundle from the provider.
+- `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, and `head_sha` (required caller identity): all six must be present and non-blank before fanout. Fresh provider data verifies every value; it never supplies or replaces a missing caller field. Any omission, blank, unresolvable ref, or mismatch blocks without a default-parent or ambient-HEAD fallback.
 - `local_coverage_command` (required): non-blank project command passed unchanged to the mandatory PR-mode test audit. Missing input blocks before fanout.
 - `audit_history_path` (optional): canonical audit-history file for repeated review/fix/proposal loops. If omitted, create `$WORK_DIR/audit-history.md` when a gate enters a second round.
 
 ## Inputs
 
 - `--input repo_root=<path>` (required) — target repository root.
-- `--input base_ref=<ref>` (optional, derived from PR metadata) — actual parent passed to `test-audit-gate`; explicit invalid or mismatched refs block without fallback.
-- `--input base_branch/base_sha/head_branch/head_ref/head_sha` (optional, derived from provider metadata) — exact expected names, refs, and full OIDs.
+- `--input base_branch/base_ref/base_sha/head_branch/head_ref/head_sha` (required) — caller-supplied exact expected names, refs, and full OIDs; provider metadata only verifies this bundle. Missing, blank, invalid, or mismatched values block without fallback.
 - `--input local_coverage_command=<command>` (required) — exact command used for detached head and merge-base coverage.
 - `--input review_dir=<path>` (optional, default `${repo_root}/.tmp/pr-review/${pr_number}`) — stable lineage root. The operator allocates `${review_dir}/runs/<run_id>` for this invocation and never writes mutable review artifacts directly at the lineage root.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs directory passed to downstream review workflows.
@@ -213,6 +211,16 @@ PR=<pr_number>
 REVIEW_ROOT=${review_dir}
 PR_REVIEW_INVOCATION_UUID=$(printf '%s' "$OULIPOLY_PARENT_INVOCATION" | jq -er '.id')
 
+if [ -z "${base_branch+x}" ] || [ -z "${base_branch//[[:space:]]/}" ] \
+  || [ -z "${base_ref+x}" ] || [ -z "${base_ref//[[:space:]]/}" ] \
+  || [ -z "${base_sha+x}" ] || [ -z "${base_sha//[[:space:]]/}" ] \
+  || [ -z "${head_branch+x}" ] || [ -z "${head_branch//[[:space:]]/}" ] \
+  || [ -z "${head_ref+x}" ] || [ -z "${head_ref//[[:space:]]/}" ] \
+  || [ -z "${head_sha+x}" ] || [ -z "${head_sha//[[:space:]]/}" ]; then
+  printf 'BLOCKED:missing-pr-review-caller-identity\n' >&2
+  exit 1
+fi
+
 # Capture provider identity before any paid fanout.
 PR_META_JSON=$(gh pr view "$PR" --repo "$REPO" \
   --json url,number,state,isDraft,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,additions,deletions,changedFiles,files \
@@ -224,41 +232,37 @@ BASE_SHA=$(printf '%s' "$PR_META_JSON" | jq -r .baseRefOid)
 HEAD_BRANCH=$(printf '%s' "$PR_META_JSON" | jq -r .headRefName)
 HEAD_SHA=$(printf '%s' "$PR_META_JSON" | jq -r .headRefOid)
 
-if [ "${base_branch+x}" = x ] && { [ -z "$base_branch" ] || [ "$base_branch" != "$BASE_BRANCH" ]; }; then
+if [ "$base_branch" != "$BASE_BRANCH" ]; then
   printf 'BLOCKED:invalid-base-ref\n' >&2
   exit 1
 fi
-if [ "${base_sha+x}" = x ] && { [ -z "$base_sha" ] || [ "$base_sha" != "$BASE_SHA" ]; }; then
+if [ "$base_sha" != "$BASE_SHA" ]; then
   printf 'BLOCKED:invalid-base-ref\n' >&2
   exit 1
 fi
-if [ "${base_ref+x}" = x ]; then
-  RESOLVED_CALLER_BASE_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${base_ref}^{commit}" 2>/dev/null) || {
-    printf 'BLOCKED:invalid-base-ref\n' >&2
-    exit 1
-  }
-  if [ -z "$base_ref" ] || [ "$RESOLVED_CALLER_BASE_SHA" != "$BASE_SHA" ]; then
-    printf 'BLOCKED:invalid-base-ref\n' >&2
-    exit 1
-  fi
+RESOLVED_CALLER_BASE_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${base_ref}^{commit}" 2>/dev/null) || {
+  printf 'BLOCKED:invalid-base-ref\n' >&2
+  exit 1
+}
+if [ "$RESOLVED_CALLER_BASE_SHA" != "$BASE_SHA" ]; then
+  printf 'BLOCKED:invalid-base-ref\n' >&2
+  exit 1
 fi
-if [ "${head_branch+x}" = x ] && { [ -z "$head_branch" ] || [ "$head_branch" != "$HEAD_BRANCH" ]; }; then
+if [ "$head_branch" != "$HEAD_BRANCH" ]; then
   printf 'BLOCKED:invalid-head-ref\n' >&2
   exit 1
 fi
-if [ "${head_sha+x}" = x ] && { [ -z "$head_sha" ] || [ "$head_sha" != "$HEAD_SHA" ]; }; then
+if [ "$head_sha" != "$HEAD_SHA" ]; then
   printf 'BLOCKED:invalid-head-ref\n' >&2
   exit 1
 fi
-if [ "${head_ref+x}" = x ]; then
-  RESOLVED_CALLER_HEAD_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${head_ref}^{commit}" 2>/dev/null) || {
-    printf 'BLOCKED:invalid-head-ref\n' >&2
-    exit 1
-  }
-  if [ -z "$head_ref" ] || [ "$RESOLVED_CALLER_HEAD_SHA" != "$HEAD_SHA" ]; then
-    printf 'BLOCKED:invalid-head-ref\n' >&2
-    exit 1
-  fi
+RESOLVED_CALLER_HEAD_SHA=$(git -C "$SOURCE_REPO_ROOT" rev-parse --verify "${head_ref}^{commit}" 2>/dev/null) || {
+  printf 'BLOCKED:invalid-head-ref\n' >&2
+  exit 1
+}
+if [ "$RESOLVED_CALLER_HEAD_SHA" != "$HEAD_SHA" ]; then
+  printf 'BLOCKED:invalid-head-ref\n' >&2
+  exit 1
 fi
 RUN_MANIFEST=$(python3 ~/ai/tools/operational_contracts.py init-pr-review-run \
   --review-root "$REVIEW_ROOT" \

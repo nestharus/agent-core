@@ -6264,21 +6264,19 @@ def test_feature_capabilities_expose_specialist_owners_and_merge_boundaries():
     ]
 
 
-def test_implementation_base_default_remains_compatible_for_non_feature_callers():
+def test_implementation_base_is_explicit_for_every_caller():
     contract = _operator_contract("implementation-pipeline-orchestrator")
     base_input = _input(contract, "base_branch")
-    assert base_input["required"] is False
+    assert base_input["required"] is True
+    assert base_input["default_source"] == "caller"
     defaults = contract["defaults"]
     assert isinstance(defaults, list)
-    assert {
-        "name": "base_branch",
-        "value": "main",
-        "source": "base",
-    } in defaults
+    assert not any(item["name"] == "base_branch" for item in defaults)
 
     text = _read("agents/implementation-pipeline-orchestrator.md")
     assert "BLOCKED:invalid-base-branch" in text
-    assert "do not fall back to `main`" in text
+    assert "do not derive or fall back to `main`" in text
+    assert "required caller-owned WU parent" in text
 
 
 def test_feature_issue_only_boundary_preserves_standalone_cold_start_contracts():
@@ -6976,10 +6974,12 @@ def test_test_audit_validates_and_uses_explicit_base_ref_everywhere():
     contract = _operator_contract("test-audit-gate")
     base_input = _input(contract, "base_ref")
     assert base_input["required"] is False
-    assert "explicit invalid values block without fallback" in base_input["description"]
-    assert {"name": "base_ref", "value": "origin/main", "source": "base"} in contract[
-        "defaults"
-    ]
+    assert base_input["default_source"] == "derived"
+    assert "required caller-owned base branch" in base_input["description"]
+    base_branch_input = _input(contract, "base_branch")
+    assert base_branch_input["required"] is True
+    assert base_branch_input["default_source"] == "caller"
+    assert not any(item["name"] == "base_ref" for item in contract["defaults"])
     prepare = _section("agents/test-audit-gate.md", "### 1. Prepare Diff Inputs")
     coverage = _between(
         "agents/test-audit-gate.md",
@@ -6992,9 +6992,60 @@ def test_test_audit_validates_and_uses_explicit_base_ref_everywhere():
         assert 'git merge-base "$resolved_head_ref" "$resolved_base_ref"' in section
         assert "BLOCKED:pinned-review-identity-mismatch" in section
         assert "origin/main" not in section
+    assert '${base_branch+x}' in prepare
+    assert 'derived_base_ref="refs/remotes/origin/${base_branch}"' in prepare
+    assert "BLOCKED:invalid-base-branch" in prepare
     assert 'git worktree add --detach "$base_worktree" "$merge_base_sha"' in coverage
     assert "base-coverage-summary.json" in coverage
     assert "main-coverage-summary.json" not in coverage
+
+
+def test_apply_gate_process_tree_report_is_required_end_to_end():
+    contract = _operator_contract("apply-gate-set")
+    report_input = _input(contract, "process_tree_report_path")
+    assert report_input["required"] is True
+    assert report_input["default_source"] == "caller"
+    output = contract["outputs"][0]
+    assert "${process_tree_report_path}" in output["wrote_lines"]
+    assert "required process_tree_report_path" in output["success_shape"]
+
+    output_contract = _section("agents/apply-gate-set.md", "## Output contract")
+    assert "`process_tree_report_path`\n" in output_contract
+    assert "explicit not-applicable reason" not in output_contract
+    assert "the process-tree report is PASS" in output_contract
+    workflow = _read("workflows/apply-gate-set.md")
+    assert "- Required independent process-tree report." in workflow
+
+
+def test_pr_review_requires_all_six_caller_identity_fields_before_provider_verification():
+    contract = _operator_contract("pr-review-operator")
+    identity_fields = (
+        "base_branch",
+        "base_ref",
+        "base_sha",
+        "head_branch",
+        "head_ref",
+        "head_sha",
+    )
+    for name in identity_fields:
+        field = _input(contract, name)
+        assert field["required"] is True
+        assert field["default_source"] == "caller"
+
+    phase_0 = _between(
+        "agents/pr-review-operator.md",
+        "### Phase 0: Fetch the PR\n",
+        "### Phase 1: Risk Assessment (3x parallel)\n",
+    )
+    blocker = "BLOCKED:missing-pr-review-caller-identity"
+    assert blocker in phase_0
+    assert phase_0.index(blocker) < phase_0.index("gh pr view")
+    for name in identity_fields:
+        assert f"${{{name}+x}}" in phase_0
+        assert f"${{{name}//[[:space:]]/}}" in phase_0
+    required_inputs = _section("agents/pr-review-operator.md", "## Required Inputs")
+    assert "provider data verifies every value" in required_inputs
+    assert "never supplies or replaces a missing caller field" in required_inputs
 
 
 def test_phase_8_transports_base_through_mandatory_test_audit_providers():
@@ -7907,11 +7958,16 @@ def test_pr_review_initial_and_conditional_process_proof_schema_is_complete():
 
     gauntlet = _between(
         "agents/pr-review-operator.md",
-        "agents -a ${agents_dir}/pr-justification-gauntlet.md \\\n",
-        "```\n\nThis is a file-producing child",
+        "#### 4b. Justification Gauntlet (`pr-justification-gauntlet.md`)\n",
+        "### Phase 4c: Supported-Surface Verification (`gpt-xhigh`)\n",
     )
-    assert "-m" not in gauntlet
-    assert '-p "$PROJECT_DIR"' in gauntlet
+    dispatch = (
+        "agents -a ${agents_dir}/pr-justification-gauntlet.md "
+        '-p "$PROJECT_DIR" -f "$WORK_DIR/gauntlet-kickoff.md" '
+        '2>&1 | tee "$WORK_DIR/result-justification.log"'
+    )
+    assert dispatch in gauntlet
+    assert "agents -m" not in gauntlet
 
 
 @pytest.mark.parametrize(
@@ -8139,6 +8195,45 @@ def test_wake_dispatch_surface_report_and_process_tree_are_exact():
     assert "derived `wake_invocation_uuid`" in process
     assert "exact `Verdict: PASS`" in process
     assert "auditor log's final exact `PASS`" in process
+
+
+def test_wake_validates_safe_tokens_contains_paths_and_quotes_dispatch_paths():
+    procedure = _section("workflows/wu-session-wake.md", "## Procedure")
+    safe_token = "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    assert procedure.count(safe_token) == 2
+    assert "BLOCKED:unsafe-wake-path" in procedure
+    assert 'realpath -m -- "${wake_run_root}"' in procedure
+    assert 'realpath -- "${planning_root}"' in procedure
+    assert "generated prompt path, and generated log path" in procedure
+    assert "remain strictly below the canonical `planning_root`" in procedure
+    assert (
+        'agents -a wu-session-resumer -p "${worktree_path}" '
+        '-f "${planning_dir}/prompts/${ticket_id}-wu-session-resume-${run_id}.md" '
+        '2>&1 | tee "${planning_dir}/logs/${ticket_id}-wu-session-resume-${run_id}.log"'
+        in procedure
+    )
+
+
+def test_wake_skipped_only_batch_is_successful_audited_noop():
+    procedure = _section("workflows/wu-session-wake.md", "## Procedure")
+    stop = _section("workflows/wu-session-wake.md", "## Stop Conditions")
+    assert "zero merged rows, and no blocked inputs is a successful no-op" in procedure
+    assert "empty expected-process/dispatch/trace audit with zero resumer nodes" in procedure
+    assert "legitimately skipped non-merged rows" in stop
+    assert "successful audited no-op with zero resumer nodes" in stop
+    assert "The legitimate skipped-only no-op is not blocked" in stop
+
+
+def test_wake_pre_merge_base_is_active_index_sourced_and_manifest_mismatch_blocks():
+    procedure = _section("workflows/wu-session-wake.md", "## Procedure")
+    assert "active-index `pre_merge_base_sha`" in procedure
+    assert "including null equality" in procedure
+    assert "BLOCKED:pre-merge-base-source-mismatch" in procedure
+    assert "The active index is the sole source passed to the resumer" in procedure
+    assert "from the session index or manifest" not in procedure
+    assert (
+        "from the active index after exact manifest equality validation" in procedure
+    )
 
 
 def test_wake_expected_nodes_match_canonical_auditor_schema_and_marker_join():

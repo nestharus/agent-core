@@ -1,2 +1,0 @@
-OULIPOLY_INVOCATION synthetic-stale-source-index
-Currentness must be proven by source-index sha and re-projection, not by log prose.

@@ -4,7 +4,7 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: "implementation-pipeline-orchestrator"
   inputs:
-    - "ticket id and branch, worktree, scratch, and planning paths, optional base_branch defaulting to main, and local_coverage_command required before Phase 8 review"
+    - "ticket id and branch, worktree, scratch, and planning paths, required caller-owned base_branch, and local_coverage_command required before Phase 8 review"
     - "non-empty ticket description from the configured Jira or Linear ticket system"
     - "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
   expectations:
@@ -67,7 +67,7 @@ implementation-pipeline-orchestrator
 
 ### Inputs
 
-- ticket id and branch, worktree, scratch, and planning paths, optional `base_branch` defaulting to `main`, and `local_coverage_command` required before Phase 8 review
+- ticket id and branch, worktree, scratch, and planning paths, required caller-owned `base_branch`, and `local_coverage_command` required before Phase 8 review; no default trunk is inferred
 - non-empty ticket description from the configured Jira or Linear ticket system
 - optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them
 
