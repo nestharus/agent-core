@@ -222,7 +222,7 @@ inputs:
   type: string
   required: false
   default_source: caller
-  description: Project coverage command required for Phase 8 PR-review test audit and passed unchanged through all providers.
+  description: Project coverage command passed unchanged through all Phase 8 PR-review providers; absence or a blank value blocks before Phase 8 fanout with BLOCKED:missing-local-coverage-command.
 - name: predecessor_session_manifest_path
   type: path
   required: false

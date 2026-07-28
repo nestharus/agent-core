@@ -6405,6 +6405,11 @@ def test_implementation_contract_covers_every_entry_mode_input_and_default():
     ):
         assert f"`{name}`" in optional_table
 
+    coverage_command = _input(contract, "local_coverage_command")
+    assert coverage_command["required"] is False
+    assert "blocks before Phase 8 fanout" in coverage_command["description"]
+    assert "BLOCKED:missing-local-coverage-command" in coverage_command["description"]
+
 
 def test_tickets_first_variant_is_contractual_migration_noop():
     contract = _operator_contract("implementation-pipeline-orchestrator")
