@@ -10,7 +10,7 @@ workflow_dispatch_contract:
   expectations:
     - "scope is repository-read-only, selects milestone/degradation/packages, writes exact target/history/trunk/integration identities plus the canonical protected set, package plan, source hashes, and plan_hash to one immutable package-source request, performs no ticket operation, and dispatches no child"
     - "execute validates exact complete package descriptors, immutable trunk/integration/protected short-branch equality, every package branch outside that set, canonical unique roots/results, exact inherited gates, and a package-local acyclic dependency graph before plan_hash, current identity, package-map acceptance, context brief, or child dispatch"
-    - "every package maps to one unique caller-owned backend-matching existing issue and one separate one-child/one-ticket-PR refactoring WU; generated WU briefs are context only"
+    - "every package maps to one unique caller-owned backend-matching existing issue and one separate one-child/one-ticket-PR refactoring WU; execute dispatches in dependency-topological order and requires every prerequisite VERIFIED_MERGED before its dependent; generated WU briefs are context only"
     - "passes each existing issue key, normalized branch and unique roots, plus wu_brief_context_path through refactoring to implementation so Phase 0 cannot cold-create; captures each route UUID and accepts only a matching singular-child hashed VERIFIED_MERGED result"
   outputs:
     - "scope: last-refactor milestone evidence, degradation inventory, bounded package plan, and immutable package-source request with plan_hash"
@@ -66,17 +66,18 @@ The orchestrator reuses the implementation-pipeline gate stack by reference:
 2. Scope milestone/degradation/package selection: follow the convention, select exact package IDs, assign unique branches outside the protected set plus unique root projections, and validate each with the unchanged trunk/integration/protected set as a future one-child/one-ticket-PR refactoring WU.
 3. Scope handoff: write/hash milestone evidence, degradation inventory, package plan, source hashes, and immutable package-source request; return `PACKAGE_SOURCE_REQUEST_READY` without ticket or child operations.
 4. Execute validation: reject unknown/omitted request or descriptor fields; validate every documented descriptor type, exact inherited gates, canonical protected short refs, package exclusion from that set, canonical unique roots/result paths, direct-child relationships, and package-local acyclic dependencies; then recompute request `plan_hash`, compare a fresh target/history/trunk/integration/protected current identity bundle, require map hash/backend/exact package-set equality, and write executable validation before any brief or dispatch.
-5. Execute per-package WUs: write context-only briefs and dispatch each package as a separate refactoring WU with its exact existing issue, normalized branch, unique roots, explicit trunk/integration branches, and the unchanged protected set. Every refactoring invocation owns one implementation child and one ticket PR.
+5. Execute per-package WUs: write context-only briefs and traverse packages in dependency-topological order. Dispatch each ready package as a separate refactoring WU with its exact existing issue, normalized branch, unique roots, explicit trunk/integration branches, and the unchanged protected set only after every prerequisite has a complete hash-bound `VERIFIED_MERGED` outcome; independent ready packages may run in parallel. Every refactoring invocation owns one implementation child and one ticket PR.
 6. Execute outcome: join runtime route identities and complete singular-child `VERIFIED_MERGED` results to the same plan hash; never mutate tickets from this root.
 
 ## Stop Conditions
 
 - Scope succeeds only at `PACKAGE_SOURCE_REQUEST_READY`; this is a stable assignment handoff, not an invitation to guess issue mappings before package selection.
-- Execute succeeds when all exact request packages ship independently and finish at LOW through their inherited gates.
+- Execute succeeds when all exact request packages finish at LOW through their inherited gates and every dependent dispatched only after its prerequisites were `VERIFIED_MERGED`.
 - Scope stops when the target, identity, milestone, evidence, package boundary, explicit trunk/integration/protected set, package branch exclusion, canonical route roots/result path, or dependency graph is invalid.
 - Stop with NEEDS_INPUT when the next decision changes user-owned value, scope, sibling-strategy routing, or behavior-change intent.
 - Stop and shrink when a proposed package returns MEDIUM, HIGH, or another non-passing outcome from an inherited gate.
 - Execute stops before every dispatch when request/current target/history/trunk/integration/protected identity, plan hash, source map, exact package set, issue uniqueness/backend, context brief, or one-child projection is stale, missing, duplicate-keyed, incomplete/extra, malformed, or ambiguous.
+- Execute blocks transitive dependents when any prerequisite fails, blocks, or lacks a complete hash-bound `VERIFIED_MERGED` outcome.
 
 ## Anti-scope
 

@@ -4706,6 +4706,9 @@ def test_commit_history_has_strict_scope_and_execute_contracts():
     assert scope < scope_stop < execute
     assert validate < dispatch
     for value in (
+        "Traverse the immutable acyclic dependency graph in topological order",
+        "every package ID in its `dependencies` has produced a complete hashed `VERIFIED_MERGED` outcome",
+        "blocks all of its transitive dependents from dispatch",
         "existing `jira_issue_key` or `linear_issue_key` as the sole ticket source",
         "`wu_brief_context_path` under that exact context-only name",
         "implementation Phase 0 reads the issue and cannot cold-create",
