@@ -7051,6 +7051,19 @@ def test_pr_review_requires_all_six_caller_identity_fields_before_provider_verif
     assert "never supplies or replaces a missing caller field" in required_inputs
 
 
+def test_pr_review_requires_non_blank_coverage_command_before_provider_verification():
+    phase_0 = _between(
+        "agents/pr-review-operator.md",
+        "### Phase 0: Fetch the PR\n",
+        "### Phase 1: Risk Assessment (3x parallel)\n",
+    )
+    blocker = "BLOCKED:missing-local-coverage-command"
+    assert blocker in phase_0
+    assert phase_0.index(blocker) < phase_0.index("gh pr view")
+    assert "${local_coverage_command+x}" in phase_0
+    assert "${local_coverage_command//[[:space:]]/}" in phase_0
+
+
 def test_phase_8_transports_base_through_mandatory_test_audit_providers():
     phase_8 = _section(
         "agents/implementation-pipeline-orchestrator.md",

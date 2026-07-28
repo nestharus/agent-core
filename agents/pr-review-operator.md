@@ -221,6 +221,12 @@ if [ -z "${base_branch+x}" ] || [ -z "${base_branch//[[:space:]]/}" ] \
   exit 1
 fi
 
+if [ -z "${local_coverage_command+x}" ] \
+  || [ -z "${local_coverage_command//[[:space:]]/}" ]; then
+  printf 'BLOCKED:missing-local-coverage-command\n' >&2
+  exit 1
+fi
+
 # Capture provider identity before any paid fanout.
 PR_META_JSON=$(gh pr view "$PR" --repo "$REPO" \
   --json url,number,state,isDraft,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,additions,deletions,changedFiles,files \
