@@ -23,7 +23,7 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 
 ## Composition pattern
 
-The motivating example for these two tools is post-merge wake of WU sessions:
+The motivating example for these components is post-merge wake of WU sessions:
 
 ```
 scheduler/manual root  ──>  wu-session-wake  ──(status only)──>  pr-batch-poller
@@ -37,7 +37,7 @@ Each component does one thing:
 - `wu-session-wake` owns status invocation, session joins, exactly-once fanout, and aggregate process proof.
 - `wu-session-resumer` (in `~/ai/agents/`) doesn't know about polling. It consumes one exact joined row and wakes that single session.
 
-Adding all three concerns into one binary is an anti-pattern. The composition is a workflow, not a tool.
+Collapsing these concerns into one binary is an anti-pattern. The composition is a workflow, not a tool.
 
 ## Adding a new tool
 
