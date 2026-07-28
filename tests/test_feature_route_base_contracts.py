@@ -177,6 +177,7 @@ REFACTOR_ARTIFACTS = {
     "${planning_dir}/refactoring-dispatch-validation.json",
     "${planning_dir}/refactoring-process-tree-audit-pre-merge.md",
     "${planning_dir}/refactoring-process-tree-audit.md",
+    "${planning_dir}/refactoring-audit-history.md from revise/review round two onward",
     "${scratch_dir}/refactoring-dispatch-evidence-pre-merge.json",
     "${scratch_dir}/refactoring-dispatch-plan.json",
     "${scratch_dir}/refactoring-expected-process-pre-merge.json",
