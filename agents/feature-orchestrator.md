@@ -148,7 +148,7 @@ defaults:
 secrets: []
 outputs:
   - task: run-feature
-    success_shape: "FINAL_PR_OPEN_HANDOFF with verified final PR base/head and durable artifacts; both route sources passed one closed feature-route-manifest-v2 graph, every accepted route consumed a current feature-route-attempt-proof-v1 with exact feature/base identity, every refactoring result additionally matched its nested implementation PR/head/guard/base identity and passed closed-index re-hash plus semantic validation of exact five pre-merge and five post-merge LOW reports without auditor reruns, and every direct merge consumed caller-bound ticket evidence, exact currentness, acceptance, and merge authorization."
+    success_shape: "FINAL_PR_OPEN_HANDOFF with verified final PR base/head and durable artifacts; the selected route source passed one closed feature-route-manifest-v2 graph, every accepted route consumed a current feature-route-attempt-proof-v1 with exact feature/base identity, every refactoring result additionally matched its nested implementation PR/head/guard/base identity and passed closed-index re-hash plus semantic validation of exact five pre-merge and five post-merge LOW reports without auditor reruns, and every direct merge consumed caller-bound ticket evidence, exact currentness, acceptance, and merge authorization."
     wrote_lines:
       - ${planning_dir}/route-manifest.json
       - ${scratch_dir}/route-dispatch-evidence.json
