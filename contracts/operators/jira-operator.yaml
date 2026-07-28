@@ -19,10 +19,10 @@ inputs:
   default_source: caller
   description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
 - name: operation
-  type: string
+  type: enum
   required: false
   default_source: caller
-  description: Optional comment operation; comment-readback activates producer-authenticated evidence.
+  description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
 - name: ticket_operation_context
   type: string
   required: false

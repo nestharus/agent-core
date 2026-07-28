@@ -35,6 +35,7 @@ These are the same inputs declared in `## Contract` above; the structured contra
 - `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Perform `PUT /rest/api/3/issue/{issueKey}` with `fields.customfield_10016=<int>`, then post an ADF durable note containing inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `${jira_project}-34` (required for read/comment/transition)
 - `body` (for `comment`): the comment text — supports plain text OR pre-built ADF JSON
+- `operation` (for `comment`, optional): omit for an ordinary comment or pass exactly `comment-readback` for producer-authenticated evidence. Any other value is out-of-contract and returns `BLOCKED` before posting; `comment-readback` requires `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`.
 - `target_status` (for `transition`): destination status name (e.g., "In Progress")
 - `jql` (for `search`): standard JQL query
 - `fields` (for `create`): project, summary, issuetype, etc.
@@ -66,10 +67,10 @@ inputs:
     default_source: caller
     description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
   - name: operation
-    type: string
+    type: enum
     required: false
     default_source: caller
-    description: Optional comment operation; comment-readback activates producer-authenticated evidence.
+    description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
   - name: ticket_operation_context
     type: string
     required: false
