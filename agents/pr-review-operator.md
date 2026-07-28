@@ -233,6 +233,11 @@ PR_META_JSON=$(gh pr view "$PR" --repo "$REPO" \
 )
 
 # Require state=OPEN and exact caller expectations before allocating this run.
+PR_STATE=$(printf '%s' "$PR_META_JSON" | jq -r .state)
+if [ "$PR_STATE" != "OPEN" ]; then
+  printf 'BLOCKED:pr-not-reviewable\n' >&2
+  exit 1
+fi
 BASE_BRANCH=$(printf '%s' "$PR_META_JSON" | jq -r .baseRefName)
 BASE_SHA=$(printf '%s' "$PR_META_JSON" | jq -r .baseRefOid)
 HEAD_BRANCH=$(printf '%s' "$PR_META_JSON" | jq -r .headRefName)

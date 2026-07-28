@@ -7064,6 +7064,19 @@ def test_pr_review_requires_non_blank_coverage_command_before_provider_verificat
     assert "${local_coverage_command//[[:space:]]/}" in phase_0
 
 
+def test_pr_review_rejects_non_open_pr_before_run_allocation():
+    phase_0 = _between(
+        "agents/pr-review-operator.md",
+        "### Phase 0: Fetch the PR\n",
+        "### Phase 1: Risk Assessment (3x parallel)\n",
+    )
+    state_check = 'if [ "$PR_STATE" != "OPEN" ]; then'
+    assert 'jq -r .state' in phase_0
+    assert state_check in phase_0
+    assert "BLOCKED:pr-not-reviewable" in phase_0
+    assert phase_0.index(state_check) < phase_0.index("init-pr-review-run")
+
+
 def test_phase_8_transports_base_through_mandatory_test_audit_providers():
     phase_8 = _section(
         "agents/implementation-pipeline-orchestrator.md",
