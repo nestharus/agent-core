@@ -17,6 +17,9 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 class ContractValidationError(ValueError):
     """Raised when an operational contract cannot authorize its next action."""
 
@@ -125,6 +128,8 @@ _PROCESS_TREE_AUDIT_BINDING_PREFIX = "PROCESS_TREE_AUDIT_BINDING_JSON="
 _PROCESS_TREE_AUDIT_BINDING_FIELDS = {
     "schema",
     "report_identity",
+    "operator_artifact",
+    "audit_history",
     "root_invocation_uuid",
     "subtree_root_uuid",
     "expected_process",
@@ -1291,6 +1296,25 @@ def _load_process_tree_audit_report(
         if not _nonblank(identity.get("operator_file")):
             errors.append("process audit report operator_file must be non-blank")
 
+    operator_path = _validate_process_tree_binding_artifact(
+        binding.get("operator_artifact"), "process audit operator artifact", errors
+    )
+    if operator_path is not None and identity:
+        operator_file = identity.get("operator_file")
+        if isinstance(operator_file, str):
+            named_operator = Path(operator_file)
+            if not named_operator.is_absolute():
+                errors.append("process audit report operator_file must be an absolute path")
+            elif operator_path != named_operator:
+                errors.append("process audit operator artifact path mismatch")
+
+    audit_history_value = binding.get("audit_history")
+    audit_history_path = None
+    if audit_history_value is not None:
+        audit_history_path = _validate_process_tree_binding_artifact(
+            audit_history_value, "process audit history", errors
+        )
+
     try:
         root_uuid = _canonical_uuid(
             binding.get("root_invocation_uuid"), "process audit root_invocation_uuid"
@@ -1325,7 +1349,11 @@ def _load_process_tree_audit_report(
     companion_values = [str(path) for path in companion_paths]
     if companion_values != sorted(companion_values):
         errors.append("process audit companion artifact rows must be sorted by path")
-    all_paths = [path for path in (expected_path, trace_path) if path is not None]
+    all_paths = [
+        path
+        for path in (operator_path, audit_history_path, expected_path, trace_path)
+        if path is not None
+    ]
     all_paths.extend(companion_paths)
     if len(all_paths) != len(set(all_paths)):
         errors.append("process audit bound artifact paths must be pairwise distinct")
@@ -1956,8 +1984,13 @@ def validate_test_audit_nested_proof(
             "report_identity": {
                 "schema": "process-tree-audit-report-v1",
                 "path": str(report_path.resolve(strict=False)),
-                "operator_file": "agents/test-audit-gate.md",
+                "operator_file": str(_REPO_ROOT / "agents/test-audit-gate.md"),
             },
+            "operator_artifact": {
+                "path": str(_REPO_ROOT / "agents/test-audit-gate.md"),
+                "sha256": _sha256_file(_REPO_ROOT / "agents/test-audit-gate.md"),
+            },
+            "audit_history": None,
             "root_invocation_uuid": root_uuid,
             "subtree_root_uuid": None,
             "expected_process": {
@@ -3671,7 +3704,7 @@ def validate_route_process_proof(
         report_identity = binding.get("report_identity")
         if not isinstance(report_identity, dict) or report_identity.get(
             "operator_file"
-        ) != "agents/feature-orchestrator.md":
+        ) != str(_REPO_ROOT / "agents/feature-orchestrator.md"):
             errors.append("process report operator identity mismatch")
         if binding.get("subtree_root_uuid") is not None:
             errors.append("process report subtree root must be none")
@@ -4439,7 +4472,7 @@ def validate_route_artifact_lineage(
         report_identity = binding.get("report_identity")
         if not isinstance(report_identity, dict) or report_identity.get(
             "operator_file"
-        ) != "agents/feature-orchestrator.md":
+        ) != str(_REPO_ROOT / "agents/feature-orchestrator.md"):
             errors.append("process report operator identity mismatch")
         if binding.get("subtree_root_uuid") is not None:
             errors.append("process report subtree root must be none")

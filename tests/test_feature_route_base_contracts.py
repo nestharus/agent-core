@@ -743,8 +743,15 @@ def _test_audit_result_fixture(tmp_path: Path) -> dict[str, Any]:
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": str(audit_report_path),
-            "operator_file": "agents/test-audit-gate.md",
+            "operator_file": str(REPO_ROOT / "agents/test-audit-gate.md"),
         },
+        "operator_artifact": {
+            "path": str(REPO_ROOT / "agents/test-audit-gate.md"),
+            "sha256": hashlib.sha256(
+                (REPO_ROOT / "agents/test-audit-gate.md").read_bytes()
+            ).hexdigest(),
+        },
+        "audit_history": None,
         "root_invocation_uuid": root_uuid,
         "subtree_root_uuid": None,
         "expected_process": {
@@ -875,8 +882,15 @@ def _refresh_test_audit_process_report(fixture: dict[str, Any]) -> dict[str, Any
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": proof["process_tree_audit_path"],
-            "operator_file": "agents/test-audit-gate.md",
+            "operator_file": str(REPO_ROOT / "agents/test-audit-gate.md"),
         },
+        "operator_artifact": {
+            "path": str(REPO_ROOT / "agents/test-audit-gate.md"),
+            "sha256": hashlib.sha256(
+                (REPO_ROOT / "agents/test-audit-gate.md").read_bytes()
+            ).hexdigest(),
+        },
+        "audit_history": None,
         "root_invocation_uuid": proof["test_audit_invocation_uuid"],
         "subtree_root_uuid": None,
         "expected_process": {
@@ -1456,8 +1470,15 @@ def _route_lineage_fixture(
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": str(paths["process_report"]),
-            "operator_file": "agents/feature-orchestrator.md",
+            "operator_file": str(REPO_ROOT / "agents/feature-orchestrator.md"),
         },
+        "operator_artifact": {
+            "path": str(REPO_ROOT / "agents/feature-orchestrator.md"),
+            "sha256": hashlib.sha256(
+                (REPO_ROOT / "agents/feature-orchestrator.md").read_bytes()
+            ).hexdigest(),
+        },
+        "audit_history": None,
         "root_invocation_uuid": _RUNNER_UUID,
         "subtree_root_uuid": None,
         "expected_process": {
@@ -2051,7 +2072,9 @@ def _refactoring_route_process_fixture(
             companions.append({"path": proof[f"{artifact}_path"], "sha256": proof[f"{artifact}_sha256"]})
     process_binding = {
         "schema": "process-tree-audit-binding-v1",
-        "report_identity": {"schema": "process-tree-audit-report-v1", "path": str(paths["process_report"]), "operator_file": "agents/feature-orchestrator.md"},
+        "report_identity": {"schema": "process-tree-audit-report-v1", "path": str(paths["process_report"]), "operator_file": str(REPO_ROOT / "agents/feature-orchestrator.md")},
+        "operator_artifact": {"path": str(REPO_ROOT / "agents/feature-orchestrator.md"), "sha256": hashlib.sha256((REPO_ROOT / "agents/feature-orchestrator.md").read_bytes()).hexdigest()},
+        "audit_history": None,
         "root_invocation_uuid": _RUNNER_UUID,
         "subtree_root_uuid": None,
         "expected_process": {"path": str(paths["pre_audit_expected_process"]), "sha256": hashlib.sha256(paths["pre_audit_expected_process"].read_bytes()).hexdigest()},
@@ -7348,7 +7371,7 @@ def test_canonical_process_audit_producer_report_interoperates_with_consumers(
     assert binding["report_identity"] == {
         "schema": "process-tree-audit-report-v1",
         "path": str(fixture["audit_report_path"]),
-        "operator_file": "agents/test-audit-gate.md",
+        "operator_file": str(REPO_ROOT / "agents/test-audit-gate.md"),
     }
     assert "sha256" not in binding["report_identity"]
     nested_validation = validate_test_audit_nested_proof(
@@ -7356,6 +7379,38 @@ def test_canonical_process_audit_producer_report_interoperates_with_consumers(
         proof_path=fixture["proof_path"],
     )
     assert nested_validation["status"] == "VALID", nested_validation["errors"]
+
+
+def test_process_tree_audit_binding_rejects_changed_decision_inputs(tmp_path: Path):
+    fixture = _test_audit_result_fixture(tmp_path)
+    report_path = fixture["audit_report_path"]
+    binding = validate_process_tree_audit_report(report_path)["binding"]
+    history_path = tmp_path / "audit-history.md"
+    history_path.write_text("# Audit History\n", encoding="utf-8")
+    binding["audit_history"] = {
+        "path": str(history_path),
+        "sha256": hashlib.sha256(history_path.read_bytes()).hexdigest(),
+    }
+    report_path.write_text(
+        render_process_tree_audit_report(binding, "PASS"), encoding="utf-8"
+    )
+    assert validate_process_tree_audit_report(report_path)["status"] == "VALID"
+
+    history_path.write_text("# Replaced Audit History\n", encoding="utf-8")
+    history_result = validate_process_tree_audit_report(report_path)
+    assert history_result["status"] == "INVALID"
+    assert "process audit history hash mismatch" in history_result["errors"]
+
+    binding["audit_history"]["sha256"] = hashlib.sha256(
+        history_path.read_bytes()
+    ).hexdigest()
+    binding["operator_artifact"]["sha256"] = "0" * 64
+    report_path.write_text(
+        render_process_tree_audit_report(binding, "PASS"), encoding="utf-8"
+    )
+    operator_result = validate_process_tree_audit_report(report_path)
+    assert operator_result["status"] == "INVALID"
+    assert "process audit operator artifact hash mismatch" in operator_result["errors"]
 
 
 def test_process_tree_auditor_declares_one_canonical_report_and_binding_schema():
@@ -7382,6 +7437,8 @@ def test_process_tree_auditor_declares_one_canonical_report_and_binding_schema()
     )
     for field in (
         '"report_identity"',
+        '"operator_artifact"',
+        '"audit_history"',
         '"root_invocation_uuid"',
         '"subtree_root_uuid"',
         '"expected_process"',
