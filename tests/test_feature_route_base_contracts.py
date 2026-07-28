@@ -7024,6 +7024,12 @@ def test_test_audit_validates_and_uses_explicit_base_ref_everywhere():
     assert '${base_branch+x}' in prepare
     assert 'derived_base_ref="refs/remotes/origin/${base_branch}"' in prepare
     assert "BLOCKED:invalid-base-branch" in prepare
+    assert 'if [ "$mode" = "pr-review" ]' in prepare
+    assert '${head_ref//[[:space:]]/}' in prepare
+    assert "BLOCKED:missing-pinned-head-ref" in prepare
+    assert prepare.index("BLOCKED:missing-pinned-head-ref") < prepare.index(
+        'git rev-parse --verify "${head_ref:-HEAD}^{commit}"'
+    )
     assert 'git worktree add --detach "$base_worktree" "$merge_base_sha"' in coverage
     assert "base-coverage-summary.json" in coverage
     assert "main-coverage-summary.json" not in coverage

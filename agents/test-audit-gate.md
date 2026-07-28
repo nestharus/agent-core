@@ -259,6 +259,10 @@ if [ -n "${base_sha:-}" ] && [ "$resolved_base_ref" != "$base_sha" ]; then
   printf 'Verdict: BLOCKED\n\nBLOCKED:pinned-review-identity-mismatch: base\n'
   exit 0
 fi
+if [ "$mode" = "pr-review" ] && { [ -z "${head_ref+x}" ] || [ -z "${head_ref//[[:space:]]/}" ]; }; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:missing-pinned-head-ref\n'
+  exit 0
+fi
 resolved_head_ref=$(git rev-parse --verify "${head_ref:-HEAD}^{commit}") || {
   printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-head-ref: %s\n' "${head_ref:-HEAD}"
   exit 0
