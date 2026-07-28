@@ -34,6 +34,11 @@ ACK_MARKERS = {
     "incremental": "Review triggered.",
     "full": "Full review triggered.",
 }
+ACK_COMPLETION_MARKERS = {
+    "incremental": "Review finished.",
+    "full": "Full review finished.",
+}
+ACK_ACTION_MARKERS = ("Action performed", "Actions performed")
 FIX_OUTCOMES = {"fixed", "fixed_and_replied"}
 REPLY_OUTCOMES = {"replied", "fixed_and_replied"}
 CALLER_DECISION_OUTCOMES = {"rejected", "deferred"}
@@ -417,11 +422,18 @@ def coderabbit_decision_signal(
     }
 
 
+def trigger_ack_marker(body: str, mode: str) -> str | None:
+    if not any(marker in body for marker in ACK_ACTION_MARKERS):
+        return None
+    markers = (ACK_COMPLETION_MARKERS[mode], ACK_MARKERS[mode])
+    full_markers = (ACK_COMPLETION_MARKERS["full"], ACK_MARKERS["full"])
+    if mode == "incremental" and any(marker in body for marker in full_markers):
+        return None
+    return next((marker for marker in markers if marker in body), None)
+
+
 def is_trigger_ack_body(body: str, mode: str) -> bool:
-    marker = ACK_MARKERS[mode]
-    if mode == "incremental" and ACK_MARKERS["full"] in body:
-        return False
-    return "Actions performed" in body and marker in body
+    return trigger_ack_marker(body, mode) is not None
 
 
 def is_any_trigger_ack_body(body: str) -> bool:
@@ -783,7 +795,8 @@ def trigger_review(repo: Repo, pr_num: int, mode: str, label: str) -> dict[str, 
             if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
                 continue
             ack_body = comment.get("body") or ""
-            if not is_trigger_ack_body(ack_body, mode):
+            ack_marker = trigger_ack_marker(ack_body, mode)
+            if ack_marker is None:
                 continue
             if login:
                 bot_login = login
@@ -795,7 +808,7 @@ def trigger_review(repo: Repo, pr_num: int, mode: str, label: str) -> dict[str, 
                 "trigger_comment_id": command_comment_id,
                 "trigger_body": body,
                 "ack_comment_id": comment_id,
-                "ack_marker": ACK_MARKERS[mode],
+                "ack_marker": ack_marker,
                 "ack_body": ack_body,
                 "bot_login": bot_login,
                 "triggered_at": utc_now(),

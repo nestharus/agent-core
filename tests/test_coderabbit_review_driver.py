@@ -34,6 +34,53 @@ def _summary(comment_id: int, body: str, updated_at: str, login: str = BOT_LOGIN
     }
 
 
+def _ack_body(action_marker: str, review_marker: str) -> str:
+    return f"<summary>{action_marker}</summary>\n\n{review_marker}\n"
+
+
+def test_current_incremental_completion_acknowledgement_reports_observed_marker(monkeypatch) -> None:
+    body = _ack_body("Action performed", "Review finished.")
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "gh_json", lambda *args: {"id": 100})
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(
+        driver,
+        "gh_paginated_array",
+        lambda *args: [{"id": 101, "body": body, "user": {"login": BOT_LOGIN}}],
+    )
+    monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
+
+    evidence = driver.trigger_review(repo, 192, "incremental", driver.DEFAULT_LABEL)
+
+    assert evidence["ack_marker"] == "Review finished."
+    assert evidence["ack_body"] == body
+
+
+def test_current_full_completion_acknowledgement_is_supported() -> None:
+    body = _ack_body("Action performed", "Full review finished.")
+
+    assert driver.trigger_ack_marker(body, "full") == "Full review finished."
+
+
+def test_legacy_triggered_acknowledgement_is_supported() -> None:
+    body = _ack_body("Actions performed", "Review triggered.")
+
+    assert driver.trigger_ack_marker(body, "incremental") == "Review triggered."
+
+
+def test_incremental_mode_rejects_full_review_acknowledgement() -> None:
+    body = _ack_body("Action performed", "Full review finished.")
+
+    assert driver.trigger_ack_marker(body, "incremental") is None
+
+
+def test_unrelated_bot_text_is_not_an_acknowledgement() -> None:
+    body = "Review finished. Here are unrelated release notes."
+
+    assert driver.trigger_ack_marker(body, "incremental") is None
+
+
 def test_approved_review_is_terminal_even_when_later_commented_review_exists() -> None:
     signal = driver.coderabbit_decision_signal(
         [
