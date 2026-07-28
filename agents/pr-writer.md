@@ -168,7 +168,7 @@ The PR body is not a place to list commits, narrate the implementation order, or
 - ✅ **Allowed:** PRs merged to and reachable from the caller's pinned `${base}` / `${base_sha}` (verify before citing).
 - ✅ **Allowed:** Commits reachable from `${base_sha}` (verify before citing).
 - ✅ **Allowed:** Open PRs that are this PR's stack dependency (the one whose head branch is this PR's base) — cite via `stack_parent_pr` input.
-- ❌ **Forbidden:** Closed PRs (whether closed-merged-to-a-non-main-branch or closed-rejected). The reader can't follow the link to anything useful.
+- ❌ **Forbidden:** Closed PRs unless they were supplied through `merged_refs` and verified merged to and reachable from the pinned `${base}` / `${base_sha}`. Closed-rejected PRs and PRs merged only to another lineage remain forbidden.
 - ❌ **Forbidden:** Open PRs that are siblings, not stack dependencies. The fact that they're in the same wave/release is internal context.
 - ❌ **Forbidden:** Local planning artifacts under `planning/` (e.g., `planning/design/`, `planning/coverage/`, `planning/distribution/proposals/`, `planning/e2e/research/`). They live on a branch only the author has; the reviewer cannot read them.
 - ❌ **Forbidden:** Scratch-directory paths (e.g., `${scratch_dir}/...`, `~/projects/<proj>/...`).

@@ -127,6 +127,7 @@ _LINEAGE_CONSTRUCTION_ORDER = [
 _PROCESS_TREE_AUDIT_BINDING_PREFIX = "PROCESS_TREE_AUDIT_BINDING_JSON="
 _PROCESS_TREE_AUDIT_BINDING_FIELDS = {
     "schema",
+    "mode",
     "report_identity",
     "operator_artifact",
     "audit_history",
@@ -645,7 +646,6 @@ _TEST_AUDIT_RESULT_FIELDS = {
     "head_sha",
     "merge_base_sha",
     "diff_sha256",
-    "local_coverage_command_sha256",
     "gate_report_path",
     "gate_report_sha256",
     "nested_proof_path",
@@ -1280,6 +1280,8 @@ def _load_process_tree_audit_report(
         errors.append("process audit machine binding must use canonical JSON")
     if binding.get("schema") != "process-tree-audit-binding-v1":
         errors.append("process audit machine-binding schema is invalid")
+    if binding.get("mode") not in {"blocking", "advisory"}:
+        errors.append("process audit machine-binding mode is invalid")
 
     identity = binding.get("report_identity")
     if (
@@ -1305,8 +1307,16 @@ def _load_process_tree_audit_report(
             named_operator = Path(operator_file)
             if not named_operator.is_absolute():
                 errors.append("process audit report operator_file must be an absolute path")
-            elif operator_path != named_operator:
-                errors.append("process audit operator artifact path mismatch")
+            else:
+                try:
+                    named_operator = named_operator.resolve(strict=True)
+                except OSError as exc:
+                    errors.append(
+                        f"cannot resolve process audit report operator_file: {exc}"
+                    )
+                else:
+                    if operator_path != named_operator:
+                        errors.append("process audit operator artifact path mismatch")
 
     audit_history_value = binding.get("audit_history")
     audit_history_path = None
@@ -1981,6 +1991,7 @@ def validate_test_audit_nested_proof(
             errors.append("process audit report canonical verdict must equal PASS")
         expected_binding = {
             "schema": "process-tree-audit-binding-v1",
+            "mode": "blocking",
             "report_identity": {
                 "schema": "process-tree-audit-report-v1",
                 "path": str(report_path.resolve(strict=False)),
@@ -2056,10 +2067,19 @@ def validate_test_audit_result(
     """Validate a test-audit result and its independently proven nested fanout."""
 
     errors: list[str] = []
-    if set(result) != _TEST_AUDIT_RESULT_FIELDS:
+    result_fields = set(result)
+    allowed_fields = _TEST_AUDIT_RESULT_FIELDS | {"local_coverage_command_sha256"}
+    required_fields = _TEST_AUDIT_RESULT_FIELDS | (
+        {"local_coverage_command_sha256"}
+        if result.get("mode") == "pr-review"
+        else set()
+    )
+    if not required_fields <= result_fields or not result_fields <= allowed_fields:
         errors.append(
-            "test-audit result fields must exactly equal: "
-            + ",".join(sorted(_TEST_AUDIT_RESULT_FIELDS))
+            "test-audit result fields do not match the selected mode; required: "
+            + ",".join(sorted(required_fields))
+            + "; allowed: "
+            + ",".join(sorted(allowed_fields))
         )
     if result.get("schema") != "test-audit-result-v2":
         errors.append("test-audit result schema is invalid")
@@ -2088,10 +2108,17 @@ def validate_test_audit_result(
     merge_base_sha = result.get("merge_base_sha")
     if not isinstance(merge_base_sha, str) or not _FULL_OID.fullmatch(merge_base_sha):
         errors.append("test-audit result merge_base_sha must be a full lowercase Git OID")
-    for field in ("diff_sha256", "local_coverage_command_sha256"):
-        value = result.get(field)
-        if not isinstance(value, str) or not _SHA256.fullmatch(value):
-            errors.append(f"test-audit result {field} must be a lowercase SHA-256")
+    diff_sha256 = result.get("diff_sha256")
+    if not isinstance(diff_sha256, str) or not _SHA256.fullmatch(diff_sha256):
+        errors.append("test-audit result diff_sha256 must be a lowercase SHA-256")
+    if result.get("mode") == "pr-review" or "local_coverage_command_sha256" in result:
+        coverage_command_sha256 = result.get("local_coverage_command_sha256")
+        if not isinstance(coverage_command_sha256, str) or not _SHA256.fullmatch(
+            coverage_command_sha256
+        ):
+            errors.append(
+                "test-audit result local_coverage_command_sha256 must be a lowercase SHA-256"
+            )
 
     gate_path = _current_artifact(
         result,
@@ -3701,6 +3728,8 @@ def validate_route_process_proof(
     )
     root_uuid = ""
     if binding:
+        if binding.get("mode") != "blocking":
+            errors.append("process report mode must equal blocking")
         report_identity = binding.get("report_identity")
         if not isinstance(report_identity, dict) or report_identity.get(
             "operator_file"
@@ -3893,18 +3922,6 @@ def validate_route_process_proof(
             expected_companions.sort(key=lambda row: str(row.get("path")))
         if binding.get("companion_artifacts") != expected_companions:
             errors.append("process report companion artifact binding mismatch")
-    binding_artifact_path = artifact_paths.get("process_report_binding")
-    if binding_artifact_path is not None:
-        try:
-            binding_artifact = _load_json(binding_artifact_path)
-        except ContractValidationError as exc:
-            errors.extend(exc.decision["errors"])
-            binding_artifact = {}
-        if binding_artifact != binding:
-            errors.append(
-                "process report binding artifact must equal the embedded machine binding"
-            )
-
     discovered = {
         "route_prompt": route_node.get("prompt_path"),
         "route_log": route_node.get("log_path"),
@@ -4469,6 +4486,8 @@ def validate_route_artifact_lineage(
     )
     root_uuid = ""
     if binding:
+        if binding.get("mode") != "blocking":
+            errors.append("process report mode must equal blocking")
         report_identity = binding.get("report_identity")
         if not isinstance(report_identity, dict) or report_identity.get(
             "operator_file"
@@ -4829,6 +4848,11 @@ def _ticket_slug(ticket_id: str) -> str:
     return slug
 
 
+def _route_attempt_names(ticket_id: str, attempt_number: int) -> tuple[str, str]:
+    slug = _ticket_slug(ticket_id)
+    return slug, f"{slug}-attempt-{attempt_number:04d}"
+
+
 def validate_route_attempt_transition(
     route_manifest: dict[str, Any], route_index: dict[str, Any]
 ) -> dict[str, Any]:
@@ -5035,10 +5059,9 @@ def validate_route_attempt_transition(
         if proof_ids != expected_dependencies:
             errors.append(f"{label} dependency proofs must exactly match manifest order")
 
-        slug = _ticket_slug(ticket_id)
+        slug, stem = _route_attempt_names(ticket_id, number)
         if not slug or slug in {".", ".."} or ".." in slug:
             errors.append(f"{label}.ticket_id has an unsafe derived slug")
-        stem = f"{slug}-attempt-{number:04d}"
         canonical, path_errors = _canonical_absolute_path(
             attempt.get("proof_envelope_path"), f"{label}.proof_envelope_path"
         )

@@ -47,7 +47,7 @@ All managed manifests are `session.json` below a planning root enumerated by the
 
 ## Trusted PR and git evidence
 
-`capture-evidence` performs one exact provider query per unique PR URL and records the raw provider payload, command, RFC3339 capture time, and canonical payload SHA-256. For merged PRs it records `git show -s --format=%H %P <merge-sha>` output and digest from the named repository. For every `branch_out_sha`, including an already-full OID, it records the exact named manifest repository, requested OID, full `git rev-parse --verify <oid>^{commit}` result, command, time, and digest.
+`capture-evidence` performs one exact provider query per unique PR URL and records the raw provider payload, command, RFC3339 capture time, and canonical payload SHA-256. It validates dynamic Git OID operands as hexadecimal before invocation. For merged PRs it records `git show -s '--format=%H %P' --end-of-options <merge-sha>` output and digest from the named repository. For every `branch_out_sha`, including an already-full OID, it records the exact named manifest repository, requested OID, full `git rev-parse --verify --end-of-options <oid>^{commit}` result, command, time, and digest.
 
 Dry run trusts no separately asserted normalized state. It recomputes URL, state, branch, head, base, merge identity/time, parent list, merge shape, and branch-out expansion from the hash-bound raw captures. It compares candidate, manifest, every exact source row, and provider evidence for manifest path, ticket/backend, branch, PR URL, head, and base identity. Persisted and derived pre-merge baselines must agree with the verified immediate parent.
 

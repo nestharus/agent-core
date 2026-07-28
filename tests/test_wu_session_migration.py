@@ -1294,6 +1294,92 @@ def test_raw_merged_state_and_full_branch_out_resolution_are_required(tmp_path: 
     assert row["reason"] == "branch-out-requires-trusted-repository-resolution"
 
 
+def test_capture_evidence_guards_dynamic_git_oid_operands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    fixture = _complete_fixture(tmp_path)
+    merged_candidate = fixture["cohort"][0]
+    commands: list[list[str]] = []
+
+    def provider(command: list[str]) -> dict[str, Any]:
+        candidate = next(
+            row for row in fixture["cohort"] if row["pr_url"] == command[-1]
+        )
+        merged = candidate is merged_candidate
+        return {
+            "url": candidate["pr_url"],
+            "state": "MERGED" if merged else "OPEN",
+            "headRefName": candidate["branch"],
+            "headRefOid": B,
+            "baseRefName": candidate["persisted_or_derived_base_branch"]
+            or "provider-base",
+            "baseRefOid": C,
+            "mergeCommit": {"oid": E} if merged else None,
+            "mergedAt": "2026-07-18T12:00:00Z" if merged else None,
+        }
+
+    def git(command: list[str]) -> str:
+        commands.append(command)
+        if "show" in command:
+            return f"{E} {C} {B}\n"
+        return f"{A}\n"
+
+    monkeypatch.setattr(MIGRATION, "_run_json_command", provider)
+    monkeypatch.setattr(MIGRATION, "_run_text_command", git)
+    output_path = tmp_path / "captured-evidence.json"
+
+    MIGRATION.capture_evidence(
+        fixture["inventory_path"], fixture["reviewed_digest"], output_path
+    )
+
+    assert output_path.is_file()
+    assert any("show" in command for command in commands)
+    assert all(command[-2] == "--end-of-options" for command in commands)
+
+
+@pytest.mark.parametrize("malformed_source", ["merge", "branch-out"])
+def test_capture_evidence_rejects_malformed_git_oid_before_invocation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    malformed_source: str,
+):
+    fixture = _complete_fixture(tmp_path)
+    target = fixture["cohort"][0]
+    if malformed_source == "branch-out":
+        target["branch_out_sha"] = "--help"
+        _persist(fixture)
+
+    def provider(command: list[str]) -> dict[str, Any]:
+        candidate = next(
+            row for row in fixture["cohort"] if row["pr_url"] == command[-1]
+        )
+        malformed_merge = malformed_source == "merge" and candidate is target
+        return {
+            "url": candidate["pr_url"],
+            "state": "MERGED" if malformed_merge else "OPEN",
+            "headRefName": candidate["branch"],
+            "headRefOid": B,
+            "baseRefName": candidate["persisted_or_derived_base_branch"]
+            or "provider-base",
+            "baseRefOid": C,
+            "mergeCommit": {"oid": "--help"} if malformed_merge else None,
+            "mergedAt": "2026-07-18T12:00:00Z" if malformed_merge else None,
+        }
+
+    def unexpected_git(_: list[str]) -> str:
+        raise AssertionError("malformed OID reached Git")
+
+    monkeypatch.setattr(MIGRATION, "_run_json_command", provider)
+    monkeypatch.setattr(MIGRATION, "_run_text_command", unexpected_git)
+
+    with pytest.raises(InputError, match="invalid dynamic Git"):
+        MIGRATION.capture_evidence(
+            fixture["inventory_path"],
+            fixture["reviewed_digest"],
+            tmp_path / "rejected-evidence.json",
+        )
+
+
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
 def test_runtime_writer_operations_execute_nominally(operation: str, tmp_path: Path):
     case = _runtime_case(tmp_path, operation)

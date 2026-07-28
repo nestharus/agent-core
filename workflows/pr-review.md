@@ -9,8 +9,8 @@ workflow_dispatch_contract:
   expectations:
     - "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks"
     - "Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base"
-    - "initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned machine binding, actual UUID, and pinned SHAs"
-    - "each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned machine binding before it can contribute to posting"
+    - "initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned exact-blocking-mode machine binding, actual UUID, and pinned SHAs"
+    - "each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned exact-blocking-mode machine binding before it can contribute to posting"
     - "every invocation uses an exact PR/base/head/invocation-qualified immutable run root, unique private refs and detached worktree, and distinct complete logs versus canonical outputs"
     - "re-queries and requires unchanged OPEN provider base/head OIDs after all conditional proofs and before any posting; every review/comment mutation and identity query names the exact repository and PR"
   outputs:
@@ -63,8 +63,8 @@ pr-review-operator
 
 - gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks
 - Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base
-- initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned machine binding, actual UUID, and pinned SHAs
-- each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned machine binding before it can contribute to posting
+- initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned exact-blocking-mode machine binding, actual UUID, and pinned SHAs
+- each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned exact-blocking-mode machine binding before it can contribute to posting
 - every invocation uses an exact PR/base/head/invocation-qualified immutable run root, unique private refs and detached worktree, and distinct complete logs versus canonical outputs
 - re-queries and requires unchanged OPEN provider base/head OIDs after all conditional proofs and before any posting; every review/comment mutation and identity query names the exact repository and PR
 

@@ -65,7 +65,7 @@ defaults:
   source: base
 outputs:
 - task: default
-  success_shape: 'Header-first # Process Tree Audit report with five identity lines, exactly one Verdict: PASS|FAIL|NEEDS_INPUT line, and exactly one producer-owned process-tree-audit-binding-v1 machine binding; stdout is the ordinary sentinel or, with stdout_report_copy=true, the exact report bytes.'
+  success_shape: 'Header-first # Process Tree Audit report with five identity lines, exactly one Verdict: PASS|FAIL|NEEDS_INPUT line, and exactly one producer-owned process-tree-audit-binding-v1 machine binding that records the exact audit mode; stdout is the ordinary sentinel or, with stdout_report_copy=true, the exact report bytes.'
   wrote_lines:
   - ${report_path}
 errors:

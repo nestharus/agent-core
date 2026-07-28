@@ -72,7 +72,7 @@ inputs:
   type: string
   required: false
   default_source: caller
-  description: shell command run from repo_root that produces coverage-summary.json and lcov.info under the current working directory's ./coverage/ subdir
+  description: Required and non-blank in pr-review mode; optional and unused for coverage generation in implementation mode. When present, it is hashed into the result.
 - name: pr_number
   type: int
   required: false
@@ -88,7 +88,7 @@ defaults:
 secrets: []
 outputs:
 - task: audit-tests
-  success_shape: test-audit-result-v2 plus TEST_AUDIT_GATE.md, with a top-line PASS, PARTIAL, or FAIL verdict and an independently audited, hash-current three-child nested process proof whose process-auditor report uses the canonical header-first report and producer-owned machine binding.
+  success_shape: test-audit-result-v2 plus TEST_AUDIT_GATE.md, with a top-line PASS, PARTIAL, or FAIL verdict and an independently audited, hash-current three-child nested process proof whose process-auditor report uses the canonical header-first report and producer-owned exact-blocking-mode machine binding.
   wrote_lines:
   - ${scratch_dir}/TEST_AUDIT_EXPECTED_PROCESS.json
   - ${scratch_dir}/TEST_AUDIT_DISPATCH_EVIDENCE.json

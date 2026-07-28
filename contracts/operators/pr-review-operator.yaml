@@ -24,7 +24,7 @@ defaults:
 secrets: []
 outputs:
 - task: review-pr
-  success_shape: pr-review-result-v2 under one immutable run root, with status REVIEW_POSTED or PROPOSAL_POSTED, exact run/provider and repository/PR posting identity, distinct child log/output hashes, nested test-audit proof/revalidation, and every versioned canonical header-first process proof with a producer-owned machine binding.
+  success_shape: pr-review-result-v2 under one immutable run root, with status REVIEW_POSTED or PROPOSAL_POSTED, exact run/provider and repository/PR posting identity, distinct child log/output hashes, nested test-audit proof/revalidation, and every versioned canonical header-first process proof with a producer-owned exact-blocking-mode machine binding.
   wrote_lines:
   - ${review_dir}/runs/<run_id>/pr-review-run.json
   - ${review_dir}/runs/<run_id>/worktree-ownership.json

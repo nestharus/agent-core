@@ -65,6 +65,7 @@ RETIRED_KEYS = {
 }
 INDEX_RESERVED_KEYS = {"schema", "schema_version", "sessions", "rows"}
 FULL_OID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+GIT_OID_OPERAND_RE = re.compile(r"^[0-9a-f]{4,64}$")
 LIST_LOCATOR_RE = re.compile(r"^(sessions|rows)\[(\d+)]$")
 MERGE_METHOD_CAPTURE_KEYS = {
     "source",
@@ -1102,17 +1103,31 @@ def capture_evidence(
         )
         merge_sha = _nested(payload, "mergeCommit", "oid")
         if isinstance(merge_sha, str) and merge_sha:
-            git_command = ["git", "-C", str(repo_root), "show", "-s", "--format=%H %P", merge_sha]
+            _require_git_oid_operand(merge_sha, "merge-oid")
+            git_command = [
+                "git",
+                "-C",
+                str(repo_root),
+                "show",
+                "-s",
+                "--format=%H %P",
+                "--end-of-options",
+                merge_sha,
+            ]
             git_payload = _run_text_command(git_command).strip()
             capture["merge_commit"] = _capture_record(git_command, git_payload)
         branch_out = candidate.get("branch_out_sha")
         if isinstance(branch_out, str) and branch_out:
+            _require_git_oid_operand(
+                branch_out, "branch-out-oid", allow_abbreviated=True
+            )
             git_command = [
                 "git",
                 "-C",
                 str(repo_root),
                 "rev-parse",
                 "--verify",
+                "--end-of-options",
                 f"{branch_out}^{{commit}}",
             ]
             git_payload = _run_text_command(git_command).strip()
@@ -1480,11 +1495,14 @@ def _derive_and_validate_evidence(record: Mapping[str, Any]) -> dict[str, Any]:
             raise MigrationError("malformed-merge-commit-capture")
         parts = merge_text.strip().split()
         merge_command = merge_capture["command"]
+        merge_command_tails = (
+            ["show", "-s", "--format=%H %P", merge_sha],
+            ["show", "-s", "--format=%H %P", "--end-of-options", merge_sha],
+        )
         if (
-            merge_command[:1] != ["git"]
-            or "-C" not in merge_command
-            or "show" not in merge_command
-            or merge_command[-1] != merge_sha
+            len(merge_command) < 3
+            or merge_command[:2] != ["git", "-C"]
+            or merge_command[3:] not in merge_command_tails
         ):
             raise MigrationError("merge-commit-capture-command-mismatch")
         if not parts or parts[0] != merge_sha:
@@ -1508,7 +1526,7 @@ def _derive_and_validate_evidence(record: Mapping[str, Any]) -> dict[str, Any]:
             raise MigrationError("ambiguous-pre-merge-base")
         evidence["merge_parents"] = parents
         evidence["merge_shape"] = shape
-        evidence["merge_repository"] = merge_command[merge_command.index("-C") + 1]
+        evidence["merge_repository"] = merge_command[2]
     branch_capture = record.get("branch_out")
     if branch_capture is not None:
         branch_payload = _validate_capture_record(branch_capture, "branch-out")
@@ -1525,10 +1543,18 @@ def _derive_and_validate_evidence(record: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(repository, str) or not Path(repository).is_absolute():
             raise MigrationError("branch-out-repository-missing")
         branch_command = branch_capture["command"]
+        branch_command_tails = (
+            ["rev-parse", "--verify", f"{requested}^{{commit}}"],
+            [
+                "rev-parse",
+                "--verify",
+                "--end-of-options",
+                f"{requested}^{{commit}}",
+            ],
+        )
         if (
             branch_command[:3] != ["git", "-C", repository]
-            or "rev-parse" not in branch_command
-            or branch_command[-1] != f"{requested}^{{commit}}"
+            or branch_command[3:] not in branch_command_tails
         ):
             raise MigrationError("branch-out-capture-command-mismatch")
         evidence["canonical_branch_out_sha"] = resolved.lower()
@@ -2957,6 +2983,14 @@ def _required_string(mapping: Mapping[str, Any], key: str) -> str:
 def _require_full_oid(value: Any, label: str) -> None:
     if not isinstance(value, str) or not FULL_OID_RE.fullmatch(value.lower()):
         raise MigrationError(f"invalid-or-abbreviated-{label}")
+
+
+def _require_git_oid_operand(
+    value: Any, label: str, *, allow_abbreviated: bool = False
+) -> None:
+    pattern = GIT_OID_OPERAND_RE if allow_abbreviated else FULL_OID_RE
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        raise InputError(f"invalid dynamic Git {label}")
 
 
 def _nested(mapping: Mapping[str, Any], *keys: str) -> Any:

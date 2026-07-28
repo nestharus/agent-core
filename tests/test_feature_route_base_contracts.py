@@ -49,6 +49,7 @@ validate_ticket_operation_result = _CONTRACT_MODULE.validate_ticket_operation_re
 validate_process_tree_audit_report = _CONTRACT_MODULE.validate_process_tree_audit_report
 validate_test_audit_nested_proof = _CONTRACT_MODULE.validate_test_audit_nested_proof
 validate_test_audit_result = _CONTRACT_MODULE.validate_test_audit_result
+_route_attempt_names = _CONTRACT_MODULE._route_attempt_names
 
 OPERATOR_NAMES = (
     "apply-gate-set",
@@ -484,8 +485,7 @@ def _route_attempt(
     pre_merge_head_sha: str | None = None,
     feature_branch: str = "feature/hourly-suspicious-process-investigator",
 ) -> dict[str, Any]:
-    slug = re.sub(r"[^a-z0-9._-]+", "-", ticket_id.lower()).strip("-")
-    stem = f"{slug}-attempt-{attempt_number:04d}"
+    slug, stem = _route_attempt_names(ticket_id, attempt_number)
     merged = state == "VERIFIED_MERGED"
     proof_root = Path(roots["proof_envelope_root"])
     proof_path = proof_root / f"{stem}.proof.json"
@@ -563,6 +563,7 @@ def _write_json_fixture(path: Path, value: dict[str, Any]) -> None:
 
 
 def _test_audit_result_fixture(tmp_path: Path) -> dict[str, Any]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     root_uuid = _RUNNER_UUID
     base_sha = "a0" * 20
     head_sha = "b0" * 20
@@ -741,6 +742,7 @@ def _test_audit_result_fixture(tmp_path: Path) -> dict[str, Any]:
             )
     binding = {
         "schema": "process-tree-audit-binding-v1",
+        "mode": "blocking",
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": str(audit_report_path),
@@ -880,6 +882,7 @@ def _refresh_test_audit_process_report(fixture: dict[str, Any]) -> dict[str, Any
     ).hexdigest()
     binding = {
         "schema": "process-tree-audit-binding-v1",
+        "mode": "blocking",
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": proof["process_tree_audit_path"],
@@ -1053,8 +1056,7 @@ def _route_lineage_fixture(
     reviewed: dict[str, Any] | None = None,
     feature_branch: str | None = None,
 ) -> dict[str, Path]:
-    slug = re.sub(r"[^a-z0-9._-]+", "-", ticket_id.lower()).strip("-")
-    stem = f"{slug}-attempt-{attempt_number:04d}"
+    _, stem = _route_attempt_names(ticket_id, attempt_number)
     reviewed = reviewed or _provider_bundle()
     feature_branch = feature_branch or reviewed["base_ref_name"]
     route_uuid = _SECOND_RUNNER_UUID
@@ -1468,6 +1470,7 @@ def _route_lineage_fixture(
     paths["process_report"].parent.mkdir(parents=True, exist_ok=True)
     process_binding = {
         "schema": "process-tree-audit-binding-v1",
+        "mode": "blocking",
         "report_identity": {
             "schema": "process-tree-audit-report-v1",
             "path": str(paths["process_report"]),
@@ -1723,8 +1726,7 @@ def _refactoring_route_process_fixture(
         reviewed=nested_reviewed,
     )
     nested_result = json.loads(nested["route_output"].read_text(encoding="utf-8"))
-    slug = re.sub(r"[^a-z0-9._-]+", "-", ticket_id.lower()).strip("-")
-    stem = f"{slug}-attempt-{attempt_number:04d}"
+    _, stem = _route_attempt_names(ticket_id, attempt_number)
     route_uuid = "21000000-0000-4000-8000-000000000001"
     auditor_uuid = "22000000-0000-4000-8000-000000000001"
     child_uuid = _SECOND_RUNNER_UUID
@@ -2073,6 +2075,7 @@ def _refactoring_route_process_fixture(
             companions.append({"path": proof[f"{artifact}_path"], "sha256": proof[f"{artifact}_sha256"]})
     process_binding = {
         "schema": "process-tree-audit-binding-v1",
+        "mode": "blocking",
         "report_identity": {"schema": "process-tree-audit-report-v1", "path": str(paths["process_report"]), "operator_file": str(REPO_ROOT / "agents/feature-orchestrator.md")},
         "operator_artifact": {"path": str(REPO_ROOT / "agents/feature-orchestrator.md"), "sha256": hashlib.sha256((REPO_ROOT / "agents/feature-orchestrator.md").read_bytes()).hexdigest()},
         "audit_history": None,
@@ -2173,8 +2176,7 @@ def _attempt_proof_fixture(
     merge_sha: str | None,
     resulting_feature_sha: str | None,
 ) -> None:
-    slug = re.sub(r"[^a-z0-9._-]+", "-", ticket_id.lower()).strip("-")
-    stem = f"{slug}-attempt-{attempt_number:04d}"
+    slug, stem = _route_attempt_names(ticket_id, attempt_number)
     artifact_root = proof_path.parent / ".artifacts" / stem
     reviewed = _provider_bundle(
         base_sha=dispatch_base_sha,
@@ -2539,19 +2541,33 @@ def test_route_record_schema_is_parsed_and_strict():
     ]
 
 
+def test_pr_writer_closed_pr_rules_preserve_verified_merged_refs_only():
+    reference_rules = _between(
+        "agents/pr-writer.md", "### Reference rules\n", "### File-path references are fine\n"
+    )
+    assert "PRs merged to and reachable from" in reference_rules
+    assert "supplied through `merged_refs` and verified merged" in reference_rules
+    assert "Closed-rejected PRs" in reference_rules
+    assert "❌ **Forbidden:** Closed PRs (whether" not in reference_rules
+
+    sidecar = _load_yaml("contracts/operators/pr-writer.yaml")
+    assert "must be reachable from base_sha" in _input(sidecar, "merged_refs")[
+        "description"
+    ]
+    assert "no unverified closed-PR" in _read("AGENTS.md")
+
+
+def test_route_attempt_fixture_names_use_the_production_rule():
+    assert _route_attempt_names("AGE / 260", 7) == (
+        "age-260",
+        "age-260-attempt-0007",
+    )
+
+
 def test_route_parser_rejects_duplicate_keys_before_normalization():
     duplicate = '{"schema_version":1,"schema_version":1}'
     with pytest.raises(RouteManifestError, match="duplicate key: schema_version"):
-        json.loads(duplicate, object_pairs_hook=lambda pairs: _raise_duplicate(pairs))
-
-
-def _raise_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise RouteManifestError(f"duplicate key: {key}")
-        result[key] = value
-    return result
+        json.loads(duplicate, object_pairs_hook=_ROUTE_MODULE._unique_object)
 
 
 def test_real_age255_manifest_normalizes_routes_dependencies_and_waves(tmp_path: Path):
@@ -2576,6 +2592,10 @@ def test_real_age255_manifest_normalizes_routes_dependencies_and_waves(tmp_path:
     }
 
 
+@pytest.mark.skipif(
+    not REAL_AGE255_MANIFEST.is_file(),
+    reason="external AGE-255 provenance source is unavailable",
+)
 def test_checked_in_age255_fixture_is_byte_identical_to_real_manifest():
     assert (REPO_ROOT / "tests/fixtures/age-255-successor-manifest.json").read_bytes() == (
         REAL_AGE255_MANIFEST.read_bytes()
@@ -3859,6 +3879,40 @@ def test_real_age255_refactoring_route_passes_common_production_process_validato
     )
     assert completed.returncode == 0, completed.stderr
     assert json.loads(output_path.read_text(encoding="utf-8")) == decision
+
+
+def test_route_process_binding_artifact_is_loaded_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    paths = _route_lineage_fixture(tmp_path)
+    binding_path = paths["process_report_binding"].resolve()
+    original_load_json = _CONTRACT_MODULE._load_json
+    binding_loads: list[Path] = []
+
+    def tracking_load_json(path: Path) -> dict[str, Any]:
+        if path.resolve() == binding_path:
+            binding_loads.append(path.resolve())
+        return original_load_json(path)
+
+    monkeypatch.setattr(_CONTRACT_MODULE, "_load_json", tracking_load_json)
+    decision = validate_route_process_proof(
+        owning_route="implementation-pipeline",
+        feature_branch="feature/hourly-suspicious-process-investigator",
+        ticket_id="AGE-259",
+        attempt_number=1,
+        route_evidence_path=paths["route_evidence"],
+        pre_audit_expected_path=paths["pre_audit_expected_process"],
+        pre_audit_dispatch_path=paths["pre_audit_dispatch_snapshot"],
+        pre_audit_trace_path=paths["pre_audit_trace"],
+        process_report_path=paths["process_report"],
+        process_report_binding_path=paths["process_report_binding"],
+        final_expected_path=paths["final_expected_process"],
+        final_dispatch_path=paths["final_dispatch_snapshot"],
+        final_trace_path=paths["final_trace"],
+    )
+
+    assert decision["status"] == "PASS", decision["errors"]
+    assert binding_loads == [binding_path]
 
 
 @pytest.mark.parametrize("owning_route", ["implementation-pipeline", "refactoring"])
@@ -7041,6 +7095,50 @@ def test_test_audit_validates_and_uses_explicit_base_ref_everywhere():
     assert "main-coverage-summary.json" not in coverage
 
 
+def test_test_audit_process_prompt_and_binding_use_the_same_absolute_operator():
+    process = _section(
+        "agents/test-audit-gate.md",
+        "### 7. Launch Three Parallel Sub-Agent Invocations",
+    )
+    operator_path = "${repo_root}/agents/test-audit-gate.md"
+    assert f"operator_file={operator_path}" in process
+    assert f"`report_identity` names `{operator_path}`" in process
+    assert "`operator_artifact.path` names that same canonical absolute operator path" in process
+    assert "`mode` equals exact `blocking`" in process
+    assert "operator_file=agents/test-audit-gate.md" not in process
+
+
+def test_test_audit_coverage_command_hash_is_mode_conditional(tmp_path: Path):
+    fixture = _test_audit_result_fixture(tmp_path)
+
+    implementation = deepcopy(fixture["result"])
+    implementation["mode"] = "implementation"
+    implementation.pop("local_coverage_command_sha256")
+    accepted = validate_test_audit_result(
+        implementation,
+        expected_root_uuid=fixture["root_uuid"],
+        expected_base_sha=fixture["base_sha"],
+        expected_head_sha=fixture["head_sha"],
+    )
+    assert accepted["status"] == "VALID", accepted["errors"]
+
+    missing_pr_review_hash = deepcopy(fixture["result"])
+    missing_pr_review_hash.pop("local_coverage_command_sha256")
+    missing = validate_test_audit_result(missing_pr_review_hash)
+    assert missing["status"] == "INVALID"
+    assert any("selected mode" in error for error in missing["errors"])
+
+    invented_null_hash = deepcopy(implementation)
+    invented_null_hash["local_coverage_command_sha256"] = None
+    invented = validate_test_audit_result(invented_null_hash)
+    assert invented["status"] == "INVALID"
+    assert any("local_coverage_command_sha256" in error for error in invented["errors"])
+
+    schema = _section("agents/test-audit-gate.md", "### 8a. Test Audit Result Schema")
+    assert "implementation: optional-lowercase-sha256-only-when-command-was-supplied" in schema
+    assert "local_coverage_command_sha256" not in schema.split("conditional_fields:", 1)[0]
+
+
 def test_apply_gate_process_tree_report_is_required_end_to_end():
     contract = _operator_contract("apply-gate-set")
     report_input = _input(contract, "process_tree_report_path")
@@ -7383,6 +7481,7 @@ def test_canonical_process_audit_producer_report_interoperates_with_consumers(
     assert json.loads(cli_output.read_text(encoding="utf-8")) == report_validation
     binding = report_validation["binding"]
     assert binding["schema"] == "process-tree-audit-binding-v1"
+    assert binding["mode"] == "blocking"
     assert binding["report_identity"] == {
         "schema": "process-tree-audit-report-v1",
         "path": str(fixture["audit_report_path"]),
@@ -7394,6 +7493,50 @@ def test_canonical_process_audit_producer_report_interoperates_with_consumers(
         proof_path=fixture["proof_path"],
     )
     assert nested_validation["status"] == "VALID", nested_validation["errors"]
+
+
+def test_process_tree_binding_resolves_named_operator_before_comparison(tmp_path: Path):
+    fixture = _test_audit_result_fixture(tmp_path)
+    report_path = fixture["audit_report_path"]
+    binding = validate_process_tree_audit_report(report_path)["binding"]
+    operator_alias = REPO_ROOT / "agents" / ".." / "agents" / "test-audit-gate.md"
+    assert str(operator_alias) != str(operator_alias.resolve())
+    binding["report_identity"]["operator_file"] = str(operator_alias)
+    report_path.write_text(
+        render_process_tree_audit_report(binding, "PASS"), encoding="utf-8"
+    )
+
+    decision = validate_process_tree_audit_report(report_path)
+
+    assert decision["status"] == "VALID", decision["errors"]
+
+
+def test_process_tree_binding_mode_is_required_and_exact_for_nested_pass(tmp_path: Path):
+    missing_fixture = _test_audit_result_fixture(tmp_path / "missing")
+    missing_report = missing_fixture["audit_report_path"]
+    missing_binding = validate_process_tree_audit_report(missing_report)["binding"]
+    missing_binding.pop("mode")
+    missing_report.write_text(
+        render_process_tree_audit_report(missing_binding, "PASS"), encoding="utf-8"
+    )
+    missing = validate_process_tree_audit_report(missing_report)
+    assert missing["status"] == "INVALID"
+    assert any("mode" in error for error in missing["errors"])
+
+    advisory_fixture = _test_audit_result_fixture(tmp_path / "advisory")
+    advisory_report = advisory_fixture["audit_report_path"]
+    advisory_binding = validate_process_tree_audit_report(advisory_report)["binding"]
+    advisory_binding["mode"] = "advisory"
+    advisory_report.write_text(
+        render_process_tree_audit_report(advisory_binding, "PASS"), encoding="utf-8"
+    )
+    proof = deepcopy(advisory_fixture["result"]["nested_process_proof"])
+    proof["process_tree_audit_sha256"] = hashlib.sha256(
+        advisory_report.read_bytes()
+    ).hexdigest()
+    advisory = validate_test_audit_nested_proof(proof)
+    assert advisory["status"] == "INVALID"
+    assert "process audit report producer-owned binding mismatch" in advisory["errors"]
 
 
 def test_process_tree_audit_binding_rejects_changed_decision_inputs(tmp_path: Path):
@@ -7451,6 +7594,7 @@ def test_process_tree_auditor_declares_one_canonical_report_and_binding_schema()
         "## Non-Negotiables\n",
     )
     for field in (
+        '"mode"',
         '"report_identity"',
         '"operator_artifact"',
         '"audit_history"',
@@ -7517,6 +7661,7 @@ def test_named_process_audit_consumers_use_canonical_producer_binding():
         assert "header-first" in normalized, name
         assert "producer-owned" in normalized, name
         assert "binding" in normalized, name
+        assert "blocking" in normalized, name
     assert "TEST_AUDIT_PROCESS_PROOF_JSON" not in _read("agents/test-audit-gate.md")
     assert "ATTEMPT_LINEAGE_JSON" not in _read("agents/feature-orchestrator.md")
 
@@ -8047,8 +8192,8 @@ def test_pr_review_initial_and_conditional_process_proof_schema_is_complete():
         "domain-research": "gpt-high"
     }
     assert schema["proof_acceptance"] == (
-        "canonical-header-first-unique-report-PASS-producer-binding-current-and-"
-        "final-stdout-PASS"
+        "canonical-header-first-unique-report-PASS-producer-binding-exact-blocking-"
+        "mode-current-and-final-stdout-PASS"
     )
     assert schema["posting_currentness"] == (
         "exact-same-OPEN-pr-base-head-oids-as-phase-0"

@@ -97,7 +97,7 @@ Worktree, planning, and scratch roots are pairwise distinct canonical absolute i
 
 ## Acyclic process-review projections
 
-The pre-merge projection is immutable and contains only the sole implementation child, baseline-auditor, and pre-merge-auditor nodes that can exist before merge. Its report uses the canonical header-first `# Process Tree Audit` envelope, exactly one `Verdict: PASS`, and one producer-owned `process-tree-audit-binding-v1` that binds report identity without a self hash, root/null subtree, expected manifest, trace, and sorted companion artifact rows by SHA-256. Post-merge auditor nodes are added only to a full post-merge projection that preserves the complete singular-child pre-merge lineage and records the pre-merge manifest hash. A process audit never requires its own invocation or a future route result as an input, and consumers never impose a caller-specific binding layout.
+The pre-merge projection is immutable and contains only the sole implementation child, baseline-auditor, and pre-merge-auditor nodes that can exist before merge. Its report uses the canonical header-first `# Process Tree Audit` envelope, exactly one `Verdict: PASS`, and one producer-owned `process-tree-audit-binding-v1` that binds exact `blocking` mode, report identity without a self hash, root/null subtree, expected manifest, trace, and sorted companion artifact rows by SHA-256. Post-merge auditor nodes are added only to a full post-merge projection that preserves the complete singular-child pre-merge lineage and records the pre-merge manifest hash. A process audit never requires its own invocation or a future route result as an input, and consumers never impose a caller-specific binding layout.
 
 ## Child evidence binding
 

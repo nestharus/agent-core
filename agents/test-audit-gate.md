@@ -80,7 +80,7 @@ inputs:
     type: string
     required: false
     default_source: caller
-    description: "shell command run from repo_root that produces coverage-summary.json and lcov.info under the current working directory's ./coverage/ subdir"
+    description: "Required and non-blank in pr-review mode; optional and unused for coverage generation in implementation mode. When present, it is hashed into the result."
   - name: pr_number
     type: int
     required: false
@@ -97,7 +97,7 @@ secrets:
   []
 outputs:
   - task: audit-tests
-    success_shape: "test-audit-result-v2 plus TEST_AUDIT_GATE.md, with a top-line PASS, PARTIAL, or FAIL verdict and an independently audited, hash-current three-child nested process proof whose process-auditor report uses the canonical header-first report and producer-owned machine binding."
+    success_shape: "test-audit-result-v2 plus TEST_AUDIT_GATE.md, with a top-line PASS, PARTIAL, or FAIL verdict and an independently audited, hash-current three-child nested process proof whose process-auditor report uses the canonical header-first report and producer-owned exact-blocking-mode machine binding."
     wrote_lines:
       - ${scratch_dir}/TEST_AUDIT_EXPECTED_PROCESS.json
       - ${scratch_dir}/TEST_AUDIT_DISPATCH_EVIDENCE.json
@@ -210,7 +210,7 @@ spec alignment, test quality, and coverage delta.
 - `--input spec_dir=<path>` (optional, default `${planning_root}/coverage`) — directory containing `spec-*.md`.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated coverage audits.
 - `--input repo=<owner/name>` (optional) — GitHub repository slug, used only for report labeling.
-- `--input local_coverage_command=<command>` (required in `pr-review` mode) — shell command run from a checkout of either the PR HEAD or the merge base that produces `coverage/coverage-summary.json` and `coverage/lcov.info` relative to the checkout root. Example for a Rust workspace: `cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info`.
+- `--input local_coverage_command=<command>` (required in `pr-review` mode; optional and unused for coverage generation in `implementation` mode) — shell command run from a checkout of either the PR HEAD or the merge base that produces `coverage/coverage-summary.json` and `coverage/lcov.info` relative to the checkout root. Example for a Rust workspace: `cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info`.
 - `--input pr_number=<number>` (optional in `pr-review` mode) — PR number for synthesis labeling only; no GitHub API calls are made with it.
 - `--input report_artifact_path=<path>` (optional) — local path to a generated report bundle or downloaded artifact bundle.
 - `--input report_pdf_path=<path>` (optional) — canonical PDF path for the test report when a report bundle is required.
@@ -462,7 +462,7 @@ python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log "$scr
 
 Fail on any missing, duplicate, malformed, out-of-order, non-success, or identity-mismatched envelope. Parse each actual child UUID and `provider_source` only from its complete `.log`; parse no UUID from a canonical report. Write immutable `$scratch_dir/TEST_AUDIT_DISPATCH_EVIDENCE.json` with `schema=test-audit-dispatch-evidence-v2`, the same root/base/head and expected-manifest path/hash, and each node's UUID, marker-derived provider source, declared operator/model, prompt path/hash, log path/hash, canonical output path/hash, extraction metadata path/hash, and output mode. The dispatch row is a role/artifact declaration, not authority for parent, model, source, status, or topology; those facts must be read from the saved trace and complete runner envelope. Every child artifact path is pairwise distinct.
 
-Capture `agents trace --json "$TEST_AUDIT_INVOCATION_UUID"` at `$scratch_dir/TEST_AUDIT_PROCESS_TREE.json` only after all three children and dispatch evidence are final. Write `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.prompt.md` naming `operator_file=agents/test-audit-gate.md`, `mode=blocking`, that exact root UUID, expected manifest, trace, and child-owned report `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.md`; list dispatch evidence, the audit prompt, and all three prompt/log/output/extraction artifacts as the exact hash-bound `companion_artifacts`. Dispatch the named auditor without a model override through one separate parent-visible Bash-background tool invocation:
+Capture `agents trace --json "$TEST_AUDIT_INVOCATION_UUID"` at `$scratch_dir/TEST_AUDIT_PROCESS_TREE.json` only after all three children and dispatch evidence are final. Write `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.prompt.md` naming `operator_file=${repo_root}/agents/test-audit-gate.md`, `mode=blocking`, that exact root UUID, expected manifest, trace, and child-owned report `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.md`; list dispatch evidence, the audit prompt, and all three prompt/log/output/extraction artifacts as the exact hash-bound `companion_artifacts`. Dispatch the named auditor without a model override through one separate parent-visible Bash-background tool invocation:
 
 ```python
 Bash(command='agents -a ${agents_dir}/process-tree-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.log"', run_in_background=True, description="Audit test-audit process tree")
@@ -470,7 +470,7 @@ Bash(command='agents -a ${agents_dir}/process-tree-auditor.md -p "$repo_root" -f
 
 Wait for its task notification before validating or consuming the report and complete log.
 
-Require the canonical header-first process report to start with `# Process Tree Audit`, followed by its canonical identity lines and exactly one canonical verdict whose complete value is `Verdict: PASS`. Require exactly one producer-owned `PROCESS_TREE_AUDIT_BINDING_JSON` row under `## Machine Binding`: `report_identity` names `agents/test-audit-gate.md` and the report path without a self hash; root equals `TEST_AUDIT_INVOCATION_UUID`; subtree is null; expected-process and trace path/hashes match; and the sorted companion rows exactly equal dispatch evidence, audit prompt, and every child prompt/log/output/extraction path/hash. Also require a complete successful process-auditor log whose provider payload final line is exact `PASS`. Then freeze `$scratch_dir/TEST_AUDIT_NESTED_PROOF.json` under `test-audit-nested-proof-v1` with those exact proof paths/hashes, all three child artifact rows, and `verdict=PASS`. Run:
+Require the canonical header-first process report to start with `# Process Tree Audit`, followed by its canonical identity lines and exactly one canonical verdict whose complete value is `Verdict: PASS`. Require exactly one producer-owned `PROCESS_TREE_AUDIT_BINDING_JSON` row under `## Machine Binding`: `mode` equals exact `blocking`; `report_identity` names `${repo_root}/agents/test-audit-gate.md` and the report path without a self hash; `operator_artifact.path` names that same canonical absolute operator path; root equals `TEST_AUDIT_INVOCATION_UUID`; subtree is null; expected-process and trace path/hashes match; and the sorted companion rows exactly equal dispatch evidence, audit prompt, and every child prompt/log/output/extraction path/hash. Also require a complete successful process-auditor log whose provider payload final line is exact `PASS`. Then freeze `$scratch_dir/TEST_AUDIT_NESTED_PROOF.json` under `test-audit-nested-proof-v1` with those exact proof paths/hashes, all three child artifact rows, and `verdict=PASS`. Run:
 
 ```bash
 python3 ~/ai/tools/operational_contracts.py validate-test-audit-proof \
@@ -541,7 +541,7 @@ Overall synthesis rules:
 - `PARTIAL` otherwise
 - Keep reasons concrete and short
 - Do not invent a fourth audit, a retry loop, or new infrastructure
-- Record `base_branch`, `base_ref`, full `base_sha`, `head_branch`, `head_ref`, full `head_sha`, merge-base SHA, diff SHA-256, and a SHA-256 of `local_coverage_command` in `TEST_AUDIT_GATE.md` so callers can reject differently bound evidence.
+- Record `base_branch`, `base_ref`, full `base_sha`, `head_branch`, `head_ref`, full `head_sha`, merge-base SHA, and diff SHA-256 in `TEST_AUDIT_GATE.md` so callers can reject differently bound evidence. In `pr-review` mode, also record the required SHA-256 of `local_coverage_command`. In `implementation` mode, record that hash only when the caller actually supplied a non-blank command; omit it when the input is absent and never invent a hash.
 - Record the expected-process and dispatch-evidence paths/hashes plus every distinct child log/output path/hash. Synthesis reads verdicts only from canonical `.md` outputs and process identity only from complete `.log` streams.
 - Before synthesis, require the current `TEST_AUDIT_NESTED_PROOF_VALIDATION.json` to equal the production validator's `VALID` decision for the current nested proof. After writing `TEST_AUDIT_GATE.md`, write `$scratch_dir/TEST_AUDIT_RESULT.json` under the schema below; never return a bare gate report as sufficient PR-review evidence.
 
@@ -549,7 +549,11 @@ Overall synthesis rules:
 
 ```yaml
 schema: test-audit-result-v2
-required_fields: [schema, status, mode, test_audit_invocation_uuid, base_branch, base_ref, base_sha, head_branch, head_ref, head_sha, merge_base_sha, diff_sha256, local_coverage_command_sha256, gate_report_path, gate_report_sha256, nested_proof_path, nested_proof_sha256, nested_proof_validation_path, nested_proof_validation_sha256, nested_process_proof]
+required_fields: [schema, status, mode, test_audit_invocation_uuid, base_branch, base_ref, base_sha, head_branch, head_ref, head_sha, merge_base_sha, diff_sha256, gate_report_path, gate_report_sha256, nested_proof_path, nested_proof_sha256, nested_proof_validation_path, nested_proof_validation_sha256, nested_process_proof]
+conditional_fields:
+  local_coverage_command_sha256:
+    pr-review: required-lowercase-sha256-of-required-nonblank-command
+    implementation: optional-lowercase-sha256-only-when-command-was-supplied
 status_values: [PASS, PARTIAL, FAIL]
 nested_process_proof_schema: test-audit-nested-proof-v1
 nested_process_proof_required_fields: [schema, test_audit_invocation_uuid, base_sha, head_sha, expected_process_path, expected_process_sha256, dispatch_evidence_path, dispatch_evidence_sha256, process_tree_path, process_tree_sha256, process_tree_audit_prompt_path, process_tree_audit_prompt_sha256, process_tree_audit_path, process_tree_audit_sha256, process_tree_audit_log_path, process_tree_audit_log_sha256, child_artifacts, verdict]
