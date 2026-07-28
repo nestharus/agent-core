@@ -958,7 +958,6 @@ When posting PR comments:
 | Fundamental approach is wrong | Run Phase 6 (proposal loop) |
 | Domain-specific claims need verification | Run Phase 7 (targeted research) |
 | Author responds to findings | Re-evaluate — update or resolve comments as appropriate |
-| PR is trivially small (<50 lines, single concern) | Skip scope/justification, but still run the test-audit gate plus audit+shortcut |
 
 ## Stop Conditions
 
