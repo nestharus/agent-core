@@ -496,7 +496,7 @@ curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
 ## Output Contract
 
 For `read`: print key, summary, status, assignee in a brief block.
-For `comment`: print the new comment ID + a confirmation line.
+For `comment`: when `operation` is omitted, print the new comment ID + a confirmation line; when `operation=comment-readback`, atomically write the producer log to `producer_log_path`, the readback projection to `producer_output_path`, and the `ticket-operation-result-v1` result to `operation_result_path`, then return that structured result.
 For `transition`: print before-status → after-status.
 For `search`: print one line per result (`KEY  status  summary`).
 For `create`: print the new key + browse URL.
