@@ -550,7 +550,7 @@ After all ticket-index rows are verified merged and ancestral to the refreshed f
 The final integrated reviewer is a mechanically dispatchable ad-hoc `gpt-xhigh` child. Write `${scratch_dir}/integrated-scope/round-<NN>/prompt.md`, then dispatch it through one parent-visible Bash-background tool invocation:
 
 ```python
-Bash(command='agents -m gpt-xhigh -p ${feature_worktree_path} -f ${scratch_dir}/integrated-scope/round-<NN>/prompt.md 2>&1 | tee ${scratch_dir}/integrated-scope/round-<NN>/review.log', run_in_background=True, description="Review integrated feature scope")
+Bash(command='agents -m gpt-xhigh -p "${feature_worktree_path}" -f "${scratch_dir}/integrated-scope/round-<NN>/prompt.md" 2>&1 | tee "${scratch_dir}/integrated-scope/round-<NN>/review.log"', run_in_background=True, description="Review integrated feature scope")
 ```
 
 After its task notification arrives, require exactly one child invocation marker distinct from the feature and route UUIDs. The prompt and runner log are transient non-contract scratch outputs and are not part of `wrote_lines`. The prompt supplies the current diff and immutable `${planning_dir}/feature-integrated-review-input.json`; all other scope, route, merge, evidence, acceptance, QA, prototype, and process paths are consumed only through the manifest's exact hashed entries, with canonical audit history added from round two. The only permitted repository write is `${planning_dir}/integrated-scope-verdict.md`, whose header is `schema=feature-integrated-scope-verdict-v1` and binds reviewer UUID/model, branches/full SHAs, exact input path/hash, coverage results, and `verdict=PASS|FAIL`. Missing, malformed, non-independent, or differently bound output is `BLOCKED:integrated-scope-review-invalid`.
