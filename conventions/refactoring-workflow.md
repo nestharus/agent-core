@@ -20,7 +20,7 @@ Do not use refactoring as a substitute for RCA, PR review, release, roadmap, or 
 
 ## Output shape
 
-Refactoring output across multiple WUs can be a series of small targeted PRs. Each WU owns exactly one single-commit PR bounded to a named slice and targeted at the caller-provided `integration_branch_ref`; the caller-provided `trunk_branch` is the eventual buffer PR base. Never infer either identity from the repository default branch. The buffer can accumulate separately dispatched refactoring WUs before a periodic feature-style PR moves the buffer to trunk.
+Refactoring output across multiple WUs can be a series of small targeted PRs. Each WU owns exactly one PR bounded to a named slice, with small, testable, single-concern commits, and targeted at the caller-provided `integration_branch_ref`; the caller-provided `trunk_branch` is the eventual buffer PR base. Never infer either identity from the repository default branch. The buffer can accumulate separately dispatched refactoring WUs before a periodic feature-style PR moves the buffer to trunk.
 
 Separately dispatched WU PRs pull from the current buffer frontier so disjoint, non-overlapping slices can proceed independently. When slices overlap, serialize the WUs through the buffer rather than relying on ad hoc rebases.
 
