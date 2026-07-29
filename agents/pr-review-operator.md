@@ -680,7 +680,13 @@ python3 ~/ai/tools/operational_contracts.py validate-test-audit-result \
 
 Require exact `status=VALID` and hash the result, nested expected manifest, nested dispatch evidence, nested root trace, process-audit prompt/report/log, nested proof, child prompt/log/output/extraction artifacts, and PR revalidation output as mandatory companions of the outer node. A plausible gate report, successful outer invocation, or artifact listing without this current independent nested PASS is `BLOCKED:pr-review-test-audit-nested-proof-failed`.
 
-Parse exactly one invocation marker from each complete log and freeze actual UUIDs plus prompt/log/output SHA-256 values in `$WORK_DIR/process-proof/initial-v1/dispatch-evidence.json`; parse no UUID from a canonical output and no verdict from a log. Include the current `TEST_AUDIT_RESULT.json`, its production revalidation, and every nested proof artifact/hash in the outer test-audit companion row. Capture `agents trace --json ${pr_review_invocation_uuid}` at `$WORK_DIR/process-proof/initial-v1/process-tree.json`. Dispatch the independent named auditor in blocking mode with `agents -a ${agents_dir}/process-tree-auditor.md -p "$PROJECT_DIR" -f "$WORK_DIR/process-proof/initial-v1/process-tree-audit.prompt.md" 2>&1 | tee "$WORK_DIR/process-proof/initial-v1/process-tree-audit.log"`; its prompt requires child-owned report `$WORK_DIR/process-proof/initial-v1/process-tree-audit.md`. Require the canonical header-first report's first line `# Process Tree Audit`, five identity lines, and exactly one `Verdict:` line whose complete value is `Verdict: PASS`. Its one producer-owned `PROCESS_TREE_AUDIT_BINDING_JSON` must record exact `mode=blocking`, bind this report identity without a self hash, exact root/null subtree, expected-process and trace path/hashes, and the sorted complete companion path/hash set. Also require a complete successful auditor log and provider payload final line `PASS` before Phase 5. Omitted mandatory nodes, duplicate/failed/stale/wrong-parent/wrong-model children, missing/invalid nested test-audit proof, model overrides on named operators, aliasing log/output paths, or hash mismatch are `BLOCKED:pr-review-process-topology-failed`; synthesis may not infer completion from files alone or require a caller-specific report layout.
+Parse exactly one invocation marker from each complete log and freeze actual UUIDs plus prompt/log/output SHA-256 values in `$WORK_DIR/process-proof/initial-v1/dispatch-evidence.json`; parse no UUID from a canonical output and no verdict from a log. Include the current `TEST_AUDIT_RESULT.json`, its production revalidation, and every nested proof artifact/hash in the outer test-audit companion row. Capture `agents trace --json ${pr_review_invocation_uuid}` at `$WORK_DIR/process-proof/initial-v1/process-tree.json`. Dispatch the independent named auditor in blocking mode through one parent-visible Bash-background tool invocation:
+
+```python
+Bash(command='agents -a ${agents_dir}/process-tree-auditor.md -p "$PROJECT_DIR" -f "$WORK_DIR/process-proof/initial-v1/process-tree-audit.prompt.md" 2>&1 | tee "$WORK_DIR/process-proof/initial-v1/process-tree-audit.log"', run_in_background=True, description="Audit initial PR review process tree")
+```
+
+After its task notification arrives, consume the complete log and the child-owned report required by its prompt at `$WORK_DIR/process-proof/initial-v1/process-tree-audit.md`. Require the canonical header-first report's first line `# Process Tree Audit`, five identity lines, and exactly one `Verdict:` line whose complete value is `Verdict: PASS`. Its one producer-owned `PROCESS_TREE_AUDIT_BINDING_JSON` must record exact `mode=blocking`, bind this report identity without a self hash, exact root/null subtree, expected-process and trace path/hashes, and the sorted complete companion path/hash set. Also require a complete successful auditor log and provider payload final line `PASS` before Phase 5. Omitted mandatory nodes, duplicate/failed/stale/wrong-parent/wrong-model children, missing/invalid nested test-audit proof, model overrides on named operators, aliasing log/output paths, or hash mismatch are `BLOCKED:pr-review-process-topology-failed`; synthesis may not infer completion from files alone or require a caller-specific report layout.
 
 ## Process Proof Schema
 
@@ -815,7 +821,13 @@ Synthesize all findings into a proposal prompt that:
 - Points the agent at relevant codebase files to read
 - Requires canonical first line `# Recommended Implementation`
 
-Launch: `agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" 2>&1 | tee "$WORK_DIR/result-proposal-round-<NN>.log"`. After notification, extract to distinct canonical `$WORK_DIR/result-proposal-round-<NN>.md` and use that round-qualified path in every risk prompt.
+Launch the proposal writer through one parent-visible Bash-background tool invocation:
+
+```python
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/proposal.md" 2>&1 | tee "$WORK_DIR/result-proposal-round-<NN>.log"', run_in_background=True, description="Write PR review proposal")
+```
+
+After its task notification arrives, extract to distinct canonical `$WORK_DIR/result-proposal-round-<NN>.md` and use that round-qualified path in every risk prompt.
 
 #### 6b. Risk-Assess the Proposal (3x `gpt-xhigh`)
 
@@ -863,12 +875,11 @@ This recommendation went through the full pipeline: research, proposal,
 If the PR touches a domain that needs external verification (compliance,
 security standards, protocol implementations), first write and hash `$WORK_DIR/process-proof/domain-<slug>-v1/expected-process.json`. The cumulative versioned projection preserves all initial and accepted proposal-round nodes and adds the domain child with `model=gpt-high`, exact prompt/log/output paths, input hashes, and pinned provider OIDs. Only then run targeted research:
 
-```bash
-agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/research-<domain>.md" \
-  2>&1 | tee "$WORK_DIR/result-<domain>.log"
+```python
+Bash(command='agents -m gpt-high -p "$PROJECT_DIR" -f "$WORK_DIR/research-<domain>.md" 2>&1 | tee "$WORK_DIR/result-<domain>.log"', run_in_background=True, description="Research PR domain")
 ```
 
-The prompt requires canonical first line `# Domain Research: <domain>`. After notification, extract to distinct `$WORK_DIR/result-<domain>.md`. After dispatch, freeze the actual marker UUID and distinct prompt/log/output hashes, capture a current root trace, and require an independent process-tree auditor in blocking mode with separate `.log` and child-owned `.md`, a canonical header-first report whose one verdict is `Verdict: PASS`, exact binding `mode=blocking`, an exact producer-owned report/root/expected/trace/companion machine binding, and successful envelope payload final line `PASS`. Omitted, wrong-model, stale, aliased, or hash-mismatched domain children cannot contribute to posting. Prepare each passing domain finding as a separate comment payload with clear framing; do not post before Phase 8.
+The prompt requires canonical first line `# Domain Research: <domain>`. After its task notification arrives, extract to distinct `$WORK_DIR/result-<domain>.md`. After dispatch, freeze the actual marker UUID and distinct prompt/log/output hashes, capture a current root trace, and require an independent process-tree auditor in blocking mode with separate `.log` and child-owned `.md`, a canonical header-first report whose one verdict is `Verdict: PASS`, exact binding `mode=blocking`, an exact producer-owned report/root/expected/trace/companion machine binding, and successful envelope payload final line `PASS`. Omitted, wrong-model, stale, aliased, or hash-mismatched domain children cannot contribute to posting. Prepare each passing domain finding as a separate comment payload with clear framing; do not post before Phase 8.
 
 ### Phase 8: Final Provider Recheck, Post, and Stable Envelope
 
