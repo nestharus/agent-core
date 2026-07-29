@@ -7099,6 +7099,18 @@ def test_test_audit_validates_and_uses_explicit_base_ref_everywhere():
     assert 'git worktree add --detach "$base_worktree" "$merge_base_sha"' in coverage
     assert "base-coverage-summary.json" in coverage
     assert "main-coverage-summary.json" not in coverage
+    assert "BLOCKED:coverage-worktree-path-exists" in coverage
+    assert 'git worktree add --detach "$head_worktree" "$head_sha" || {' in coverage
+    assert (
+        'git worktree add --detach "$base_worktree" "$merge_base_sha" || {'
+        in coverage
+    )
+    assert "BLOCKED:head-local-coverage-command-failed" in coverage
+    assert "BLOCKED:base-local-coverage-command-failed" in coverage
+    assert "BLOCKED:head-coverage-summary-copy-failed" in coverage
+    assert "BLOCKED:head-lcov-copy-failed" in coverage
+    assert "BLOCKED:base-coverage-summary-copy-failed" in coverage
+    assert "BLOCKED:base-lcov-copy-failed" in coverage
 
 
 def test_test_audit_process_prompt_and_binding_use_the_same_absolute_operator():

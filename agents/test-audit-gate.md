@@ -411,23 +411,51 @@ cleanup_coverage_worktrees() {
   git -C "$repo_root" worktree remove --force "$head_worktree" 2>/dev/null || true
   git -C "$repo_root" worktree remove --force "$base_worktree" 2>/dev/null || true
 }
+if [ -e "$head_worktree" ] || [ -L "$head_worktree" ] || [ -e "$base_worktree" ] || [ -L "$base_worktree" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:coverage-worktree-path-exists\n'
+  exit 0
+fi
 trap cleanup_coverage_worktrees EXIT
-git worktree add --detach "$head_worktree" "$head_sha"
-git worktree add --detach "$base_worktree" "$merge_base_sha"
+git worktree add --detach "$head_worktree" "$head_sha" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-coverage-worktree-add-failed\n'
+  exit 0
+}
+git worktree add --detach "$base_worktree" "$merge_base_sha" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-coverage-worktree-add-failed\n'
+  exit 0
+}
 (
-  cd "$head_worktree"
-  mkdir -p coverage
-  bash -c "$local_coverage_command"
-)
-cp "$head_worktree/coverage/coverage-summary.json" "$scratch_dir/pr-coverage-summary.json"
-cp "$head_worktree/coverage/lcov.info"             "$scratch_dir/pr-lcov.info"
+  cd "$head_worktree" &&
+    mkdir -p coverage &&
+    bash -c "$local_coverage_command"
+) || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-local-coverage-command-failed\n'
+  exit 0
+}
+cp "$head_worktree/coverage/coverage-summary.json" "$scratch_dir/pr-coverage-summary.json" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-coverage-summary-copy-failed\n'
+  exit 0
+}
+cp "$head_worktree/coverage/lcov.info" "$scratch_dir/pr-lcov.info" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-lcov-copy-failed\n'
+  exit 0
+}
 (
-  cd "$base_worktree"
-  mkdir -p coverage
-  bash -c "$local_coverage_command"
-)
-cp "$base_worktree/coverage/coverage-summary.json" "$scratch_dir/base-coverage-summary.json"
-cp "$base_worktree/coverage/lcov.info"             "$scratch_dir/base-lcov.info"
+  cd "$base_worktree" &&
+    mkdir -p coverage &&
+    bash -c "$local_coverage_command"
+) || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-local-coverage-command-failed\n'
+  exit 0
+}
+cp "$base_worktree/coverage/coverage-summary.json" "$scratch_dir/base-coverage-summary.json" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-coverage-summary-copy-failed\n'
+  exit 0
+}
+cp "$base_worktree/coverage/lcov.info" "$scratch_dir/base-lcov.info" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-lcov-copy-failed\n'
+  exit 0
+}
 cleanup_coverage_worktrees
 trap - EXIT
 ```
