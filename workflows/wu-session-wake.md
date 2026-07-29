@@ -6,7 +6,7 @@ workflow_dispatch_contract:
   inputs:
     - "sessions.active-wake.json path"
     - "poller output from tools/pr-batch-poller"
-    - "per-project worktree and planning roots"
+    - "repo_root plus per-project worktree and planning roots"
     - "caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION"
     - "session rows carrying base_branch, pr_open_base_sha, and optional pre_merge_base_sha"
   expectations:
@@ -44,7 +44,7 @@ orchestrator: "root wu-session-wake invocation (scheduler-triggered or manual)"
 inputs:
   - "sessions.active-wake.json path"
   - "poller output from tools/pr-batch-poller"
-  - "per-project worktree and planning roots"
+  - "repo_root plus per-project worktree and planning roots"
   - "caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION"
   - "session rows carrying base_branch, pr_open_base_sha, and optional pre_merge_base_sha"
 expectations:
