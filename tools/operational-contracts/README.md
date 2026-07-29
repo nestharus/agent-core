@@ -26,4 +26,4 @@ Route validation is split between common `validate-route-process-proof --feature
 
 ## Anti-Scope
 
-The module validates caller-supplied artifacts and writes validation results. It does not dispatch agents, query providers, mutate pull requests or tickets, or perform merges.
+The module validates caller-supplied artifacts and writes validation results. It also allocates immutable PR-review run roots, writes their manifest and ownership records, and safely removes clean, owned PR-review worktrees after terminal evidence exists. It does not dispatch agents, query providers, mutate pull requests or tickets, or perform merges.
