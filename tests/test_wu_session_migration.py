@@ -32,9 +32,12 @@ C = "c" * 40
 D = "d" * 40
 E = "e" * 40
 REAL_INVENTORY = Path(
-    "/home/nes/projects/agent-runner/planning/"
-    "hourly-suspicious-process-investigator-feature/.scratch/"
-    "age-260-session-migration-inventory.json"
+    os.environ.get(
+        "AGE_260_REVIEWED_INVENTORY",
+        "/home/nes/projects/agent-runner/planning/"
+        "hourly-suspicious-process-investigator-feature/.scratch/"
+        "age-260-session-migration-inventory.json",
+    )
 )
 REAL_INVENTORY_SHA256 = "f48f87265635fb362a37294071cef7f8d016c5ad502a4cda27491a835f262622"
 FROZEN_REAL_SQUASH_EVIDENCE = (
