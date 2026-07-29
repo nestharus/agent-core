@@ -258,7 +258,7 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
 
 ## Procedure
 
-1. Freshly fetch `refs/heads/${base}:refs/remotes/origin/${base}`. Require `base_ref == refs/remotes/origin/${base}`, `git rev-parse ${base_ref}^{commit} == ${base_sha}`, `git rev-parse ${head_ref}^{commit} == ${head_sha}`, and both SHAs to be full commit ids. Read `git -C ${repo_root} diff ${base_sha}...${head_sha} --stat` and the full pinned diff. Any mismatch is `BLOCKED:pinned-pr-identity-mismatch`; do not substitute a short/local branch.
+1. Freshly run `git -C ${repo_root} fetch origin refs/heads/${base}:refs/remotes/origin/${base}`. Require `base_ref == refs/remotes/origin/${base}`, `git -C ${repo_root} rev-parse ${base_ref}^{commit} == ${base_sha}`, `git -C ${repo_root} rev-parse ${head_ref}^{commit} == ${head_sha}`, and both SHAs to be full commit ids. Read `git -C ${repo_root} diff ${base_sha}...${head_sha} --stat` and the full pinned diff. Any mismatch is `BLOCKED:pinned-pr-identity-mismatch`; do not substitute a short/local branch.
 2. Read each `context_files` path (if any) to understand intent. Don't cite them in the body.
 3. Verify any `merged_refs` inputs:
    - For a PR number `<n>`: query `state,mergedAt,baseRefName,mergeCommit`; require `MERGED`, non-null `mergeCommit.oid`, `baseRefName == ${base}`, and `git merge-base --is-ancestor <mergeCommit.oid> ${base_sha}`. Otherwise drop it.
