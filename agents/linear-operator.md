@@ -28,6 +28,7 @@ inputs:
     description: "body"
   - name: operation
     type: enum
+    options: [comment-readback]
     required: false
     default_source: caller
     description: "When supplied, must be comment-readback; omission selects ordinary comment behavior."

@@ -68,6 +68,7 @@ inputs:
     description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
   - name: operation
     type: enum
+    options: [comment-readback]
     required: false
     default_source: caller
     description: When supplied, must be comment-readback; omission selects ordinary comment behavior.

@@ -5750,6 +5750,8 @@ def test_ticket_operators_share_closed_comment_readback_schema_and_contract_inpu
             item for item in contract["inputs"] if item["name"] == "operation"
         )
         assert operation_input["type"] == "enum"
+        assert operation_input["options"] == ["comment-readback"]
+        assert operation_input["required"] is False
         assert "must be comment-readback" in operation_input["description"]
         required_inputs = _section(
             f"agents/{backend}-operator.md", "## Required Inputs"
