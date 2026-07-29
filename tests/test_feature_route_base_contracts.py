@@ -2710,6 +2710,50 @@ def test_feature_route_manifest_cli_writes_validated_output(tmp_path: Path):
     assert result["topological_order"] == ["AGE-257", "AGE-256", "AGE-258", "AGE-259"]
 
 
+def test_feature_route_manifest_cli_blocks_on_output_io_error(monkeypatch, capsys):
+    def fail_write(*_args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(_ROUTE_MODULE, "normalize_route_source", lambda **_kwargs: {})
+    monkeypatch.setattr(_ROUTE_MODULE, "write_manifest", fail_write)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "feature_route_manifest.py",
+            "--ticket-route-map-json",
+            "[]",
+            "--feature-id",
+            "AGE-255",
+            "--feature-scope-path",
+            "/scope.md",
+            "--feature-branch",
+            "feature/route",
+            "--trunk-branch",
+            "main",
+            "--manager-flavor",
+            "manager-max",
+            "--ticket-system",
+            "linear",
+            "--scoped-ticket",
+            "AGE-256",
+            "--child-worktrees-root",
+            "/worktrees",
+            "--planning-dir",
+            "/planning",
+            "--scratch-dir",
+            "/scratch",
+            "--output",
+            "/route-manifest.json",
+        ],
+    )
+
+    assert _ROUTE_MODULE.main() == 2
+    assert capsys.readouterr().out == (
+        "BLOCKED:invalid-ticket-route-manifest: disk full\n"
+    )
+
+
 def test_inline_implementation_and_refactoring_records_share_successor_route_graph(
     tmp_path: Path,
 ):

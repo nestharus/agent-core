@@ -833,7 +833,7 @@ def main() -> int:
             scratch_dir=args.scratch_dir,
         )
         write_manifest(args.output, manifest)
-    except RouteManifestError as error:
+    except (RouteManifestError, OSError) as error:
         print(f"BLOCKED:invalid-ticket-route-manifest: {error}")
         return 2
     print(f"feature-route-manifest: normalized; output={args.output}")
