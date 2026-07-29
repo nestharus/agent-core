@@ -180,6 +180,7 @@ outputs:
   - ${planning_dir}/feature-final-evidence.json
   - ${planning_dir}/final-pr-handoff.json
   - ${planning_dir}/feature-outcome.json
+  - ${audit_history_path} from review round two onward
 errors:
 - class: BLOCKED
   cause: Required invocation or route data is missing, unreadable, contradictory, stale, or unsafe.

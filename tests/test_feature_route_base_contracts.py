@@ -142,6 +142,7 @@ FEATURE_ARTIFACTS = {
     "${planning_dir}/feature-final-evidence.json",
     "${planning_dir}/final-pr-handoff.json",
     "${planning_dir}/feature-outcome.json",
+    "${audit_history_path} from review round two onward",
 }
 REFACTOR_INPUT_NAMES = {
     "jira_issue_key",
@@ -5403,9 +5404,12 @@ def test_feature_artifacts_are_stable_and_mirrored():
     )
     for path in FEATURE_ARTIFACTS:
         assert path in _read("agents/feature-orchestrator.md")
-        if not path.endswith("feature-audit-history.md"):
+        if not path.startswith("${audit_history_path}"):
             assert Path(path).name in artifact_section
-        assert Path(path).name in workflow_outputs
+        if path.startswith("${audit_history_path}"):
+            assert "feature-audit-history.md when review reaches round two" in workflow_outputs
+        else:
+            assert Path(path).name in workflow_outputs
 
 
 def test_feature_process_tree_join_is_independent_attempt_scoped_and_cumulative():
@@ -7146,6 +7150,7 @@ def test_apply_gate_process_tree_report_is_required_end_to_end():
     assert report_input["default_source"] == "caller"
     output = contract["outputs"][0]
     assert "${process_tree_report_path}" in output["wrote_lines"]
+    assert "${audit_history_path}" in output["wrote_lines"]
     assert "required process_tree_report_path" in output["success_shape"]
 
     output_contract = _section("agents/apply-gate-set.md", "## Output contract")

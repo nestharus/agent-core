@@ -48,6 +48,7 @@ outputs:
   - ${process_tree_path}
   - ${process_tree_report_path}
   - ${result_path}
+  - ${audit_history_path}
 errors:
 - {class: BLOCKED, cause: 'Required current evidence is missing, malformed, non-accepting, or topologically invalid.', recovery: Repair or rerun the named gate subtree.}
 - {class: NEEDS_INPUT, cause: 'A user-owned authorization, scope, or value decision is absent.', recovery: Answer the emitted question artifact and resume.}
