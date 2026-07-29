@@ -164,10 +164,10 @@ inputs:
   default_source: base
   description: needs_input or rerun_review_first when imported evidence is stale.
 - name: proposer_fix_scope
-  type: path_list_or_target_list
+  type: path_list
   required: false
   default_source: caller
-  description: Optional audited target items that bound proposer remediation.
+  description: Optional audited target paths identifying the target items that bound proposer remediation.
 - name: workflow_file
   type: path
   required: false
