@@ -40,7 +40,7 @@ inputs:
     type: path_list
     required: true
     default_source: caller
-    description: "Prompt, log, gate, output, and status artifacts needed to interpret the process tree."
+    description: "Prompt, log, gate, output, and status artifacts needed to interpret the process tree; the canonical report path is forbidden."
   - name: audit_history_path
     type: path
     required: false
@@ -125,7 +125,7 @@ You audit execution validity, not design correctness, code quality, or human app
 - `root_invocation_uuid=<uuid>` (required) - invocation UUID used to produce the trace.
 - `subtree_root_uuid=<uuid>` (optional) - node UUID that scopes the audit to a subtree inside the saved trace. When absent, audit from `root_invocation_uuid`.
 - `expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs. Canonical-output rows live inside this manifest, not as a separate top-level input.
-- `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree.
+- `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree. Resolve each path to its canonical absolute identity and reject any row equal to the resolved `report_path`.
   The companion artifacts must not include audited-run narrative notes or rationale for skipped work.
 - `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context and qualifying canonical-output deletion or replacement lineage evidence. This operator reads it but does not update it.
 - `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.
@@ -247,6 +247,8 @@ The report contains exactly one `## Machine Binding` section and exactly one `PR
 
 ### Step 1: Load Inputs
 
+Resolve `report_path` and every `companion_artifacts` row once against the invocation working directory to canonical absolute paths. Before reading or hashing artifacts, return `BLOCKED:self-referential-companion-artifact` if any companion identity equals the report identity.
+
 Read `operator_file`, `process_tree_path`, `expected_process`, every non-log `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied. For each log entry, verify the path and inspect only query-relevant bounded regions; do not load an entire long log by default. Load ordinary expected nodes and any canonical rows containing `canonical_output_path`, `expected_verdict`, and optional `expected_sha256`; when `audit_history_path` is present, keep its deletion/replacement entries available for Step 4.
 
 Validate `mode` as `blocking` or `advisory`. Return `BLOCKED:invalid-mode` for any other value.
@@ -342,7 +344,7 @@ Do not write audit history. Emit this report as a role output. The caller uses `
 
 ### Step 7: Write Report
 
-Resolve `report_path` once against the invocation working directory to a canonical absolute path, write the report there, and use that same resolved path in `report_identity.path`. Hash `operator_file`, `audit_history_path` when supplied, `expected_process`, `process_tree_path`, and every `companion_artifacts` row from their current bytes, then write the canonical machine binding with the exact validated `mode` and without a hash of the report itself. Do not emit `PASS` if any hashed input changed between inspection and report emission. When `stdout_report_copy=true`, read the completed report back from the resolved path and emit those exact bytes as the complete provider response; do not add a sentinel, prefix, suffix, or code fence. The caller extracts provider-only stdout and requires byte equality before accepting the report.
+Write the report to the canonical `report_path` resolved in Step 1 and use that same path in `report_identity.path`. Hash `operator_file`, `audit_history_path` when supplied, `expected_process`, `process_tree_path`, and every validated canonical `companion_artifacts` row from their current bytes, then write the canonical machine binding with the exact validated `mode` and without a hash of the report itself. Do not emit `PASS` if any hashed input changed between inspection and report emission. When `stdout_report_copy=true`, read the completed report back from the resolved path and emit those exact bytes as the complete provider response; do not add a sentinel, prefix, suffix, or code fence. The caller extracts provider-only stdout and requires byte equality before accepting the report.
 
 ## Output Format
 

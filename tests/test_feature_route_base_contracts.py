@@ -7627,7 +7627,12 @@ def test_process_tree_auditor_declares_one_canonical_report_and_binding_schema()
     ):
         assert field in machine_binding
     assert "deliberately has no report hash" in machine_binding
+    load_inputs = _section("agents/process-tree-auditor.md", "### Step 1: Load Inputs")
+    assert "BLOCKED:self-referential-companion-artifact" in load_inputs
+    assert "if any companion identity equals the report identity" in load_inputs
     sidecar = _load_yaml("contracts/operators/process-tree-auditor.yaml")
+    companion_input = _input(sidecar, "companion_artifacts")
+    assert "canonical report path is forbidden" in companion_input["description"]
     assert "Header-first # Process Tree Audit report" in sidecar["outputs"][0][
         "success_shape"
     ]

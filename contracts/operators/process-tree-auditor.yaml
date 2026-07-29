@@ -32,7 +32,7 @@ inputs:
   type: path_list
   required: true
   default_source: caller
-  description: Prompt, log, gate, output, and status artifacts needed to interpret the process tree.
+  description: Prompt, log, gate, output, and status artifacts needed to interpret the process tree; the canonical report path is forbidden.
 - name: audit_history_path
   type: path
   required: false
