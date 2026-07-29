@@ -7904,6 +7904,10 @@ def test_pr_review_detached_posting_targets_exact_pr_and_repo_with_fake_gh(
     assert 'gh api --method GET "repos/${REPO}/issues/${PR}/comments"' in phase_8
     assert "gh pr review --" not in phase_8
     assert "gh pr comment --" not in phase_8
+    assert "Reuse exactly one matching review ID and URL" in phase_8
+    assert "Reuse exactly one matching comment ID and URL" in phase_8
+    assert "BLOCKED:duplicate-pr-review-posting-identity" in phase_8
+    assert "BLOCKED:duplicate-pr-comment-posting-identity" in phase_8
 
     repo = tmp_path / "detached"
     repo.mkdir()
