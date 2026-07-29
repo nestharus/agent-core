@@ -81,17 +81,17 @@ inputs:
     type: path
     required: false
     default_source: caller
-    description: Canonical ticket-operation-result-v1 path for comment-readback.
+    description: Required for operation=comment-readback; canonical ticket-operation-result-v1 path.
   - name: producer_log_path
     type: path
     required: false
     default_source: caller
-    description: Distinct producer-owned closed ticket-client operation log path.
+    description: Required for operation=comment-readback; distinct producer-owned closed ticket-client operation log path.
   - name: producer_output_path
     type: path
     required: false
     default_source: caller
-    description: Distinct producer-owned exact remote readback output path.
+    description: Required for operation=comment-readback; distinct producer-owned exact remote readback output path.
   - name: target_status
     type: string
     required: false
@@ -173,7 +173,7 @@ outputs:
     wrote_lines: ["${scratch_dir}/ticket.md when output_path is supplied"]
   - task: comment
     success_shape: Print the new comment ID, or return producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
-    wrote_lines: ["operation_result_path, producer_log_path, and producer_output_path for operation=comment-readback"]
+    wrote_lines: ["${operation_result_path}", "${producer_log_path}", "${producer_output_path}"]
   - task: transition
     success_shape: Print before-status to after-status.
     wrote_lines: []
