@@ -55,7 +55,7 @@ inputs:
     type: path
     required: false
     default_source: base
-    description: "Output report path."
+    description: "Output report path; resolve relative values against the invocation working directory to one canonical absolute path before writing."
   - name: stdout_report_copy
     type: bool
     required: false
@@ -129,7 +129,7 @@ You audit execution validity, not design correctness, code quality, or human app
   The companion artifacts must not include audited-run narrative notes or rationale for skipped work.
 - `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context and qualifying canonical-output deletion or replacement lineage evidence. This operator reads it but does not update it.
 - `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.
-- `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path.
+- `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path. Resolve it once against the invocation working directory to a canonical absolute path before writing, and use only that resolved path as the report identity.
 - `stdout_report_copy=<true|false>` (optional, default `false`) - when true, after atomically writing `report_path`, emit those exact report bytes as the complete provider stdout instead of the ordinary terminal sentinel. This is used only when a caller will fail-closed extract and byte-compare the provider output to the consumed report.
 
 Every report includes the canonical machine binding declared below. A caller that requires a specific hash-bound companion set supplies those artifacts through `companion_artifacts` and validates the producer-owned binding; it does not request or parse a caller-specific report layout.
@@ -226,7 +226,7 @@ The report contains exactly one `## Machine Binding` section and exactly one `PR
 }
 ```
 
-`mode` is the exact validated audit mode used for the decision and is always present, including when the default `blocking` mode was selected. `report_identity.path` is the exact canonical report path and deliberately has no report hash: the report never hash-references itself. `operator_file` is the canonical absolute path of the audited procedure and must equal `operator_artifact.path`; `operator_artifact` also binds that procedure's current bytes. `audit_history` is JSON `null` when no history was supplied and otherwise uses the same path/SHA-256 artifact shape. `subtree_root_uuid` is JSON `null` when no subtree was requested. Operator, audit-history, expected-process, process-tree, and companion paths are canonical absolute identities with current lowercase SHA-256 values; companion rows are unique and sorted lexically by path. The binding includes every supplied companion and no report path among hashed artifacts. Caller-specific identity such as base/head SHAs, run IDs, dispatch joins, or child artifact arrays belongs in the hash-bound expected-process or companion artifacts rather than new binding fields.
+`mode` is the exact validated audit mode used for the decision and is always present, including when the default `blocking` mode was selected. `report_identity.path` is the resolved canonical absolute report path and deliberately has no report hash: the report never hash-references itself. `operator_file` is the canonical absolute path of the audited procedure and must equal `operator_artifact.path`; `operator_artifact` also binds that procedure's current bytes. `audit_history` is JSON `null` when no history was supplied and otherwise uses the same path/SHA-256 artifact shape. `subtree_root_uuid` is JSON `null` when no subtree was requested. Operator, audit-history, expected-process, process-tree, and companion paths are canonical absolute identities with current lowercase SHA-256 values; companion rows are unique and sorted lexically by path. The binding includes every supplied companion and no report path among hashed artifacts. Caller-specific identity such as base/head SHAs, run IDs, dispatch joins, or child artifact arrays belongs in the hash-bound expected-process or companion artifacts rather than new binding fields.
 
 ## Non-Negotiables
 
@@ -342,7 +342,7 @@ Do not write audit history. Emit this report as a role output. The caller uses `
 
 ### Step 7: Write Report
 
-Write `report_path`. Hash `operator_file`, `audit_history_path` when supplied, `expected_process`, `process_tree_path`, and every `companion_artifacts` row from their current bytes, then write the canonical machine binding with the exact validated `mode` and without a hash of `report_path` itself. Do not emit `PASS` if any hashed input changed between inspection and report emission. When `stdout_report_copy=true`, read the completed report back and emit those exact bytes as the complete provider response; do not add a sentinel, prefix, suffix, or code fence. The caller extracts provider-only stdout and requires byte equality before accepting the report.
+Resolve `report_path` once against the invocation working directory to a canonical absolute path, write the report there, and use that same resolved path in `report_identity.path`. Hash `operator_file`, `audit_history_path` when supplied, `expected_process`, `process_tree_path`, and every `companion_artifacts` row from their current bytes, then write the canonical machine binding with the exact validated `mode` and without a hash of the report itself. Do not emit `PASS` if any hashed input changed between inspection and report emission. When `stdout_report_copy=true`, read the completed report back from the resolved path and emit those exact bytes as the complete provider response; do not add a sentinel, prefix, suffix, or code fence. The caller extracts provider-only stdout and requires byte equality before accepting the report.
 
 ## Output Format
 
