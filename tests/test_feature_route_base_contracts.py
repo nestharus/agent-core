@@ -7207,6 +7207,20 @@ def test_pr_review_requires_non_blank_coverage_command_before_provider_verificat
     assert "${local_coverage_command//[[:space:]]/}" in phase_0
 
 
+def test_pr_review_rejects_invalid_runtime_identity_before_provider_access():
+    phase_0 = _between(
+        "agents/pr-review-operator.md",
+        "### Phase 0: Fetch the PR\n",
+        "### Phase 1: Risk Assessment (3x parallel)\n",
+    )
+    blocker = "BLOCKED:runtime-invocation-identity-unavailable"
+    assert blocker in phase_0
+    assert phase_0.index(blocker) < phase_0.index("gh pr view")
+    assert phase_0.index(blocker) < phase_0.index("init-pr-review-run")
+    assert "object_pairs_hook=unique_object" in phase_0
+    assert "str(uuid.UUID(invocation_uuid)) != invocation_uuid" in phase_0
+
+
 def test_pr_review_rejects_non_open_pr_before_run_allocation():
     phase_0 = _between(
         "agents/pr-review-operator.md",

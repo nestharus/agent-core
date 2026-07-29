@@ -209,7 +209,28 @@ SOURCE_REPO_ROOT=${repo_root}
 REPO="${repo:-$(git -C "$SOURCE_REPO_ROOT" remote get-url origin | sed -E 's#(git@[^:]+:|https://[^/]+/)##; s/\\.git$//')}"
 PR=<pr_number>
 REVIEW_ROOT=${review_dir}
-PR_REVIEW_INVOCATION_UUID=$(printf '%s' "$OULIPOLY_PARENT_INVOCATION" | jq -er '.id')
+if ! PR_REVIEW_INVOCATION_UUID=$(printf '%s' "${OULIPOLY_PARENT_INVOCATION-}" | python3 -c '
+import json
+import sys
+import uuid
+
+def unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate key")
+        value[key] = item
+    return value
+
+envelope = json.load(sys.stdin, object_pairs_hook=unique_object)
+invocation_uuid = envelope.get("id") if isinstance(envelope, dict) else None
+if not isinstance(invocation_uuid, str) or str(uuid.UUID(invocation_uuid)) != invocation_uuid:
+    raise ValueError("id must be a canonical UUID")
+print(invocation_uuid)
+'); then
+  printf 'BLOCKED:runtime-invocation-identity-unavailable\n' >&2
+  exit 1
+fi
 
 if [ -z "${base_branch+x}" ] || [ -z "${base_branch//[[:space:]]/}" ] \
   || [ -z "${base_ref+x}" ] || [ -z "${base_ref//[[:space:]]/}" ] \
@@ -307,7 +328,7 @@ Skim `diff.txt` to understand the actual changes — this is what all prompts wi
 
 Before allocating a run, launching children, or posting, require the exact PR number/URL and `state=OPEN`; closed, merged, or unknown state is `BLOCKED:pr-not-reviewable`. Validate every caller-supplied base/head branch/SHA against provider state and resolve every supplied ref to the same OID before replacing it with this run's private refs; empty, missing, unresolvable, or mismatched values are `BLOCKED:invalid-base-ref` or `BLOCKED:invalid-head-ref` with no fallback. Validate non-blank `local_coverage_command` before fanout.
 
-Derive `pr_review_invocation_uuid` only from one valid `OULIPOLY_PARENT_INVOCATION`. `init-pr-review-run` atomically creates a never-before-used root whose `run_id` contains the exact PR number, full base OID, full head OID, and invocation UUID. It also creates explicit worktree ownership and unique `refs/pr-review/${PR}/runs/${run_id}/{base,head}` identities. Fetch both refs with `--force` so a force-pushed pull head is accepted into a new exact-run ref without rewriting any older run ref. Refuse an existing run root instead of resuming or deleting it. Verify detached `HEAD == $HEAD_SHA` before fanout. Expected-process declarations use stable roles; actual child UUIDs are joined from complete logs after dispatch. All child `-p` values use this run's detached `$PROJECT_DIR`, never ambient `repo_root` HEAD.
+Derive `pr_review_invocation_uuid` only from one valid `OULIPOLY_PARENT_INVOCATION`. Missing, malformed, duplicate-keyed, blank, or non-canonical UUID data is `BLOCKED:runtime-invocation-identity-unavailable` before provider access or run allocation. `init-pr-review-run` atomically creates a never-before-used root whose `run_id` contains the exact PR number, full base OID, full head OID, and invocation UUID. It also creates explicit worktree ownership and unique `refs/pr-review/${PR}/runs/${run_id}/{base,head}` identities. Fetch both refs with `--force` so a force-pushed pull head is accepted into a new exact-run ref without rewriting any older run ref. Refuse an existing run root instead of resuming or deleting it. Verify detached `HEAD == $HEAD_SHA` before fanout. Expected-process declarations use stable roles; actual child UUIDs are joined from complete logs after dispatch. All child `-p` values use this run's detached `$PROJECT_DIR`, never ambient `repo_root` HEAD.
 
 ### Phase 1: Risk Assessment (3x parallel)
 
