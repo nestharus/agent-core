@@ -193,8 +193,7 @@ def _branch_is_valid(branch: str) -> bool:
     return result.returncode == 0 and result.stdout.rstrip("\n") == branch
 
 
-def _short_branch(value: Any, field: str) -> str:
-    branch = _nonblank(value, field)
+def _git_remote_prefixes() -> tuple[str, ...]:
     remote_result = subprocess.run(
         ["git", "remote"],
         check=False,
@@ -202,11 +201,15 @@ def _short_branch(value: Any, field: str) -> str:
         stderr=subprocess.DEVNULL,
         text=True,
     )
-    remote_prefixes = tuple(
+    return tuple(
         f"{remote}/"
         for remote in remote_result.stdout.splitlines()
         if remote and remote == remote.strip()
     )
+
+
+def _short_branch(value: Any, field: str, remote_prefixes: tuple[str, ...]) -> str:
+    branch = _nonblank(value, field)
     if branch.startswith(
         ("refs/", "remotes/", "origin/", "upstream/") + remote_prefixes
     ):
@@ -413,8 +416,9 @@ def _normalize_route_records(
     if source_backend != ticket_system:
         raise RouteManifestError("source backend does not match ticket_system")
     feature_id = _nonblank(feature_id, "feature_id")
-    feature_branch = _short_branch(feature_branch, "feature_branch")
-    trunk_branch = _short_branch(trunk_branch, "trunk_branch")
+    remote_prefixes = _git_remote_prefixes()
+    feature_branch = _short_branch(feature_branch, "feature_branch", remote_prefixes)
+    trunk_branch = _short_branch(trunk_branch, "trunk_branch", remote_prefixes)
     if feature_branch == trunk_branch:
         raise RouteManifestError("feature and trunk branches must differ")
     if manager_flavor not in MANAGER_FLAVORS:
@@ -459,7 +463,9 @@ def _normalize_route_records(
         depends_on = _string_list(
             raw_row["depends_on"], f"{field}.depends_on", allow_empty=True
         )
-        branch = _short_branch(raw_row["branch_name"], f"{field}.branch_name")
+        branch = _short_branch(
+            raw_row["branch_name"], f"{field}.branch_name", remote_prefixes
+        )
         ticket_source, source_identity = _ticket_source(
             raw_row["ticket_source"],
             f"{field}.ticket_source",

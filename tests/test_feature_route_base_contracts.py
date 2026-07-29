@@ -2397,6 +2397,25 @@ def _normalize_inline_age255(
     )
 
 
+def test_feature_route_manifest_resolves_remote_prefixes_once_per_normalization(
+    tmp_path: Path, monkeypatch
+):
+    original_run = _ROUTE_MODULE.subprocess.run
+    remote_calls = 0
+
+    def counting_run(command, *args, **kwargs):
+        nonlocal remote_calls
+        if command == ["git", "remote"]:
+            remote_calls += 1
+        return original_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(_ROUTE_MODULE.subprocess, "run", counting_run)
+
+    _normalize_age255(tmp_path)
+
+    assert remote_calls == 1
+
+
 def _route_cli_common(tmp_path: Path, output: Path, tickets: list[str]) -> list[str]:
     command = [
         sys.executable,
