@@ -173,7 +173,7 @@ outputs:
     wrote_lines: ["${scratch_dir}/ticket.md when output_path is supplied"]
   - task: comment
     success_shape: Print the new comment ID, or return producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
-    wrote_lines: ["${operation_result_path}", "${producer_log_path}", "${producer_output_path}"]
+    wrote_lines: ["${operation_result_path} when operation=comment-readback", "${producer_log_path} when operation=comment-readback", "${producer_output_path} when operation=comment-readback"]
   - task: transition
     success_shape: Print before-status to after-status.
     wrote_lines: []

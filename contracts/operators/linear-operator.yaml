@@ -120,7 +120,9 @@ outputs:
 - task: comment
   success_shape: Ordinary comment confirmation, or producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
   wrote_lines:
-  - operation_result_path, producer_log_path, and producer_output_path for operation=comment-readback
+  - ${operation_result_path} when operation=comment-readback
+  - ${producer_log_path} when operation=comment-readback
+  - ${producer_output_path} when operation=comment-readback
 - task: create
   success_shape: Task-specific stdout or durable artifact paths named by the procedure.
   wrote_lines: []
