@@ -839,7 +839,10 @@ def poll(
             previous_hashes.get(key) != digest
             and not metadata.get("resolved")
             and metadata.get("source") != "trigger-ack"
-            and comment_matches_review_head(metadata, head_oid)
+            and (
+                metadata.get("kind") != "in-diff"
+                or comment_matches_review_head(metadata, head_oid)
+            )
         ):
             new_comments.append(output_metadata(record))
 

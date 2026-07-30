@@ -287,6 +287,29 @@ def test_review_comment_uses_owning_review_commit_for_head_scope() -> None:
     assert driver.comment_matches_review_head(records[0]["metadata"], None)
 
 
+def test_current_head_poll_reports_new_out_of_diff_comments(monkeypatch) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    issue_comment = _summary(10, "Review summary", "2026-05-21T09:51:50Z")
+
+    def fake_gh_paginated_array(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/issues/198/comments"):
+            return [issue_comment]
+        return []
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
+    monkeypatch.setattr(driver, "load_state", lambda *args: {})
+    monkeypatch.setattr(driver, "save_state", lambda *args: None)
+    monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
+    monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
+
+    result = driver.poll(repo, 198, head_oid="head-sha")
+
+    assert [comment["comment_id"] for comment in result["new_comments"]] == [10]
+    assert result["actionable_comments"] == []
+
+
 def test_current_head_evidence_is_filtered_before_terminal_signal_selection() -> None:
     summary_body = (
         driver.SUMMARY_COMMENT_MARKER
