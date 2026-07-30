@@ -948,11 +948,26 @@ def initial_trigger_decision(
     bot_login = discover_bot_login(
         repo, pr_num, reviews=reviews, issue_comments=issue_comments
     )
-    latest_review = latest_coderabbit_review(reviews, bot_login)
+    current_head_reviews = [
+        review for review in reviews if review.get("commit_id") == head_oid
+    ]
+    current_head_comments = [
+        comment
+        for comment in issue_comments
+        if (
+            observed_at := parse_time(
+                comment.get("updated_at") or comment.get("created_at")
+            )
+        )
+        and observed_at >= head_committed_at
+    ]
+    latest_review = latest_coderabbit_review(current_head_reviews, bot_login)
     latest_review_at = (
         parse_time(latest_review.get("submitted_at")) if latest_review else None
     )
-    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
+    decision_signal = coderabbit_decision_signal(
+        current_head_reviews, current_head_comments, bot_login
+    )
     outcome = current_head_decision_outcome(
         decision_signal, head_oid, head_committed_at
     )

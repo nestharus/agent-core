@@ -287,6 +287,87 @@ def test_initial_trigger_auto_does_not_skip_previous_head_approval(monkeypatch) 
     )
 
 
+def test_initial_trigger_selects_current_head_terminal_review_before_newer_stale_review(
+    monkeypatch,
+) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-runner")
+
+    def fake_gh_paginated_array(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/reviews"):
+            return [
+                _review(3, "APPROVED", "2026-05-21T09:51:46Z"),
+                _review(
+                    4,
+                    "CHANGES_REQUESTED",
+                    "2026-05-21T09:52:46Z",
+                    commit_id="previous-sha",
+                ),
+            ]
+        if endpoint.endswith("/issues/130/comments"):
+            return []
+        raise AssertionError(f"unexpected endpoint: {endpoint}")
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+
+    decision = driver.initial_trigger_decision(
+        repo,
+        130,
+        "incremental",
+        "auto",
+        "head-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
+    assert decision["trigger"] is False
+    assert decision["outcome"] == "approved"
+    assert decision["review_decision"] == "APPROVED"
+
+
+def test_initial_trigger_ignores_newer_stale_review_when_ack_is_pending(
+    monkeypatch,
+) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-runner")
+    ack = _summary(
+        10,
+        _ack_body("Action performed", "Review finished."),
+        "2026-05-21T09:51:00Z",
+    )
+
+    def fake_gh_paginated_array(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/reviews"):
+            return [
+                _review(
+                    3,
+                    "COMMENTED",
+                    "2026-05-21T09:52:00Z",
+                    commit_id="previous-sha",
+                )
+            ]
+        if endpoint.endswith("/issues/130/comments"):
+            return [ack]
+        raise AssertionError(f"unexpected endpoint: {endpoint}")
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+
+    decision = driver.initial_trigger_decision(
+        repo,
+        130,
+        "incremental",
+        "auto",
+        "head-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
+    assert decision["trigger"] is False
+    assert (
+        decision["reason"]
+        == "initial-trigger-policy:auto:pending-ack-newer-than-latest-review"
+    )
+    assert decision["latest_review_at"] is None
+
+
 def test_loop_cadence_ignores_standalone_poll_timestamp(monkeypatch, tmp_path) -> None:
     repo = driver.Repo(owner="nestharus", name="agent-runner")
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
