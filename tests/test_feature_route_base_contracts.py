@@ -5834,10 +5834,11 @@ def test_ticket_operator_comment_readback_reconciles_exact_ticket_and_body_befor
     zero = readback.index("Zero matches:")
     one = readback.index("One match:")
     multiple = readback.index("More than one match:")
+    zero_match = readback[zero:one]
     assert reconciliation < zero < one < multiple
     assert "exact context ticket key" in readback
     assert "posted-body SHA-256" in readback
-    assert "create once" in readback[zero:one]
+    assert "create once" in zero_match
     assert "do not" in readback[one:multiple]
     assert "before POST" in readback[multiple:] or "before create" in readback[multiple:]
     assert "write no PASS result artifacts" in readback[multiple:]
@@ -5845,6 +5846,14 @@ def test_ticket_operator_comment_readback_reconciles_exact_ticket_and_body_befor
         assert "Read every page" in readback
         assert "canonicalize each returned ADF body by the same rule" in readback
     else:
+        comment_procedure = _section("agents/linear-operator.md", "## Procedure: Comment")
+        assert (
+            'Returns `{"ok": true, "data": {"id": "<uuid>", "issueId": "<uuid>"}}`.'
+            in comment_procedure
+        )
+        assert "returned body hash" not in zero_match
+        assert "non-blank ID and returned issue UUID" in zero_match
+        assert "verify the posted-body hash through the mandatory post-create readback" in zero_match
         assert "fully paginated `list-comments`" in readback
         assert "exact UTF-8 bytes" in readback
         assert "do not trim, normalize line endings, or render Markdown" in readback

@@ -355,7 +355,7 @@ Canonicalize the posted Markdown body once before any ticket-client request as i
 
 Reconcile before any create request. Query the exact context ticket key with `get-issue` and the fully paginated `list-comments`, require both responses to agree on the exact issue identifier and UUID, and select only comments whose exact-body SHA-256 equals the posted-body SHA-256. Apply these closed outcomes:
 
-- Zero matches: create once with `create-comment`; require its non-blank ID, returned body hash, and returned issue UUID to equal the reconciled posted-body and exact-ticket identities, then use that response as the remote create identity.
+- Zero matches: create once with `create-comment`; require its non-blank ID and returned issue UUID to equal the exact-ticket identity, then verify the posted-body hash through the mandatory post-create readback below.
 - One match: do not create; reuse that comment's ID as the remote create identity only after its exact ticket and posted-body identities have passed the checks above.
 - More than one match: return `BLOCKED: ambiguous comment-readback reconciliation` before create and write no PASS result artifacts.
 
