@@ -227,6 +227,35 @@ def test_summary_comment_approved_marker_is_terminal_fallback() -> None:
     assert driver.review_decision_outcome(signal["decision"]) == "approved"
 
 
+def test_current_head_evidence_is_filtered_before_terminal_signal_selection() -> None:
+    summary_body = (
+        driver.SUMMARY_COMMENT_MARKER
+        + "\nNo actionable comments were generated in the recent review.\n"
+    )
+    reviews, comments = driver.current_head_review_evidence(
+        [
+            _review(1, "APPROVED", "2026-05-21T09:51:00Z"),
+            _review(
+                2,
+                "CHANGES_REQUESTED",
+                "2026-05-21T09:53:00Z",
+                commit_id="previous-sha",
+            ),
+        ],
+        [
+            _summary(10, summary_body, "2026-05-21T09:49:00Z"),
+        ],
+        "head-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
+    signal = driver.coderabbit_decision_signal(reviews, comments, BOT_LOGIN)
+
+    assert signal["decision"] == "APPROVED"
+    assert signal["review_id"] == 1
+    assert comments == []
+
+
 def test_initial_trigger_auto_skips_when_terminal_review_exists(monkeypatch) -> None:
     repo = driver.Repo(owner="nestharus", name="agent-runner")
 

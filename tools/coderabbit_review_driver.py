@@ -360,6 +360,28 @@ def issue_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
     )
 
 
+def current_head_review_evidence(
+    reviews: list[dict[str, Any]],
+    issue_comments: list[dict[str, Any]],
+    head_oid: str,
+    head_committed_at: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    current_head_reviews = [
+        review for review in reviews if review.get("commit_id") == head_oid
+    ]
+    current_head_comments = [
+        comment
+        for comment in issue_comments
+        if (
+            observed_at := parse_time(
+                comment.get("updated_at") or comment.get("created_at")
+            )
+        )
+        and observed_at >= head_committed_at
+    ]
+    return current_head_reviews, current_head_comments
+
+
 def normalized_review_decision(latest_review: dict[str, Any] | None) -> str:
     if not latest_review:
         return "NONE"
@@ -740,7 +762,12 @@ def output_metadata(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
+def poll(
+    repo: Repo,
+    pr_num: int,
+    head_oid: str | None = None,
+    head_committed_at: datetime | None = None,
+) -> dict[str, Any]:
     reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
@@ -750,7 +777,15 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
     thread_status = graphql_review_threads(repo, pr_num)
 
     latest_review = latest_coderabbit_review(reviews, bot_login)
-    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
+    decision_reviews = reviews
+    decision_comments = issue_comments
+    if head_oid is not None and head_committed_at is not None:
+        decision_reviews, decision_comments = current_head_review_evidence(
+            reviews, issue_comments, head_oid, head_committed_at
+        )
+    decision_signal = coderabbit_decision_signal(
+        decision_reviews, decision_comments, bot_login
+    )
     decision = decision_signal["decision"]
     outcome = review_decision_outcome(decision)
     records = collect_comment_records(
@@ -948,19 +983,9 @@ def initial_trigger_decision(
     bot_login = discover_bot_login(
         repo, pr_num, reviews=reviews, issue_comments=issue_comments
     )
-    current_head_reviews = [
-        review for review in reviews if review.get("commit_id") == head_oid
-    ]
-    current_head_comments = [
-        comment
-        for comment in issue_comments
-        if (
-            observed_at := parse_time(
-                comment.get("updated_at") or comment.get("created_at")
-            )
-        )
-        and observed_at >= head_committed_at
-    ]
+    current_head_reviews, current_head_comments = current_head_review_evidence(
+        reviews, issue_comments, head_oid, head_committed_at
+    )
     latest_review = latest_coderabbit_review(current_head_reviews, bot_login)
     latest_review_at = (
         parse_time(latest_review.get("submitted_at")) if latest_review else None
@@ -1583,7 +1608,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         iteration_dir.mkdir(parents=True, exist_ok=True)
         cadence = wait_for_loop_poll_cadence(repo, args.pr_num, min_poll_interval)
         poll_started_at = utc_now()
-        poll_result = poll(repo, args.pr_num)
+        poll_result = poll(repo, args.pr_num, head_oid, head_committed_at)
         mark_loop_poll(repo, args.pr_num)
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
         raw_outcome = poll_result.get("outcome")
