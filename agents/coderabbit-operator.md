@@ -73,9 +73,12 @@ The loop:
   mode and waits for ack.
 - waits at least 300 seconds between successive loop-owned `poll` calls for
   the same PR.
+- revalidates the provider head against the local worktree before and after
+  every poll, aborting if another actor advances the PR branch.
 - treats `APPROVED` as terminal with `terminal_reason: "approved"` only when
   the review targets the current PR head; stale approvals remain non-terminal.
-- dispatches one fixer invocation per actionable in-diff comment, with a
+- dispatches at most one fixer invocation per actionable in-diff comment ID
+  during one run, with a
   resolved prompt written under
   `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/iter-{n}/`.
 - honors frontmatter-declared fixer models by invoking agent files with

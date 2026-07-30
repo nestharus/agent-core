@@ -456,7 +456,7 @@ def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -
         lambda *args: "2026-07-30T10:10:56-07:00",
     )
 
-    head_oid, committed_at = driver.validated_pr_head_identity(
+    branch, head_oid, committed_at = driver.validated_pr_head_identity(
         metadata,
         driver.Repo(owner="nestharus", name="agent-core"),
         198,
@@ -465,6 +465,7 @@ def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -
         expected_oid="new-sha",
     )
 
+    assert branch == "fix/review"
     assert head_oid == "new-sha"
     assert committed_at == driver.parse_time("2026-07-30T10:10:56-07:00")
 
@@ -482,4 +483,53 @@ def test_validated_pr_head_identity_rejects_stale_provider_head(
             tmp_path,
             expected_branch="fix/review",
             expected_oid="new-sha",
+        )
+
+
+def test_poll_revalidation_rejects_external_head_change(monkeypatch, tmp_path) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {
+            "headRefName": "fix/review",
+            "headRefOid": "external-sha",
+        },
+    )
+    monkeypatch.setattr(driver, "git_head", lambda *args: "local-sha")
+
+    with pytest.raises(driver.DriverError, match="did not match pushed commit"):
+        driver.revalidate_current_pr_head(
+            repo,
+            198,
+            tmp_path,
+            "fix/review",
+        )
+
+
+def test_poll_aborts_when_external_head_changes_during_poll(
+    monkeypatch, tmp_path
+) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    metadata = iter(
+        [
+            {"headRefName": "fix/review", "headRefOid": "local-sha"},
+            {"headRefName": "fix/review", "headRefOid": "external-sha"},
+        ]
+    )
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: next(metadata))
+    monkeypatch.setattr(driver, "git_head", lambda *args: "local-sha")
+    monkeypatch.setattr(
+        driver,
+        "git_output",
+        lambda *args: "2026-07-30T10:10:56-07:00",
+    )
+    monkeypatch.setattr(driver, "poll", lambda *args: {"outcome": "approved"})
+
+    with pytest.raises(driver.DriverError, match="did not match pushed commit"):
+        driver.poll_current_pr_head(
+            repo,
+            198,
+            tmp_path,
+            "fix/review",
         )

@@ -1503,7 +1503,7 @@ def validated_pr_head_identity(
     worktree_path: Path,
     expected_branch: str | None = None,
     expected_oid: str | None = None,
-) -> tuple[str, datetime]:
+) -> tuple[str, str, datetime]:
     head_branch = metadata.get("headRefName")
     if not isinstance(head_branch, str) or not head_branch:
         raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
@@ -1529,7 +1529,38 @@ def validated_pr_head_identity(
         raise DriverError(
             f"could not resolve current head identity for {repo.slug}#{pr_num}"
         )
+    return head_branch, head_oid, head_committed_at
+
+
+def revalidate_current_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+) -> tuple[str, datetime]:
+    _, head_oid, head_committed_at = validated_pr_head_identity(
+        pr_metadata(repo, pr_num),
+        repo,
+        pr_num,
+        worktree_path,
+        expected_branch=expected_branch,
+        expected_oid=git_head(worktree_path),
+    )
     return head_oid, head_committed_at
+
+
+def poll_current_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+) -> tuple[dict[str, Any], str, datetime]:
+    head_oid, head_committed_at = revalidate_current_pr_head(
+        repo, pr_num, worktree_path, expected_branch
+    )
+    poll_result = poll(repo, pr_num, head_oid, head_committed_at)
+    revalidate_current_pr_head(repo, pr_num, worktree_path, expected_branch)
+    return poll_result, head_oid, head_committed_at
 
 
 def review_loop(args: argparse.Namespace) -> dict[str, Any]:
@@ -1541,16 +1572,15 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     metadata = pr_metadata(repo, args.pr_num)
-    pr_branch = metadata.get("headRefName")
-    if not isinstance(pr_branch, str) or not pr_branch:
-        raise DriverError(
-            f"could not resolve PR head branch for {repo.slug}#{args.pr_num}"
-        )
     worktree_path = Path(args.worktree_path).expanduser().resolve()
-    ensure_worktree_branch(worktree_path, pr_branch)
-    head_oid, head_committed_at = validated_pr_head_identity(
-        metadata, repo, args.pr_num, worktree_path, expected_branch=pr_branch
+    pr_branch, head_oid, head_committed_at = validated_pr_head_identity(
+        metadata,
+        repo,
+        args.pr_num,
+        worktree_path,
+        expected_oid=git_head(worktree_path),
     )
+    ensure_worktree_branch(worktree_path, pr_branch)
 
     fixer_agent = args.fixer_agent
     fixer_model = args.fixer_model
@@ -1610,7 +1640,9 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         iteration_dir.mkdir(parents=True, exist_ok=True)
         cadence = wait_for_loop_poll_cadence(repo, args.pr_num, min_poll_interval)
         poll_started_at = utc_now()
-        poll_result = poll(repo, args.pr_num, head_oid, head_committed_at)
+        poll_result, head_oid, head_committed_at = poll_current_pr_head(
+            repo, args.pr_num, worktree_path, pr_branch
+        )
         mark_loop_poll(repo, args.pr_num)
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
         raw_outcome = poll_result.get("outcome")
@@ -1727,7 +1759,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
             metadata = pr_metadata(repo, args.pr_num)
-            head_oid, head_committed_at = validated_pr_head_identity(
+            _, head_oid, head_committed_at = validated_pr_head_identity(
                 metadata,
                 repo,
                 args.pr_num,
