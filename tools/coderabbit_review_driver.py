@@ -1253,6 +1253,7 @@ def dispatch_comment_agent(
     else:
         raise DriverError("comment dispatch requires a fixer agent or fixer model")
 
+    head_before = git_head(worktree_path)
     started_at = utc_now()
     result = subprocess.run(
         cmd,
@@ -1293,7 +1294,12 @@ def dispatch_comment_agent(
             json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
     elif outcome["outcome"] in FIX_OUTCOMES and not outcome["commit_sha"]:
-        outcome["commit_sha"] = git_head(worktree_path)
+        head_after = git_head(worktree_path)
+        if head_after == head_before:
+            raise DriverError(
+                f"fix outcome for comment {comment_id} produced no commit"
+            )
+        outcome["commit_sha"] = head_after
         outcome_path.write_text(
             json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
