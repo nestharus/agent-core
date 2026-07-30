@@ -794,6 +794,13 @@ def poll(
     decision_signal = coderabbit_decision_signal(
         decision_reviews, decision_comments, bot_login
     )
+    latest_scoped_review = latest_coderabbit_review(decision_reviews, bot_login)
+    latest_scoped_review_at = (
+        parse_time(latest_scoped_review.get("submitted_at"))
+        if latest_scoped_review
+        else None
+    )
+    completion_ack_at = latest_completion_ack_time(decision_comments, bot_login)
     decision = decision_signal["decision"]
     outcome = review_decision_outcome(decision)
     records = collect_comment_records(
@@ -878,6 +885,17 @@ def poll(
         "review_decision_source": decision_signal.get("source"),
         "latest_decision_review_id": decision_signal.get("review_id"),
         "latest_decision_comment_id": decision_signal.get("comment_id"),
+        "latest_review_at": latest_scoped_review_at.isoformat()
+        if latest_scoped_review_at
+        else None,
+        "latest_completion_ack_at": completion_ack_at.isoformat()
+        if completion_ack_at
+        else None,
+        "review_completed": bool(
+            latest_scoped_review_at
+            and completion_ack_at
+            and completion_ack_at >= latest_scoped_review_at
+        ),
         "new_comments": new_comments,
         "actionable_comments": actionable_comments,
         "resolved_since_last_poll": resolved_since_last_poll,
@@ -971,6 +989,25 @@ def latest_trigger_ack_time(
             continue
         body = comment.get("body") or ""
         if not is_trigger_ack_body(body, mode):
+            continue
+        observed_at = parse_time(comment.get("updated_at") or comment.get("created_at"))
+        if observed_at and (latest is None or observed_at > latest):
+            latest = observed_at
+    return latest
+
+
+def latest_completion_ack_time(
+    issue_comments: list[dict[str, Any]], bot_login: str | None
+) -> datetime | None:
+    latest: datetime | None = None
+    for comment in issue_comments:
+        login = (comment.get("user") or {}).get("login")
+        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
+            continue
+        body = comment.get("body") or ""
+        if not any(marker in body for marker in ACK_ACTION_MARKERS) or not any(
+            marker in body for marker in ACK_COMPLETION_MARKERS.values()
+        ):
             continue
         observed_at = parse_time(comment.get("updated_at") or comment.get("created_at"))
         if observed_at and (latest is None or observed_at > latest):
@@ -1319,11 +1356,16 @@ def dispatch_comment_agent(
         outcome_path.write_text(
             json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-    elif outcome["outcome"] in FIX_OUTCOMES and not outcome["commit_sha"]:
+    if outcome["outcome"] in FIX_OUTCOMES:
         head_after = git_head(worktree_path)
         if head_after == head_before:
             raise DriverError(
                 f"fix outcome for comment {comment_id} produced no commit"
+            )
+        if outcome["commit_sha"] and outcome["commit_sha"] != head_after:
+            raise DriverError(
+                f"fix outcome for comment {comment_id} reported commit "
+                f"{outcome['commit_sha']} but worktree HEAD is {head_after}"
             )
         outcome["commit_sha"] = head_after
         outcome_path.write_text(
@@ -1526,6 +1568,20 @@ def changes_requested_without_actionable_comments(
 ) -> bool:
     return not actionable_comments and (
         review_decision.upper() == "CHANGES_REQUESTED" or outcome == "changes_requested"
+    )
+
+
+def completed_review_without_terminal_decision(
+    review_decision: str,
+    outcome: Any,
+    actionable_comments: list[dict[str, Any]],
+    review_completed: bool,
+) -> bool:
+    return (
+        review_completed
+        and not actionable_comments
+        and review_decision.upper() == "COMMENTED"
+        and outcome is None
     )
 
 
@@ -1767,6 +1823,18 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iterations.append(iteration)
             break
 
+        if completed_review_without_terminal_decision(
+            final_review_decision,
+            final_outcome,
+            actionable_comments,
+            bool(poll_result.get("review_completed")),
+        ):
+            terminal_reason = "review_completed_without_terminal_decision"
+            iteration["needs_caller_decision"] = True
+            iteration["escalation_reason"] = terminal_reason
+            iterations.append(iteration)
+            break
+
         if not actionable_comments:
             iterations.append(iteration)
             print(
@@ -1861,9 +1929,10 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         iterations.append(iteration)
         iteration_index += 1
 
-    needs_caller_decision = (
-        terminal_reason == "changes_requested_without_actionable_comments"
-    )
+    needs_caller_decision = terminal_reason in {
+        "changes_requested_without_actionable_comments",
+        "review_completed_without_terminal_decision",
+    }
     return {
         "repo": repo.slug,
         "pr_num": args.pr_num,

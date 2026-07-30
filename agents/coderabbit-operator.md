@@ -89,6 +89,10 @@ The loop:
 - stops with `terminal_reason: "no_value_provided"` when every actionable
   in-diff comment in the iteration is assessed
   `review_provided_value: false`.
+- escalates with `needs_caller_decision=true` when CodeRabbit explicitly marks
+  a current-head review finished but returns only `COMMENTED` and no
+  dispatchable in-diff findings; this prevents completion evidence from
+  becoming an unbounded pending state.
 
 ## Per-Comment Outcome Shape
 

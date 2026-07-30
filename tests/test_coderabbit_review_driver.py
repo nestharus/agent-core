@@ -145,6 +145,18 @@ def test_changes_requested_without_actionable_comments_escalates_instead_of_poll
     )
 
 
+def test_completed_commented_review_without_actionable_comments_escalates() -> None:
+    assert driver.completed_review_without_terminal_decision(
+        "COMMENTED", None, [], True
+    )
+    assert not driver.completed_review_without_terminal_decision(
+        "COMMENTED", None, [], False
+    )
+    assert not driver.completed_review_without_terminal_decision(
+        "COMMENTED", None, [{"comment_id": 1}], True
+    )
+
+
 def test_review_loop_does_not_redispatch_handled_comment_ids() -> None:
     comment = {
         "comment_id": 42,
@@ -308,6 +320,43 @@ def test_current_head_poll_reports_new_out_of_diff_comments(monkeypatch) -> None
 
     assert [comment["comment_id"] for comment in result["new_comments"]] == [10]
     assert result["actionable_comments"] == []
+
+
+def test_poll_reports_completed_current_head_commented_review(monkeypatch) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    review = _review(7, "COMMENTED", "2026-05-21T09:51:48Z")
+    ack = _summary(
+        10,
+        _ack_body("Action performed", "Review finished."),
+        "2026-05-21T09:51:50Z",
+    )
+
+    def fake_gh_paginated_array(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/reviews"):
+            return [review]
+        if endpoint.endswith("/issues/198/comments"):
+            return [ack]
+        return []
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
+    monkeypatch.setattr(driver, "load_state", lambda *args: {})
+    monkeypatch.setattr(driver, "save_state", lambda *args: None)
+    monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
+    monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
+
+    result = driver.poll(
+        repo,
+        198,
+        head_oid="head-sha",
+        head_committed_at=driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
+    assert result["review_decision"] == "COMMENTED"
+    assert result["review_completed"] is True
+    assert result["latest_review_at"] == "2026-05-21T09:51:48+00:00"
+    assert result["latest_completion_ack_at"] == "2026-05-21T09:51:50+00:00"
 
 
 def test_current_head_evidence_is_filtered_before_terminal_signal_selection() -> None:
@@ -601,6 +650,46 @@ def test_dispatch_comment_agent_rejects_fix_without_new_commit(
     monkeypatch.setattr(driver, "git_head", lambda *args: "unchanged-head")
 
     with pytest.raises(driver.DriverError, match="produced no commit"):
+        driver.dispatch_comment_agent(
+            comment={"comment_id": 123, "file_path": "/tmp/comment.md"},
+            repo=driver.Repo(owner="nestharus", name="agent-core"),
+            pr_num=198,
+            pr_branch="fix/review",
+            worktree_path=tmp_path,
+            iteration_dir=iteration_dir,
+            template_path=template_path,
+            fixer_agent=None,
+            fixer_model="gpt-high",
+        )
+
+
+def test_dispatch_comment_agent_rejects_reported_commit_that_is_not_head(
+    monkeypatch, tmp_path
+) -> None:
+    iteration_dir = tmp_path / "iteration"
+    template_path = tmp_path / "fix-prompt.md"
+    template_path.write_text("Fix comment $comment_id", encoding="utf-8")
+    raw_outcome = {
+        "comment_id": 123,
+        "outcome": "fixed",
+        "commit_sha": "reported-stale-sha",
+        "reply_body_file": None,
+        "rationale": "Applied the focused fix.",
+        "files_touched": ["tools/example.py"],
+        "review_provided_value": True,
+    }
+    monkeypatch.setattr(
+        driver.subprocess,
+        "run",
+        lambda *args, **kwargs: driver.subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=driver.json.dumps(raw_outcome)
+        ),
+    )
+    monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+    heads = iter(["head-before", "head-after"])
+    monkeypatch.setattr(driver, "git_head", lambda *args: next(heads))
+
+    with pytest.raises(driver.DriverError, match="worktree HEAD is head-after"):
         driver.dispatch_comment_agent(
             comment={"comment_id": 123, "file_path": "/tmp/comment.md"},
             repo=driver.Repo(owner="nestharus", name="agent-core"),
