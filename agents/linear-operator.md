@@ -351,7 +351,15 @@ For `upsert-comment`: print the comment ID returned by the CLI JSON envelope so 
 
 When `task=comment` and `operation=comment-readback`, require exact `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`. The three paths are canonical, absolute, pairwise distinct, and written only by this invocation. Derive `producer_invocation_uuid` from runner provenance; never accept a caller-selected UUID.
 
-Post the comment first. Parse its non-blank ID, query the same issue with `get-issue` and `list-comments`, and require exact issue identifier equality plus exactly one returned comment with that ID and the exact posted body SHA-256. Use the issue URL plus `#comment-<comment-id>` as the stable Linear remote comment URL and require it on both create and readback identities. Atomically write the closed ticket-client request/response transcript to `producer_log_path`, the exact readback projection to `producer_output_path`, and then the canonical result below to `operation_result_path`. The producer log is the closed backend-operation log, not the still-open outer runner `.log`; the feature route separately authenticates its implementation child through process lineage.
+Canonicalize the posted Markdown body once before any ticket-client request as its exact UTF-8 bytes and SHA-256 those bytes; do not trim, normalize line endings, or render Markdown before comparison.
+
+Reconcile before any create request. Query the exact context ticket key with `get-issue` and the fully paginated `list-comments`, require both responses to agree on the exact issue identifier and UUID, and select only comments whose exact-body SHA-256 equals the posted-body SHA-256. Apply these closed outcomes:
+
+- Zero matches: create once with `create-comment`; require its non-blank ID, returned body hash, and returned issue UUID to equal the reconciled posted-body and exact-ticket identities, then use that response as the remote create identity.
+- One match: do not create; reuse that comment's ID as the remote create identity only after its exact ticket and posted-body identities have passed the checks above.
+- More than one match: return `BLOCKED: ambiguous comment-readback reconciliation` before create and write no PASS result artifacts.
+
+After either zero-match creation or one-match reuse, query the same exact ticket with fully paginated `list-comments` again. Require exact issue identifier and UUID equality plus exactly one returned comment with the selected ID and exact posted-body SHA-256. Use the reconciled issue URL plus `#comment-<comment-id>` as the stable Linear remote comment URL and require it on both create and readback identities. Atomically write the closed ticket-client request/response transcript to `producer_log_path`, the exact readback projection to `producer_output_path`, and then the canonical result below to `operation_result_path`. The producer log is the closed backend-operation log, not the still-open outer runner `.log`; the feature route separately authenticates its implementation child through process lineage.
 
 ```yaml
 schema: ticket-operation-result-v1

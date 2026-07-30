@@ -5822,6 +5822,55 @@ def test_ticket_operators_share_closed_comment_readback_schema_and_contract_inpu
         assert "Any other value is out-of-contract and returns `BLOCKED`" in required_inputs
 
 
+@pytest.mark.parametrize("backend", ["jira", "linear"])
+def test_ticket_operator_comment_readback_reconciles_exact_ticket_and_body_before_create(
+    backend: str,
+):
+    readback = _section(
+        f"agents/{backend}-operator.md", "### Producer-Authenticated Comment Readback"
+    )
+
+    reconciliation = readback.index("Reconcile before any create request.")
+    zero = readback.index("Zero matches:")
+    one = readback.index("One match:")
+    multiple = readback.index("More than one match:")
+    assert reconciliation < zero < one < multiple
+    assert "exact context ticket key" in readback
+    assert "posted-body SHA-256" in readback
+    assert "create once" in readback[zero:one]
+    assert "do not" in readback[one:multiple]
+    assert "before POST" in readback[multiple:] or "before create" in readback[multiple:]
+    assert "write no PASS result artifacts" in readback[multiple:]
+    if backend == "jira":
+        assert "Read every page" in readback
+        assert "canonicalize each returned ADF body by the same rule" in readback
+    else:
+        assert "fully paginated `list-comments`" in readback
+        assert "exact UTF-8 bytes" in readback
+        assert "do not trim, normalize line endings, or render Markdown" in readback
+
+
+def test_jira_authenticated_readback_is_v3_adf_only_without_changing_ordinary_fallback():
+    comment_procedure = _section("agents/jira-operator.md", "## Procedure: Comment")
+    endpoint_contract = _between(
+        "agents/jira-operator.md",
+        "**Endpoint contract:**\n",
+        "For simple plain-text comments:\n",
+    )
+    readback = _section(
+        "agents/jira-operator.md", "### Producer-Authenticated Comment Readback"
+    )
+
+    assert "v2 fallback applies only to ordinary comments" in endpoint_contract
+    assert "operation=comment-readback` path below is v3-only" in endpoint_contract
+    assert "v3-only" in readback
+    assert "sorted object keys" in readback
+    assert "no insignificant whitespace" in readback
+    assert "without a v2 fallback" in readback
+    assert "/rest/api/2/" not in readback
+    assert "/rest/api/2/issue/{issueIdOrKey}/comment" in comment_procedure
+
+
 def test_phase_9_named_ticket_dispatch_validates_and_transports_producer_result():
     phase_9 = _section(
         "agents/implementation-pipeline-orchestrator.md",
