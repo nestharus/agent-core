@@ -372,11 +372,7 @@ def current_head_review_evidence(
     current_head_comments = [
         comment
         for comment in issue_comments
-        if (
-            observed_at := parse_time(
-                comment.get("updated_at") or comment.get("created_at")
-            )
-        )
+        if (observed_at := parse_time(comment.get("created_at")))
         and observed_at >= head_committed_at
     ]
     return current_head_reviews, current_head_comments
@@ -1470,18 +1466,25 @@ def mark_loop_poll(repo: Repo, pr_num: int) -> None:
     save_state(repo, pr_num, state)
 
 
-def select_actionable_comments(poll_result: dict[str, Any]) -> list[dict[str, Any]]:
+def select_actionable_comments(
+    poll_result: dict[str, Any], handled_comment_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
+    handled_comment_ids = handled_comment_ids or set()
     new_comments = [
         comment
         for comment in poll_result.get("new_comments", [])
-        if comment.get("kind") == "in-diff" and not comment.get("resolved")
+        if comment.get("kind") == "in-diff"
+        and not comment.get("resolved")
+        and int(comment.get("comment_id") or 0) not in handled_comment_ids
     ]
     if new_comments:
         return new_comments
     return [
         comment
         for comment in poll_result.get("actionable_comments", [])
-        if comment.get("kind") == "in-diff" and not comment.get("resolved")
+        if comment.get("kind") == "in-diff"
+        and not comment.get("resolved")
+        and int(comment.get("comment_id") or 0) not in handled_comment_ids
     ]
 
 
@@ -1503,9 +1506,7 @@ def validated_pr_head_identity(
 ) -> tuple[str, datetime]:
     head_branch = metadata.get("headRefName")
     if not isinstance(head_branch, str) or not head_branch:
-        raise DriverError(
-            f"could not resolve PR head branch for {repo.slug}#{pr_num}"
-        )
+        raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
     if expected_branch is not None and head_branch != expected_branch:
         raise DriverError(
             f"PR head branch changed for {repo.slug}#{pr_num}: "
@@ -1602,6 +1603,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     terminal_reason: str | None = None
     final_review_decision = "NONE"
     rate_limit_observations: list[str] = []
+    handled_comment_ids: set[int] = set()
 
     while True:
         iteration_dir = cache_dir(repo, args.pr_num) / f"iter-{iteration_index}"
@@ -1615,7 +1617,9 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         final_outcome = current_head_decision_outcome(
             poll_result.get("decision_signal") or {}, head_oid, head_committed_at
         )
-        actionable_comments = select_actionable_comments(poll_result)
+        actionable_comments = select_actionable_comments(
+            poll_result, handled_comment_ids
+        )
         iteration: dict[str, Any] = {
             "iteration": iteration_index,
             "poll_started_at": poll_started_at,
@@ -1683,6 +1687,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 fixer_model=fixer_model,
             )
             iteration["outcomes"].append(outcome)
+            handled_comment_ids.add(int(comment["comment_id"]))
 
         if iteration["outcomes"] and all(
             outcome["review_provided_value"] is False

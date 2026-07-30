@@ -145,6 +145,21 @@ def test_changes_requested_without_actionable_comments_escalates_instead_of_poll
     )
 
 
+def test_review_loop_does_not_redispatch_handled_comment_ids() -> None:
+    comment = {
+        "comment_id": 42,
+        "kind": "in-diff",
+        "resolved": False,
+    }
+    poll_result = {
+        "new_comments": [],
+        "actionable_comments": [comment],
+    }
+
+    assert driver.select_actionable_comments(poll_result) == [comment]
+    assert driver.select_actionable_comments(poll_result, {42}) == []
+
+
 def test_previous_head_approval_is_not_terminal_for_current_head() -> None:
     signal = driver.coderabbit_decision_signal(
         [_review(3, "APPROVED", "2026-05-21T09:51:46Z", commit_id="previous-sha")],
@@ -253,6 +268,21 @@ def test_current_head_evidence_is_filtered_before_terminal_signal_selection() ->
 
     assert signal["decision"] == "APPROVED"
     assert signal["review_id"] == 1
+    assert comments == []
+
+
+def test_old_summary_edit_does_not_become_current_head_evidence() -> None:
+    summary_body = driver.SUMMARY_COMMENT_MARKER + "\nActionable comments posted: 1\n"
+    summary = _summary(10, summary_body, "2026-05-21T09:49:00Z")
+    summary["updated_at"] = "2026-05-21T09:51:00Z"
+
+    _, comments = driver.current_head_review_evidence(
+        [],
+        [summary],
+        "head-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
     assert comments == []
 
 
