@@ -73,7 +73,8 @@ The loop:
   mode and waits for ack.
 - waits at least 300 seconds between successive loop-owned `poll` calls for
   the same PR.
-- treats `APPROVED` as terminal with `terminal_reason: "approved"`.
+- treats `APPROVED` as terminal with `terminal_reason: "approved"` only when
+  the review targets the current PR head; stale approvals remain non-terminal.
 - dispatches one fixer invocation per actionable in-diff comment, with a
   resolved prompt written under
   `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/iter-{n}/`.

@@ -15,16 +15,25 @@ import coderabbit_review_driver as driver  # noqa: E402
 BOT_LOGIN = "coderabbitai[bot]"
 
 
-def _review(review_id: int, state: str, submitted_at: str, login: str = BOT_LOGIN) -> dict:
+def _review(
+    review_id: int,
+    state: str,
+    submitted_at: str,
+    login: str = BOT_LOGIN,
+    commit_id: str = "head-sha",
+) -> dict:
     return {
         "id": review_id,
         "state": state,
         "submitted_at": submitted_at,
+        "commit_id": commit_id,
         "user": {"login": login},
     }
 
 
-def _summary(comment_id: int, body: str, updated_at: str, login: str = BOT_LOGIN) -> dict:
+def _summary(
+    comment_id: int, body: str, updated_at: str, login: str = BOT_LOGIN
+) -> dict:
     return {
         "id": comment_id,
         "body": body,
@@ -38,7 +47,9 @@ def _ack_body(action_marker: str, review_marker: str) -> str:
     return f"<summary>{action_marker}</summary>\n\n{review_marker}\n"
 
 
-def test_current_incremental_completion_acknowledgement_reports_observed_marker(monkeypatch) -> None:
+def test_current_incremental_completion_acknowledgement_reports_observed_marker(
+    monkeypatch,
+) -> None:
     body = _ack_body("Action performed", "Review finished.")
     repo = driver.Repo(owner="nestharus", name="agent-core")
     monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
@@ -99,7 +110,9 @@ def test_approved_review_is_terminal_even_when_later_commented_review_exists() -
     assert driver.review_decision_outcome(signal["decision"]) == "approved"
 
 
-def test_changes_requested_review_is_terminal_even_when_later_commented_review_exists() -> None:
+def test_changes_requested_review_is_terminal_even_when_later_commented_review_exists() -> (
+    None
+):
     signal = driver.coderabbit_decision_signal(
         [
             _review(1, "APPROVED", "2026-05-21T09:38:26Z"),
@@ -116,7 +129,9 @@ def test_changes_requested_review_is_terminal_even_when_later_commented_review_e
     assert driver.review_decision_outcome(signal["decision"]) == "changes_requested"
 
 
-def test_changes_requested_without_actionable_comments_escalates_instead_of_polling() -> None:
+def test_changes_requested_without_actionable_comments_escalates_instead_of_polling() -> (
+    None
+):
     assert driver.changes_requested_without_actionable_comments(
         "CHANGES_REQUESTED", "changes_requested", []
     )
@@ -125,6 +140,68 @@ def test_changes_requested_without_actionable_comments_escalates_instead_of_poll
     )
     assert not driver.changes_requested_without_actionable_comments(
         "CHANGES_REQUESTED", "changes_requested", [{"comment_id": 1}]
+    )
+
+
+def test_previous_head_approval_is_not_terminal_for_current_head() -> None:
+    signal = driver.coderabbit_decision_signal(
+        [_review(3, "APPROVED", "2026-05-21T09:51:46Z", commit_id="previous-sha")],
+        [],
+        BOT_LOGIN,
+    )
+
+    assert (
+        driver.current_head_decision_outcome(
+            signal,
+            "current-sha",
+            driver.parse_time("2026-05-21T09:50:00Z"),
+        )
+        is None
+    )
+
+
+def test_current_head_approval_is_terminal() -> None:
+    signal = driver.coderabbit_decision_signal(
+        [_review(3, "APPROVED", "2026-05-21T09:51:46Z", commit_id="current-sha")],
+        [],
+        BOT_LOGIN,
+    )
+
+    assert (
+        driver.current_head_decision_outcome(
+            signal,
+            "current-sha",
+            driver.parse_time("2026-05-21T09:50:00Z"),
+        )
+        == "approved"
+    )
+
+
+def test_summary_decision_must_follow_current_head_commit() -> None:
+    body = (
+        driver.SUMMARY_COMMENT_MARKER
+        + "\nNo actionable comments were generated in the recent review.\n"
+    )
+    head_committed_at = driver.parse_time("2026-05-21T09:50:00Z")
+
+    old_signal = driver.coderabbit_decision_signal(
+        [], [_summary(10, body, "2026-05-21T09:49:59Z")], BOT_LOGIN
+    )
+    current_signal = driver.coderabbit_decision_signal(
+        [], [_summary(11, body, "2026-05-21T09:50:01Z")], BOT_LOGIN
+    )
+
+    assert (
+        driver.current_head_decision_outcome(
+            old_signal, "current-sha", head_committed_at
+        )
+        is None
+    )
+    assert (
+        driver.current_head_decision_outcome(
+            current_signal, "current-sha", head_committed_at
+        )
+        == "approved"
     )
 
 
@@ -161,11 +238,53 @@ def test_initial_trigger_auto_skips_when_terminal_review_exists(monkeypatch) -> 
     monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
     monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
 
-    decision = driver.initial_trigger_decision(repo, 130, "incremental", "auto")
+    decision = driver.initial_trigger_decision(
+        repo,
+        130,
+        "incremental",
+        "auto",
+        "head-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
 
     assert decision["trigger"] is False
     assert decision["outcome"] == "approved"
     assert decision["review_decision"] == "APPROVED"
+
+
+def test_initial_trigger_auto_does_not_skip_previous_head_approval(monkeypatch) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-runner")
+
+    def fake_gh_paginated_array(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/reviews"):
+            return [
+                _review(
+                    3,
+                    "APPROVED",
+                    "2026-05-21T09:51:46Z",
+                    commit_id="previous-sha",
+                )
+            ]
+        if endpoint.endswith("/issues/130/comments"):
+            return []
+        raise AssertionError(f"unexpected endpoint: {endpoint}")
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_gh_paginated_array)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+
+    decision = driver.initial_trigger_decision(
+        repo,
+        130,
+        "incremental",
+        "auto",
+        "current-sha",
+        driver.parse_time("2026-05-21T09:50:00Z"),
+    )
+
+    assert decision["trigger"] is True
+    assert (
+        decision["reason"] == "initial-trigger-policy:auto:no-pending-trigger-detected"
+    )
 
 
 def test_loop_cadence_ignores_standalone_poll_timestamp(monkeypatch, tmp_path) -> None:
