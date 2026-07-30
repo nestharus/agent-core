@@ -1060,6 +1060,15 @@ def git_head(worktree_path: Path) -> str:
     return git_output(worktree_path, ["rev-parse", "HEAD"])
 
 
+def remote_branch_oid(worktree_path: Path, branch: str) -> str:
+    ref = f"refs/heads/{branch}"
+    output = git_output(worktree_path, ["ls-remote", "--heads", "origin", ref])
+    fields = output.split()
+    if len(fields) != 2 or fields[1] != ref:
+        raise DriverError(f"could not resolve remote branch {ref}")
+    return fields[0]
+
+
 def commit_dirty_agent_changes(worktree_path: Path, comment_id: int) -> str | None:
     dirty = git_dirty_paths(worktree_path)
     if not dirty:
@@ -1546,15 +1555,64 @@ def revalidate_current_pr_head(
     worktree_path: Path,
     expected_branch: str,
 ) -> tuple[str, datetime]:
+    local_oid = git_head(worktree_path)
+    remote_oid = remote_branch_oid(worktree_path, expected_branch)
+    if remote_oid != local_oid:
+        raise DriverError(
+            f"remote PR branch changed for {repo.slug}#{pr_num}: "
+            f"local {local_oid}, remote {remote_oid}"
+        )
     _, head_oid, head_committed_at = validated_pr_head_identity(
         pr_metadata(repo, pr_num),
         repo,
         pr_num,
         worktree_path,
         expected_branch=expected_branch,
-        expected_oid=git_head(worktree_path),
+        expected_oid=local_oid,
     )
     return head_oid, head_committed_at
+
+
+def wait_for_provider_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+    expected_oid: str,
+) -> tuple[str, datetime]:
+    poll_interval = env_int(
+        "CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
+    )
+    while True:
+        remote_oid = remote_branch_oid(worktree_path, expected_branch)
+        if remote_oid != expected_oid:
+            raise DriverError(
+                f"remote PR branch changed after push for {repo.slug}#{pr_num}: "
+                f"expected {expected_oid}, got {remote_oid}"
+            )
+        metadata = pr_metadata(repo, pr_num)
+        head_branch = metadata.get("headRefName")
+        if head_branch != expected_branch:
+            raise DriverError(
+                f"PR head branch changed for {repo.slug}#{pr_num}: "
+                f"expected {expected_branch!r}, got {head_branch!r}"
+            )
+        if metadata.get("headRefOid") == expected_oid:
+            _, head_oid, head_committed_at = validated_pr_head_identity(
+                metadata,
+                repo,
+                pr_num,
+                worktree_path,
+                expected_branch=expected_branch,
+                expected_oid=expected_oid,
+            )
+            return head_oid, head_committed_at
+        print(
+            f"Waiting for PR head metadata to reach {expected_oid} for {repo.slug}#{pr_num}",
+            file=sys.stderr,
+            flush=True,
+        )
+        time.sleep(poll_interval)
 
 
 def poll_current_pr_head(
@@ -1764,15 +1822,14 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
-            metadata = pr_metadata(repo, args.pr_num)
-            _, head_oid, head_committed_at = validated_pr_head_identity(
-                metadata,
+            head_oid, head_committed_at = wait_for_provider_pr_head(
                 repo,
                 args.pr_num,
                 worktree_path,
-                expected_branch=pr_branch,
-                expected_oid=iteration["push_result"]["head_sha"],
+                pr_branch,
+                iteration["push_result"]["head_sha"],
             )
+            metadata = pr_metadata(repo, args.pr_num)
 
         for outcome in iteration["outcomes"]:
             if outcome["outcome"] in REPLY_OUTCOMES:

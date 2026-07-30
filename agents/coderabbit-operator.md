@@ -69,8 +69,8 @@ Declared roles: `orchestration`, `adapter`.
 The loop:
 
 - auto-skips the initial trigger when a matching CodeRabbit trigger ack is
-  newer than the latest CodeRabbit review; otherwise it triggers the selected
-  mode and waits for ack.
+  newer than both the latest CodeRabbit review and the current PR head commit;
+  otherwise it triggers the selected mode and waits for ack.
 - waits at least 300 seconds between successive loop-owned `poll` calls for
   the same PR.
 - revalidates the provider head against the local worktree before and after
@@ -84,6 +84,7 @@ The loop:
 - honors frontmatter-declared fixer models by invoking agent files with
   `agents -a <agent-file> -p <worktree> -f <prompt>` and no `-m` override.
 - aggregates the full per-comment structured outcome, pushes fixed commits,
+  waits for provider PR-head metadata to reflect each verified remote push,
   posts reply files, triggers an incremental review, and loops again.
 - stops with `terminal_reason: "no_value_provided"` when every actionable
   in-diff comment in the iteration is assessed

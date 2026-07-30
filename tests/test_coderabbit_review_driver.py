@@ -564,7 +564,9 @@ def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -
     assert committed_at == driver.parse_time("2026-07-30T10:10:56-07:00")
 
 
-def test_validated_pr_head_identity_caps_future_commit_time(monkeypatch, tmp_path) -> None:
+def test_validated_pr_head_identity_caps_future_commit_time(
+    monkeypatch, tmp_path
+) -> None:
     metadata = {"headRefName": "fix/review", "headRefOid": "new-sha"}
     observed_at = driver.parse_time("2026-07-30T18:00:00Z")
     monkeypatch.setattr(driver, "utc_now_dt", lambda: observed_at)
@@ -613,6 +615,7 @@ def test_poll_revalidation_rejects_external_head_change(monkeypatch, tmp_path) -
         },
     )
     monkeypatch.setattr(driver, "git_head", lambda *args: "local-sha")
+    monkeypatch.setattr(driver, "remote_branch_oid", lambda *args: "local-sha")
 
     with pytest.raises(driver.DriverError, match="did not match pushed commit"):
         driver.revalidate_current_pr_head(
@@ -635,6 +638,7 @@ def test_poll_aborts_when_external_head_changes_during_poll(
     )
     monkeypatch.setattr(driver, "pr_metadata", lambda *args: next(metadata))
     monkeypatch.setattr(driver, "git_head", lambda *args: "local-sha")
+    monkeypatch.setattr(driver, "remote_branch_oid", lambda *args: "local-sha")
     monkeypatch.setattr(
         driver,
         "git_output",
@@ -648,4 +652,52 @@ def test_poll_aborts_when_external_head_changes_during_poll(
             198,
             tmp_path,
             "fix/review",
+        )
+
+
+def test_wait_for_provider_pr_head_allows_metadata_propagation(
+    monkeypatch, tmp_path
+) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    metadata = iter(
+        [
+            {"headRefName": "fix/review", "headRefOid": "old-sha"},
+            {"headRefName": "fix/review", "headRefOid": "new-sha"},
+        ]
+    )
+    sleeps = []
+    monkeypatch.setattr(driver, "remote_branch_oid", lambda *args: "new-sha")
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: next(metadata))
+    monkeypatch.setattr(
+        driver,
+        "git_output",
+        lambda *args: "2026-07-30T10:10:56-07:00",
+    )
+    monkeypatch.setattr(driver.time, "sleep", sleeps.append)
+
+    head_oid, _ = driver.wait_for_provider_pr_head(
+        repo,
+        198,
+        tmp_path,
+        "fix/review",
+        "new-sha",
+    )
+
+    assert head_oid == "new-sha"
+    assert sleeps == [driver.DEFAULT_POLL_INTERVAL_SECONDS]
+
+
+def test_wait_for_provider_pr_head_rejects_remote_branch_change(
+    monkeypatch, tmp_path
+) -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    monkeypatch.setattr(driver, "remote_branch_oid", lambda *args: "external-sha")
+
+    with pytest.raises(driver.DriverError, match="remote PR branch changed after push"):
+        driver.wait_for_provider_pr_head(
+            repo,
+            198,
+            tmp_path,
+            "fix/review",
+            "new-sha",
         )
