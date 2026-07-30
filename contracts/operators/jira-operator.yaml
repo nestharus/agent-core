@@ -18,6 +18,33 @@ inputs:
   required: false
   default_source: caller
   description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
+- name: operation
+  type: enum
+  options:
+  - comment-readback
+  required: false
+  default_source: caller
+  description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
+- name: ticket_operation_context
+  type: string
+  required: false
+  default_source: caller
+  description: Exact JSON ticket/route/attempt/PR/reviewed-ref context required for operation=comment-readback.
+- name: operation_result_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for operation=comment-readback; canonical ticket-operation-result-v1 path.
+- name: producer_log_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for operation=comment-readback; distinct producer-owned closed ticket-client operation log path.
+- name: producer_output_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for operation=comment-readback; distinct producer-owned exact remote readback output path.
 - name: target_status
   type: string
   required: false
@@ -99,8 +126,11 @@ outputs:
   wrote_lines:
   - ${scratch_dir}/ticket.md when output_path is supplied
 - task: comment
-  success_shape: Print the new comment ID and a confirmation line.
-  wrote_lines: []
+  success_shape: Print the new comment ID, or return producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
+  wrote_lines:
+  - ${operation_result_path} when operation=comment-readback
+  - ${producer_log_path} when operation=comment-readback
+  - ${producer_output_path} when operation=comment-readback
 - task: transition
   success_shape: Print before-status to after-status.
   wrote_lines: []

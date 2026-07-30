@@ -54,11 +54,11 @@ A success row has `row_type: "pr_status"` and `error: null`. All fields are pres
 | `repo` | Parsed repository. |
 | `number` | Positive PR number. |
 | `pr_url` | GitHub PR URL. |
-| `state` | GitHub PR state. |
+| `state` | GitHub PR state (`OPEN`, `CLOSED`, or `MERGED`). |
 | `merged` | GitHub merged flag. |
 | `merged_at` | Merge timestamp, or null. |
-| `merge_sha` | Merge commit OID, or null. |
-| `head_sha` | PR head OID, or null. |
+| `merge_sha` | Full merge commit OID, or null. |
+| `head_sha` | Full PR head OID, or null. |
 | `head_ref_name` | PR head branch name, or null. |
 | `base_ref_name` | Base branch name, or null. |
 | `base_ref_oid` | Base ref OID from GitHub, or null. |
@@ -117,9 +117,11 @@ The tool calls `gh api graphql -f query=<query>` through one subprocess boundary
 
 ## Resumer-handoff shape
 
-A merged success row supplies the PR-derived fields needed by the wake composition layer: `pr_url`, `merge_sha`, `head_sha`, `head_ref_name` as branch name, and `merged_at`.
+A merged success row supplies the exact PR-derived fields needed by the `wu-session-wake` composition root: `pr_url`, `state`, `merged`, full `merge_sha`, full `head_sha`, `head_ref_name` as branch name, `base_ref_name`, `base_ref_oid`, and `merged_at`. That root must reject null or abbreviated head/merge identity for a merged row. The poller is status-only and never dispatches a resumer.
 
-The composition layer joins those values to session state and supplies `ticket_id`, `session_manifest_path`, and `pre_merge_main_sha`. `base_ref_oid` is not `pre_merge_main_sha`.
+`wu-session-wake` reads only canonical `sessions.active-wake.json`, joins `pr_url` to session `draft_pr_url`, requires `head_ref_name == branch`, full `head_sha == draft_pr_head_sha`, and `base_ref_name == base_branch`, then dispatches one exact joined row containing `ticket_id`, `session_manifest_path`, and optional `pre_merge_base_sha` to one `wu-session-resumer`. Historical `sessions.index.json` rows are never poller input. `base_ref_oid` is current base-status evidence, not `pre_merge_base_sha`; specifically, it is the current base OID observed when the poll ran. It is not automatically the historical immediate pre-merge SHA and must never be copied into `pre_merge_base_sha`. When the session has no pre-merge value because the PR merged manually or externally, `wu-session-resumer` independently re-queries the exact PR and derives/validates the immediate pre-merge parent from trusted merge-method and commit-parent evidence.
+
+The active handoff has no retired trunk-specific pre-merge field and no legacy alias fallback. OPEN persisted sessions legitimately carry `pre_merge_base_sha: null`; the value becomes required only immediately before an automated merge or while processing a merged wake.
 
 ## Exit codes and stderr/stdout contract
 
@@ -137,6 +139,6 @@ The tool does not schedule itself, decide actions, mutate PR state, discover WU 
 
 ## Used by
 
-- `scheduler` can run the poller on a cadence.
-- Wake composition can inspect JSONL or JSON rows and decide which merged PRs need follow-up.
-- `wu-session-resumer` receives one already-known merge event from that composition layer; it does not poll.
+- A scheduler or manual caller invokes `wu-session-wake`; it does not route directly to this poller/resumer pair.
+- `wu-session-wake` invokes the poller, inspects JSONL or JSON status rows, joins them to canonical sessions, and owns fanout/process proof.
+- `wu-session-resumer` receives one exact already-joined merge row from `wu-session-wake`; it does not poll.

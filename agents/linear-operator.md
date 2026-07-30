@@ -26,6 +26,12 @@ inputs:
     required: false
     default_source: caller
     description: "body"
+  - name: operation
+    type: enum
+    options: [comment-readback]
+    required: false
+    default_source: caller
+    description: "When supplied, must be comment-readback; omission selects ordinary comment behavior."
   - name: target_status
     type: string
     required: false
@@ -36,6 +42,26 @@ inputs:
     required: false
     default_source: caller
     description: "output path"
+  - name: ticket_operation_context
+    type: string
+    required: false
+    default_source: caller
+    description: "Exact JSON ticket/route/attempt/PR/reviewed-ref context required for operation=comment-readback."
+  - name: operation_result_path
+    type: path
+    required: false
+    default_source: caller
+    description: "Canonical ticket-operation-result-v1 path for comment-readback."
+  - name: producer_log_path
+    type: path
+    required: false
+    default_source: caller
+    description: "Distinct producer-owned closed ticket-client operation log path."
+  - name: producer_output_path
+    type: path
+    required: false
+    default_source: caller
+    description: "Distinct producer-owned exact remote readback output path."
   - name: brief_path
     type: path
     required: false
@@ -100,8 +126,8 @@ outputs:
     success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
     wrote_lines: []
   - task: comment
-    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
-    wrote_lines: []
+    success_shape: "Ordinary comment confirmation, or producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback."
+    wrote_lines: ["${operation_result_path} when operation=comment-readback", "${producer_log_path} when operation=comment-readback", "${producer_output_path} when operation=comment-readback"]
   - task: create
     success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
     wrote_lines: []
@@ -175,6 +201,7 @@ You read, comment on, create, and transition Linear issues using the ported Line
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment`, `transition`, and `apply-labels`).
 - `target_status` (for `transition`): destination state name for the routine manager-owned path. The closed routine set is exactly `Todo`, `In Progress`, and `Done`, sourced from `clients.linear.client.ROUTINE_MANAGER_OWNED_STATES`; out-of-set values are out-of-contract and the operator returns `BLOCKED`.
 - `body` (for `comment`): markdown body — Linear renders Markdown natively, no ADF.
+- `operation` (for `comment`, optional): omit for an ordinary comment or pass exactly `comment-readback` for producer-authenticated evidence. Any other value is out-of-contract and returns `BLOCKED`; `comment-readback` requires `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`.
 - `output_path` (for `read`): destination file path the operator must write the rendered ticket to (used by orchestrator Phase 0 bootstrap).
 - `brief_path` (for `create`): path to a markdown brief whose contents become the issue description verbatim. The orchestrator validates that the rendered description is non-empty; scope and boundaries are derived later in Phase 2.5 / Phase 3 / Step 6a, not pre-declared in the brief.
 - `summary` (for `create`): one-line title for the issue.
@@ -320,6 +347,44 @@ PYTHONPATH=$HOME/ai python3 -m clients.linear.cli upsert-comment \
 `upsert-comment` matches by the `--title` value (it scans existing comments for that title in their body and updates in place if found).
 For `upsert-comment`: print the comment ID returned by the CLI JSON envelope so callers can record the durable reference.
 
+### Producer-Authenticated Comment Readback
+
+When `task=comment` and `operation=comment-readback`, require exact `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`. The three paths are canonical, absolute, pairwise distinct, and written only by this invocation. Derive `producer_invocation_uuid` from runner provenance; never accept a caller-selected UUID.
+
+Canonicalize the posted Markdown body once before any ticket-client request as its exact UTF-8 bytes and SHA-256 those bytes; do not trim, normalize line endings, or render Markdown before comparison.
+
+Reconcile before any create request. Query the exact context ticket key with `get-issue` and the fully paginated `list-comments`, require both responses to agree on the exact issue identifier and UUID, and select only comments whose exact-body SHA-256 equals the posted-body SHA-256. Apply these closed outcomes:
+
+- Zero matches: create once with `create-comment`; require its non-blank ID and returned issue UUID to equal the exact-ticket identity, then verify the posted-body hash through the mandatory post-create readback below.
+- One match: do not create; reuse that comment's ID as the remote create identity only after its exact ticket and posted-body identities have passed the checks above.
+- More than one match: return `BLOCKED: ambiguous comment-readback reconciliation` before create and write no PASS result artifacts.
+
+After either zero-match creation or one-match reuse, query the same exact ticket with fully paginated `list-comments` again. Require exact issue identifier and UUID equality plus exactly one returned comment with the selected ID and exact posted-body SHA-256. Use the reconciled issue URL plus `#comment-<comment-id>` as the stable Linear remote comment URL and require it on both create and readback identities. Atomically write the closed ticket-client request/response transcript to `producer_log_path`, the exact readback projection to `producer_output_path`, and then the canonical result below to `operation_result_path`. The producer log is the closed backend-operation log, not the still-open outer runner `.log`; the feature route separately authenticates its implementation child through process lineage.
+
+```yaml
+schema: ticket-operation-result-v1
+additional_properties: false
+required_fields: [schema, backend, ticket_key, operation, status, owning_route, attempt_number, pr_url, pr_number, reviewed_base_branch, reviewed_base_ref, reviewed_base_sha, reviewed_head_branch, reviewed_head_ref, reviewed_head_sha, comment_body_sha256, remote_comment_id, remote_comment_url, readback_status, readback_ticket_key, readback_comment_id, readback_comment_url, readback_body_sha256, producer_operator, producer_invocation_uuid, producer_log_path, producer_log_sha256, producer_output_path, producer_output_sha256]
+fixed_values:
+  backend: linear
+  operation: comment-readback
+  status: PASS
+  owning_route: implementation-pipeline
+  readback_status: PASS
+  producer_operator: agents/linear-operator.md
+identity_rules:
+  - readback_ticket_key-equals-ticket_key
+  - readback_comment_id-and-url-equal-remote-comment-id-and-url
+  - readback_body_sha256-equals-comment_body_sha256
+  - producer-invocation-is-runtime-derived
+  - producer-log-and-output-are-distinct-current-hash-bound-artifacts
+producer_log_schema: ticket-operation-producer-log-v1
+producer_output_schema: ticket-operation-readback-v1
+caller_validator: tools/operational_contracts.py validate-ticket-operation-result --expected-context <caller-owned-path>
+```
+
+The producer log uses exactly `schema`, `backend`, `ticket_key`, `operation`, `status`, `producer_operator`, `producer_invocation_uuid`, `comment_body_sha256`, `remote_comment_id`, `remote_comment_url`, `readback_status`, `readback_ticket_key`, `readback_comment_id`, `readback_comment_url`, and `readback_body_sha256`. The readback output uses exactly `schema`, `backend`, `ticket_key`, `status`, `comment_id`, `comment_url`, and `body_sha256`. The caller runs the production validator with its immutable pre-dispatch `--expected-context` artifact before consuming the result. Unknown fields, failed/missing readback, a duplicate/missing comment, wrong issue/comment/body, malformed remote identity, stale producer support hash, or caller-context mismatch blocks consumption and never authorizes ticket/PR progression.
+
 ## Procedure: Create
 
 Used by `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 0 when cold-starting from a `brief_path`, and by any operator workflow that needs to file a new issue.
@@ -443,7 +508,7 @@ Both CLI commands return the standard JSON envelope. Parse `identifier`, `title`
 ## Output Contract
 
 For `read`: write the rendered ticket to `output_path`; print the key, title, state, parent in a brief block.
-For `comment`: print the new comment ID + a confirmation line.
+For `comment`: when `operation` is omitted, print the new comment ID + a confirmation line; when `operation=comment-readback`, atomically write the producer log to `producer_log_path`, the readback projection to `producer_output_path`, and the `ticket-operation-result-v1` result to `operation_result_path`, then return that structured result.
 For `create`: print the new key + URL.
 For `update-estimate`: print the issue key, refined estimate, and comment ID for the durable Markdown note.
 For `list-projects`: print one line per result (`ID  state  name`, omitting blank state).

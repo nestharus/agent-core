@@ -4,16 +4,19 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: "pr-review-operator"
   inputs:
-    - "actual branch diff or PR, approved proposal package, test evidence, and audit-history context"
-    - "base branch or true stacked parent for comparison"
+    - "an OPEN PR number, stable review lineage root, approved proposal/test context, non-blank local_coverage_command, and optional audit history"
+    - "required caller-supplied base/head branch, fetched ref, and full OID identity; provider data verifies all six fields and never replaces missing or blank values"
   expectations:
     - "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks"
-    - "runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone"
-    - "routes repeated fix or gate loops through audit-history and process-tree review"
+    - "Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base"
+    - "initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned exact-blocking-mode machine binding, actual UUID, and pinned SHAs"
+    - "each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned exact-blocking-mode machine binding before it can contribute to posting"
+    - "every invocation uses an exact PR/base/head/invocation-qualified immutable run root, unique private refs and detached worktree, and distinct complete logs versus canonical outputs"
+    - "re-queries and requires unchanged OPEN provider base/head OIDs after all conditional proofs and before any posting; every review/comment mutation and identity query names the exact repository and PR"
   outputs:
     - "gate verdicts and actionable findings for the next fix pass or decomposition"
     - "synthesized PR-review comment when posting is in scope"
-    - "process-tree-auditor evidence before synthesis or downstream PR movement"
+    - "pr-review-result-v2 with immutable run identity, REVIEW_POSTED or PROPOSAL_POSTED, exact-repository/exact-PR posting identity, exact base/head OIDs, every child log/output hash, nested test-audit proof/revalidation, and every process-proof path and hash"
   non_goals:
     - "does not review prototype work that lacks a proposal contract"
     - "does not treat human review as a substitute for model-owned gates"
@@ -21,7 +24,7 @@ workflow_dispatch_contract:
 ---
 # PR Review Gates
 
-**This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md` — the step that makes implementation work consumable for review by gating the diff against the proposal that scoped it. It runs after Phase 7 optional review handling. Gates the draft PR before it is opened, or before it is promoted if it was opened already.
+**This is the implementation-presentation workflow.** It is Phase 8 of `~/ai/workflows/implementation-pipeline.md`. Phase 7 has already opened and verified the one draft PR; Phase 8 reviews that exact provider PR head before Phase 9 terminal movement.
 
 Model-owned gates may block on their own evidence questions, but a human does not re-run or revalidate them as branch-local approval before a draft PR opens.
 
@@ -53,20 +56,23 @@ pr-review-operator
 
 ### Inputs
 
-- actual branch diff or PR, approved proposal package, test evidence, and audit-history context
-- base branch or true stacked parent for comparison
+- an OPEN PR number, stable review lineage root, approved proposal/test context, non-blank local_coverage_command, and optional audit history
+- required caller-supplied base/head branch, fetched ref, and full OID identity; provider data verifies all six fields and never replaces missing or blank values
 
 ### Expectations
 
 - gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks
-- runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone
-- routes repeated fix or gate loops through audit-history and process-tree review
+- Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base
+- initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned exact-blocking-mode machine binding, actual UUID, and pinned SHAs
+- each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned exact-blocking-mode machine binding before it can contribute to posting
+- every invocation uses an exact PR/base/head/invocation-qualified immutable run root, unique private refs and detached worktree, and distinct complete logs versus canonical outputs
+- re-queries and requires unchanged OPEN provider base/head OIDs after all conditional proofs and before any posting; every review/comment mutation and identity query names the exact repository and PR
 
 ### Outputs
 
 - gate verdicts and actionable findings for the next fix pass or decomposition
 - synthesized PR-review comment when posting is in scope
-- process-tree-auditor evidence before synthesis or downstream PR movement
+- pr-review-result-v2 with immutable run identity, REVIEW_POSTED or PROPOSAL_POSTED, exact-repository/exact-PR posting identity, exact base/head OIDs, every child log/output hash, nested test-audit proof/revalidation, and every process-proof path and hash
 
 ### Non-goals
 
@@ -80,7 +86,7 @@ pr-review-operator
 |---|---|---|
 | Test audit | `gpt-high` | Check intent-first tests, risk reduction, acceptance criteria, and fixture externality. |
 | Multi-concern review | `gpt-xhigh` | Should this PR be split? Intent: does everything in this diff belong together? |
-| Justification review | `gpt-xhigh` | Does every change justify its presence? Intent: is anything here for a reason other than the stated purpose? |
+| Justification review | `gpt-high` | Does every change justify its presence? The named gauntlet's frontmatter model is authoritative; callers do not pass `-m`. |
 | Supported-Surface Verification | `gpt-xhigh` | Does the actual diff still reduce risk on the approved supported surface, including adjacent paths, migration/rollback, and observability? |
 | Commit-hygiene check | `gpt-high` | Are commits small, testable, single-concern, and well-described? Checklist. |
 | Synthesize and post | `gpt-high` | Collect all gate outputs into one PR comment that reviewers can act on. |
@@ -89,7 +95,11 @@ See `~/ai/models/roles.md` for the model-role rationale. Do not restate the matr
 
 ## Operating Rules
 
-- Run on the actual diff. Default comparison is `git diff main..HEAD`; if the branch is stacked, compare against its true parent.
+- Run on the pinned provider diff `git diff ${base_sha}...${head_sha}` after freshly fetching the base and exact PR head. Ambient `HEAD`, a short local branch, and a default-parent fallback are invalid review targets.
+- Treat the configured review directory as a lineage root. Each invocation allocates a new exact PR/base/head/invocation-qualified run root and private refs; it never reuses another run's worktree or mutates prior artifacts.
+- Keep every complete runner envelope in a dedicated `.log` distinct from its canonical result/report. Extract stdout payloads with `tools/operational_contracts.py`, hash file-producing child outputs independently, parse UUIDs only from logs, and parse verdicts only from canonical outputs.
+- Treat test audit as a nested composition: require its exact three children, authoritative models, root-parent relation, expected manifest, trace, independent process audit, result, and current production-validator PASS as mandatory companions of the outer test-audit node.
+- From the detached review worktree, every `gh pr review` or `gh pr comment` mutation and every created-ID query names both the exact repository and PR; current-branch inference is forbidden.
 - A PR that touches N independent concerns should be split into N PRs.
 - A large deletion is its own PR, separate from the addition that replaces it.
 - Additive changes go before behavioral changes.
@@ -232,7 +242,10 @@ One `gpt-high` agent collects the gate outputs and posts one synthesized PR comm
 
 Synthesis rules:
 
-- Process-tree review: before synthesis consumes or posts gate outputs, run `process-tree-auditor` on the PR-review gate fanout. The expected process includes test audit, multi-concern review, justification review, supported-surface verification, commit hygiene, and each gate output consumed by synthesis. A blocking process violation prevents synthesis/posting.
+- Initial process-tree review: before fanout, write the canonical stable-role projection for every required risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene child. Named operators use frontmatter models without `-m`. Join actual UUIDs after captured markers, capture the trace, hash all companions, and require an independent header-first `# Process Tree Audit` report with exactly one `Verdict: PASS`, one producer-owned report/root/expected/trace/sorted-companion machine binding, and final stdout `PASS` before synthesis. The outer test-audit row is incomplete until `validate-test-audit-result` independently accepts its actual nested three-child trace and the same canonical report/binding contract against the outer child UUID and pinned SHAs.
+- Conditional process-tree review: every proposal/revision risk round and every domain-research fanout receives its own versioned expected manifest, post-dispatch UUID/hash join, trace, report, and audit log. An earlier proof never certifies a repeated or conditional child.
+- Final currentness: after all applicable process proofs pass and before any GitHub posting, re-query the same PR and require unchanged OPEN state plus exact provider base/head names and full OIDs. Any movement or consumed-artifact hash change prevents posting.
+- Stable result: return the current immutable run identity, exact repository/PR posting identities, every direct/nested child log/output path/hash, the nested test-audit result/proof/revalidation, and every initial/conditional expected, dispatch, trace, audit, and audit-log path/hash in `pr-review-result-v2`; omitted, aliased, or stale evidence cannot produce `REVIEW_POSTED` or `PROPOSAL_POSTED`.
 - Include the canonical test-report S3 PDF URL when Test Audit produced or consumed one. Fall back to the uploaded Actions-artifact URL only when the S3 URL is absent. The PR comment remains a pointer; do not paste the full report.
 - Include each gate verdict.
 - Include the specific findings needed for the next fix pass.
@@ -265,7 +278,7 @@ If multi-concern review recommends a split:
 
 - Decompose into N PRs using the file or line allocation from the review.
 - Merge sequentially.
-- Rebase each later PR onto `main` after the earlier PR lands, or onto the current parent while the stack is still in flight.
+- Rebase each later PR onto the freshly verified provider parent after the earlier PR lands, or onto the current exact stack parent while the stack is still in flight.
 - Follow the stack conventions in `~/ai/conventions/git.md`.
 
 ## Gate Ownership Recap

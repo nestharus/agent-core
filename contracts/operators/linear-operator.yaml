@@ -18,6 +18,13 @@ inputs:
   required: false
   default_source: caller
   description: body
+- name: operation
+  type: enum
+  options:
+  - comment-readback
+  required: false
+  default_source: caller
+  description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
 - name: target_status
   type: string
   required: false
@@ -28,6 +35,26 @@ inputs:
   required: false
   default_source: caller
   description: output path
+- name: ticket_operation_context
+  type: string
+  required: false
+  default_source: caller
+  description: Exact JSON ticket/route/attempt/PR/reviewed-ref context required for operation=comment-readback.
+- name: operation_result_path
+  type: path
+  required: false
+  default_source: caller
+  description: Canonical ticket-operation-result-v1 path for comment-readback.
+- name: producer_log_path
+  type: path
+  required: false
+  default_source: caller
+  description: Distinct producer-owned closed ticket-client operation log path.
+- name: producer_output_path
+  type: path
+  required: false
+  default_source: caller
+  description: Distinct producer-owned exact remote readback output path.
 - name: brief_path
   type: path
   required: false
@@ -91,8 +118,11 @@ outputs:
   success_shape: Task-specific stdout or durable artifact paths named by the procedure.
   wrote_lines: []
 - task: comment
-  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
-  wrote_lines: []
+  success_shape: Ordinary comment confirmation, or producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
+  wrote_lines:
+  - ${operation_result_path} when operation=comment-readback
+  - ${producer_log_path} when operation=comment-readback
+  - ${producer_output_path} when operation=comment-readback
 - task: create
   success_shape: Task-specific stdout or durable artifact paths named by the procedure.
   wrote_lines: []

@@ -6,7 +6,7 @@ Canonical convention for internal structure reshaping with no intended external 
 
 Use this strategy when the work is primarily internal structure reshape, the intended external behavior is unchanged, and the work needs refactoring-specific safety topology: integration-buffer staging, contract-bounded slicing, encapsulate-first handling for unsafe surfaces, or shim lifecycle tracking.
 
-Use it for refactors that benefit from many small PRs against a shared buffer, for slices identified from auditor outputs, and for cleanup where the hard problem is preserving contracts while changing the implementation behind them.
+Use it for refactors that benefit from separate one-PR WUs against a shared buffer, for slices identified from auditor outputs, and for cleanup where the hard problem is preserving contracts while changing the implementation behind them. Each orchestrator invocation owns exactly one child and one ticket PR; larger efforts decompose before dispatch.
 
 The receiver-side boundary cites `conventions/feature-development-workflow.md` `## Refactoring out of scope`; feature-spawned refactor tickets are valid intake only under no-behavior-shipping.
 
@@ -20,9 +20,9 @@ Do not use refactoring as a substitute for RCA, PR review, release, roadmap, or 
 
 ## Output shape
 
-Refactoring output is a series of small targeted PRs. Each PR is single-commit, bounded to a named slice, and targeted at an integration-branch buffer based off the repository default branch (for `~/ai`, `master`). The buffer accumulates many small refactors before a periodic feature-style PR moves the buffer to trunk.
+Refactoring output across multiple WUs can be a series of small targeted PRs. Each WU owns exactly one PR bounded to a named slice, with small, testable, single-concern commits, and targeted at the caller-provided `integration_branch_ref`; the caller-provided `trunk_branch` is the eventual buffer PR base. Never infer either identity from the repository default branch. The buffer can accumulate separately dispatched refactoring WUs before a periodic feature-style PR moves the buffer to trunk.
 
-PRs pull from the current buffer frontier so parallel refactor PRs can proceed on disjoint, non-overlapping slices. When slices overlap, serialize them through the buffer rather than relying on ad hoc rebases.
+Separately dispatched WU PRs pull from the current buffer frontier so disjoint, non-overlapping slices can proceed independently. When slices overlap, serialize the WUs through the buffer rather than relying on ad hoc rebases.
 
 This convention names the buffer shape only. Cadence, naming, and merge timing are per-effort decisions.
 
@@ -78,6 +78,40 @@ This workflow does not implement cross-file analysis logic itself. That logic is
 ## Gate discipline inheritance
 
 Refactoring slices inherit the ACR-156 LOW-only / decompose-on-oscillation discipline from `~/ai/conventions/code-quality.md`. Do not advance a slice with unresolved MEDIUM or HIGH risk outcomes. If review or auditor findings oscillate without converging to LOW, decompose or shrink the slice rather than accepting residuals.
+
+## Runtime invocation identity
+
+Runtime invocation UUIDs come from runner provenance, never caller input. A refactoring invocation derives its own identity from `OULIPOLY_PARENT_INVOCATION`; each child identity is joined only after the runner emits one valid `OULIPOLY_INVOCATION` marker into that child's complete log. Pre-dispatch manifests name stable roles, prompts, logs, and outputs rather than UUIDs that do not yet exist.
+
+## Ready-state recovery
+
+The refactoring owner promotes only the exact reviewed OPEN draft PR. Every failure after ready and before merge invokes exact-repository `gh pr ready --undo`, freshly fetches both base and head branches, and freshly re-queries that PR. `validate-ready-state-restoration` must prove OPEN `is_draft=true`, unchanged URL/number/state/base/head identity across undo, and provider OIDs equal to the fresh fetches before the owner may return to the implementation child's Phase 8. Undo, re-query, identity, or draft-state failure is `BLOCKED:ready-state-restoration-failed` and is not replayable.
+
+Invocation of the guarded merge command is the irreversible attempt boundary. No ready undo occurs after that point; merge-command and post-attempt verification failures return `BLOCKED:merge-attempt-started` with `replay_permitted=false`.
+
+## Canonical branch and path identity
+
+The explicit repository trunk, integration branch, child branch, and every protected-list entry are independently validated exact short branches before protected membership checks. The canonical protected list contains trunk first, integration second when distinct, and any extra names in lexical order. Reject missing trunk/integration members, full refs, remote-tracking forms, invalid aliases, duplicates, and semantically disguised protected names; never normalize an invalid protected entry into authority. The child branch must differ from every protected branch.
+
+Worktree, planning, and scratch roots are pairwise distinct canonical absolute identities. Reject `.` / `..` components, symlinks, lexical-versus-`resolve(strict=False)` differences, and cross-root canonical aliases before dispatch. A child projection repeats those exact strings unchanged.
+
+## Acyclic process-review projections
+
+The pre-merge projection is immutable and contains only the sole implementation child, baseline-auditor, and pre-merge-auditor nodes that can exist before merge. Its report uses the canonical header-first `# Process Tree Audit` envelope, exactly one `Verdict: PASS`, and one producer-owned `process-tree-audit-binding-v1` that binds exact `blocking` mode, report identity without a self hash, root/null subtree, expected manifest, trace, and sorted companion artifact rows by SHA-256. Post-merge auditor nodes are added only to a full post-merge projection that preserves the complete singular-child pre-merge lineage and records the pre-merge manifest hash. A process audit never requires its own invocation or a future route result as an input, and consumers never impose a caller-specific binding layout.
+
+## Child evidence binding
+
+Before promotion, the refactoring owner requires the implementation result's immutable `ticket-operation-expected-context-v1` path/hash and validated producer ticket-result path/hash. It reruns `validate-ticket-operation-result --expected-context` against the exact refactoring ticket/backend/site/attempt/PR/reviewed identity; a self-consistent result for another caller is not ticket evidence. The implementation result also carries exact current Phase 4/6/8 expected-process/raw-trace/process-audit path-hashes. Refactoring re-hashes those artifacts but does not re-audit implementation-owned internal nodes.
+
+The `refactoring-route-result-v1` binds both the implementation-owned rows and exact refactoring-owned pre-merge/final proof rows. It also binds child PR URL/number to the nested implementation PR; declared/open/pre-merge/merged head names to the nested reviewed head branch; declared/observed/expected-guard head SHAs to nested `phase_8_reviewed_head_sha`; and open/pre-merge/merged/reviewed base SHAs to nested `phase_8_reviewed_base_sha`. `integration_branch_name`, child dispatched and open/pre-merge/merged observed base names, and nested implementation `base_branch` equal the caller's exact integration/feature branch plus nested `base_ref=refs/remotes/origin/${integration_branch_name}`. Equal OIDs never waive PR, name, ref, base, or guard joins.
+
+The same route result binds one current `refactoring-auditor-index-v1` by path/SHA-256. The closed index names exact route invocation UUID, feature branch, ticket, attempt, baseline, pre-merge head, and post-merge head plus exactly five rows in canonical role order at each of `pre-merge` and `post-merge`. Each row contains only `role`, `stage`, `report_path`, `report_sha256`, `verdict`, `round`, `baseline_sha`, and `current_head_sha`; the route child arrays equal the index arrays exactly. Every report is distinct, re-hashed, and parsed for exactly one canonical `Verdict: LOW`; pre-merge heads equal the nested reviewed child head and post-merge heads equal final/refreshed integration SHA. Feature-level consumers perform this re-hash and semantic validation and verify both owners' process-proof hashes without rerunning auditors or recursively imposing feature topology on either orchestrator's descendants.
+
+## Guarded child-PR merge identity
+
+Every parent-sensitive implementation, behavior-test, coverage, test-audit, PR-review, refactoring-auditor, ticket-evidence, and pre-merge process result binds one exact `reviewed_base_sha` plus reviewed head SHA. The refactoring child must identify the same exact nested implementation PR URL/number and reviewed head branch/SHA before promotion. Immediately before the owner-controlled merge, freshly fetch the explicit integration and child head branches, resolve both full OIDs, re-query that exact PR, and invoke `tools/operational_contracts.py validate-pr-currentness` with required fetched base/head SHAs over frozen reviewed and immediate provider bundles. Require OPEN ready state, unchanged PR number/URL, exact base/head names, exact expected-head guard, and provider/fetched/reviewed equality for both full OIDs; record both fetched SHAs in currentness evidence. The merged observation's base SHA must still equal both `reviewed_base_sha` and `pre_merge_base_sha`; another PR, same-OID branch alias, or unrelated merged base OID fails.
+
+If the integration branch advanced externally or through a sibling merge, write a `STALE_CURRENTNESS` result and perform no merge. Return the candidate through refresh/rebase and rerun every parent-sensitive implementation, test, review, refactoring-auditor, ticket-evidence, and process gate before establishing a new reviewed base/head. An unchanged head does not preserve evidence across parent movement. Only exact equality permits the provider's expected-head guard. Afterward require the same PR in MERGED state with unchanged identities and matching non-null merge OID, then prove refreshed integration ancestry and immediate parent equal to `reviewed_base_sha` before post-merge acceptance.
 
 ## Shim labeling
 

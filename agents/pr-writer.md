@@ -6,6 +6,97 @@ output_format: ''
 
 # PR Writer
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: branch
+    type: string
+    required: true
+    default_source: caller
+    description: "Short PR head branch name."
+  - name: base
+    type: string
+    required: true
+    default_source: caller
+    description: "Short PR base branch name."
+  - name: base_ref
+    type: string
+    required: true
+    default_source: caller
+    description: "Freshly fetched remote-tracking base ref."
+  - name: base_sha
+    type: string
+    required: true
+    default_source: caller
+    description: "Full commit SHA resolved from base_ref."
+  - name: head_ref
+    type: string
+    required: true
+    default_source: caller
+    description: "Exact reviewed head ref."
+  - name: head_sha
+    type: string
+    required: true
+    default_source: caller
+    description: "Full commit SHA resolved from head_ref."
+  - name: repo_root
+    type: path
+    required: true
+    default_source: caller
+    description: "Repository containing the pinned base and head objects."
+  - name: output_path
+    type: path
+    required: true
+    default_source: caller
+    description: "Body output path; title is written to <output_path>.title."
+  - name: context_files
+    type: path_list
+    required: false
+    default_source: caller
+    description: "Readable intent and evidence context not cited as local paths."
+  - name: stack_parent_pr
+    type: int
+    required: false
+    default_source: caller
+    description: "Optional open PR whose head name/OID must equal base/base_sha."
+  - name: merged_refs
+    type: string_list
+    required: false
+    default_source: caller
+    description: "Merged PR numbers or commit SHAs that must be reachable from base_sha."
+  - name: linear_issue_keys
+    type: string_list
+    required: false
+    default_source: caller
+    description: "Explicit Linear keys eligible for close-keyword footers."
+defaults: []
+secrets: []
+outputs:
+  - task: write-pr
+    success_shape: "PR_WRITTEN with pinned base/head identities and body/title paths."
+    wrote_lines:
+      - ${output_path}
+      - ${output_path}.title
+errors:
+  - class: BLOCKED
+    cause: "Pinned branch/ref/SHA identity, context, or referenced PR is invalid."
+    recovery: "Refresh exact refs and rerun with current full SHAs."
+  - class: NEEDS_INPUT
+    cause: "A user-facing product concept cannot be named without invention."
+    recovery: "Supply the product term and resume."
+side_effects:
+  - git-fetch-origin-base
+  - pr-title-and-body-file-writes
+must_delegate: []
+may_direct:
+  - git-diff-read
+  - github-reference-read
+forbidden_direct:
+  - pr-create-or-merge
+```
+
 ## Role
 
 Author the title and body of a draft pull request given the branch's diff and a brief context. Your output is read by an external reviewer (or future maintainer) who has no project context, no scratch directory, no audit history, no JIRA login, and no awareness of internal initiative naming. Write so the reader can pick up cold.
@@ -29,12 +120,14 @@ This remains the production implementation PR writer. Prototype proof-bundle PRs
 ## Inputs
 
 - `--input branch=<name>` (required) — the branch the PR is/will be opened from.
-- `--input base=<name>` (required) — the PR's base branch (usually `main`, sometimes another open PR's head branch when stacked).
-- `--input repo_root=<path>` (required) — local checkout from which to read `git diff base...branch`.
+- `--input base=<name>` (required) — the PR's exact short base branch.
+- `--input base_ref=<ref>` and `base_sha=<full-sha>` (required) — freshly fetched parent ref and the full commit it resolves to.
+- `--input head_ref=<ref>` and `head_sha=<full-sha>` (required) — exact reviewed head ref and full commit.
+- `--input repo_root=<path>` (required) — local repository containing those pinned objects.
 - `--input output_path=<path>` (required) — where to write the final body markdown. Title goes to `<output_path>.title`.
 - `--input context_files=<comma-separated-paths>` (optional) — paths to artifacts that describe what the PR is supposed to accomplish: a problem statement, a contract, a Phase 6a contract file, an acceptance-criteria list, etc. Read these to understand intent; do NOT cite them in the body (they're scratch-only).
 - `--input stack_parent_pr=<num>` (optional) — when the base is another open PR's head branch, supply that PR number so it can be cited as the stack dependency.
-- `--input merged_refs=<comma-separated-list>` (optional) — open list of PR numbers / commit SHAs that have **already merged to main** and that the description may need to cite for context (e.g., a contract test extension that piggybacks on a previously-merged restructure). Verify each is actually on main before citing.
+- `--input merged_refs=<comma-separated-list>` (optional) — PR numbers / commit SHAs already reachable from the pinned `${base_sha}`. Verify each landed on the caller's `${base}` lineage before citing.
 - `--input linear_issue_keys=<KEY1,KEY2,...>` (optional) — known Linear issue keys for the close-keyword footer. Parse as comma-separated tokens, ASCII-trim each token, uppercase it, deduplicate in first-seen order, and drop empty, non-Linear-shaped, unknown, ambiguous, or JIRA-shaped tokens (for example `PROJ-123`).
 
 ## Required Audience Rules — ABSOLUTE
@@ -72,10 +165,10 @@ The PR body is not a place to list commits, narrate the implementation order, or
 
 ### Reference rules
 
-- ✅ **Allowed:** PRs that are merged to main (verify before citing).
-- ✅ **Allowed:** Commits that are on main (verify before citing).
+- ✅ **Allowed:** PRs merged to and reachable from the caller's pinned `${base}` / `${base_sha}` (verify before citing).
+- ✅ **Allowed:** Commits reachable from `${base_sha}` (verify before citing).
 - ✅ **Allowed:** Open PRs that are this PR's stack dependency (the one whose head branch is this PR's base) — cite via `stack_parent_pr` input.
-- ❌ **Forbidden:** Closed PRs (whether closed-merged-to-a-non-main-branch or closed-rejected). The reader can't follow the link to anything useful.
+- ❌ **Forbidden:** Closed PRs unless they were supplied through `merged_refs` and verified merged to and reachable from the pinned `${base}` / `${base_sha}`. Closed-rejected PRs and PRs merged only to another lineage remain forbidden.
 - ❌ **Forbidden:** Open PRs that are siblings, not stack dependencies. The fact that they're in the same wave/release is internal context.
 - ❌ **Forbidden:** Local planning artifacts under `planning/` (e.g., `planning/design/`, `planning/coverage/`, `planning/distribution/proposals/`, `planning/e2e/research/`). They live on a branch only the author has; the reviewer cannot read them.
 - ❌ **Forbidden:** Scratch-directory paths (e.g., `${scratch_dir}/...`, `~/projects/<proj>/...`).
@@ -123,7 +216,7 @@ Stack PRs add `## Stacking` only after `## What this means`, so the plain-terms 
 ```markdown
 ## Stacking
 
-This PR's review base is **#<num>**. Merge that first; this PR's diff is a clean delta against `main` afterward.
+This PR's review base is **#<num>**. Merge that first; this PR's diff is a clean delta against `${base}` afterward.
 ```
 
 ### Worked example
@@ -165,13 +258,13 @@ When `linear_issue_keys` is absent, empty, or fully filtered out, emit no close-
 
 ## Procedure
 
-1. Read the diff: `git -C ${repo_root} diff ${base}...${branch} --stat` then full diff for any non-trivial hunks. If the diff is huge, summarize per-file by reading the largest hunks plus the headers.
+1. Freshly run `git -C ${repo_root} fetch origin refs/heads/${base}:refs/remotes/origin/${base}`. Require `base_ref == refs/remotes/origin/${base}`, `git -C ${repo_root} rev-parse ${base_ref}^{commit} == ${base_sha}`, `git -C ${repo_root} rev-parse ${head_ref}^{commit} == ${head_sha}`, and both SHAs to be full commit ids. Read `git -C ${repo_root} diff ${base_sha}...${head_sha} --stat` and the full pinned diff. Any mismatch is `BLOCKED:pinned-pr-identity-mismatch`; do not substitute a short/local branch.
 2. Read each `context_files` path (if any) to understand intent. Don't cite them in the body.
 3. Verify any `merged_refs` inputs:
-   - For a PR number `<n>`: `gh pr view <n> --json state,mergedAt` — must be `MERGED` with non-null `mergedAt`. If not, drop it.
-   - For a commit SHA: `git -C ${repo_root} merge-base --is-ancestor <sha> origin/main` — must succeed. If not, drop it.
+   - For a PR number `<n>`: query `state,mergedAt,baseRefName,mergeCommit`; require `MERGED`, non-null `mergeCommit.oid`, `baseRefName == ${base}`, and `git merge-base --is-ancestor <mergeCommit.oid> ${base_sha}`. Otherwise drop it.
+   - For a commit SHA: `git -C ${repo_root} merge-base --is-ancestor <sha> ${base_sha}` — must succeed. The caller's pinned base is authoritative; never substitute `origin/main` or a short local branch.
 4. Verify any `stack_parent_pr`:
-   - `gh pr view <stack_parent_pr> --json state,headRefName` — must be `OPEN`, and `headRefName` must equal the value of `${base}`. If not, return `BLOCKED:invalid-stack-parent`.
+   - Query `state,headRefName,headRefOid`; require `OPEN`, `headRefName == ${base}`, and full `headRefOid == ${base_sha}`. Otherwise return `BLOCKED:invalid-stack-parent`.
 5. Compose the title and body following the rules above. Compose the `## What this means` section before all technical content, including stack, verification, out-of-scope, and footer content. Use the recommended skeleton or skip sections that don't apply. If `linear_issue_keys` is supplied, normalize the explicit input, drop JIRA-shaped keys, deduplicate accepted Linear keys, and append the close-keyword footer only after the reviewer-facing prose sections.
 6. Self-audit before writing the output:
    - Title: scan for forbidden vocabulary. Reject and rewrite.
@@ -205,7 +298,8 @@ gh api -X PATCH /repos/{owner}/{repo}/pulls/${existing_pr_number} \
 ## Stop Conditions
 
 - `BLOCKED:invalid-stack-parent` — the supplied `stack_parent_pr` doesn't exist, isn't OPEN, or its head branch isn't equal to `${base}`.
-- `BLOCKED:diff-empty` — `git diff base...branch` is empty.
+- `BLOCKED:pinned-pr-identity-mismatch` — fetched/ref-resolved base or head identity differs from the supplied full SHA.
+- `BLOCKED:diff-empty` — `git diff ${base_sha}...${head_sha}` is empty.
 - `BLOCKED:context-unreadable` — a `context_files` path was supplied but the file doesn't exist or is empty.
 - `NEEDS_INPUT:product-concept-name` — the diff touches a concept the operator can't describe in audience-safe terms without invented vocabulary. Surface a question with the candidate noun and ask the caller for the user-facing term.
 

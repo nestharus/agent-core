@@ -4,7 +4,7 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: "implementation-pipeline-orchestrator"
   inputs:
-    - "ticket id and branch, worktree, scratch, and planning paths"
+    - "ticket id and branch, worktree, scratch, and planning paths, required caller-owned base_branch, and local_coverage_command required before Phase 8 review"
     - "non-empty ticket description from the configured Jira or Linear ticket system"
     - "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
   expectations:
@@ -14,9 +14,18 @@ workflow_dispatch_contract:
     - "resolves estimate mutation policy from the authoritative ticket-operator contract and requires verified write or policy-disabled no-write evidence before Phase 4"
     - "uses apply-gate-set caller modes implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions"
     - "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
+    - "freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence"
+    - "Phase 7 opens one exact draft PR, Phase 8 freezes the exact closed provider identity including boolean is_draft=true and reviews that base/head with local coverage plus production-validated nested test-audit process evidence, and Phase 9 validates one immediate provider capture before side effects and returns one stable VERIFIED_DRAFT_PR or VERIFIED_MERGED result envelope"
+    - "Phase 9 writes and hashes a closed caller-owned ticket-operation-expected-context-v1 before dispatch, requires the selected named ticket operator's exact comment/readback result to validate against it, and returns both path/hash pairs plus current owned Phase 4/6/8 process-proof path/hashes"
+    - "Phase 0, Phase 7, and Phase 9 invoke exact wu-session-migration operations phase0-init, phase7-upsert, and phase9-update with closed wu-session-runtime-write-v1 requests; the shared executable owns lock, journal, held-parent, rollback, and recovery mechanics while sessions.index.json remains historical source inventory"
+    - "each Phase 8 rerun allocates a new exact-identity PR-review run and keeps every runner log distinct from its canonical result while preserving prior run lineage"
+    - "a feature-routed draft result exposes implementation-pipeline-result-v1 with base_branch equal to the dispatched feature branch, base_ref equal to its fetched refs/remotes/origin identity, reviewed/current provider base_ref_name equal to that exact branch even when OIDs coincide, and current Phase 4/6/8 proof rows for the parent's common feature-route-attempt-proof-v1 gate; direct merge authorization remains a separate parent composition with ticket/currentness/acceptance evidence"
   outputs:
     - "planning artifacts under the per-WU planning directory"
-    - "tested repository diff and draft PR URL when the work proceeds"
+    - "planning_dir/phase-8-reviewed-pr.json, planning_dir/phase-9-currentness.json recording required fetched base/head SHAs, and conditional planning_dir/phase-9-ready-restoration.json exact provider-state evidence"
+    - "planning_dir/ticket-operations/<wu>-phase-9-expected-context.json, <wu>-phase-9-comment.json, and <wu>-phase-9-validation.json caller context, producer comment/readback, and validation evidence"
+    - "planning_dir/implementation-pipeline-result.json with a conditional Phase 9 VERIFIED_DRAFT_PR or VERIFIED_MERGED outcome, exact is_draft and phase_8_reviewed_is_draft booleans, immutable Phase 8 reviewed identities, expected-context and validated ticket-result path/hashes, owned Phase 4/6/8 process-proof path/hashes, final equality/restoration result, and artifact hashes"
+    - "planning_dir/../sessions.active-wake.json canonical row after exact Phase 7 PR acquisition"
     - "ticket comments and audit-history closure evidence at PR and finalization points"
   non_goals:
     - "does not use git-resident ticket files as the source of truth"
@@ -25,7 +34,7 @@ workflow_dispatch_contract:
 ---
 # Implementation Pipeline
 
-End-to-end pipeline from triggering event to merged PR.
+End-to-end pipeline from triggering event to a verified draft-PR or verified merged-PR outcome, selected by `auto_merge_after_phase_9`.
 Bugs start with RCA. Features, refactors, and other planned work skip RCA.
 
 ## Declared roles
@@ -58,7 +67,7 @@ implementation-pipeline-orchestrator
 
 ### Inputs
 
-- ticket id and branch, worktree, scratch, and planning paths
+- ticket id and branch, worktree, scratch, and planning paths, required caller-owned `base_branch`, and `local_coverage_command` required before Phase 8 review; no default trunk is inferred
 - non-empty ticket description from the configured Jira or Linear ticket system
 - optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them
 
@@ -70,11 +79,20 @@ implementation-pipeline-orchestrator
 - resolves estimate mutation policy from the authoritative ticket-operator contract and requires a current `phase-3-estimate-writeback-v1` artifact proving either verified write success or authoritative policy-disabled non-applicability before Phase 4
 - uses apply-gate-set caller modes `implementation-phase-4`, `implementation-phase-6`, and `implementation-phase-8` for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions
 - keeps tests and product code separated between Phase 6b and Phase 6c invocations
+- freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence
+- Phase 7 opens one exact draft PR, Phase 8 freezes the exact closed provider identity including boolean `is_draft=true` and reviews that base/head with local coverage plus production-validated nested test-audit process evidence, and Phase 9 validates one immediate provider capture before side effects and returns one stable `VERIFIED_DRAFT_PR` or `VERIFIED_MERGED` result envelope
+- Phase 9 dispatches the selected named ticket operator to comment then exactly read back the remote comment, validates producer-owned `ticket-operation-result-v1`, and returns its path/hash with the route attempt
+- Phase 7 and Phase 9 maintain `sessions.active-wake.json` with the session manifest under the shared exclusive cutover lock and interruption-recoverable journal protocol; `sessions.index.json` remains historical source inventory
+- each Phase 8 rerun allocates a new exact-identity PR-review run and keeps every runner log distinct from its canonical result while preserving prior run lineage
+- a feature-routed draft result exposes `implementation-pipeline-result-v1` with `base_branch` equal to the dispatched feature branch, `base_ref` equal to its fetched `refs/remotes/origin` identity, reviewed/current provider `base_ref_name` equal to that exact branch even when OIDs coincide, and current Phase 4/6/8 proof rows for the parent's common `feature-route-attempt-proof-v1` gate; direct merge authorization remains a separate parent composition with ticket/currentness/acceptance evidence
 
 ### Outputs
 
 - planning artifacts under the per-WU planning directory
-- tested repository diff and draft PR URL when the work proceeds
+- `${planning_dir}/phase-8-reviewed-pr.json`, `${planning_dir}/phase-9-currentness.json` recording required fetched base/head SHAs, and conditional `${planning_dir}/phase-9-ready-restoration.json` exact provider-state evidence
+- `${planning_dir}/ticket-operations/<wu>-phase-9-comment.json` producer-owned comment/readback evidence
+- `${planning_dir}/implementation-pipeline-result.json` with a conditional Phase 9 `VERIFIED_DRAFT_PR` or `VERIFIED_MERGED` outcome, exact `is_draft` and `phase_8_reviewed_is_draft` booleans, immutable Phase 8 reviewed identities, final equality/restoration result, process paths, and artifact hashes
+- `${planning_dir}/../sessions.active-wake.json` canonical row after exact Phase 7 PR acquisition
 - ticket comments and audit-history closure evidence at PR and finalization points
 
 ### Non-goals
@@ -119,8 +137,8 @@ WU session lifecycle (spawn → run → merge → post-merge wake): `~/ai/conven
 - **No backwards-compatibility shims.** See `~/ai/conventions/no-backwards-compatibility.md`.
 - **No deferred stubs.** See `~/ai/conventions/no-deferred-stubs.md`.
 - **The risk gate is the proposal review.** Do not add a redundant human approval step on top of it.
-- **Human gating is restricted.** The only two surviving human-gate triggers are (1) Phase 2.5 problem-map review and (2) any sub-agent NEEDS_INPUT that surfaces a new value, scope, or trade-off question the orchestrator cannot decide. Phase 0/1/2/5 and Phase 10 promotion are non-human-gated; the orchestrator advances them autonomously when their model gates clear.
-- **Draft PRs are routine; promotion is automated.** Opening and promoting draft PRs are both automated by the orchestrator under the violation-escalation policy.
+- **Human gating is restricted.** The only two surviving human-gate triggers are (1) Phase 2.5 problem-map review and (2) any sub-agent NEEDS_INPUT that surfaces a new value, scope, or trade-off question the orchestrator cannot decide. Phase 0/1/2/5 and authorized Phase 9 mechanics are non-human-gated; there is no Phase 10 in this operator.
+- **Draft PRs are routine; merge is conditional.** Phase 7 opens or reuses one draft PR. Phase 9 returns that verified draft when `auto_merge_after_phase_9=false`, or performs authorized promotion/merge and returns verified merge evidence when true.
 - **RCA-track verification.** On the RCA track, symptom-only bugs create deterministic failure tests that close the coverage gap that allowed the bug to ship; existing failing test commands, node IDs, CI logs, red-phase reports, or structured failures may instead be accepted as the red signal and carried forward. The fix is not complete until each pre-fix red signal runs green post-fix, and the before/after evidence travels in the PR. There is no separate "reproduction harness" or "regression harness" construct — bug-driven tests are tests, indistinguishable in form from coverage-expansion tests written outside the RCA track. The "regression" framing is just a consequence of where the test came from, not a different category of artifact.
 
 ## Phase Map
@@ -132,7 +150,7 @@ Optional phases:
 - `Phase 4.5` alignment for governance-heavy projects
 
 Core path:
-- `Phase 2.5 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9 -> Phase 10`
+- `Phase 2.5 -> Phase 3 -> Phase 4 -> Phase 5 -> Phase 6 -> Phase 7 -> Phase 8 -> Phase 9`
 - Recursion edge: completed parent `Phase 6` component work may open a child recursion level that enters `level-open` and reuses the same Phase 6 contract/test/code path; the parent reaches `child-levels-open` only after candidate children have been considered for framing.
 
 ## Entry Modes
@@ -201,7 +219,7 @@ The `implementation-pipeline-orchestrator` exposes `planning_dir` as a required 
 - Artifacts: `research/NN-rca.md` and the red signal it cites for each named root cause: either a newly authored reproduction test or existing failing test evidence carried forward.
 - Role: investigate root cause, trace the failure path, capture evidence, tie each hypothesized root cause to a deterministic failure signal, and **do not** propose fixes.
 - Rule: RCA is investigative only. If the output starts designing solutions, re-run with a tighter brief.
-- Rule: for symptom-only bugs, Phase 0 creates or identifies a test for each named root cause. The reproduction test lives in the project's test root, alongside coverage-expansion tests that come from non-RCA work — they are formally identical. It serves as the gap-closing coverage and the regression detector for this bug, both. Committed against pre-fix HEAD, it runs **red**. If a failing test command, node ID, CI log, red-phase report, or structured failure already exists, accept it as the red signal instead of creating a second reproduction artifact. Record the red-run command and output, or the accepted failure evidence and rerun target, in the `Reproduction` section of `research/NN-rca.md`. There is no separate "reproduction harness" abstraction.
+- Rule: for symptom-only bugs, Phase 0 creates or identifies a test for each named root cause. The reproduction test lives in the project's test root, alongside coverage-expansion tests that come from non-RCA work — they are formally identical. It serves as the gap-closing coverage and the regression detector for this bug, both. Capture the full pre-fix HEAD as `pre_fix_sha` before authoring the test or editing product code; against that commit, the test runs **red**. If a failing test command, node ID, CI log, red-phase report, or structured failure already exists, accept it as the red signal instead of creating a second reproduction artifact. Record `pre_fix_sha` and the red-run command and output, or the accepted failure evidence and rerun target, in the `Reproduction` section of `research/NN-rca.md`. There is no separate "reproduction harness" abstraction.
 - Rule: distinguish **behavior tests** from **structural shape-guards**. A behavior test exercises the affected code path with inputs and asserts outputs — it closes the coverage gap that allowed the bug. A structural shape-guard reads a config file (workflow YAML, schema, manifest) and asserts the file's shape — it catches deletion regressions but does not verify behavior; an attacker (or careless refactor) could write the YAML with the right shape and still break the runtime. Both are tests, but **shape-guards do not substitute for behavior tests** when behavior is the bug's domain. When the affected surface is a config file whose runtime semantics are not testable in the unit/component layer (e.g., GitHub workflow YAML asserting "step X exists between step Y and Z"), the closest available test may be a shape-guard. That is honest, not load-bearing — record the residual behavior-coverage gap in `risk/NN-test-residuals.md` with class `integration-hidden` so the gap is explicit rather than masked.
 - Rule: for `~/ai` markdown/operator/workflow/convention/routing/anchor structural-verification bugs or shape-guards, the structural guard route is WRITE eval-spec authoring under `~/ai/conventions/evals.md`, not behavior-test or pytest shape-guard authoring.
 - Rule: when deterministic reproduction is not feasible (for example, races that need real infrastructure), produce a contract-level test that asserts the invariant the fix must establish (call ordering, post-condition check, blocking guard, etc.), and reproduce behaviorally on the appropriate runner when one is available. Document any unreproduced hypothesis as `Hypothesis (unreproduced)` with the specific evidence that would confirm or refute it; downstream phases must not assume an unreproduced hypothesis as cause.
@@ -427,7 +445,7 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: Phase 6 consumes the approved `research/NN-problem-map.md`, approved `proposals/NN-*.md` including its test-intent track and assumption register, `risk/NN-supported-surface.md`, and `research/NN-hookpoints.md`.
 - Rule: Coupling/cohesion role split. `coupling-auditor.md` evidence is assessed against integrations between components at the current recursion layer, using component pairs and their current-layer integration evidence. `cohesion-auditor.md` evidence is assessed against individual components at the current recursion layer, using per-component organization evidence to decide whether the component should remain as-is, be broken out through the existing recursive child-entry path, or contribute evidence to the current-level component-set decision. The auditors produce evidence; Phase 6 owns the component-set decision.
 - Rule: RCA-track. The red signals produced or accepted in Phase 0 are inputs to the Phase 3 test-intent track and to Phase 6b. Step 6b carries them forward (existing tests satisfy firstness when the Step 6b output index maps them to the named risk and source). Step 6c is not complete until each pre-fix red signal from Phase 0 runs green against post-fix HEAD.
-- Rule: RCA-track evidence is **verbatim output, not summary**. The red run is captured by reverting the planned-change product file(s) to the branch's base (`origin/main` or the stacked parent), running each newly authored reproduction test or accepted existing failing test command/node ID, and pasting the failure block into the Phase 9 evidence artifact. The green run is captured by restoring the fix and re-running the same signal, pasting the pass block. "Tests passed" is not evidence; the actual test-runner or browser-runner command output is.
+- Rule: RCA-track evidence is **verbatim output, not summary**. Capture the red run in an isolated detached worktree pinned to the `pre_fix_sha` recorded by Phase 0; when the reproduction test was newly authored after that commit, apply only its test change before running the signal. Do not reconstruct pre-fix state by reverting selected files in the implementation worktree. Run each newly authored reproduction test or accepted existing failing test command/node ID there and paste the failure block into the Phase 9 evidence artifact. Capture the green run by re-running the same signal against post-fix HEAD and paste the pass block. "Tests passed" is not evidence; the actual test-runner or browser-runner command output is.
 - Rule: Recursive child entry. A child recursion level enters `level-open` only after an audited `ChildLevelFramingRecord` exists for that child framing. Existing overlay and audit machinery supplies the review evidence through `audit_overlay_refs`; this workflow rule does not add a new scheduler, workflow, or operator.
 - Rule: Recursive parent exit. A parent level may transition into `child-levels-open` only after each candidate child has been considered for framing. This rule does not define halt criteria; halt criteria belong to the sibling halt-rule WU.
 - Rule: Recursive Phase 6 reuse integration tests. Once a child recursion level enters `level-open`, the same level-scoped integration test semantics repeat for that child level's own `level_id`; integration-test evidence is not a child-entry condition or gate, and `ChildLevelFramingRecord` remains the child-entry condition.
@@ -522,11 +540,13 @@ After Step 6c has passing level evidence, the derivation trigger logic decides w
 - Rule: Phase 6 -> Phase 7 `PrototypeSwapRecord` boundary: this rule sits after Step 6c's process-tree review and before Phase 7; Phase 6 still has exactly three sub-steps, Step 6a, Step 6b, and Step 6c, so this is not a Step 6d. Before Phase 7 can advance or any optional PR-mode review can consume the diff, every WU or level scope with a level prototype must produce a `PrototypeSwapRecord` at `${planning_dir}/risk/${wu_lower}-prototype-swap-record.md`; a WU or level scope without a level prototype must place an explicit non-applicability statement at that same path, because a missing artifact is not equivalent to non-applicability. The record must contain `component_refs`, `component_test_results`, `procedural_test_results`, `level_behavior_test_results`, `removed_or_retired_refs`, and `audit_overlay_refs`, with `level_id` and `prototype_ref` additional to the six ticket fields, plus a terminal-state field whose allowed values are `consumed`, `non-applicable`, and `superseded`. Each `audit_overlay_refs` entry must identify the artifact path and the verdict or currentness evidence proving the artifact applies to the swapped component inventory. The canonical implementation-pipeline workflow forbids the implementation-pipeline orchestrator from advancing past the Phase 7 readiness checks on a diff that has no `PrototypeSwapRecord` or explicit non-applicability statement at `${planning_dir}/risk/${wu_lower}-prototype-swap-record.md`; Phase 7 dispatch cannot advance and the optional review operator cannot consume that diff. This rule authorizes no new operators and no new workflow file, and it does not define overlay scheduling, which belongs to sibling NES-270. This prohibition is implemented by the `Pre-dispatch swap-record gate` in `~/ai/agents/implementation-pipeline-orchestrator.md` § Phase 7, which the orchestrator agent executes procedurally. Parallel prototype code cannot remain as shadow implementation unless the proposal at the level scope has named retained prototype paths as supported-surface; supported-surface naming is the only retained-prototype escape clause.
 - Boundary pointer: same-layer component-pair integration-test evidence is upstream evidence consumed before swap readiness and is distinct from `component_test_results`, `procedural_test_results`, and `level_behavior_test_results`.
 
-## Phase 7 - Optional PR-Mode Review Delegation
+## Phase 7 - Draft PR Acquisition and Optional PR-Mode Review
 
-The implementation-pipeline orchestrator runs readiness checks, then calls `~/ai/tools/coderabbit_review_driver.py` directly for optional PR-mode CodeRabbit review. The script owns @mention triggering, trigger-ack polling, GitHub review-state interpretation, review/comment normalization, and per-comment body persistence. The repository-level `coderabbit` label is only an installation marker; applying it to a PR suppresses CodeRabbit and is not a trigger.
+The implementation-pipeline orchestrator runs readiness checks, acquires and verifies one draft PR, then calls `~/ai/tools/coderabbit_review_driver.py` directly for optional PR-mode CodeRabbit review. The script owns @mention triggering, trigger-ack polling, GitHub review-state interpretation, review/comment normalization, and per-comment body persistence. The repository-level `coderabbit` label is only an installation marker; applying it to a PR suppresses CodeRabbit and is not a trigger.
 
 - Readiness checks: inherited prototype proof tests, integration-test evidence for same-layer interacting component pairs, and `PrototypeSwapRecord` / explicit non-applicability.
+- PR acquisition: freshly fetch the parent, resolve full base/head SHAs, pass names/refs/SHAs to `pr-writer`, create with explicit `--base/--head`, then require provider base/head OIDs to equal the pinned objects before CodeRabbit.
+- PR identity gate: the Phase 7 PR must be OPEN draft with exact base/head names and full OIDs; a base advance invalidates PR-writer evidence and reruns the boundary.
 - Enablement primitive: `~/ai/tools/coderabbit_review_driver.py is-enabled ${repo}`. Exit `1` is a clean skip. Other nonzero exits block Phase 7.
 - Trigger mode criterion: use `incremental` for normal PR-review flow and for re-runs after child fix commits. Use `full` only for code-audit or mass-cleanup workflows whose declared review target is whole files rather than the latest diff, such as file-by-file risk-assessment cleanup passes.
 - Loop primitive: `~/ai/tools/coderabbit_review_driver.py review-loop ${repo} ${pr_num} --worktree-path ${worktree_path} --mode ${coderabbit_trigger_mode}`.
@@ -535,21 +555,26 @@ The implementation-pipeline orchestrator runs readiness checks, then calls `~/ai
 - `terminal_reason=no_value_provided` is accepted convergence when every actionable in-diff comment in the latest iteration was assessed `review_provided_value: false`.
 - `needs_caller_decision=true` surfaces valuable `rejected` or `deferred` per-comment outcomes to the root caller without re-triggering.
 - The orchestrator must not compose its own trigger/poll/dispatch/retrigger loop, must not use inline `gh pr view ... statusCheckRollup` polling, must not inline CodeRabbit comment bodies, and must not synthesize an empty review pass.
-- If the pipeline creates or reuses a PR, it writes `${scratch_dir}/pr-url.txt`; Phase 9 reuses that URL instead of creating a duplicate PR.
+- Phase 0 invokes `python3 ~/ai/tools/wu-session-migration phase0-init --request ${scratch_dir}/session-writes/phase0-init.json`. Phase 7 writes `${scratch_dir}/pr-url.txt` and `${scratch_dir}/pr-number.txt`, records `pr_open_base_sha`, leaves `pre_merge_base_sha` unresolved, and invokes `python3 ~/ai/tools/wu-session-migration phase7-upsert --request ${scratch_dir}/session-writes/phase7-upsert.json`. Phase 9 invokes `python3 ~/ai/tools/wu-session-migration phase9-update --request ${scratch_dir}/session-writes/phase9-update.json`. Each closed request binds exact source identities and complete manifest/index projections; operators do not reproduce the transaction algorithm or write targets directly. The historical `sessions.index.json` is not a wake input, and Phase 9 reuses the exact PR/row identity.
 
 ## Phase 8 - Post-Review Gates
 
-- These are the PR-opening gates on the actual diff.
-- Policy: dispatch `apply-gate-set(caller_mode=implementation-phase-8)` after Phase 7 readiness and optional review delegation, before draft PR movement.
+- These are the terminal PR-outcome gates on the actual diff already attached to the Phase 7 draft PR.
+- Freshly fetch the parent after Phase 7 fixers and use `base_ref=refs/remotes/origin/${base_branch}` plus full `base_sha` and exact head ref/SHA. Short `${base_branch}` is provider identity only.
+- Policy: dispatch `apply-gate-set(caller_mode=implementation-phase-8)` after Phase 7 readiness and optional review delegation, before Phase 9 ticket/terminal movement.
 - The Phase 8 gate-set inventory is test-audit review, multi-concern PR review, justification PR review, commit hygiene, Phase 8 actual-diff code-quality, proof-risk and validation-integrity runtime-claim transport where applicable, supported-surface inventory-resolution while ACR-286 remains open, currentness rechecks against prior joins, `${planning_dir}/risk/phase-8-join-manifest.json`, and process-tree audit #3.
-- Rule: the actual PR diff is the review target. Proposal-shaped evidence cannot satisfy actual-diff rows.
+- Rule: the exact provider PR diff `${base_sha}...${head_sha}` is the review target. Require OPEN state and matching provider base/head OIDs before fanout; proposal-shaped or ambient-HEAD evidence cannot satisfy rows.
+- Rule: query exact URL/number/state/isDraft/base/head names/OIDs, require OPEN and exact boolean draft state, then freeze `${planning_dir}/phase-8-reviewed-pr.json` before fanout with exactly `pr_url`, `pr_number`, `state`, `is_draft`, `base_ref_name`, `base_ref_oid`, `head_ref_name`, and `head_ref_oid`; require `is_draft=true` and retain it with exact base/head OIDs as immutable `phase_8_reviewed_is_draft`, `phase_8_reviewed_base_sha`, and `phase_8_reviewed_head_sha` through Phase 9. Only a full parent-sensitive Phase 8 rerun may replace them.
+- Rule: pass non-blank `local_coverage_command` unchanged through apply-gate-set and PR review to test audit, which runs both coverage sides in detached exact-commit worktrees.
+- Rule: each Phase 8 rerun passes a stable PR lineage root but requires PR review to allocate a new root qualified by exact PR number, provider base/head OIDs, and current review invocation UUID. The review fetches into unique private refs, uses an invocation-owned detached worktree, preserves every earlier run, and returns `pr-review-result-v2` for only the current run.
+- Rule: every Phase 8 `agents` invocation captures the complete runner envelope in a dedicated `.log` distinct from its canonical result/report. Stdout children use the operational payload extractor; file-producing children retain the complete log and separately hash their prompted output. Expected-process and join rows carry both paths/hashes, UUIDs come only from logs, verdicts only from canonical outputs, and `TEST_AUDIT_GATE.log` never aliases `TEST_AUDIT_GATE.md`. The test-audit row additionally requires `TEST_AUDIT_RESULT.json` and production revalidation of its nested three-child expected/dispatch/root-trace/process-audit PASS against the outer child UUID and immutable Phase 8 SHAs.
 - Rule: `apply-gate-set(caller_mode=implementation-phase-8)` writes or verifies the Phase 8 join manifest at `${planning_dir}/risk/phase-8-join-manifest.json`, projects expected-process evidence, and requires process-tree audit #3 evidence. Rows carry at least `canonical_output_path`, `size`, `mtime`, `sha256`, `verdict_line`, and `verified_at`, plus the operator schema's caller mode, raw/normalized verdict, applicability, currentness, inventory-resolution, and blocking-status fields. Currentness rechecks against prior joins follow `~/ai/conventions/apply-gate-set-currentness.md` § `Currentness key schema`, § `Row-level re-verification`, and § `Full re-dispatch`.
 - Rule: the Phase 8 code-quality rows must carry actual-diff runtime-claim context under the Phase 3 `## Proof plan` rule. Validation-integrity and proof-risk remain required where that context makes them applicable.
-- Rule: if the multi-concern row says the diff should be split, split it before opening PRs.
+- Rule: if the multi-concern row says the diff should be split, stop the current PR before Phase 9 and perform the approved split; an already-open draft is not terminal evidence.
 - Rule: preserve ACR-280 Phase 8 code-quality strategy selection. For current semantic Phase 8 code-quality `MEDIUM` or `HIGH`, choose MOVE-and-import and record `STRATEGY_PHASE8_CODE_QUALITY_MOVE_AND_IMPORT`, in-place file-decomposition and record `STRATEGY_PHASE8_CODE_QUALITY_FILE_DECOMPOSITION`, in-WU remediation/helper extraction and record `STRATEGY_PHASE8_CODE_QUALITY_INWU`, or follow-up-ticket decomposition and record `STRATEGY_PHASE8_CODE_QUALITY_FOLLOWUP`. Follow-up tickets require current-WU narrowing and rerun or explicit `DECOMPOSED`; they never allow advance by themselves.
-- Rule: only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-8)` permits closure judge dispatch, draft PR creation, ticket comment work, or PR movement. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, stale rows, missing output paths, malformed manifests, or process-tree blocking findings prevent draft PR creation until the affected subtree is rerun or repaired.
+- Rule: only a returned `PASS` from `apply-gate-set(caller_mode=implementation-phase-8)` permits closure judge dispatch, Phase 9 ticket comments, verified-draft return, promotion, or merge. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, `STALE_REFUSAL`, stale rows, missing output paths, malformed manifests, or process-tree blocking findings prevent terminal movement until the affected subtree is rerun or repaired.
 - Rule: if a delegated agent returns `NEEDS_INPUT:<question_artifact>`, the root handles it through `~/ai/conventions/agent-questions-and-session-graph.md`. Do not advance this phase, write code, post review output, or open a PR from work that depends on the unanswered question.
-- Phase 8 is the review and capture layer that precedes draft PR creation; it is not followed by a human branch-local review fallback before Phase 9.
+- Phase 8 is the review and capture layer between Phase 7 draft-PR review and Phase 9 terminal movement; it is not followed by a human branch-local review fallback.
 - Phase 8 capture documentation: after `apply-gate-set(caller_mode=implementation-phase-8)` returns `PASS` with process-tree audit #3 evidence cleared, the orchestrator dispatches the `gpt-xhigh` closure judge and records `actual_story_points` and `actual_capture_method` as an orchestrator-owned closure artifact before Phase 9. The enum is `closer-best-effort | wall-time-derived | unmeasured`, the point set is `1, 2, 3, 5, 8, 13, 21, 40, 100`, and wall-time-derived is reserved as enum-only with no requirements for timers, durations, start/stop timestamps, or trace-derived time calculations.
 - Rule: ACR-125 capture must not dispatch `task=update-estimate` for actuals, must not write actuals to Linear `estimate`, and must not write actuals to a Jira estimate field. The refined estimate is the canonical planned estimate; the live ticket field reflects it only when Phase 3 recorded `write_verified`.
 - Final verification-only behavior: Final does not recalculate the actual; it verifies the audit-history calibration block and `estimate_comparison_comment_ref`, then references the comparison in the close-comment.
@@ -577,21 +602,23 @@ Estimate calibration
 - audit_history: ${planning_dir}/audit-history.md
 ```
 
-## Phase 9 - Draft PR
+## Phase 9 - Verified PR Outcome
 
-- Routine automation step after all prior gates pass.
-- Rule: if Phase 7 wrote `${scratch_dir}/pr-url.txt`, Phase 9 verifies and reuses that PR instead of running `gh pr create` again.
+- Terminal automation step after all prior gates pass; there is no separate Phase 10.
+- Rule: Phase 9 requires the Phase 7 `${scratch_dir}/pr-url.txt` and `${scratch_dir}/pr-number.txt`, verifies and reuses that exact PR, and never runs `gh pr create`.
+- Rule: Phase 7 supplied branch names plus freshly fetched base/head refs/full SHAs to `pr-writer` and created with explicit `--base/--head`. Phase 9 freshly verifies the same provider identity; mismatch or base advance invalidates Phase 8 without fallback.
 - Rule: open one draft PR per concern identified by multi-concern review.
 - Rule: respect dependency order for stacked work.
 - Rule: follow `~/ai/conventions/git.md`.
 - Rule: opening a **draft** PR is not Tier-3 by default.
-- Rule: **the title and body MUST be authored by `~/ai/agents/pr-writer.md`** — never hand-written by the orchestrator and never inlined into the `gh pr create` invocation. The writer enforces audience-and-content rules (no internal jargon, no commit-history sections, no closed-PR or local-planning-artifact references) that hand-written or templated bodies routinely violate. Pass the relevant phase artifacts (`problem-map.md`, `proposal.md`, `contract.md`, RCA evidence) as `context_files` so the writer has intent grounding without citing them in the body. For stacked PRs, supply `stack_parent_pr=<num>`; for any reference to merged work, supply `merged_refs=<list>`; when the selected ticket backend is Linear and the Linear key is known, supply `linear_issue_keys=<KEY>` so `pr-writer` emits the close-keyword footer itself.
+- Rule: **the Phase 7 title and body MUST be authored by `~/ai/agents/pr-writer.md`**. Pass the relevant phase artifacts as `context_files`, optional stack/merged refs, and the known Linear key when applicable. Phase 9 consumes that PR and does not re-author or duplicate it.
 - Rule: RCA-track. The draft PR description includes before/after evidence for every Phase 0 red signal, whether a newly authored reproduction test or an existing failing test accepted as the reproduction signal: the red-run command and output or accepted failure evidence, paired with the matching post-fix green-run command and output recorded in Step 6c. Pass the evidence path(s) to `pr-writer` via `context_files` so they're folded into the body in audience-safe form.
-
-## Phase 10 - Promote To Ready-For-Review
-
-- Automated by the orchestrator once Phase 9 succeeds and the Phase 8 process-tree audit has cleared.
-- Rule: the orchestrator runs `gh pr ready <pr_number>` and records the promotion in `${scratch_dir}/pr-promoted.txt`. No human gate.
+- Rule: session and ticket evidence distinguishes `branch_out_sha`, `pr_open_base_sha`, and `pre_merge_base_sha`. The PR-open snapshot is never the coverage baseline. For manual/external merge, `pre_merge_base_sha` remains null until wake-time trusted merge evidence derives and validates the immediate pre-merge parent.
+- Rule: both terminal paths write `implementation-pipeline-result-v1` with the same identity/process/hash keys, `base_branch` equal to the dispatched base, `base_ref=refs/remotes/origin/${base_branch}`, reviewed/current provider `base_ref_name` equal to that exact branch even when another ref has the same OID, exact `is_draft` and `phase_8_reviewed_is_draft` booleans, immutable Phase 8 reviewed base/head SHAs, exact `ticket_operation_expected_context_path` / `ticket_operation_expected_context_sha256`, validated `ticket_operation_result_path` / `ticket_operation_result_sha256`, exact current `owned_process_proofs` rows for Phase 4/6/8 expected-process/raw-trace/process-audit artifacts, and the final executable currentness equality/restoration result/path/hash. Draft uses null merge fields; merged uses an immediate pre-merge base equal to the reviewed base, merge, refreshed-base, ancestry, and parent evidence. Feature/refactoring consumers re-hash but do not re-audit the implementation-owned proof nodes.
+- Rule: before ticket dispatch or either terminal path, Phase 9 writes and hashes closed `ticket-operation-expected-context-v1` from caller-owned backend/site/ticket/route/attempt/PR/reviewed identity. The selected named Jira/Linear operator then performs the comment and exact same-ticket comment readback and writes closed `ticket-operation-result-v1` plus current producer operation-log/readback-output hashes. `validate-ticket-operation-result` requires `--expected-context`, exact producer equality, and backend URL site/ticket equality when encoded. Omission or any mismatch blocks before return, ready, or merge; later feature validation remains defense in depth rather than the first caller-context gate.
+- Rule: with auto-merge enabled, invoke `tools/operational_contracts.py validate-pr-currentness` with required freshly fetched base and head SHAs before ready and again after ready immediately before merge. Both calls require provider/fetched/reviewed equality for both OIDs and record both fetched SHAs. Every failure after ready and before the merge command invokes exact-repository `gh pr ready --undo`, fresh base/head fetch and exact PR re-query, then `validate-ready-state-restoration`; only OPEN draft identity unchanged across undo permits `RETURN_TO_PHASE_8`. Undo/re-query/identity failure is `BLOCKED:ready-state-restoration-failed`. Once the merge command starts, no undo or replay is permitted and any merge/post-attempt refusal is `BLOCKED:merge-attempt-started`.
+- Rule: Phase 9 keeps one canonical `${planning_dir}/../sessions.active-wake.json` row using `draft_pr_url`, full `draft_pr_head_sha`, `base_branch`, full `branch_out_sha`, `pre_merge_base_sha`, and `session_manifest_path`; active handoff rows contain no retired aliases. Every manifest/active-index mutation must pass the executable operation's closed schema, source-identity, allowed-change, exact-row, replacement-projection, held-parent, and shared-recovery checks. OPEN/manual outcomes retain `pre_merge_base_sha=null`. Automated merge outcomes interruption-recoverably persist the immediate pre-merge value before merge and exact merge identity after verification.
+- Rule: promotion on a public-audience repository requires matching pre-authorization under `~/ai/workflows/tiered-approval.md`; without it, the auto-merge path is inapplicable and Phase 9 returns the verified-draft outcome.
 
 ## Gate Ownership
 
@@ -601,7 +628,7 @@ Rule of thumb:
 - the implementation-pipeline human gates are (1) the Phase 2.5 problem-map review and (2) legitimate NEEDS_INPUT new-value-question surfacing per `~/ai/agents/implementation-pipeline-orchestrator.md`
 - every other phase belongs to a model gate or to automation
 - the proposal is reviewed by the risk gate, not by an extra human approval pass
-- Phase 9 (draft PR) and Phase 10 (promotion) are both automated by the orchestrator
+- Phase 7 draft-PR acquisition is automated; Phase 9 conditionally owns verified draft return or authorized ready/merge mechanics
 
 ## Tiered Approval
 
@@ -612,7 +639,7 @@ Practical default:
 - editing files is not Tier-3
 - running tests is not Tier-3
 - opening **draft** PRs is not Tier-3
-- public promotion and other outward-facing actions follow the tiered-approval workflow
+- public promotion requires a matching pre-authorized runbook under the tiered-approval workflow; it is not an implicit Phase 10 gate
 
 ## Pause For Refactor
 
@@ -646,7 +673,7 @@ Without that record, the phase was not skipped correctly.
 
 ## Orchestrator
 
-This pipeline is dispatched by the `implementation-pipeline-orchestrator` (`gpt-xhigh`) operator at `~/ai/agents/implementation-pipeline-orchestrator.md`. The orchestrator is the only delegated actor that walks a Work Unit through every phase, dispatches each leaf operator via the `agents` CLI, runs the three required process-tree audits, and enforces the violation-escalation policy autonomously (including Tier-1 main-branch rewinds when a violation is detected). Inlining the orchestrator role into the root conversation is itself a workflow violation because it removes the orchestration decisions from `agents trace --json` and prevents process-tree-auditor from auditing the workflow as a whole.
+This pipeline is dispatched by the `implementation-pipeline-orchestrator` (`gpt-xhigh`) operator at `~/ai/agents/implementation-pipeline-orchestrator.md`. The orchestrator is the only delegated actor that walks a Work Unit through every phase, dispatches each leaf operator via the `agents` CLI, runs the three required process-tree audits, and enforces the violation-escalation policy autonomously (including Tier-1 WU-branch rewinds when a violation is detected). Inlining the orchestrator role into the root conversation is itself a workflow violation because it removes the orchestration decisions from `agents trace --json` and prevents process-tree-auditor from auditing the workflow as a whole.
 
 ## Adjacent References
 

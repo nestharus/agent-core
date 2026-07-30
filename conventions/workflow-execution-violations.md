@@ -53,6 +53,8 @@ Default severity: `blocking`.
 
 Report-emission examples include: canonical PDF missing when a report bundle is required; Product, Engineering, or Investigative report missing from a coverage-expansion run; screenshot artifact missing for a UI-touching test, bug, or report claim; non-UI evidence artifact missing for a backend-only behavior claim; or `reports/report-index.md` missing, malformed, stale, or not tied to the expected process node.
 
+Runner-envelope examples include: an `agents` invocation tees to the same path a child owns as its canonical report; a canonical output begins with `OULIPOLY_INVOCATION` or contains the terminal runner sentinel; a process node lacks distinct complete-log and canonical-output paths/hashes; UUID evidence is parsed from a report; or a verdict is parsed from the runner log instead of the validated canonical output. These are blocking output/artifact violations. Stdout-producing children use the fail-closed extractor named by `~/ai/workflows/agents-cli.md`; file-producing children retain the complete log and independently hash their prompted output.
+
 ### 3. Gate/termination violation
 
 Workflow advanced after a non-passing model or human gate, ignored a required return-to-research signal, or ignored a terminate/close signal.
@@ -108,6 +110,8 @@ An agent reports success, a trace node succeeds, or a workflow appears complete 
 For Phase 6 firstness, this class includes a workflow that reports Step 6b complete, Step 6c consumable, Phase 6 complete, or PR-review-ready while required firstness work, output, evidence, or verification is absent or contradicted.
 
 Examples include: missing Step 6b or Step 6c expected-process entries; the same invocation mapped to both Step 6b and Step 6c; Step 6c running before Step 6b outputs existed; missing, malformed, stale, or unmapped Step 6b output index; missing or contradicted relaxed-position Step 6c `consumed:` evidence for the Step 6b output index and implemented Step 6b output-index rows; Step 6b prompt/log evidence that the test writer saw implementation context; or downstream advancement while required firstness evidence was absent without surfacing `NEEDS_INPUT:<question_artifact>`.
+
+For PR-review test audit, this class also includes accepting a plausible outer `TEST_AUDIT_GATE.md` or successful outer node when the saved nested trace does not have the exact test-audit root plus exactly one direct, terminal-success child for each declared spec-alignment, test-quality, and coverage-delta UUID. Missing, duplicate, undeclared-role, wrong-parent/model/source/operator, failed, non-terminal, or extra nested nodes are blocking. So are a nested process-audit report that is not the canonical header-first format with exactly one PASS verdict, an absent/mismatched producer-owned report/root/expected/trace/complete-companion machine binding, a non-PASS auditor log, or any `validate-test-audit-result` outcome other than current `VALID` for the outer child UUID and pinned base/head SHAs. Parent, model, source, and status authority comes from the saved trace and runner envelope, not self-authored dispatch rows.
 
 Report-emission false-completion examples include: a PR comment presents itself as the canonical report instead of linking to the PDF bundle; an agent reports report generation complete while a required PDF, screenshot, non-UI evidence artifact, or report-index entry is absent; or workflow synthesis advances while required report artifacts are missing without surfacing `NEEDS_INPUT`.
 

@@ -35,6 +35,7 @@ These are the same inputs declared in `## Contract` above; the structured contra
 - `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Perform `PUT /rest/api/3/issue/{issueKey}` with `fields.customfield_10016=<int>`, then post an ADF durable note containing inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `${jira_project}-34` (required for read/comment/transition)
 - `body` (for `comment`): the comment text — supports plain text OR pre-built ADF JSON
+- `operation` (for `comment`, optional): omit for an ordinary comment or pass exactly `comment-readback` for producer-authenticated evidence. Any other value is out-of-contract and returns `BLOCKED` before posting; `comment-readback` requires `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`.
 - `target_status` (for `transition`): destination status name (e.g., "In Progress")
 - `jql` (for `search`): standard JQL query
 - `fields` (for `create`): project, summary, issuetype, etc.
@@ -65,6 +66,32 @@ inputs:
     required: false
     default_source: caller
     description: Comment body; markdown is rendered to ADF unless caller supplies ADF JSON.
+  - name: operation
+    type: enum
+    options: [comment-readback]
+    required: false
+    default_source: caller
+    description: When supplied, must be comment-readback; omission selects ordinary comment behavior.
+  - name: ticket_operation_context
+    type: string
+    required: false
+    default_source: caller
+    description: Exact JSON ticket/route/attempt/PR/reviewed-ref context required for operation=comment-readback.
+  - name: operation_result_path
+    type: path
+    required: false
+    default_source: caller
+    description: Required for operation=comment-readback; canonical ticket-operation-result-v1 path.
+  - name: producer_log_path
+    type: path
+    required: false
+    default_source: caller
+    description: Required for operation=comment-readback; distinct producer-owned closed ticket-client operation log path.
+  - name: producer_output_path
+    type: path
+    required: false
+    default_source: caller
+    description: Required for operation=comment-readback; distinct producer-owned exact remote readback output path.
   - name: target_status
     type: string
     required: false
@@ -145,8 +172,8 @@ outputs:
     success_shape: Print key, summary, status, assignee, or render ticket markdown to output_path for orchestrator bootstrap.
     wrote_lines: ["${scratch_dir}/ticket.md when output_path is supplied"]
   - task: comment
-    success_shape: Print the new comment ID and a confirmation line.
-    wrote_lines: []
+    success_shape: Print the new comment ID, or return producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback.
+    wrote_lines: ["${operation_result_path} when operation=comment-readback", "${producer_log_path} when operation=comment-readback", "${producer_output_path} when operation=comment-readback"]
   - task: transition
     success_shape: Print before-status to after-status.
     wrote_lines: []
@@ -306,6 +333,7 @@ JIRA Cloud comments use **ADF (Atlassian Document Format)**, NOT markdown. ADF i
 **Endpoint contract:**
 - The canonical comment-create endpoint is `POST /rest/api/3/issue/{issueIdOrKey}/comment`; the runnable URL remains `${jira_url}/rest/api/3/issue/$ISSUE_KEY/comment`.
 - The single permitted fallback is `POST /rest/api/2/issue/{issueIdOrKey}/comment` (v2 + singular), only when the canonical v3 request returns HTTP 404 and the response body confirms the endpoint is missing or unavailable, such as `No endpoint POST` or an equivalent missing-endpoint indicator. A silent 404, generic 404, issue-not-found 404, auth 404, or permission 404 does not trigger fallback.
+- That v2 fallback applies only to ordinary comments where `operation` is omitted. The producer-authenticated `operation=comment-readback` path below is v3-only because its body identity is canonical ADF.
 - `/comments` plural is non-supported for comment creation; the observed bad shape `/rest/api/2/issue/{issueIdOrKey}/comments` is non-supported and must not be used as canonical or fallback.
 - If both the canonical v3 attempt and the permitted v2 singular fallback fail, return `BLOCKED` with each attempted path plus the verbatim HTTP status and body for each attempt.
 - Rationale: `~/work/rfqautomation-linux/DECISIONS.md` § "`jira-operator` hardening note (no ticket)", INFA-141, comment IDs `17120` and `17623`, dated `2026-05-05`.
@@ -341,6 +369,44 @@ For rich content (tables, headings, links), build ADF in a JSON file and POST wi
 - Links are a `mark` on a `text` node, not a separate node: `{"type": "text", "text": "...", "marks": [{"type": "link", "attrs": {"href": "..."}}]}`
 - Code spans use `{"marks": [{"type": "code"}]}`; code blocks use `{"type": "codeBlock", "attrs": {"language": "bash"}}`
 - A successful POST returns `{"id": "...", "self": "..."}`. Parse `id` to confirm.
+
+### Producer-Authenticated Comment Readback
+
+When `task=comment` and `operation=comment-readback`, require exact `ticket_operation_context`, `operation_result_path`, `producer_log_path`, and `producer_output_path`. The three paths are canonical, absolute, pairwise distinct, and written only by this invocation. Derive `producer_invocation_uuid` from runner provenance; never accept a caller-selected UUID.
+
+Canonicalize the posted ADF body once before any network request: parse it as one ADF JSON value, serialize it as UTF-8 JSON with sorted object keys, no insignificant whitespace, and no ASCII escaping, and SHA-256 those exact bytes. The authenticated path is v3-only; every list, create, and single-comment read uses `/rest/api/3/`, and a v3 failure returns `BLOCKED` without a v2 fallback. Ordinary comments where `operation` is omitted retain the endpoint fallback above.
+
+Reconcile before any create request. Read every page of `GET /rest/api/3/issue/{issueIdOrKey}/comment` using the exact context ticket key, require the response to remain bound to that request, and canonicalize each returned ADF body by the same rule. Select only comments whose canonical body SHA-256 equals the posted-body SHA-256 and whose non-blank ID and HTTPS self URL identify that exact Jira site, ticket key, and comment ID. Apply these closed outcomes:
+
+- Zero matches: create once through `POST /rest/api/3/issue/{issueIdOrKey}/comment`; require the response's non-blank ID, HTTPS self URL, exact ticket identity, and canonical ADF body hash, then use that response as the remote create identity.
+- One match: do not POST; reuse that comment's ID and self URL as the remote create identity only after its exact ticket and posted-body identities have passed the checks above.
+- More than one match: return `BLOCKED: ambiguous comment-readback reconciliation` before POST and write no PASS result artifacts.
+
+After either zero-match creation or one-match reuse, immediately `GET /rest/api/3/issue/{issueIdOrKey}/comment/{id}` on the same Jira site. Require the returned ID and self URL to equal the selected remote identity, the request issue key to equal the exact context key, and the canonical ADF body SHA-256 to equal the posted-body SHA-256. Atomically write the closed ticket-client request/response transcript to `producer_log_path`, the exact readback projection to `producer_output_path`, and then the canonical result below to `operation_result_path`. The producer log is the closed backend-operation log, not the still-open outer runner `.log`; the feature route separately authenticates its implementation child through process lineage.
+
+```yaml
+schema: ticket-operation-result-v1
+additional_properties: false
+required_fields: [schema, backend, ticket_key, operation, status, owning_route, attempt_number, pr_url, pr_number, reviewed_base_branch, reviewed_base_ref, reviewed_base_sha, reviewed_head_branch, reviewed_head_ref, reviewed_head_sha, comment_body_sha256, remote_comment_id, remote_comment_url, readback_status, readback_ticket_key, readback_comment_id, readback_comment_url, readback_body_sha256, producer_operator, producer_invocation_uuid, producer_log_path, producer_log_sha256, producer_output_path, producer_output_sha256]
+fixed_values:
+  backend: jira
+  operation: comment-readback
+  status: PASS
+  owning_route: implementation-pipeline
+  readback_status: PASS
+  producer_operator: agents/jira-operator.md
+identity_rules:
+  - readback_ticket_key-equals-ticket_key
+  - readback-comment-id-and-url-equal-remote-comment-id-and-url
+  - readback_body_sha256-equals-comment_body_sha256
+  - producer-invocation-is-runtime-derived
+  - producer-log-and-output-are-distinct-current-hash-bound-artifacts
+producer_log_schema: ticket-operation-producer-log-v1
+producer_output_schema: ticket-operation-readback-v1
+caller_validator: tools/operational_contracts.py validate-ticket-operation-result --expected-context <caller-owned-path>
+```
+
+The producer log uses exactly `schema`, `backend`, `ticket_key`, `operation`, `status`, `producer_operator`, `producer_invocation_uuid`, `comment_body_sha256`, `remote_comment_id`, `remote_comment_url`, `readback_status`, `readback_ticket_key`, `readback_comment_id`, `readback_comment_url`, and `readback_body_sha256`. The readback output uses exactly `schema`, `backend`, `ticket_key`, `status`, `comment_id`, `comment_url`, and `body_sha256`. The caller runs the production validator with its immutable pre-dispatch `--expected-context` artifact before consuming the result. Unknown fields, failed/missing readback, a duplicate/missing comment, wrong issue/comment/body, malformed remote identity, stale producer support hash, or caller-context mismatch blocks consumption and never authorizes ticket/PR progression.
 
 **Common REST API gotchas:**
 - Not every successful POST returns a JSON body. `/issue/{key}/comment` returns the comment object; `/issueLink` returns 201 with **empty body** — `json.loads(b"")` raises `JSONDecodeError`. When wrapping arbitrary endpoints, branch on the response status (201/204) or content-length, not on assumed JSON.
@@ -439,7 +505,7 @@ curl -s -u "${jira_account_email}:$JIRA_API_KEY" \
 ## Output Contract
 
 For `read`: print key, summary, status, assignee in a brief block.
-For `comment`: print the new comment ID + a confirmation line.
+For `comment`: when `operation` is omitted, print the new comment ID + a confirmation line; when `operation=comment-readback`, atomically write the producer log to `producer_log_path`, the readback projection to `producer_output_path`, and the `ticket-operation-result-v1` result to `operation_result_path`, then return that structured result.
 For `transition`: print before-status → after-status.
 For `search`: print one line per result (`KEY  status  summary`).
 For `create`: print the new key + browse URL.

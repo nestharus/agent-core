@@ -15,24 +15,29 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 ## Current tools
 
 - `scheduler/` — generic scheduled-task primitive. Bind a schedule (cron-style, interval, one-shot) to a script invocation, an agent dispatch, or a workflow run. **Status: skeleton only; see `scheduler/README.md`.**
-- `pr-batch-poller/` — single-call GitHub PR status query for N PRs at once. Returns merged-status, new-comments, last-event-timestamp per PR. Used by the `wu-session-resumer` agent (per `~/ai/conventions/wu-session-lifecycle.md` Stage 6) to wake sessions in batches rather than one-poll-per-PR. **Status: implemented; see `pr-batch-poller/README.md`.**
+- `pr-batch-poller/` — status-only single-call GitHub PR query for N PRs. A scheduler-triggered or manual `wu-session-wake` root invokes it, joins rows to sessions, and dispatches one exact joined row to each `wu-session-resumer`; the poller never wakes sessions itself. **Status: implemented; see `pr-batch-poller/README.md`.**
+- `wu-session-migration/` — reviewed-inventory cutover plus the strict persisted-session writer. It captures hash-bound provider/git evidence and exposes closed-schema `phase0-init`, `phase7-upsert`, `phase9-update`, `resumer-update`, and `resumer-close` operations through one exclusive-lock, held-parent, durable-journal, interruption-recoverable transaction primitive while preserving historical `sessions.index.json`. **Status: implemented; see `wu-session-migration/README.md`.**
 - `workflow_index/` — deterministic generator for `workflows/index.json` from YAML frontmatter in `workflows/*.md`. **Status: implemented; see `workflow_index/README.md`.**
+- `feature_route_manifest.py` — strict normalization and validation of feature route sources. **Status: implemented; see `feature-route-manifest/README.md`.**
+- `operational_contracts.py` — fail-closed executable validation for workflow authorization contracts. **Status: implemented; see `operational-contracts/README.md`.**
 
 ## Composition pattern
 
-The motivating example for these two tools is post-merge wake of WU sessions:
+The motivating example for these components is post-merge wake of WU sessions:
 
 ```
-scheduler  ──(every 10 min)──>  pr-batch-poller  ──(per merged PR)──>  wu-session-resumer agent
+scheduler/manual root  ──>  wu-session-wake  ──(status only)──>  pr-batch-poller
+                                  └──(one exact joined row)──>  wu-session-resumer agent
 ```
 
 Each component does one thing:
 
-- `scheduler` doesn't know about GitHub, PRs, or WU sessions. It schedules.
+- `scheduler` doesn't know about GitHub, PRs, or WU sessions. It invokes `wu-session-wake` on schedule.
 - `pr-batch-poller` doesn't know about scheduling or session lifecycle. It batch-queries.
-- `wu-session-resumer` (in `~/ai/agents/`) doesn't know about polling. It wakes a single session given a merge event.
+- `wu-session-wake` owns status invocation, session joins, exactly-once fanout, and aggregate process proof.
+- `wu-session-resumer` (in `~/ai/agents/`) doesn't know about polling. It consumes one exact joined row and wakes that single session.
 
-Adding all three concerns into one binary is an anti-pattern. The composition is a workflow, not a tool.
+Collapsing these concerns into one binary is an anti-pattern. The composition is a workflow, not a tool.
 
 ## Adding a new tool
 

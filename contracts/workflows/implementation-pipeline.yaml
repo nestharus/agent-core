@@ -3,7 +3,7 @@ source: workflows/implementation-pipeline.md
 workflow_id: implementation-pipeline
 orchestrator: implementation-pipeline-orchestrator
 inputs:
-- ticket id and branch, worktree, scratch, and planning paths
+- ticket id and branch, worktree, scratch, and planning paths, required caller-owned base_branch, and local_coverage_command required before Phase 8 review
 - non-empty ticket description from the configured Jira or Linear ticket system
 - optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them
 expectations:
@@ -13,9 +13,18 @@ expectations:
 - resolves estimate mutation policy from the authoritative ticket-operator contract and requires verified write or policy-disabled no-write evidence before Phase 4
 - uses apply-gate-set caller modes implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions
 - keeps tests and product code separated between Phase 6b and Phase 6c invocations
+- freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence
+- Phase 7 opens one exact draft PR, Phase 8 freezes the exact closed provider identity including boolean is_draft=true and reviews that base/head with local coverage plus production-validated nested test-audit process evidence, and Phase 9 validates one immediate provider capture before side effects and returns one stable VERIFIED_DRAFT_PR or VERIFIED_MERGED result envelope
+- Phase 9 writes and hashes a closed caller-owned ticket-operation-expected-context-v1 before dispatch, requires the selected named ticket operator's exact comment/readback result to validate against it, and returns both path/hash pairs plus current owned Phase 4/6/8 process-proof path/hashes
+- Phase 0, Phase 7, and Phase 9 invoke exact wu-session-migration operations phase0-init, phase7-upsert, and phase9-update with closed wu-session-runtime-write-v1 requests; the shared executable owns lock, journal, held-parent, rollback, and recovery mechanics while sessions.index.json remains historical source inventory
+- each Phase 8 rerun allocates a new exact-identity PR-review run and keeps every runner log distinct from its canonical result while preserving prior run lineage
+- a feature-routed draft result exposes implementation-pipeline-result-v1 with base_branch equal to the dispatched feature branch, base_ref equal to its fetched refs/remotes/origin identity, reviewed/current provider base_ref_name equal to that exact branch even when OIDs coincide, and current Phase 4/6/8 proof rows for the parent's common feature-route-attempt-proof-v1 gate; direct merge authorization remains a separate parent composition with ticket/currentness/acceptance evidence
 outputs:
 - planning artifacts under the per-WU planning directory
-- tested repository diff and draft PR URL when the work proceeds
+- planning_dir/phase-8-reviewed-pr.json, planning_dir/phase-9-currentness.json recording required fetched base/head SHAs, and conditional planning_dir/phase-9-ready-restoration.json exact provider-state evidence
+- planning_dir/ticket-operations/<wu>-phase-9-expected-context.json, <wu>-phase-9-comment.json, and <wu>-phase-9-validation.json caller context, producer comment/readback, and validation evidence
+- planning_dir/implementation-pipeline-result.json with a conditional Phase 9 VERIFIED_DRAFT_PR or VERIFIED_MERGED outcome, exact is_draft and phase_8_reviewed_is_draft booleans, immutable Phase 8 reviewed identities, expected-context and validated ticket-result path/hashes, owned Phase 4/6/8 process-proof path/hashes, final equality/restoration result, and artifact hashes
+- planning_dir/../sessions.active-wake.json canonical row after exact Phase 7 PR acquisition
 - ticket comments and audit-history closure evidence at PR and finalization points
 non_goals:
 - does not use git-resident ticket files as the source of truth

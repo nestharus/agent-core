@@ -5,13 +5,15 @@ orchestrator: apply-gate-set
 inputs:
 - caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
 - child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
+- implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command
 expectations:
 - dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest
+- writes expected-process before fanout, joins actual child UUIDs afterward, captures raw trace, and independently audits/hashes every consumed output before aggregate acceptance; Phase 8 additionally production-validates the nested test-audit proof
 - projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows
 - preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts
 - requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children
 outputs:
-- mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records
+- apply-gate-set-result-v1 plus mode-scoped dispatch/join/aggregate/expected-process/raw-trace/process-audit artifacts and hashes
 - file-first evidence suitable for RCA or implementation-pipeline caller consumption
 non_goals:
 - does not wire RCA or implementation-pipeline callers

@@ -3,14 +3,15 @@ source: workflows/agents-cli.md
 workflow_id: agents-cli
 orchestrator: root orchestrator or workflow operator invoking agents CLI
 inputs:
-- model name, worktree path, prompt file, and log path for an agent dispatch
+- model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch
 - sub-agent delegation, question-handling, or parallel-writer context
 expectations:
 - standardizes agents CLI invocation and tee-based log capture for pipeline work
+- keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports
 - routes delegated user questions through the root-owned question artifact convention
 - requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only
 outputs:
-- consistent agents command shape for prompts, logs, and long-running background work
+- consistent agents command shape for prompts, complete logs, distinct canonical outputs, and long-running background work
 - stable prompt and log naming conventions for post-run review
 non_goals:
 - does not replace the agent-runner README as the authoritative CLI reference

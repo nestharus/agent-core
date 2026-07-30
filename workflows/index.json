@@ -77,11 +77,12 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "standardizes agents CLI invocation and tee-based log capture for pipeline work",
+          "keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports",
           "routes delegated user questions through the root-owned question artifact convention",
           "requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only"
         ],
         "inputs": [
-          "model name, worktree path, prompt file, and log path for an agent dispatch",
+          "model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch",
           "sub-agent delegation, question-handling, or parallel-writer context"
         ],
         "non_goals": [
@@ -90,7 +91,7 @@
         ],
         "orchestrator": "root orchestrator or workflow operator invoking agents CLI",
         "outputs": [
-          "consistent agents command shape for prompts, logs, and long-running background work",
+          "consistent agents command shape for prompts, complete logs, distinct canonical outputs, and long-running background work",
           "stable prompt and log naming conventions for post-run review"
         ]
       }
@@ -133,13 +134,15 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "dispatches or consumes active child gate evidence for the selected caller mode and writes a canonical join manifest",
+          "writes expected-process before fanout, joins actual child UUIDs afterward, captures raw trace, and independently audits/hashes every consumed output before aggregate acceptance; Phase 8 additionally production-validates the nested test-audit proof",
           "projects manifest rows into expected-process evidence and blocks stale, missing, malformed, non-LOW, or unsupported convention-only gate rows",
           "preserves skip, bootstrap-exception, and inventory-resolution rows without rewriting raw child verdicts",
           "requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children"
         ],
         "inputs": [
           "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition",
-          "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
+          "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields",
+          "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
         ],
         "non_goals": [
           "does not wire RCA or implementation-pipeline callers",
@@ -148,7 +151,7 @@
         ],
         "orchestrator": "apply-gate-set",
         "outputs": [
-          "mode-scoped dispatch manifest, join manifest, aggregate report, expected-process manifest, process-tree report reference, and audit-history records",
+          "apply-gate-set-result-v1 plus mode-scoped dispatch/join/aggregate/expected-process/raw-trace/process-audit artifacts and hashes",
           "file-first evidence suitable for RCA or implementation-pipeline caller consumption"
         ]
       }
@@ -290,22 +293,32 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "coordinates a feature lifecycle above individual WUs while dispatching implementation-pipeline-orchestrator once per scoped ticket",
-          "keeps ticket PRs targeted to the feature branch and assembles evidence packs for ticket PRs and the final feature PR"
+          "validates explicit trunk_branch and feature_branch as distinct short GitHub branch names with git check-ref-format --branch exact-output semantics before route derivation or output",
+          "validates the complete raw route set through one shared production ticket-source/backend/branch/protected-ref/canonical-path/payload/dependency/cycle/wave/output contract that rejects wu_brief_path before output, directory creation, dispatch, or any ticket side effect; treats topological waves only as eligibility sets and serializes merge-owning attempts so each ticket has one accepted result across one or more immutable numbered owning-workflow attempts",
+          "forces the one implementation child per route to auto_merge_after_phase_9=false; feature-orchestrator consumes VERIFIED_DRAFT_PR, promotes the exact direct PR only after pre-ready gates, and merges it only after fresh non-draft currentness and lineage authorization, while refactoring-orchestrator alone merges its one child PR",
+          "maps each refactoring route's existing backend issue key and normalized branch to same-named child inputs and accepts only one singular VERIFIED_MERGED child whose PR/head/guard/base identity exactly matches the nested implementation result and whose closed route/feature/attempt-bound auditor index exactly enumerates five pre-merge and five post-merge current LOW reports",
+          "requires the implementation result's immutable caller expected-context and producer ticket-result path/hashes, revalidates exact caller/producer/site/ticket identity, and hash-checks child-owned process proofs instead of trusting a feature-authored PASS wrapper or re-auditing child internals",
+          "derives implementation-pipeline-orchestrator/implementation-pipeline-result-v1 or refactoring-orchestrator/refactoring-route-result-v1 from the manifest; passes the exact normalized feature_branch into production route-process validation; requires proof-envelope/common-result/attempt-index/route-result feature-branch agreement, exact route PR/head/guard/base identity even when OIDs coincide, and refactoring auditor-index/report re-hash plus exact-LOW semantic validation without auditor reruns before acceptance or dependency release",
+          "produces QA first, pins trunk/feature/diff second, then freezes feature-evidence-index and feature-integrated-review-input; reviewer, verdict, final evidence, handoff, and outcome bind the same non-self-referential input hash",
+          "after route/process/evidence pre-ready PASS, runs gh pr ready on the exact repository/PR, freshly fetches both exact base/head refs and re-queries OPEN non-draft identity, requires provider/fetched/reviewed equality for both OIDs through production currentness, restores exact OPEN draft identity on every pre-merge refusal, then uses the expected-head guarded merge with no replay after merge invocation",
+          "stops at a queried and verified final feature PR-open handoff; post_merge_owner resumes final merge, ticket closure, and post-merge outcome work"
         ],
         "inputs": [
-          "feature brief or approved roadmap, scoped ticket list, repo root, trunk branch, feature branch name, worktrees root, planning root, scratch root, ticket-backend inputs, and selected manager flavor",
-          "optional prototype dossier path, QA target descriptor, and evidence-pack context"
+          "required canonical inputs: feature_id, feature_scope_path, repo_root, explicit trunk_branch, explicit feature_branch, feature_worktree_path, child_worktrees_root, planning_dir, scratch_dir, JSON scoped_ticket_list, ticket_system, matching jira_url, jira_project, and jira_account_email or linear_team_key and optional linear_project_id, manager_flavor, JSON acceptance_evidence_paths, and post_merge_owner; runtime invocation identity is runner-derived",
+          "exactly one route source: ticket_route_map, represented by --ticket-route-map-json with closed feature-inline-route-map-v2 records, or successor_manifest_path, represented by --successor-manifest naming the strict feature-successor-envelope-v1; the CLI rejects both/neither before parsing, every record requires one existing backend issue key equal to ticket_id, and both paths emit the same closed feature-route-manifest-v2 record graph",
+          "optional context: prototype_dossier_path, qa_operator, qa_target_descriptor, evidence_pack_context, and audit_history_path derived as planning_dir/feature-audit-history.md"
         ],
         "non_goals": [
-          "does not replace roadmap, prototype, implementation-pipeline, PR-review, or CodeRabbit workflows",
-          "does not inline ticket decomposition or implementation-pipeline phases"
+          "does not reproduce implementation-pipeline or refactoring phases, self-certify process or scope gates, or let a route implementation child auto-merge",
+          "does not merge refactoring-owned PRs, wait for the final feature PR merge, close tickets, or write a post-merge final outcome"
         ],
         "orchestrator": "feature-orchestrator",
         "outputs": [
-          "feature branch pushed to origin",
-          "per-ticket implementation-pipeline runs and ticket PR list",
-          "final feature-to-trunk PR with evidence pack, QA verdict or placeholder, prototype payload when applicable, and outcome record"
+          "${planning_dir}/route-manifest.json, ${planning_dir}/route-attempt-index.json, ${scratch_dir}/route-dispatch-evidence.json, ${planning_dir}/ticket-pr-merge-index.json, and ${planning_dir}/feature-process-index.json",
+          "unique ${scratch_dir}/feature-process/prompts/<ticket_slug>-attempt-<NNNN>.prompt.md, logs/<ticket_slug>-attempt-<NNNN>.log, outputs/<ticket_slug>-attempt-<NNNN>.output.json, expected/<ticket_slug>-attempt-<NNNN>.pre-audit.expected.json, dispatch/<ticket_slug>-attempt-<NNNN>.pre-audit.dispatch.json, traces/<ticket_slug>-attempt-<NNNN>.pre-audit.trace.json, auditors/<ticket_slug>-attempt-<NNNN>.prompt.md, auditors/<ticket_slug>-attempt-<NNNN>.log, auditors/<ticket_slug>-attempt-<NNNN>.output.md, expected/<ticket_slug>-attempt-<NNNN>.final.expected.json, dispatch/<ticket_slug>-attempt-<NNNN>.final.dispatch.json, traces/<ticket_slug>-attempt-<NNNN>.final.trace.json, ${planning_dir}/route-evidence/<ticket_slug>-attempt-<NNNN>.evidence.json, feature-process/<ticket_slug>-attempt-<NNNN>.audit.md, feature-process/<ticket_slug>-attempt-<NNNN>.binding.json, route-process-validation/<ticket_slug>-attempt-<NNNN>.json, route-attempt-outcomes/<ticket_slug>-attempt-<NNNN>.json, route-attempt-proofs/<ticket_slug>-attempt-<NNNN>.proof.json, and direct-only route-acceptance/<ticket_slug>-attempt-<NNNN>.acceptance.json",
+          "${scratch_dir}/feature-expected-process.json, ${scratch_dir}/feature-process-tree.json, and ${planning_dir}/feature-process-tree-audit.md",
+          "${planning_dir}/route-currentness/<ticket_slug>-attempt-<NNNN>-pre-ready.json, ${planning_dir}/route-currentness/<ticket_slug>-attempt-<NNNN>-post-ready.json, ${planning_dir}/route-ready-restoration/<ticket_slug>-attempt-<NNNN>.json, ${planning_dir}/route-authorization/<ticket_slug>-attempt-<NNNN>.json, ${planning_dir}/qa-verdict.md, ${planning_dir}/feature-evidence-index.json, ${planning_dir}/feature-integrated-review-input.json, ${planning_dir}/integrated-scope-verdict.md, ${planning_dir}/feature-final-evidence.json, and ${planning_dir}/feature-audit-history.md when review reaches round two",
+          "${planning_dir}/final-pr-handoff.json and ${planning_dir}/feature-outcome.json with state FINAL_PR_OPEN_HANDOFF and verified final PR base/head/head SHA"
         ]
       }
     },
@@ -321,10 +334,16 @@
           "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
           "resolves estimate mutation policy from the authoritative ticket-operator contract and requires verified write or policy-disabled no-write evidence before Phase 4",
           "uses apply-gate-set caller modes implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
-          "keeps tests and product code separated between Phase 6b and Phase 6c invocations"
+          "keeps tests and product code separated between Phase 6b and Phase 6c invocations",
+          "freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence",
+          "Phase 7 opens one exact draft PR, Phase 8 freezes the exact closed provider identity including boolean is_draft=true and reviews that base/head with local coverage plus production-validated nested test-audit process evidence, and Phase 9 validates one immediate provider capture before side effects and returns one stable VERIFIED_DRAFT_PR or VERIFIED_MERGED result envelope",
+          "Phase 9 writes and hashes a closed caller-owned ticket-operation-expected-context-v1 before dispatch, requires the selected named ticket operator's exact comment/readback result to validate against it, and returns both path/hash pairs plus current owned Phase 4/6/8 process-proof path/hashes",
+          "Phase 0, Phase 7, and Phase 9 invoke exact wu-session-migration operations phase0-init, phase7-upsert, and phase9-update with closed wu-session-runtime-write-v1 requests; the shared executable owns lock, journal, held-parent, rollback, and recovery mechanics while sessions.index.json remains historical source inventory",
+          "each Phase 8 rerun allocates a new exact-identity PR-review run and keeps every runner log distinct from its canonical result while preserving prior run lineage",
+          "a feature-routed draft result exposes implementation-pipeline-result-v1 with base_branch equal to the dispatched feature branch, base_ref equal to its fetched refs/remotes/origin identity, reviewed/current provider base_ref_name equal to that exact branch even when OIDs coincide, and current Phase 4/6/8 proof rows for the parent's common feature-route-attempt-proof-v1 gate; direct merge authorization remains a separate parent composition with ticket/currentness/acceptance evidence"
         ],
         "inputs": [
-          "ticket id and branch, worktree, scratch, and planning paths",
+          "ticket id and branch, worktree, scratch, and planning paths, required caller-owned base_branch, and local_coverage_command required before Phase 8 review",
           "non-empty ticket description from the configured Jira or Linear ticket system",
           "optional pipeline_entry_mode normal, review_first, or plug_existing_review with audit target or existing review bundle inputs when that mode requires them"
         ],
@@ -336,7 +355,10 @@
         "orchestrator": "implementation-pipeline-orchestrator",
         "outputs": [
           "planning artifacts under the per-WU planning directory",
-          "tested repository diff and draft PR URL when the work proceeds",
+          "planning_dir/phase-8-reviewed-pr.json, planning_dir/phase-9-currentness.json recording required fetched base/head SHAs, and conditional planning_dir/phase-9-ready-restoration.json exact provider-state evidence",
+          "planning_dir/ticket-operations/<wu>-phase-9-expected-context.json, <wu>-phase-9-comment.json, and <wu>-phase-9-validation.json caller context, producer comment/readback, and validation evidence",
+          "planning_dir/implementation-pipeline-result.json with a conditional Phase 9 VERIFIED_DRAFT_PR or VERIFIED_MERGED outcome, exact is_draft and phase_8_reviewed_is_draft booleans, immutable Phase 8 reviewed identities, expected-context and validated ticket-result path/hashes, owned Phase 4/6/8 process-proof path/hashes, final equality/restoration result, and artifact hashes",
+          "planning_dir/../sessions.active-wake.json canonical row after exact Phase 7 PR acquisition",
           "ticket comments and audit-history closure evidence at PR and finalization points"
         ]
       }
@@ -377,12 +399,15 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "gates the implementation diff against the proposal through test audit, decomposition, justification, supported-surface, and commit-hygiene checks",
-          "runs on the actual diff after Phase 7 optional review handling rather than judging the proposal alone",
-          "routes repeated fix or gate loops through audit-history and process-tree review"
+          "Phase 7 has already opened the draft; Phase 8 reviews that exact provider head in a detached worktree against the freshly fetched provider base",
+          "initial process proof covers risk, research, outer test-audit, decomposition, justification, supported-surface, and commit-hygiene children; the outer test-audit must also return a production-validated nested three-child trace and canonical header-first process-audit PASS with producer-owned exact-blocking-mode machine binding, actual UUID, and pinned SHAs",
+          "each repeated proposal-risk round and domain-research fanout has its own versioned expected/dispatch/trace/audit proof, canonical header-first unique PASS, and producer-owned exact-blocking-mode machine binding before it can contribute to posting",
+          "every invocation uses an exact PR/base/head/invocation-qualified immutable run root, unique private refs and detached worktree, and distinct complete logs versus canonical outputs",
+          "re-queries and requires unchanged OPEN provider base/head OIDs after all conditional proofs and before any posting; every review/comment mutation and identity query names the exact repository and PR"
         ],
         "inputs": [
-          "actual branch diff or PR, approved proposal package, test evidence, and audit-history context",
-          "base branch or true stacked parent for comparison"
+          "an OPEN PR number, stable review lineage root, approved proposal/test context, non-blank local_coverage_command, and optional audit history",
+          "required caller-supplied base/head branch, fetched ref, and full OID identity; provider data verifies all six fields and never replaces missing or blank values"
         ],
         "non_goals": [
           "does not review prototype work that lacks a proposal contract",
@@ -393,7 +418,7 @@
         "outputs": [
           "gate verdicts and actionable findings for the next fix pass or decomposition",
           "synthesized PR-review comment when posting is in scope",
-          "process-tree-auditor evidence before synthesis or downstream PR movement"
+          "pr-review-result-v2 with immutable run identity, REVIEW_POSTED or PROPOSAL_POSTED, exact-repository/exact-PR posting identity, exact base/head OIDs, every child log/output hash, nested test-audit proof/revalidation, and every process-proof path and hash"
         ]
       }
     },
@@ -555,16 +580,19 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "per-PR cycle output lands on the integration buffer"
+          "dispatches exactly one implementation child and one ticket PR after executable exact protected-short-branch, canonical root, and cardinality validation; larger refactors decompose into separate refactoring WUs before this workflow",
+          "the sole implementation child receives exact ticket/backend/branch/root inputs, base_branch equal to the validated short integration branch name, and auto_merge_after_phase_9=false",
+          "refactoring-orchestrator solely merges the child PR after exact nested implementation versus child PR/head/base/expected-head-guard identity validation, required caller expected-context versus producer ticket-result validation, current implementation Phase 4/6/8 proof hashes, a closed route/feature/attempt-bound auditor index with exact five pre-merge and five post-merge current LOW reports, and an immutable pre-merge process projection whose canonical header-first unique-PASS audit has a producer-owned machine binding",
+          "binds implementation, test, review, and auditor evidence to reviewed base/head SHAs and requires provider/fetched/reviewed equality for both OIDs immediately before merge; every post-ready pre-merge refusal restores exact OPEN draft identity before returning to implementation Phase 8, while merge invocation is explicitly non-replayable",
+          "success requires matching MERGED provider identity/merge OID, refreshed ancestry/immediate parent from reviewed_base_sha, and exact current refactoring-owned pre-merge/final process-proof path-hashes",
+          "feature-orchestrator consumes VERIFIED_MERGED route evidence, binds implementation/refactoring-owned process proofs without re-auditing their internals, and never merges refactoring-owned PRs",
+          "feature-routed success returns refactoring-route-result-v1 with exact route invocation identity, singular merged child, child and nested implementation PR/head/guard equality, integration/dispatched/open/pre-merge/merged/nested-implementation base name and reviewed/pre-merge/merged base SHA equality, plus a current closed auditor index whose route arrays and ten re-hashed exact-LOW reports are semantically validated without rerunning auditors"
         ],
         "inputs": [
-          "target_list",
-          "repo_root",
-          "worktree_path",
-          "planning_dir",
-          "scratch_dir",
-          "integration_branch_ref",
-          "slice_bounds"
+          "exactly one ticket source: jira_issue_key, linear_issue_key, or canonical wu_brief_path",
+          "required backend selection/configuration: ticket_system plus jira_url, jira_project, and jira_account_email for Jira, or linear_team_key and optional linear_project_id for Linear",
+          "required coordination inputs: target_list, repo_root, unique branch_name and canonical absolute worktree_path/planning_dir/scratch_dir for the sole child, exact short trunk_branch and integration_branch_ref, canonical JSON protected_branches including both, and slice_bounds; invocation UUID is derived from runner provenance",
+          "optional inputs: wu_brief_context_path valid only with an existing issue key, shim_placement_parameters, prior_refactor_evidence_pointers, manager_flavor, shim_registry_path defaulting to ~/ai/conventions/active-shims.md, and audit_history_path defaulting to planning_dir/refactoring-audit-history.md"
         ],
         "non_goals": [
           "does not implement cross-file auditor analysis",
@@ -573,8 +601,11 @@
         ],
         "orchestrator": "refactoring-orchestrator",
         "outputs": [
-          "per-PR cycle dispatch evidence",
-          "integration-buffer commit"
+          "${planning_dir}/refactoring-route-result.json, ${planning_dir}/refactoring-auditor-index.json, ${planning_dir}/refactoring-currentness/<slice_identity>.json, ${planning_dir}/refactoring-ready-restoration/<slice_identity>.json, ${planning_dir}/refactoring-process-tree-audit-pre-merge.md, and ${planning_dir}/refactoring-process-tree-audit.md",
+          "${scratch_dir}/refactoring-dispatch-plan.json and ${planning_dir}/refactoring-dispatch-validation.json",
+          "${scratch_dir}/refactoring-expected-process-pre-merge.json, ${scratch_dir}/refactoring-dispatch-evidence-pre-merge.json, and ${scratch_dir}/refactoring-process-tree-pre-merge.json",
+          "${scratch_dir}/refactoring-dispatch-evidence.json, ${scratch_dir}/refactoring-expected-process.json, and ${scratch_dir}/refactoring-process-tree.json",
+          "${planning_dir}/refactoring-audit-history.md from revise/review round two onward"
         ]
       }
     },
@@ -585,26 +616,27 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
-          "finds the last refactor milestone for the target surface",
-          "analyzes commits since that milestone for structural degradation",
-          "packages corrective refactors into independently reviewable PR plans that inherit the base refactoring and implementation-pipeline gates"
+          "scope is repository-read-only, selects milestone/degradation/packages, writes exact target/history/trunk/integration identities plus the canonical protected set, package plan, source hashes, and plan_hash to one immutable package-source request, performs no ticket operation, and dispatches no child",
+          "execute validates exact complete package descriptors, immutable trunk/integration/protected short-branch equality, every package branch outside that set, canonical unique roots/results, exact inherited gates, and a package-local acyclic dependency graph before plan_hash, current identity, package-map acceptance, context brief, or child dispatch",
+          "every package maps to one unique caller-owned backend-matching existing issue and one separate one-child/one-ticket-PR refactoring WU; execute dispatches in dependency-topological order and requires every prerequisite VERIFIED_MERGED before its dependent; generated WU briefs are context only",
+          "passes each existing issue key, normalized branch and unique roots, plus wu_brief_context_path through refactoring to implementation so Phase 0 cannot cold-create; captures each route UUID and accepts only a matching singular-child hashed VERIFIED_MERGED result"
         ],
         "inputs": [
-          "target surface (accepts either target or target_surface), repo_root, worktree_path, planning_dir, scratch_dir, integration_branch_ref, history_base_ref",
-          "milestone_search_policy, degradation_signal_sources, package_bounds, manager_flavor, and optional package_size_override"
+          "required in both scope and execute: mode, ticket_system, repo_root, worktree_path, planning_dir, scratch_dir, exact short trunk_branch, canonical JSON protected_branches, and manager_flavor",
+          "scope mode also requires target or target_surface, integration_branch_ref, history_base_ref, milestone_search_policy, degradation_signal_sources, package_bounds, and optional package_size_override; it rejects execute inputs",
+          "execute mode also requires immutable package_source_request, caller-owned package_ticket_source_map, current_identity_path, and matching Jira or Linear existing-issue child configuration; it rejects scope-selection inputs and requires trunk/protected equality with scope"
         ],
         "non_goals": [
           "does not modify the base ACR-179 refactoring substrate",
           "does not design incident-driven or seed-and-fan-out sibling strategies",
           "does not introduce behavior or feature changes",
-          "does not add scheduler or ticket-automation hooks"
+          "does not add scheduler or ticket-automation hooks",
+          "does not create, search, comment on, update, estimate, label, or transition tickets in either mode"
         ],
         "orchestrator": "refactoring-commit-history-orchestrator",
         "outputs": [
-          "last-refactor milestone evidence",
-          "history degradation inventory",
-          "bounded package plan with gate obligations",
-          "handoff inputs for ACR-179 per-package execution"
+          "scope: last-refactor milestone evidence, degradation inventory, bounded package plan, and immutable package-source request with plan_hash",
+          "execute: currentness/package-map validation, canonical per-package context briefs, exact existing-issue handoffs bound to plan_hash, and package outcomes with runtime route identities"
         ]
       }
     },
@@ -841,21 +873,36 @@
         "expectations": [
           "joins merged PR rows to one persisted WU session manifest",
           "dispatches wu-session-resumer once per merged session",
-          "does not batch post-merge session work inside the poller or scheduler"
+          "does not batch post-merge session work inside the poller or scheduler",
+          "verifies the merged PR base against base_branch and runs post-merge evidence against that base without defaulting to main",
+          "verifies the multi-row expected process and process tree before aggregate completion",
+          "joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS",
+          "blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending",
+          "validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root",
+          "treats a batch containing only valid non-merged skipped rows as a successful audited no-op",
+          "uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch"
         ],
         "inputs": [
-          "sessions.index.json path",
+          "sessions.active-wake.json path",
           "poller output from tools/pr-batch-poller",
-          "per-project worktree and planning roots"
+          "repo_root plus per-project worktree and planning roots",
+          "caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION",
+          "session rows carrying base_branch, pr_open_base_sha, and optional pre_merge_base_sha"
         ],
         "non_goals": [
           "does not implement the scheduler runtime",
           "does not change pr-batch-poller schema",
           "does not inline post-merge checks or spawn successor WUs"
         ],
-        "orchestrator": "composition layer",
+        "orchestrator": "root wu-session-wake invocation (scheduler-triggered or manual)",
         "outputs": [
-          "one wu-session-resumer log per merged session"
+          "${planning_root}/wake-runs/${run_id}/composition-report.json",
+          "${planning_root}/wake-runs/${run_id}/expected-process.json",
+          "${planning_root}/wake-runs/${run_id}/dispatch-evidence.json",
+          "${planning_root}/wake-runs/${run_id}/process-tree.json",
+          "${planning_root}/wake-runs/${run_id}/process-tree-audit.md",
+          "${planning_root}/wake-runs/${run_id}/process-tree-audit.log",
+          "one current-invocation prompt and log per dispatched merged session"
         ]
       }
     }

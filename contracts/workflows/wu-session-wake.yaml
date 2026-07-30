@@ -1,17 +1,32 @@
 schema: workflow-dispatch-contract-v1
 source: workflows/wu-session-wake.md
 workflow_id: wu-session-wake
-orchestrator: composition layer
+orchestrator: root wu-session-wake invocation (scheduler-triggered or manual)
 inputs:
-- sessions.index.json path
+- sessions.active-wake.json path
 - poller output from tools/pr-batch-poller
-- per-project worktree and planning roots
+- repo_root plus per-project worktree and planning roots
+- caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION
+- session rows carrying base_branch, pr_open_base_sha, and optional pre_merge_base_sha
 expectations:
 - joins merged PR rows to one persisted WU session manifest
 - dispatches wu-session-resumer once per merged session
 - does not batch post-merge session work inside the poller or scheduler
+- verifies the merged PR base against base_branch and runs post-merge evidence against that base without defaulting to main
+- verifies the multi-row expected process and process tree before aggregate completion
+- joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS
+- blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending
+- validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root
+- treats a batch containing only valid non-merged skipped rows as a successful audited no-op
+- uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch
 outputs:
-- one wu-session-resumer log per merged session
+- ${planning_root}/wake-runs/${run_id}/composition-report.json
+- ${planning_root}/wake-runs/${run_id}/expected-process.json
+- ${planning_root}/wake-runs/${run_id}/dispatch-evidence.json
+- ${planning_root}/wake-runs/${run_id}/process-tree.json
+- ${planning_root}/wake-runs/${run_id}/process-tree-audit.md
+- ${planning_root}/wake-runs/${run_id}/process-tree-audit.log
+- one current-invocation prompt and log per dispatched merged session
 non_goals:
 - does not implement the scheduler runtime
 - does not change pr-batch-poller schema

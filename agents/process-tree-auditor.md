@@ -6,6 +6,90 @@ output_format: ''
 
 # Process Tree Auditor
 
+## Contract
+
+```yaml
+schema: operator-contract-v1
+inputs:
+  - name: operator_file
+    type: path
+    required: true
+    default_source: caller
+    description: "Operator or workflow procedure whose execution is being audited."
+  - name: process_tree_path
+    type: path
+    required: true
+    default_source: caller
+    description: "Saved JSON output from agents trace for the root invocation."
+  - name: root_invocation_uuid
+    type: string
+    required: true
+    default_source: caller
+    description: "Invocation UUID used to produce the trace."
+  - name: subtree_root_uuid
+    type: string
+    required: false
+    default_source: caller
+    description: "Optional node UUID that scopes the audit within the saved trace."
+  - name: expected_process
+    type: path
+    required: true
+    default_source: caller
+    description: "Manifest of required workflow phases, child roles, invocations, models, prompts, logs, and outputs."
+  - name: companion_artifacts
+    type: path_list
+    required: true
+    default_source: caller
+    description: "Prompt, log, gate, output, and status artifacts needed to interpret the process tree; the canonical report path is forbidden."
+  - name: audit_history_path
+    type: path
+    required: false
+    default_source: caller
+    description: "Optional canonical audit history read for repeated-loop and output-lineage context."
+  - name: mode
+    type: enum
+    required: false
+    default_source: base
+    description: "blocking or advisory; canonical-output trust failures remain blocking in either mode."
+  - name: report_path
+    type: path
+    required: false
+    default_source: base
+    description: "Output report path; resolve relative values against the invocation working directory to one canonical absolute path before writing."
+  - name: stdout_report_copy
+    type: bool
+    required: false
+    default_source: base
+    description: "Emit the exact completed report bytes as provider stdout for fail-closed extraction and byte comparison."
+defaults:
+  - name: mode
+    value: blocking
+    source: base
+  - name: report_path
+    value: PROCESS_TREE_AUDIT.report.md
+    source: base
+  - name: stdout_report_copy
+    value: false
+    source: base
+outputs:
+  - task: default
+    success_shape: "Header-first # Process Tree Audit report with five identity lines, exactly one Verdict: PASS|FAIL|NEEDS_INPUT line, and exactly one producer-owned process-tree-audit-binding-v1 machine binding that records the exact audit mode; stdout is the ordinary sentinel or, with stdout_report_copy=true, the exact report bytes."
+    wrote_lines:
+      - ${report_path}
+errors:
+  - class: BLOCKED
+    cause: mode is outside blocking|advisory, or a required file cannot be read or parsed.
+    recovery: Correct the mode or repair the unreadable or malformed file, then rerun the audit.
+  - class: NEEDS_INPUT
+    cause: Required process evidence is absent or too vague to map without guessing.
+    recovery: Supply the missing trace, manifest, or companion evidence, then rerun the audit.
+side_effects:
+  - Writes only artifacts declared by the operator body.
+must_delegate: []
+forbidden_direct:
+  - Do not bypass the operator body, anti-scope, or stop conditions.
+```
+
 ## Declared roles
 
 `parser`, `validator`.
@@ -41,11 +125,14 @@ You audit execution validity, not design correctness, code quality, or human app
 - `root_invocation_uuid=<uuid>` (required) - invocation UUID used to produce the trace.
 - `subtree_root_uuid=<uuid>` (optional) - node UUID that scopes the audit to a subtree inside the saved trace. When absent, audit from `root_invocation_uuid`.
 - `expected_process=<path>` (required) - manifest that maps required workflow phases or child roles to expected invocations, models, prompts, logs, and outputs. Canonical-output rows live inside this manifest, not as a separate top-level input.
-- `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree.
+- `companion_artifacts=<paths>` (required) - newline or comma list of prompt files, log files, gate reports, expected outputs, and status artifacts needed to interpret the tree. Resolve each path to its canonical absolute identity and reject any row equal to the resolved `report_path`.
   The companion artifacts must not include audited-run narrative notes or rationale for skipped work.
 - `audit_history_path=<path>` (optional) - canonical audit history to read for repeated-loop context and qualifying canonical-output deletion or replacement lineage evidence. This operator reads it but does not update it.
 - `mode=<blocking|advisory>` (optional, default `blocking`) - `blocking` enforces hard violations as `FAIL`; `advisory` reports ordinary findings without blocking, but canonical-output trust failures remain blocking for canonical rows.
-- `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path.
+- `report_path=<path>` (optional, default `PROCESS_TREE_AUDIT.report.md`) - output report path. Resolve it once against the invocation working directory to a canonical absolute path before writing, and use only that resolved path as the report identity.
+- `stdout_report_copy=<true|false>` (optional, default `false`) - when true, after atomically writing `report_path`, emit those exact report bytes as the complete provider stdout instead of the ordinary terminal sentinel. This is used only when a caller will fail-closed extract and byte-compare the provider output to the consumed report.
+
+Every report includes the canonical machine binding declared below. A caller that requires a specific hash-bound companion set supplies those artifacts through `companion_artifacts` and validates the producer-owned binding; it does not request or parse a caller-specific report layout.
 
 ## Expected Process Manifest
 
@@ -114,6 +201,33 @@ If the manifest is absent or too vague to map expected work to tree nodes, retur
 
 For a forbidden node/group (`required: false`, `blocking_if_present: true`), the manifest must provide enough operator, task, prompt, or log identity to match without guessing. Map the identity against every child in the audited subtree. Zero matches passes that negative expectation; one or more matches is `unexpected_forbidden_child` and blocking, regardless of child terminal status. A forbidden node cannot use `blocking_if_missing: true`, and contradictory required/forbidden flags make the manifest malformed.
 
+## Canonical Machine Binding
+
+The report contains exactly one `## Machine Binding` section and exactly one `PROCESS_TREE_AUDIT_BINDING_JSON=<canonical-json>` row in that section. The JSON object uses `schema=process-tree-audit-binding-v1` and these exact fields:
+
+```json
+{
+  "schema": "process-tree-audit-binding-v1",
+  "mode": "<blocking|advisory>",
+  "report_identity": {
+    "schema": "process-tree-audit-report-v1",
+    "path": "<report_path>",
+    "operator_file": "<operator_file>"
+  },
+  "operator_artifact": {"path": "<canonical-operator-file-path>", "sha256": "<sha256>"},
+  "audit_history": null,
+  "root_invocation_uuid": "<root_invocation_uuid>",
+  "subtree_root_uuid": null,
+  "expected_process": {"path": "<expected_process>", "sha256": "<sha256>"},
+  "process_tree": {"path": "<process_tree_path>", "sha256": "<sha256>"},
+  "companion_artifacts": [
+    {"path": "<companion-path>", "sha256": "<sha256>"}
+  ]
+}
+```
+
+`mode` is the exact validated audit mode used for the decision and is always present, including when the default `blocking` mode was selected. `report_identity.path` is the resolved canonical absolute report path and deliberately has no report hash: the report never hash-references itself. `operator_file` is the canonical absolute path of the audited procedure and must equal `operator_artifact.path`; `operator_artifact` also binds that procedure's current bytes. `audit_history` is JSON `null` when no history was supplied and otherwise uses the same path/SHA-256 artifact shape. `subtree_root_uuid` is JSON `null` when no subtree was requested. Operator, audit-history, expected-process, process-tree, and companion paths are canonical absolute identities with current lowercase SHA-256 values; companion rows are unique and sorted lexically by path. The binding includes every supplied companion and no report path among hashed artifacts. Caller-specific identity such as base/head SHAs, run IDs, dispatch joins, or child artifact arrays belongs in the hash-bound expected-process or companion artifacts rather than new binding fields.
+
 ## Non-Negotiables
 
 - Read `~/ai/conventions/workflow-execution-violations.md`.
@@ -124,6 +238,7 @@ For a forbidden node/group (`required: false`, `blocking_if_present: true`), the
 - For canonical-output rows, `WROTE:`, dispatch stdout, orchestrator stdout, prior PASS verdicts, agents-result JSON, and successful trace nodes are context only and cannot prove current canonical-output existence/content.
 - Do not treat missing trace data as harmless. If the workflow required tree review and required evidence is absent, return `NEEDS_INPUT` or `FAIL`.
 - The audited-run narrative is not evidence and cannot turn missing artifacts, skipped phases, or absent outputs into PASS.
+- Emit the canonical header-first report and producer-owned machine binding exactly once. Never put `Verdict:` before the header, emit a second verdict, add caller-specific binding fields, or replace the binding with a custom layout.
 - Keep root context small: report the minimum subtree evidence needed to support each finding, not a full transcript-style replay.
 - Never use an execution log's total or retained byte length as pass/fail evidence. Producer-side complete capture and auditor-side bounded consumption are separate concerns.
 - Inspect long logs with targeted search, bounded line ranges, or a bounded tail. A runtime retention or truncation marker is not a violation unless a specific required fact is unavailable from all allowed evidence sources.
@@ -131,6 +246,8 @@ For a forbidden node/group (`required: false`, `blocking_if_present: true`), the
 ## Procedure
 
 ### Step 1: Load Inputs
+
+Resolve `report_path` and every `companion_artifacts` row once against the invocation working directory to canonical absolute paths. Before reading or hashing artifacts, return `BLOCKED:self-referential-companion-artifact` if any companion identity equals the report identity.
 
 Read `operator_file`, `process_tree_path`, `expected_process`, every non-log `companion_artifacts` entry, `subtree_root_uuid` when supplied, and `audit_history_path` when supplied. For each log entry, verify the path and inspect only query-relevant bounded regions; do not load an entire long log by default. Load ordinary expected nodes and any canonical rows containing `canonical_output_path`, `expected_verdict`, and optional `expected_sha256`; when `audit_history_path` is present, keep its deletion/replacement entries available for Step 4.
 
@@ -227,7 +344,7 @@ Do not write audit history. Emit this report as a role output. The caller uses `
 
 ### Step 7: Write Report
 
-Write `report_path`.
+Write the report to the canonical `report_path` resolved in Step 1 and use that same path in `report_identity.path`. Hash `operator_file`, `audit_history_path` when supplied, `expected_process`, `process_tree_path`, and every validated canonical `companion_artifacts` row from their current bytes, then write the canonical machine binding with the exact validated `mode` and without a hash of the report itself. Do not emit `PASS` if any hashed input changed between inspection and report emission. When `stdout_report_copy=true`, read the completed report back from the resolved path and emit those exact bytes as the complete provider response; do not add a sentinel, prefix, suffix, or code fence. The caller extracts provider-only stdout and requires byte equality before accepting the report.
 
 ## Output Format
 
@@ -241,7 +358,10 @@ Root invocation UUID: <uuid>
 Subtree root UUID: <uuid|none>
 Trace JSON: <process_tree_path>
 Expected process: <expected_process>
-Verdict: PASS | FAIL | NEEDS_INPUT
+Verdict: <PASS|FAIL|NEEDS_INPUT>
+
+## Machine Binding
+PROCESS_TREE_AUDIT_BINDING_JSON=<canonical-json matching Canonical Machine Binding>
 
 ## Tree Summary
 - Nodes inspected: <n>
@@ -283,9 +403,14 @@ Verdict: PASS | FAIL | NEEDS_INPUT
 <short summary sufficient for the root orchestrator without replaying full subtree context>
 ```
 
+The first non-blank report lines are exactly the header, the five identity lines in the order shown, and one canonical verdict line. The report contains exactly one line beginning `Verdict:`; `PASS | FAIL | NEEDS_INPUT` is notation in this contract, never report content.
+
 Final stdout:
 
+- With `stdout_report_copy=true`, the exact completed `report_path` bytes and nothing else.
 - `PASS` when every required process element is mapped, succeeded or stopped as expected, every forbidden-child pattern has zero matches, ordinary required outputs are verified, and canonical-output rows pass current stat/read/verdict/hash checks or accepted lineage.
 - `FAIL:<count> violations` when one or more blocking violations are present.
 - `NEEDS_INPUT:<missing fields or artifacts>` when required evidence is absent or too vague to audit.
-- `BLOCKED:<reason>` when `mode` is invalid or required files cannot be read or parsed.
+- `BLOCKED:<reason>` when required files cannot be read or parsed.
+
+The ordinary sentinel bullets apply only when `stdout_report_copy=false`.

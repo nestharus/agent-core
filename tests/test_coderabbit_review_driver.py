@@ -34,6 +34,53 @@ def _summary(comment_id: int, body: str, updated_at: str, login: str = BOT_LOGIN
     }
 
 
+def _ack_body(action_marker: str, review_marker: str) -> str:
+    return f"<summary>{action_marker}</summary>\n\n{review_marker}\n"
+
+
+def test_current_incremental_completion_acknowledgement_reports_observed_marker(monkeypatch) -> None:
+    body = _ack_body("Action performed", "Review finished.")
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "gh_json", lambda *args: {"id": 100})
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(
+        driver,
+        "gh_paginated_array",
+        lambda *args: [{"id": 101, "body": body, "user": {"login": BOT_LOGIN}}],
+    )
+    monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
+
+    evidence = driver.trigger_review(repo, 192, "incremental", driver.DEFAULT_LABEL)
+
+    assert evidence["ack_marker"] == "Review finished."
+    assert evidence["ack_body"] == body
+
+
+def test_current_full_completion_acknowledgement_is_supported() -> None:
+    body = _ack_body("Action performed", "Full review finished.")
+
+    assert driver.trigger_ack_marker(body, "full") == "Full review finished."
+
+
+def test_legacy_triggered_acknowledgement_is_supported() -> None:
+    body = _ack_body("Actions performed", "Review triggered.")
+
+    assert driver.trigger_ack_marker(body, "incremental") == "Review triggered."
+
+
+def test_incremental_mode_rejects_full_review_acknowledgement() -> None:
+    body = _ack_body("Action performed", "Full review finished.")
+
+    assert driver.trigger_ack_marker(body, "incremental") is None
+
+
+def test_unrelated_bot_text_is_not_an_acknowledgement() -> None:
+    body = "Review finished. Here are unrelated release notes."
+
+    assert driver.trigger_ack_marker(body, "incremental") is None
+
+
 def test_approved_review_is_terminal_even_when_later_commented_review_exists() -> None:
     signal = driver.coderabbit_decision_signal(
         [
@@ -67,6 +114,18 @@ def test_changes_requested_review_is_terminal_even_when_later_commented_review_e
     assert signal["source"] == "github_review"
     assert signal["review_id"] == 2
     assert driver.review_decision_outcome(signal["decision"]) == "changes_requested"
+
+
+def test_changes_requested_without_actionable_comments_escalates_instead_of_polling() -> None:
+    assert driver.changes_requested_without_actionable_comments(
+        "CHANGES_REQUESTED", "changes_requested", []
+    )
+    assert not driver.changes_requested_without_actionable_comments(
+        "NONE", "pending", []
+    )
+    assert not driver.changes_requested_without_actionable_comments(
+        "CHANGES_REQUESTED", "changes_requested", [{"comment_id": 1}]
+    )
 
 
 def test_summary_comment_approved_marker_is_terminal_fallback() -> None:

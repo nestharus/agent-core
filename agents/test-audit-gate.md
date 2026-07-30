@@ -26,6 +26,36 @@ inputs:
     required: true
     default_source: caller
     description: "scratch dir"
+  - name: base_ref
+    type: string
+    required: false
+    default_source: derived
+    description: "Parent ref used for the reviewed diff and baseline coverage worktree; derived only as refs/remotes/origin/${base_branch} from the required caller-owned base branch when omitted."
+  - name: base_branch
+    type: string
+    required: true
+    default_source: caller
+    description: "Caller-owned short provider base name; missing or blank values block and no default branch is inferred."
+  - name: base_sha
+    type: string
+    required: false
+    default_source: caller
+    description: "Full expected commit resolved from base_ref."
+  - name: head_branch
+    type: string
+    required: false
+    default_source: caller
+    description: "Short provider head name; required with pinned PR-review composition."
+  - name: head_ref
+    type: string
+    required: false
+    default_source: caller
+    description: "Exact reviewed head ref."
+  - name: head_sha
+    type: string
+    required: false
+    default_source: caller
+    description: "Full expected commit resolved from head_ref."
   - name: planning_root
     type: path
     required: false
@@ -50,7 +80,7 @@ inputs:
     type: string
     required: false
     default_source: caller
-    description: "shell command run from repo_root that produces coverage-summary.json and lcov.info under the current working directory's ./coverage/ subdir"
+    description: "Required and non-blank in pr-review mode; optional and unused for coverage generation in implementation mode. When present, it is hashed into the result."
   - name: pr_number
     type: int
     required: false
@@ -67,8 +97,27 @@ secrets:
   []
 outputs:
   - task: audit-tests
-    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
-    wrote_lines: []
+    success_shape: "test-audit-result-v2 plus TEST_AUDIT_GATE.md, with a top-line PASS, PARTIAL, or FAIL verdict and an independently audited, hash-current three-child nested process proof whose process-auditor report uses the canonical header-first report and producer-owned exact-blocking-mode machine binding."
+    wrote_lines:
+      - ${scratch_dir}/TEST_AUDIT_EXPECTED_PROCESS.json
+      - ${scratch_dir}/TEST_AUDIT_DISPATCH_EVIDENCE.json
+      - ${scratch_dir}/TEST_AUDIT_SPEC.log
+      - ${scratch_dir}/TEST_AUDIT_SPEC.md
+      - ${scratch_dir}/TEST_AUDIT_SPEC.extraction.json
+      - ${scratch_dir}/TEST_AUDIT_QUALITY.log
+      - ${scratch_dir}/TEST_AUDIT_QUALITY.md
+      - ${scratch_dir}/TEST_AUDIT_QUALITY.extraction.json
+      - ${scratch_dir}/TEST_AUDIT_COVERAGE.log
+      - ${scratch_dir}/TEST_AUDIT_COVERAGE.md
+      - ${scratch_dir}/TEST_AUDIT_COVERAGE.extraction.json
+      - ${scratch_dir}/TEST_AUDIT_PROCESS_TREE.json
+      - ${scratch_dir}/TEST_AUDIT_PROCESS_AUDIT.prompt.md
+      - ${scratch_dir}/TEST_AUDIT_PROCESS_AUDIT.log
+      - ${scratch_dir}/TEST_AUDIT_PROCESS_AUDIT.md
+      - ${scratch_dir}/TEST_AUDIT_NESTED_PROOF.json
+      - ${scratch_dir}/TEST_AUDIT_NESTED_PROOF_VALIDATION.json
+      - ${scratch_dir}/TEST_AUDIT_GATE.md
+      - ${scratch_dir}/TEST_AUDIT_RESULT.json
 errors:
   - class: BLOCKED
     cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
@@ -81,10 +130,12 @@ side_effects:
 must_delegate:
   - coverage-analyzer
   - coverage-auditor
+  - process-tree-auditor
 may_direct:
   - local-coverage-generation
   - git-diff-read
   - git-worktree-baseline-checkout
+  - git-worktree-head-checkout
 forbidden_direct:
   - fetching-ci-coverage-artifacts
 ```
@@ -122,6 +173,13 @@ spec alignment, test quality, and coverage delta.
 - Spec `PASS` requires positive evidence: for each changed product file, cite at least one spec anchor and one matching diff/file location. Absence of contradiction is `PARTIAL`, not `PASS`.
 - Test-quality `FAIL` is reserved for changed tests classified `CAPTURED_BEHAVIOR` or `HARMFUL`. Missing evidence, no changed tests, or only `STRUCTURAL` / `DEAD` evidence is `PARTIAL`.
 - Coverage-delta uses locally-generated coverage runs against the PR HEAD and the merge base. Do not fetch CI workflow artifacts. Do not call `gh api .../actions/workflows/...` or `aws s3 cp` for coverage.
+- Require non-blank caller-owned `base_branch`. When `base_ref` is omitted, derive only `refs/remotes/origin/${base_branch}` after fetching that exact branch; never infer `main`, `origin/main`, or the repository default branch. An explicitly supplied empty, mismatched, or unresolvable ref is `BLOCKED:invalid-base-ref` without fallback.
+- PR-review composition supplies the full base/head branch/ref/SHA identity. Resolve both refs, require exact full-SHA equality, and never use ambient `HEAD`; any mismatch is `BLOCKED:pinned-review-identity-mismatch`.
+- In `pr-review` mode, blank or absent `local_coverage_command` is `BLOCKED:missing-local-coverage-command` before coverage work.
+- Every `agents` invocation tees its complete merged runner stream to a dedicated `.log` containing exactly one valid `OULIPOLY_INVOCATION` marker and one terminal successful `OULIPOLY_RESULT` sentinel. A `.log` path never aliases a canonical `.md` report.
+- These three children produce their canonical verdicts on stdout. Extract each provider payload only with `tools/operational_contracts.py extract-provider-payload`; never parse, trim, copy, or synthesize a verdict directly from the runner log.
+- Derive the current test-audit invocation UUID only from runner provenance in `OULIPOLY_PARENT_INVOCATION`. The expected manifest declares all three children with `parent=root`; post-dispatch evidence must show each actual child parent equals that exact root UUID.
+- The three-child fanout is not accepted from file presence or this operator's synthesis. Capture the root trace, dispatch `process-tree-auditor` in blocking mode, and require the hash-bound nested proof to pass `tools/operational_contracts.py validate-test-audit-proof` before writing `TEST_AUDIT_GATE.md`.
 - In implementation mode, coverage-delta is always `PARTIAL`.
 - If a human attaches a prior `behavior-investigator.md` result for context, `OBVIOUSLY_BROKEN` maps to `FAIL`. There is no `OBVIOUSLY_BROKEN` pass path.
 - Use this test taxonomy verbatim when reasoning about test quality:
@@ -145,11 +203,14 @@ spec alignment, test quality, and coverage delta.
 - `--input mode=implementation|pr-review` (required) — gate mode.
 - `--input repo_root=<path>` (required) — target repository root.
 - `--input scratch_dir=<path>` (required) — writable directory for prompt files and reports.
+- `--input base_branch=<short-branch>` (required) — caller-owned parent/trunk policy for every mode; omission or blank input blocks without fallback.
+- `--input base_ref=<ref>` (optional, derived only as `refs/remotes/origin/${base_branch}`) — actual parent ref for the reviewed diff and baseline coverage worktree. An explicit empty, invalid, or differently named value blocks without fallback.
+- `--input base_sha/head_branch/head_ref/head_sha` (required together for PR-review composition) — pinned provider identity; explicit mismatch blocks without fallback.
 - `--input planning_root=<path>` (optional, default `${repo_root}/planning`) — planning docs root used to derive the default coverage spec directory.
 - `--input spec_dir=<path>` (optional, default `${planning_root}/coverage`) — directory containing `spec-*.md`.
 - `--input agents_dir=<path>` (optional, default `~/ai/agents`) — shared operator prompt directory for delegated coverage audits.
 - `--input repo=<owner/name>` (optional) — GitHub repository slug, used only for report labeling.
-- `--input local_coverage_command=<command>` (required in `pr-review` mode) — shell command run from a checkout of either the PR HEAD or the merge base that produces `coverage/coverage-summary.json` and `coverage/lcov.info` relative to the checkout root. Example for a Rust workspace: `cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info`.
+- `--input local_coverage_command=<command>` (required in `pr-review` mode; optional and unused for coverage generation in `implementation` mode) — shell command run from a checkout of either the PR HEAD or the merge base that produces `coverage/coverage-summary.json` and `coverage/lcov.info` relative to the checkout root. Example for a Rust workspace: `cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info`.
 - `--input pr_number=<number>` (optional in `pr-review` mode) — PR number for synthesis labeling only; no GitHub API calls are made with it.
 - `--input report_artifact_path=<path>` (optional) — local path to a generated report bundle or downloaded artifact bundle.
 - `--input report_pdf_path=<path>` (optional) — canonical PDF path for the test report when a report bundle is required.
@@ -172,22 +233,56 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 
 ### 1. Prepare Diff Inputs
 
-Resolve the merge base against `origin/main`, then diff from that base:
+Freshly fetch the required caller-owned `refs/heads/${base_branch}:refs/remotes/origin/${base_branch}`. Derive an omitted `base_ref` only from that exact branch, resolve both pinned refs, and diff only the full commit pair. Standalone implementation mode may derive `head_ref=HEAD`; PR-review mode may not.
 
 ```bash
 cd "$repo_root"
-base_ref=$(git merge-base HEAD origin/main) || {
-  printf 'Verdict: BLOCKED\n\nFailed to compute git merge-base against origin/main.\n'
+if [ -z "${base_branch+x}" ] || [ -z "${base_branch//[[:space:]]/}" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-branch\n'
+  exit 0
+fi
+derived_base_ref="refs/remotes/origin/${base_branch}"
+git fetch origin "refs/heads/${base_branch}:${derived_base_ref}" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_branch"
+  exit 0
+}
+if [ "${base_ref+x}" = x ] && { [ -z "$base_ref" ] || [ "$base_ref" != "$derived_base_ref" ]; }; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_ref"
+  exit 0
+fi
+base_ref="${base_ref:-$derived_base_ref}"
+resolved_base_ref=$(git rev-parse --verify "${base_ref}^{commit}") || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_ref"
+  exit 0
+}
+if [ -n "${base_sha:-}" ] && [ "$resolved_base_ref" != "$base_sha" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:pinned-review-identity-mismatch: base\n'
+  exit 0
+fi
+if [ "$mode" = "pr-review" ] && { [ -z "${head_ref+x}" ] || [ -z "${head_ref//[[:space:]]/}" ]; }; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:missing-pinned-head-ref\n'
+  exit 0
+fi
+resolved_head_ref=$(git rev-parse --verify "${head_ref:-HEAD}^{commit}") || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-head-ref: %s\n' "${head_ref:-HEAD}"
+  exit 0
+}
+if [ -n "${head_sha:-}" ] && [ "$resolved_head_ref" != "$head_sha" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:pinned-review-identity-mismatch: head\n'
+  exit 0
+fi
+merge_base_sha=$(git merge-base "$resolved_head_ref" "$resolved_base_ref") || {
+  printf 'Verdict: BLOCKED\n\nFailed to compute git merge-base against %s.\n' "$base_ref"
   exit 0
 }
 
-git diff "$base_ref"...HEAD > "$scratch_dir/diff.txt" || {
+git diff "$merge_base_sha"..."$resolved_head_ref" > "$scratch_dir/diff.txt" || {
   printf 'Verdict: BLOCKED\n\nFailed to produce git diff against %s.\n' "$base_ref"
   exit 0
 }
 
-git diff --name-only "$base_ref"...HEAD | sort > "$scratch_dir/changed-files.txt"
-git diff --name-only "$base_ref"...HEAD -- \
+git diff --name-only "$merge_base_sha"..."$resolved_head_ref" | sort > "$scratch_dir/changed-files.txt"
+git diff --name-only "$merge_base_sha"..."$resolved_head_ref" -- \
   '*test*.py' '*_test.py' '*.test.ts' '*.test.tsx' '*.spec.ts' '*.spec.tsx' | sort \
   > "$scratch_dir/changed-tests.txt"
 ```
@@ -217,7 +312,7 @@ audited.
 Run the same-PR spec-edit check before spec discovery:
 
 ```bash
-git diff --name-only | grep "$spec_dir/spec-.*\\.md$"
+git diff --name-only "$merge_base_sha"..."$resolved_head_ref" | grep "$spec_dir/spec-.*\\.md$"
 ```
 
 If that command is non-empty and any non-spec file is also changed, emit
@@ -278,39 +373,91 @@ Every prompt must require deterministic parsing:
 
 Do not generate coverage in implementation mode.
 
-In `pr-review` mode, run `local_coverage_command` twice: once against the PR
-HEAD (the current working tree at `repo_root`) and once against the merge-base
-commit via a detached worktree. Persist both result sets into `scratch_dir`
+In `pr-review` mode, require non-blank `local_coverage_command` and run it twice: once in a detached worktree at exact `head_sha` and once in another detached worktree at the merge-base commit. Persist both result sets into `scratch_dir`
 under deterministic filenames so the coverage prompt can cite them. There are
 no GitHub API calls and no remote artifact fetches in this step.
 
 ```bash
 cd "$repo_root"
-base_ref=$(git merge-base HEAD origin/main) || {
-  printf 'Verdict: BLOCKED\n\nFailed to compute git merge-base against origin/main.\n'
+git fetch origin "refs/heads/${base_branch}:refs/remotes/origin/${base_branch}" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_branch"
+  exit 0
+}
+resolved_base_ref=$(git rev-parse --verify "${base_ref}^{commit}") || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-base-ref: %s\n' "$base_ref"
+  exit 0
+}
+resolved_head_ref=$(git rev-parse --verify "${head_ref}^{commit}") || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:invalid-head-ref: %s\n' "$head_ref"
+  exit 0
+}
+if [ "$resolved_base_ref" != "$base_sha" ] || [ "$resolved_head_ref" != "$head_sha" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:pinned-review-identity-mismatch\n'
+  exit 0
+fi
+if [ -z "${local_coverage_command//[[:space:]]/}" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:missing-local-coverage-command\n'
+  exit 0
+fi
+merge_base_sha=$(git merge-base "$resolved_head_ref" "$resolved_base_ref") || {
+  printf 'Verdict: BLOCKED\n\nFailed to compute git merge-base against %s.\n' "$base_ref"
   exit 0
 }
 
-# PR HEAD coverage
-mkdir -p coverage
-bash -c "$local_coverage_command" || {
-  printf 'Verdict: PARTIAL\n\nLocal coverage command failed against PR HEAD.\n'
-  exit 0
-}
-cp coverage/coverage-summary.json "$scratch_dir/pr-coverage-summary.json"
-cp coverage/lcov.info             "$scratch_dir/pr-lcov.info"
-
-# Merge-base coverage via detached worktree (does not disturb repo_root)
+# Exact head and merge-base coverage via detached worktrees.
+head_worktree="$scratch_dir/head-coverage-worktree"
 base_worktree="$scratch_dir/baseline-worktree"
-git worktree add --detach "$base_worktree" "$base_ref"
+cleanup_coverage_worktrees() {
+  git -C "$repo_root" worktree remove --force "$head_worktree" 2>/dev/null || true
+  git -C "$repo_root" worktree remove --force "$base_worktree" 2>/dev/null || true
+}
+if [ -e "$head_worktree" ] || [ -L "$head_worktree" ] || [ -e "$base_worktree" ] || [ -L "$base_worktree" ]; then
+  printf 'Verdict: BLOCKED\n\nBLOCKED:coverage-worktree-path-exists\n'
+  exit 0
+fi
+trap cleanup_coverage_worktrees EXIT
+git worktree add --detach "$head_worktree" "$head_sha" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-coverage-worktree-add-failed\n'
+  exit 0
+}
+git worktree add --detach "$base_worktree" "$merge_base_sha" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-coverage-worktree-add-failed\n'
+  exit 0
+}
 (
-  cd "$base_worktree"
-  mkdir -p coverage
-  bash -c "$local_coverage_command"
-)
-cp "$base_worktree/coverage/coverage-summary.json" "$scratch_dir/main-coverage-summary.json"
-cp "$base_worktree/coverage/lcov.info"             "$scratch_dir/main-lcov.info"
-git worktree remove --force "$base_worktree"
+  cd "$head_worktree" &&
+    mkdir -p coverage &&
+    bash -c "$local_coverage_command"
+) || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-local-coverage-command-failed\n'
+  exit 0
+}
+cp "$head_worktree/coverage/coverage-summary.json" "$scratch_dir/pr-coverage-summary.json" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-coverage-summary-copy-failed\n'
+  exit 0
+}
+cp "$head_worktree/coverage/lcov.info" "$scratch_dir/pr-lcov.info" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:head-lcov-copy-failed\n'
+  exit 0
+}
+(
+  cd "$base_worktree" &&
+    mkdir -p coverage &&
+    bash -c "$local_coverage_command"
+) || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-local-coverage-command-failed\n'
+  exit 0
+}
+cp "$base_worktree/coverage/coverage-summary.json" "$scratch_dir/base-coverage-summary.json" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-coverage-summary-copy-failed\n'
+  exit 0
+}
+cp "$base_worktree/coverage/lcov.info" "$scratch_dir/base-lcov.info" || {
+  printf 'Verdict: BLOCKED\n\nBLOCKED:base-lcov-copy-failed\n'
+  exit 0
+}
+cleanup_coverage_worktrees
+trap - EXIT
 ```
 
 If either run cannot produce the required `coverage/coverage-summary.json` +
@@ -320,16 +467,64 @@ baseline.
 
 ### 7. Launch Three Parallel Sub-Agent Invocations
 
-`~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule. Run exactly these as three separate Bash-background tool invocations, then collect the result files after all task notifications arrive:
+`~/ai/workflows/agents-cli.md` is the canonical dispatch/wait rule. Derive `TEST_AUDIT_INVOCATION_UUID=$(printf '%s' "$OULIPOLY_PARENT_INVOCATION" | jq -er '.id')`; reject missing, multiple, non-canonical, or caller-supplied substitutes. Before dispatch, write immutable `$scratch_dir/TEST_AUDIT_EXPECTED_PROCESS.json` with `schema=test-audit-expected-process-v2`, that exact root UUID, exact pinned base/head SHAs, and stable nodes in this order: `spec-alignment`, `test-quality`, and `coverage-delta`. Each node records `required=true`, its exact operator/model, `parent=root`, prompt path and SHA-256, distinct `.log`, canonical `.md`, and extraction-metadata paths, `output_mode=stdout-extracted`, and named post-dispatch `log_sha256`, `canonical_output_sha256`, `extraction_metadata_sha256`, and `provider_source` join fields. The authoritative operator/model pairs are `ad-hoc-spec-alignment/gpt-high`, `coverage-auditor/gpt-xhigh`, and `coverage-analyzer/gpt-high`. No child UUID, provider source, or invented pre-dispatch log/output hash appears in this file.
+
+Run exactly these as three separate Bash-background tool invocations, then wait for all task notifications. Each invocation's only shell sink is its dedicated complete log:
 
 ```python
-Bash(command='agents -m gpt-high -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_SPEC.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_SPEC.md"', run_in_background=True, description="Run test-audit spec review")
-Bash(command='agents -a ${agents_dir}/coverage-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_QUALITY.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_QUALITY.md"', run_in_background=True, description="Run test-audit quality review")
-Bash(command='agents -a ${agents_dir}/coverage-analyzer.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_COVERAGE.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_COVERAGE.md"', run_in_background=True, description="Run test-audit coverage review")
+Bash(command='agents -m gpt-high -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_SPEC.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_SPEC.log"', run_in_background=True, description="Run test-audit spec review")
+Bash(command='agents -a ${agents_dir}/coverage-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_QUALITY.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_QUALITY.log"', run_in_background=True, description="Run test-audit quality review")
+Bash(command='agents -a ${agents_dir}/coverage-analyzer.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_COVERAGE.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_COVERAGE.log"', run_in_background=True, description="Run test-audit coverage review")
 ```
 
 Every sub-audit prompt must explicitly say: the first line of your output must
 be `Verdict: PASS` or `Verdict: PARTIAL` or `Verdict: FAIL`.
+
+After all three notifications arrive, invoke the extraction helper separately for each completed log:
+
+```bash
+python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log "$scratch_dir/TEST_AUDIT_SPEC.log" --output "$scratch_dir/TEST_AUDIT_SPEC.md" --metadata "$scratch_dir/TEST_AUDIT_SPEC.extraction.json"
+python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log "$scratch_dir/TEST_AUDIT_QUALITY.log" --output "$scratch_dir/TEST_AUDIT_QUALITY.md" --metadata "$scratch_dir/TEST_AUDIT_QUALITY.extraction.json"
+python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log "$scratch_dir/TEST_AUDIT_COVERAGE.log" --output "$scratch_dir/TEST_AUDIT_COVERAGE.md" --metadata "$scratch_dir/TEST_AUDIT_COVERAGE.extraction.json"
+```
+
+Fail on any missing, duplicate, malformed, out-of-order, non-success, or identity-mismatched envelope. Parse each actual child UUID and `provider_source` only from its complete `.log`; parse no UUID from a canonical report. Write immutable `$scratch_dir/TEST_AUDIT_DISPATCH_EVIDENCE.json` with `schema=test-audit-dispatch-evidence-v2`, the same root/base/head and expected-manifest path/hash, and each node's UUID, marker-derived provider source, declared operator/model, prompt path/hash, log path/hash, canonical output path/hash, extraction metadata path/hash, and output mode. The dispatch row is a role/artifact declaration, not authority for parent, model, source, status, or topology; those facts must be read from the saved trace and complete runner envelope. Every child artifact path is pairwise distinct.
+
+Capture `agents trace --json "$TEST_AUDIT_INVOCATION_UUID"` at `$scratch_dir/TEST_AUDIT_PROCESS_TREE.json` only after all three children and dispatch evidence are final. Write `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.prompt.md` naming `operator_file=${repo_root}/agents/test-audit-gate.md`, `mode=blocking`, that exact root UUID, expected manifest, trace, and child-owned report `$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.md`; list dispatch evidence, the audit prompt, and all three prompt/log/output/extraction artifacts as the exact hash-bound `companion_artifacts`. Dispatch the named auditor without a model override through one separate parent-visible Bash-background tool invocation:
+
+```python
+Bash(command='agents -a ${agents_dir}/process-tree-auditor.md -p "$repo_root" -f "$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.prompt.md" 2>&1 | tee "$scratch_dir/TEST_AUDIT_PROCESS_AUDIT.log"', run_in_background=True, description="Audit test-audit process tree")
+```
+
+Wait for its task notification before validating or consuming the report and complete log.
+
+Require the canonical header-first process report to start with `# Process Tree Audit`, followed by its canonical identity lines and exactly one canonical verdict whose complete value is `Verdict: PASS`. Require exactly one producer-owned `PROCESS_TREE_AUDIT_BINDING_JSON` row under `## Machine Binding`: `mode` equals exact `blocking`; `report_identity` names `${repo_root}/agents/test-audit-gate.md` and the report path without a self hash; `operator_artifact.path` names that same canonical absolute operator path; root equals `TEST_AUDIT_INVOCATION_UUID`; subtree is null; expected-process and trace path/hashes match; and the sorted companion rows exactly equal dispatch evidence, audit prompt, and every child prompt/log/output/extraction path/hash. Also require a complete successful process-auditor log whose provider payload final line is exact `PASS`. Then freeze `$scratch_dir/TEST_AUDIT_NESTED_PROOF.json` under `test-audit-nested-proof-v1` with those exact proof paths/hashes, all three child artifact rows, and `verdict=PASS`. Run:
+
+```bash
+python3 ~/ai/tools/operational_contracts.py validate-test-audit-proof \
+  --proof "$scratch_dir/TEST_AUDIT_NESTED_PROOF.json" \
+  --output "$scratch_dir/TEST_AUDIT_NESTED_PROOF_VALIDATION.json"
+```
+
+Only exact `status=VALID` for that current proof permits synthesis. The validator must traverse the actual saved trace, require exact requested/root invocation identity, and join each declared child UUID to exactly one trace node. It requires exactly three direct child nodes and no other descendants; each node's actual `parent_id`, `model_name`, `source`, successful terminal status, `success=true`, `exit_code=0`, and `finished_at` come from the trace, while source and successful identity are cross-checked against extraction metadata from the complete runner envelope. Fixed role/operator comes from the canonical node specification joined to that exact UUID, never from trace-free inference. Missing, duplicate, undeclared-role, wrong-parent/model/source/operator, failed, non-terminal, or extra nested nodes; stale prompt/log/output/extraction content; missing or hash-mismatched expected/dispatch/trace/audit artifacts; non-PASS report/stdout; or a stale validation artifact is `BLOCKED:test-audit-process-topology-failed`; do not write or return `TEST_AUDIT_GATE.md`.
+
+### 7a. Test Audit Process Artifact Schema
+
+```yaml
+schema: test-audit-process-artifacts-v2
+root_identity_source: OULIPOLY_PARENT_INVOCATION
+required_nodes:
+  spec-alignment: {operator_or_role: ad-hoc-spec-alignment, model: gpt-high, parent: root}
+  test-quality: {operator_or_role: coverage-auditor, model: gpt-xhigh, parent: root}
+  coverage-delta: {operator_or_role: coverage-analyzer, model: gpt-high, parent: root}
+node_required_fields: [id, required, operator_or_role, model, parent, prompt_path, prompt_sha256, log_path, log_sha256_join_field, canonical_output_path, canonical_output_sha256_join_field, extraction_metadata_path, extraction_metadata_sha256_join_field, provider_source_join_field, output_mode]
+node_output_mode: stdout-extracted
+node_path_invariant: dedicated-log-distinct-from-canonical-output
+identity_source: complete-log-only
+verdict_source: canonical-output-only
+required_proof_artifacts: [TEST_AUDIT_EXPECTED_PROCESS.json, TEST_AUDIT_DISPATCH_EVIDENCE.json, TEST_AUDIT_PROCESS_TREE.json, TEST_AUDIT_PROCESS_AUDIT.prompt.md, TEST_AUDIT_PROCESS_AUDIT.log, TEST_AUDIT_PROCESS_AUDIT.md, TEST_AUDIT_NESTED_PROOF.json, TEST_AUDIT_NESTED_PROOF_VALIDATION.json]
+proof_acceptance: canonical-header-first-unique-report-PASS-producer-binding-current-final-stdout-PASS-and-production-validator-VALID
+```
 
 ### 8. Synthesize
 
@@ -374,3 +569,23 @@ Overall synthesis rules:
 - `PARTIAL` otherwise
 - Keep reasons concrete and short
 - Do not invent a fourth audit, a retry loop, or new infrastructure
+- Record `base_branch`, `base_ref`, full `base_sha`, `head_branch`, `head_ref`, full `head_sha`, merge-base SHA, and diff SHA-256 in `TEST_AUDIT_GATE.md` so callers can reject differently bound evidence. In `pr-review` mode, also record the required SHA-256 of `local_coverage_command`. In `implementation` mode, record that hash only when the caller actually supplied a non-blank command; omit it when the input is absent and never invent a hash.
+- Record the expected-process and dispatch-evidence paths/hashes plus every distinct child log/output path/hash. Synthesis reads verdicts only from canonical `.md` outputs and process identity only from complete `.log` streams.
+- Before synthesis, require the current `TEST_AUDIT_NESTED_PROOF_VALIDATION.json` to equal the production validator's `VALID` decision for the current nested proof. After writing `TEST_AUDIT_GATE.md`, write `$scratch_dir/TEST_AUDIT_RESULT.json` under the schema below; never return a bare gate report as sufficient PR-review evidence.
+
+### 8a. Test Audit Result Schema
+
+```yaml
+schema: test-audit-result-v2
+required_fields: [schema, status, mode, test_audit_invocation_uuid, base_branch, base_ref, base_sha, head_branch, head_ref, head_sha, merge_base_sha, diff_sha256, gate_report_path, gate_report_sha256, nested_proof_path, nested_proof_sha256, nested_proof_validation_path, nested_proof_validation_sha256, nested_process_proof]
+conditional_fields:
+  local_coverage_command_sha256:
+    pr-review: required-lowercase-sha256-of-required-nonblank-command
+    implementation: optional-lowercase-sha256-only-when-command-was-supplied
+status_values: [PASS, PARTIAL, FAIL]
+nested_process_proof_schema: test-audit-nested-proof-v1
+nested_process_proof_required_fields: [schema, test_audit_invocation_uuid, base_sha, head_sha, expected_process_path, expected_process_sha256, dispatch_evidence_path, dispatch_evidence_sha256, process_tree_path, process_tree_sha256, process_tree_audit_prompt_path, process_tree_audit_prompt_sha256, process_tree_audit_path, process_tree_audit_sha256, process_tree_audit_log_path, process_tree_audit_log_sha256, child_artifacts, verdict]
+child_artifact_required_fields: [id, invocation_uuid, parent_invocation_uuid, operator_or_role, model, provider_source, prompt_path, prompt_sha256, log_path, log_sha256, canonical_output_path, canonical_output_sha256, extraction_metadata_path, extraction_metadata_sha256, output_mode]
+proof_validator: tools/operational_contracts.py validate-test-audit-result
+proof_acceptance: nested-independent-PASS-and-current-hashes
+```

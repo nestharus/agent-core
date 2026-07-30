@@ -3,6 +3,56 @@ source: agents/refactoring-orchestrator.md
 model: gpt-xhigh
 description: Coordinate one per-PR refactor cycle against an integration buffer.
 inputs:
+- name: jira_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: Jira issue key; exactly one of jira_issue_key, linear_issue_key, or wu_brief_path is required.
+- name: linear_issue_key
+  type: string
+  required: false
+  default_source: caller
+  description: Linear issue key; exactly one of jira_issue_key, linear_issue_key, or wu_brief_path is required.
+- name: wu_brief_path
+  type: path
+  required: false
+  default_source: caller
+  description: Canonical WU brief path; exactly one of wu_brief_path, jira_issue_key, or linear_issue_key is required.
+- name: wu_brief_context_path
+  type: path
+  required: false
+  default_source: caller
+  description: Optional readable package context passed to the sole implementation child; never a ticket source and valid only with an existing issue key.
+- name: ticket_system
+  type: enum
+  required: true
+  default_source: caller
+  description: Exactly jira or linear; must agree with the sole ticket source and matching backend configuration.
+- name: jira_url
+  type: string
+  required: false
+  default_source: wrapper:<name> | base | caller
+  description: Jira base URL forwarded unchanged to each implementation child when ticket_system=jira.
+- name: jira_project
+  type: string
+  required: false
+  default_source: wrapper:<name> | base | caller
+  description: Jira project forwarded unchanged to each implementation child when ticket_system=jira.
+- name: jira_account_email
+  type: string
+  required: false
+  default_source: wrapper:<name> | base | caller
+  description: Jira account identity forwarded unchanged to each implementation child when ticket_system=jira.
+- name: linear_team_key
+  type: string
+  required: false
+  default_source: wrapper:<name> | base | caller
+  description: Linear team key forwarded unchanged to each implementation child when ticket_system=linear.
+- name: linear_project_id
+  type: string
+  required: false
+  default_source: wrapper:<name> | base | caller
+  description: Optional Linear project forwarded unchanged to each implementation child when ticket_system=linear.
 - name: target_list
   type: string
   required: true
@@ -13,42 +63,98 @@ inputs:
   required: true
   default_source: caller
   description: repo root
+- name: branch_name
+  type: string
+  required: true
+  default_source: caller
+  description: Exact unique non-protected short branch for the sole implementation child and ticket PR.
 - name: worktree_path
   type: path
   required: true
   default_source: caller
-  description: worktree path
+  description: Unique canonical absolute worktree path passed unchanged to the sole implementation child; aliases, symlinks, and dot components are invalid.
 - name: planning_dir
   type: path
   required: true
   default_source: caller
-  description: planning dir
+  description: Unique canonical absolute planning root passed unchanged to the sole implementation child; aliases, symlinks, and dot components are invalid.
 - name: scratch_dir
   type: path
   required: true
   default_source: caller
-  description: scratch dir
+  description: Unique canonical absolute scratch root passed unchanged to the sole implementation child; aliases, symlinks, and dot components are invalid.
+- name: trunk_branch
+  type: string
+  required: true
+  default_source: caller
+  description: Explicit exact short repository trunk branch; it must be present in protected_branches.
 - name: integration_branch_ref
   type: string
   required: true
   default_source: caller
-  description: integration branch ref
+  description: Short GitHub branch name only; full refs and remote-tracking refs are rejected.
+- name: protected_branches
+  type: string
+  required: true
+  default_source: caller
+  description: Exact JSON list of unique short protected branches in canonical trunk/integration/lexical order; it must include trunk_branch and integration_branch_ref.
 - name: slice_bounds
   type: string
   required: true
   default_source: caller
   description: slice bounds
+- name: shim_placement_parameters
+  type: string
+  required: false
+  default_source: caller
+  description: Optional placement constraints for explicitly authorized refactoring shims.
+- name: prior_refactor_evidence_pointers
+  type: string
+  required: false
+  default_source: caller
+  description: Optional prior evidence paths; reusable only when their recorded baseline SHA and auditor set match the current cycle.
+- name: shim_registry_path
+  type: path
+  required: false
+  default_source: base
+  description: Active shim registry path, defaulting to ~/ai/conventions/active-shims.md.
+- name: audit_history_path
+  type: path
+  required: false
+  default_source: base
+  description: Canonical refactoring revise/review history, required from round two onward.
 - name: manager_flavor
   type: enum
   required: false
   default_source: caller
   description: manager flavor
-defaults: []
+defaults:
+- name: shim_registry_path
+  value: ~/ai/conventions/active-shims.md
+  source: base
+- name: audit_history_path
+  value: ${planning_dir}/refactoring-audit-history.md
+  source: base
 secrets: []
 outputs:
 - task: run-refactor
-  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
-  wrote_lines: []
+  success_shape: VERIFIED_MERGED refactoring-route-result-v1 with the child PR URL/number and every declared/reviewed/open/pre-merge/merged head identity exactly equal to the nested implementation result, all integration/base names equal to the exact integration branch even when OIDs coincide, merged/reviewed/pre-merge base SHA equality, immutable implementation ticket evidence, current implementation/refactoring process proofs, and a current route/feature/attempt-bound refactoring-auditor-index-v1 whose exact five pre-merge and five post-merge LOW reports are re-hashed and semantically validated.
+  wrote_lines:
+  - ${planning_dir}/refactoring-route-result.json
+  - ${planning_dir}/refactoring-auditor-index.json
+  - ${planning_dir}/refactoring-currentness/<slice_identity>.json
+  - ${planning_dir}/refactoring-ready-restoration/<slice_identity>.json
+  - ${planning_dir}/refactoring-dispatch-validation.json
+  - ${planning_dir}/refactoring-process-tree-audit-pre-merge.md
+  - ${planning_dir}/refactoring-process-tree-audit.md
+  - ${planning_dir}/refactoring-audit-history.md from revise/review round two onward
+  - ${scratch_dir}/refactoring-dispatch-evidence-pre-merge.json
+  - ${scratch_dir}/refactoring-dispatch-plan.json
+  - ${scratch_dir}/refactoring-expected-process-pre-merge.json
+  - ${scratch_dir}/refactoring-process-tree-pre-merge.json
+  - ${scratch_dir}/refactoring-dispatch-evidence.json
+  - ${scratch_dir}/refactoring-expected-process.json
+  - ${scratch_dir}/refactoring-process-tree.json
 errors:
 - class: BLOCKED
   cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
@@ -57,13 +163,22 @@ errors:
   cause: A user-owned value, scope, or trade-off question is required.
   recovery: Answer the emitted question artifact and resume.
 side_effects:
-- implementation-pipeline-dispatches
+- one-implementation-pipeline-dispatch
 - integration-buffer-updates
+- integration-branch-pr-verification
+- refactoring-child-pr-ready-and-ready-undo-before-replay
+- one-refactoring-child-pr-merge
 - shim-registry-updates
 must_delegate:
 - implementation-pipeline-orchestrator
+- refactoring-auditor-set:cohesion-auditor|coupling-auditor|function-classification-auditor|push-pull-auditor|validation-integrity-auditor
+- refactoring-process-review:process-tree-auditor
+- second-round-history-encoding:decision-encoder
 may_direct:
 - refactor-scope-read
+- refactoring-child-pr-evidence-verification-and-merge
 forbidden_direct:
 - behavior-changing-feature-work
 - pipeline-bypassing-implementation
+- implementation-child-auto-merge
+- self-certification-of-refactoring-auditor-or-process-gates

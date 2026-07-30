@@ -2,77 +2,104 @@ schema: operator-contract-v1
 source: agents/wu-session-resumer.md
 model: gpt-high
 description: Wake one merged Work Unit session and close or hand off its post-merge lifecycle
-contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: pr_url
   type: string
   required: true
   default_source: caller
-  description: '`pr_url` (required) - URL of the merged PR.'
+  description: Exact URL of the merged PR.
 - name: merge_sha
   type: string
   required: true
   default_source: caller
-  description: '`merge_sha` (required) - final merge commit SHA on `main`; anchors post-merge checks and manifest closure.'
-- name: main
-  type: string
-  required: true
-  default_source: caller
-  description: '`merge_sha` (required) - final merge commit SHA on `main`; anchors post-merge checks and manifest closure.'
+  description: Full provider-reported merge commit OID on the recorded base branch.
 - name: head_sha
   type: string
   required: true
   default_source: caller
-  description: '`head_sha` (required) - PR head SHA before merge; must match the dormant session.'
-- name: pre_merge_main_sha
+  description: Full provider-reported PR head OID before merge.
+- name: base_branch
   type: string
   required: true
   default_source: caller
-  description: '`pre_merge_main_sha` (required) - main SHA before the merge; used for coverage comparison.'
+  description: Exact PR base ref recorded by the session and trusted PR query.
+- name: pre_merge_base_sha
+  type: string
+  required: false
+  default_source: caller
+  description: Immediate pre-merge base OID captured immediately before an automated merge; omitted for trusted wake-time derivation.
 - name: branch_name
   type: string
   required: true
   default_source: caller
-  description: '`branch_name` (required) - WU branch name from the merge event; must match manifest `branch`.'
-- name: branch
-  type: string
-  required: true
-  default_source: caller
-  description: '`branch_name` (required) - WU branch name from the merge event; must match manifest `branch`.'
+  description: Exact PR head ref recorded by the session and trusted PR query.
 - name: ticket_id
   type: string
   required: true
   default_source: caller
-  description: '`ticket_id` (required) - ticket key or issue id for identity validation and ticket comment.'
+  description: Ticket key or issue id used for session identity and cross-linking.
 - name: session_manifest_path
-  type: string
+  type: path
   required: true
   default_source: caller
-  description: '`session_manifest_path` (required) - absolute path to the WU session manifest, normally `${planning_dir}/session.json`.'
+  description: Absolute path to the one persisted WU session manifest.
 - name: test_command
   type: string
   required: false
   default_source: caller
-  description: '`test_command` (optional) - explicit command for the merged-main test rerun. If absent, use only an explicit manifest or project policy value; do not infer one.'
+  description: Explicit merged-tree test command; no inferred command is allowed.
 - name: coverage_command
   type: string
   required: false
   default_source: caller
-  description: '`coverage_command` (optional) - explicit command for coverage measurement. If absent, use only explicit before/after artifacts or manifest/project policy.'
+  description: Explicit coverage command; explicit manifest or project policy may supply it when omitted.
 defaults: []
+secrets: []
 outputs:
-- task: default
-  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
-  wrote_lines: []
+- task: resume
+  success_shape: 'Exactly wu-session-resumer: closed; manifest=<path> or wu-session-resumer: handoff-prepared; manifest=<path>; brief=<path>.'
+  wrote_lines:
+  - session_manifest_path
+  - ${planning_dir}/../sessions.active-wake.json exact-row removal after verified close or handoff
+  - ${scratch_dir}/session-writes/resumer-update.json
+  - ${scratch_dir}/session-writes/resumer-close.json
+  - manifest audit_history_path or ${planning_dir}/audit-history.md
+  - ${planning_dir}/reports/post-merge-test-rerun.md
+  - ${planning_dir}/reports/post-merge-coverage.md
+  - ${planning_dir}/reports/post-merge-contracts.md
+  - ${planning_dir}/reports/post-merge-drift.md
+  - ${scratch_dir}/questions/q-<uuidv4>.question.json when input is required
+  - ${scratch_dir}/ticket-comments/${ticket_id}-post-merge.json when a ticket write cannot complete
+  - successor_session_brief when a successor handoff is declared
 errors:
 - class: BLOCKED
-  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
-  recovery: Provide the missing input or route to the correct operator.
+  cause: Identity, merge state/OID, base containment, immediate-parent evidence, required delegate, backend, or destination validation failed.
+  recovery: Correct the named BLOCKED:<reason> evidence failure and rerun without mutating the recorded base or manifest first.
 - class: NEEDS_INPUT
-  cause: A user-owned decision is required before safe completion.
-  recovery: Write the question artifact when the operator convention requires one, then stop.
+  cause: A command policy, successor, scope, or failed-check disposition requires user-owned input.
+  recovery: Resolve the emitted NEEDS_INPUT:<absolute-question-path> artifact and resume the same session.
 side_effects:
-- Writes only artifacts declared by the operator body.
-must_delegate: []
+- fetch-recorded-base-from-origin
+- sync-local-recorded-base-after-trusted-identity-gate
+- session-manifest-write
+- active-wake-index-update-and-final-removal-under-shared-lock
+- executable-resumer-update-and-resumer-close-closed-schema-requests
+- session-audit-history-write
+- post-merge-report-writes
+- optional-question-artifact-write
+- optional-successor-brief-write
+- ticket-cross-link-comment
+- optional-attempted-ticket-comment-write
+must_delegate:
+- semantic-drift-review-to-rebase-drift-checker
+- linear-ticket-write-to-linear-operator
+- jira-ticket-write-to-jira-operator
+may_direct:
+- trusted-pr-and-git-identity-reads
+- session-write-request-authoring-and-wu-session-migration-invocation
+- explicit-test-and-coverage-commands
 forbidden_direct:
-- Do not bypass the operator body, anti-scope, or stop conditions.
+- self-certify-semantic-drift
+- direct-linear-or-jira-write
+- mutate-local-base-before-trusted-merge-identity-and-containment-pass
+- synthesize-pre-merge-base-from-pr-open-current-base-or-branch-out-evidence

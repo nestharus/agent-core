@@ -4,14 +4,15 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: "root orchestrator or workflow operator invoking agents CLI"
   inputs:
-    - "model name, worktree path, prompt file, and log path for an agent dispatch"
+    - "model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch"
     - "sub-agent delegation, question-handling, or parallel-writer context"
   expectations:
     - "standardizes agents CLI invocation and tee-based log capture for pipeline work"
+    - "keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports"
     - "routes delegated user questions through the root-owned question artifact convention"
     - "requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only"
   outputs:
-    - "consistent agents command shape for prompts, logs, and long-running background work"
+    - "consistent agents command shape for prompts, complete logs, distinct canonical outputs, and long-running background work"
     - "stable prompt and log naming conventions for post-run review"
   non_goals:
     - "does not replace the agent-runner README as the authoritative CLI reference"
@@ -36,18 +37,19 @@ root orchestrator or workflow operator invoking agents CLI
 
 ### Inputs
 
-- model name, worktree path, prompt file, and log path for an agent dispatch
+- model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch
 - sub-agent delegation, question-handling, or parallel-writer context
 
 ### Expectations
 
 - standardizes agents CLI invocation and tee-based log capture for pipeline work
+- keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports
 - routes delegated user questions through the root-owned question artifact convention
 - requires branch work and tracked-file mutation to run from git worktrees; central checkout use is read-state / branch-tracking only
 
 ### Outputs
 
-- consistent agents command shape for prompts, logs, and long-running background work
+- consistent agents command shape for prompts, complete logs, distinct canonical outputs, and long-running background work
 - stable prompt and log naming conventions for post-run review
 
 ### Non-goals
@@ -81,7 +83,7 @@ agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 - `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `gpt-medium`, or another configured model id. Only used when there is no `-a`. See `~/ai/models/roles.md` for selection guidance.
 - `-p <worktree-path>`: the agent's working directory; for branch work or tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
-- `2>&1 | tee <log-path>`: capture stdout and stderr into a log file for review.
+- `2>&1 | tee <log-path>`: capture the complete merged runner envelope into a dedicated `.log` file. A successful stream contains exactly one `OULIPOLY_INVOCATION`, exactly one optional `OULIPOLY_SESSION` immediately after it, provider payload, then exactly one terminal `OULIPOLY_RESULT`; it is never a canonical provider result/report path. The session envelope is optional because the production runner emits none when session resolution/capture returns `emitted=false`.
 
 Use the README for other invocation forms. In `~/ai/`, the patterns above are the default pipeline entry point.
 
@@ -100,6 +102,14 @@ Consumers inspect completed logs programmatically with targeted search, bounded 
 - Logs pair one-to-one with prompts: `<task>-<phase>.log`.
 - For revisions, suffix by round: `slice-007-proposal-revise.md`, `slice-007-proposal-revise2.md`.
 - For parallel risk rounds, log per round: `slice-007-risk-audit.log`, `slice-007-risk-audit2.log`, `slice-007-risk-audit3.log`.
+
+## Runner Log And Canonical Output Separation
+
+- Every `agents` invocation has one complete `.log` sink and a different canonical output path. No command may use the same path for `tee` and a child-owned or extracted `.md`/`.json` result.
+- For an ad-hoc or other stdout-producing child, run `python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log <log> --output <result> --metadata <extraction.json>` only after the invocation completes. The helper requires exactly one valid invocation marker, at most one optional session marker immediately after invocation and before payload, exactly one ordered terminal successful result sentinel, matching invocation/result UUIDs, session `agent_runner_invocation_id` equality when present, and no duplicate, malformed, misplaced, post-payload, or failure envelope; it atomically writes only the provider payload and excludes the session marker.
+- For a file-producing child, retain the complete `.log`, require the child-owned canonical output at the distinct prompted path, and hash/validate that file independently. Do not overwrite it with the runner stream or reconstruct it from the log.
+- Process evidence parses invocation UUIDs only from complete `.log` files and verdict/schema content only from canonical outputs. Expected-process nodes name both distinct paths and the post-dispatch log/output hash fields; dispatch evidence freezes the actual hashes.
+- Canonical Markdown begins with its own required verdict/schema header. Canonical JSON begins with its own schema object/key. Neither may begin with `OULIPOLY_INVOCATION`, `OULIPOLY_SESSION`, `OULIPOLY_RESULT`, or `OULIPOLY_FAILURE`.
 
 ## Sub-agent delegation
 

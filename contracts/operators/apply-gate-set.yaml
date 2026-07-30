@@ -1,163 +1,58 @@
 schema: operator-contract-v1
 source: agents/apply-gate-set.md
-model: gpt-medium
-description: Shared active gate-set owner that verifies implementation Phase 4 estimate write/no-write disposition, dispatches required gate children, owns join/currentness/exception rows and expected-process projection, and refuses silent inheritance.
-contract_status: minimum-generated-from-operator-sections
+model: gpt-xhigh
+description: Shared active gate-set owner that verifies implementation Phase 4 estimate write/no-write disposition, dispatches required gate children, owns exact identity/currentness/exception joins and expected-process projection, and refuses silent inheritance.
 inputs:
-- name: caller_mode
-  type: string
-  required: true
-  default_source: caller
-  description: '`caller_mode`: one of `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.'
-- name: repo_root
-  type: string
-  required: true
-  default_source: caller
-  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
-- name: worktree_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
-- name: planning_dir
-  type: string
-  required: true
-  default_source: caller
-  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
-- name: scratch_dir
-  type: string
-  required: true
-  default_source: caller
-  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
-- name: audit_history_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.'
-- name: process_tree_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.'
-- name: root_invocation_uuid
-  type: string
-  required: true
-  default_source: caller
-  description: '`process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.'
-- name: cycle_id
-  type: string
-  required: true
-  default_source: caller
-  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
-- name: head_sha
-  type: string
-  required: true
-  default_source: caller
-  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
-- name: base_ref
-  type: string
-  required: true
-  default_source: caller
-  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
-- name: diff_sha256
-  type: string
-  required: true
-  default_source: caller
-  description: 'Currentness identity: `cycle_id`, `head_sha`, `base_ref`, `diff_sha256` or equivalent diff hash, scope reference, runtime-claim reference or literal runtime claim, and relevant contract/report hashes.'
-- name: estimate_delta_flag
-  type: string
-  required: false
-  default_source: caller
-  description: Complete inherited/refined/over_2x/rationale mapping required for implementation-phase-4; null inherited values retain over_2x unknown.
-- name: estimate_writeback_disposition_ref
-  type: path
-  required: false
-  default_source: caller
-  description: Canonical phase-3-estimate-writeback-v1 artifact required for implementation-phase-4.
-- name: cold_start_disposition_ref
-  type: path
-  required: false
-  default_source: caller
-  description: Durable answered-question evidence required for implementation-phase-4 when the inherited estimate is null.
-- name: Output
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: root
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: paths
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: for
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: dispatch
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: manifest
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: join
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: aggregate
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: report
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: expected
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: process
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: tree
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-- name: reference
-  type: string
-  required: true
-  default_source: caller
-  description: Output root paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, and process-tree report reference.
-defaults: []
+- {name: caller_mode, type: enum, required: true, default_source: caller, description: 'rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8.'}
+- {name: repo_root, type: path, required: true, default_source: caller, description: Repository root.}
+- {name: worktree_path, type: path, required: true, default_source: caller, description: Exact caller worktree.}
+- {name: planning_dir, type: path, required: true, default_source: caller, description: Durable planning root.}
+- {name: scratch_dir, type: path, required: true, default_source: caller, description: Writable dispatch root.}
+- {name: audit_history_path, type: path, required: true, default_source: caller, description: Canonical audit history.}
+- {name: root_invocation_uuid, type: string, required: true, default_source: caller, description: Runtime-derived caller invocation UUID used for trace capture.}
+- {name: cycle_id, type: string, required: true, default_source: caller, description: Stable gate-set cycle identity.}
+- {name: base_branch, type: string, required: false, default_source: caller, description: Short provider base name; required in implementation modes.}
+- {name: base_ref, type: string, required: false, default_source: caller, description: Freshly fetched remote base ref; required in implementation modes.}
+- {name: base_sha, type: string, required: false, default_source: caller, description: Full base commit SHA; required in implementation modes.}
+- {name: head_branch, type: string, required: false, default_source: caller, description: Short provider head name; required in implementation modes.}
+- {name: head_ref, type: string, required: false, default_source: caller, description: Exact head ref; required in implementation modes.}
+- {name: head_sha, type: string, required: true, default_source: caller, description: Full reviewed head commit SHA.}
+- {name: diff_sha256, type: string, required: true, default_source: caller, description: Hash of the exact proposal/component/PR diff target.}
+- {name: scope_ref, type: string, required: true, default_source: caller, description: Scope identity and hash source.}
+- {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: Runtime claim identity or explicit non-applicability artifact.}
+- {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: Current contract artifact hashes.}
+- {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: Current caller report hashes.}
+- {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}
+- {name: dispatch_manifest_path, type: path, required: true, default_source: caller, description: Dispatch manifest output.}
+- {name: join_manifest_path, type: path, required: true, default_source: caller, description: Join manifest output.}
+- {name: aggregate_report_path, type: path, required: true, default_source: caller, description: Aggregate report output.}
+- {name: expected_process_path, type: path, required: true, default_source: caller, description: Pre-dispatch expected-process output.}
+- {name: process_tree_path, type: path, required: true, default_source: caller, description: Raw trace output.}
+- {name: process_tree_report_path, type: path, required: true, default_source: caller, description: Independent process-tree audit output required for advancement.}
+- {name: result_path, type: path, required: true, default_source: caller, description: Stable apply-gate-set-result-v1 output.}
+- {name: local_coverage_command, type: string, required: false, default_source: caller, description: Required and passed verbatim for implementation-phase-8 test audit.}
+- {name: currentness_policy_ref, type: string, required: false, default_source: base, description: Canonical currentness policy section.}
+defaults:
+- name: currentness_policy_ref
+  value: ~/ai/conventions/apply-gate-set-currentness.md#Currentness-key-schema
+  source: base
+secrets: []
 outputs:
-- task: default
-  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
-  wrote_lines: []
+- task: apply-gates
+  success_shape: apply-gate-set-result-v1 with status, exact base/head identity, manifest/report/trace paths and hashes including required process_tree_report_path, blocking/exception rows, terminal decision, and next action.
+  wrote_lines:
+  - ${dispatch_manifest_path}
+  - ${join_manifest_path}
+  - ${aggregate_report_path}
+  - ${expected_process_path}
+  - ${process_tree_path}
+  - ${process_tree_report_path}
+  - ${result_path}
+  - ${audit_history_path}
 errors:
-- class: BLOCKED
-  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
-  recovery: Provide the missing input or route to the correct operator.
-- class: NEEDS_INPUT
-  cause: A user-owned decision is required before safe completion.
-  recovery: Write the question artifact when the operator convention requires one, then stop.
-side_effects:
-- Writes only artifacts declared by the operator body.
-must_delegate: []
-forbidden_direct:
-- Do not bypass the operator body, anti-scope, or stop conditions.
+- {class: BLOCKED, cause: 'Required current evidence is missing, malformed, non-accepting, or topologically invalid.', recovery: Repair or rerun the named gate subtree.}
+- {class: NEEDS_INPUT, cause: 'A user-owned authorization, scope, or value decision is absent.', recovery: Answer the emitted question artifact and resume.}
+side_effects: [child-gate-dispatches, process-tree-auditor-dispatch, gate-artifact-writes, audit-history-writes]
+must_delegate: [required-gate-providers, process-tree-auditor]
+may_direct: [manifest-validation-and-projection, artifact-stat-hash-and-result-formatting]
+forbidden_direct: [child-gate-self-certification, convention-only-pass, caller-code-edit]

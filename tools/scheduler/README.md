@@ -10,7 +10,7 @@ Schedule a task to run on a specified time pattern. The task can be a shell scri
 
 - The scheduler does NOT know what its scheduled tasks do. It runs them.
 - The scheduler does NOT batch external API calls. (That's `pr-batch-poller` or another batching tool.)
-- The scheduler does NOT track WU sessions or merge events. (That's `wu-session-resumer`'s job; it's just *triggered by* a scheduled task.)
+- The scheduler does NOT track WU sessions or merge events. For this lifecycle it invokes the `wu-session-wake` workflow root; that root reads only `sessions.active-wake.json`, invokes the status-only poller, and dispatches exact joined rows to resumers.
 - The scheduler does NOT decide a script's exit-code semantics — the script does.
 
 ## Inputs (proposed)
@@ -30,7 +30,7 @@ Schedule a task to run on a specified time pattern. The task can be a shell scri
 ## Outputs
 
 - A list of run records per `task_id`: start time, end time, exit code, log path.
-- The scheduler is **passive** — it does not push notifications. Consumers (e.g. `wu-session-resumer`) that need to act on completion poll the run record or are woken by the scheduled task itself.
+- The scheduler is **passive** — it does not push notifications, read historical `sessions.index.json`, or dispatch resumers. A scheduled WU-session task starts `wu-session-wake`, the same root used manually.
 
 ## Storage
 
@@ -54,7 +54,7 @@ scheduler disable <task_id>
 
 ## Used by
 
-- (planned) `~/ai/conventions/wu-session-lifecycle.md` Stage 6 — schedules `pr-batch-poller` runs to detect merges.
+- (planned) `~/ai/conventions/wu-session-lifecycle.md` Stage 6 — schedules the `wu-session-wake` workflow root. That root invokes `pr-batch-poller` for status only and sends one exact joined row to each `wu-session-resumer`.
 - (planned) future operator / workflow uses TBD.
 
 ## TODO

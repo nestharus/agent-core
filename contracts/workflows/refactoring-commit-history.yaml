@@ -3,19 +3,20 @@ source: workflows/refactoring-commit-history.md
 workflow_id: refactoring-commit-history
 orchestrator: refactoring-commit-history-orchestrator
 inputs:
-- target surface (accepts either target or target_surface), repo_root, worktree_path, planning_dir, scratch_dir, integration_branch_ref, history_base_ref
-- milestone_search_policy, degradation_signal_sources, package_bounds, manager_flavor, and optional package_size_override
+- 'required in both scope and execute: mode, ticket_system, repo_root, worktree_path, planning_dir, scratch_dir, exact short trunk_branch, canonical JSON protected_branches, and manager_flavor'
+- scope mode also requires target or target_surface, integration_branch_ref, history_base_ref, milestone_search_policy, degradation_signal_sources, package_bounds, and optional package_size_override; it rejects execute inputs
+- execute mode also requires immutable package_source_request, caller-owned package_ticket_source_map, current_identity_path, and matching Jira or Linear existing-issue child configuration; it rejects scope-selection inputs and requires trunk/protected equality with scope
 expectations:
-- finds the last refactor milestone for the target surface
-- analyzes commits since that milestone for structural degradation
-- packages corrective refactors into independently reviewable PR plans that inherit the base refactoring and implementation-pipeline gates
+- scope is repository-read-only, selects milestone/degradation/packages, writes exact target/history/trunk/integration identities plus the canonical protected set, package plan, source hashes, and plan_hash to one immutable package-source request, performs no ticket operation, and dispatches no child
+- execute validates exact complete package descriptors, immutable trunk/integration/protected short-branch equality, every package branch outside that set, canonical unique roots/results, exact inherited gates, and a package-local acyclic dependency graph before plan_hash, current identity, package-map acceptance, context brief, or child dispatch
+- every package maps to one unique caller-owned backend-matching existing issue and one separate one-child/one-ticket-PR refactoring WU; execute dispatches in dependency-topological order and requires every prerequisite VERIFIED_MERGED before its dependent; generated WU briefs are context only
+- passes each existing issue key, normalized branch and unique roots, plus wu_brief_context_path through refactoring to implementation so Phase 0 cannot cold-create; captures each route UUID and accepts only a matching singular-child hashed VERIFIED_MERGED result
 outputs:
-- last-refactor milestone evidence
-- history degradation inventory
-- bounded package plan with gate obligations
-- handoff inputs for ACR-179 per-package execution
+- 'scope: last-refactor milestone evidence, degradation inventory, bounded package plan, and immutable package-source request with plan_hash'
+- 'execute: currentness/package-map validation, canonical per-package context briefs, exact existing-issue handoffs bound to plan_hash, and package outcomes with runtime route identities'
 non_goals:
 - does not modify the base ACR-179 refactoring substrate
 - does not design incident-driven or seed-and-fan-out sibling strategies
 - does not introduce behavior or feature changes
 - does not add scheduler or ticket-automation hooks
+- does not create, search, comment on, update, estimate, label, or transition tickets in either mode
