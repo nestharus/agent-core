@@ -1278,6 +1278,7 @@ def dispatch_comment_agent(
     else:
         raise DriverError("comment dispatch requires a fixer agent or fixer model")
 
+    outcome_path.unlink(missing_ok=True)
     head_before = git_head(worktree_path)
     started_at = utc_now()
     result = subprocess.run(

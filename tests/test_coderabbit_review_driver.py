@@ -522,6 +522,22 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
     iteration_dir = tmp_path / "iteration"
     template_path = tmp_path / "fix-prompt.md"
     template_path.write_text("Fix comment $comment_id", encoding="utf-8")
+    iteration_dir.mkdir()
+    outcome_path = iteration_dir / "agent-123.prompt.outcome.json"
+    outcome_path.write_text(
+        driver.json.dumps(
+            {
+                "comment_id": 123,
+                "outcome": "fixed",
+                "commit_sha": "stale-commit-sha",
+                "reply_body_file": None,
+                "rationale": "Stale outcome from an earlier invocation.",
+                "files_touched": ["tools/stale.py"],
+                "review_provided_value": True,
+            }
+        ),
+        encoding="utf-8",
+    )
     raw_outcome = {
         "comment_id": 123,
         "outcome": "fixed",
@@ -554,7 +570,6 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
         fixer_model="gpt-high",
     )
 
-    outcome_path = iteration_dir / "agent-123.prompt.outcome.json"
     persisted = driver.json.loads(outcome_path.read_text(encoding="utf-8"))
     assert outcome["commit_sha"] == "agent-commit-sha"
     assert persisted["commit_sha"] == "agent-commit-sha"
