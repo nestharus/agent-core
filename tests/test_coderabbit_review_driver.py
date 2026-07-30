@@ -207,6 +207,11 @@ def test_summary_decision_must_follow_current_head_commit() -> None:
     current_signal = driver.coderabbit_decision_signal(
         [], [_summary(11, body, "2026-05-21T09:50:01Z")], BOT_LOGIN
     )
+    edited_old_summary = _summary(12, body, "2026-05-21T09:49:59Z")
+    edited_old_summary["updated_at"] = "2026-05-21T09:50:02Z"
+    edited_old_signal = driver.coderabbit_decision_signal(
+        [], [edited_old_summary], BOT_LOGIN
+    )
 
     assert (
         driver.current_head_decision_outcome(
@@ -219,6 +224,12 @@ def test_summary_decision_must_follow_current_head_commit() -> None:
             current_signal, "current-sha", head_committed_at
         )
         == "approved"
+    )
+    assert (
+        driver.current_head_decision_outcome(
+            edited_old_signal, "current-sha", head_committed_at
+        )
+        is None
     )
 
 

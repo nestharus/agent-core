@@ -442,6 +442,7 @@ def coderabbit_decision_signal(
                 "decision": decision,
                 "source": "summary_comment",
                 "comment_id": comment.get("id"),
+                "created_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "sort_key": (*issue_comment_sort_key(comment), 0),
             }
@@ -471,7 +472,7 @@ def current_head_decision_outcome(
     if source == "github_review":
         return outcome if decision_signal.get("commit_id") == head_oid else None
     if source == "summary_comment":
-        observed_at = parse_time(decision_signal.get("updated_at"))
+        observed_at = parse_time(decision_signal.get("created_at"))
         return outcome if observed_at and observed_at >= head_committed_at else None
     return None
 
