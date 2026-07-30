@@ -448,6 +448,49 @@ def test_loop_cadence_ignores_standalone_poll_timestamp(monkeypatch, tmp_path) -
     assert cadence["last_poll_at"] is None
 
 
+def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
+    monkeypatch, tmp_path
+) -> None:
+    iteration_dir = tmp_path / "iteration"
+    template_path = tmp_path / "fix-prompt.md"
+    template_path.write_text("Fix comment $comment_id", encoding="utf-8")
+    raw_outcome = {
+        "comment_id": 123,
+        "outcome": "fixed",
+        "commit_sha": None,
+        "reply_body_file": None,
+        "rationale": "Applied the focused fix.",
+        "files_touched": ["tools/example.py"],
+        "review_provided_value": True,
+    }
+    monkeypatch.setattr(
+        driver.subprocess,
+        "run",
+        lambda *args, **kwargs: driver.subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=driver.json.dumps(raw_outcome)
+        ),
+    )
+    monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+    monkeypatch.setattr(driver, "git_head", lambda *args: "agent-commit-sha")
+
+    outcome = driver.dispatch_comment_agent(
+        comment={"comment_id": 123, "file_path": "/tmp/comment.md"},
+        repo=driver.Repo(owner="nestharus", name="agent-core"),
+        pr_num=198,
+        pr_branch="fix/review",
+        worktree_path=tmp_path,
+        iteration_dir=iteration_dir,
+        template_path=template_path,
+        fixer_agent=None,
+        fixer_model="gpt-high",
+    )
+
+    outcome_path = iteration_dir / "agent-123.prompt.outcome.json"
+    persisted = driver.json.loads(outcome_path.read_text(encoding="utf-8"))
+    assert outcome["commit_sha"] == "agent-commit-sha"
+    assert persisted["commit_sha"] == "agent-commit-sha"
+
+
 def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -> None:
     metadata = {"headRefName": "fix/review", "headRefOid": "new-sha"}
     monkeypatch.setattr(
