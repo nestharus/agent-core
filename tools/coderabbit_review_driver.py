@@ -1511,6 +1511,7 @@ def validated_pr_head_identity(
     expected_branch: str | None = None,
     expected_oid: str | None = None,
 ) -> tuple[str, str, datetime]:
+    head_observed_at = utc_now_dt()
     head_branch = metadata.get("headRefName")
     if not isinstance(head_branch, str) or not head_branch:
         raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
@@ -1536,7 +1537,7 @@ def validated_pr_head_identity(
         raise DriverError(
             f"could not resolve current head identity for {repo.slug}#{pr_num}"
         )
-    return head_branch, head_oid, head_committed_at
+    return head_branch, head_oid, min(head_committed_at, head_observed_at)
 
 
 def revalidate_current_pr_head(

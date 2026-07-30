@@ -564,6 +564,28 @@ def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -
     assert committed_at == driver.parse_time("2026-07-30T10:10:56-07:00")
 
 
+def test_validated_pr_head_identity_caps_future_commit_time(monkeypatch, tmp_path) -> None:
+    metadata = {"headRefName": "fix/review", "headRefOid": "new-sha"}
+    observed_at = driver.parse_time("2026-07-30T18:00:00Z")
+    monkeypatch.setattr(driver, "utc_now_dt", lambda: observed_at)
+    monkeypatch.setattr(
+        driver,
+        "git_output",
+        lambda *args: "2026-07-31T18:00:00Z",
+    )
+
+    _, _, evidence_cutoff = driver.validated_pr_head_identity(
+        metadata,
+        driver.Repo(owner="nestharus", name="agent-core"),
+        198,
+        tmp_path,
+        expected_branch="fix/review",
+        expected_oid="new-sha",
+    )
+
+    assert evidence_cutoff == observed_at
+
+
 def test_validated_pr_head_identity_rejects_stale_provider_head(
     monkeypatch, tmp_path
 ) -> None:
