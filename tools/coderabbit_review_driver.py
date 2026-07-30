@@ -652,6 +652,11 @@ def collect_comment_records(
     records: list[dict[str, Any]] = []
     latest_review = latest_coderabbit_review(reviews, bot_login)
     latest_review_id = int(latest_review["id"]) if latest_review else 0
+    review_commit_ids = {
+        int(review["id"]): review.get("commit_id")
+        for review in reviews
+        if review.get("id") is not None
+    }
 
     for comment in review_comments:
         login = (comment.get("user") or {}).get("login")
@@ -692,6 +697,7 @@ def collect_comment_records(
                 "posted_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "commit_id": comment.get("commit_id"),
+                "review_commit_id": review_commit_ids.get(review_id),
                 "html_url": comment.get("html_url"),
             }
         )
@@ -754,9 +760,14 @@ def output_metadata(record: dict[str, Any]) -> dict[str, Any]:
         "code_path": metadata.get("code_path"),
         "code_line": metadata.get("code_line"),
         "review_id": metadata.get("review_id"),
+        "review_commit_id": metadata.get("review_commit_id"),
         "thread_parent": metadata.get("thread_parent"),
         "resolved": metadata.get("resolved"),
     }
+
+
+def comment_matches_review_head(metadata: dict[str, Any], head_oid: str | None) -> bool:
+    return head_oid is None or metadata.get("review_commit_id") == head_oid
 
 
 def poll(
@@ -821,12 +832,14 @@ def poll(
             not metadata.get("resolved")
             and metadata.get("kind") == "in-diff"
             and metadata.get("source") != "trigger-ack"
+            and comment_matches_review_head(metadata, head_oid)
         ):
             actionable_comments.append(output_metadata(record))
         if (
             previous_hashes.get(key) != digest
             and not metadata.get("resolved")
             and metadata.get("source") != "trigger-ack"
+            and comment_matches_review_head(metadata, head_oid)
         ):
             new_comments.append(output_metadata(record))
 

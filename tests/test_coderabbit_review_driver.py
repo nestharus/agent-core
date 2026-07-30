@@ -253,6 +253,40 @@ def test_summary_comment_approved_marker_is_terminal_fallback() -> None:
     assert driver.review_decision_outcome(signal["decision"]) == "approved"
 
 
+def test_review_comment_uses_owning_review_commit_for_head_scope() -> None:
+    repo = driver.Repo(owner="nestharus", name="agent-core")
+    records = driver.collect_comment_records(
+        repo,
+        198,
+        [
+            _review(
+                7,
+                "CHANGES_REQUESTED",
+                "2026-05-21T09:51:00Z",
+                commit_id="previous-sha",
+            )
+        ],
+        [
+            {
+                "id": 42,
+                "pull_request_review_id": 7,
+                "body": "old finding",
+                "commit_id": "current-sha",
+                "position": 1,
+                "user": {"login": BOT_LOGIN},
+            }
+        ],
+        [],
+        {},
+        BOT_LOGIN,
+    )
+
+    assert records[0]["metadata"]["commit_id"] == "current-sha"
+    assert records[0]["metadata"]["review_commit_id"] == "previous-sha"
+    assert not driver.comment_matches_review_head(records[0]["metadata"], "current-sha")
+    assert driver.comment_matches_review_head(records[0]["metadata"], None)
+
+
 def test_current_head_evidence_is_filtered_before_terminal_signal_selection() -> None:
     summary_body = (
         driver.SUMMARY_COMMENT_MARKER

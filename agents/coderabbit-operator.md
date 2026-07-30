@@ -78,7 +78,7 @@ The loop:
 - treats `APPROVED` as terminal with `terminal_reason: "approved"` only when
   the review targets the current PR head; stale approvals remain non-terminal.
 - dispatches at most one fixer invocation per actionable in-diff comment ID
-  during one run, with a
+  owned by the current-head review during one run, with a
   resolved prompt written under
   `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/iter-{n}/`.
 - honors frontmatter-declared fixer models by invoking agent files with
