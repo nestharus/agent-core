@@ -1646,7 +1646,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         )
         mark_loop_poll(repo, args.pr_num)
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
-        raw_outcome = poll_result.get("outcome")
         final_outcome = current_head_decision_outcome(
             poll_result.get("decision_signal") or {}, head_oid, head_committed_at
         )
@@ -1661,7 +1660,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "review_decision": final_review_decision,
             "terminal": final_outcome is not None,
             "outcome": final_outcome,
-            "raw_outcome": raw_outcome,
             "review_decision_source": poll_result.get("review_decision_source"),
             "new_comments": poll_result.get("new_comments", []),
             "actionable_comments": actionable_comments,
