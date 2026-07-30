@@ -5,6 +5,8 @@ from __future__ import annotations
 import pathlib
 import sys
 
+import pytest
+
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "tools"))
@@ -385,3 +387,40 @@ def test_loop_cadence_ignores_standalone_poll_timestamp(monkeypatch, tmp_path) -
 
     assert cadence["waited_seconds"] == 0
     assert cadence["last_poll_at"] is None
+
+
+def test_validated_pr_head_identity_accepts_pushed_head(monkeypatch, tmp_path) -> None:
+    metadata = {"headRefName": "fix/review", "headRefOid": "new-sha"}
+    monkeypatch.setattr(
+        driver,
+        "git_output",
+        lambda *args: "2026-07-30T10:10:56-07:00",
+    )
+
+    head_oid, committed_at = driver.validated_pr_head_identity(
+        metadata,
+        driver.Repo(owner="nestharus", name="agent-core"),
+        198,
+        tmp_path,
+        expected_branch="fix/review",
+        expected_oid="new-sha",
+    )
+
+    assert head_oid == "new-sha"
+    assert committed_at == driver.parse_time("2026-07-30T10:10:56-07:00")
+
+
+def test_validated_pr_head_identity_rejects_stale_provider_head(
+    monkeypatch, tmp_path
+) -> None:
+    metadata = {"headRefName": "fix/review", "headRefOid": "old-sha"}
+
+    with pytest.raises(driver.DriverError, match="did not match pushed commit"):
+        driver.validated_pr_head_identity(
+            metadata,
+            driver.Repo(owner="nestharus", name="agent-core"),
+            198,
+            tmp_path,
+            expected_branch="fix/review",
+            expected_oid="new-sha",
+        )

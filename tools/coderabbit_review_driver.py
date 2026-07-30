@@ -1468,6 +1468,44 @@ def changes_requested_without_actionable_comments(
     )
 
 
+def validated_pr_head_identity(
+    metadata: dict[str, Any],
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str | None = None,
+    expected_oid: str | None = None,
+) -> tuple[str, datetime]:
+    head_branch = metadata.get("headRefName")
+    if not isinstance(head_branch, str) or not head_branch:
+        raise DriverError(
+            f"could not resolve PR head branch for {repo.slug}#{pr_num}"
+        )
+    if expected_branch is not None and head_branch != expected_branch:
+        raise DriverError(
+            f"PR head branch changed for {repo.slug}#{pr_num}: "
+            f"expected {expected_branch!r}, got {head_branch!r}"
+        )
+    head_oid = str(metadata.get("headRefOid") or "")
+    if not head_oid:
+        raise DriverError(
+            f"could not resolve current head identity for {repo.slug}#{pr_num}"
+        )
+    if expected_oid is not None and head_oid != expected_oid:
+        raise DriverError(
+            f"PR head did not match pushed commit for {repo.slug}#{pr_num}: "
+            f"expected {expected_oid}, got {head_oid}"
+        )
+    head_committed_at = parse_time(
+        git_output(worktree_path, ["show", "-s", "--format=%cI", head_oid])
+    )
+    if head_committed_at is None:
+        raise DriverError(
+            f"could not resolve current head identity for {repo.slug}#{pr_num}"
+        )
+    return head_oid, head_committed_at
+
+
 def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     repo = Repo.parse(args.repo)
     enabled, enabled_payload = repo_label_enabled(repo, args.label)
@@ -1484,18 +1522,9 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         )
     worktree_path = Path(args.worktree_path).expanduser().resolve()
     ensure_worktree_branch(worktree_path, pr_branch)
-    head_oid = str(metadata.get("headRefOid") or "")
-    if not head_oid:
-        raise DriverError(
-            f"could not resolve current head identity for {repo.slug}#{args.pr_num}"
-        )
-    head_committed_at = parse_time(
-        git_output(worktree_path, ["show", "-s", "--format=%cI", head_oid])
+    head_oid, head_committed_at = validated_pr_head_identity(
+        metadata, repo, args.pr_num, worktree_path, expected_branch=pr_branch
     )
-    if head_committed_at is None:
-        raise DriverError(
-            f"could not resolve current head identity for {repo.slug}#{args.pr_num}"
-        )
 
     fixer_agent = args.fixer_agent
     fixer_model = args.fixer_model
@@ -1667,6 +1696,15 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
+            metadata = pr_metadata(repo, args.pr_num)
+            head_oid, head_committed_at = validated_pr_head_identity(
+                metadata,
+                repo,
+                args.pr_num,
+                worktree_path,
+                expected_branch=pr_branch,
+                expected_oid=iteration["push_result"]["head_sha"],
+            )
 
         for outcome in iteration["outcomes"]:
             if outcome["outcome"] in REPLY_OUTCOMES:
