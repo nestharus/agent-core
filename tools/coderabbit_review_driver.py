@@ -369,12 +369,20 @@ def current_head_review_evidence(
     current_head_reviews = [
         review for review in reviews if review.get("commit_id") == head_oid
     ]
-    current_head_comments = [
-        comment
-        for comment in issue_comments
-        if (observed_at := parse_time(comment.get("created_at")))
-        and observed_at >= head_committed_at
-    ]
+    current_head_comments = []
+    for comment in issue_comments:
+        created_at = parse_time(comment.get("created_at"))
+        updated_at = parse_time(comment.get("updated_at"))
+        body = comment.get("body") or ""
+        created_for_head = bool(created_at and created_at >= head_committed_at)
+        reused_summary_for_head = bool(
+            SUMMARY_COMMENT_MARKER in body
+            and head_oid in body
+            and updated_at
+            and updated_at >= head_committed_at
+        )
+        if created_for_head or reused_summary_for_head:
+            current_head_comments.append(comment)
     return current_head_reviews, current_head_comments
 
 
@@ -410,6 +418,7 @@ def coderabbit_decision_signal(
     reviews: list[dict[str, Any]],
     issue_comments: list[dict[str, Any]],
     bot_login: str | None,
+    head_oid: str | None = None,
 ) -> dict[str, Any]:
     terminal_signals: list[dict[str, Any]] = []
     for review in reviews:
@@ -442,6 +451,9 @@ def coderabbit_decision_signal(
                 "decision": decision,
                 "source": "summary_comment",
                 "comment_id": comment.get("id"),
+                "commit_id": head_oid
+                if head_oid and head_oid in (comment.get("body") or "")
+                else None,
                 "created_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "sort_key": (*issue_comment_sort_key(comment), 0),
@@ -472,6 +484,8 @@ def current_head_decision_outcome(
     if source == "github_review":
         return outcome if decision_signal.get("commit_id") == head_oid else None
     if source == "summary_comment":
+        if decision_signal.get("commit_id") == head_oid:
+            return outcome
         observed_at = parse_time(decision_signal.get("created_at"))
         return outcome if observed_at and observed_at >= head_committed_at else None
     return None
@@ -792,7 +806,10 @@ def poll(
             reviews, issue_comments, head_oid, head_committed_at
         )
     decision_signal = coderabbit_decision_signal(
-        decision_reviews, decision_comments, bot_login
+        decision_reviews,
+        decision_comments,
+        bot_login,
+        head_oid if head_committed_at is not None else None,
     )
     latest_scoped_review = latest_coderabbit_review(decision_reviews, bot_login)
     latest_scoped_review_at = (
@@ -1041,7 +1058,7 @@ def initial_trigger_decision(
         parse_time(latest_review.get("submitted_at")) if latest_review else None
     )
     decision_signal = coderabbit_decision_signal(
-        current_head_reviews, current_head_comments, bot_login
+        current_head_reviews, current_head_comments, bot_login, head_oid
     )
     outcome = current_head_decision_outcome(
         decision_signal, head_oid, head_committed_at

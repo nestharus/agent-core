@@ -403,6 +403,32 @@ def test_old_summary_edit_does_not_become_current_head_evidence() -> None:
     assert comments == []
 
 
+def test_reused_summary_names_current_head_as_terminal_evidence() -> None:
+    body = (
+        driver.SUMMARY_COMMENT_MARKER
+        + "\nNo actionable comments were generated in the recent review.\n"
+        + "Reviewing files between base-sha and head-sha.\n"
+    )
+    summary = _summary(10, body, "2026-05-21T09:51:00Z")
+    summary["created_at"] = "2026-05-21T09:49:00Z"
+    head_committed_at = driver.parse_time("2026-05-21T09:50:00Z")
+
+    _, comments = driver.current_head_review_evidence(
+        [], [summary], "head-sha", head_committed_at
+    )
+    signal = driver.coderabbit_decision_signal(
+        [], comments, BOT_LOGIN, head_oid="head-sha"
+    )
+
+    assert comments == [summary]
+    assert signal["decision"] == "APPROVED"
+    assert signal["commit_id"] == "head-sha"
+    assert (
+        driver.current_head_decision_outcome(signal, "head-sha", head_committed_at)
+        == "approved"
+    )
+
+
 def test_initial_trigger_auto_skips_when_terminal_review_exists(monkeypatch) -> None:
     repo = driver.Repo(owner="nestharus", name="agent-runner")
 
