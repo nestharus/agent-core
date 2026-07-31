@@ -862,7 +862,9 @@ Before optional review dispatch, enforce the Phase 6 → Phase 7 `PrototypeSwapR
 8. Interpret the final JSON:
    - `terminal_reason=approved` is CodeRabbit success; record `review_decision`, `bot_login` from the final iteration, and proceed.
    - `terminal_reason=no_value_provided` is CodeRabbit loop convergence; record the no-value decision and proceed unless the project has an explicit stricter policy.
-   - `needs_caller_decision=true` means a per-comment fixer returned `rejected` or `deferred` for a valuable comment. Surface the verbatim `caller_decision_outcomes` to the root caller; do not re-trigger or merge until dispositioned.
+   - `needs_caller_decision=true` with `caller_decision_outcomes` means a per-comment fixer returned `rejected` or `deferred` for a valuable comment. Surface those outcomes verbatim to the root caller.
+   - `needs_caller_decision=true` with `escalation_reason` and no `caller_decision_outcomes` means the provider completed without dispatchable in-diff comments or requested changes without exposing such comments. Surface the final iteration's `escalation_reason` and review evidence to the root caller.
+   - For either caller-decision shape, do not re-trigger or merge until dispositioned.
    - Any other nonzero exit blocks Phase 7 as `BLOCKED:coderabbit-script-failed`.
 9. The orchestrator must not call `poll` in its own loop, call `gh pr view ... statusCheckRollup`, parse CodeRabbit comment bodies inline, poll GitHub review endpoints directly, or synthesize an empty review pass.
 10. The script state lives at `~/.cache/coderabbit/{owner}/{repo}/pr-{num}/state.json`; per-comment files live under `review-{review_id}/comment-{comment_id}.md`, and per-iteration prompts/outcomes live under `iter-{n}/`.

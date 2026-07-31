@@ -1931,7 +1931,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
-            head_oid, head_committed_at = wait_for_provider_pr_head(
+            wait_for_provider_pr_head(
                 repo,
                 args.pr_num,
                 worktree_path,
