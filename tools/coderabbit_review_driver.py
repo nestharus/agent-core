@@ -1111,7 +1111,7 @@ def git_output(worktree_path: Path, args: list[str]) -> str:
     return result.stdout.strip()
 
 
-def ensure_worktree_branch(worktree_path: Path, branch: str) -> None:
+def require_worktree_branch(worktree_path: Path, branch: str) -> None:
     if not worktree_path.is_dir():
         raise DriverError(f"worktree_path does not exist: {worktree_path}")
     current_branch = git_output(worktree_path, ["branch", "--show-current"])
@@ -1611,9 +1611,7 @@ def validated_pr_head_identity(
     expected_oid: str | None = None,
 ) -> tuple[str, str, datetime]:
     head_observed_at = utc_now_dt()
-    head_branch = metadata.get("headRefName")
-    if not isinstance(head_branch, str) or not head_branch:
-        raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
+    head_branch = pr_head_branch(metadata, repo, pr_num)
     if expected_branch is not None and head_branch != expected_branch:
         raise DriverError(
             f"PR head branch changed for {repo.slug}#{pr_num}: "
@@ -1637,6 +1635,13 @@ def validated_pr_head_identity(
             f"could not resolve current head identity for {repo.slug}#{pr_num}"
         )
     return head_branch, head_oid, min(head_committed_at, head_observed_at)
+
+
+def pr_head_branch(metadata: dict[str, Any], repo: Repo, pr_num: int) -> str:
+    head_branch = metadata.get("headRefName")
+    if not isinstance(head_branch, str) or not head_branch:
+        raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
+    return head_branch
 
 
 def revalidate_current_pr_head(
@@ -1729,14 +1734,16 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
     metadata = pr_metadata(repo, args.pr_num)
     worktree_path = Path(args.worktree_path).expanduser().resolve()
-    pr_branch, head_oid, head_committed_at = validated_pr_head_identity(
+    pr_branch = pr_head_branch(metadata, repo, args.pr_num)
+    require_worktree_branch(worktree_path, pr_branch)
+    _, head_oid, head_committed_at = validated_pr_head_identity(
         metadata,
         repo,
         args.pr_num,
         worktree_path,
+        expected_branch=pr_branch,
         expected_oid=git_head(worktree_path),
     )
-    ensure_worktree_branch(worktree_path, pr_branch)
 
     fixer_agent = args.fixer_agent
     fixer_model = args.fixer_model

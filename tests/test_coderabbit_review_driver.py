@@ -853,6 +853,7 @@ def test_wait_for_provider_pr_head_allows_metadata_propagation(
         ]
     )
     sleeps = []
+    monkeypatch.delenv("CODERABBIT_POLL_INTERVAL_SECONDS", raising=False)
     monkeypatch.setattr(driver, "remote_branch_oid", lambda *args: "new-sha")
     monkeypatch.setattr(driver, "pr_metadata", lambda *args: next(metadata))
     monkeypatch.setattr(

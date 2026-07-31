@@ -75,8 +75,9 @@ The loop:
   the same PR.
 - revalidates the provider head against the local worktree before and after
   every poll, aborting if another actor advances the PR branch.
-- treats `APPROVED` as terminal with `terminal_reason: "approved"` only when
-  the review targets the current PR head; stale approvals remain non-terminal.
+- treats terminal review decisions as current-head-relative: `APPROVED`
+  returns `terminal_reason: "approved"`, while stale approvals and stale
+  change requests remain non-terminal.
 - dispatches at most one fixer invocation per actionable in-diff comment ID
   owned by the current-head review during one run, with a
   resolved prompt written under
