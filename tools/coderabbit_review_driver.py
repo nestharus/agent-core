@@ -45,7 +45,9 @@ CALLER_DECISION_OUTCOMES = {"rejected", "deferred"}
 VALID_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES | CALLER_DECISION_OUTCOMES
 TERMINAL_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED"}
 REVIEW_STATES = TERMINAL_REVIEW_STATES | {"COMMENTED"}
-SUMMARY_COMMENT_MARKER = "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->"
+SUMMARY_COMMENT_MARKER = (
+    "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->"
+)
 SUMMARY_APPROVED_MARKER = "No actionable comments were generated in the recent review"
 SUMMARY_CHANGES_REQUESTED_MARKER = "Actionable comments posted"
 
@@ -157,7 +159,9 @@ def read_json_file(path: Path) -> dict[str, Any] | None:
 
 def write_json_file(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def repo_cache_dir(repo: Repo) -> Path:
@@ -227,7 +231,9 @@ def save_bot_login(repo: Repo, bot_login: str, pr_num: int | None = None) -> Non
 
 
 def repo_label_exists_uncached(repo: Repo, label: str) -> bool:
-    result = run_gh(["label", "list", "--repo", repo.slug, "--search", label, "--json", "name"])
+    result = run_gh(
+        ["label", "list", "--repo", repo.slug, "--search", label, "--json", "name"]
+    )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise DriverError(f"failed to list labels for {repo.slug}: {detail}")
@@ -237,7 +243,11 @@ def repo_label_exists_uncached(repo: Repo, label: str) -> bool:
         raise DriverError(f"gh label list returned invalid JSON: {err}") from err
     if not isinstance(labels, list):
         raise DriverError("gh label list returned non-array JSON")
-    return any(label_info.get("name") == label for label_info in labels if isinstance(label_info, dict))
+    return any(
+        label_info.get("name") == label
+        for label_info in labels
+        if isinstance(label_info, dict)
+    )
 
 
 def repo_label_enabled(repo: Repo, label: str) -> tuple[bool, dict[str, Any]]:
@@ -272,7 +282,9 @@ def is_coderabbit_login(login: str | None) -> bool:
     if not login:
         return False
     normalized = login.lower()
-    return normalized.startswith("coderabbitai") or normalized.startswith("coderabbit-ai")
+    return normalized.startswith("coderabbitai") or normalized.startswith(
+        "coderabbit-ai"
+    )
 
 
 def is_bot_login(login: str | None, bot_login: str | None) -> bool:
@@ -303,7 +315,11 @@ def discover_bot_login(
     if cached:
         return cached
 
-    reviews = reviews if reviews is not None else gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
+    reviews = (
+        reviews
+        if reviews is not None
+        else gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
+    )
     review_comments = (
         review_comments
         if review_comments is not None
@@ -338,7 +354,36 @@ def review_sort_key(review: dict[str, Any]) -> tuple[str, int]:
 
 
 def issue_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
-    return (comment.get("updated_at") or comment.get("created_at") or "", int(comment.get("id") or 0))
+    return (
+        comment.get("updated_at") or comment.get("created_at") or "",
+        int(comment.get("id") or 0),
+    )
+
+
+def current_head_review_evidence(
+    reviews: list[dict[str, Any]],
+    issue_comments: list[dict[str, Any]],
+    head_oid: str,
+    head_committed_at: datetime,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    current_head_reviews = [
+        review for review in reviews if review.get("commit_id") == head_oid
+    ]
+    current_head_comments = []
+    for comment in issue_comments:
+        created_at = parse_time(comment.get("created_at"))
+        updated_at = parse_time(comment.get("updated_at"))
+        body = comment.get("body") or ""
+        created_for_head = bool(created_at and created_at >= head_committed_at)
+        reused_summary_for_head = bool(
+            SUMMARY_COMMENT_MARKER in body
+            and head_oid in body
+            and updated_at
+            and updated_at >= head_committed_at
+        )
+        if created_for_head or reused_summary_for_head:
+            current_head_comments.append(comment)
+    return current_head_reviews, current_head_comments
 
 
 def normalized_review_decision(latest_review: dict[str, Any] | None) -> str:
@@ -373,6 +418,7 @@ def coderabbit_decision_signal(
     reviews: list[dict[str, Any]],
     issue_comments: list[dict[str, Any]],
     bot_login: str | None,
+    head_oid: str | None = None,
 ) -> dict[str, Any]:
     terminal_signals: list[dict[str, Any]] = []
     for review in reviews:
@@ -387,6 +433,7 @@ def coderabbit_decision_signal(
                 "decision": decision,
                 "source": "github_review",
                 "review_id": review.get("id"),
+                "commit_id": review.get("commit_id"),
                 "submitted_at": review.get("submitted_at"),
                 "sort_key": (*review_sort_key(review), 1),
             }
@@ -404,6 +451,10 @@ def coderabbit_decision_signal(
                 "decision": decision,
                 "source": "summary_comment",
                 "comment_id": comment.get("id"),
+                "commit_id": head_oid
+                if head_oid and head_oid in (comment.get("body") or "")
+                else None,
+                "created_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "sort_key": (*issue_comment_sort_key(comment), 0),
             }
@@ -418,8 +469,26 @@ def coderabbit_decision_signal(
         "decision": normalized_review_decision(latest_review),
         "source": "github_review" if latest_review else "none",
         "review_id": latest_review.get("id") if latest_review else None,
+        "commit_id": latest_review.get("commit_id") if latest_review else None,
         "submitted_at": latest_review.get("submitted_at") if latest_review else None,
     }
+
+
+def current_head_decision_outcome(
+    decision_signal: dict[str, Any], head_oid: str, head_committed_at: datetime
+) -> str | None:
+    outcome = review_decision_outcome(str(decision_signal.get("decision") or "NONE"))
+    if outcome is None:
+        return None
+    source = decision_signal.get("source")
+    if source == "github_review":
+        return outcome if decision_signal.get("commit_id") == head_oid else None
+    if source == "summary_comment":
+        if decision_signal.get("commit_id") == head_oid:
+            return outcome
+        observed_at = parse_time(decision_signal.get("created_at"))
+        return outcome if observed_at and observed_at >= head_committed_at else None
+    return None
 
 
 def trigger_ack_marker(body: str, mode: str) -> str | None:
@@ -509,7 +578,9 @@ def associate_issue_comment_review(
     reviews: list[dict[str, Any]],
     bot_login: str | None,
 ) -> int:
-    comment_time = parse_time(issue_comment.get("updated_at") or issue_comment.get("created_at"))
+    comment_time = parse_time(
+        issue_comment.get("updated_at") or issue_comment.get("created_at")
+    )
     cr_reviews = [
         review
         for review in reviews
@@ -545,7 +616,9 @@ def yaml_value(value: Any) -> str:
 
 def write_comment_file(path: Path, metadata: dict[str, Any], body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    frontmatter = "\n".join(f"{key}: {yaml_value(value)}" for key, value in metadata.items())
+    frontmatter = "\n".join(
+        f"{key}: {yaml_value(value)}" for key, value in metadata.items()
+    )
     path.write_text(f"---\n{frontmatter}\n---\n\n{body}\n", encoding="utf-8")
 
 
@@ -593,6 +666,11 @@ def collect_comment_records(
     records: list[dict[str, Any]] = []
     latest_review = latest_coderabbit_review(reviews, bot_login)
     latest_review_id = int(latest_review["id"]) if latest_review else 0
+    review_commit_ids = {
+        int(review["id"]): review.get("commit_id")
+        for review in reviews
+        if review.get("id") is not None
+    }
 
     for comment in review_comments:
         login = (comment.get("user") or {}).get("login")
@@ -602,10 +680,19 @@ def collect_comment_records(
         review_id = int(comment.get("pull_request_review_id") or 0)
         status = thread_status.get(comment_id, {})
         position = comment.get("position")
-        resolved = bool(status.get("is_resolved") or status.get("is_outdated") or position is None)
+        resolved = bool(
+            status.get("is_resolved") or status.get("is_outdated") or position is None
+        )
         body = comment.get("body") or ""
         metadata = base_comment_metadata(
-            repo, pr_num, comment_id, "in-diff", "review-comment", review_id, body, login
+            repo,
+            pr_num,
+            comment_id,
+            "in-diff",
+            "review-comment",
+            review_id,
+            body,
+            login,
         )
         metadata.update(
             {
@@ -624,11 +711,19 @@ def collect_comment_records(
                 "posted_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "commit_id": comment.get("commit_id"),
+                "review_commit_id": review_commit_ids.get(review_id),
                 "html_url": comment.get("html_url"),
             }
         )
         path = comment_file_path(repo, pr_num, review_id, comment_id)
-        records.append({"key": f"review-comment:{comment_id}", "path": path, "body": body, "metadata": metadata})
+        records.append(
+            {
+                "key": f"review-comment:{comment_id}",
+                "path": path,
+                "body": body,
+                "metadata": metadata,
+            }
+        )
 
     for comment in issue_comments:
         login = (comment.get("user") or {}).get("login")
@@ -648,7 +743,9 @@ def collect_comment_records(
                 "code_path": None,
                 "code_line": None,
                 "thread_parent": None,
-                "resolved": bool(is_ack or (review_id != 0 and review_id != latest_review_id)),
+                "resolved": bool(
+                    is_ack or (review_id != 0 and review_id != latest_review_id)
+                ),
                 "outdated": bool(review_id != 0 and review_id != latest_review_id),
                 "posted_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
@@ -656,7 +753,14 @@ def collect_comment_records(
             }
         )
         path = comment_file_path(repo, pr_num, review_id, comment_id)
-        records.append({"key": f"issue-comment:{comment_id}", "path": path, "body": body, "metadata": metadata})
+        records.append(
+            {
+                "key": f"issue-comment:{comment_id}",
+                "path": path,
+                "body": body,
+                "metadata": metadata,
+            }
+        )
 
     return records
 
@@ -670,20 +774,50 @@ def output_metadata(record: dict[str, Any]) -> dict[str, Any]:
         "code_path": metadata.get("code_path"),
         "code_line": metadata.get("code_line"),
         "review_id": metadata.get("review_id"),
+        "review_commit_id": metadata.get("review_commit_id"),
         "thread_parent": metadata.get("thread_parent"),
         "resolved": metadata.get("resolved"),
     }
 
 
-def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
+def comment_matches_review_head(metadata: dict[str, Any], head_oid: str | None) -> bool:
+    return head_oid is None or metadata.get("review_commit_id") == head_oid
+
+
+def poll(
+    repo: Repo,
+    pr_num: int,
+    head_oid: str | None = None,
+    head_committed_at: datetime | None = None,
+) -> dict[str, Any]:
     reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    bot_login = discover_bot_login(repo, pr_num, reviews, review_comments, issue_comments)
+    bot_login = discover_bot_login(
+        repo, pr_num, reviews, review_comments, issue_comments
+    )
     thread_status = graphql_review_threads(repo, pr_num)
 
     latest_review = latest_coderabbit_review(reviews, bot_login)
-    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
+    decision_reviews = reviews
+    decision_comments = issue_comments
+    if head_oid is not None and head_committed_at is not None:
+        decision_reviews, decision_comments = current_head_review_evidence(
+            reviews, issue_comments, head_oid, head_committed_at
+        )
+    decision_signal = coderabbit_decision_signal(
+        decision_reviews,
+        decision_comments,
+        bot_login,
+        head_oid if head_committed_at is not None else None,
+    )
+    latest_scoped_review = latest_coderabbit_review(decision_reviews, bot_login)
+    latest_scoped_review_at = (
+        parse_time(latest_scoped_review.get("submitted_at"))
+        if latest_scoped_review
+        else None
+    )
+    completion_ack_at = latest_completion_ack_time(decision_comments, bot_login)
     decision = decision_signal["decision"]
     outcome = review_decision_outcome(decision)
     records = collect_comment_records(
@@ -702,7 +836,11 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
     for record in records:
         key = record["key"]
         metadata = record["metadata"]
-        digest = metadata["body_sha256"] + ":" + str(metadata.get("updated_at") or metadata.get("posted_at"))
+        digest = (
+            metadata["body_sha256"]
+            + ":"
+            + str(metadata.get("updated_at") or metadata.get("posted_at"))
+        )
         current_hashes[key] = digest
         current_status[key] = {
             "comment_id": metadata["comment_id"],
@@ -710,18 +848,25 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
             "kind": metadata.get("kind"),
             "source": metadata.get("source"),
         }
-        seen_by_review.setdefault(str(metadata["review_id"]), []).append(int(metadata["comment_id"]))
+        seen_by_review.setdefault(str(metadata["review_id"]), []).append(
+            int(metadata["comment_id"])
+        )
         write_comment_file(record["path"], metadata, record["body"])
         if (
             not metadata.get("resolved")
             and metadata.get("kind") == "in-diff"
             and metadata.get("source") != "trigger-ack"
+            and comment_matches_review_head(metadata, head_oid)
         ):
             actionable_comments.append(output_metadata(record))
         if (
             previous_hashes.get(key) != digest
             and not metadata.get("resolved")
             and metadata.get("source") != "trigger-ack"
+            and (
+                metadata.get("kind") != "in-diff"
+                or comment_matches_review_head(metadata, head_oid)
+            )
         ):
             new_comments.append(output_metadata(record))
 
@@ -753,9 +898,21 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
         "review_decision": decision,
         "terminal": outcome is not None,
         "outcome": outcome,
+        "decision_signal": decision_signal,
         "review_decision_source": decision_signal.get("source"),
         "latest_decision_review_id": decision_signal.get("review_id"),
         "latest_decision_comment_id": decision_signal.get("comment_id"),
+        "latest_review_at": latest_scoped_review_at.isoformat()
+        if latest_scoped_review_at
+        else None,
+        "latest_completion_ack_at": completion_ack_at.isoformat()
+        if completion_ack_at
+        else None,
+        "review_completed": bool(
+            latest_scoped_review_at
+            and completion_ack_at
+            and completion_ack_at >= latest_scoped_review_at
+        ),
         "new_comments": new_comments,
         "actionable_comments": actionable_comments,
         "resolved_since_last_poll": resolved_since_last_poll,
@@ -766,7 +923,9 @@ def poll(repo: Repo, pr_num: int) -> dict[str, Any]:
 def trigger_review(repo: Repo, pr_num: int, mode: str, label: str) -> dict[str, Any]:
     enabled, _ = repo_label_enabled(repo, label)
     if not enabled:
-        raise DriverError("CodeRabbit marker label is absent from repository", exit_code=1)
+        raise DriverError(
+            "CodeRabbit marker label is absent from repository", exit_code=1
+        )
 
     body = TRIGGER_BODIES[mode]
     response = gh_json(
@@ -780,11 +939,15 @@ def trigger_review(repo: Repo, pr_num: int, mode: str, label: str) -> dict[str, 
         ]
     )
     command_comment_id = int(response["id"])
-    poll_interval = env_int("CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS)
+    poll_interval = env_int(
+        "CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
+    )
     bot_login = discover_bot_login(repo, pr_num)
 
     while True:
-        issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
+        issue_comments = gh_paginated_array(
+            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+        )
         for comment in issue_comments:
             comment_id = int(comment.get("id") or 0)
             if comment_id <= command_comment_id:
@@ -850,7 +1013,33 @@ def latest_trigger_ack_time(
     return latest
 
 
-def initial_trigger_decision(repo: Repo, pr_num: int, mode: str, policy: str) -> dict[str, Any]:
+def latest_completion_ack_time(
+    issue_comments: list[dict[str, Any]], bot_login: str | None
+) -> datetime | None:
+    latest: datetime | None = None
+    for comment in issue_comments:
+        login = (comment.get("user") or {}).get("login")
+        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
+            continue
+        body = comment.get("body") or ""
+        if not any(marker in body for marker in ACK_ACTION_MARKERS) or not any(
+            marker in body for marker in ACK_COMPLETION_MARKERS.values()
+        ):
+            continue
+        observed_at = parse_time(comment.get("updated_at") or comment.get("created_at"))
+        if observed_at and (latest is None or observed_at > latest):
+            latest = observed_at
+    return latest
+
+
+def initial_trigger_decision(
+    repo: Repo,
+    pr_num: int,
+    mode: str,
+    policy: str,
+    head_oid: str,
+    head_committed_at: datetime,
+) -> dict[str, Any]:
     if policy == "always":
         return {"trigger": True, "reason": "initial-trigger-policy:always"}
     if policy == "skip":
@@ -858,11 +1047,22 @@ def initial_trigger_decision(repo: Repo, pr_num: int, mode: str, policy: str) ->
 
     reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    bot_login = discover_bot_login(repo, pr_num, reviews=reviews, issue_comments=issue_comments)
-    latest_review = latest_coderabbit_review(reviews, bot_login)
-    latest_review_at = parse_time(latest_review.get("submitted_at")) if latest_review else None
-    decision_signal = coderabbit_decision_signal(reviews, issue_comments, bot_login)
-    outcome = review_decision_outcome(decision_signal["decision"])
+    bot_login = discover_bot_login(
+        repo, pr_num, reviews=reviews, issue_comments=issue_comments
+    )
+    current_head_reviews, current_head_comments = current_head_review_evidence(
+        reviews, issue_comments, head_oid, head_committed_at
+    )
+    latest_review = latest_coderabbit_review(current_head_reviews, bot_login)
+    latest_review_at = (
+        parse_time(latest_review.get("submitted_at")) if latest_review else None
+    )
+    decision_signal = coderabbit_decision_signal(
+        current_head_reviews, current_head_comments, bot_login, head_oid
+    )
+    outcome = current_head_decision_outcome(
+        decision_signal, head_oid, head_committed_at
+    )
     if outcome:
         return {
             "trigger": False,
@@ -870,16 +1070,24 @@ def initial_trigger_decision(repo: Repo, pr_num: int, mode: str, policy: str) ->
             "review_decision": decision_signal["decision"],
             "outcome": outcome,
             "review_decision_source": decision_signal.get("source"),
-            "latest_review_at": latest_review_at.isoformat() if latest_review_at else None,
+            "latest_review_at": latest_review_at.isoformat()
+            if latest_review_at
+            else None,
         }
     ack_time = latest_trigger_ack_time(issue_comments, mode, bot_login)
 
-    if ack_time and (latest_review_at is None or ack_time > latest_review_at):
+    if (
+        ack_time
+        and ack_time >= head_committed_at
+        and (latest_review_at is None or ack_time > latest_review_at)
+    ):
         return {
             "trigger": False,
             "reason": "initial-trigger-policy:auto:pending-ack-newer-than-latest-review",
             "latest_trigger_ack_at": ack_time.isoformat(),
-            "latest_review_at": latest_review_at.isoformat() if latest_review_at else None,
+            "latest_review_at": latest_review_at.isoformat()
+            if latest_review_at
+            else None,
         }
     return {
         "trigger": True,
@@ -903,7 +1111,7 @@ def git_output(worktree_path: Path, args: list[str]) -> str:
     return result.stdout.strip()
 
 
-def ensure_worktree_branch(worktree_path: Path, branch: str) -> None:
+def require_worktree_branch(worktree_path: Path, branch: str) -> None:
     if not worktree_path.is_dir():
         raise DriverError(f"worktree_path does not exist: {worktree_path}")
     current_branch = git_output(worktree_path, ["branch", "--show-current"])
@@ -922,12 +1130,23 @@ def git_head(worktree_path: Path) -> str:
     return git_output(worktree_path, ["rev-parse", "HEAD"])
 
 
+def remote_branch_oid(worktree_path: Path, branch: str) -> str:
+    ref = f"refs/heads/{branch}"
+    output = git_output(worktree_path, ["ls-remote", "--heads", "origin", ref])
+    fields = output.split()
+    if len(fields) != 2 or fields[1] != ref:
+        raise DriverError(f"could not resolve remote branch {ref}")
+    return fields[0]
+
+
 def commit_dirty_agent_changes(worktree_path: Path, comment_id: int) -> str | None:
     dirty = git_dirty_paths(worktree_path)
     if not dirty:
         return None
     git_output(worktree_path, ["add", "-A"])
-    git_output(worktree_path, ["commit", "-m", f"Address CodeRabbit comment {comment_id}"])
+    git_output(
+        worktree_path, ["commit", "-m", f"Address CodeRabbit comment {comment_id}"]
+    )
     return git_head(worktree_path)
 
 
@@ -1002,36 +1221,56 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
 
 def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
     if not isinstance(raw, dict):
-        raise DriverError(f"agent outcome for comment {comment_id} is not a JSON object")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} is not a JSON object"
+        )
     outcome = raw.get("outcome")
     if outcome not in VALID_OUTCOMES:
-        raise DriverError(f"agent outcome for comment {comment_id} has invalid outcome {outcome!r}")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid outcome {outcome!r}"
+        )
     try:
         raw_comment_id = int(raw.get("comment_id", -1))
     except (TypeError, ValueError) as err:
-        raise DriverError(f"agent outcome for comment {comment_id} has invalid comment_id") from err
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid comment_id"
+        ) from err
     if raw_comment_id != comment_id:
         raise DriverError(f"agent outcome comment_id mismatch for comment {comment_id}")
     if not isinstance(raw.get("rationale"), str) or not raw["rationale"].strip():
-        raise DriverError(f"agent outcome for comment {comment_id} is missing rationale")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} is missing rationale"
+        )
     if not isinstance(raw.get("files_touched"), list) or not all(
         isinstance(item, str) for item in raw["files_touched"]
     ):
-        raise DriverError(f"agent outcome for comment {comment_id} has invalid files_touched")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid files_touched"
+        )
     if not isinstance(raw.get("review_provided_value"), bool):
-        raise DriverError(f"agent outcome for comment {comment_id} is missing review_provided_value")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} is missing review_provided_value"
+        )
 
     commit_sha = raw.get("commit_sha")
     if commit_sha is not None and not isinstance(commit_sha, str):
-        raise DriverError(f"agent outcome for comment {comment_id} has invalid commit_sha")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid commit_sha"
+        )
     reply_body_file = raw.get("reply_body_file")
     if reply_body_file is not None and not isinstance(reply_body_file, str):
-        raise DriverError(f"agent outcome for comment {comment_id} has invalid reply_body_file")
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid reply_body_file"
+        )
     if outcome in REPLY_OUTCOMES:
         if not reply_body_file:
-            raise DriverError(f"agent outcome for comment {comment_id} must include reply_body_file")
+            raise DriverError(
+                f"agent outcome for comment {comment_id} must include reply_body_file"
+            )
         if not Path(reply_body_file).is_file():
-            raise DriverError(f"reply body file for comment {comment_id} does not exist: {reply_body_file}")
+            raise DriverError(
+                f"reply body file for comment {comment_id} does not exist: {reply_body_file}"
+            )
 
     return {
         "comment_id": comment_id,
@@ -1058,23 +1297,43 @@ def dispatch_comment_agent(
 ) -> dict[str, Any]:
     comment_id = int(comment["comment_id"])
     prompt_path = iteration_dir / f"agent-{comment_id}.prompt.md"
-    render_fix_prompt(template_path, prompt_path, comment, repo, pr_num, pr_branch, worktree_path)
+    render_fix_prompt(
+        template_path, prompt_path, comment, repo, pr_num, pr_branch, worktree_path
+    )
     outcome_path = prompt_path.with_suffix(".outcome.json")
     log_path = prompt_path.with_suffix(".log")
 
     if fixer_agent and fixer_model:
         raise DriverError("pass either --fixer-agent or --fixer-model, not both")
     if fixer_agent:
-        cmd = ["agents", "-a", fixer_agent, "-p", str(worktree_path), "-f", str(prompt_path)]
+        cmd = [
+            "agents",
+            "-a",
+            fixer_agent,
+            "-p",
+            str(worktree_path),
+            "-f",
+            str(prompt_path),
+        ]
         dispatch_kind = "agent-file"
         dispatch_ref = fixer_agent
     elif fixer_model:
-        cmd = ["agents", "-m", fixer_model, "-p", str(worktree_path), "-f", str(prompt_path)]
+        cmd = [
+            "agents",
+            "-m",
+            fixer_model,
+            "-p",
+            str(worktree_path),
+            "-f",
+            str(prompt_path),
+        ]
         dispatch_kind = "model"
         dispatch_ref = fixer_model
     else:
         raise DriverError("comment dispatch requires a fixer agent or fixer model")
 
+    outcome_path.unlink(missing_ok=True)
+    head_before = git_head(worktree_path)
     started_at = utc_now()
     result = subprocess.run(
         cmd,
@@ -1095,8 +1354,12 @@ def dispatch_comment_agent(
     else:
         raw = extract_json_object(result.stdout)
         if raw is None:
-            raise DriverError(f"agent did not write parseable outcome JSON for comment {comment_id}; log={log_path}")
-        outcome_path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            raise DriverError(
+                f"agent did not write parseable outcome JSON for comment {comment_id}; log={log_path}"
+            )
+        outcome_path.write_text(
+            json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     outcome = validate_outcome(raw, comment_id)
 
     dirty_after = git_dirty_paths(worktree_path)
@@ -1107,10 +1370,24 @@ def dispatch_comment_agent(
     if dirty_after and outcome["outcome"] in FIX_OUTCOMES:
         commit_sha = commit_dirty_agent_changes(worktree_path, comment_id)
         outcome["commit_sha"] = commit_sha
-        outcome_path.write_text(json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    elif outcome["outcome"] in FIX_OUTCOMES and not outcome["commit_sha"]:
-        outcome["commit_sha"] = git_head(worktree_path)
-        outcome_path.write_text(json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        outcome_path.write_text(
+            json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    if outcome["outcome"] in FIX_OUTCOMES:
+        head_after = git_head(worktree_path)
+        if head_after == head_before:
+            raise DriverError(
+                f"fix outcome for comment {comment_id} produced no commit"
+            )
+        if outcome["commit_sha"] and outcome["commit_sha"] != head_after:
+            raise DriverError(
+                f"fix outcome for comment {comment_id} reported commit "
+                f"{outcome['commit_sha']} but worktree HEAD is {head_after}"
+            )
+        outcome["commit_sha"] = head_after
+        outcome_path.write_text(
+            json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
     outcome.update(
         {
@@ -1128,7 +1405,9 @@ def dispatch_comment_agent(
     return outcome
 
 
-def post_reply(repo: Repo, pr_num: int, comment_id: int, body_file: str) -> dict[str, Any]:
+def post_reply(
+    repo: Repo, pr_num: int, comment_id: int, body_file: str
+) -> dict[str, Any]:
     # command_reply prints its own JSON, so keep review-loop replies quiet by using the same underlying path.
     body_path = Path(body_file)
     body = body_path.read_text(encoding="utf-8")
@@ -1137,14 +1416,24 @@ def post_reply(repo: Repo, pr_num: int, comment_id: int, body_file: str) -> dict
 
     bot_login = discover_bot_login(repo, pr_num)
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
-    target = next((comment for comment in review_comments if int(comment.get("id")) == comment_id), None)
+    target = next(
+        (
+            comment
+            for comment in review_comments
+            if int(comment.get("id")) == comment_id
+        ),
+        None,
+    )
     if target and not is_bot_login((target.get("user") or {}).get("login"), bot_login):
         raise DriverError(f"comment {comment_id} is not authored by CodeRabbit")
 
     normalized_body = body.strip()
     if target:
         for comment in review_comments:
-            if comment.get("in_reply_to_id") == comment_id and (comment.get("body") or "").strip() == normalized_body:
+            if (
+                comment.get("in_reply_to_id") == comment_id
+                and (comment.get("body") or "").strip() == normalized_body
+            ):
                 return {
                     "repo": repo.slug,
                     "pr_num": pr_num,
@@ -1177,15 +1466,24 @@ def post_reply(repo: Repo, pr_num: int, comment_id: int, body_file: str) -> dict
         }
 
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    issue_target = next((comment for comment in issue_comments if int(comment.get("id")) == comment_id), None)
+    issue_target = next(
+        (comment for comment in issue_comments if int(comment.get("id")) == comment_id),
+        None,
+    )
     if not issue_target:
         raise DriverError(f"comment {comment_id} was not found on PR {pr_num}")
     if not is_bot_login((issue_target.get("user") or {}).get("login"), bot_login):
         raise DriverError(f"comment {comment_id} is not authored by CodeRabbit")
 
     target_url = issue_target.get("html_url")
-    mention_login = bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
-    issue_body = f"@{mention_login} re: {target_url}\n\n{body}" if target_url else f"@{mention_login}\n\n{body}"
+    mention_login = (
+        bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
+    )
+    issue_body = (
+        f"@{mention_login} re: {target_url}\n\n{body}"
+        if target_url
+        else f"@{mention_login}\n\n{body}"
+    )
     for comment in issue_comments:
         if (comment.get("body") or "").strip() == issue_body.strip():
             return {
@@ -1220,12 +1518,18 @@ def post_reply(repo: Repo, pr_num: int, comment_id: int, body_file: str) -> dict
     }
 
 
-def wait_for_loop_poll_cadence(repo: Repo, pr_num: int, min_interval_seconds: int) -> dict[str, Any]:
+def wait_for_loop_poll_cadence(
+    repo: Repo, pr_num: int, min_interval_seconds: int
+) -> dict[str, Any]:
     state = load_state(repo, pr_num)
     last_raw = state.get("last_loop_poll_at")
     last_at = parse_time(last_raw) if isinstance(last_raw, str) else None
     if not last_at:
-        return {"waited_seconds": 0, "last_poll_at": None, "min_interval_seconds": min_interval_seconds}
+        return {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": min_interval_seconds,
+        }
     elapsed = (utc_now_dt() - last_at).total_seconds()
     remaining = min_interval_seconds - elapsed
     if remaining <= 0:
@@ -1254,18 +1558,25 @@ def mark_loop_poll(repo: Repo, pr_num: int) -> None:
     save_state(repo, pr_num, state)
 
 
-def select_actionable_comments(poll_result: dict[str, Any]) -> list[dict[str, Any]]:
+def select_actionable_comments(
+    poll_result: dict[str, Any], handled_comment_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
+    handled_comment_ids = handled_comment_ids or set()
     new_comments = [
         comment
         for comment in poll_result.get("new_comments", [])
-        if comment.get("kind") == "in-diff" and not comment.get("resolved")
+        if comment.get("kind") == "in-diff"
+        and not comment.get("resolved")
+        and int(comment.get("comment_id") or 0) not in handled_comment_ids
     ]
     if new_comments:
         return new_comments
     return [
         comment
         for comment in poll_result.get("actionable_comments", [])
-        if comment.get("kind") == "in-diff" and not comment.get("resolved")
+        if comment.get("kind") == "in-diff"
+        and not comment.get("resolved")
+        and int(comment.get("comment_id") or 0) not in handled_comment_ids
     ]
 
 
@@ -1277,18 +1588,162 @@ def changes_requested_without_actionable_comments(
     )
 
 
+def completed_review_without_terminal_decision(
+    review_decision: str,
+    outcome: Any,
+    actionable_comments: list[dict[str, Any]],
+    review_completed: bool,
+) -> bool:
+    return (
+        review_completed
+        and not actionable_comments
+        and review_decision.upper() == "COMMENTED"
+        and outcome is None
+    )
+
+
+def validated_pr_head_identity(
+    metadata: dict[str, Any],
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str | None = None,
+    expected_oid: str | None = None,
+) -> tuple[str, str, datetime]:
+    head_observed_at = utc_now_dt()
+    head_branch = pr_head_branch(metadata, repo, pr_num)
+    if expected_branch is not None and head_branch != expected_branch:
+        raise DriverError(
+            f"PR head branch changed for {repo.slug}#{pr_num}: "
+            f"expected {expected_branch!r}, got {head_branch!r}"
+        )
+    head_oid = str(metadata.get("headRefOid") or "")
+    if not head_oid:
+        raise DriverError(
+            f"could not resolve current head identity for {repo.slug}#{pr_num}"
+        )
+    if expected_oid is not None and head_oid != expected_oid:
+        raise DriverError(
+            f"PR head did not match pushed commit for {repo.slug}#{pr_num}: "
+            f"expected {expected_oid}, got {head_oid}"
+        )
+    head_committed_at = parse_time(
+        git_output(worktree_path, ["show", "-s", "--format=%cI", head_oid])
+    )
+    if head_committed_at is None:
+        raise DriverError(
+            f"could not resolve current head identity for {repo.slug}#{pr_num}"
+        )
+    return head_branch, head_oid, min(head_committed_at, head_observed_at)
+
+
+def pr_head_branch(metadata: dict[str, Any], repo: Repo, pr_num: int) -> str:
+    head_branch = metadata.get("headRefName")
+    if not isinstance(head_branch, str) or not head_branch:
+        raise DriverError(f"could not resolve PR head branch for {repo.slug}#{pr_num}")
+    return head_branch
+
+
+def revalidate_current_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+) -> tuple[str, datetime]:
+    local_oid = git_head(worktree_path)
+    remote_oid = remote_branch_oid(worktree_path, expected_branch)
+    if remote_oid != local_oid:
+        raise DriverError(
+            f"remote PR branch changed for {repo.slug}#{pr_num}: "
+            f"local {local_oid}, remote {remote_oid}"
+        )
+    _, head_oid, head_committed_at = validated_pr_head_identity(
+        pr_metadata(repo, pr_num),
+        repo,
+        pr_num,
+        worktree_path,
+        expected_branch=expected_branch,
+        expected_oid=local_oid,
+    )
+    return head_oid, head_committed_at
+
+
+def wait_for_provider_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+    expected_oid: str,
+) -> tuple[str, datetime]:
+    poll_interval = env_int(
+        "CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
+    )
+    while True:
+        remote_oid = remote_branch_oid(worktree_path, expected_branch)
+        if remote_oid != expected_oid:
+            raise DriverError(
+                f"remote PR branch changed after push for {repo.slug}#{pr_num}: "
+                f"expected {expected_oid}, got {remote_oid}"
+            )
+        metadata = pr_metadata(repo, pr_num)
+        head_branch = metadata.get("headRefName")
+        if head_branch != expected_branch:
+            raise DriverError(
+                f"PR head branch changed for {repo.slug}#{pr_num}: "
+                f"expected {expected_branch!r}, got {head_branch!r}"
+            )
+        if metadata.get("headRefOid") == expected_oid:
+            _, head_oid, head_committed_at = validated_pr_head_identity(
+                metadata,
+                repo,
+                pr_num,
+                worktree_path,
+                expected_branch=expected_branch,
+                expected_oid=expected_oid,
+            )
+            return head_oid, head_committed_at
+        print(
+            f"Waiting for PR head metadata to reach {expected_oid} for {repo.slug}#{pr_num}",
+            file=sys.stderr,
+            flush=True,
+        )
+        time.sleep(poll_interval)
+
+
+def poll_current_pr_head(
+    repo: Repo,
+    pr_num: int,
+    worktree_path: Path,
+    expected_branch: str,
+) -> tuple[dict[str, Any], str, datetime]:
+    head_oid, head_committed_at = revalidate_current_pr_head(
+        repo, pr_num, worktree_path, expected_branch
+    )
+    poll_result = poll(repo, pr_num, head_oid, head_committed_at)
+    revalidate_current_pr_head(repo, pr_num, worktree_path, expected_branch)
+    return poll_result, head_oid, head_committed_at
+
+
 def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     repo = Repo.parse(args.repo)
     enabled, enabled_payload = repo_label_enabled(repo, args.label)
     if not enabled:
-        raise DriverError("CodeRabbit marker label is absent from repository", exit_code=1)
+        raise DriverError(
+            "CodeRabbit marker label is absent from repository", exit_code=1
+        )
 
     metadata = pr_metadata(repo, args.pr_num)
-    pr_branch = metadata.get("headRefName")
-    if not isinstance(pr_branch, str) or not pr_branch:
-        raise DriverError(f"could not resolve PR head branch for {repo.slug}#{args.pr_num}")
     worktree_path = Path(args.worktree_path).expanduser().resolve()
-    ensure_worktree_branch(worktree_path, pr_branch)
+    pr_branch = pr_head_branch(metadata, repo, args.pr_num)
+    require_worktree_branch(worktree_path, pr_branch)
+    _, head_oid, head_committed_at = validated_pr_head_identity(
+        metadata,
+        repo,
+        args.pr_num,
+        worktree_path,
+        expected_branch=pr_branch,
+        expected_oid=git_head(worktree_path),
+    )
 
     fixer_agent = args.fixer_agent
     fixer_model = args.fixer_model
@@ -1304,7 +1759,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
     template_path = Path(args.template).expanduser().resolve()
     min_poll_interval = args.poll_interval_seconds or env_int(
-        "CODERABBIT_REVIEW_LOOP_POLL_INTERVAL_SECONDS", DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS
+        "CODERABBIT_REVIEW_LOOP_POLL_INTERVAL_SECONDS",
+        DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS,
     )
     if min_poll_interval < DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS:
         raise DriverError(
@@ -1312,37 +1768,59 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     loop_started_at = utc_now()
-    trigger_decision = initial_trigger_decision(repo, args.pr_num, args.mode, args.initial_trigger)
+    trigger_decision = initial_trigger_decision(
+        repo,
+        args.pr_num,
+        args.mode,
+        args.initial_trigger,
+        head_oid,
+        head_committed_at,
+    )
     initial_trigger: dict[str, Any] | None = None
     if trigger_decision["trigger"]:
-        print(f"Triggering CodeRabbit {args.mode} review for {repo.slug}#{args.pr_num}", file=sys.stderr, flush=True)
+        print(
+            f"Triggering CodeRabbit {args.mode} review for {repo.slug}#{args.pr_num}",
+            file=sys.stderr,
+            flush=True,
+        )
         initial_trigger = trigger_review(repo, args.pr_num, args.mode, args.label)
     else:
-        print(f"Skipping initial trigger: {trigger_decision['reason']}", file=sys.stderr, flush=True)
+        print(
+            f"Skipping initial trigger: {trigger_decision['reason']}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     iterations: list[dict[str, Any]] = []
     iteration_index = 1
     terminal_reason: str | None = None
     final_review_decision = "NONE"
     rate_limit_observations: list[str] = []
+    handled_comment_ids: set[int] = set()
 
     while True:
         iteration_dir = cache_dir(repo, args.pr_num) / f"iter-{iteration_index}"
         iteration_dir.mkdir(parents=True, exist_ok=True)
         cadence = wait_for_loop_poll_cadence(repo, args.pr_num, min_poll_interval)
         poll_started_at = utc_now()
-        poll_result = poll(repo, args.pr_num)
+        poll_result, head_oid, head_committed_at = poll_current_pr_head(
+            repo, args.pr_num, worktree_path, pr_branch
+        )
         mark_loop_poll(repo, args.pr_num)
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
-        final_outcome = poll_result.get("outcome")
-        actionable_comments = select_actionable_comments(poll_result)
+        final_outcome = current_head_decision_outcome(
+            poll_result.get("decision_signal") or {}, head_oid, head_committed_at
+        )
+        actionable_comments = select_actionable_comments(
+            poll_result, handled_comment_ids
+        )
         iteration: dict[str, Any] = {
             "iteration": iteration_index,
             "poll_started_at": poll_started_at,
             "poll_completed_at": utc_now(),
             "cadence": cadence,
             "review_decision": final_review_decision,
-            "terminal": poll_result.get("terminal"),
+            "terminal": final_outcome is not None,
             "outcome": final_outcome,
             "review_decision_source": poll_result.get("review_decision_source"),
             "new_comments": poll_result.get("new_comments", []),
@@ -1369,6 +1847,18 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iterations.append(iteration)
             break
 
+        if completed_review_without_terminal_decision(
+            final_review_decision,
+            final_outcome,
+            actionable_comments,
+            bool(poll_result.get("review_completed")),
+        ):
+            terminal_reason = "review_completed_without_terminal_decision"
+            iteration["needs_caller_decision"] = True
+            iteration["escalation_reason"] = terminal_reason
+            iterations.append(iteration)
+            break
+
         if not actionable_comments:
             iterations.append(iteration)
             print(
@@ -1380,7 +1870,9 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             continue
 
         if git_dirty_paths(worktree_path):
-            raise DriverError(f"worktree is dirty before comment dispatch: {worktree_path}")
+            raise DriverError(
+                f"worktree is dirty before comment dispatch: {worktree_path}"
+            )
 
         for comment in actionable_comments:
             print(
@@ -1400,9 +1892,11 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 fixer_model=fixer_model,
             )
             iteration["outcomes"].append(outcome)
+            handled_comment_ids.add(int(comment["comment_id"]))
 
         if iteration["outcomes"] and all(
-            outcome["review_provided_value"] is False for outcome in iteration["outcomes"]
+            outcome["review_provided_value"] is False
+            for outcome in iteration["outcomes"]
         ):
             terminal_reason = "no_value_provided"
             iterations.append(iteration)
@@ -1411,7 +1905,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         caller_decision = [
             outcome
             for outcome in iteration["outcomes"]
-            if outcome["review_provided_value"] and outcome["outcome"] in CALLER_DECISION_OUTCOMES
+            if outcome["review_provided_value"]
+            and outcome["outcome"] in CALLER_DECISION_OUTCOMES
         ]
         if caller_decision:
             iteration["needs_caller_decision"] = True
@@ -1436,17 +1931,32 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
+            wait_for_provider_pr_head(
+                repo,
+                args.pr_num,
+                worktree_path,
+                pr_branch,
+                iteration["push_result"]["head_sha"],
+            )
+            metadata = pr_metadata(repo, args.pr_num)
 
         for outcome in iteration["outcomes"]:
             if outcome["outcome"] in REPLY_OUTCOMES:
-                reply_result = post_reply(repo, args.pr_num, outcome["comment_id"], outcome["reply_body_file"])
+                reply_result = post_reply(
+                    repo, args.pr_num, outcome["comment_id"], outcome["reply_body_file"]
+                )
                 iteration["reply_results"].append(reply_result)
 
-        iteration["trigger_result"] = trigger_review(repo, args.pr_num, "incremental", args.label)
+        iteration["trigger_result"] = trigger_review(
+            repo, args.pr_num, "incremental", args.label
+        )
         iterations.append(iteration)
         iteration_index += 1
 
-    needs_caller_decision = terminal_reason == "changes_requested_without_actionable_comments"
+    needs_caller_decision = terminal_reason in {
+        "changes_requested_without_actionable_comments",
+        "review_completed_without_terminal_decision",
+    }
     return {
         "repo": repo.slug,
         "pr_num": args.pr_num,
@@ -1524,15 +2034,27 @@ def command_reply(args: argparse.Namespace) -> int:
         raise DriverError("reply body file is empty")
 
     bot_login = discover_bot_login(repo, args.pr_num)
-    review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{args.pr_num}/comments")
-    target = next((comment for comment in review_comments if int(comment.get("id")) == args.comment_id), None)
+    review_comments = gh_paginated_array(
+        f"/repos/{repo.slug}/pulls/{args.pr_num}/comments"
+    )
+    target = next(
+        (
+            comment
+            for comment in review_comments
+            if int(comment.get("id")) == args.comment_id
+        ),
+        None,
+    )
     if target and not is_bot_login((target.get("user") or {}).get("login"), bot_login):
         raise DriverError(f"comment {args.comment_id} is not authored by CodeRabbit")
 
     normalized_body = body.strip()
     if target:
         for comment in review_comments:
-            if comment.get("in_reply_to_id") == args.comment_id and (comment.get("body") or "").strip() == normalized_body:
+            if (
+                comment.get("in_reply_to_id") == args.comment_id
+                and (comment.get("body") or "").strip() == normalized_body
+            ):
                 print(
                     json.dumps(
                         {
@@ -1578,16 +2100,33 @@ def command_reply(args: argparse.Namespace) -> int:
         )
         return 0
 
-    issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{args.pr_num}/comments")
-    issue_target = next((comment for comment in issue_comments if int(comment.get("id")) == args.comment_id), None)
+    issue_comments = gh_paginated_array(
+        f"/repos/{repo.slug}/issues/{args.pr_num}/comments"
+    )
+    issue_target = next(
+        (
+            comment
+            for comment in issue_comments
+            if int(comment.get("id")) == args.comment_id
+        ),
+        None,
+    )
     if not issue_target:
-        raise DriverError(f"comment {args.comment_id} was not found on PR {args.pr_num}")
+        raise DriverError(
+            f"comment {args.comment_id} was not found on PR {args.pr_num}"
+        )
     if not is_bot_login((issue_target.get("user") or {}).get("login"), bot_login):
         raise DriverError(f"comment {args.comment_id} is not authored by CodeRabbit")
 
     target_url = issue_target.get("html_url")
-    mention_login = bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
-    issue_body = f"@{mention_login} re: {target_url}\n\n{body}" if target_url else f"@{mention_login}\n\n{body}"
+    mention_login = (
+        bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
+    )
+    issue_body = (
+        f"@{mention_login} re: {target_url}\n\n{body}"
+        if target_url
+        else f"@{mention_login}\n\n{body}"
+    )
     for comment in issue_comments:
         if (comment.get("body") or "").strip() == issue_body.strip():
             print(
@@ -1638,20 +2177,30 @@ def command_reply(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--label", default=os.environ.get("CODERABBIT_MARKER_LABEL", DEFAULT_LABEL))
+    parser.add_argument(
+        "--label", default=os.environ.get("CODERABBIT_MARKER_LABEL", DEFAULT_LABEL)
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    enabled = subparsers.add_parser("is-enabled", help="Exit 0 when the repo has the CodeRabbit marker label.")
+    enabled = subparsers.add_parser(
+        "is-enabled", help="Exit 0 when the repo has the CodeRabbit marker label."
+    )
     enabled.add_argument("repo")
     enabled.set_defaults(func=command_is_enabled)
 
-    trigger = subparsers.add_parser("trigger", help="Post a CodeRabbit review command and wait for ack.")
+    trigger = subparsers.add_parser(
+        "trigger", help="Post a CodeRabbit review command and wait for ack."
+    )
     trigger.add_argument("repo")
     trigger.add_argument("pr_num", type=int)
-    trigger.add_argument("--mode", choices=("incremental", "full"), default="incremental")
+    trigger.add_argument(
+        "--mode", choices=("incremental", "full"), default="incremental"
+    )
     trigger.set_defaults(func=command_trigger)
 
-    poll_parser = subparsers.add_parser("poll", help="Poll CodeRabbit review state and persist comment files.")
+    poll_parser = subparsers.add_parser(
+        "poll", help="Poll CodeRabbit review state and persist comment files."
+    )
     poll_parser.add_argument("repo")
     poll_parser.add_argument("pr_num", type=int)
     poll_parser.set_defaults(func=command_poll)
@@ -1662,7 +2211,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_loop_parser.add_argument("repo")
     review_loop_parser.add_argument("pr_num", type=int)
-    review_loop_parser.add_argument("--mode", choices=("incremental", "full"), default="incremental")
+    review_loop_parser.add_argument(
+        "--mode", choices=("incremental", "full"), default="incremental"
+    )
     review_loop_parser.add_argument(
         "--initial-trigger",
         choices=("auto", "always", "skip"),
@@ -1697,7 +2248,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_loop_parser.set_defaults(func=command_review_loop)
 
-    reply = subparsers.add_parser("reply", help="Reply to a CodeRabbit review or issue comment.")
+    reply = subparsers.add_parser(
+        "reply", help="Reply to a CodeRabbit review or issue comment."
+    )
     reply.add_argument("repo")
     reply.add_argument("pr_num", type=int)
     reply.add_argument("comment_id", type=int)
