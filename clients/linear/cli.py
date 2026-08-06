@@ -31,6 +31,16 @@ class JsonArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+def _read_utf8_file(path: str, label: str) -> str:
+    try:
+        with Path(path).open("r", encoding="utf-8", newline="") as source:
+            return source.read()
+    except (OSError, UnicodeError) as error:
+        raise LinearClientError(
+            "INVALID_INPUT", f"Cannot read {label} file: {path}: {error}"
+        ) from error
+
+
 def get_issue(issue_id: str) -> None:
     """Fetch and print issue details as JSON."""
     client = LinearClient()
@@ -47,14 +57,7 @@ def get_issue_description(issue_id: str) -> None:
 
 def verify_issue_description(issue_id: str, description_file: str) -> None:
     """Verify a local description against Linear's narrow canonicalization."""
-    try:
-        with Path(description_file).open("r", encoding="utf-8", newline="") as source:
-            expected = source.read()
-    except (OSError, UnicodeError) as error:
-        raise LinearClientError(
-            "INVALID_INPUT",
-            f"Cannot read description file: {description_file}: {error}",
-        ) from error
+    expected = _read_utf8_file(description_file, "description")
     actual = LinearClient().get_issue(issue_id).get("description") or ""
     matches = descriptions_match_after_linear_canonicalization(expected, actual)
     print(
@@ -193,6 +196,7 @@ def create_issue(
     team: str,
     title: str,
     description: str | None = None,
+    description_file: str | None = None,
     project_id: str | None = None,
     labels: list[str] | None = None,
     create_missing_labels: bool = False,
@@ -205,6 +209,8 @@ def create_issue(
     Resolution failures raise before the issue is created so we never
     produce a half-labeled ticket.
     """
+    if description_file:
+        description = _read_utf8_file(description_file, "description")
     client = LinearClient()
     resolved_project_id: str | None = None
     if project_id:
@@ -260,10 +266,8 @@ def update_issue(
             (mutually exclusive with description)
         estimate: Optional story-point estimate.
     """
-    # Read description from file if provided
     if description_file:
-        with open(description_file, encoding="utf-8") as f:
-            description = f.read()
+        description = _read_utf8_file(description_file, "description")
 
     client = LinearClient()
     update_kwargs: dict[str, object] = {"issue_id": issue_id}
@@ -513,7 +517,12 @@ def main(argv: list[str] | None = None) -> None:
         "--team", required=True, help="Team identifier (UUID, key, or name)"
     )
     create_issue_parser.add_argument("--title", required=True, help="Issue title")
-    create_issue_parser.add_argument("--description", help="Issue description")
+    create_description_group = create_issue_parser.add_mutually_exclusive_group()
+    create_description_group.add_argument("--description", help="Issue description")
+    create_description_group.add_argument(
+        "--description-file",
+        help="Path to an issue description file; preserves original line endings",
+    )
     create_issue_parser.add_argument("--project", help="Project UUID or slugId")
     create_issue_parser.add_argument(
         "--estimate",
@@ -745,6 +754,7 @@ def main(argv: list[str] | None = None) -> None:
                 team=args.team,
                 title=args.title,
                 description=args.description,
+                description_file=args.description_file,
                 project_id=args.project,
                 labels=_split_values(args.label),
                 create_missing_labels=args.create_missing_labels,

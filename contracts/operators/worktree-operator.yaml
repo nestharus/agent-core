@@ -39,7 +39,7 @@ inputs:
   type: string
   required: false
   default_source: base
-  description: Existing safe short branch name resolved to an exact commit before mutation.
+  description: Existing safe short branch required for create, remove, bulk-cleanup, and open-pr; resolved through the freshly fetched remote-tracking ref to an exact commit.
 - name: branch_policy
   type: string
   required: false
@@ -58,7 +58,7 @@ outputs:
   success_shape: 'worktree-operation-result-v1 with task=create, canonical repo/worktree paths, branch, base branch/SHA, head SHA, and clean=true.'
   wrote_lines: []
 - task: list
-  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  success_shape: 'worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/status row per registered worktree.'
   wrote_lines: []
 - task: sync
   success_shape: 'worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness.'
@@ -67,7 +67,7 @@ outputs:
   success_shape: 'worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true.'
   wrote_lines: []
 - task: bulk-cleanup
-  success_shape: 'worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base SHA/head SHA/cleanliness/removal-status result per inspected target.'
+  success_shape: 'worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base branch/base SHA/head SHA/cleanliness/status/reason row per inspected target.'
   wrote_lines: []
 - task: open-pr
   success_shape: 'worktree-operation-result-v1 with task=open-pr, exact repository and PR URL/number, base/head branches, head SHA, and draft=true.'
@@ -95,3 +95,4 @@ forbidden_direct:
 - unvalidated-worktree-mutation
 - unquoted-caller-controlled-git-arguments
 - worktree-target-outside-canonical-root
+- central-checkout-as-worktree-target

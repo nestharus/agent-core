@@ -436,7 +436,7 @@
         "expectations": [
           "runs the open path against shared operators before trusting a project-specific wrapper",
           "emits or refreshes thin project-local wrappers only when stable project facts justify them",
-          "emits a wrapper contract surface with inherits, base_procedure, and project defaults",
+          "emits a wrapper only at <project>/trunk/agents/ with inherits, base_procedure referencing ~/ai/agents/<name>.md, and project defaults in a sidecar or operator-contract-v1 block",
           "uses qualitative stale-wrapper signals to choose closed path or re-bootstrap"
         ],
         "inputs": [
@@ -451,7 +451,7 @@
         "orchestrator": "Work Manager or root coordinator",
         "outputs": [
           "project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions",
-          "optional project-local wrapper with valid operator-contract-v1 block and optional project AGENTS routing/policy update",
+          "optional <project>/trunk/agents/<name>.md wrapper that references ~/ai/agents/<name>.md and provides project defaults through a sidecar or valid operator-contract-v1 block, plus optional project AGENTS routing/policy update",
           "NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct"
         ]
       }

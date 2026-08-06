@@ -1969,7 +1969,12 @@ query LabelsForTeam($teamId: ID!, $first: Int!, $after: String) {
                 query,
                 {"teamId": team_id, "first": 50, "after": cursor},
             )
-            connection = result.get("data", {}).get("issueLabels")
+            data = result.get("data")
+            if not isinstance(data, dict):
+                raise LinearClientError(
+                    "INVALID_RESPONSE", "Linear label response is missing data"
+                )
+            connection = data.get("issueLabels")
             if not isinstance(connection, dict):
                 raise LinearClientError(
                     "INVALID_RESPONSE", "Linear label response is missing issueLabels"

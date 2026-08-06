@@ -401,7 +401,7 @@ Used by `~/ai/agents/implementation-pipeline-orchestrator.md` Phase 0 when cold-
 PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-issue \
     --team "${linear_team_key}" \
     --title "WU summary line" \
-    --description "$(cat ${brief_path})" \
+    --description-file "${brief_path}" \
     ${linear_project_id:+--project "${linear_project_id}"} \
     ${labels:+--label "${labels}"} \
     ${estimate:+--estimate "${estimate}"} \  # optional; story-point estimate

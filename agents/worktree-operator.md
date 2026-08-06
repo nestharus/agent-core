@@ -43,7 +43,7 @@ inputs:
     type: string
     required: false
     default_source: base
-    description: "Existing safe short branch name resolved to an exact commit before mutation."
+    description: "Existing safe short branch required for create, remove, bulk-cleanup, and open-pr; resolved through the freshly fetched remote-tracking ref to an exact commit."
   - name: branch_policy
     type: string
     required: false
@@ -63,7 +63,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=create, canonical repo/worktree paths, branch, base branch/SHA, head SHA, and clean=true."
     wrote_lines: []
   - task: list
-    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    success_shape: "worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/status row per registered worktree."
     wrote_lines: []
   - task: sync
     success_shape: "worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness."
@@ -72,7 +72,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true."
     wrote_lines: []
   - task: bulk-cleanup
-    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base SHA/head SHA/cleanliness/removal-status result per inspected target."
+    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base branch/base SHA/head SHA/cleanliness/status/reason row per inspected target."
     wrote_lines: []
   - task: open-pr
     success_shape: "worktree-operation-result-v1 with task=open-pr, exact repository and PR URL/number, base/head branches, head SHA, and draft=true."
@@ -100,6 +100,7 @@ forbidden_direct:
   - unvalidated-worktree-mutation
   - unquoted-caller-controlled-git-arguments
   - worktree-target-outside-canonical-root
+  - central-checkout-as-worktree-target
 ```
 
 You manage git worktrees for a repository that uses a dedicated worktree root at `${worktrees_root}`. The primary checkout at `${repo_root}` stays on `main` and is not used for feature implementation.
@@ -126,7 +127,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 - **`${repo_root}` stays on `main`** — never commit directly there.
 - **Branch naming follows the caller's `${branch_policy}`.** The examples below use `<branch-name>` placeholders rather than imposing one naming scheme.
 - **Worktree location:** `${worktrees_root}/<name>/`.
-- **Canonical containment:** resolve `${repo_root}`, `${worktrees_root}`, and the proposed worktree path before mutation. The proposed path's canonical parent must equal the canonical `${worktrees_root}`; `name` must be one safe path component matching `[A-Za-z0-9][A-Za-z0-9._-]*` and must not start with `-`.
+- **Canonical containment:** resolve `${repo_root}`, `${worktrees_root}`, and every proposed or discovered worktree path before use. A worktree path must differ from canonical `${repo_root}` and have canonical `${worktrees_root}` as its direct parent. `name` must be one safe path component matching `[A-Za-z0-9][A-Za-z0-9._-]*` and must not start with `-`. Apply the repository-path inequality even when the caller supplies a custom worktree root.
 - **Argument safety:** pass caller-controlled paths and refs as individually quoted arguments, never through `eval`, `bash -c`, or an interpolated command string. Validate short branch names with `git check-ref-format --branch` and the caller's branch policy before use.
 
 ## Required Inputs
@@ -134,7 +135,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 - `task`: One of: `create`, `list`, `sync`, `remove`, `bulk-cleanup`, `open-pr`
 - `name` (for create/sync/remove/open-pr): Worktree name (e.g., `cost-estimation-e2e`) used to derive the exact direct-child worktree path.
 - `branch_name` (for create/sync/remove/open-pr, optional): branch checked out in the worktree. If omitted, derive it deterministically from `name` using the caller's branch policy.
-- `base_branch` (for create, optional): Branch to create from. Defaults to `main`.
+- `base_branch` (for create/remove/bulk-cleanup/open-pr, optional): Expected base branch. Defaults to `main`; fetch and resolve its exact remote-tracking SHA before mutation.
 
 ## Inputs
 
@@ -163,6 +164,8 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 git -C "$repo_root" worktree list --porcelain
 ```
 
+Return the `list` variant of `worktree-operation-result-v1` with one canonical path, branch, head SHA, cleanliness, and registration-status row per worktree.
+
 ## Procedure: Sync Worktree After Rebase
 
 After jj updates branch refs in the shared `.git/`, each affected worktree needs to sync:
@@ -175,13 +178,13 @@ Run sync only when the caller explicitly selected `task=sync`. Before the reset,
 
 ## Procedure: Remove Worktree
 
-Resolve the exact registered target and record its canonical path, checked-out branch, base SHA, head SHA, and cleanliness before removal. Refuse dirty worktrees unless the caller separately and explicitly authorizes force removal. For the normal path:
+Resolve the exact registered target and record its canonical path, checked-out branch, and head SHA. Fetch the validated `base_branch`, set `base_ref` to its exact remote-tracking ref, and resolve `base_sha` from that ref before removal. Record cleanliness and refuse dirty worktrees unless the caller separately and explicitly authorizes force removal. For the normal path:
 
 ```bash
 git -C "$repo_root" worktree remove "$worktree_path"
 ```
 
-Verify the path is absent and return the pre-removal identity with `removed: true`.
+Verify both that the filesystem path is absent and that no exact canonical path record remains in `git -C "$repo_root" worktree list --porcelain`; only then return the pre-removal identity with `removed: true`.
 
 ## Procedure: Bulk Cleanup Merged Worktrees
 
@@ -195,7 +198,7 @@ Read records with `git -C "$repo_root" worktree list --porcelain`. For each regi
 
 ## Procedure: Open PR
 
-After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`, then dispatch `pr-writer` to author the title + body before opening the PR:
+After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Push that exact branch and require the remote head OID to equal `head_sha`, then dispatch `pr-writer` to author the title + body before opening the PR:
 
 ```bash
 git -C "$worktree_path" push -u origin "$branch_name"
@@ -206,6 +209,10 @@ agents -a ~/ai/agents/pr-writer.md \
   -p "$worktree_path" \
   --input "branch=$branch_name" \
   --input "base=$base_branch" \
+  --input "base_ref=$base_ref" \
+  --input "base_sha=$base_sha" \
+  --input "head_ref=$head_ref" \
+  --input "head_sha=$head_sha" \
   --input "repo_root=$worktree_path" \
   --input "output_path=$worktree_path/.tmp/pr-body.md" \
   2>&1 | tee "$worktree_path/.tmp/pr-writer.log"
@@ -224,11 +231,11 @@ Include `--input linear_issue_keys=<KEY>` only when a Linear key is known to the
 
 Before `gh pr create`, require the writer command to succeed and both `$worktree_path/.tmp/pr-body.md.title` and `$worktree_path/.tmp/pr-body.md` to exist and be non-empty. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
 
-After creation, query the exact PR from `repo_slug`, require `state=OPEN`, `draft=true`, the requested base/head branches, and the committed head SHA, then return that provider identity.
+After creation, query the exact PR from `repo_slug`, require `state=OPEN`, `draft=true`, the requested base/head branches, and provider head OID equal to the captured `head_sha`, then return that provider identity.
 
 ## Result Contract
 
-Return one `worktree-operation-result-v1` JSON object. `create` includes canonical repository/worktree paths, branch, base branch and SHA, head SHA, and `clean: true`. `sync` includes canonical path, branch, pre/post head SHA, and post-sync cleanliness. `remove` includes the same pre-removal identity plus `removed: true`. `bulk-cleanup` includes one identity and removal-status row per inspected target. `open-pr` includes exact repository and PR URL/number, base/head branches, head SHA, and `draft: true`. Never report success from command text alone; verify the resulting filesystem, Git, and provider state first.
+Return one `worktree-operation-result-v1` JSON object for every task. `list` includes one canonical path/branch/head SHA/cleanliness/status row per registered worktree. `create` includes canonical repository/worktree paths, branch, base branch and SHA, head SHA, and `clean: true`. `sync` includes canonical path, branch, pre/post head SHA, and post-sync cleanliness. `remove` includes the pre-removal path, branch, base branch/SHA, head SHA, and cleanliness plus `removed: true`. `bulk-cleanup` includes one identity row per inspected target with explicit `status` and `reason`, including skipped targets. `open-pr` includes exact repository and PR URL/number, base/head branches, head SHA, and `draft: true`. Never report success from command text alone; verify the resulting filesystem, Git, and provider state first.
 
 ## Stop Conditions
 

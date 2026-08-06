@@ -8917,17 +8917,24 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "open-pr",
     ]
     assert "pre/post head SHA" in outputs["sync"]
+    assert "task=list" in outputs["list"]
     assert "open-pr" in name["description"]
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
     assert "one path/branch" in outputs["bulk-cleanup"]
     assert "draft=true" in outputs["open-pr"]
+    assert "status/reason" in outputs["bulk-cleanup"]
     assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
+    assert "central-checkout-as-worktree-target" in sidecar["forbidden_direct"]
     assert "BLOCKED:dirty-worktree" in operator
     assert "Require exactly one provider PR" in operator
     assert "pr-writer.log" in operator
     assert "to exist and be non-empty" in operator
+    assert "worktree's current branch to equal `branch_name`" in operator
+    for pinned_input in ("base_ref", "base_sha", "head_ref", "head_sha"):
+        assert f'--input "{pinned_input}=${pinned_input}"' in operator
+    assert "no exact canonical path record remains" in operator
 
 
 def test_build_prototype_indexes_complete_test_carry_forward_schema():
@@ -8952,6 +8959,26 @@ def test_build_prototype_indexes_complete_test_carry_forward_schema():
         assert field in workflow
         assert any(field in output for output in sidecar["outputs"])
         assert any(field in output for output in indexed_outputs)
+
+
+def test_project_bootstrap_indexes_canonical_wrapper_location_and_base():
+    workflow = (REPO_ROOT / "workflows/project-bootstrap.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/project-bootstrap.yaml").read_text()
+    )
+
+    for value in ("<project>/trunk/agents/", "~/ai/agents/<name>.md"):
+        assert value in workflow
+        assert any(value in item for item in sidecar["expectations"])
+        assert any(value in item for item in sidecar["outputs"])
+
+
+def test_pr_review_rechecks_provider_identity_before_each_post_or_reuse():
+    operator = (REPO_ROOT / "agents/pr-review-operator.md").read_text()
+
+    assert "Immediately before each existing-post identity reuse" in operator
+    assert "immediately before each review/comment mutation" in operator
+    assert "as the final preceding operation" in operator
 
 
 def test_rca_requires_failing_test_trigger_command_before_routing():

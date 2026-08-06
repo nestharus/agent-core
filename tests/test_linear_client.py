@@ -110,6 +110,19 @@ def test_list_labels_rejects_repeated_cursor(monkeypatch: pytest.MonkeyPatch) ->
     assert error.value.code == "PAGINATION_ERROR"
 
 
+@pytest.mark.parametrize("response", [{}, {"data": None}, {"data": []}])
+def test_list_labels_rejects_malformed_data_envelope(
+    monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]
+) -> None:
+    client = _client(monkeypatch)
+    monkeypatch.setattr(client, "_run_graphql", lambda _query, _variables: response)
+
+    with pytest.raises(LinearClientError) as error:
+        client.list_labels("ACR")
+
+    assert error.value.code == "INVALID_RESPONSE"
+
+
 def test_resolve_label_ids_uses_later_page_without_create(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -262,3 +275,27 @@ def test_verify_issue_description_mismatch_exits_one(
     assert error.value.code == 1
     assert payload["ok"] is False
     assert payload["data"]["status"] == "MISMATCH"
+
+
+def test_create_issue_description_file_preserves_terminal_newlines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "description.md"
+    expected = "description\r\n\r\n"
+    source.write_bytes(expected.encode())
+    captured: dict[str, Any] = {}
+
+    class StubClient:
+        def create_issue(self, **kwargs: Any) -> dict[str, str]:
+            captured.update(kwargs)
+            return {"id": "issue-1", "identifier": "ACR-1"}
+
+    monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
+
+    linear_cli.create_issue(
+        team="ACR", title="Title", description_file=str(source)
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert captured["description"] == expected
