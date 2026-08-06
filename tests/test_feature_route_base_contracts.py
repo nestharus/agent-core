@@ -8939,6 +8939,9 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "base SHA",
         "head SHA",
         "cleanliness",
+        "PR target repository",
+        "PR head repository",
+        "PR URL/number/state",
         "removed",
     ):
         assert bulk_field in outputs["bulk-cleanup"]
@@ -8989,9 +8992,9 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "no exact canonical path record remains" in operator
     assert "worktree_row_required" in operator
     assert "result_row_required" in operator
-    assert "removed_row: {removed: true, status: PASS" in operator
+    assert "removed_row: {pr_state: MERGED, removed: true, status: PASS" in operator
     assert "skipped_row: {removed: false, status: BLOCKED" in operator
-    assert "nullable: [branch, base_branch, base_sha, head_sha, clean]" in operator
+    assert "nullable: [branch, base_branch, base_sha, head_sha, clean, pr_repo" in operator
     assert "provider_state: OPEN" in operator
     assert 'gh pr list --repo "$repo_slug" --state open' in operator
     assert "BLOCKED:non-exact-open-pr" in operator
@@ -9005,7 +9008,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "for diagnostic evidence only" in operator
     assert "Do not close any PR from that evidence" in operator
     assert "mutation_state=unknown" in operator
-    assert 'git ls-remote --exit-code --refs "$push_remote"' in operator
+    assert 'git ls-remote --exit-code --refs "$push_url"' in operator
     assert "BLOCKED:remote-head-unverified" in operator
     assert "hold it through the exact open-PR decision" in operator
     assert "REGISTERED_PRIMARY" in operator
@@ -9015,6 +9018,10 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "BLOCKED:push-remote-repository-mismatch" in operator
     assert "headRepository.nameWithOwner" in operator
     assert "headRepositoryOwner.login" in operator
+    assert "target/base repository and head repository both equal" in operator
+    assert "pr_head_repo" in operator
+    assert "Merged worktrees need provider-verified bulk cleanup" in operator
+    assert "A draft pull request needs exact creation or idempotent reuse" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
     assert "BLOCKED:ambiguous-open-pr" in operator
     assert "re-query that exact PR to require `state=CLOSED`" in operator
@@ -9078,6 +9085,11 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "base_sha",
         "head_sha",
         "clean",
+        "pr_repo",
+        "pr_head_repo",
+        "pr_url",
+        "pr_number",
+        "pr_state",
         "removed",
         "status",
         "reason",
@@ -9091,9 +9103,9 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
             "pr_number",
             "provider_state",
             "draft",
-        "base_branch",
-        "base_sha",
-        "head_branch",
+            "base_branch",
+            "base_sha",
+            "head_branch",
             "head_sha",
         ],
         "fixed": {"provider_state": "OPEN", "draft": True},
@@ -9110,7 +9122,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         'git -C "$worktree_path" push -u "$push_remote" "$branch_name"'
     )
     remote_head_index = open_pr_section.index(
-        'git ls-remote --exit-code --refs "$push_remote"'
+        'git ls-remote --exit-code --refs "$push_url"'
     )
     create_index = open_pr_section.index("created_pr_output=$(gh pr create")
     assert query_index < non_exact_index < writer_index

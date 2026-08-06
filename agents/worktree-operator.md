@@ -72,7 +72,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true."
     wrote_lines: []
   - task: bulk-cleanup
-    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one worktree_path/branch/base branch/base SHA/head SHA/cleanliness/removed/status/reason row per inspected target; skipped rows retain every key and use null for unavailable identity fields; aggregate status is PASS for zero or all-PASS rows, PARTIAL for mixed PASS/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
+    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one worktree_path/branch/base branch/base SHA/head SHA/cleanliness/PR target repository/PR head repository/PR URL/number/state/removed/status/reason row per inspected target; skipped rows retain every key and use null for unavailable identity fields; aggregate status is PASS for zero or all-PASS rows, PARTIAL for mixed PASS/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
     wrote_lines: []
   - task: open-pr
     success_shape: "worktree-operation-result-v1 with task=open-pr, status=PASS, provider_state=OPEN, exact target and head repository identities, PR URL/number, base/head branches, base SHA, head SHA, and draft=true."
@@ -114,6 +114,8 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 - Worktrees need to be listed or inspected
 - A worktree needs to be synced after jj rebase
 - A worktree needs to be removed/pruned
+- Merged worktrees need provider-verified bulk cleanup
+- A draft pull request needs exact creation or idempotent reuse
 
 ## Do Not Use When
 
@@ -194,12 +196,14 @@ Verify both that the filesystem path is absent and that no exact canonical path 
 Remove worktrees whose PRs were merged. **Verify PR status before deleting**
 — don't assume a missing remote branch means merged (could be local-only).
 
-Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose repository, base branch, head branch, and head OID match those values and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Before removal, acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`. While holding it, re-read the exact registered worktree record and revalidate canonical path, branch, head SHA, base identity, and empty `git status --porcelain` against the provider-matched identity. Abort that target with `status=BLOCKED` if any identity or cleanliness changed. Hold the lock through `git worktree remove` and the post-removal filesystem and registration checks. Dirty worktrees are always skipped with `status=BLOCKED`, `reason=dirty-worktree`, and `removed=false`; this operator never force-removes them or deletes local branches. Every result row has `worktree_path`, `branch`, `base_branch`, `base_sha`, `head_sha`, `clean`, `removed`, `status`, and `reason`. A removed row has all identity fields populated, `removed=true`, `status=PASS`, and `reason=merged-pr`. A skipped detached or invalid row has `removed=false`, `status=BLOCKED`, its precise reason, and `null` for each identity or cleanliness field that could not be established. Return one result row for every inspected target. Set aggregate `status=PASS` when there are zero targets or every row is `PASS`, `status=PARTIAL` when `PASS` and `BLOCKED` rows are mixed, and `status=BLOCKED` when a non-empty result contains only `BLOCKED` rows.
+Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose target/base repository and head repository both equal the canonical worktree `OWNER/REPO` identity, whose base branch, head branch, and head OID match the validated values, and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Before removal, acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`. While holding it, re-read the exact registered worktree record and revalidate canonical path, branch, head SHA, base identity, and empty `git status --porcelain` against the provider-matched identity. Abort that target with `status=BLOCKED` if any identity or cleanliness changed. Hold the lock through `git worktree remove` and the post-removal filesystem and registration checks. Dirty worktrees are always skipped with `status=BLOCKED`, `reason=dirty-worktree`, and `removed=false`; this operator never force-removes them or deletes local branches. Every result row has `worktree_path`, `branch`, `base_branch`, `base_sha`, `head_sha`, `clean`, `pr_repo`, `pr_head_repo`, `pr_url`, `pr_number`, `pr_state`, `removed`, `status`, and `reason`. A removed row has all identity fields populated, both PR repository identities equal to the worktree repository, `pr_state=MERGED`, `removed=true`, `status=PASS`, and `reason=merged-pr`. A skipped detached or invalid row has `removed=false`, `status=BLOCKED`, its precise reason, and `null` for each worktree or PR identity or cleanliness field that could not be established. Return one result row for every inspected target. Set aggregate `status=PASS` when there are zero targets or every row is `PASS`, `status=PARTIAL` when `PASS` and `BLOCKED` rows are mixed, and `status=BLOCKED` when a non-empty result contains only `BLOCKED` rows.
 
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
 
 ## Procedure: Open PR
+
+In this procedure, `push_url` is the exact validated push URL returned for `push_remote`; remote-head reads use this URL directly and never resolve the remote's potentially different fetch URL.
 
 After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Set `push_remote=origin`, read its push URL with `git -C "$repo_root" remote get-url --push "$push_remote"`, normalize only supported GitHub SSH/HTTPS URL forms to `OWNER/REPO`, and require that identity to equal `repo_slug`; otherwise return `BLOCKED:push-remote-repository-mismatch` before any fetch, push, or PR mutation. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`, and hold it through the exact open-PR decision, writer result, push, remote-head verification, PR creation or reuse, provider verification, and any owned-PR reconciliation. While holding it and before any push, query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner` and capture the exact target/head repository identities, base/head branch pair, URL, number, state, draft flag, and full OIDs. Require `headRepository.nameWithOwner` and the owner/name reconstructed from `headRepositoryOwner.login` plus `headRepository.name` to equal `repo_slug`. More than one match is `BLOCKED:ambiguous-open-pr`. If one PR exists and every required provider field matches the repository, local, and base identities, reuse it without invoking `pr-writer`, pushing, or creating another PR. If one PR exists and any required field differs, return `BLOCKED:non-exact-open-pr` with its observed identity; do not invoke `pr-writer`, push, or call `gh pr create`. Only zero open query results enter the creation path. In that path, dispatch `pr-writer` and require successful, non-empty title and body output before the first push:
 
@@ -231,7 +235,7 @@ If either pipeline status is nonzero, return the common `BLOCKED` envelope with 
 ```bash
 # Validate both writer files as non-empty before this first remote mutation.
 git -C "$worktree_path" push -u "$push_remote" "$branch_name"
-remote_head_record=$(git ls-remote --exit-code --refs "$push_remote" "refs/heads/$branch_name")
+remote_head_record=$(git ls-remote --exit-code --refs "$push_url" "refs/heads/$branch_name")
 # Require exactly one record whose ref is refs/heads/$branch_name and OID is head_sha.
 
 set +e
@@ -290,9 +294,9 @@ variants:
     status: PASS | PARTIAL | BLOCKED
     required: [results]
     aggregate_status: {zero_targets: PASS, all_rows_pass: PASS, mixed_pass_blocked: PARTIAL, nonempty_all_rows_blocked: BLOCKED}
-    result_row_required: [worktree_path, branch, base_branch, base_sha, head_sha, clean, removed, status, reason]
-    removed_row: {removed: true, status: PASS, reason: merged-pr, nullable: []}
-    skipped_row: {removed: false, status: BLOCKED, nullable: [branch, base_branch, base_sha, head_sha, clean]}
+    result_row_required: [worktree_path, branch, base_branch, base_sha, head_sha, clean, pr_repo, pr_head_repo, pr_url, pr_number, pr_state, removed, status, reason]
+    removed_row: {pr_state: MERGED, removed: true, status: PASS, reason: merged-pr, nullable: []}
+    skipped_row: {removed: false, status: BLOCKED, nullable: [branch, base_branch, base_sha, head_sha, clean, pr_repo, pr_head_repo, pr_url, pr_number, pr_state]}
   open-pr:
     status: PASS
     required: [repo, head_repo, pr_url, pr_number, provider_state, draft, base_branch, base_sha, head_branch, head_sha]
