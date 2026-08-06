@@ -8933,7 +8933,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "open-pr" in name["description"]
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
-    assert "one path/branch" in outputs["bulk-cleanup"]
+    assert "one worktree_path/branch" in outputs["bulk-cleanup"]
     for value in (
         "status=PASS",
         "provider_state=OPEN",
@@ -8967,10 +8967,14 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "Hold the lock through the removal and both post-removal checks" in operator
     assert "this operator has no force-removal input" in operator
     assert "Require exactly one provider PR" in operator
-    assert "pr-writer.log" in operator
-    assert 'rm -f "$worktree_path/.tmp/pr-body.md"' in operator
+    assert 'writer_dir=$(mktemp -d)' in operator
+    assert 'trap \'rm -rf -- "$writer_dir"\' EXIT' in operator
+    assert 'tee "$writer_dir/pr-writer.log"' in operator
+    assert "$worktree_path/.tmp" not in operator
+    assert "not be symlinks" in operator
+    assert "canonical `writer_dir` as their direct parent" in operator
     assert 'pipeline_status=("${PIPESTATUS[@]}")' in operator
-    assert "to exist and be non-empty" in operator
+    assert "to exist, be non-empty regular files" in operator
     assert "worktree's current branch to equal `branch_name`" in operator
     for pinned_input in ("base_ref", "base_sha", "head_ref", "head_sha"):
         assert f'--input "{pinned_input}=${pinned_input}"' in operator
@@ -8989,10 +8993,13 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "reason=pr-writer-output-invalid" in operator
     assert "Do not execute any later command in this procedure" in operator
     assert "created_pr_output=$(gh pr create" in operator
-    assert "snapshot all PR numbers" in operator
-    assert "subtract the pre-create PR-number snapshot" in operator
     assert "perform one bounded exact repository/base/head" in operator
+    assert "for diagnostic evidence only" in operator
+    assert "Do not close any PR from that evidence" in operator
     assert "mutation_state=unknown" in operator
+    assert 'git ls-remote --exit-code --refs origin "refs/heads/$branch_name"' in operator
+    assert "BLOCKED:remote-head-unverified" in operator
+    assert "hold it through the exact open-PR decision" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
     assert "BLOCKED:ambiguous-open-pr" in operator
     assert "re-query that exact PR to require `state=CLOSED`" in operator

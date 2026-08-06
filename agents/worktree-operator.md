@@ -72,7 +72,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true."
     wrote_lines: []
   - task: bulk-cleanup
-    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base branch/base SHA/head SHA/cleanliness/removed/status/reason row per inspected target; skipped rows retain every key and use null for unavailable identity fields; aggregate status is PASS for zero or all-PASS rows, PARTIAL for mixed PASS/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
+    success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one worktree_path/branch/base branch/base SHA/head SHA/cleanliness/removed/status/reason row per inspected target; skipped rows retain every key and use null for unavailable identity fields; aggregate status is PASS for zero or all-PASS rows, PARTIAL for mixed PASS/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
     wrote_lines: []
   - task: open-pr
     success_shape: "worktree-operation-result-v1 with task=open-pr, status=PASS, provider_state=OPEN, exact repository and PR URL/number, base/head branches, base SHA, head SHA, and draft=true."
@@ -201,13 +201,13 @@ Read records with `git -C "$repo_root" worktree list --porcelain`. For each regi
 
 ## Procedure: Open PR
 
-After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Before any push, query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid` and capture the exact base/head branch pair, URL, number, state, draft flag, and full OIDs. More than one match is `BLOCKED:ambiguous-open-pr`. If one PR exists and every required provider field matches the local and base identities, reuse it without invoking `pr-writer`, pushing, or creating another PR. If one PR exists and any required field differs, return `BLOCKED:non-exact-open-pr` with its observed identity; do not invoke `pr-writer`, push, or call `gh pr create`. Only zero open query results enter the creation path. In that path, dispatch `pr-writer` and require successful, non-empty title and body output before the first push:
+After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`, and hold it through the exact open-PR decision, writer result, push, remote-head verification, PR creation or reuse, provider verification, and any owned-PR reconciliation. While holding it and before any push, query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid` and capture the exact base/head branch pair, URL, number, state, draft flag, and full OIDs. More than one match is `BLOCKED:ambiguous-open-pr`. If one PR exists and every required provider field matches the local and base identities, reuse it without invoking `pr-writer`, pushing, or creating another PR. If one PR exists and any required field differs, return `BLOCKED:non-exact-open-pr` with its observed identity; do not invoke `pr-writer`, push, or call `gh pr create`. Only zero open query results enter the creation path. In that path, dispatch `pr-writer` and require successful, non-empty title and body output before the first push:
 
 ```bash
-# Author the title + body via pr-writer (enforces the audience and content rules
-# — no internal jargon, no commit history, no closed-PR or planning-artifact refs).
-mkdir -p "$worktree_path/.tmp"
-rm -f "$worktree_path/.tmp/pr-body.md" "$worktree_path/.tmp/pr-body.md.title"
+# Keep writer output outside the untrusted worktree and private to this invocation.
+umask 077
+writer_dir=$(mktemp -d)
+trap 'rm -rf -- "$writer_dir"' EXIT
 set -o pipefail
 agents -a ~/ai/agents/pr-writer.md \
   -p "$worktree_path" \
@@ -218,8 +218,8 @@ agents -a ~/ai/agents/pr-writer.md \
   --input "head_ref=$head_ref" \
   --input "head_sha=$head_sha" \
   --input "repo_root=$worktree_path" \
-  --input "output_path=$worktree_path/.tmp/pr-body.md" \
-  2>&1 | tee "$worktree_path/.tmp/pr-writer.log"
+  --input "output_path=$writer_dir/pr-body.md" \
+  2>&1 | tee "$writer_dir/pr-writer.log"
 pipeline_status=("${PIPESTATUS[@]}")
   # Optional: --input context_files=<comma-separated paths the writer should read for intent>
   # Optional: --input stack_parent_pr=<num> if base is another open PR's head branch
@@ -231,23 +231,24 @@ If either pipeline status is nonzero, return the common `BLOCKED` envelope with 
 ```bash
 # Validate both writer files as non-empty before this first remote mutation.
 git -C "$worktree_path" push -u origin "$branch_name"
-# Require the remote branch OID to equal head_sha before continuing.
+remote_head_record=$(git ls-remote --exit-code --refs origin "refs/heads/$branch_name")
+# Require exactly one record whose ref is refs/heads/$branch_name and OID is head_sha.
 
 set +e
 created_pr_output=$(gh pr create --repo "$repo_slug" --draft \
   --head "$branch_name" \
   --base "$base_branch" \
-  --title "$(cat "$worktree_path/.tmp/pr-body.md.title")" \
-  --body-file "$worktree_path/.tmp/pr-body.md")
+  --title "$(cat "$writer_dir/pr-body.md.title")" \
+  --body-file "$writer_dir/pr-body.md")
 create_rc=$?
 set -e
 ```
 
 Include `--input linear_issue_keys=<KEY>` only when a Linear key is known to the manual operator. Omit when no key is known; no close footer will be emitted in that case.
 
-Before the push, require the writer command to succeed and both `$worktree_path/.tmp/pr-body.md.title` and `$worktree_path/.tmp/pr-body.md` to exist and be non-empty. A writer or file-validation failure returns the common `BLOCKED` envelope with `mutation_state=none`; it does not push. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. Immediately before `gh pr create`, snapshot all PR numbers for the exact repository/base/head pair with `--state all`. Treat `created_pr_output` as a usable URL only when `create_rc=0` and it parses as exactly one PR URL in `repo_slug`; set `created_pr_url` to that exact URL and capture its number before postcondition verification. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
+Before the push, require the writer command to succeed and both `$writer_dir/pr-body.md.title` and `$writer_dir/pr-body.md` to exist, be non-empty regular files, not be symlinks, and have canonical `writer_dir` as their direct parent. A writer or file-validation failure returns the common `BLOCKED` envelope with `mutation_state=none`; it does not push. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. After the push, parse `remote_head_record`, require exactly one tab-delimited record whose ref is exactly `refs/heads/$branch_name` and whose OID equals `head_sha`, and return `BLOCKED:remote-head-unverified` with `mutation_state=unknown` before PR creation if `git ls-remote` fails, returns another shape, or reports another OID. Treat `created_pr_output` as a usable URL only when `create_rc=0` and it parses as exactly one PR URL in `repo_slug`; set `created_pr_url` to that exact URL and capture its number before postcondition verification. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
 
-For a reused or newly created PR, query that exact captured URL/number from `repo_slug` and require `state=OPEN`, `draft=true`, the requested base/head branches, provider base OID equal to the captured `base_sha`, and provider head OID equal to the captured `head_sha`, then return that provider identity. If `create_rc` is nonzero or `created_pr_output` is empty, malformed, or not one usable URL, perform one bounded exact repository/base/head `--state all` requery and subtract the pre-create PR-number snapshot. When exactly one new PR remains, capture its URL/number, close it with `gh pr close`, require `state=CLOSED`, and return `BLOCKED` with `mutation_state=reconciled` and both identities. When no new PR remains, return `BLOCKED` with `mutation_state=none`; when the new identity is ambiguous, return `BLOCKED` with `mutation_state=unknown` and all observed candidates rather than closing an unrelated PR. Never report success from unusable create output.
+For a reused or newly created PR, query that exact captured URL/number from `repo_slug` and require `state=OPEN`, `draft=true`, the requested base/head branches, provider base OID equal to the captured `base_sha`, and provider head OID equal to the captured `head_sha`, then return that provider identity. If `create_rc` is nonzero or `created_pr_output` is empty, malformed, or not one usable URL, perform one bounded exact repository/base/head `--state all` requery for diagnostic evidence only. The requery cannot prove which actor created a discovered PR, even under the local mutation lock. Do not close any PR from that evidence; return `BLOCKED` with `mutation_state=unknown` and all observed candidates. Never report success from unusable create output.
 
 If a newly created PR with a usable URL fails any postcondition, run `gh pr close "$created_pr_url" --repo "$repo_slug" --comment "Closed automatically after open-pr postcondition verification failed."`, re-query that exact PR to require `state=CLOSED`, and return the common `BLOCKED` envelope with `mutation_state=reconciled` plus created and closed provider identities; never leave an identified unverified open PR or report success. If a reused PR fails verification, leave it unchanged and return `BLOCKED` with `mutation_state=none` and its observed identity. A retry re-runs the exact open-PR query and reuses a valid exact match rather than creating another PR.
 
