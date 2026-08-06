@@ -9010,7 +9010,10 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "mutation_state=unknown" in operator
     assert 'git ls-remote --exit-code --refs "$push_url"' in operator
     assert "BLOCKED:remote-head-unverified" in operator
+    assert "whose OID equals `head_sha`" in operator
     assert "hold it through the exact open-PR decision" in operator
+    assert "before resolving worktree or ref identities" in operator
+    assert "BLOCKED:stale-open-pr-worktree-identity" in operator
     assert "REGISTERED_PRIMARY" in operator
     assert "REGISTERED_LINKED" in operator
     assert "not tested as a linked mutation target" in operator
@@ -9024,8 +9027,11 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "A draft pull request needs exact creation or idempotent reuse" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
     assert "BLOCKED:ambiguous-open-pr" in operator
-    assert "re-query that exact PR to require `state=CLOSED`" in operator
+    assert "re-query that exact PR" in operator
+    assert "exact re-query succeeds with `state=CLOSED`" in operator
     assert "mutation_state=reconciled" in operator
+    assert "Use `mutation_state=reconciled` only when the close succeeds" in operator
+    assert "the exact PR remains open" in operator
     assert "A retry re-runs the exact open-PR query" in operator
     assert result_contract["variants"]["blocked"] == {
         "status": "BLOCKED",
@@ -9113,6 +9119,8 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     open_pr_section = operator.split("## Procedure: Open PR", 1)[1].split(
         "## Result Contract", 1
     )[0]
+    lock_index = open_pr_section.index("Acquire the same exclusive advisory mutation lock")
+    resolve_index = open_pr_section.index("resolve `base_sha`")
     query_index = open_pr_section.index(
         'gh pr list --repo "$repo_slug" --state open'
     )
@@ -9125,7 +9133,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         'git ls-remote --exit-code --refs "$push_url"'
     )
     create_index = open_pr_section.index("created_pr_output=$(gh pr create")
-    assert query_index < non_exact_index < writer_index
+    assert lock_index < resolve_index < query_index < non_exact_index < writer_index
     assert writer_index < push_index < remote_head_index < create_index
     assert variants["bulk-cleanup"]["aggregate_status"] == {
         "zero_targets": "PASS",
