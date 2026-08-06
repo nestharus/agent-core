@@ -8934,10 +8934,18 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
     assert "one worktree_path/branch" in outputs["bulk-cleanup"]
+    for bulk_field in (
+        "base branch",
+        "base SHA",
+        "head SHA",
+        "cleanliness",
+        "removed",
+    ):
+        assert bulk_field in outputs["bulk-cleanup"]
     for value in (
         "status=PASS",
         "provider_state=OPEN",
-        "exact repository",
+        "exact target and head repository identities",
         "PR URL/number",
         "base/head branches",
         "base SHA",
@@ -8997,9 +9005,16 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "for diagnostic evidence only" in operator
     assert "Do not close any PR from that evidence" in operator
     assert "mutation_state=unknown" in operator
-    assert 'git ls-remote --exit-code --refs origin "refs/heads/$branch_name"' in operator
+    assert 'git ls-remote --exit-code --refs "$push_remote"' in operator
     assert "BLOCKED:remote-head-unverified" in operator
     assert "hold it through the exact open-PR decision" in operator
+    assert "REGISTERED_PRIMARY" in operator
+    assert "REGISTERED_LINKED" in operator
+    assert "not tested as a linked mutation target" in operator
+    assert 'remote get-url --push "$push_remote"' in operator
+    assert "BLOCKED:push-remote-repository-mismatch" in operator
+    assert "headRepository.nameWithOwner" in operator
+    assert "headRepositoryOwner.login" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
     assert "BLOCKED:ambiguous-open-pr" in operator
     assert "re-query that exact PR to require `state=CLOSED`" in operator
@@ -9071,6 +9086,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "status": "PASS",
         "required": [
             "repo",
+            "head_repo",
             "pr_url",
             "pr_number",
             "provider_state",
@@ -9082,6 +9098,23 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         ],
         "fixed": {"provider_state": "OPEN", "draft": True},
     }
+    open_pr_section = operator.split("## Procedure: Open PR", 1)[1].split(
+        "## Result Contract", 1
+    )[0]
+    query_index = open_pr_section.index(
+        'gh pr list --repo "$repo_slug" --state open'
+    )
+    non_exact_index = open_pr_section.index("BLOCKED:non-exact-open-pr")
+    writer_index = open_pr_section.index("agents -a ~/ai/agents/pr-writer.md")
+    push_index = open_pr_section.index(
+        'git -C "$worktree_path" push -u "$push_remote" "$branch_name"'
+    )
+    remote_head_index = open_pr_section.index(
+        'git ls-remote --exit-code --refs "$push_remote"'
+    )
+    create_index = open_pr_section.index("created_pr_output=$(gh pr create")
+    assert query_index < non_exact_index < writer_index
+    assert writer_index < push_index < remote_head_index < create_index
     assert variants["bulk-cleanup"]["aggregate_status"] == {
         "zero_targets": "PASS",
         "all_rows_pass": "PASS",

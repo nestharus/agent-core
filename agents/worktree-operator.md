@@ -75,7 +75,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one worktree_path/branch/base branch/base SHA/head SHA/cleanliness/removed/status/reason row per inspected target; skipped rows retain every key and use null for unavailable identity fields; aggregate status is PASS for zero or all-PASS rows, PARTIAL for mixed PASS/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
     wrote_lines: []
   - task: open-pr
-    success_shape: "worktree-operation-result-v1 with task=open-pr, status=PASS, provider_state=OPEN, exact repository and PR URL/number, base/head branches, base SHA, head SHA, and draft=true."
+    success_shape: "worktree-operation-result-v1 with task=open-pr, status=PASS, provider_state=OPEN, exact target and head repository identities, PR URL/number, base/head branches, base SHA, head SHA, and draft=true."
     wrote_lines: []
 errors:
   - class: BLOCKED
@@ -130,7 +130,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 - **`${repo_root}` stays on `main`** — never commit directly there.
 - **Branch naming follows the caller's `${branch_policy}`.** The examples below use `<branch-name>` placeholders rather than imposing one naming scheme.
 - **Worktree location:** `${worktrees_root}/<name>/`.
-- **Canonical containment:** resolve `${repo_root}`, `${worktrees_root}`, and every proposed or discovered worktree path before use. A worktree path must differ from canonical `${repo_root}` and have canonical `${worktrees_root}` as its direct parent. `name` must be one safe path component matching `[A-Za-z0-9][A-Za-z0-9._-]*` and must not start with `-`. Apply the repository-path inequality even when the caller supplies a custom worktree root.
+- **Canonical containment:** resolve `${repo_root}`, `${worktrees_root}`, and every proposed or discovered worktree path before use. Every mutation target must differ from canonical `${repo_root}` and have canonical `${worktrees_root}` as its direct parent. `task=list` instead reports canonical `${repo_root}` as the explicit primary-checkout row and applies the direct-parent rule only to linked-worktree rows. `name` must be one safe path component matching `[A-Za-z0-9][A-Za-z0-9._-]*` and must not start with `-`. Apply the repository-path inequality to every mutation target even when the caller supplies a custom worktree root.
 - **Argument safety:** pass caller-controlled paths and refs as individually quoted arguments, never through `eval`, `bash -c`, or an interpolated command string. Validate short branch names with `git check-ref-format --branch` and the caller's branch policy before use.
 
 ## Required Inputs
@@ -167,7 +167,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 git -C "$repo_root" worktree list --porcelain
 ```
 
-For each registered worktree record, resolve its canonical path and run `git -C "$registered_worktree_path" status --porcelain` before returning the row. Every list row has `path`, `branch`, `head_sha`, `clean`, `registration_status`, and `reason`. A readable row has all identity fields populated, `registration_status=REGISTERED`, and `reason=null`. An unreadable or vanished row has `registration_status=BLOCKED`, a precise `reason`, and `null` for each unavailable `branch`, `head_sha`, or `clean` field; never assume such a row is clean. Set aggregate `status=PASS` when there are zero rows or every row is readable, `status=PARTIAL` for mixed readable and `BLOCKED` rows, and `status=BLOCKED` for a non-empty result containing only `BLOCKED` rows.
+For each registered worktree record, resolve its canonical path and run `git -C "$registered_worktree_path" status --porcelain` before returning the row. Every list row has `path`, `branch`, `head_sha`, `clean`, `registration_status`, and `reason`. The canonical `${repo_root}` record is a readable `REGISTERED_PRIMARY` row and is not tested as a linked mutation target. A readable linked direct child of `${worktrees_root}` is `REGISTERED_LINKED`. Both readable variants have all identity fields populated and `reason=null`. An unreadable, vanished, or invalid linked row has `registration_status=BLOCKED`, a precise `reason`, and `null` for each unavailable `branch`, `head_sha`, or `clean` field; never assume such a row is clean. Set aggregate `status=PASS` when there are zero rows or every row is readable, `status=PARTIAL` for mixed readable and `BLOCKED` rows, and `status=BLOCKED` for a non-empty result containing only `BLOCKED` rows.
 
 ## Procedure: Sync Worktree After Rebase
 
@@ -201,7 +201,7 @@ Read records with `git -C "$repo_root" worktree list --porcelain`. For each regi
 
 ## Procedure: Open PR
 
-After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`, and hold it through the exact open-PR decision, writer result, push, remote-head verification, PR creation or reuse, provider verification, and any owned-PR reconciliation. While holding it and before any push, query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid` and capture the exact base/head branch pair, URL, number, state, draft flag, and full OIDs. More than one match is `BLOCKED:ambiguous-open-pr`. If one PR exists and every required provider field matches the local and base identities, reuse it without invoking `pr-writer`, pushing, or creating another PR. If one PR exists and any required field differs, return `BLOCKED:non-exact-open-pr` with its observed identity; do not invoke `pr-writer`, push, or call `gh pr create`. Only zero open query results enter the creation path. In that path, dispatch `pr-writer` and require successful, non-empty title and body output before the first push:
+After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Set `push_remote=origin`, read its push URL with `git -C "$repo_root" remote get-url --push "$push_remote"`, normalize only supported GitHub SSH/HTTPS URL forms to `OWNER/REPO`, and require that identity to equal `repo_slug`; otherwise return `BLOCKED:push-remote-repository-mismatch` before any fetch, push, or PR mutation. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`, and hold it through the exact open-PR decision, writer result, push, remote-head verification, PR creation or reuse, provider verification, and any owned-PR reconciliation. While holding it and before any push, query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner` and capture the exact target/head repository identities, base/head branch pair, URL, number, state, draft flag, and full OIDs. Require `headRepository.nameWithOwner` and the owner/name reconstructed from `headRepositoryOwner.login` plus `headRepository.name` to equal `repo_slug`. More than one match is `BLOCKED:ambiguous-open-pr`. If one PR exists and every required provider field matches the repository, local, and base identities, reuse it without invoking `pr-writer`, pushing, or creating another PR. If one PR exists and any required field differs, return `BLOCKED:non-exact-open-pr` with its observed identity; do not invoke `pr-writer`, push, or call `gh pr create`. Only zero open query results enter the creation path. In that path, dispatch `pr-writer` and require successful, non-empty title and body output before the first push:
 
 ```bash
 # Keep writer output outside the untrusted worktree and private to this invocation.
@@ -230,8 +230,8 @@ If either pipeline status is nonzero, return the common `BLOCKED` envelope with 
 
 ```bash
 # Validate both writer files as non-empty before this first remote mutation.
-git -C "$worktree_path" push -u origin "$branch_name"
-remote_head_record=$(git ls-remote --exit-code --refs origin "refs/heads/$branch_name")
+git -C "$worktree_path" push -u "$push_remote" "$branch_name"
+remote_head_record=$(git ls-remote --exit-code --refs "$push_remote" "refs/heads/$branch_name")
 # Require exactly one record whose ref is refs/heads/$branch_name and OID is head_sha.
 
 set +e
@@ -274,7 +274,7 @@ variants:
     required: [worktrees]
     aggregate_status: {zero_rows: PASS, all_rows_readable: PASS, mixed_readable_blocked: PARTIAL, nonempty_all_rows_blocked: BLOCKED}
     worktree_row_required: [path, branch, head_sha, clean, registration_status, reason]
-    readable_row: {registration_status: REGISTERED, reason: null, nullable: []}
+    readable_row: {registration_status: REGISTERED_PRIMARY | REGISTERED_LINKED, reason: null, nullable: []}
     blocked_row: {registration_status: BLOCKED, nullable: [branch, head_sha, clean]}
   create:
     status: PASS
@@ -295,7 +295,7 @@ variants:
     skipped_row: {removed: false, status: BLOCKED, nullable: [branch, base_branch, base_sha, head_sha, clean]}
   open-pr:
     status: PASS
-    required: [repo, pr_url, pr_number, provider_state, draft, base_branch, base_sha, head_branch, head_sha]
+    required: [repo, head_repo, pr_url, pr_number, provider_state, draft, base_branch, base_sha, head_branch, head_sha]
     fixed: {provider_state: OPEN, draft: true}
 ```
 
