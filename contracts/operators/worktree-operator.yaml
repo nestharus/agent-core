@@ -70,7 +70,7 @@ outputs:
   success_shape: 'worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base branch/base SHA/head SHA/cleanliness/status/reason row per inspected target.'
   wrote_lines: []
 - task: open-pr
-  success_shape: 'worktree-operation-result-v1 with task=open-pr, exact repository and PR URL/number, base/head branches, head SHA, and draft=true.'
+  success_shape: 'worktree-operation-result-v1 with task=open-pr, status=OPEN, exact repository and PR URL/number, base/head branches, head SHA, and draft=true.'
   wrote_lines: []
 errors:
 - class: BLOCKED

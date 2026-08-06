@@ -75,7 +75,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base branch/base SHA/head SHA/cleanliness/status/reason row per inspected target."
     wrote_lines: []
   - task: open-pr
-    success_shape: "worktree-operation-result-v1 with task=open-pr, exact repository and PR URL/number, base/head branches, head SHA, and draft=true."
+    success_shape: "worktree-operation-result-v1 with task=open-pr, status=OPEN, exact repository and PR URL/number, base/head branches, head SHA, and draft=true."
     wrote_lines: []
 errors:
   - class: BLOCKED
@@ -171,14 +171,14 @@ Return the `list` variant of `worktree-operation-result-v1` with one canonical p
 After jj updates branch refs in the shared `.git/`, each affected worktree needs to sync:
 
 ```bash
-git -C "$worktree_path" reset --hard "$branch_name"
+git -C "$worktree_path" reset --keep "$branch_name"
 ```
 
-Run sync only when the caller explicitly selected `task=sync`. Before the reset, require the canonical target to be a registered direct child of `${worktrees_root}`, require its checked-out branch to equal the validated `branch_name`, and require `git status --porcelain` to be empty; a dirty worktree is `BLOCKED:dirty-worktree`, not force-reset authorization. Record the pre-reset head, do not perform an implicit bulk reset, then verify and return the post-reset head and cleanliness.
+Run sync only when the caller explicitly selected `task=sync`. Acquire an exclusive advisory mutation lock under the canonical Git common directory and hold it from the final clean check through reset and post-reset verification. Under that lock, require the canonical target to be a registered direct child of `${worktrees_root}`, require its checked-out branch to equal the validated `branch_name`, and require `git status --porcelain` to be empty; a dirty worktree is `BLOCKED:dirty-worktree`. Record the pre-reset head, use `reset --keep` so a concurrent uncooperative writer causes refusal rather than deletion, do not perform an implicit bulk reset, then verify and return the post-reset head and cleanliness before releasing the lock.
 
 ## Procedure: Remove Worktree
 
-Resolve the exact registered target and record its canonical path, checked-out branch, and head SHA. Fetch the validated `base_branch`, set `base_ref` to its exact remote-tracking ref, and resolve `base_sha` from that ref before removal. Record cleanliness and refuse dirty worktrees unless the caller separately and explicitly authorizes force removal. For the normal path:
+Resolve the exact registered target and record its canonical path, checked-out branch, and head SHA. Fetch the validated `base_branch`, set `base_ref` to its exact remote-tracking ref, and resolve `base_sha` from that ref before removal. Require an empty `git status --porcelain`; dirty `remove` requests always return `BLOCKED:dirty-worktree` and this operator has no force-removal input. For the normal path:
 
 ```bash
 git -C "$repo_root" worktree remove "$worktree_path"
@@ -191,7 +191,7 @@ Verify both that the filesystem path is absent and that no exact canonical path 
 Remove worktrees whose PRs were merged. **Verify PR status before deleting**
 — don't assume a missing remote branch means merged (could be local-only).
 
-Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose repository, base branch, head branch, and head OID match those values and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Record path, branch, base branch/SHA, head SHA, and cleanliness before each removal. Do not force-remove dirty worktrees or delete local branches without separate explicit authorization. Return one result row for every inspected target, including skipped targets and their reason.
+Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose repository, base branch, head branch, and head OID match those values and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Record path, branch, base branch/SHA, head SHA, and cleanliness before each removal. Dirty worktrees are always skipped with `status=BLOCKED` and `reason=dirty-worktree`; this operator never force-removes them or deletes local branches. Return one result row for every inspected target, including skipped targets and their reason.
 
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
@@ -205,6 +205,9 @@ git -C "$worktree_path" push -u origin "$branch_name"
 
 # Author the title + body via pr-writer (enforces the audience and content rules
 # — no internal jargon, no commit history, no closed-PR or planning-artifact refs).
+mkdir -p "$worktree_path/.tmp"
+rm -f "$worktree_path/.tmp/pr-body.md" "$worktree_path/.tmp/pr-body.md.title"
+set -o pipefail
 agents -a ~/ai/agents/pr-writer.md \
   -p "$worktree_path" \
   --input "branch=$branch_name" \
@@ -216,6 +219,8 @@ agents -a ~/ai/agents/pr-writer.md \
   --input "repo_root=$worktree_path" \
   --input "output_path=$worktree_path/.tmp/pr-body.md" \
   2>&1 | tee "$worktree_path/.tmp/pr-writer.log"
+pipeline_status=("${PIPESTATUS[@]}")
+(( pipeline_status[0] == 0 && pipeline_status[1] == 0 )) || exit 1
   # Optional: --input context_files=<comma-separated paths the writer should read for intent>
   # Optional: --input stack_parent_pr=<num> if base is another open PR's head branch
   # Optional: --input linear_issue_keys=<KEY> when a Linear key is known
@@ -236,6 +241,34 @@ After creation, query the exact PR from `repo_slug`, require `state=OPEN`, `draf
 ## Result Contract
 
 Return one `worktree-operation-result-v1` JSON object for every task. `list` includes one canonical path/branch/head SHA/cleanliness/status row per registered worktree. `create` includes canonical repository/worktree paths, branch, base branch and SHA, head SHA, and `clean: true`. `sync` includes canonical path, branch, pre/post head SHA, and post-sync cleanliness. `remove` includes the pre-removal path, branch, base branch/SHA, head SHA, and cleanliness plus `removed: true`. `bulk-cleanup` includes one identity row per inspected target with explicit `status` and `reason`, including skipped targets. `open-pr` includes exact repository and PR URL/number, base/head branches, head SHA, and `draft: true`. Never report success from command text alone; verify the resulting filesystem, Git, and provider state first.
+
+```yaml
+schema: worktree-operation-result-v1
+required: [schema, task, status]
+variants:
+  list:
+    status: PASS
+    required: [worktrees]
+    worktree_row_required: [path, branch, head_sha, clean, registration_status]
+  create:
+    status: PASS
+    required: [repo_root, worktree_path, branch, base_branch, base_sha, head_sha, clean]
+  sync:
+    status: PASS
+    required: [worktree_path, branch, pre_head_sha, post_head_sha, clean]
+  remove:
+    status: PASS
+    required: [worktree_path, branch, base_branch, base_sha, head_sha, clean, removed]
+    fixed: {removed: true}
+  bulk-cleanup:
+    status: PASS | PARTIAL | BLOCKED
+    required: [results]
+    result_row_required: [worktree_path, branch, base_branch, base_sha, head_sha, clean, status, reason]
+  open-pr:
+    status: PASS
+    required: [repo, pr_url, pr_number, provider_state, draft, base_branch, head_branch, head_sha]
+    fixed: {provider_state: OPEN, draft: true}
+```
 
 ## Stop Conditions
 

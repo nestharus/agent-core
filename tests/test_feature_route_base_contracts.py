@@ -8928,13 +8928,21 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
     assert "central-checkout-as-worktree-target" in sidecar["forbidden_direct"]
     assert "BLOCKED:dirty-worktree" in operator
+    assert 'reset --keep "$branch_name"' in operator
+    assert "exclusive advisory mutation lock" in operator
+    assert "this operator has no force-removal input" in operator
     assert "Require exactly one provider PR" in operator
     assert "pr-writer.log" in operator
+    assert 'rm -f "$worktree_path/.tmp/pr-body.md"' in operator
+    assert 'pipeline_status=("${PIPESTATUS[@]}")' in operator
     assert "to exist and be non-empty" in operator
     assert "worktree's current branch to equal `branch_name`" in operator
     for pinned_input in ("base_ref", "base_sha", "head_ref", "head_sha"):
         assert f'--input "{pinned_input}=${pinned_input}"' in operator
     assert "no exact canonical path record remains" in operator
+    assert "worktree_row_required" in operator
+    assert "result_row_required" in operator
+    assert "provider_state: OPEN" in operator
 
 
 def test_build_prototype_indexes_complete_test_carry_forward_schema():
