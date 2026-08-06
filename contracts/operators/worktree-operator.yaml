@@ -80,9 +80,11 @@ errors:
   cause: A user-owned value, scope, or trade-off question is required.
   recovery: Answer the emitted question artifact and resume.
 side_effects:
+- git-fetch
 - git-worktree-create
 - git-worktree-remove
 - git-branch-create
+- git-reset-keep
 - git-push-origin
 - gh-pr-create
 - gh-pr-close-reconciliation

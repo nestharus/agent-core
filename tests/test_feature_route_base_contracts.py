@@ -8957,6 +8957,8 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
     assert "central-checkout-as-worktree-target" in sidecar["forbidden_direct"]
+    assert "git-fetch" in sidecar["side_effects"]
+    assert "git-reset-keep" in sidecar["side_effects"]
     assert "BLOCKED:dirty-worktree" in operator
     assert 'reset --keep "$branch_name"' in operator
     assert "exclusive advisory mutation lock" in operator
@@ -8980,7 +8982,17 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "nullable: [branch, base_branch, base_sha, head_sha, clean]" in operator
     assert "provider_state: OPEN" in operator
     assert 'gh pr list --repo "$repo_slug" --state open' in operator
-    assert "created_pr_url=$(gh pr create" in operator
+    assert "BLOCKED:non-exact-open-pr" in operator
+    assert "Only zero open query results enter the creation path" in operator
+    assert "successful, non-empty title and body output before the first push" in operator
+    assert "reason=pr-writer-failed" in operator
+    assert "reason=pr-writer-output-invalid" in operator
+    assert "Do not execute any later command in this procedure" in operator
+    assert "created_pr_output=$(gh pr create" in operator
+    assert "snapshot all PR numbers" in operator
+    assert "subtract the pre-create PR-number snapshot" in operator
+    assert "perform one bounded exact repository/base/head" in operator
+    assert "mutation_state=unknown" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
     assert "BLOCKED:ambiguous-open-pr" in operator
     assert "re-query that exact PR to require `state=CLOSED`" in operator
@@ -8989,7 +9001,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert result_contract["variants"]["blocked"] == {
         "status": "BLOCKED",
         "required": ["reason", "mutation_state", "observed_identity"],
-        "mutation_state": ["none", "reconciled"],
+        "mutation_state": ["none", "reconciled", "unknown"],
         "observed_identity": "object | null",
         "reconciliation": "object | null",
         "reconciliation_required_when": {"mutation_state": "reconciled"},
