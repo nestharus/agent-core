@@ -278,6 +278,32 @@ def test_verify_issue_description_mismatch_exits_one(
     assert payload["data"]["status"] == "MISMATCH"
 
 
+@pytest.mark.parametrize("readback", [{"description": None}, {}])
+def test_verify_empty_description_rejects_absent_readback(
+    readback: dict[str, object],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "description.md"
+    source.write_text("", encoding="utf-8")
+
+    class StubClient:
+        def get_issue(self, _issue_id: str) -> dict[str, object]:
+            return readback
+
+    monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
+
+    with pytest.raises(SystemExit) as error:
+        linear_cli.verify_issue_description("ACR-1", str(source))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert error.value.code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["status"] == "MISMATCH"
+    assert payload["data"]["actualSha256"] is None
+
+
 def test_create_issue_description_file_preserves_terminal_newlines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

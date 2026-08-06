@@ -58,7 +58,7 @@ outputs:
   success_shape: 'worktree-operation-result-v1 with task=create, canonical repo/worktree paths, branch, base branch/SHA, head SHA, and clean=true.'
   wrote_lines: []
 - task: list
-  success_shape: 'worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/status row per registered worktree after per-worktree git status collection.'
+  success_shape: 'worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/registration-status/reason row per registered worktree after per-worktree git status collection; unreadable or vanished rows retain every key and use null for unavailable fields; aggregate status is PASS for zero or all-readable rows, PARTIAL for mixed readable/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows.'
   wrote_lines: []
 - task: sync
   success_shape: 'worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness.'
@@ -85,6 +85,7 @@ side_effects:
 - git-branch-create
 - git-push-origin
 - gh-pr-create
+- gh-pr-close-reconciliation
 must_delegate:
 - worktree-mutation
 may_direct:

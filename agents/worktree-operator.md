@@ -63,7 +63,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=create, canonical repo/worktree paths, branch, base branch/SHA, head SHA, and clean=true."
     wrote_lines: []
   - task: list
-    success_shape: "worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/status row per registered worktree after per-worktree git status collection."
+    success_shape: "worktree-operation-result-v1 with task=list and one canonical path/branch/head SHA/cleanliness/registration-status/reason row per registered worktree after per-worktree git status collection; unreadable or vanished rows retain every key and use null for unavailable fields; aggregate status is PASS for zero or all-readable rows, PARTIAL for mixed readable/BLOCKED rows, and BLOCKED for non-empty all-BLOCKED rows."
     wrote_lines: []
   - task: sync
     success_shape: "worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness."
@@ -90,6 +90,7 @@ side_effects:
   - git-branch-create
   - git-push-origin
   - gh-pr-create
+  - gh-pr-close-reconciliation
 must_delegate:
   - worktree-mutation
 may_direct:
@@ -164,7 +165,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 git -C "$repo_root" worktree list --porcelain
 ```
 
-For each registered worktree record, resolve its canonical path and run `git -C "$registered_worktree_path" status --porcelain` before returning the row. Return the `list` variant of `worktree-operation-result-v1` with one canonical path, branch, head SHA, observed cleanliness, and registration-status row per worktree; an unreadable or vanished registered worktree is a non-clean `BLOCKED` row rather than assumed clean.
+For each registered worktree record, resolve its canonical path and run `git -C "$registered_worktree_path" status --porcelain` before returning the row. Every list row has `path`, `branch`, `head_sha`, `clean`, `registration_status`, and `reason`. A readable row has all identity fields populated, `registration_status=REGISTERED`, and `reason=null`. An unreadable or vanished row has `registration_status=BLOCKED`, a precise `reason`, and `null` for each unavailable `branch`, `head_sha`, or `clean` field; never assume such a row is clean. Set aggregate `status=PASS` when there are zero rows or every row is readable, `status=PARTIAL` for mixed readable and `BLOCKED` rows, and `status=BLOCKED` for a non-empty result containing only `BLOCKED` rows.
 
 ## Procedure: Sync Worktree After Rebase
 
@@ -178,7 +179,7 @@ Run sync only when the caller explicitly selected `task=sync`. Acquire an exclus
 
 ## Procedure: Remove Worktree
 
-Resolve the exact registered target and record its canonical path, checked-out branch, and head SHA. Fetch the validated `base_branch`, set `base_ref` to its exact remote-tracking ref, and resolve `base_sha` from that ref before removal. Require an empty `git status --porcelain`; dirty `remove` requests always return `BLOCKED:dirty-worktree` and this operator has no force-removal input. For the normal path:
+Resolve the exact registered target and record its canonical path, checked-out branch, and head SHA. Fetch the validated `base_branch`, set `base_ref` to its exact remote-tracking ref, and resolve `base_sha` from that ref before removal. Acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`. While holding it, re-read the exact registration and require its canonical path, branch, head SHA, base identity, and empty `git status --porcelain` to match the recorded identity. Dirty or changed `remove` requests always return `BLOCKED`, and this operator has no force-removal input. Hold the lock through the removal and both post-removal checks. For the normal path:
 
 ```bash
 git -C "$repo_root" worktree remove "$worktree_path"
@@ -198,7 +199,7 @@ Read records with `git -C "$repo_root" worktree list --porcelain`. For each regi
 
 ## Procedure: Open PR
 
-After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Push that exact branch and require the remote head OID to equal `head_sha`, then dispatch `pr-writer` to author the title + body before opening the PR:
+After creating a worktree and making commits, resolve and validate `repo_slug` as the exact `OWNER/REPO` identity of `${repo_root}`. Require the worktree's current branch to equal `branch_name`; fetch `base_branch`, set `base_ref` to the exact remote-tracking ref, resolve `base_sha`, set `head_ref` to the exact local branch ref, and resolve `head_sha`. Push that exact branch and require the remote head OID to equal `head_sha`. Query open PRs with `gh pr list --repo "$repo_slug" --state open --head "$branch_name" --base "$base_branch" --json url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid` and capture the exact base/head branch pair, URL, number, state, draft flag, and full OIDs. More than one match is `BLOCKED:ambiguous-open-pr`. Reuse one exact matching PR only when every required provider field already matches; do not invoke `pr-writer` or create a second PR. When no match exists, dispatch `pr-writer` to author the title + body before opening the PR:
 
 ```bash
 git -C "$worktree_path" push -u origin "$branch_name"
@@ -225,31 +226,43 @@ pipeline_status=("${PIPESTATUS[@]}")
   # Optional: --input stack_parent_pr=<num> if base is another open PR's head branch
   # Optional: --input linear_issue_keys=<KEY> when a Linear key is known
 
-gh pr create --repo "$repo_slug" --draft \
+created_pr_url=$(gh pr create --repo "$repo_slug" --draft \
   --head "$branch_name" \
   --base "$base_branch" \
   --title "$(cat "$worktree_path/.tmp/pr-body.md.title")" \
-  --body-file "$worktree_path/.tmp/pr-body.md"
+  --body-file "$worktree_path/.tmp/pr-body.md")
 ```
 
 Include `--input linear_issue_keys=<KEY>` only when a Linear key is known to the manual operator. Omit when no key is known; no close footer will be emitted in that case.
 
-Before `gh pr create`, require the writer command to succeed and both `$worktree_path/.tmp/pr-body.md.title` and `$worktree_path/.tmp/pr-body.md` to exist and be non-empty. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
+Before `gh pr create`, require the writer command to succeed and both `$worktree_path/.tmp/pr-body.md.title` and `$worktree_path/.tmp/pr-body.md` to exist and be non-empty. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. Require `created_pr_url` to identify exactly one PR in `repo_slug`, and capture its number before postcondition verification. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
 
-After creation, query the exact PR from `repo_slug`, require `state=OPEN`, `draft=true`, the requested base/head branches, provider base OID equal to the captured `base_sha`, and provider head OID equal to the captured `head_sha`, then return that provider identity.
+For a reused or newly created PR, query that exact captured URL/number from `repo_slug` and require `state=OPEN`, `draft=true`, the requested base/head branches, provider base OID equal to the captured `base_sha`, and provider head OID equal to the captured `head_sha`, then return that provider identity. If a newly created PR fails any postcondition, run `gh pr close "$created_pr_url" --repo "$repo_slug" --comment "Closed automatically after open-pr postcondition verification failed."`, re-query that exact PR to require `state=CLOSED`, and return the common `BLOCKED` envelope with `mutation_state=reconciled` plus created and closed provider identities; never leave an unverified open PR or report success. If a reused PR fails verification, leave it unchanged and return `BLOCKED` with `mutation_state=none` and its observed identity. A retry re-runs the exact open-PR query and reuses a valid exact match rather than creating another PR.
 
 ## Result Contract
 
 Return one `worktree-operation-result-v1` JSON object for every task. `list` includes one canonical path/branch/head SHA/observed-cleanliness/status row per registered worktree. `create` includes canonical repository/worktree paths, branch, base branch and SHA, head SHA, and `clean: true`. `sync` includes canonical path, branch, pre/post head SHA, and post-sync cleanliness. `remove` includes the pre-removal path, branch, base branch/SHA, head SHA, and cleanliness plus `removed: true`. `bulk-cleanup` includes one result row per inspected target with every declared key, explicit `removed`, `status`, and `reason`, and `null` only for skipped-row identity fields that could not be established; aggregate status follows the zero/all-pass, mixed, and all-blocked mapping below. `open-pr` includes `status: PASS`, `provider_state: OPEN`, exact repository and PR URL/number, base/head branches, base and head SHAs, and `draft: true`. Never report success from command text alone; verify the resulting filesystem, Git, and provider state first.
 
+Every task that blocks outside a row-based partial result uses one common envelope: `schema=worktree-operation-result-v1`, the selected `task`, `status=BLOCKED`, a stable `reason`, and `mutation_state`. `mutation_state` is `none` when no side effect needs reconciliation and `reconciled` only when the result also includes machine-readable `reconciliation` evidence proving the side effect was undone or closed. Include any available `observed_identity`; unavailable identity fields are `null`, never omitted or invented. A `BLOCKED` envelope is terminal non-success even when reconciliation succeeded.
+
 ```yaml
 schema: worktree-operation-result-v1
 required: [schema, task, status]
 variants:
+  blocked:
+    status: BLOCKED
+    required: [reason, mutation_state, observed_identity]
+    mutation_state: [none, reconciled]
+    observed_identity: object | null
+    reconciliation: object | null
+    reconciliation_required_when: {mutation_state: reconciled}
   list:
-    status: PASS
+    status: PASS | PARTIAL | BLOCKED
     required: [worktrees]
-    worktree_row_required: [path, branch, head_sha, clean, registration_status]
+    aggregate_status: {zero_rows: PASS, all_rows_readable: PASS, mixed_readable_blocked: PARTIAL, nonempty_all_rows_blocked: BLOCKED}
+    worktree_row_required: [path, branch, head_sha, clean, registration_status, reason]
+    readable_row: {registration_status: REGISTERED, reason: null, nullable: []}
+    blocked_row: {registration_status: BLOCKED, nullable: [branch, head_sha, clean]}
   create:
     status: PASS
     required: [repo_root, worktree_path, branch, base_branch, base_sha, head_sha, clean]

@@ -8923,6 +8923,13 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "pre/post head SHA" in outputs["sync"]
     assert "task=list" in outputs["list"]
     assert "per-worktree git status collection" in outputs["list"]
+    for list_rule in (
+        "unreadable or vanished rows retain every key",
+        "PASS for zero or all-readable rows",
+        "PARTIAL for mixed readable/BLOCKED rows",
+        "BLOCKED for non-empty all-BLOCKED rows",
+    ):
+        assert list_rule in outputs["list"]
     assert "open-pr" in name["description"]
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
@@ -8955,6 +8962,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "exclusive advisory mutation lock" in operator
     assert "Hold the lock through `git worktree remove`" in operator
     assert "revalidate canonical path, branch, head SHA, base identity" in operator
+    assert "Hold the lock through the removal and both post-removal checks" in operator
     assert "this operator has no force-removal input" in operator
     assert "Require exactly one provider PR" in operator
     assert "pr-writer.log" in operator
@@ -8971,13 +8979,39 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "skipped_row: {removed: false, status: BLOCKED" in operator
     assert "nullable: [branch, base_branch, base_sha, head_sha, clean]" in operator
     assert "provider_state: OPEN" in operator
+    assert 'gh pr list --repo "$repo_slug" --state open' in operator
+    assert "created_pr_url=$(gh pr create" in operator
+    assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
+    assert "BLOCKED:ambiguous-open-pr" in operator
+    assert "re-query that exact PR to require `state=CLOSED`" in operator
+    assert "mutation_state=reconciled" in operator
+    assert "A retry re-runs the exact open-PR query" in operator
+    assert result_contract["variants"]["blocked"] == {
+        "status": "BLOCKED",
+        "required": ["reason", "mutation_state", "observed_identity"],
+        "mutation_state": ["none", "reconciled"],
+        "observed_identity": "object | null",
+        "reconciliation": "object | null",
+        "reconciliation_required_when": {"mutation_state": "reconciled"},
+    }
     assert variants["list"]["worktree_row_required"] == [
         "path",
         "branch",
         "head_sha",
         "clean",
         "registration_status",
+        "reason",
     ]
+    assert variants["list"]["aggregate_status"] == {
+        "zero_rows": "PASS",
+        "all_rows_readable": "PASS",
+        "mixed_readable_blocked": "PARTIAL",
+        "nonempty_all_rows_blocked": "BLOCKED",
+    }
+    assert variants["list"]["blocked_row"] == {
+        "registration_status": "BLOCKED",
+        "nullable": ["branch", "head_sha", "clean"],
+    }
     assert variants["create"]["required"] == [
         "repo_root",
         "worktree_path",
@@ -9072,7 +9106,11 @@ def test_project_bootstrap_indexes_canonical_wrapper_location_and_base():
         assert any(value in item for item in sidecar["expectations"])
         assert any(value in item for item in sidecar["outputs"])
     assert "<project>/agents/" not in workflow
-    precedence = sidecar["expectations"][0]
+    precedence = next(
+        item
+        for item in sidecar["expectations"]
+        if "contracts/workflows/project-bootstrap.yaml" in item
+    )
     assert "authoritative dispatch contract" in precedence
     assert "frontmatter only when the sidecar is absent" in precedence
     assert precedence.replace(
@@ -9108,9 +9146,15 @@ def test_pr_review_rechecks_provider_identity_before_each_post_or_reuse():
         "next reuse or mutation requires a fresh recheck",
     ):
         assert clause in phase8
-    assert phase8.index('gh pr view "$PR" --repo "$REPO"') < phase8.index(
+    posting_index = phase8.index(
         "Only then post the prepared review and comment payloads"
     )
+    assert phase8.index('gh pr view "$PR" --repo "$REPO"') < posting_index
+    assert (
+        phase8.index("Immediately before each existing-post identity reuse")
+        < posting_index
+    )
+    assert phase8.index("as the final preceding operation") < posting_index
 
 
 def test_rca_requires_failing_test_trigger_command_before_routing():

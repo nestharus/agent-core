@@ -58,8 +58,10 @@ def get_issue_description(issue_id: str) -> None:
 def verify_issue_description(issue_id: str, description_file: str) -> None:
     """Verify a local description against Linear's narrow canonicalization."""
     expected = _read_utf8_file(description_file, "description")
-    actual = LinearClient().get_issue(issue_id).get("description") or ""
-    matches = descriptions_match_after_linear_canonicalization(expected, actual)
+    actual = LinearClient().get_issue(issue_id).get("description")
+    matches = isinstance(actual, str) and (
+        descriptions_match_after_linear_canonicalization(expected, actual)
+    )
     print(
         json.dumps(
             {
@@ -68,7 +70,11 @@ def verify_issue_description(issue_id: str, description_file: str) -> None:
                     "issue": issue_id,
                     "status": "MATCH" if matches else "MISMATCH",
                     "expectedSha256": hashlib.sha256(expected.encode()).hexdigest(),
-                    "actualSha256": hashlib.sha256(actual.encode()).hexdigest(),
+                    "actualSha256": (
+                        hashlib.sha256(actual.encode()).hexdigest()
+                        if isinstance(actual, str)
+                        else None
+                    ),
                 },
             },
             indent=2,
@@ -246,7 +252,7 @@ def create_issue(
             )
         readback = client.get_issue(issue_id)
     if description is not None and readback is not None:
-        actual_description = readback.get("description") or ""
+        actual_description = readback.get("description")
         if not isinstance(actual_description, str) or not (
             descriptions_match_after_linear_canonicalization(
                 description, actual_description
