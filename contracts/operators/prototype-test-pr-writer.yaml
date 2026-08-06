@@ -55,11 +55,6 @@ inputs:
   required: true
   default_source: caller
   description: output_path
-- name: main
-  type: string
-  required: true
-  default_source: caller
-  description: '`base` - target branch for the draft PR; caller supplies the repository default branch or an explicit review target, but this must not be hard-coded to `main`.'
 defaults: []
 outputs:
 - task: default

@@ -40,7 +40,7 @@ ANCHOR_NAMES = [
 TESTS: list[Callable[[], None]] = []
 
 
-def test(func: Callable[[], None]) -> Callable[[], None]:
+def register_test(func: Callable[[], None]) -> Callable[[], None]:
     """orchestration"""
 
     TESTS.append(func)
@@ -316,91 +316,91 @@ def _assert_positive_and_negative(anchor_name: str) -> None:
     _assert_check_fails(anchor_name, _mutated_operator(anchor_name))
 
 
-@test
+@register_test
 def test_audience_rule_what_this_means_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_what_this_means")
 
 
-@test
+@register_test
 def test_audience_rule_first_content_section_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_first_content_section")
 
 
-@test
+@register_test
 def test_audience_rule_one_to_three_sentences_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_one_to_three_sentences")
 
 
-@test
+@register_test
 def test_audience_rule_plain_language_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_plain_language")
 
 
-@test
+@register_test
 def test_audience_rule_forbidden_content_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_forbidden_content")
 
 
-@test
+@register_test
 def test_audience_rule_routine_refactor_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("audience_rule_routine_refactor")
 
 
-@test
+@register_test
 def test_body_structure_first_section_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("body_structure_first_section")
 
 
-@test
+@register_test
 def test_body_structure_technical_sections_follow_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("body_structure_technical_sections_follow")
 
 
-@test
+@register_test
 def test_body_structure_stacking_after_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("body_structure_stacking_after")
 
 
-@test
+@register_test
 def test_worked_example_present_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("worked_example_present")
 
 
-@test
+@register_test
 def test_worked_example_starts_with_chosen_heading_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("worked_example_starts_with_chosen_heading")
 
 
-@test
+@register_test
 def test_worked_example_no_internal_jargon_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("worked_example_no_internal_jargon")
 
 
-@test
+@register_test
 def test_worked_example_no_internal_jargon_historical_pr_reference_negative() -> None:
     """validator"""
 
@@ -410,42 +410,42 @@ def test_worked_example_no_internal_jargon_historical_pr_reference_negative() ->
     )
 
 
-@test
+@register_test
 def test_procedure_compose_first_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("procedure_compose_first")
 
 
-@test
+@register_test
 def test_procedure_self_audit_first_heading_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("procedure_self_audit_first_heading")
 
 
-@test
+@register_test
 def test_procedure_self_audit_length_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("procedure_self_audit_length")
 
 
-@test
+@register_test
 def test_procedure_self_audit_forbidden_content_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("procedure_self_audit_forbidden_content")
 
 
-@test
+@register_test
 def test_procedure_self_audit_routine_refactor_positive_and_negative() -> None:
     """validator"""
 
     _assert_positive_and_negative("procedure_self_audit_routine_refactor")
 
 
-@test
+@register_test
 def test_main_exits_zero_for_synthetic_operator() -> None:
     """validator"""
 
@@ -459,7 +459,7 @@ def test_main_exits_zero_for_synthetic_operator() -> None:
         raise AssertionError(f"unexpected FAIL line:\n{stdout}")
 
 
-@test
+@register_test
 def test_main_exits_one_for_missing_anchor() -> None:
     """validator"""
 
@@ -470,7 +470,7 @@ def test_main_exits_one_for_missing_anchor() -> None:
     _assert_fail_line(stdout, anchor_name)
 
 
-@test
+@register_test
 def test_fail_lines_are_well_formed_for_each_anchor() -> None:
     """validator"""
 

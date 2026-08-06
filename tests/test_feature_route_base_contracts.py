@@ -1794,7 +1794,8 @@ def _refactoring_route_process_fixture(
         for role in auditor_roles:
             path = tmp_path / "refactoring-owned" / "auditors" / f"{stage}-{role}.md"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(f"# {role}\n\nVerdict: LOW\n", encoding="utf-8")
+            verdict = "LOW" if role == "validation-integrity-auditor" else "Verdict: LOW"
+            path.write_text(f"# {role}\n\n{verdict}\n", encoding="utf-8")
             rows.append(
                 {
                     "role": role,
@@ -4182,6 +4183,14 @@ def test_refactoring_route_rejects_wrong_nested_pr_head_or_merged_base_identity(
             "refactoring auditor index pre_merge_reports[0] report must contain exactly one canonical Verdict: LOW line",
         ),
         (
+            "validation-non-low-report",
+            "refactoring auditor index pre_merge_reports[4] report must end with exactly one canonical validation-integrity LOW token",
+        ),
+        (
+            "validation-mixed-verdict-report",
+            "refactoring auditor index pre_merge_reports[4] report must end with exactly one canonical validation-integrity LOW token",
+        ),
+        (
             "wrong-pre-merge-head",
             "refactoring route child pre_merge_auditor_current_head must equal nested reviewed head",
         ),
@@ -4246,6 +4255,24 @@ def test_refactoring_route_rejects_unclosed_or_stale_auditor_evidence(
         child["pre_merge_auditor_reports"] = deepcopy(
             auditor_index["pre_merge_reports"]
         )
+    elif case == "validation-non-low-report":
+        report = auditor_index["pre_merge_reports"][4]
+        report_path = Path(report["report_path"])
+        report_path.write_text("# Validation integrity\n\nHIGH\n", encoding="utf-8")
+        report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        child["pre_merge_auditor_reports"] = deepcopy(
+            auditor_index["pre_merge_reports"]
+        )
+    elif case == "validation-mixed-verdict-report":
+        report = auditor_index["pre_merge_reports"][4]
+        report_path = Path(report["report_path"])
+        report_path.write_text(
+            "# Validation integrity\n\nVerdict: HIGH\nLOW\n", encoding="utf-8"
+        )
+        report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        child["pre_merge_auditor_reports"] = deepcopy(
+            auditor_index["pre_merge_reports"]
+        )
     elif case == "wrong-pre-merge-head":
         wrong_head = "b4" * 20
         child["pre_merge_auditor_current_head"] = wrong_head
@@ -4276,6 +4303,23 @@ def test_refactoring_route_rejects_unclosed_or_stale_auditor_evidence(
 
     assert decision["status"] == "INVALID"
     assert any(expected_error in error for error in decision["errors"])
+
+
+def test_refactoring_route_accepts_trailing_blank_after_validation_verdict(
+    tmp_path: Path,
+):
+    report_path = tmp_path / "validation-integrity.md"
+    report_path.write_text("# Validation integrity\n\nLOW\n\n", encoding="utf-8")
+    errors: list[str] = []
+
+    _CONTRACT_MODULE._validate_refactoring_auditor_report_verdict(
+        report_path,
+        role="validation-integrity-auditor",
+        label="validation report",
+        errors=errors,
+    )
+
+    assert errors == []
 
 
 def test_route_attempt_rejects_proof_envelope_feature_branch_mismatch(
@@ -8838,6 +8882,379 @@ def test_agents_routing_summary_matches_refactoring_contract_and_defaults():
     assert "`root_invocation_uuid`" not in row
 
 
-def test_preexisting_malformed_workflow_is_untouched():
-    status_path = REPO_ROOT / "workflows/step6c-consumption-side-file.md"
-    assert status_path.exists()
+def test_step6c_workflow_declares_sidecar_first_contract_resolution():
+    workflow = (REPO_ROOT / "workflows/step6c-consumption-side-file.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/step6c-consumption-side-file.yaml").read_text()
+    )
+    rule = sidecar["expectations"][0]
+
+    assert "authoritative dispatch contract" in rule
+    assert "frontmatter only when the sidecar is absent" in rule
+    workflow_rule = rule.replace(
+        "this sidecar", "`contracts/workflows/step6c-consumption-side-file.yaml`"
+    )
+    assert workflow_rule in workflow
+
+
+def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/operators/worktree-operator.yaml").read_text()
+    )
+    task = next(row for row in sidecar["inputs"] if row["name"] == "task")
+    name = next(row for row in sidecar["inputs"] if row["name"] == "name")
+    outputs = {
+        row["task"]: row["success_shape"] for row in sidecar["outputs"]
+    }
+    operator = (REPO_ROOT / "agents/worktree-operator.md").read_text()
+    result_contract = _fenced_yaml_section(
+        "agents/worktree-operator.md", "## Result Contract"
+    )
+    variants = result_contract["variants"]
+
+    assert task["options"] == [
+        "create",
+        "list",
+        "sync",
+        "remove",
+        "bulk-cleanup",
+        "open-pr",
+    ]
+    assert "pre/post head SHA" in outputs["sync"]
+    assert "task=list" in outputs["list"]
+    assert "per-worktree git status collection" in outputs["list"]
+    for list_rule in (
+        "unreadable or vanished rows retain every key",
+        "PASS for zero or all-readable rows",
+        "PARTIAL for mixed readable/BLOCKED rows",
+        "BLOCKED for non-empty all-BLOCKED rows",
+    ):
+        assert list_rule in outputs["list"]
+    assert "open-pr" in name["description"]
+    assert "base branch/base SHA" in outputs["remove"]
+    assert "pre-removal" in outputs["remove"]
+    assert "one worktree_path/branch" in outputs["bulk-cleanup"]
+    for bulk_field in (
+        "base branch",
+        "base SHA",
+        "head SHA",
+        "cleanliness",
+        "PR target repository",
+        "PR head repository",
+        "PR URL/number/state",
+        "removed",
+    ):
+        assert bulk_field in outputs["bulk-cleanup"]
+    for value in (
+        "status=PASS",
+        "provider_state=OPEN",
+        "exact target and head repository identities",
+        "PR URL/number",
+        "base/head branches",
+        "base SHA",
+        "head SHA",
+        "draft=true",
+    ):
+        assert value in outputs["open-pr"]
+    assert "skipped rows retain every key" in outputs["bulk-cleanup"]
+    assert "null for unavailable identity fields" in outputs["bulk-cleanup"]
+    for aggregate_rule in (
+        "PASS for zero or all-PASS rows",
+        "PARTIAL for mixed PASS/BLOCKED rows",
+        "BLOCKED for non-empty all-BLOCKED rows",
+    ):
+        assert aggregate_rule in outputs["bulk-cleanup"]
+    assert "status/reason" in outputs["bulk-cleanup"]
+    assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
+    assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
+    assert "central-checkout-as-worktree-target" in sidecar["forbidden_direct"]
+    assert "git-fetch" in sidecar["side_effects"]
+    assert "git-reset-keep" in sidecar["side_effects"]
+    assert "git-push-validated-url" in sidecar["side_effects"]
+    assert "BLOCKED:dirty-worktree" in operator
+    assert 'reset --keep "$branch_name"' in operator
+    assert "exclusive advisory mutation lock" in operator
+    assert "Hold the lock through `git worktree remove`" in operator
+    assert "revalidate canonical path, branch, head SHA, base identity" in operator
+    assert "Hold the lock through the removal and both post-removal checks" in operator
+    assert "this operator has no force-removal input" in operator
+    assert "Require exactly one provider PR" in operator
+    assert 'writer_dir=$(mktemp -d)' in operator
+    assert 'trap \'rm -rf -- "$writer_dir"\' EXIT' in operator
+    assert 'tee "$writer_dir/pr-writer.log"' in operator
+    assert "$worktree_path/.tmp" not in operator
+    assert "not be symlinks" in operator
+    assert "canonical `writer_dir` as their direct parent" in operator
+    assert 'pipeline_status=("${PIPESTATUS[@]}")' in operator
+    assert "to exist, be non-empty regular files" in operator
+    assert "worktree's current branch to equal `branch_name`" in operator
+    for pinned_input in ("base_ref", "base_sha", "head_ref", "head_sha"):
+        assert f'--input "{pinned_input}=${pinned_input}"' in operator
+    assert "no exact canonical path record remains" in operator
+    assert "worktree_row_required" in operator
+    assert "result_row_required" in operator
+    assert "removed_row: {pr_state: MERGED, removed: true, status: PASS" in operator
+    assert "skipped_row: {removed: false, status: BLOCKED" in operator
+    assert "nullable: [branch, base_branch, base_sha, head_sha, clean, pr_repo" in operator
+    assert "provider_state: OPEN" in operator
+    assert 'gh pr list --repo "$repo_slug" --state open' in operator
+    assert "BLOCKED:non-exact-open-pr" in operator
+    assert "Only zero open query results enter the creation path" in operator
+    assert "successful, non-empty title and body output before the first push" in operator
+    assert "reason=pr-writer-failed" in operator
+    assert "reason=pr-writer-output-invalid" in operator
+    assert "Do not execute any later command in this procedure" in operator
+    assert "created_pr_output=$(gh pr create" in operator
+    assert "perform one bounded exact repository/base/head" in operator
+    assert "for diagnostic evidence only" in operator
+    assert "Do not close any PR from that evidence" in operator
+    assert "mutation_state=unknown" in operator
+    assert 'git ls-remote --exit-code --refs "$push_url"' in operator
+    assert "BLOCKED:remote-head-unverified" in operator
+    assert "whose OID equals `head_sha`" in operator
+    assert "hold it through the exact open-PR decision" in operator
+    assert "before resolving worktree or ref identities" in operator
+    assert "BLOCKED:stale-open-pr-worktree-identity" in operator
+    assert "REGISTERED_PRIMARY" in operator
+    assert "REGISTERED_LINKED" in operator
+    assert "not tested as a linked mutation target" in operator
+    assert 'remote get-url --push "$push_remote"' in operator
+    assert "BLOCKED:push-remote-repository-mismatch" in operator
+    assert "headRepository.nameWithOwner" in operator
+    assert "headRepositoryOwner.login" in operator
+    assert "target/base repository and head repository both equal" in operator
+    assert "pr_head_repo" in operator
+    bulk_cleanup_section = operator.split(
+        "## Procedure: Bulk Cleanup Merged Worktrees", 1
+    )[1].split("## Procedure: Open PR", 1)[0]
+    provider_recheck_index = bulk_cleanup_section.index(
+        'gh pr view "$pr_number" --repo "$pr_repo"'
+    )
+    removal_index = bulk_cleanup_section.index(
+        'git -C "$repo_root" worktree remove "$worktree_path"'
+    )
+    assert provider_recheck_index < removal_index
+    assert "state=MERGED" in bulk_cleanup_section
+    assert "Merged worktrees need provider-verified bulk cleanup" in operator
+    assert "A draft pull request needs exact creation or idempotent reuse" in operator
+    assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
+    assert "BLOCKED:ambiguous-open-pr" in operator
+    assert "re-query that exact PR" in operator
+    assert "exact re-query succeeds with `state=CLOSED`" in operator
+    assert "mutation_state=reconciled" in operator
+    assert "Use `mutation_state=reconciled` only when the close succeeds" in operator
+    assert "the exact PR remains open" in operator
+    assert "A retry re-runs the exact open-PR query" in operator
+    assert result_contract["variants"]["blocked"] == {
+        "status": "BLOCKED",
+        "required": ["reason", "mutation_state", "observed_identity"],
+        "mutation_state": ["none", "reconciled", "unknown"],
+        "observed_identity": "object | null",
+        "reconciliation": "object | null",
+        "reconciliation_required_when": {"mutation_state": "reconciled"},
+    }
+    assert variants["list"]["worktree_row_required"] == [
+        "path",
+        "branch",
+        "head_sha",
+        "clean",
+        "registration_status",
+        "reason",
+    ]
+    assert variants["list"]["aggregate_status"] == {
+        "zero_rows": "PASS",
+        "all_rows_readable": "PASS",
+        "mixed_readable_blocked": "PARTIAL",
+        "nonempty_all_rows_blocked": "BLOCKED",
+    }
+    assert variants["list"]["blocked_row"] == {
+        "registration_status": "BLOCKED",
+        "nullable": ["branch", "head_sha", "clean"],
+    }
+    assert variants["create"]["required"] == [
+        "repo_root",
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+    ]
+    assert variants["sync"]["required"] == [
+        "worktree_path",
+        "branch",
+        "pre_head_sha",
+        "post_head_sha",
+        "clean",
+    ]
+    assert variants["remove"]["required"] == [
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+        "removed",
+    ]
+    assert variants["bulk-cleanup"]["result_row_required"] == [
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+        "pr_repo",
+        "pr_head_repo",
+        "pr_url",
+        "pr_number",
+        "pr_state",
+        "removed",
+        "status",
+        "reason",
+    ]
+    assert variants["open-pr"] == {
+        "status": "PASS",
+        "required": [
+            "repo",
+            "head_repo",
+            "pr_url",
+            "pr_number",
+            "provider_state",
+            "draft",
+            "base_branch",
+            "base_sha",
+            "head_branch",
+            "head_sha",
+        ],
+        "fixed": {"provider_state": "OPEN", "draft": True},
+    }
+    open_pr_section = operator.split("## Procedure: Open PR", 1)[1].split(
+        "## Result Contract", 1
+    )[0]
+    lock_index = open_pr_section.index("Acquire the same exclusive advisory mutation lock")
+    resolve_index = open_pr_section.index("resolve `base_sha`")
+    query_index = open_pr_section.index(
+        'gh pr list --repo "$repo_slug" --state open'
+    )
+    non_exact_index = open_pr_section.index("BLOCKED:non-exact-open-pr")
+    writer_index = open_pr_section.index("agents -a ~/ai/agents/pr-writer.md")
+    push_index = open_pr_section.index(
+        'git -C "$worktree_path" push "$push_url"'
+    )
+    remote_head_index = open_pr_section.index(
+        'git ls-remote --exit-code --refs "$push_url"'
+    )
+    stale_identity_index = open_pr_section.index(
+        "BLOCKED:stale-open-pr-worktree-identity"
+    )
+    create_index = open_pr_section.index("created_pr_output=$(gh pr create")
+    assert lock_index < resolve_index < query_index < non_exact_index < writer_index
+    assert stale_identity_index < push_index < create_index
+    assert writer_index < push_index < remote_head_index < create_index
+    assert variants["bulk-cleanup"]["aggregate_status"] == {
+        "zero_targets": "PASS",
+        "all_rows_pass": "PASS",
+        "mixed_pass_blocked": "PARTIAL",
+        "nonempty_all_rows_blocked": "BLOCKED",
+    }
+
+
+def test_build_prototype_indexes_complete_test_carry_forward_schema():
+    fields = (
+        "prototype_test_pr_url",
+        "prototype_test_branch",
+        "test_paths_or_node_ids",
+        "marker_reason",
+        "ticket_mapping",
+        "implementation_acceptance_criterion",
+    )
+    workflow = (REPO_ROOT / "workflows/build-prototype.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/build-prototype.yaml").read_text()
+    )
+    index = json.loads((REPO_ROOT / "workflows/index.json").read_text())
+    indexed_outputs = index["workflows"]["build-prototype"][
+        "workflow_dispatch_contract"
+    ]["outputs"]
+
+    for field in fields:
+        assert field in workflow
+        assert any(field in output for output in sidecar["outputs"])
+        assert any(field in output for output in indexed_outputs)
+
+
+def test_project_bootstrap_indexes_canonical_wrapper_location_and_base():
+    workflow = (REPO_ROOT / "workflows/project-bootstrap.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/project-bootstrap.yaml").read_text()
+    )
+
+    for value in ("<project>/trunk/agents/", "~/ai/agents/<name>.md"):
+        assert value in workflow
+        assert any(value in item for item in sidecar["expectations"])
+        assert any(value in item for item in sidecar["outputs"])
+    assert "<project>/agents/" not in workflow
+    precedence = next(
+        item
+        for item in sidecar["expectations"]
+        if "contracts/workflows/project-bootstrap.yaml" in item
+    )
+    assert "authoritative dispatch contract" in precedence
+    assert "frontmatter only when the sidecar is absent" in precedence
+    assert precedence.replace(
+        "contracts/workflows/project-bootstrap.yaml",
+        "`contracts/workflows/project-bootstrap.yaml`",
+    ) in workflow
+
+
+def test_pr_review_rechecks_provider_identity_before_each_post_or_reuse():
+    operator = (REPO_ROOT / "agents/pr-review-operator.md").read_text()
+    phase8 = operator.split(
+        "### Phase 8: Final Provider Recheck, Post, and Stable Envelope", 1
+    )[1].split("## Terminal Result Schema", 1)[0]
+
+    query_fields = (
+        "url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid"
+    )
+    for clause in (
+        'gh pr view "$PR" --repo "$REPO"',
+        f"--json {query_fields}",
+        '"$WORK_DIR/final-provider-identity.json"',
+        "state=OPEN",
+        "exact Phase 0 draft flag",
+        "baseRefName=$BASE_BRANCH",
+        "baseRefOid=$BASE_SHA",
+        "headRefName=$HEAD_BRANCH",
+        "headRefOid=$HEAD_SHA",
+        "Immediately before each existing-post identity reuse",
+        "immediately before each review/comment mutation",
+        "as the final preceding operation",
+        "exact field equality",
+        "BLOCKED:pr-review-stale-provider-state",
+        "next reuse or mutation requires a fresh recheck",
+    ):
+        assert clause in phase8
+    posting_index = phase8.index(
+        "Only then post the prepared review and comment payloads"
+    )
+    assert phase8.index('gh pr view "$PR" --repo "$REPO"') < posting_index
+    assert (
+        phase8.index("Immediately before each existing-post identity reuse")
+        < posting_index
+    )
+    assert phase8.index("as the final preceding operation") < posting_index
+
+
+def test_rca_requires_failing_test_trigger_command_before_routing():
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/operators/rca-orchestrator.yaml").read_text()
+    )
+    trigger_command = next(
+        row for row in sidecar["inputs"] if row["name"] == "trigger_command"
+    )
+    operator = (REPO_ROOT / "agents/rca-orchestrator.md").read_text()
+
+    assert trigger_command["required"] is False
+    assert "required for `trigger_type=failing_test`" in trigger_command["description"]
+    assert "require a non-empty `trigger_command` before routing" in operator
+    assert "BLOCKED:missing-trigger-command" in operator

@@ -6,13 +6,14 @@ inputs:
 - target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger
 - evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting
 expectations:
+- resolves contracts/workflows/project-bootstrap.yaml as the authoritative dispatch contract before inline frontmatter and uses frontmatter only when the sidecar is absent
 - runs the open path against shared operators before trusting a project-specific wrapper
 - emits or refreshes thin project-local wrappers only when stable project facts justify them
-- emits a wrapper contract surface with inherits, base_procedure, and project defaults
+- emits a wrapper only at <project>/trunk/agents/ with inherits, base_procedure referencing ~/ai/agents/<name>.md, and project defaults in a sidecar or operator-contract-v1 block
 - uses qualitative stale-wrapper signals to choose closed path or re-bootstrap
 outputs:
 - project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions
-- optional project-local wrapper with valid operator-contract-v1 block and optional project AGENTS routing/policy update
+- optional <project>/trunk/agents/<name>.md wrapper that references ~/ai/agents/<name>.md and provides project defaults through a sidecar or valid operator-contract-v1 block, plus optional project AGENTS routing/policy update
 - NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct
 non_goals:
 - does not redefine bootstrap-pattern lifecycle vocabulary

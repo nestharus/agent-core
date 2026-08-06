@@ -7,13 +7,14 @@ workflow_dispatch_contract:
     - "target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger"
     - "evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting"
   expectations:
+    - "resolves contracts/workflows/project-bootstrap.yaml as the authoritative dispatch contract before inline frontmatter and uses frontmatter only when the sidecar is absent"
     - "runs the open path against shared operators before trusting a project-specific wrapper"
     - "emits or refreshes thin project-local wrappers only when stable project facts justify them"
-    - "emits a wrapper contract surface with inherits, base_procedure, and project defaults"
+    - "emits a wrapper only at <project>/trunk/agents/ with inherits, base_procedure referencing ~/ai/agents/<name>.md, and project defaults in a sidecar or operator-contract-v1 block"
     - "uses qualitative stale-wrapper signals to choose closed path or re-bootstrap"
   outputs:
     - "project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions"
-    - "optional project-local wrapper with valid operator-contract-v1 block and optional project AGENTS routing/policy update"
+    - "optional <project>/trunk/agents/<name>.md wrapper that references ~/ai/agents/<name>.md and provides project defaults through a sidecar or valid operator-contract-v1 block, plus optional project AGENTS routing/policy update"
     - "NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct"
   non_goals:
     - "does not redefine bootstrap-pattern lifecycle vocabulary"
@@ -43,15 +44,16 @@ Work Manager or root coordinator
 
 ### Expectations
 
+- resolves `contracts/workflows/project-bootstrap.yaml` as the authoritative dispatch contract before inline frontmatter and uses frontmatter only when the sidecar is absent
 - runs the open path against shared operators before trusting a project-specific wrapper
 - emits or refreshes thin project-local wrappers only when stable project facts justify them
-- emits a wrapper contract surface with `inherits:`, `base_procedure:`, and project defaults
+- emits a wrapper only at `<project>/trunk/agents/` with `inherits:`, `base_procedure:` referencing `~/ai/agents/<name>.md`, and project defaults in a sidecar or `operator-contract-v1` block
 - uses qualitative stale-wrapper signals to choose closed path or re-bootstrap
 
 ### Outputs
 
 - project-bootstrap run report with layout, category, decision, emitted paths, skipped paths, and residual questions
-- optional project-local wrapper with valid operator-contract-v1 block and optional project AGENTS routing/policy update
+- optional `<project>/trunk/agents/<name>.md` wrapper that references `~/ai/agents/<name>.md` and provides project defaults through a sidecar or valid `operator-contract-v1` block, plus optional project AGENTS routing/policy update
 - NO_WRAPPER_NEEDED, NEEDS_INPUT, or BLOCKED outcome when emission is not correct
 
 ### Non-goals
@@ -103,7 +105,7 @@ Work Manager or root coordinator
 
 ### Emission
 
-1. Read `~/ai/conventions/project-layout.md` and resolve the destination before writing. Use `<project>/trunk/agents/` for the single-repo umbrella layout and `<project>/agents/` for the multi-repo umbrella layout where project routing and wrappers live at the umbrella root.
+1. Read `~/ai/conventions/project-layout.md` and resolve the destination before writing. For every supported layout, emit project-specific wrappers only at `<project>/trunk/agents/`.
 2. Emit or refresh only a thin wrapper file plus optimized sidecar. The wrapper shape is frontmatter, H1, `Base procedure: ~/ai/agents/<name>.md`, optional `## Contract`, and local defaults, examples, and project-specific overrides only.
 3. Do not re-inline the shared base procedure. The wrapper references the base procedure and carries only the stable project facts needed to avoid rediscovery.
 4. Keep project-wide policy knobs in project `AGENTS.md`. Wrappers may reference those knobs and add category-specific defaults, but the precedence rule is that the project AGENTS.md owns global policy facts and the wrapper owns category-local execution defaults. Do not duplicate or override global policy facts inside the wrapper.
@@ -113,7 +115,7 @@ Work Manager or root coordinator
 
 ### Closed Path Dispatch Contract
 
-1. Read project `AGENTS.md`, the current wrapper, the wrapper's `Base procedure:` pointer, the wrapper contract sidecar or `## Contract` block, and the current shared base operator or workflow.
+1. Read project `AGENTS.md`, the current wrapper, the wrapper's `Base procedure:` pointer, the current shared base operator or workflow, and the wrapper's optimized sidecar first. Use its inline `## Contract` block only when the sidecar is absent.
 2. Dispatch the project wrapper first when it is present and current. Dispatch the shared general operator only after `NO_WRAPPER_NEEDED` or after the run report documents a fallback from the wrapper.
 3. Validate the wrapper contract before dispatch: the YAML parses, `schema: operator-contract-v1` is present, `inherits:` and `base_procedure:` name the shared base, and required wrapper defaults are present per `conventions/bootstrap-pattern.md` § Closed-path dispatch.
 4. Route ordinary WU implementation through `~/ai/workflows/implementation-pipeline.md`; this workflow does not replace the implementation pipeline.

@@ -124,7 +124,7 @@ outputs:
   - ${producer_log_path} when operation=comment-readback
   - ${producer_output_path} when operation=comment-readback
 - task: create
-  success_shape: Task-specific stdout or durable artifact paths named by the procedure.
+  success_shape: Created or duplicate-reused issue key and URL after deterministic Markdown description readback returns MATCH.
   wrote_lines: []
 - task: update-estimate
   success_shape: Task-specific stdout or durable artifact paths named by the procedure.

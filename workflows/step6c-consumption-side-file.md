@@ -1,11 +1,22 @@
 ---
 description: 'Project Phase 6 Step 6b output-index rows into orchestrator-authored Step 6c side-file consumption evidence.'
+workflow:
+  id: step6c-consumption-side-file
 workflow_dispatch_contract:
   orchestrator: implementation-pipeline-orchestrator
-  command: step6c-consumption-side-file project --index <step6b-output-index> --out <side-file> --level-id <level-id> [--expected-process <manifest-path>]
+  inputs:
+    - current Step 6b output index, target side-file path, and level id
+    - optional expected-process manifest path and known Step 6c topology identities
+  expectations:
+    - resolves `contracts/workflows/step6c-consumption-side-file.yaml` as the authoritative dispatch contract and uses Markdown frontmatter only when the sidecar is absent
+    - projects canonical consumed rows deterministically before Step 6c dispatch
+    - fails closed on malformed indexes, duplicate rows, or under-specified level identity
   outputs:
     - side-file with canonical consumed rows
     - optional side_channel_evidence_bundle manifest entry
+  non_goals:
+    - does not wrap or dispatch an agent
+    - does not treat model-authored consumption claims as audit evidence
 ---
 
 # Step 6c Consumption Side File

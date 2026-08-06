@@ -168,6 +168,16 @@ def build_index(workflows_dir: Path | str) -> dict:
         if workflow_id in workflows:
             raise ValueError(f"{source_path}: duplicate workflow.id {workflow_id!r}")
 
+        if workflow.get("status") == "retired":
+            retired = parsed.get("retired_workflow")
+            if not isinstance(retired, dict) or retired.get(
+                "active_dispatch_contract"
+            ) != "removed":
+                raise ValueError(
+                    f"{source_path}: retired workflow must declare active_dispatch_contract: removed"
+                )
+            continue
+
         contract = parsed.get("workflow_dispatch_contract")
         validate_dispatch_contract(contract, source_path)
         workflow_aliases = parsed.get("workflow_aliases")

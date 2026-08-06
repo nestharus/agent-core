@@ -5,11 +5,17 @@ intended to simplify usage in shell scripts and Claude command files.
 """
 
 import argparse
+import hashlib
 import json
 import sys
+from pathlib import Path
 from typing import NoReturn
 
-from .client import LinearClient, LinearClientError
+from .client import (
+    LinearClient,
+    LinearClientError,
+    descriptions_match_after_linear_canonicalization,
+)
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -25,6 +31,16 @@ class JsonArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+def _read_utf8_file(path: str, label: str) -> str:
+    try:
+        with Path(path).open("r", encoding="utf-8", newline="") as source:
+            return source.read()
+    except (OSError, UnicodeError) as error:
+        raise LinearClientError(
+            "INVALID_INPUT", f"Cannot read {label} file: {path}: {error}"
+        ) from error
+
+
 def get_issue(issue_id: str) -> None:
     """Fetch and print issue details as JSON."""
     client = LinearClient()
@@ -37,6 +53,35 @@ def get_issue_description(issue_id: str) -> None:
     client = LinearClient()
     issue = client.get_issue(issue_id)
     print(issue.get("description") or "")
+
+
+def verify_issue_description(issue_id: str, description_file: str) -> None:
+    """Verify a local description against Linear's narrow canonicalization."""
+    expected = _read_utf8_file(description_file, "description")
+    actual = LinearClient().get_issue(issue_id).get("description")
+    matches = isinstance(actual, str) and (
+        descriptions_match_after_linear_canonicalization(expected, actual)
+    )
+    print(
+        json.dumps(
+            {
+                "ok": matches,
+                "data": {
+                    "issue": issue_id,
+                    "status": "MATCH" if matches else "MISMATCH",
+                    "expectedSha256": hashlib.sha256(expected.encode()).hexdigest(),
+                    "actualSha256": (
+                        hashlib.sha256(actual.encode()).hexdigest()
+                        if isinstance(actual, str)
+                        else None
+                    ),
+                },
+            },
+            indent=2,
+        )
+    )
+    if not matches:
+        sys.exit(1)
 
 
 def split_plans(issue_id: str, output_dir: str) -> None:
@@ -161,6 +206,8 @@ def create_issue(
     labels: list[str] | None = None,
     create_missing_labels: bool = False,
     estimate: int | None = None,
+    *,
+    description_file: str | None = None,
 ) -> None:
     """Create a new issue and print result as JSON.
 
@@ -169,6 +216,13 @@ def create_issue(
     Resolution failures raise before the issue is created so we never
     produce a half-labeled ticket.
     """
+    if description is not None and description_file is not None:
+        raise LinearClientError(
+            "INVALID_INPUT",
+            "description and description_file are mutually exclusive",
+        )
+    if description_file is not None:
+        description = _read_utf8_file(description_file, "description")
     client = LinearClient()
     resolved_project_id: str | None = None
     if project_id:
@@ -188,14 +242,38 @@ def create_issue(
     if estimate is not None:
         create_kwargs["estimate"] = estimate
     issue = client.create_issue(**create_kwargs)
+    issue_id = issue.get("id") or issue.get("identifier")
+    readback: dict[str, object] | None = None
+    if description is not None or (labels and label_ids):
+        if not issue_id:
+            raise LinearClientError(
+                "READBACK_FAILED",
+                "Created issue response has no ID for required readback; do not retry creation",
+            )
+        readback = client.get_issue(issue_id)
+    if description is not None and readback is not None:
+        actual_description = readback.get("description")
+        if not isinstance(actual_description, str) or not (
+            descriptions_match_after_linear_canonicalization(
+                description, actual_description
+            )
+        ):
+            issue_identity = issue.get("identifier") or issue_id
+            issue_url = issue.get("url") or readback.get("url") or "URL unavailable"
+            raise LinearClientError(
+                "DESCRIPTION_READBACK_MISMATCH",
+                f"Created issue {issue_identity} at {issue_url}, but its description "
+                "failed canonical readback; do not retry creation",
+            )
     if labels and label_ids:
-        issue_id = issue.get("id") or issue.get("identifier")
-        if issue_id:
-            readback = client.get_issue(issue_id)
+        if issue_id and readback is not None:
+            readback_labels = readback.get("labels")
+            if not isinstance(readback_labels, list):
+                readback_labels = []
             readback_label_ids = {
                 label.get("id")
-                for label in readback.get("labels", [])
-                if label.get("id")
+                for label in readback_labels
+                if isinstance(label, dict) and label.get("id")
             }
             if any(label_id not in readback_label_ids for label_id in label_ids):
                 client.apply_labels(
@@ -224,10 +302,13 @@ def update_issue(
             (mutually exclusive with description)
         estimate: Optional story-point estimate.
     """
-    # Read description from file if provided
-    if description_file:
-        with open(description_file, encoding="utf-8") as f:
-            description = f.read()
+    if description is not None and description_file is not None:
+        raise LinearClientError(
+            "INVALID_INPUT",
+            "description and description_file are mutually exclusive",
+        )
+    if description_file is not None:
+        description = _read_utf8_file(description_file, "description")
 
     client = LinearClient()
     update_kwargs: dict[str, object] = {"issue_id": issue_id}
@@ -429,6 +510,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     get_issue_desc_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
 
+    verify_issue_desc_parser = subparsers.add_parser(
+        "verify-issue-description",
+        help="Compare a local description with Linear's stored Markdown",
+    )
+    verify_issue_desc_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    verify_issue_desc_parser.add_argument(
+        "--description-file", required=True, help="Expected Markdown description file"
+    )
+
     # split-plans command
     split_plans_parser = subparsers.add_parser(
         "split-plans", help="Split ticket plans into individual files"
@@ -468,7 +558,12 @@ def main(argv: list[str] | None = None) -> None:
         "--team", required=True, help="Team identifier (UUID, key, or name)"
     )
     create_issue_parser.add_argument("--title", required=True, help="Issue title")
-    create_issue_parser.add_argument("--description", help="Issue description")
+    create_description_group = create_issue_parser.add_mutually_exclusive_group()
+    create_description_group.add_argument("--description", help="Issue description")
+    create_description_group.add_argument(
+        "--description-file",
+        help="Path to an issue description file; preserves original line endings",
+    )
     create_issue_parser.add_argument("--project", help="Project UUID or slugId")
     create_issue_parser.add_argument(
         "--estimate",
@@ -685,6 +780,8 @@ def main(argv: list[str] | None = None) -> None:
             get_issue(args.issue_id)
         elif args.command == "get-issue-description":
             get_issue_description(args.issue_id)
+        elif args.command == "verify-issue-description":
+            verify_issue_description(args.issue_id, args.description_file)
         elif args.command == "split-plans":
             split_plans(args.issue_id, args.output_dir)
         elif args.command == "list-projects":
@@ -698,6 +795,7 @@ def main(argv: list[str] | None = None) -> None:
                 team=args.team,
                 title=args.title,
                 description=args.description,
+                description_file=args.description_file,
                 project_id=args.project,
                 labels=_split_values(args.label),
                 create_missing_labels=args.create_missing_labels,
