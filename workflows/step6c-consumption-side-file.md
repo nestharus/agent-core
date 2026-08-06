@@ -8,6 +8,7 @@ workflow_dispatch_contract:
     - current Step 6b output index, target side-file path, and level id
     - optional expected-process manifest path and known Step 6c topology identities
   expectations:
+    - resolves `contracts/workflows/step6c-consumption-side-file.yaml` as the authoritative dispatch contract and uses Markdown frontmatter only when the sidecar is absent
     - projects canonical consumed rows deterministically before Step 6c dispatch
     - fails closed on malformed indexes, duplicate rows, or under-specified level identity
   outputs:

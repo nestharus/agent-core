@@ -8,6 +8,8 @@ output_format: ''
 
 ## Contract
 
+When `contracts/operators/linear-operator.yaml` is present, dispatchers use that sidecar as the optimized call interface and this embedded block only as its equivalent fallback. The full operator body remains the procedural authority.
+
 ```yaml
 schema: operator-contract-v1
 inputs:
@@ -522,7 +524,7 @@ Both CLI commands return the standard JSON envelope. Parse `identifier`, `title`
 
 For `read`: write the rendered ticket to `output_path`; print the key, title, state, parent in a brief block.
 For `comment`: when `operation` is omitted, print the new comment ID + a confirmation line; when `operation=comment-readback`, atomically write the producer log to `producer_log_path`, the readback projection to `producer_output_path`, and the `ticket-operation-result-v1` result to `operation_result_path`, then return that structured result.
-For `create`: print the new key + URL.
+For `create`: after description readback returns `MATCH`, print the created or duplicate-reused key + URL.
 For `update-estimate`: print the issue key, refined estimate, and comment ID for the durable Markdown note.
 For `list-projects`: print one line per result (`ID  state  name`, omitting blank state).
 For `list-labels`: print one line per result (`ID  name`).

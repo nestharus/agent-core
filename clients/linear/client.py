@@ -26,7 +26,7 @@ UUID_RE = re.compile(
 
 
 def normalize_description_for_readback(description: str) -> str:
-    """Normalize only Linear's observed Markdown storage canonicalization."""
+    """Normalize only Linear's observed unordered-list marker canonicalization."""
     normalized: list[str] = []
     fence: tuple[str, int] | None = None
     for line in description.splitlines(keepends=True):
@@ -48,7 +48,12 @@ def normalize_description_for_readback(description: str) -> str:
         elif fence is None:
             body = re.sub(r"^(\s*)-([ \t]+)", r"\1*\2", body)
         normalized.append(body + ending)
-    value = "".join(normalized)
+    return "".join(normalized)
+
+
+def _remove_one_terminal_newline(value: str) -> str:
+    if value.endswith("\r\n"):
+        return value[:-2]
     if value.endswith("\n"):
         return value[:-1]
     return value
@@ -58,9 +63,14 @@ def descriptions_match_after_linear_canonicalization(
     expected: str, actual: str
 ) -> bool:
     """Compare descriptions without accepting unobserved semantic drift."""
-    return normalize_description_for_readback(expected) == normalize_description_for_readback(
-        actual
-    )
+    list_canonicalized = normalize_description_for_readback(expected)
+    allowed = {
+        expected,
+        list_canonicalized,
+        _remove_one_terminal_newline(expected),
+        _remove_one_terminal_newline(list_canonicalized),
+    }
+    return actual in allowed
 
 
 class LinearClientError(Exception):

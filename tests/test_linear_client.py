@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from clients.linear.cli import verify_issue_description
 from clients.linear.client import (
     LinearClient,
     LinearClientError,
@@ -160,10 +162,18 @@ def test_resolve_label_ids_preserves_team_precedence_and_ambiguity(
     assert error.value.code == "AMBIGUOUS_LABEL"
 
 
-def test_description_readback_accepts_observed_linear_canonicalization() -> None:
-    expected = "# Heading\n\n- first\n  - nested\n"
-    actual = "# Heading\n\n* first\n  * nested"
-
+@pytest.mark.parametrize(
+    ("expected", "actual"),
+    [
+        ("# Heading\n\n- first\n  - nested\n", "# Heading\n\n* first\n  * nested"),
+        ("- first\n", "* first\n"),
+        ("text\n", "text"),
+        ("- first\r\n", "* first"),
+    ],
+)
+def test_description_readback_accepts_observed_linear_canonicalization(
+    expected: str, actual: str
+) -> None:
     assert descriptions_match_after_linear_canonicalization(expected, actual)
 
 
@@ -182,9 +192,22 @@ def test_description_readback_tracks_exact_fence_boundary() -> None:
         ("[label](https://example.test/a)\n", "[label](https://example.test/b)"),
         ("text\n\n", "text"),
         ("```text\n- literal\n```\n", "```text\n* literal\n```"),
+        ("* first", "- first"),
+        ("text", "text\n"),
     ],
 )
 def test_description_readback_rejects_material_drift(
     expected: str, actual: str
 ) -> None:
     assert not descriptions_match_after_linear_canonicalization(expected, actual)
+
+
+def test_description_readback_reports_unreadable_source_as_client_error(
+    tmp_path: Path,
+) -> None:
+    missing = tmp_path / "missing.md"
+
+    with pytest.raises(LinearClientError) as error:
+        verify_issue_description("ACR-1", str(missing))
+
+    assert error.value.code == "INVALID_INPUT"

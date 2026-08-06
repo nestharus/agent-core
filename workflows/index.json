@@ -794,6 +794,7 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
+          "resolves `contracts/workflows/step6c-consumption-side-file.yaml` as the authoritative dispatch contract and uses Markdown frontmatter only when the sidecar is absent",
           "projects canonical consumed rows deterministically before Step 6c dispatch",
           "fails closed on malformed indexes, duplicate rows, or under-specified level identity"
         ],

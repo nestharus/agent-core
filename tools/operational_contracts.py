@@ -2939,7 +2939,7 @@ def _validate_refactoring_auditor_report_verdict(
             line
             for line in lines
             if line in {"LOW", "MEDIUM", "HIGH"}
-            or line.startswith(("NEEDS_INPUT:", "BLOCKED:"))
+            or line.startswith(("Verdict:", "NEEDS_INPUT:", "BLOCKED:"))
         ]
         if verdict_lines != ["LOW"] or not lines or lines[-1] != "LOW":
             errors.append(

@@ -326,7 +326,9 @@ report_acceptance:
   baseline_sha: exact-auditor_baseline_sha
   pre_merge_current_head: exact-nested-reviewed-child-head
   post_merge_current_head: exact-final-and-refreshed-integration-sha
-  report_verdict_line: exactly-one-canonical-Verdict-LOW
+  report_verdict_line:
+    A1 roles: exactly-one-canonical-Verdict-LOW
+    validation-integrity-auditor: exactly-one-final-standalone-LOW
 route_child_array_equality: exact
 additional_properties: false
 ```

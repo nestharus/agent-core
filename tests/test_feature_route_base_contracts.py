@@ -4187,6 +4187,10 @@ def test_refactoring_route_rejects_wrong_nested_pr_head_or_merged_base_identity(
             "refactoring auditor index pre_merge_reports[4] report must end with exactly one canonical validation-integrity LOW token",
         ),
         (
+            "validation-mixed-verdict-report",
+            "refactoring auditor index pre_merge_reports[4] report must end with exactly one canonical validation-integrity LOW token",
+        ),
+        (
             "wrong-pre-merge-head",
             "refactoring route child pre_merge_auditor_current_head must equal nested reviewed head",
         ),
@@ -4255,6 +4259,16 @@ def test_refactoring_route_rejects_unclosed_or_stale_auditor_evidence(
         report = auditor_index["pre_merge_reports"][4]
         report_path = Path(report["report_path"])
         report_path.write_text("# Validation integrity\n\nHIGH\n", encoding="utf-8")
+        report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        child["pre_merge_auditor_reports"] = deepcopy(
+            auditor_index["pre_merge_reports"]
+        )
+    elif case == "validation-mixed-verdict-report":
+        report = auditor_index["pre_merge_reports"][4]
+        report_path = Path(report["report_path"])
+        report_path.write_text(
+            "# Validation integrity\n\nVerdict: HIGH\nLOW\n", encoding="utf-8"
+        )
         report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
         child["pre_merge_auditor_reports"] = deepcopy(
             auditor_index["pre_merge_reports"]
@@ -8851,6 +8865,56 @@ def test_agents_routing_summary_matches_refactoring_contract_and_defaults():
     assert "`root_invocation_uuid`" not in row
 
 
-def test_preexisting_malformed_workflow_is_untouched():
-    status_path = REPO_ROOT / "workflows/step6c-consumption-side-file.md"
-    assert status_path.exists()
+def test_step6c_workflow_declares_sidecar_first_contract_resolution():
+    workflow = (REPO_ROOT / "workflows/step6c-consumption-side-file.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/step6c-consumption-side-file.yaml").read_text()
+    )
+    rule = sidecar["expectations"][0]
+
+    assert "authoritative dispatch contract" in rule
+    assert "frontmatter only when the sidecar is absent" in rule
+    workflow_rule = rule.replace(
+        "this sidecar", "`contracts/workflows/step6c-consumption-side-file.yaml`"
+    )
+    assert workflow_rule in workflow
+
+
+def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/operators/worktree-operator.yaml").read_text()
+    )
+    task = next(row for row in sidecar["inputs"] if row["name"] == "task")
+    outputs = {
+        row["task"]: row["success_shape"] for row in sidecar["outputs"]
+    }
+
+    assert task["options"] == [
+        "create",
+        "list",
+        "sync",
+        "remove",
+        "bulk-cleanup",
+        "open-pr",
+    ]
+    assert "pre/post head SHA" in outputs["sync"]
+    assert "pre-removal" in outputs["remove"]
+    assert "one path/branch" in outputs["bulk-cleanup"]
+    assert "draft=true" in outputs["open-pr"]
+    assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
+    assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
+
+
+def test_rca_requires_failing_test_trigger_command_before_routing():
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/operators/rca-orchestrator.yaml").read_text()
+    )
+    trigger_command = next(
+        row for row in sidecar["inputs"] if row["name"] == "trigger_command"
+    )
+    operator = (REPO_ROOT / "agents/rca-orchestrator.md").read_text()
+
+    assert trigger_command["required"] is False
+    assert "required for `trigger_type=failing_test`" in trigger_command["description"]
+    assert "require a non-empty `trigger_command` before routing" in operator
+    assert "BLOCKED:missing-trigger-command" in operator
