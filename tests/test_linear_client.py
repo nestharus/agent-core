@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -299,3 +300,45 @@ def test_create_issue_description_file_preserves_terminal_newlines(
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert captured["description"] == expected
+
+
+def test_create_description_file_is_keyword_only_without_moving_existing_parameters() -> None:
+    create_parameters = list(inspect.signature(linear_cli.create_issue).parameters)
+    update_parameters = list(inspect.signature(linear_cli.update_issue).parameters)
+
+    assert create_parameters[:7] == [
+        "team",
+        "title",
+        "description",
+        "project_id",
+        "labels",
+        "create_missing_labels",
+        "estimate",
+    ]
+    assert update_parameters == [
+        "issue_id",
+        "description",
+        "description_file",
+        "estimate",
+    ]
+    assert (
+        inspect.signature(linear_cli.create_issue).parameters[
+            "description_file"
+        ].kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+
+
+@pytest.mark.parametrize("operation", [linear_cli.create_issue, linear_cli.update_issue])
+def test_issue_mutations_reject_conflicting_description_inputs(operation: Any) -> None:
+    kwargs = {"description": "inline", "description_file": "description.md"}
+    if operation is linear_cli.create_issue:
+        kwargs.update(team="ACR", title="Title")
+    else:
+        kwargs.update(issue_id="ACR-1")
+
+    with pytest.raises(LinearClientError) as error:
+        operation(**kwargs)
+
+    assert error.value.code == "INVALID_INPUT"
+    assert "mutually exclusive" in str(error.value)

@@ -434,6 +434,7 @@
       },
       "workflow_dispatch_contract": {
         "expectations": [
+          "resolves contracts/workflows/project-bootstrap.yaml as the authoritative dispatch contract before inline frontmatter and uses frontmatter only when the sidecar is absent",
           "runs the open path against shared operators before trusting a project-specific wrapper",
           "emits or refreshes thin project-local wrappers only when stable project facts justify them",
           "emits a wrapper only at <project>/trunk/agents/ with inherits, base_procedure referencing ~/ai/agents/<name>.md, and project defaults in a sidecar or operator-contract-v1 block",

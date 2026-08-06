@@ -196,11 +196,12 @@ def create_issue(
     team: str,
     title: str,
     description: str | None = None,
-    description_file: str | None = None,
     project_id: str | None = None,
     labels: list[str] | None = None,
     create_missing_labels: bool = False,
     estimate: int | None = None,
+    *,
+    description_file: str | None = None,
 ) -> None:
     """Create a new issue and print result as JSON.
 
@@ -209,7 +210,12 @@ def create_issue(
     Resolution failures raise before the issue is created so we never
     produce a half-labeled ticket.
     """
-    if description_file:
+    if description is not None and description_file is not None:
+        raise LinearClientError(
+            "INVALID_INPUT",
+            "description and description_file are mutually exclusive",
+        )
+    if description_file is not None:
         description = _read_utf8_file(description_file, "description")
     client = LinearClient()
     resolved_project_id: str | None = None
@@ -266,7 +272,12 @@ def update_issue(
             (mutually exclusive with description)
         estimate: Optional story-point estimate.
     """
-    if description_file:
+    if description is not None and description_file is not None:
+        raise LinearClientError(
+            "INVALID_INPUT",
+            "description and description_file are mutually exclusive",
+        )
+    if description_file is not None:
         description = _read_utf8_file(description_file, "description")
 
     client = LinearClient()

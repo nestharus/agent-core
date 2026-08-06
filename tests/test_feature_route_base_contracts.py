@@ -8907,6 +8907,10 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         row["task"]: row["success_shape"] for row in sidecar["outputs"]
     }
     operator = (REPO_ROOT / "agents/worktree-operator.md").read_text()
+    result_contract = _fenced_yaml_section(
+        "agents/worktree-operator.md", "## Result Contract"
+    )
+    variants = result_contract["variants"]
 
     assert task["options"] == [
         "create",
@@ -8922,7 +8926,18 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
     assert "one path/branch" in outputs["bulk-cleanup"]
-    assert "draft=true" in outputs["open-pr"]
+    for value in (
+        "status=PASS",
+        "provider_state=OPEN",
+        "exact repository",
+        "PR URL/number",
+        "base/head branches",
+        "head SHA",
+        "draft=true",
+    ):
+        assert value in outputs["open-pr"]
+    assert "skipped rows retain every key" in outputs["bulk-cleanup"]
+    assert "null for unavailable identity fields" in outputs["bulk-cleanup"]
     assert "status/reason" in outputs["bulk-cleanup"]
     assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
@@ -8942,7 +8957,67 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "no exact canonical path record remains" in operator
     assert "worktree_row_required" in operator
     assert "result_row_required" in operator
+    assert "removed_row: {removed: true, status: PASS" in operator
+    assert "skipped_row: {removed: false, status: BLOCKED" in operator
+    assert "nullable: [branch, base_branch, base_sha, head_sha, clean]" in operator
     assert "provider_state: OPEN" in operator
+    assert variants["list"]["worktree_row_required"] == [
+        "path",
+        "branch",
+        "head_sha",
+        "clean",
+        "registration_status",
+    ]
+    assert variants["create"]["required"] == [
+        "repo_root",
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+    ]
+    assert variants["sync"]["required"] == [
+        "worktree_path",
+        "branch",
+        "pre_head_sha",
+        "post_head_sha",
+        "clean",
+    ]
+    assert variants["remove"]["required"] == [
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+        "removed",
+    ]
+    assert variants["bulk-cleanup"]["result_row_required"] == [
+        "worktree_path",
+        "branch",
+        "base_branch",
+        "base_sha",
+        "head_sha",
+        "clean",
+        "removed",
+        "status",
+        "reason",
+    ]
+    assert variants["open-pr"] == {
+        "status": "PASS",
+        "required": [
+            "repo",
+            "pr_url",
+            "pr_number",
+            "provider_state",
+            "draft",
+            "base_branch",
+            "head_branch",
+            "head_sha",
+        ],
+        "fixed": {"provider_state": "OPEN", "draft": True},
+    }
 
 
 def test_build_prototype_indexes_complete_test_carry_forward_schema():
@@ -8979,14 +9054,46 @@ def test_project_bootstrap_indexes_canonical_wrapper_location_and_base():
         assert value in workflow
         assert any(value in item for item in sidecar["expectations"])
         assert any(value in item for item in sidecar["outputs"])
+    assert "<project>/agents/" not in workflow
+    precedence = sidecar["expectations"][0]
+    assert "authoritative dispatch contract" in precedence
+    assert "frontmatter only when the sidecar is absent" in precedence
+    assert precedence.replace(
+        "contracts/workflows/project-bootstrap.yaml",
+        "`contracts/workflows/project-bootstrap.yaml`",
+    ) in workflow
 
 
 def test_pr_review_rechecks_provider_identity_before_each_post_or_reuse():
     operator = (REPO_ROOT / "agents/pr-review-operator.md").read_text()
+    phase8 = operator.split(
+        "### Phase 8: Final Provider Recheck, Post, and Stable Envelope", 1
+    )[1].split("## Terminal Result Schema", 1)[0]
 
-    assert "Immediately before each existing-post identity reuse" in operator
-    assert "immediately before each review/comment mutation" in operator
-    assert "as the final preceding operation" in operator
+    query_fields = (
+        "url,number,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid"
+    )
+    for clause in (
+        'gh pr view "$PR" --repo "$REPO"',
+        f"--json {query_fields}",
+        '"$WORK_DIR/final-provider-identity.json"',
+        "state=OPEN",
+        "exact Phase 0 draft flag",
+        "baseRefName=$BASE_BRANCH",
+        "baseRefOid=$BASE_SHA",
+        "headRefName=$HEAD_BRANCH",
+        "headRefOid=$HEAD_SHA",
+        "Immediately before each existing-post identity reuse",
+        "immediately before each review/comment mutation",
+        "as the final preceding operation",
+        "exact field equality",
+        "BLOCKED:pr-review-stale-provider-state",
+        "next reuse or mutation requires a fresh recheck",
+    ):
+        assert clause in phase8
+    assert phase8.index('gh pr view "$PR" --repo "$REPO"') < phase8.index(
+        "Only then post the prepared review and comment payloads"
+    )
 
 
 def test_rca_requires_failing_test_trigger_command_before_routing():

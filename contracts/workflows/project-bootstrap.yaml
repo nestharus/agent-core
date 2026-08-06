@@ -6,6 +6,7 @@ inputs:
 - target project path, layout variant, bootstrap category, base operator or workflow, project facts, planning path, scratch path, and first-bootstrap or re-bootstrap trigger
 - evidence that a project-specific wrapper may be needed, missing, stale, or not worth emitting
 expectations:
+- resolves contracts/workflows/project-bootstrap.yaml as the authoritative dispatch contract before inline frontmatter and uses frontmatter only when the sidecar is absent
 - runs the open path against shared operators before trusting a project-specific wrapper
 - emits or refreshes thin project-local wrappers only when stable project facts justify them
 - emits a wrapper only at <project>/trunk/agents/ with inherits, base_procedure referencing ~/ai/agents/<name>.md, and project defaults in a sidecar or operator-contract-v1 block
