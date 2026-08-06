@@ -9030,7 +9030,9 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     provider_recheck_index = bulk_cleanup_section.index(
         'gh pr view "$pr_number" --repo "$pr_repo"'
     )
-    removal_index = bulk_cleanup_section.rindex('git worktree remove`')
+    removal_index = bulk_cleanup_section.index(
+        'git -C "$repo_root" worktree remove "$worktree_path"'
+    )
     assert provider_recheck_index < removal_index
     assert "state=MERGED" in bulk_cleanup_section
     assert "Merged worktrees need provider-verified bulk cleanup" in operator

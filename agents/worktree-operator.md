@@ -200,6 +200,12 @@ Read records with `git -C "$repo_root" worktree list --porcelain`. For each regi
 
 While still holding the lock, re-query the exact captured PR with `gh pr view "$pr_number" --repo "$pr_repo" --json url,number,state,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner`. Require its URL/number, target and head repository identities, base branch/OID, head branch/OID, and `state=MERGED` to remain exactly equal to the provider evidence that authorized removal. Only after that exact re-query passes may the operator run `git worktree remove`; any query failure or drift returns that target as `status=BLOCKED` without removal.
 
+```bash
+git -C "$repo_root" worktree remove "$worktree_path"
+```
+
+Keep the mutation lock held through this command and the post-removal filesystem and registration checks.
+
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
 
