@@ -236,14 +236,38 @@ def create_issue(
     if estimate is not None:
         create_kwargs["estimate"] = estimate
     issue = client.create_issue(**create_kwargs)
+    issue_id = issue.get("id") or issue.get("identifier")
+    readback: dict[str, object] | None = None
+    if description is not None or (labels and label_ids):
+        if not issue_id:
+            raise LinearClientError(
+                "READBACK_FAILED",
+                "Created issue response has no ID for required readback; do not retry creation",
+            )
+        readback = client.get_issue(issue_id)
+    if description is not None and readback is not None:
+        actual_description = readback.get("description") or ""
+        if not isinstance(actual_description, str) or not (
+            descriptions_match_after_linear_canonicalization(
+                description, actual_description
+            )
+        ):
+            issue_identity = issue.get("identifier") or issue_id
+            issue_url = issue.get("url") or readback.get("url") or "URL unavailable"
+            raise LinearClientError(
+                "DESCRIPTION_READBACK_MISMATCH",
+                f"Created issue {issue_identity} at {issue_url}, but its description "
+                "failed canonical readback; do not retry creation",
+            )
     if labels and label_ids:
-        issue_id = issue.get("id") or issue.get("identifier")
-        if issue_id:
-            readback = client.get_issue(issue_id)
+        if issue_id and readback is not None:
+            readback_labels = readback.get("labels")
+            if not isinstance(readback_labels, list):
+                readback_labels = []
             readback_label_ids = {
                 label.get("id")
-                for label in readback.get("labels", [])
-                if label.get("id")
+                for label in readback_labels
+                if isinstance(label, dict) and label.get("id")
             }
             if any(label_id not in readback_label_ids for label_id in label_ids):
                 client.apply_labels(

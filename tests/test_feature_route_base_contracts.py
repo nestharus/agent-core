@@ -8922,6 +8922,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     ]
     assert "pre/post head SHA" in outputs["sync"]
     assert "task=list" in outputs["list"]
+    assert "per-worktree git status collection" in outputs["list"]
     assert "open-pr" in name["description"]
     assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
@@ -8932,12 +8933,19 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "exact repository",
         "PR URL/number",
         "base/head branches",
+        "base SHA",
         "head SHA",
         "draft=true",
     ):
         assert value in outputs["open-pr"]
     assert "skipped rows retain every key" in outputs["bulk-cleanup"]
     assert "null for unavailable identity fields" in outputs["bulk-cleanup"]
+    for aggregate_rule in (
+        "PASS for zero or all-PASS rows",
+        "PARTIAL for mixed PASS/BLOCKED rows",
+        "BLOCKED for non-empty all-BLOCKED rows",
+    ):
+        assert aggregate_rule in outputs["bulk-cleanup"]
     assert "status/reason" in outputs["bulk-cleanup"]
     assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
@@ -8945,6 +8953,8 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "BLOCKED:dirty-worktree" in operator
     assert 'reset --keep "$branch_name"' in operator
     assert "exclusive advisory mutation lock" in operator
+    assert "Hold the lock through `git worktree remove`" in operator
+    assert "revalidate canonical path, branch, head SHA, base identity" in operator
     assert "this operator has no force-removal input" in operator
     assert "Require exactly one provider PR" in operator
     assert "pr-writer.log" in operator
@@ -9012,11 +9022,18 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
             "pr_number",
             "provider_state",
             "draft",
-            "base_branch",
-            "head_branch",
+        "base_branch",
+        "base_sha",
+        "head_branch",
             "head_sha",
         ],
         "fixed": {"provider_state": "OPEN", "draft": True},
+    }
+    assert variants["bulk-cleanup"]["aggregate_status"] == {
+        "zero_targets": "PASS",
+        "all_rows_pass": "PASS",
+        "mixed_pass_blocked": "PARTIAL",
+        "nonempty_all_rows_blocked": "BLOCKED",
     }
 
 

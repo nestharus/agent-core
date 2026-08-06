@@ -291,6 +291,9 @@ def test_create_issue_description_file_preserves_terminal_newlines(
             captured.update(kwargs)
             return {"id": "issue-1", "identifier": "ACR-1"}
 
+        def get_issue(self, _issue_id: str) -> dict[str, str]:
+            return {"description": expected}
+
     monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
 
     linear_cli.create_issue(
@@ -300,6 +303,48 @@ def test_create_issue_description_file_preserves_terminal_newlines(
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
     assert captured["description"] == expected
+
+
+def test_create_issue_description_mismatch_blocks_without_second_create(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = {"create": 0, "read": 0}
+
+    class StubClient:
+        def create_issue(self, **_kwargs: Any) -> dict[str, str]:
+            calls["create"] += 1
+            return {
+                "id": "issue-1",
+                "identifier": "ACR-1",
+                "url": "https://linear.app/issue/ACR-1",
+            }
+
+        def get_issue(self, _issue_id: str) -> dict[str, str]:
+            calls["read"] += 1
+            return {"description": "materially changed"}
+
+    monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
+
+    with pytest.raises(SystemExit) as error:
+        linear_cli.main(
+            [
+                "create-issue",
+                "--team",
+                "ACR",
+                "--title",
+                "Title",
+                "--description",
+                "expected description",
+            ]
+        )
+
+    assert calls == {"create": 1, "read": 1}
+    assert error.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "DESCRIPTION_READBACK_MISMATCH"
+    assert "Created issue ACR-1" in payload["error"]["message"]
+    assert "do not retry creation" in payload["error"]["message"]
 
 
 def test_create_description_file_is_keyword_only_without_moving_existing_parameters() -> None:
