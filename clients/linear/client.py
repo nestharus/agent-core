@@ -46,7 +46,9 @@ def normalize_description_for_readback(description: str) -> str:
             ):
                 fence = None
         elif fence is None:
-            body = re.sub(r"^(\s*)-([ \t]+)", r"\1*\2", body)
+            thematic_break = re.match(r"^ {0,3}(?:-[ \t]*){3,}$", body)
+            if not thematic_break:
+                body = re.sub(r"^( {0,3})-([ \t]+)", r"\1*\2", body)
         normalized.append(body + ending)
     return "".join(normalized)
 

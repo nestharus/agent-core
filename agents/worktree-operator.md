@@ -33,12 +33,12 @@ inputs:
     type: string
     required: false
     default_source: caller
-    description: "Safe direct-child worktree name; path separators, traversal components, option-like values, and shell metacharacters are invalid."
+    description: "Required for create, sync, remove, and open-pr; derives ${worktrees_root}/${name}. Must be one safe direct-child name without traversal, option-like values, or shell metacharacters."
   - name: branch_name
     type: string
     required: false
     default_source: caller | derived
-    description: "Safe short local branch name accepted by git check-ref-format --branch and the caller's branch policy."
+    description: "Required or deterministically derived from name for create, sync, remove, and open-pr; must pass git check-ref-format --branch and the caller's branch policy."
   - name: base_branch
     type: string
     required: false
@@ -69,7 +69,7 @@ outputs:
     success_shape: "worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness."
     wrote_lines: []
   - task: remove
-    success_shape: "worktree-operation-result-v1 with task=remove, pre-removal path/branch/base SHA/head SHA/cleanliness identity, and removed=true."
+    success_shape: "worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true."
     wrote_lines: []
   - task: bulk-cleanup
     success_shape: "worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base SHA/head SHA/cleanliness/removal-status result per inspected target."
@@ -119,7 +119,7 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 
 ## Execution Boundary
 
-`must_delegate: worktree-mutation` is a caller boundary: callers delegate worktree mutations to this operator. Once selected, this operator performs the single requested task directly. It must never dispatch `worktree-operator.md`, another agent, or another workflow to perform the same request. Before mutation, validate the requested repository, exact base, branch policy, branch absence, path absence, canonical containment, and central-checkout protection; after mutation, return the task-specific identity and cleanliness evidence.
+`must_delegate: worktree-mutation` is a caller boundary: callers delegate worktree mutations to this operator. Once selected, this operator performs the single requested task directly. It must never dispatch `worktree-operator.md`, another agent, or another workflow to perform the same request. Apply task-specific preconditions: `create` requires branch and path absence; `sync`, `remove`, and `open-pr` require one exact existing registered worktree, expected branch, and canonical containment; `bulk-cleanup` validates each discovered registered worktree independently. Every mutating task validates the repository, exact base where applicable, branch policy, and central-checkout protection, then returns task-specific identity and cleanliness evidence.
 
 ## Non-Negotiables
 
@@ -132,8 +132,8 @@ You manage git worktrees for a repository that uses a dedicated worktree root at
 ## Required Inputs
 
 - `task`: One of: `create`, `list`, `sync`, `remove`, `bulk-cleanup`, `open-pr`
-- `name` (for create/sync/remove): Worktree name (e.g., `cost-estimation-e2e`)
-- `branch_name` (for create/sync/remove, optional): branch checked out in the worktree. If omitted, derive it from `name` using the caller's branch policy.
+- `name` (for create/sync/remove/open-pr): Worktree name (e.g., `cost-estimation-e2e`) used to derive the exact direct-child worktree path.
+- `branch_name` (for create/sync/remove/open-pr, optional): branch checked out in the worktree. If omitted, derive it deterministically from `name` using the caller's branch policy.
 - `base_branch` (for create, optional): Branch to create from. Defaults to `main`.
 
 ## Inputs
@@ -171,7 +171,7 @@ After jj updates branch refs in the shared `.git/`, each affected worktree needs
 git -C "$worktree_path" reset --hard "$branch_name"
 ```
 
-Run sync only when the caller explicitly selected `task=sync`. Before the reset, require the canonical target to be a registered direct child of `${worktrees_root}`, require its checked-out branch to equal the validated `branch_name`, and record the pre-reset head and cleanliness. Do not perform an implicit bulk reset. Verify and return the post-reset head and cleanliness.
+Run sync only when the caller explicitly selected `task=sync`. Before the reset, require the canonical target to be a registered direct child of `${worktrees_root}`, require its checked-out branch to equal the validated `branch_name`, and require `git status --porcelain` to be empty; a dirty worktree is `BLOCKED:dirty-worktree`, not force-reset authorization. Record the pre-reset head, do not perform an implicit bulk reset, then verify and return the post-reset head and cleanliness.
 
 ## Procedure: Remove Worktree
 
@@ -188,7 +188,7 @@ Verify the path is absent and return the pre-removal identity with `removed: tru
 Remove worktrees whose PRs were merged. **Verify PR status before deleting**
 — don't assume a missing remote branch means merged (could be local-only).
 
-Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads, validate its exact branch and canonical containment, query that branch's PR, and remove it only when the provider reports `MERGED`. Record path, branch, base SHA, head SHA, and cleanliness before each removal. Do not force-remove dirty worktrees or delete local branches without separate explicit authorization. Return one result row for every inspected target, including skipped targets and their reason.
+Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose repository, base branch, head branch, and head OID match those values and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Record path, branch, base branch/SHA, head SHA, and cleanliness before each removal. Do not force-remove dirty worktrees or delete local branches without separate explicit authorization. Return one result row for every inspected target, including skipped targets and their reason.
 
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
@@ -207,7 +207,8 @@ agents -a ~/ai/agents/pr-writer.md \
   --input "branch=$branch_name" \
   --input "base=$base_branch" \
   --input "repo_root=$worktree_path" \
-  --input "output_path=$worktree_path/.tmp/pr-body.md"
+  --input "output_path=$worktree_path/.tmp/pr-body.md" \
+  2>&1 | tee "$worktree_path/.tmp/pr-writer.log"
   # Optional: --input context_files=<comma-separated paths the writer should read for intent>
   # Optional: --input stack_parent_pr=<num> if base is another open PR's head branch
   # Optional: --input linear_issue_keys=<KEY> when a Linear key is known
@@ -221,7 +222,7 @@ gh pr create --repo "$repo_slug" --draft \
 
 Include `--input linear_issue_keys=<KEY>` only when a Linear key is known to the manual operator. Omit when no key is known; no close footer will be emitted in that case.
 
-Never invoke `gh pr create` with an empty body or a hand-authored body. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
+Before `gh pr create`, require the writer command to succeed and both `$worktree_path/.tmp/pr-body.md.title` and `$worktree_path/.tmp/pr-body.md` to exist and be non-empty. Never invoke `gh pr create` with missing/empty writer output or a hand-authored body. The writer's audience-and-content rules (`~/ai/agents/pr-writer.md`) exist because hand-written bodies routinely leak internal jargon ("wave N", "Slot B", work-unit ids, planning-artifact paths) that an external reviewer can't act on.
 
 After creation, query the exact PR from `repo_slug`, require `state=OPEN`, `draft=true`, the requested base/head branches, and the committed head SHA, then return that provider identity.
 

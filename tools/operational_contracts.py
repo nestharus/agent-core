@@ -2935,13 +2935,16 @@ def _validate_refactoring_auditor_report_verdict(
         errors.append(f"cannot read {label} {report_path}: {exc}")
         return
     if role == "validation-integrity-auditor":
+        final_nonblank_line = next(
+            (line for line in reversed(lines) if line.strip()), None
+        )
         verdict_lines = [
             line
             for line in lines
             if line in {"LOW", "MEDIUM", "HIGH"}
             or line.startswith(("Verdict:", "NEEDS_INPUT:", "BLOCKED:"))
         ]
-        if verdict_lines != ["LOW"] or not lines or lines[-1] != "LOW":
+        if verdict_lines != ["LOW"] or final_nonblank_line != "LOW":
             errors.append(
                 f"{label} must end with exactly one canonical validation-integrity LOW token"
             )

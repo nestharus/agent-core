@@ -4305,6 +4305,23 @@ def test_refactoring_route_rejects_unclosed_or_stale_auditor_evidence(
     assert any(expected_error in error for error in decision["errors"])
 
 
+def test_refactoring_route_accepts_trailing_blank_after_validation_verdict(
+    tmp_path: Path,
+):
+    report_path = tmp_path / "validation-integrity.md"
+    report_path.write_text("# Validation integrity\n\nLOW\n\n", encoding="utf-8")
+    errors: list[str] = []
+
+    _CONTRACT_MODULE._validate_refactoring_auditor_report_verdict(
+        report_path,
+        role="validation-integrity-auditor",
+        label="validation report",
+        errors=errors,
+    )
+
+    assert errors == []
+
+
 def test_route_attempt_rejects_proof_envelope_feature_branch_mismatch(
     tmp_path: Path,
 ):
@@ -8885,9 +8902,11 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         (REPO_ROOT / "contracts/operators/worktree-operator.yaml").read_text()
     )
     task = next(row for row in sidecar["inputs"] if row["name"] == "task")
+    name = next(row for row in sidecar["inputs"] if row["name"] == "name")
     outputs = {
         row["task"]: row["success_shape"] for row in sidecar["outputs"]
     }
+    operator = (REPO_ROOT / "agents/worktree-operator.md").read_text()
 
     assert task["options"] == [
         "create",
@@ -8898,11 +8917,41 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
         "open-pr",
     ]
     assert "pre/post head SHA" in outputs["sync"]
+    assert "open-pr" in name["description"]
+    assert "base branch/base SHA" in outputs["remove"]
     assert "pre-removal" in outputs["remove"]
     assert "one path/branch" in outputs["bulk-cleanup"]
     assert "draft=true" in outputs["open-pr"]
     assert "recursive-worktree-operator-dispatch" in sidecar["forbidden_direct"]
     assert "unquoted-caller-controlled-git-arguments" in sidecar["forbidden_direct"]
+    assert "BLOCKED:dirty-worktree" in operator
+    assert "Require exactly one provider PR" in operator
+    assert "pr-writer.log" in operator
+    assert "to exist and be non-empty" in operator
+
+
+def test_build_prototype_indexes_complete_test_carry_forward_schema():
+    fields = (
+        "prototype_test_pr_url",
+        "prototype_test_branch",
+        "test_paths_or_node_ids",
+        "marker_reason",
+        "ticket_mapping",
+        "implementation_acceptance_criterion",
+    )
+    workflow = (REPO_ROOT / "workflows/build-prototype.md").read_text()
+    sidecar = yaml.safe_load(
+        (REPO_ROOT / "contracts/workflows/build-prototype.yaml").read_text()
+    )
+    index = json.loads((REPO_ROOT / "workflows/index.json").read_text())
+    indexed_outputs = index["workflows"]["build-prototype"][
+        "workflow_dispatch_contract"
+    ]["outputs"]
+
+    for field in fields:
+        assert field in workflow
+        assert any(field in output for output in sidecar["outputs"])
+        assert any(field in output for output in indexed_outputs)
 
 
 def test_rca_requires_failing_test_trigger_command_before_routing():

@@ -48,7 +48,8 @@ def get_issue_description(issue_id: str) -> None:
 def verify_issue_description(issue_id: str, description_file: str) -> None:
     """Verify a local description against Linear's narrow canonicalization."""
     try:
-        expected = Path(description_file).read_text(encoding="utf-8")
+        with Path(description_file).open("r", encoding="utf-8", newline="") as source:
+            expected = source.read()
     except (OSError, UnicodeError) as error:
         raise LinearClientError(
             "INVALID_INPUT",

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from clients.linear.cli import verify_issue_description
+from clients.linear import cli as linear_cli
 from clients.linear.client import (
     LinearClient,
     LinearClientError,
@@ -194,6 +196,8 @@ def test_description_readback_tracks_exact_fence_boundary() -> None:
         ("```text\n- literal\n```\n", "```text\n* literal\n```"),
         ("* first", "- first"),
         ("text", "text\n"),
+        ("    - literal\n", "    * literal"),
+        ("- - -\n", "* - -"),
     ],
 )
 def test_description_readback_rejects_material_drift(
@@ -208,6 +212,53 @@ def test_description_readback_reports_unreadable_source_as_client_error(
     missing = tmp_path / "missing.md"
 
     with pytest.raises(LinearClientError) as error:
-        verify_issue_description("ACR-1", str(missing))
+        linear_cli.verify_issue_description("ACR-1", str(missing))
 
     assert error.value.code == "INVALID_INPUT"
+
+
+def test_verify_issue_description_preserves_raw_crlf_hashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "description.md"
+    expected = b"- first\r\n"
+    actual = "* first"
+    source.write_bytes(expected)
+
+    class StubClient:
+        def get_issue(self, issue_id: str) -> dict[str, str]:
+            assert issue_id == "ACR-1"
+            return {"description": actual}
+
+    monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
+
+    linear_cli.verify_issue_description("ACR-1", str(source))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["data"]["status"] == "MATCH"
+    assert payload["data"]["expectedSha256"] == hashlib.sha256(expected).hexdigest()
+    assert payload["data"]["actualSha256"] == hashlib.sha256(
+        actual.encode()
+    ).hexdigest()
+
+
+def test_verify_issue_description_mismatch_exits_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "description.md"
+    source.write_text("expected", encoding="utf-8")
+
+    class StubClient:
+        def get_issue(self, _issue_id: str) -> dict[str, str]:
+            return {"description": "changed"}
+
+    monkeypatch.setattr(linear_cli, "LinearClient", StubClient)
+
+    with pytest.raises(SystemExit) as error:
+        linear_cli.verify_issue_description("ACR-1", str(source))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert error.value.code == 1
+    assert payload["ok"] is False
+    assert payload["data"]["status"] == "MISMATCH"

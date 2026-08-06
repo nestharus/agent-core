@@ -29,12 +29,12 @@ inputs:
   type: string
   required: false
   default_source: caller
-  description: Safe direct-child worktree name; path separators, traversal components, option-like values, and shell metacharacters are invalid.
+  description: Required for create, sync, remove, and open-pr; derives ${worktrees_root}/${name}. Must be one safe direct-child name without traversal, option-like values, or shell metacharacters.
 - name: branch_name
   type: string
   required: false
   default_source: caller | derived
-  description: Safe short local branch name accepted by git check-ref-format --branch and the caller's branch policy.
+  description: Required or deterministically derived from name for create, sync, remove, and open-pr; must pass git check-ref-format --branch and the caller's branch policy.
 - name: base_branch
   type: string
   required: false
@@ -64,7 +64,7 @@ outputs:
   success_shape: 'worktree-operation-result-v1 with task=sync, canonical path, branch, pre/post head SHA, and post-sync cleanliness.'
   wrote_lines: []
 - task: remove
-  success_shape: 'worktree-operation-result-v1 with task=remove, pre-removal path/branch/base SHA/head SHA/cleanliness identity, and removed=true.'
+  success_shape: 'worktree-operation-result-v1 with task=remove, pre-removal path/branch/base branch/base SHA/head SHA/cleanliness identity, and removed=true.'
   wrote_lines: []
 - task: bulk-cleanup
   success_shape: 'worktree-operation-result-v1 with task=bulk-cleanup and one path/branch/base SHA/head SHA/cleanliness/removal-status result per inspected target.'
