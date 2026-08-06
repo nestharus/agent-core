@@ -6,7 +6,7 @@ contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: incident_id
   type: string
-  required: true
+  required: false
   default_source: caller
   description: '`incident_id?`: tracker key, URL, incident slug, or incident handle.'
 - name: failure_id
@@ -15,71 +15,60 @@ inputs:
   default_source: caller
   description: '`failure_id`: stable slug used for canonical artifact paths.'
 - name: trigger_type
-  type: string
-  required: true
-  default_source: caller
-  description: '`trigger_type`: exactly `failing_test` or `incident`.'
-- name: failing_test
-  type: string
-  required: true
-  default_source: caller
-  description: '`trigger_type`: exactly `failing_test` or `incident`.'
-- name: incident
-  type: string
+  type: enum
+  options:
+  - failing_test
+  - incident
   required: true
   default_source: caller
   description: '`trigger_type`: exactly `failing_test` or `incident`.'
 - name: trigger_evidence_path
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`trigger_evidence_path`: absolute path to failing test output, incident brief, log bundle, QA observation, or other concrete trigger evidence.'
 - name: trigger_command
   type: string
-  required: true
+  required: false
   default_source: caller
   description: '`trigger_command?`: required for `trigger_type=failing_test`; filled by Phase 1 for `trigger_type=incident`.'
 - name: repo_root
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`repo_root`: absolute repository root for investigation.'
 - name: worktree_path
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`worktree_path`: writable worktree for reproduction tests and Phase 5 application.'
 - name: scratch_dir
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`scratch_dir`: transient prompts, logs, and question artifacts.'
 - name: planning_dir
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`planning_dir`: durable RCA artifact root.'
 - name: audit_history_path
-  type: string
-  required: true
-  default_source: caller
+  type: path
+  required: false
+  default_source: base
   description: '`audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.'
 - name: ticket_system
-  type: string
-  required: true
+  type: enum
+  options:
+  - linear
+  - jira
+  required: false
   default_source: caller
   description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
-- name: linear
-  type: string
-  required: true
-  default_source: caller
-  description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
-- name: jira
-  type: string
-  required: true
-  default_source: caller
-  description: '`ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.'
-defaults: []
+defaults:
+- name: audit_history_path
+  value: ${planning_dir}/audit-history.md
+  source: base
 outputs:
 - task: default
   success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.

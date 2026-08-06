@@ -2927,12 +2927,24 @@ def _validate_refactoring_auditor_collection_shape(
 
 
 def _validate_refactoring_auditor_report_verdict(
-    report_path: Path, *, label: str, errors: list[str]
+    report_path: Path, *, role: str, label: str, errors: list[str]
 ) -> None:
     try:
         lines = report_path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         errors.append(f"cannot read {label} {report_path}: {exc}")
+        return
+    if role == "validation-integrity-auditor":
+        verdict_lines = [
+            line
+            for line in lines
+            if line in {"LOW", "MEDIUM", "HIGH"}
+            or line.startswith(("NEEDS_INPUT:", "BLOCKED:"))
+        ]
+        if verdict_lines != ["LOW"] or not lines or lines[-1] != "LOW":
+            errors.append(
+                f"{label} must end with exactly one canonical validation-integrity LOW token"
+            )
         return
     verdict_lines = [line for line in lines if line.startswith("Verdict:")]
     if verdict_lines != ["Verdict: LOW"]:
@@ -3010,7 +3022,10 @@ def _validate_refactoring_auditor_index(
             if report_path is not None:
                 indexed_paths.append(report_path)
                 _validate_refactoring_auditor_report_verdict(
-                    report_path, label=f"{row_label} report", errors=errors
+                    report_path,
+                    role=str(report.get("role")),
+                    label=f"{row_label} report",
+                    errors=errors,
                 )
             if report.get("verdict") != "LOW":
                 errors.append(f"{row_label}.verdict must equal LOW")

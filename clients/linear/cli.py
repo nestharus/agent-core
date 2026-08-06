@@ -5,11 +5,17 @@ intended to simplify usage in shell scripts and Claude command files.
 """
 
 import argparse
+import hashlib
 import json
 import sys
+from pathlib import Path
 from typing import NoReturn
 
-from .client import LinearClient, LinearClientError
+from .client import (
+    LinearClient,
+    LinearClientError,
+    descriptions_match_after_linear_canonicalization,
+)
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -37,6 +43,29 @@ def get_issue_description(issue_id: str) -> None:
     client = LinearClient()
     issue = client.get_issue(issue_id)
     print(issue.get("description") or "")
+
+
+def verify_issue_description(issue_id: str, description_file: str) -> None:
+    """Verify a local description against Linear's narrow canonicalization."""
+    expected = Path(description_file).read_text(encoding="utf-8")
+    actual = LinearClient().get_issue(issue_id).get("description") or ""
+    matches = descriptions_match_after_linear_canonicalization(expected, actual)
+    print(
+        json.dumps(
+            {
+                "ok": matches,
+                "data": {
+                    "issue": issue_id,
+                    "status": "MATCH" if matches else "MISMATCH",
+                    "expectedSha256": hashlib.sha256(expected.encode()).hexdigest(),
+                    "actualSha256": hashlib.sha256(actual.encode()).hexdigest(),
+                },
+            },
+            indent=2,
+        )
+    )
+    if not matches:
+        sys.exit(1)
 
 
 def split_plans(issue_id: str, output_dir: str) -> None:
@@ -429,6 +458,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     get_issue_desc_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
 
+    verify_issue_desc_parser = subparsers.add_parser(
+        "verify-issue-description",
+        help="Compare a local description with Linear's stored Markdown",
+    )
+    verify_issue_desc_parser.add_argument("issue_id", help="Issue ID (e.g., NES-24)")
+    verify_issue_desc_parser.add_argument(
+        "--description-file", required=True, help="Expected Markdown description file"
+    )
+
     # split-plans command
     split_plans_parser = subparsers.add_parser(
         "split-plans", help="Split ticket plans into individual files"
@@ -685,6 +723,8 @@ def main(argv: list[str] | None = None) -> None:
             get_issue(args.issue_id)
         elif args.command == "get-issue-description":
             get_issue_description(args.issue_id)
+        elif args.command == "verify-issue-description":
+            verify_issue_description(args.issue_id, args.description_file)
         elif args.command == "split-plans":
             split_plans(args.issue_id, args.output_dir)
         elif args.command == "list-projects":

@@ -13,6 +13,8 @@ workflow_dispatch_contract:
   outputs:
     - "dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md"
     - "recommended downstream tickets, roadmap revisions, or scope-cut decisions"
+    - "P4 test-publication manifest and prototype-test draft PR URL"
+    - "P4 spawned-ticket carry-forward payloads for inherited proof tests"
   non_goals:
     - "does not bypass the implementation pipeline for ordinary well-scoped work"
     - "does not treat the prototype branch as the load-bearing deliverable"
@@ -49,6 +51,8 @@ prototype-orchestrator
 
 - dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md
 - recommended downstream tickets, roadmap revisions, or scope-cut decisions
+- P4 test-publication manifest and prototype-test draft PR URL
+- P4 spawned-ticket carry-forward payloads for inherited proof tests
 
 ### Non-goals
 

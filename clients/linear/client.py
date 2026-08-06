@@ -25,6 +25,44 @@ UUID_RE = re.compile(
 )
 
 
+def normalize_description_for_readback(description: str) -> str:
+    """Normalize only Linear's observed Markdown storage canonicalization."""
+    normalized: list[str] = []
+    fence: tuple[str, int] | None = None
+    for line in description.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        ending = line[len(body) :]
+        fence_match = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", body)
+        if fence is None and fence_match:
+            marker = fence_match.group(1)
+            fence = (marker[0], len(marker))
+        elif fence is not None and fence_match:
+            marker = fence_match.group(1)
+            remainder = fence_match.group(2)
+            if (
+                marker[0] == fence[0]
+                and len(marker) >= fence[1]
+                and not remainder.strip()
+            ):
+                fence = None
+        elif fence is None:
+            body = re.sub(r"^(\s*)-([ \t]+)", r"\1*\2", body)
+        normalized.append(body + ending)
+    value = "".join(normalized)
+    if value.endswith("\n"):
+        return value[:-1]
+    return value
+
+
+def descriptions_match_after_linear_canonicalization(
+    expected: str, actual: str
+) -> bool:
+    """Compare descriptions without accepting unobserved semantic drift."""
+    return normalize_description_for_readback(expected) == normalize_description_for_readback(
+        actual
+    )
+
+
 class LinearClientError(Exception):
     """Raised when a Linear API operation fails.
 
@@ -1891,8 +1929,12 @@ query IssueUnresolvedComments($id: String!, $after: String) {
             raise LinearClientError("NOT_FOUND", f"Team not found: {team}")
 
         query = """
-query LabelsForTeam($teamId: ID!) {
-  issueLabels(filter: {or: [{team: {id: {eq: $teamId}}}, {team: {null: true}}]}) {
+query LabelsForTeam($teamId: ID!, $first: Int!, $after: String) {
+  issueLabels(
+    filter: {or: [{team: {id: {eq: $teamId}}}, {team: {null: true}}]}
+    first: $first
+    after: $after
+  ) {
     nodes {
       id
       name
@@ -1900,12 +1942,56 @@ query LabelsForTeam($teamId: ID!) {
       description
       team { id key name }
     }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
   }
 }
 """
-        result = self._run_graphql(query, {"teamId": team_id})
-        nodes = result.get("data", {}).get("issueLabels", {}).get("nodes", []) or []
-        return cast(list[dict[str, Any]], nodes)
+        labels: list[dict[str, Any]] = []
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            result = self._run_graphql(
+                query,
+                {"teamId": team_id, "first": 50, "after": cursor},
+            )
+            connection = result.get("data", {}).get("issueLabels")
+            if not isinstance(connection, dict):
+                raise LinearClientError(
+                    "INVALID_RESPONSE", "Linear label response is missing issueLabels"
+                )
+            nodes = connection.get("nodes")
+            if not isinstance(nodes, list) or not all(
+                isinstance(node, dict) for node in nodes
+            ):
+                raise LinearClientError(
+                    "INVALID_RESPONSE", "Linear label response is missing issueLabels.nodes"
+                )
+            labels.extend(cast(list[dict[str, Any]], nodes))
+
+            page_info = connection.get("pageInfo")
+            if not isinstance(page_info, dict) or not isinstance(
+                page_info.get("hasNextPage"), bool
+            ):
+                raise LinearClientError(
+                    "PAGINATION_ERROR", "Linear label pagination metadata is malformed"
+                )
+            if not page_info["hasNextPage"]:
+                return labels
+            next_cursor = page_info.get("endCursor")
+            if (
+                not isinstance(next_cursor, str)
+                or not next_cursor
+                or next_cursor in seen_cursors
+            ):
+                raise LinearClientError(
+                    "PAGINATION_ERROR",
+                    "Pagination did not advance: missing or repeated endCursor",
+                )
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
 
     def create_label(
         self,

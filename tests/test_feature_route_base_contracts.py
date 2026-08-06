@@ -1794,7 +1794,8 @@ def _refactoring_route_process_fixture(
         for role in auditor_roles:
             path = tmp_path / "refactoring-owned" / "auditors" / f"{stage}-{role}.md"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(f"# {role}\n\nVerdict: LOW\n", encoding="utf-8")
+            verdict = "LOW" if role == "validation-integrity-auditor" else "Verdict: LOW"
+            path.write_text(f"# {role}\n\n{verdict}\n", encoding="utf-8")
             rows.append(
                 {
                     "role": role,
@@ -4182,6 +4183,10 @@ def test_refactoring_route_rejects_wrong_nested_pr_head_or_merged_base_identity(
             "refactoring auditor index pre_merge_reports[0] report must contain exactly one canonical Verdict: LOW line",
         ),
         (
+            "validation-non-low-report",
+            "refactoring auditor index pre_merge_reports[4] report must end with exactly one canonical validation-integrity LOW token",
+        ),
+        (
             "wrong-pre-merge-head",
             "refactoring route child pre_merge_auditor_current_head must equal nested reviewed head",
         ),
@@ -4242,6 +4247,14 @@ def test_refactoring_route_rejects_unclosed_or_stale_auditor_evidence(
         report = auditor_index["pre_merge_reports"][0]
         report_path = Path(report["report_path"])
         report_path.write_text("# Current report\n\nVerdict: HIGH\n", encoding="utf-8")
+        report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        child["pre_merge_auditor_reports"] = deepcopy(
+            auditor_index["pre_merge_reports"]
+        )
+    elif case == "validation-non-low-report":
+        report = auditor_index["pre_merge_reports"][4]
+        report_path = Path(report["report_path"])
+        report_path.write_text("# Validation integrity\n\nHIGH\n", encoding="utf-8")
         report["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
         child["pre_merge_auditor_reports"] = deepcopy(
             auditor_index["pre_merge_reports"]

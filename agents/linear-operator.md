@@ -129,7 +129,7 @@ outputs:
     success_shape: "Ordinary comment confirmation, or producer-owned ticket-operation-result-v1 for caller-context validation after operation=comment-readback."
     wrote_lines: ["${operation_result_path} when operation=comment-readback", "${producer_log_path} when operation=comment-readback", "${producer_output_path} when operation=comment-readback"]
   - task: create
-    success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
+    success_shape: "Created or duplicate-reused issue key and URL after deterministic Markdown description readback returns MATCH."
     wrote_lines: []
   - task: update-estimate
     success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
@@ -193,6 +193,12 @@ You read, comment on, create, and transition Linear issues using the ported Line
 
 - The user wants info posted to PRs (use `gh` CLI directly).
 - The user wants Notion / Slack / email posts (different operators).
+
+## Execution Boundary
+
+`must_delegate: linear-writes` is a caller boundary: callers delegate Linear writes to this operator. Once selected, this operator is the terminal executor for the requested Linear operation. It must invoke the matching `clients.linear.cli` command directly and must never dispatch `linear-operator.md`, another agent, or another workflow to perform the same operation. A running nested write is not a successful result.
+
+The task mapping is closed: `read` uses `get-issue`; `comment` uses `create-comment`; `create` uses `search-issues` followed by at most one `create-issue`; `update-estimate` uses `update-issue` and the documented comment path; `transition` uses `transition-issue`; `search` uses `search-issues`; `list-issues` uses `list-issues`; `list-projects` uses `list-projects`; `list-labels` uses `list-labels`; `create-label` uses `create-label`; `apply-labels` uses `apply-labels`; and `upsert-comment` uses `upsert-comment`. Return only after the direct operation and required readback are terminal.
 
 ## Required Inputs
 
@@ -406,9 +412,16 @@ For a concrete story-point value, the optional flag is `--estimate 5` (`--estima
 
 `--project` accepts an existing project UUID or `slugId`, resolved against `${linear_team_key}` before create. Missing project tokens raise `NOT_FOUND`; duplicate `slugId` matches across distinct projects raise `AMBIGUOUS_PROJECT`. Project names and URLs are not accepted identifiers.
 
-Returns `{"ok": true, "data": {"id": "<uuid>", "identifier": "${linear_team_key}-NNN", "url": "..."}}`. Print the new key + URL (the output contract).
+Returns `{"ok": true, "data": {"id": "<uuid>", "identifier": "${linear_team_key}-NNN", "url": "..."}}`. Before reporting success for either a newly created or duplicate-reused issue, compare the stored description with the source brief:
 
-**Description from a markdown brief.** Linear stores Markdown natively. The brief is passed verbatim — no ADF render, no heading transformation. The orchestrator validates only that the rendered description is non-empty; the operator does not synthesize scope or boundary sections from the brief.
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli verify-issue-description \
+    "${issue_key}" --description-file "${brief_path}"
+```
+
+The comparison permits only Linear's observed Markdown canonicalization: unordered-list markers may change from `-` to `*` outside fenced code blocks, and one terminal newline may be removed. Changed headings, prose, links, code, list text or structure, interior whitespace, or additional trailing blank lines remain a mismatch. A mismatch is blocking after create/reuse and must never trigger another create attempt. Print the verified key + URL only after `status=MATCH` (the output contract).
+
+**Description from a markdown brief.** The brief is sent without operator-authored transformation. Linear may canonicalize the two narrowly verified Markdown forms above; the operator does not synthesize scope or boundary sections from the brief.
 
 **Anti-pattern.** Do not file the same WU twice. Before creating, search for an existing issue with matching title:
 
