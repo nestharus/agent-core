@@ -8970,6 +8970,7 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "central-checkout-as-worktree-target" in sidecar["forbidden_direct"]
     assert "git-fetch" in sidecar["side_effects"]
     assert "git-reset-keep" in sidecar["side_effects"]
+    assert "git-push-validated-url" in sidecar["side_effects"]
     assert "BLOCKED:dirty-worktree" in operator
     assert 'reset --keep "$branch_name"' in operator
     assert "exclusive advisory mutation lock" in operator
@@ -9023,6 +9024,15 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     assert "headRepositoryOwner.login" in operator
     assert "target/base repository and head repository both equal" in operator
     assert "pr_head_repo" in operator
+    bulk_cleanup_section = operator.split(
+        "## Procedure: Bulk Cleanup Merged Worktrees", 1
+    )[1].split("## Procedure: Open PR", 1)[0]
+    provider_recheck_index = bulk_cleanup_section.index(
+        'gh pr view "$pr_number" --repo "$pr_repo"'
+    )
+    removal_index = bulk_cleanup_section.rindex('git worktree remove`')
+    assert provider_recheck_index < removal_index
+    assert "state=MERGED" in bulk_cleanup_section
     assert "Merged worktrees need provider-verified bulk cleanup" in operator
     assert "A draft pull request needs exact creation or idempotent reuse" in operator
     assert 'gh pr close "$created_pr_url" --repo "$repo_slug"' in operator
@@ -9127,13 +9137,17 @@ def test_worktree_operator_sidecar_closes_mutation_boundary_and_results():
     non_exact_index = open_pr_section.index("BLOCKED:non-exact-open-pr")
     writer_index = open_pr_section.index("agents -a ~/ai/agents/pr-writer.md")
     push_index = open_pr_section.index(
-        'git -C "$worktree_path" push -u "$push_remote" "$branch_name"'
+        'git -C "$worktree_path" push "$push_url"'
     )
     remote_head_index = open_pr_section.index(
         'git ls-remote --exit-code --refs "$push_url"'
     )
+    stale_identity_index = open_pr_section.index(
+        "BLOCKED:stale-open-pr-worktree-identity"
+    )
     create_index = open_pr_section.index("created_pr_output=$(gh pr create")
     assert lock_index < resolve_index < query_index < non_exact_index < writer_index
+    assert stale_identity_index < push_index < create_index
     assert writer_index < push_index < remote_head_index < create_index
     assert variants["bulk-cleanup"]["aggregate_status"] == {
         "zero_targets": "PASS",

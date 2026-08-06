@@ -85,7 +85,7 @@ side_effects:
 - git-worktree-remove
 - git-branch-create
 - git-reset-keep
-- git-push-origin
+- git-push-validated-url
 - gh-pr-create
 - gh-pr-close-reconciliation
 must_delegate:

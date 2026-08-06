@@ -90,7 +90,7 @@ side_effects:
   - git-worktree-remove
   - git-branch-create
   - git-reset-keep
-  - git-push-origin
+  - git-push-validated-url
   - gh-pr-create
   - gh-pr-close-reconciliation
 must_delegate:
@@ -198,6 +198,8 @@ Remove worktrees whose PRs were merged. **Verify PR status before deleting**
 
 Read records with `git -C "$repo_root" worktree list --porcelain`. For each registered direct child of `${worktrees_root}`, skip detached heads and validate its exact branch, canonical containment, current head SHA, expected base branch, and repository identity. Require exactly one provider PR whose target/base repository and head repository both equal the canonical worktree `OWNER/REPO` identity, whose base branch, head branch, and head OID match the validated values, and whose state is `MERGED`; missing, ambiguous, or mismatched PR evidence blocks removal. Before removal, acquire the same exclusive advisory mutation lock under the canonical Git common directory used by `sync`. While holding it, re-read the exact registered worktree record and revalidate canonical path, branch, head SHA, base identity, and empty `git status --porcelain` against the provider-matched identity. Abort that target with `status=BLOCKED` if any identity or cleanliness changed. Hold the lock through `git worktree remove` and the post-removal filesystem and registration checks. Dirty worktrees are always skipped with `status=BLOCKED`, `reason=dirty-worktree`, and `removed=false`; this operator never force-removes them or deletes local branches. Every result row has `worktree_path`, `branch`, `base_branch`, `base_sha`, `head_sha`, `clean`, `pr_repo`, `pr_head_repo`, `pr_url`, `pr_number`, `pr_state`, `removed`, `status`, and `reason`. A removed row has all identity fields populated, both PR repository identities equal to the worktree repository, `pr_state=MERGED`, `removed=true`, `status=PASS`, and `reason=merged-pr`. A skipped detached or invalid row has `removed=false`, `status=BLOCKED`, its precise reason, and `null` for each worktree or PR identity or cleanliness field that could not be established. Return one result row for every inspected target. Set aggregate `status=PASS` when there are zero targets or every row is `PASS`, `status=PARTIAL` when `PASS` and `BLOCKED` rows are mixed, and `status=BLOCKED` when a non-empty result contains only `BLOCKED` rows.
 
+While still holding the lock, re-query the exact captured PR with `gh pr view "$pr_number" --repo "$pr_repo" --json url,number,state,baseRefName,baseRefOid,headRefName,headRefOid,headRepository,headRepositoryOwner`. Require its URL/number, target and head repository identities, base branch/OID, head branch/OID, and `state=MERGED` to remain exactly equal to the provider evidence that authorized removal. Only after that exact re-query passes may the operator run `git worktree remove`; any query failure or drift returns that target as `status=BLOCKED` without removal.
+
 **Never** delete a worktree just because `git ls-remote` can't find the branch
 — local-only branches and branches not yet pushed would be lost.
 
@@ -234,7 +236,8 @@ If either pipeline status is nonzero, return the common `BLOCKED` envelope with 
 
 ```bash
 # Validate both writer files as non-empty before this first remote mutation.
-git -C "$worktree_path" push -u "$push_remote" "$branch_name"
+git -C "$worktree_path" push "$push_url" \
+  "refs/heads/$branch_name:refs/heads/$branch_name"
 remote_head_record=$(git ls-remote --exit-code --refs "$push_url" "refs/heads/$branch_name")
 # Require exactly one record whose ref is refs/heads/$branch_name and OID is head_sha.
 
