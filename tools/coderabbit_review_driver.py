@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Drive GitHub PR-mode CodeRabbit review through @mentions and review state."""
+"""Drive generation-aware GitHub PR-mode CodeRabbit reviews."""
 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +26,7 @@ CACHE_ROOT = Path.home() / ".cache" / "coderabbit"
 DEFAULT_ENABLED_TTL_SECONDS = 3600
 DEFAULT_POLL_INTERVAL_SECONDS = 15
 DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS = 300
+DEFAULT_CAPACITY_QUERY_ATTEMPTS = 4
 AI_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIX_BRIEF_TEMPLATE = AI_ROOT / "templates" / "coderabbit-fix-brief.md"
 DEFAULT_FIXER_AGENT = AI_ROOT / "agents" / "coderabbit-comment-fixer.md"
@@ -48,8 +52,29 @@ REVIEW_STATES = TERMINAL_REVIEW_STATES | {"COMMENTED"}
 SUMMARY_COMMENT_MARKER = (
     "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->"
 )
-SUMMARY_APPROVED_MARKER = "No actionable comments were generated in the recent review"
-SUMMARY_CHANGES_REQUESTED_MARKER = "Actionable comments posted"
+GENERATION_SCHEMA = "coderabbit-review-generation-v1"
+GENERATION_RESULTS = {
+    "REVIEW_COMPLETED",
+    "RATE_LIMITED_NO_REVIEW",
+    "WAITING_FOR_REVIEW",
+    "BLOCKED",
+}
+CAPACITY_QUERY_BODY = "@coderabbitai rate limit"
+RATE_LIMIT_MARKERS = (
+    "review limit reached",
+    "reached your pr review limit",
+    "couldn't start this review",
+    "review rate limited",
+)
+CAPACITY_RESPONSE_MARKERS = (
+    "review rate limit",
+    "review remaining",
+    "reviews remaining",
+    "review available",
+    "review will be available",
+    "reviews are available",
+    "review limit",
+)
 
 
 class DriverError(Exception):
@@ -128,6 +153,14 @@ def gh_paginated_array(endpoint: str) -> list[dict[str, Any]]:
     raise DriverError(f"expected array response from {endpoint}")
 
 
+def authenticated_actor_login() -> str:
+    actor = gh_json(["api", "/user"])
+    login = actor.get("login") if isinstance(actor, dict) else None
+    if not isinstance(login, str) or not login:
+        raise DriverError("could not resolve the authenticated GitHub actor")
+    return login
+
+
 def utc_now_dt() -> datetime:
     return datetime.now(UTC)
 
@@ -182,6 +215,23 @@ def cache_dir(repo: Repo, pr_num: int) -> Path:
 
 def state_path(repo: Repo, pr_num: int) -> Path:
     return cache_dir(repo, pr_num) / "state.json"
+
+
+@contextmanager
+def provider_command_lock(repo: Repo, pr_num: int):
+    path = cache_dir(repo, pr_num) / "provider-command.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as lock_file:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as err:
+            raise DriverError(
+                f"another provider command is already in progress for {repo.slug}#{pr_num}"
+            ) from err
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def load_state(repo: Repo, pr_num: int) -> dict[str, Any]:
@@ -310,6 +360,7 @@ def discover_bot_login(
     reviews: list[dict[str, Any]] | None = None,
     review_comments: list[dict[str, Any]] | None = None,
     issue_comments: list[dict[str, Any]] | None = None,
+    persist: bool = True,
 ) -> str | None:
     cached = load_cached_bot_login(repo, pr_num)
     if cached:
@@ -331,7 +382,7 @@ def discover_bot_login(
         else gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
     )
     login = first_coderabbit_login(reviews, review_comments, issue_comments)
-    if login:
+    if login and persist:
         save_bot_login(repo, login, pr_num)
     return login
 
@@ -353,6 +404,17 @@ def review_sort_key(review: dict[str, Any]) -> tuple[str, int]:
     return (review.get("submitted_at") or "", int(review.get("id") or 0))
 
 
+def review_follows_trigger(
+    review: dict[str, Any], triggered_at: datetime | None
+) -> bool:
+    submitted_at = parse_time(review.get("submitted_at"))
+    return (
+        triggered_at is not None
+        and submitted_at is not None
+        and submitted_at >= triggered_at
+    )
+
+
 def issue_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
     return (
         comment.get("updated_at") or comment.get("created_at") or "",
@@ -360,30 +422,427 @@ def issue_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
     )
 
 
-def current_head_review_evidence(
+def object_id(item: dict[str, Any]) -> int:
+    try:
+        return int(item.get("id") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def coderabbit_review_ids(
+    reviews: list[dict[str, Any]], bot_login: str | None
+) -> list[int]:
+    return sorted(
+        object_id(review)
+        for review in reviews
+        if object_id(review)
+        and is_bot_login((review.get("user") or {}).get("login"), bot_login)
+    )
+
+
+def is_rate_limit_comment_body(body: str) -> bool:
+    normalized = body.lower()
+    return any(marker in normalized for marker in RATE_LIMIT_MARKERS)
+
+
+def is_capacity_response_body(body: str) -> bool:
+    normalized = body.lower()
+    return any(marker in normalized for marker in CAPACITY_RESPONSE_MARKERS)
+
+
+def normalized_comment_body(value: str) -> str:
+    return value.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def capacity_response_projection(comment: dict[str, Any]) -> dict[str, Any]:
+    body = str(comment.get("body") or "")
+    normalized = body.lower()
+    remaining_match = re.search(
+        r"(?P<count>\d+)\s+(?:pr\s+)?reviews?\s+(?:are\s+)?remaining", normalized
+    ) or re.search(
+        r"remaining(?:\s+pr)?\s+reviews?[^\d\n]{0,20}(?P<count>\d+)", normalized
+    )
+    remaining = int(remaining_match.group("count")) if remaining_match else None
+    retry_match = re.search(
+        r"next review (?:will be )?available in:?\s*\*{0,2}(?P<guidance>[^\n<]+)",
+        body,
+        flags=re.IGNORECASE,
+    )
+    retry_guidance = retry_match.group("guidance").strip(" *") if retry_match else None
+    one_at_a_time = "one review at a time" in normalized
+    active_review = any(
+        marker in normalized
+        for marker in ("review in progress", "review is in progress", "active review")
+    )
+    exhausted = is_rate_limit_comment_body(body) or any(
+        marker in normalized
+        for marker in ("no reviews available", "0 reviews remaining")
+    )
+    available_now = any(
+        marker in normalized
+        for marker in ("review is available now", "reviews are available now")
+    )
+    capacity_available: bool | None
+    if one_at_a_time and active_review:
+        capacity_available = False
+    elif available_now:
+        capacity_available = True
+    elif remaining is not None:
+        capacity_available = remaining > 0
+    elif exhausted or retry_guidance:
+        capacity_available = False
+    else:
+        capacity_available = None
+    return {
+        "comment_id": object_id(comment),
+        "comment_url": comment.get("html_url"),
+        "observed_at": comment.get("updated_at") or comment.get("created_at"),
+        "remaining_reviews": remaining,
+        "retry_guidance": retry_guidance,
+        "one_review_at_a_time": one_at_a_time,
+        "active_review": active_review,
+        "capacity_available": capacity_available,
+    }
+
+
+def active_review_generation(repo: Repo, pr_num: int) -> dict[str, Any] | None:
+    generation = load_state(repo, pr_num).get("active_generation")
+    return dict(generation) if isinstance(generation, dict) else None
+
+
+def generation_evidence_path(repo: Repo, pr_num: int) -> str:
+    return str(state_path(repo, pr_num))
+
+
+def save_review_generation(
+    repo: Repo, pr_num: int, generation: dict[str, Any]
+) -> dict[str, Any]:
+    result = generation.get("result")
+    if (
+        generation.get("schema") != GENERATION_SCHEMA
+        or result not in GENERATION_RESULTS
+    ):
+        raise DriverError("refusing to persist malformed CodeRabbit review generation")
+    generation["evidence_path"] = generation_evidence_path(repo, pr_num)
+    state = load_state(repo, pr_num)
+    state["active_generation"] = generation
+    save_state(repo, pr_num, state)
+    return generation
+
+
+def activate_review_generation(
+    repo: Repo, pr_num: int, generation: dict[str, Any]
+) -> dict[str, Any]:
+    state = load_state(repo, pr_num)
+    active = state.get("active_generation")
+    if isinstance(active, dict) and active.get("generation_id") != generation.get(
+        "generation_id"
+    ):
+        history = state.setdefault("review_generation_history", [])
+        history.append(active)
+    generation["evidence_path"] = generation_evidence_path(repo, pr_num)
+    state["active_generation"] = generation
+    state.pop("inflight_trigger", None)
+    save_state(repo, pr_num, state)
+    return generation
+
+
+def new_review_generation(
+    repo: Repo,
+    pr_num: int,
+    mode: str,
+    expected_head_oid: str,
     reviews: list[dict[str, Any]],
     issue_comments: list[dict[str, Any]],
-    head_oid: str,
-    head_committed_at: datetime,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    current_head_reviews = [
-        review for review in reviews if review.get("commit_id") == head_oid
-    ]
-    current_head_comments = []
-    for comment in issue_comments:
-        created_at = parse_time(comment.get("created_at"))
-        updated_at = parse_time(comment.get("updated_at"))
-        body = comment.get("body") or ""
-        created_for_head = bool(created_at and created_at >= head_committed_at)
-        reused_summary_for_head = bool(
-            SUMMARY_COMMENT_MARKER in body
-            and head_oid in body
-            and updated_at
-            and updated_at >= head_committed_at
+    bot_login: str | None,
+    trigger_comment: dict[str, Any],
+    *,
+    baseline_review_ids: list[int] | None = None,
+    baseline_issue_comment_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    triggered_at = (
+        trigger_comment.get("created_at")
+        or trigger_comment.get("updated_at")
+        or utc_now()
+    )
+    return {
+        "schema": GENERATION_SCHEMA,
+        "generation_id": object_id(trigger_comment),
+        "result": "WAITING_FOR_REVIEW",
+        "repo": repo.slug,
+        "pr_num": pr_num,
+        "mode": mode,
+        "baseline_review_ids": baseline_review_ids
+        if baseline_review_ids is not None
+        else coderabbit_review_ids(reviews, bot_login),
+        "baseline_issue_comment_ids": baseline_issue_comment_ids
+        if baseline_issue_comment_ids is not None
+        else sorted(
+            object_id(comment) for comment in issue_comments if object_id(comment)
+        ),
+        "trigger_comment_id": object_id(trigger_comment),
+        "trigger_comment_url": trigger_comment.get("html_url"),
+        "triggered_at": triggered_at,
+        "expected_head_oid": expected_head_oid,
+        "current_head_oid": expected_head_oid,
+        "ack_comment_id": None,
+        "ack_comment_url": None,
+        "accepted_review_id": None,
+        "accepted_review_state": None,
+        "accepted_review_commit_id": None,
+        "accepted_review_submitted_at": None,
+        "rate_limit": None,
+        "capacity_query": None,
+        "next_permitted_action": "poll",
+        "blocked_reason": None,
+    }
+
+
+def rate_limit_check_evidence(repo: Repo, head_oid: str) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    check_data = gh_json(["api", f"/repos/{repo.slug}/commits/{head_oid}/check-runs"])
+    check_runs = (
+        check_data.get("check_runs", []) if isinstance(check_data, dict) else []
+    )
+    for check in check_runs:
+        output = check.get("output") or {}
+        text = " ".join(
+            str(value or "")
+            for value in (check.get("name"), output.get("title"), output.get("summary"))
         )
-        if created_for_head or reused_summary_for_head:
-            current_head_comments.append(comment)
-    return current_head_reviews, current_head_comments
+        if "review rate limited" not in text.lower():
+            continue
+        evidence.append(
+            {
+                "kind": "check_run",
+                "id": check.get("id"),
+                "name": check.get("name"),
+                "status": check.get("status"),
+                "conclusion": check.get("conclusion"),
+                "url": check.get("html_url") or check.get("details_url"),
+            }
+        )
+    status_data = gh_json(["api", f"/repos/{repo.slug}/commits/{head_oid}/status"])
+    statuses = status_data.get("statuses", []) if isinstance(status_data, dict) else []
+    for status in statuses:
+        status_text = " ".join(
+            str(value or "")
+            for value in (status.get("context"), status.get("description"))
+        )
+        if "review rate limited" not in status_text.lower():
+            continue
+        evidence.append(
+            {
+                "kind": "status_context",
+                "id": status.get("id"),
+                "name": status.get("context"),
+                "status": status.get("state"),
+                "description": status.get("description"),
+                "url": status.get("target_url"),
+            }
+        )
+    return evidence
+
+
+def generation_rate_limit_comments(
+    generation: dict[str, Any],
+    issue_comments: list[dict[str, Any]],
+    bot_login: str | None,
+) -> list[dict[str, Any]]:
+    baseline = {
+        int(value) for value in generation.get("baseline_issue_comment_ids", [])
+    }
+    triggered_at = parse_time(generation.get("triggered_at"))
+    candidates: list[dict[str, Any]] = []
+    for comment in issue_comments:
+        if object_id(comment) in baseline:
+            continue
+        if not is_bot_login((comment.get("user") or {}).get("login"), bot_login):
+            continue
+        if not is_rate_limit_comment_body(str(comment.get("body") or "")):
+            continue
+        observed_at = parse_time(comment.get("created_at") or comment.get("updated_at"))
+        if triggered_at and (observed_at is None or observed_at < triggered_at):
+            continue
+        candidates.append(comment)
+    return sorted(candidates, key=issue_comment_sort_key)
+
+
+def classify_review_generation(
+    generation: dict[str, Any],
+    current_head_oid: str,
+    reviews: list[dict[str, Any]],
+    issue_comments: list[dict[str, Any]],
+    bot_login: str | None,
+) -> dict[str, Any]:
+    classified = dict(generation)
+    expected_head_oid = str(classified.get("expected_head_oid") or "")
+    classified["current_head_oid"] = current_head_oid
+    if not current_head_oid or current_head_oid != expected_head_oid:
+        classified.update(
+            {
+                "result": "BLOCKED",
+                "blocked_reason": "PR head changed during review generation",
+                "next_permitted_action": "start_new_generation_for_current_head",
+            }
+        )
+        return classified
+
+    baseline_reviews = {
+        int(value) for value in classified.get("baseline_review_ids", [])
+    }
+    triggered_at = parse_time(classified.get("triggered_at"))
+    accepted = [
+        review
+        for review in reviews
+        if object_id(review)
+        and object_id(review) not in baseline_reviews
+        and is_bot_login((review.get("user") or {}).get("login"), bot_login)
+        and review.get("commit_id") == expected_head_oid
+        and review_follows_trigger(review, triggered_at)
+    ]
+    if accepted:
+        review = max(accepted, key=review_sort_key)
+        classified.update(
+            {
+                "result": "REVIEW_COMPLETED",
+                "blocked_reason": None,
+                "accepted_review_id": object_id(review),
+                "accepted_review_state": str(review.get("state") or "NONE").upper(),
+                "accepted_review_commit_id": review.get("commit_id"),
+                "accepted_review_submitted_at": review.get("submitted_at"),
+                "rate_limit": None,
+                "next_permitted_action": "inspect_open_findings",
+            }
+        )
+        return classified
+
+    if classified.get("result") == "BLOCKED" and isinstance(
+        classified.get("capacity_query"), dict
+    ):
+        return classified
+
+    bound_rate_limit = classified.get("rate_limit")
+    if (
+        isinstance(bound_rate_limit, dict)
+        and object_id({"id": bound_rate_limit.get("comment_id")})
+        and bound_rate_limit.get("trigger_comment_id")
+        == classified.get("trigger_comment_id")
+    ):
+        classified.update(
+            {
+                "result": "RATE_LIMITED_NO_REVIEW",
+                "blocked_reason": None,
+                "next_permitted_action": classified.get("next_permitted_action")
+                or "query_capacity",
+            }
+        )
+        return classified
+
+    rate_limit_comments = generation_rate_limit_comments(
+        classified, issue_comments, bot_login
+    )
+    if len(rate_limit_comments) > 1:
+        classified.update(
+            {
+                "result": "BLOCKED",
+                "blocked_reason": "ambiguous rate-limit evidence for trigger generation",
+                "next_permitted_action": "inspect_rate_limit_comments",
+            }
+        )
+        return classified
+    if rate_limit_comments:
+        comment = rate_limit_comments[0]
+        classified.update(
+            {
+                "result": "RATE_LIMITED_NO_REVIEW",
+                "blocked_reason": None,
+                "rate_limit": {
+                    "comment_id": object_id(comment),
+                    "comment_url": comment.get("html_url"),
+                    "observed_at": comment.get("created_at")
+                    or comment.get("updated_at"),
+                    "trigger_comment_id": classified.get("trigger_comment_id"),
+                    "expected_head_oid": expected_head_oid,
+                    "check_evidence": [],
+                },
+                "next_permitted_action": "query_capacity",
+            }
+        )
+        return classified
+
+    classified.update(
+        {
+            "result": "WAITING_FOR_REVIEW",
+            "blocked_reason": None,
+            "next_permitted_action": "poll",
+        }
+    )
+    return classified
+
+
+def record_review_generation_observation(
+    repo: Repo,
+    pr_num: int,
+    generation: dict[str, Any],
+    current_head_oid: str,
+    reviews: list[dict[str, Any]],
+    issue_comments: list[dict[str, Any]],
+    bot_login: str | None,
+    persist: bool = True,
+) -> dict[str, Any]:
+    if generation.get("schema") != GENERATION_SCHEMA:
+        return {
+            "schema": GENERATION_SCHEMA,
+            "result": "BLOCKED",
+            "repo": repo.slug,
+            "pr_num": pr_num,
+            "next_permitted_action": "trigger",
+            "blocked_reason": "no active review generation",
+        }
+    generation = classify_review_generation(
+        generation, current_head_oid, reviews, issue_comments, bot_login
+    )
+    if generation["result"] == "RATE_LIMITED_NO_REVIEW":
+        generation["rate_limit"]["check_evidence"] = rate_limit_check_evidence(
+            repo, current_head_oid
+        )
+    if persist:
+        return save_review_generation(repo, pr_num, generation)
+    return generation
+
+
+def poll_review_generation(
+    repo: Repo,
+    pr_num: int,
+    generation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    generation = dict(generation or active_review_generation(repo, pr_num) or {})
+    if generation.get("schema") != GENERATION_SCHEMA:
+        return {
+            "schema": GENERATION_SCHEMA,
+            "result": "BLOCKED",
+            "repo": repo.slug,
+            "pr_num": pr_num,
+            "next_permitted_action": "trigger",
+            "blocked_reason": "no active review generation",
+        }
+
+    current_head_oid = str(pr_metadata(repo, pr_num).get("headRefOid") or "")
+    reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
+    issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
+    bot_login = discover_bot_login(
+        repo, pr_num, reviews=reviews, issue_comments=issue_comments
+    )
+    return record_review_generation_observation(
+        repo,
+        pr_num,
+        generation,
+        current_head_oid,
+        reviews,
+        issue_comments,
+        bot_login,
+    )
 
 
 def normalized_review_decision(latest_review: dict[str, Any] | None) -> str:
@@ -400,94 +859,6 @@ def review_decision_outcome(decision: str) -> str | None:
         return "approved"
     if decision == "CHANGES_REQUESTED":
         return "changes_requested"
-    return None
-
-
-def summary_comment_decision(comment: dict[str, Any]) -> str:
-    body = comment.get("body") or ""
-    if SUMMARY_COMMENT_MARKER not in body:
-        return "NONE"
-    if SUMMARY_APPROVED_MARKER in body:
-        return "APPROVED"
-    if SUMMARY_CHANGES_REQUESTED_MARKER in body:
-        return "CHANGES_REQUESTED"
-    return "NONE"
-
-
-def coderabbit_decision_signal(
-    reviews: list[dict[str, Any]],
-    issue_comments: list[dict[str, Any]],
-    bot_login: str | None,
-    head_oid: str | None = None,
-) -> dict[str, Any]:
-    terminal_signals: list[dict[str, Any]] = []
-    for review in reviews:
-        login = (review.get("user") or {}).get("login")
-        if not is_bot_login(login, bot_login):
-            continue
-        decision = normalized_review_decision(review)
-        if decision not in TERMINAL_REVIEW_STATES:
-            continue
-        terminal_signals.append(
-            {
-                "decision": decision,
-                "source": "github_review",
-                "review_id": review.get("id"),
-                "commit_id": review.get("commit_id"),
-                "submitted_at": review.get("submitted_at"),
-                "sort_key": (*review_sort_key(review), 1),
-            }
-        )
-
-    for comment in issue_comments:
-        login = (comment.get("user") or {}).get("login")
-        if not is_bot_login(login, bot_login):
-            continue
-        decision = summary_comment_decision(comment)
-        if decision not in TERMINAL_REVIEW_STATES:
-            continue
-        terminal_signals.append(
-            {
-                "decision": decision,
-                "source": "summary_comment",
-                "comment_id": comment.get("id"),
-                "commit_id": head_oid
-                if head_oid and head_oid in (comment.get("body") or "")
-                else None,
-                "created_at": comment.get("created_at"),
-                "updated_at": comment.get("updated_at"),
-                "sort_key": (*issue_comment_sort_key(comment), 0),
-            }
-        )
-
-    if terminal_signals:
-        signal = max(terminal_signals, key=lambda item: item["sort_key"])
-        return {key: value for key, value in signal.items() if key != "sort_key"}
-
-    latest_review = latest_coderabbit_review(reviews, bot_login)
-    return {
-        "decision": normalized_review_decision(latest_review),
-        "source": "github_review" if latest_review else "none",
-        "review_id": latest_review.get("id") if latest_review else None,
-        "commit_id": latest_review.get("commit_id") if latest_review else None,
-        "submitted_at": latest_review.get("submitted_at") if latest_review else None,
-    }
-
-
-def current_head_decision_outcome(
-    decision_signal: dict[str, Any], head_oid: str, head_committed_at: datetime
-) -> str | None:
-    outcome = review_decision_outcome(str(decision_signal.get("decision") or "NONE"))
-    if outcome is None:
-        return None
-    source = decision_signal.get("source")
-    if source == "github_review":
-        return outcome if decision_signal.get("commit_id") == head_oid else None
-    if source == "summary_comment":
-        if decision_signal.get("commit_id") == head_oid:
-            return outcome
-        observed_at = parse_time(decision_signal.get("created_at"))
-        return outcome if observed_at and observed_at >= head_committed_at else None
     return None
 
 
@@ -573,37 +944,6 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
     return by_comment
 
 
-def associate_issue_comment_review(
-    issue_comment: dict[str, Any],
-    reviews: list[dict[str, Any]],
-    bot_login: str | None,
-) -> int:
-    comment_time = parse_time(
-        issue_comment.get("updated_at") or issue_comment.get("created_at")
-    )
-    cr_reviews = [
-        review
-        for review in reviews
-        if is_bot_login((review.get("user") or {}).get("login"), bot_login)
-    ]
-    if not cr_reviews:
-        return 0
-    latest_review = latest_coderabbit_review(cr_reviews, bot_login)
-    if comment_time is None or latest_review is None:
-        return int(latest_review["id"]) if latest_review else 0
-
-    candidates: list[tuple[float, dict[str, Any]]] = []
-    for review in cr_reviews:
-        review_time = parse_time(review.get("submitted_at"))
-        if review_time is None:
-            continue
-        candidates.append((abs((review_time - comment_time).total_seconds()), review))
-    if not candidates:
-        return int(latest_review["id"])
-    _, review = min(candidates, key=lambda item: item[0])
-    return int(review["id"])
-
-
 def comment_file_path(repo: Repo, pr_num: int, review_id: int, comment_id: int) -> Path:
     return cache_dir(repo, pr_num) / f"review-{review_id}" / f"comment-{comment_id}.md"
 
@@ -620,6 +960,31 @@ def write_comment_file(path: Path, metadata: dict[str, Any], body: str) -> None:
         f"{key}: {yaml_value(value)}" for key, value in metadata.items()
     )
     path.write_text(f"---\n{frontmatter}\n---\n\n{body}\n", encoding="utf-8")
+
+
+def persist_auxiliary_issue_comment(
+    repo: Repo,
+    pr_num: int,
+    comment: dict[str, Any],
+    bot_login: str | None,
+    source: str,
+) -> str:
+    comment_id = object_id(comment)
+    body = str(comment.get("body") or "")
+    path = comment_file_path(repo, pr_num, 0, comment_id)
+    metadata = base_comment_metadata(
+        repo, pr_num, comment_id, "out-of-diff", source, 0, body, bot_login
+    )
+    metadata.update(
+        {
+            "node_id": comment.get("node_id"),
+            "posted_at": comment.get("created_at"),
+            "updated_at": comment.get("updated_at"),
+            "html_url": comment.get("html_url"),
+        }
+    )
+    write_comment_file(path, metadata, body)
+    return str(path)
 
 
 def base_comment_metadata(
@@ -664,8 +1029,6 @@ def collect_comment_records(
     bot_login: str | None,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    latest_review = latest_coderabbit_review(reviews, bot_login)
-    latest_review_id = int(latest_review["id"]) if latest_review else 0
     review_commit_ids = {
         int(review["id"]): review.get("commit_id")
         for review in reviews
@@ -730,7 +1093,7 @@ def collect_comment_records(
         if not is_bot_login(login, bot_login):
             continue
         comment_id = int(comment["id"])
-        review_id = associate_issue_comment_review(comment, reviews, bot_login)
+        review_id = 0
         body = comment.get("body") or ""
         is_ack = is_any_trigger_ack_body(body)
         source = "trigger-ack" if is_ack else "issue-comment"
@@ -743,12 +1106,11 @@ def collect_comment_records(
                 "code_path": None,
                 "code_line": None,
                 "thread_parent": None,
-                "resolved": bool(
-                    is_ack or (review_id != 0 and review_id != latest_review_id)
-                ),
-                "outdated": bool(review_id != 0 and review_id != latest_review_id),
+                "resolved": is_ack,
+                "outdated": False,
                 "posted_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
+                "review_commit_id": None,
                 "html_url": comment.get("html_url"),
             }
         )
@@ -765,18 +1127,31 @@ def collect_comment_records(
     return records
 
 
-def output_metadata(record: dict[str, Any]) -> dict[str, Any]:
+def output_metadata(
+    record: dict[str, Any], current_head_oid: str | None = None
+) -> dict[str, Any]:
     metadata = record["metadata"]
+    resolved = bool(metadata.get("resolved"))
+    finding_head_oid = metadata.get("review_commit_id") or (
+        current_head_oid if metadata.get("kind") == "in-diff" else None
+    )
     return {
         "comment_id": metadata["comment_id"],
         "kind": metadata["kind"],
         "file_path": str(record["path"]),
+        "body_path": str(record["path"]),
         "code_path": metadata.get("code_path"),
         "code_line": metadata.get("code_line"),
         "review_id": metadata.get("review_id"),
         "review_commit_id": metadata.get("review_commit_id"),
+        "head_oid": finding_head_oid,
+        "thread_id": metadata.get("thread_id"),
         "thread_parent": metadata.get("thread_parent"),
-        "resolved": metadata.get("resolved"),
+        "resolved": resolved,
+        "resolution_state": "resolved" if resolved else "unresolved",
+        "outdated": metadata.get("outdated"),
+        "source": metadata.get("source"),
+        "url": metadata.get("html_url"),
     }
 
 
@@ -784,47 +1159,92 @@ def comment_matches_review_head(metadata: dict[str, Any], head_oid: str | None) 
     return head_oid is None or metadata.get("review_commit_id") == head_oid
 
 
+def is_open_finding_record(
+    record: dict[str, Any],
+    head_oid: str | None,
+    out_of_diff_dispositions: dict[str, dict[str, Any]] | None = None,
+) -> bool:
+    metadata = record["metadata"]
+    body = str(record.get("body") or "")
+    if metadata.get("resolved") or metadata.get("thread_parent") is not None:
+        return False
+    if metadata.get("source") == "trigger-ack":
+        return False
+    if metadata.get("kind") == "in-diff":
+        return comment_matches_review_head(metadata, head_oid)
+    disposition = (out_of_diff_dispositions or {}).get(
+        str(int(metadata.get("comment_id") or 0))
+    )
+    if (
+        isinstance(disposition, dict)
+        and disposition.get("body_sha256") == metadata.get("body_sha256")
+        and disposition.get("updated_at")
+        == (metadata.get("updated_at") or metadata.get("posted_at"))
+    ):
+        return False
+    informational_markers = (
+        SUMMARY_COMMENT_MARKER,
+        "<!-- This is an auto-generated reply by CodeRabbit -->",
+        "<!-- This is an auto-generated comment: review paused by coderabbit.ai -->",
+    )
+    return (
+        not is_rate_limit_comment_body(body)
+        and not is_capacity_response_body(body)
+        and not any(marker in body for marker in informational_markers)
+    )
+
+
 def poll(
     repo: Repo,
     pr_num: int,
     head_oid: str | None = None,
-    head_committed_at: datetime | None = None,
+    persist_state: bool = True,
 ) -> dict[str, Any]:
     reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
     bot_login = discover_bot_login(
-        repo, pr_num, reviews, review_comments, issue_comments
+        repo,
+        pr_num,
+        reviews,
+        review_comments,
+        issue_comments,
+        persist=persist_state,
     )
     thread_status = graphql_review_threads(repo, pr_num)
 
     latest_review = latest_coderabbit_review(reviews, bot_login)
     decision_reviews = reviews
-    decision_comments = issue_comments
-    if head_oid is not None and head_committed_at is not None:
-        decision_reviews, decision_comments = current_head_review_evidence(
-            reviews, issue_comments, head_oid, head_committed_at
-        )
-    decision_signal = coderabbit_decision_signal(
-        decision_reviews,
-        decision_comments,
-        bot_login,
-        head_oid if head_committed_at is not None else None,
-    )
+    if head_oid is not None:
+        decision_reviews = [
+            review for review in reviews if review.get("commit_id") == head_oid
+        ]
     latest_scoped_review = latest_coderabbit_review(decision_reviews, bot_login)
     latest_scoped_review_at = (
         parse_time(latest_scoped_review.get("submitted_at"))
         if latest_scoped_review
         else None
     )
-    completion_ack_at = latest_completion_ack_time(decision_comments, bot_login)
-    decision = decision_signal["decision"]
-    outcome = review_decision_outcome(decision)
+    aggregate_decision = normalized_review_decision(latest_scoped_review)
+    aggregate_decision_signal = {
+        "decision": aggregate_decision,
+        "source": "github_review" if latest_scoped_review else "none",
+        "review_id": latest_scoped_review.get("id") if latest_scoped_review else None,
+        "commit_id": latest_scoped_review.get("commit_id")
+        if latest_scoped_review
+        else None,
+        "submitted_at": latest_scoped_review.get("submitted_at")
+        if latest_scoped_review
+        else None,
+    }
     records = collect_comment_records(
         repo, pr_num, reviews, review_comments, issue_comments, thread_status, bot_login
     )
 
     state = load_state(repo, pr_num)
+    out_of_diff_dispositions = state.get("out_of_diff_dispositions", {})
+    if not isinstance(out_of_diff_dispositions, dict):
+        out_of_diff_dispositions = {}
     previous_hashes: dict[str, str] = state.get("seen_comment_hashes", {})
     previous_status: dict[str, dict[str, Any]] = state.get("comment_status", {})
     current_hashes: dict[str, str] = {}
@@ -833,6 +1253,7 @@ def poll(
 
     new_comments: list[dict[str, Any]] = []
     actionable_comments: list[dict[str, Any]] = []
+    unresolved_findings: list[dict[str, Any]] = []
     for record in records:
         key = record["key"]
         metadata = record["metadata"]
@@ -852,13 +1273,15 @@ def poll(
             int(metadata["comment_id"])
         )
         write_comment_file(record["path"], metadata, record["body"])
+        if is_open_finding_record(record, head_oid, out_of_diff_dispositions):
+            unresolved_findings.append(output_metadata(record, head_oid))
         if (
             not metadata.get("resolved")
             and metadata.get("kind") == "in-diff"
             and metadata.get("source") != "trigger-ack"
             and comment_matches_review_head(metadata, head_oid)
         ):
-            actionable_comments.append(output_metadata(record))
+            actionable_comments.append(output_metadata(record, head_oid))
         if (
             previous_hashes.get(key) != digest
             and not metadata.get("resolved")
@@ -868,7 +1291,7 @@ def poll(
                 or comment_matches_review_head(metadata, head_oid)
             )
         ):
-            new_comments.append(output_metadata(record))
+            new_comments.append(output_metadata(record, head_oid))
 
     resolved_since_last_poll: list[int] = []
     for key, old_status in previous_status.items():
@@ -878,105 +1301,528 @@ def poll(
         if not old_status.get("resolved") and new_status.get("resolved"):
             resolved_since_last_poll.append(int(new_status["comment_id"]))
 
-    new_state = {
-        "last_polled_at": utc_now(),
-        "last_review_decision": decision,
-        "last_review_decision_source": decision_signal.get("source"),
-        "last_bot_login": bot_login,
-        "latest_review_id": latest_review.get("id") if latest_review else None,
-        "latest_decision_review_id": decision_signal.get("review_id"),
-        "latest_decision_comment_id": decision_signal.get("comment_id"),
-        "seen_comment_hashes": current_hashes,
-        "comment_status": current_status,
-        "seen_comment_ids_per_review": seen_by_review,
-    }
-    save_state(repo, pr_num, new_state)
-    if bot_login:
+    new_state = dict(state)
+    new_state.update(
+        {
+            "last_polled_at": utc_now(),
+            "last_review_decision": aggregate_decision,
+            "last_review_decision_source": aggregate_decision_signal.get("source"),
+            "last_bot_login": bot_login,
+            "latest_review_id": latest_review.get("id") if latest_review else None,
+            "latest_decision_review_id": aggregate_decision_signal.get("review_id"),
+            "seen_comment_hashes": current_hashes,
+            "comment_status": current_status,
+            "seen_comment_ids_per_review": seen_by_review,
+        }
+    )
+    if persist_state:
+        save_state(repo, pr_num, new_state)
+    if bot_login and persist_state:
         save_bot_login(repo, bot_login, pr_num)
+
+    active_generation = state.get("active_generation")
+    current_generation_head_oid = None
+    if isinstance(active_generation, dict):
+        current_generation_head_oid = str(
+            pr_metadata(repo, pr_num).get("headRefOid") or ""
+        )
+    generation = (
+        record_review_generation_observation(
+            repo,
+            pr_num,
+            active_generation,
+            current_generation_head_oid or "",
+            reviews,
+            issue_comments,
+            bot_login,
+            persist=persist_state,
+        )
+        if isinstance(active_generation, dict)
+        else {
+            "schema": GENERATION_SCHEMA,
+            "result": "BLOCKED",
+            "repo": repo.slug,
+            "pr_num": pr_num,
+            "next_permitted_action": "trigger",
+            "blocked_reason": "no active review generation",
+        }
+    )
+    decision = "NONE"
+    outcome = None
+    decision_signal: dict[str, Any] = {"decision": "NONE", "source": "none"}
+    if generation.get("result") == "REVIEW_COMPLETED":
+        decision = str(generation.get("accepted_review_state") or "NONE")
+        outcome = review_decision_outcome(decision)
+        decision_signal = {
+            "decision": decision,
+            "source": "review_generation",
+            "review_id": generation.get("accepted_review_id"),
+            "commit_id": generation.get("accepted_review_commit_id"),
+            "submitted_at": generation.get("accepted_review_submitted_at"),
+        }
 
     return {
         "review_decision": decision,
-        "terminal": outcome is not None,
+        "aggregate_review_decision": aggregate_decision,
+        "aggregate_decision_signal": aggregate_decision_signal,
+        "terminal": generation.get("result") != "WAITING_FOR_REVIEW",
         "outcome": outcome,
         "decision_signal": decision_signal,
         "review_decision_source": decision_signal.get("source"),
         "latest_decision_review_id": decision_signal.get("review_id"),
-        "latest_decision_comment_id": decision_signal.get("comment_id"),
         "latest_review_at": latest_scoped_review_at.isoformat()
         if latest_scoped_review_at
         else None,
-        "latest_completion_ack_at": completion_ack_at.isoformat()
-        if completion_ack_at
-        else None,
-        "review_completed": bool(
-            latest_scoped_review_at
-            and completion_ack_at
-            and completion_ack_at >= latest_scoped_review_at
-        ),
+        "review_completed": generation.get("result") == "REVIEW_COMPLETED",
+        "generation": generation,
         "new_comments": new_comments,
         "actionable_comments": actionable_comments,
+        "unresolved_findings": unresolved_findings,
         "resolved_since_last_poll": resolved_since_last_poll,
         "bot_login": bot_login,
     }
 
 
-def trigger_review(repo: Repo, pr_num: int, mode: str, label: str) -> dict[str, Any]:
+def generation_suppresses_trigger(
+    generation: dict[str, Any] | None,
+) -> tuple[bool, str | None]:
+    if not generation or generation.get("schema") != GENERATION_SCHEMA:
+        return False, None
+    result = generation.get("result")
+    if result == "WAITING_FOR_REVIEW":
+        return True, "review request is already outstanding"
+    if result == "BLOCKED":
+        return True, "the active review generation is blocked"
+    if result != "RATE_LIMITED_NO_REVIEW":
+        return False, None
+    capacity_query = generation.get("capacity_query")
+    response = (
+        capacity_query.get("response") if isinstance(capacity_query, dict) else None
+    )
+    if not isinstance(response, dict) or response.get("capacity_available") is not True:
+        return True, "CodeRabbit has not reported restored review capacity"
+    return False, None
+
+
+def inflight_command_candidates(
+    marker: dict[str, Any], issue_comments: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    baseline = {int(value) for value in marker.get("baseline_issue_comment_ids", [])}
+    started_at = parse_time(marker.get("started_at"))
+    expected_body = normalized_comment_body(str(marker.get("body") or ""))
+    actor_login = marker.get("actor_login")
+    if not expected_body:
+        raise DriverError("persisted in-flight provider command is malformed")
+    if not isinstance(actor_login, str) or not actor_login:
+        return []
+    candidates: list[dict[str, Any]] = []
+    for comment in issue_comments:
+        if object_id(comment) in baseline:
+            continue
+        if (comment.get("user") or {}).get("login") != actor_login:
+            continue
+        if normalized_comment_body(str(comment.get("body") or "")) != expected_body:
+            continue
+        observed_at = parse_time(comment.get("created_at") or comment.get("updated_at"))
+        if started_at and (
+            observed_at is None or observed_at < started_at - timedelta(seconds=5)
+        ):
+            continue
+        candidates.append(comment)
+    return sorted(candidates, key=issue_comment_sort_key)
+
+
+def trigger_review(
+    repo: Repo, pr_num: int, mode: str, label: str, force: bool = False
+) -> dict[str, Any]:
+    with provider_command_lock(repo, pr_num):
+        return _trigger_review(repo, pr_num, mode, label, force)
+
+
+def _trigger_review(
+    repo: Repo, pr_num: int, mode: str, label: str, force: bool
+) -> dict[str, Any]:
     enabled, _ = repo_label_enabled(repo, label)
     if not enabled:
         raise DriverError(
             "CodeRabbit marker label is absent from repository", exit_code=1
         )
 
-    body = TRIGGER_BODIES[mode]
-    response = gh_json(
-        [
-            "api",
-            "-X",
-            "POST",
-            f"/repos/{repo.slug}/issues/{pr_num}/comments",
-            "-f",
-            f"body={body}",
-        ]
+    metadata = pr_metadata(repo, pr_num)
+    expected_head_oid = str(metadata.get("headRefOid") or "")
+    if not expected_head_oid:
+        raise DriverError(f"could not resolve PR head for {repo.slug}#{pr_num}")
+
+    state = load_state(repo, pr_num)
+    inflight = state.get("inflight_trigger")
+    recovered_trigger = False
+    if isinstance(inflight, dict):
+        reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
+        issue_comments = gh_paginated_array(
+            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+        )
+        candidates = inflight_command_candidates(inflight, issue_comments)
+        if len(candidates) > 1:
+            raise DriverError(
+                "ambiguous in-flight review trigger identity; inspect exact command comments"
+            )
+        if not candidates:
+            if not force:
+                raise DriverError(
+                    "in-flight review trigger has no provider identity yet; retry reconciliation or explicitly supersede it"
+                )
+            abandoned = dict(inflight)
+            abandoned.update(
+                {
+                    "abandoned_at": utc_now(),
+                    "abandon_reason": "explicit-force-with-no-provider-identity",
+                }
+            )
+            state.setdefault("inflight_trigger_history", []).append(abandoned)
+            state.pop("inflight_trigger", None)
+            save_state(repo, pr_num, state)
+        else:
+            recovered_mode = str(inflight.get("mode") or "")
+            recovered_head_oid = str(inflight.get("expected_head_oid") or "")
+            if recovered_mode not in TRIGGER_BODIES or not recovered_head_oid:
+                raise DriverError("persisted in-flight review trigger is malformed")
+            bot_login = discover_bot_login(
+                repo, pr_num, reviews=reviews, issue_comments=issue_comments
+            )
+            body = TRIGGER_BODIES[recovered_mode]
+            response = candidates[0]
+            generation = new_review_generation(
+                repo,
+                pr_num,
+                recovered_mode,
+                recovered_head_oid,
+                reviews,
+                issue_comments,
+                bot_login,
+                response,
+                baseline_review_ids=[
+                    int(value) for value in inflight.get("baseline_review_ids", [])
+                ],
+                baseline_issue_comment_ids=[
+                    int(value)
+                    for value in inflight.get("baseline_issue_comment_ids", [])
+                ],
+            )
+            generation.update(
+                {
+                    "posted": True,
+                    "suppressed": False,
+                    "trigger_body": body,
+                    "reconciled_inflight": True,
+                    "supersession_deferred_reason": "reconciled-inflight-trigger"
+                    if force
+                    else None,
+                }
+            )
+            activate_review_generation(repo, pr_num, generation)
+            mode = recovered_mode
+            recovered_trigger = True
+
+    if not recovered_trigger:
+        existing = active_review_generation(repo, pr_num)
+        replaceable_head_change = bool(
+            existing
+            and existing.get("result") == "BLOCKED"
+            and existing.get("next_permitted_action")
+            == "start_new_generation_for_current_head"
+            and existing.get("expected_head_oid") != expected_head_oid
+        )
+        suppression_generation = None if force or replaceable_head_change else existing
+        suppressed, reason = generation_suppresses_trigger(suppression_generation)
+        if suppressed:
+            return {
+                **(suppression_generation or {}),
+                "posted": False,
+                "suppressed": True,
+                "suppression_reason": reason,
+            }
+
+        reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
+        issue_comments = gh_paginated_array(
+            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+        )
+        bot_login = discover_bot_login(
+            repo, pr_num, reviews=reviews, issue_comments=issue_comments
+        )
+        body = TRIGGER_BODIES[mode]
+        inflight = {
+            "schema": "coderabbit-inflight-trigger-v1",
+            "repo": repo.slug,
+            "pr_num": pr_num,
+            "mode": mode,
+            "body": body,
+            "actor_login": authenticated_actor_login(),
+            "expected_head_oid": expected_head_oid,
+            "started_at": utc_now(),
+            "baseline_review_ids": coderabbit_review_ids(reviews, bot_login),
+            "baseline_issue_comment_ids": sorted(
+                object_id(comment) for comment in issue_comments if object_id(comment)
+            ),
+        }
+        state = load_state(repo, pr_num)
+        state["inflight_trigger"] = inflight
+        save_state(repo, pr_num, state)
+        response = gh_json(
+            [
+                "api",
+                "-X",
+                "POST",
+                f"/repos/{repo.slug}/issues/{pr_num}/comments",
+                "-f",
+                f"body={body}",
+            ]
+        )
+        if not isinstance(response, dict) or not object_id(response):
+            raise DriverError("GitHub did not return a trigger comment identity")
+        generation = new_review_generation(
+            repo,
+            pr_num,
+            mode,
+            expected_head_oid,
+            reviews,
+            issue_comments,
+            bot_login,
+            response,
+        )
+        generation.update({"posted": True, "suppressed": False, "trigger_body": body})
+        activate_review_generation(repo, pr_num, generation)
+    generation.update(
+        {
+            "result": "WAITING_FOR_REVIEW",
+            "next_permitted_action": "poll",
+            "posted": True,
+            "suppressed": False,
+            "trigger_body": body,
+        }
     )
-    command_comment_id = int(response["id"])
+    return save_review_generation(repo, pr_num, generation)
+
+
+def capacity_query(repo: Repo, pr_num: int, refresh: bool = False) -> dict[str, Any]:
+    with provider_command_lock(repo, pr_num):
+        return _capacity_query(repo, pr_num, refresh)
+
+
+def _capacity_query(repo: Repo, pr_num: int, refresh: bool) -> dict[str, Any]:
+    generation = active_review_generation(repo, pr_num)
+    can_resume_blocked_query = bool(
+        generation
+        and generation.get("result") == "BLOCKED"
+        and isinstance(generation.get("capacity_query"), dict)
+    )
+    if not generation or (
+        generation.get("result") != "RATE_LIMITED_NO_REVIEW"
+        and not can_resume_blocked_query
+    ):
+        raise DriverError(
+            "capacity query requires an active RATE_LIMITED_NO_REVIEW generation"
+        )
+
+    existing = generation.get("capacity_query")
+    recovered_inflight = False
+    if isinstance(existing, dict) and existing.get("status") == "posting":
+        issue_comments = gh_paginated_array(
+            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+        )
+        candidates = inflight_command_candidates(existing, issue_comments)
+        if len(candidates) > 1:
+            generation.update(
+                {
+                    "result": "BLOCKED",
+                    "blocked_reason": "ambiguous in-flight capacity-query identity",
+                    "next_permitted_action": "inspect_capacity_query_comments",
+                }
+            )
+            return save_review_generation(repo, pr_num, generation)
+        if not candidates:
+            if not refresh:
+                raise DriverError(
+                    "in-flight capacity query has no provider identity yet; retry reconciliation or use --new-query to supersede it"
+                )
+            abandoned = dict(existing)
+            abandoned.update(
+                {
+                    "abandoned_at": utc_now(),
+                    "abandon_reason": "explicit-refresh-with-no-provider-identity",
+                }
+            )
+            generation.setdefault("capacity_query_history", []).append(abandoned)
+            generation["capacity_query"] = None
+            save_review_generation(repo, pr_num, generation)
+            existing = None
+        else:
+            response = candidates[0]
+            existing.update(
+                {
+                    "status": "posted",
+                    "generation_id": object_id(response),
+                    "query_comment_id": object_id(response),
+                    "query_comment_url": response.get("html_url"),
+                    "queried_at": response.get("created_at")
+                    or response.get("updated_at")
+                    or existing.get("started_at"),
+                }
+            )
+            generation["capacity_query"] = existing
+            save_review_generation(repo, pr_num, generation)
+            recovered_inflight = True
+
+    if isinstance(existing, dict) and (not refresh or recovered_inflight):
+        query = dict(existing)
+    else:
+        if isinstance(existing, dict):
+            generation.setdefault("capacity_query_history", []).append(existing)
+        issue_comments = gh_paginated_array(
+            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+        )
+        query = {
+            "status": "posting",
+            "generation_id": None,
+            "query_comment_id": None,
+            "query_comment_url": None,
+            "body": CAPACITY_QUERY_BODY,
+            "actor_login": authenticated_actor_login(),
+            "started_at": utc_now(),
+            "queried_at": None,
+            "baseline_issue_comment_ids": sorted(
+                object_id(comment) for comment in issue_comments if object_id(comment)
+            ),
+            "response": None,
+        }
+        generation["capacity_query"] = query
+        save_review_generation(repo, pr_num, generation)
+        response = gh_json(
+            [
+                "api",
+                "-X",
+                "POST",
+                f"/repos/{repo.slug}/issues/{pr_num}/comments",
+                "-f",
+                f"body={CAPACITY_QUERY_BODY}",
+            ]
+        )
+        if not isinstance(response, dict) or not object_id(response):
+            raise DriverError("GitHub did not return a capacity-query comment identity")
+        query.update(
+            {
+                "status": "posted",
+                "generation_id": object_id(response),
+                "query_comment_id": object_id(response),
+                "query_comment_url": response.get("html_url"),
+                "queried_at": response.get("created_at")
+                or response.get("updated_at")
+                or query["started_at"],
+            }
+        )
+        generation["capacity_query"] = query
+        save_review_generation(repo, pr_num, generation)
+
+    if isinstance(query.get("response"), dict) and not refresh:
+        return generation
+
+    attempts = env_int(
+        "CODERABBIT_CAPACITY_QUERY_ATTEMPTS", DEFAULT_CAPACITY_QUERY_ATTEMPTS
+    )
     poll_interval = env_int(
         "CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
     )
     bot_login = discover_bot_login(repo, pr_num)
+    baseline = {int(value) for value in query.get("baseline_issue_comment_ids", [])}
+    query_time = parse_time(query.get("queried_at"))
+    for attempt in range(attempts):
+        comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
+        candidates: list[dict[str, Any]] = []
+        for comment in comments:
+            if object_id(comment) in baseline:
+                continue
+            if not is_bot_login((comment.get("user") or {}).get("login"), bot_login):
+                continue
+            observed_at = parse_time(
+                comment.get("created_at") or comment.get("updated_at")
+            )
+            if query_time and (observed_at is None or observed_at < query_time):
+                continue
+            if is_capacity_response_body(str(comment.get("body") or "")):
+                candidates.append(comment)
+        if len(candidates) > 1:
+            generation.update(
+                {
+                    "result": "BLOCKED",
+                    "blocked_reason": "ambiguous capacity-query response",
+                    "next_permitted_action": "inspect_capacity_responses",
+                }
+            )
+            return save_review_generation(repo, pr_num, generation)
+        if candidates:
+            projection = capacity_response_projection(candidates[0])
+            projection["capacity_query_id"] = query.get("generation_id")
+            projection["response_body_path"] = persist_auxiliary_issue_comment(
+                repo,
+                pr_num,
+                candidates[0],
+                bot_login,
+                "capacity-response",
+            )
+            query["response"] = projection
+            query["attempts"] = attempt + 1
+            generation["capacity_query"] = query
+            if projection["capacity_available"] is None:
+                generation.update(
+                    {
+                        "result": "BLOCKED",
+                        "blocked_reason": "capacity response did not report availability",
+                        "next_permitted_action": "refresh_capacity_query",
+                    }
+                )
+            else:
+                generation.update(
+                    {
+                        "result": "RATE_LIMITED_NO_REVIEW",
+                        "blocked_reason": None,
+                        "next_permitted_action": "trigger"
+                        if projection["capacity_available"]
+                        else "wait_for_reported_capacity_then_refresh_query",
+                    }
+                )
+            return save_review_generation(repo, pr_num, generation)
+        if attempt + 1 < attempts:
+            time.sleep(poll_interval * (attempt + 1))
 
-    while True:
-        issue_comments = gh_paginated_array(
-            f"/repos/{repo.slug}/issues/{pr_num}/comments"
-        )
-        for comment in issue_comments:
-            comment_id = int(comment.get("id") or 0)
-            if comment_id <= command_comment_id:
-                continue
-            login = (comment.get("user") or {}).get("login")
-            if bot_login and login != bot_login and not is_coderabbit_login(login):
-                continue
-            if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
-                continue
-            ack_body = comment.get("body") or ""
-            ack_marker = trigger_ack_marker(ack_body, mode)
-            if ack_marker is None:
-                continue
-            if login:
-                bot_login = login
-                save_bot_login(repo, bot_login, pr_num)
-            return {
-                "repo": repo.slug,
-                "pr_num": pr_num,
-                "mode": mode,
-                "trigger_comment_id": command_comment_id,
-                "trigger_body": body,
-                "ack_comment_id": comment_id,
-                "ack_marker": ack_marker,
-                "ack_body": ack_body,
-                "bot_login": bot_login,
-                "triggered_at": utc_now(),
-            }
-        time.sleep(poll_interval)
+    query["attempts"] = attempts
+    generation["capacity_query"] = query
+    generation.update(
+        {
+            "result": "BLOCKED",
+            "blocked_reason": "capacity response unavailable after bounded backoff",
+            "next_permitted_action": "poll_capacity_query",
+        }
+    )
+    return save_review_generation(repo, pr_num, generation)
+
+
+def open_findings(repo: Repo, pr_num: int) -> dict[str, Any]:
+    head_oid = str(pr_metadata(repo, pr_num).get("headRefOid") or "")
+    if not head_oid:
+        raise DriverError(f"could not resolve PR head for {repo.slug}#{pr_num}")
+    result = poll(repo, pr_num, head_oid=head_oid, persist_state=False)
+    current_head_oid = str(pr_metadata(repo, pr_num).get("headRefOid") or "")
+    if current_head_oid != head_oid:
+        raise DriverError("PR head changed while collecting open findings")
+    findings = result.get("unresolved_findings", [])
+    return {
+        "schema": "coderabbit-open-findings-v1",
+        "repo": repo.slug,
+        "pr_num": pr_num,
+        "head_oid": head_oid,
+        "generation_result": (result.get("generation") or {}).get("result"),
+        "count": len(findings),
+        "findings": findings,
+    }
 
 
 def pr_metadata(repo: Repo, pr_num: int) -> dict[str, Any]:
@@ -996,104 +1842,48 @@ def pr_metadata(repo: Repo, pr_num: int) -> dict[str, Any]:
     return data
 
 
-def latest_trigger_ack_time(
-    issue_comments: list[dict[str, Any]], mode: str, bot_login: str | None
-) -> datetime | None:
-    latest: datetime | None = None
-    for comment in issue_comments:
-        login = (comment.get("user") or {}).get("login")
-        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
-            continue
-        body = comment.get("body") or ""
-        if not is_trigger_ack_body(body, mode):
-            continue
-        observed_at = parse_time(comment.get("updated_at") or comment.get("created_at"))
-        if observed_at and (latest is None or observed_at > latest):
-            latest = observed_at
-    return latest
-
-
-def latest_completion_ack_time(
-    issue_comments: list[dict[str, Any]], bot_login: str | None
-) -> datetime | None:
-    latest: datetime | None = None
-    for comment in issue_comments:
-        login = (comment.get("user") or {}).get("login")
-        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
-            continue
-        body = comment.get("body") or ""
-        if not any(marker in body for marker in ACK_ACTION_MARKERS) or not any(
-            marker in body for marker in ACK_COMPLETION_MARKERS.values()
-        ):
-            continue
-        observed_at = parse_time(comment.get("updated_at") or comment.get("created_at"))
-        if observed_at and (latest is None or observed_at > latest):
-            latest = observed_at
-    return latest
-
-
 def initial_trigger_decision(
     repo: Repo,
     pr_num: int,
-    mode: str,
     policy: str,
     head_oid: str,
-    head_committed_at: datetime,
 ) -> dict[str, Any]:
+    state = load_state(repo, pr_num)
+    if isinstance(state.get("inflight_trigger"), dict):
+        return {
+            "trigger": True,
+            "reason": "initial-trigger-policy:reconcile-inflight-trigger",
+        }
     if policy == "always":
         return {"trigger": True, "reason": "initial-trigger-policy:always"}
+    active = state.get("active_generation")
+    generation = active if isinstance(active, dict) else None
+    matching_generation = bool(
+        generation
+        and generation.get("schema") == GENERATION_SCHEMA
+        and generation.get("expected_head_oid") == head_oid
+    )
+    if policy == "skip" and not matching_generation:
+        raise DriverError(
+            "initial-trigger=skip requires a persisted generation for the current PR head"
+        )
     if policy == "skip":
-        return {"trigger": False, "reason": "initial-trigger-policy:skip"}
-
-    reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
-    issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    bot_login = discover_bot_login(
-        repo, pr_num, reviews=reviews, issue_comments=issue_comments
-    )
-    current_head_reviews, current_head_comments = current_head_review_evidence(
-        reviews, issue_comments, head_oid, head_committed_at
-    )
-    latest_review = latest_coderabbit_review(current_head_reviews, bot_login)
-    latest_review_at = (
-        parse_time(latest_review.get("submitted_at")) if latest_review else None
-    )
-    decision_signal = coderabbit_decision_signal(
-        current_head_reviews, current_head_comments, bot_login, head_oid
-    )
-    outcome = current_head_decision_outcome(
-        decision_signal, head_oid, head_committed_at
-    )
-    if outcome:
         return {
             "trigger": False,
-            "reason": f"initial-trigger-policy:auto:terminal-review-{outcome}",
-            "review_decision": decision_signal["decision"],
-            "outcome": outcome,
-            "review_decision_source": decision_signal.get("source"),
-            "latest_review_at": latest_review_at.isoformat()
-            if latest_review_at
-            else None,
+            "reason": "initial-trigger-policy:skip:active-generation",
+            "generation_result": generation.get("result"),
         }
-    ack_time = latest_trigger_ack_time(issue_comments, mode, bot_login)
-
-    if (
-        ack_time
-        and ack_time >= head_committed_at
-        and (latest_review_at is None or ack_time > latest_review_at)
-    ):
-        return {
-            "trigger": False,
-            "reason": "initial-trigger-policy:auto:pending-ack-newer-than-latest-review",
-            "latest_trigger_ack_at": ack_time.isoformat(),
-            "latest_review_at": latest_review_at.isoformat()
-            if latest_review_at
-            else None,
-        }
+    if matching_generation:
+        suppressed, reason = generation_suppresses_trigger(generation)
+        if suppressed or generation.get("result") == "REVIEW_COMPLETED":
+            return {
+                "trigger": False,
+                "reason": f"initial-trigger-policy:auto:{reason or 'review-completed'}",
+                "generation_result": generation.get("result"),
+            }
     return {
         "trigger": True,
-        "reason": "initial-trigger-policy:auto:no-pending-trigger-detected",
-        "latest_trigger_ack_at": ack_time.isoformat() if ack_time else None,
-        "latest_review_at": latest_review_at.isoformat() if latest_review_at else None,
+        "reason": "initial-trigger-policy:auto:no-active-generation",
     }
 
 
@@ -1251,6 +2041,10 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
         raise DriverError(
             f"agent outcome for comment {comment_id} is missing review_provided_value"
         )
+    if raw["review_provided_value"] is False and outcome != "rejected":
+        raise DriverError(
+            f"agent outcome for comment {comment_id} must reject non-value feedback"
+        )
 
     commit_sha = raw.get("commit_sha")
     if commit_sha is not None and not isinstance(commit_sha, str):
@@ -1405,46 +2199,101 @@ def dispatch_comment_agent(
     return outcome
 
 
+def reply_readback(
+    reply: dict[str, Any], body: str, parent_comment_id: int | None
+) -> dict[str, Any]:
+    reply_id = object_id(reply)
+    if not reply_id or normalized_comment_body(
+        str(reply.get("body") or "")
+    ) != normalized_comment_body(body):
+        raise DriverError("posted reply could not be read back with its exact identity")
+    if (
+        parent_comment_id is not None
+        and reply.get("in_reply_to_id") != parent_comment_id
+    ):
+        raise DriverError(
+            "posted review reply was not bound to the requested comment thread"
+        )
+    return {
+        "id": reply_id,
+        "url": reply.get("html_url"),
+        "author": (reply.get("user") or {}).get("login"),
+        "in_reply_to_id": reply.get("in_reply_to_id"),
+    }
+
+
+def reply_result(
+    repo: Repo,
+    pr_num: int,
+    comment_id: int,
+    reply_kind: str,
+    posted: bool,
+    readback: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "repo": repo.slug,
+        "pr_num": pr_num,
+        "comment_id": comment_id,
+        "posted": posted,
+        "reason": None if posted else "reply-already-present",
+        "reply_kind": reply_kind,
+        "reply_id": readback["id"],
+        "reply_url": readback["url"],
+        "readback": readback,
+    }
+
+
+def mark_out_of_diff_disposition(
+    repo: Repo,
+    pr_num: int,
+    target: dict[str, Any],
+    readback: dict[str, Any],
+) -> None:
+    comment_id = object_id(target)
+    state = load_state(repo, pr_num)
+    dispositions = state.setdefault("out_of_diff_dispositions", {})
+    dispositions[str(comment_id)] = {
+        "status": "replied",
+        "body_sha256": hashlib_sha256(str(target.get("body") or "")),
+        "updated_at": target.get("updated_at") or target.get("created_at"),
+        "reply_id": readback["id"],
+        "reply_url": readback["url"],
+        "recorded_at": utc_now(),
+    }
+    save_state(repo, pr_num, state)
+
+
 def post_reply(
     repo: Repo, pr_num: int, comment_id: int, body_file: str
 ) -> dict[str, Any]:
-    # command_reply prints its own JSON, so keep review-loop replies quiet by using the same underlying path.
-    body_path = Path(body_file)
-    body = body_path.read_text(encoding="utf-8")
+    body = Path(body_file).read_text(encoding="utf-8")
     if not body.strip():
         raise DriverError("reply body file is empty")
 
     bot_login = discover_bot_login(repo, pr_num)
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
     target = next(
-        (
-            comment
-            for comment in review_comments
-            if int(comment.get("id")) == comment_id
-        ),
+        (comment for comment in review_comments if object_id(comment) == comment_id),
         None,
     )
-    if target and not is_bot_login((target.get("user") or {}).get("login"), bot_login):
-        raise DriverError(f"comment {comment_id} is not authored by CodeRabbit")
-
-    normalized_body = body.strip()
     if target:
-        for comment in review_comments:
-            if (
-                comment.get("in_reply_to_id") == comment_id
-                and (comment.get("body") or "").strip() == normalized_body
-            ):
-                return {
-                    "repo": repo.slug,
-                    "pr_num": pr_num,
-                    "comment_id": comment_id,
-                    "posted": False,
-                    "reason": "reply-already-present",
-                    "reply_kind": "review-comment-reply",
-                    "reply_id": comment.get("id"),
-                    "reply_url": comment.get("html_url"),
-                }
-
+        if not is_bot_login((target.get("user") or {}).get("login"), bot_login):
+            raise DriverError(f"comment {comment_id} is not authored by CodeRabbit")
+        duplicate = next(
+            (
+                comment
+                for comment in review_comments
+                if comment.get("in_reply_to_id") == comment_id
+                and normalized_comment_body(str(comment.get("body") or ""))
+                == normalized_comment_body(body)
+            ),
+            None,
+        )
+        if duplicate:
+            readback = reply_readback(duplicate, body, comment_id)
+            return reply_result(
+                repo, pr_num, comment_id, "review-comment-reply", False, readback
+            )
         response = gh_json(
             [
                 "api",
@@ -1455,47 +2304,51 @@ def post_reply(
                 f"body={body}",
             ]
         )
-        return {
-            "repo": repo.slug,
-            "pr_num": pr_num,
-            "comment_id": comment_id,
-            "posted": True,
-            "reply_kind": "review-comment-reply",
-            "reply_id": response.get("id"),
-            "reply_url": response.get("html_url"),
-        }
+        response_id = object_id(response) if isinstance(response, dict) else 0
+        if not response_id:
+            raise DriverError("GitHub returned no review-reply identity")
+        posted = gh_json(["api", f"/repos/{repo.slug}/pulls/comments/{response_id}"])
+        if not isinstance(posted, dict):
+            raise DriverError("GitHub returned no review-reply readback")
+        readback = reply_readback(posted, body, comment_id)
+        return reply_result(
+            repo, pr_num, comment_id, "review-comment-reply", True, readback
+        )
 
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
     issue_target = next(
-        (comment for comment in issue_comments if int(comment.get("id")) == comment_id),
+        (comment for comment in issue_comments if object_id(comment) == comment_id),
         None,
     )
     if not issue_target:
-        raise DriverError(f"comment {comment_id} was not found on PR {pr_num}")
+        raise DriverError(
+            f"CodeRabbit comment {comment_id} was not found on PR {pr_num}; refusing top-level fallback"
+        )
     if not is_bot_login((issue_target.get("user") or {}).get("login"), bot_login):
         raise DriverError(f"comment {comment_id} is not authored by CodeRabbit")
 
     target_url = issue_target.get("html_url")
     mention_login = (
         bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
-    )
+    ).removesuffix("[bot]")
     issue_body = (
         f"@{mention_login} re: {target_url}\n\n{body}"
         if target_url
-        else f"@{mention_login}\n\n{body}"
+        else f"@{mention_login} re: comment-id:{comment_id}\n\n{body}"
     )
-    for comment in issue_comments:
-        if (comment.get("body") or "").strip() == issue_body.strip():
-            return {
-                "repo": repo.slug,
-                "pr_num": pr_num,
-                "comment_id": comment_id,
-                "posted": False,
-                "reason": "reply-already-present",
-                "reply_kind": "issue-comment",
-                "reply_id": comment.get("id"),
-                "reply_url": comment.get("html_url"),
-            }
+    duplicate = next(
+        (
+            comment
+            for comment in issue_comments
+            if normalized_comment_body(str(comment.get("body") or ""))
+            == normalized_comment_body(issue_body)
+        ),
+        None,
+    )
+    if duplicate:
+        readback = reply_readback(duplicate, issue_body, None)
+        mark_out_of_diff_disposition(repo, pr_num, issue_target, readback)
+        return reply_result(repo, pr_num, comment_id, "issue-comment", False, readback)
 
     response = gh_json(
         [
@@ -1507,15 +2360,15 @@ def post_reply(
             f"body={issue_body}",
         ]
     )
-    return {
-        "repo": repo.slug,
-        "pr_num": pr_num,
-        "comment_id": comment_id,
-        "posted": True,
-        "reply_kind": "issue-comment",
-        "reply_id": response.get("id"),
-        "reply_url": response.get("html_url"),
-    }
+    response_id = object_id(response) if isinstance(response, dict) else 0
+    if not response_id:
+        raise DriverError("GitHub returned no issue-reply identity")
+    posted = gh_json(["api", f"/repos/{repo.slug}/issues/comments/{response_id}"])
+    if not isinstance(posted, dict):
+        raise DriverError("GitHub returned no issue-reply readback")
+    readback = reply_readback(posted, issue_body, None)
+    mark_out_of_diff_disposition(repo, pr_num, issue_target, readback)
+    return reply_result(repo, pr_num, comment_id, "issue-comment", True, readback)
 
 
 def wait_for_loop_poll_cadence(
@@ -1562,22 +2415,19 @@ def select_actionable_comments(
     poll_result: dict[str, Any], handled_comment_ids: set[int] | None = None
 ) -> list[dict[str, Any]]:
     handled_comment_ids = handled_comment_ids or set()
-    new_comments = [
-        comment
-        for comment in poll_result.get("new_comments", [])
+    candidates = [
+        *poll_result.get("new_comments", []),
+        *poll_result.get("actionable_comments", []),
+    ]
+    comments_by_id = {
+        int(comment.get("comment_id") or 0): comment
+        for comment in candidates
         if comment.get("kind") == "in-diff"
         and not comment.get("resolved")
         and int(comment.get("comment_id") or 0) not in handled_comment_ids
-    ]
-    if new_comments:
-        return new_comments
-    return [
-        comment
-        for comment in poll_result.get("actionable_comments", [])
-        if comment.get("kind") == "in-diff"
-        and not comment.get("resolved")
-        and int(comment.get("comment_id") or 0) not in handled_comment_ids
-    ]
+    }
+    comments_by_id.pop(0, None)
+    return list(comments_by_id.values())
 
 
 def changes_requested_without_actionable_comments(
@@ -1589,17 +2439,11 @@ def changes_requested_without_actionable_comments(
 
 
 def completed_review_without_terminal_decision(
-    review_decision: str,
     outcome: Any,
     actionable_comments: list[dict[str, Any]],
     review_completed: bool,
 ) -> bool:
-    return (
-        review_completed
-        and not actionable_comments
-        and review_decision.upper() == "COMMENTED"
-        and outcome is None
-    )
+    return review_completed and not actionable_comments and outcome is None
 
 
 def validated_pr_head_identity(
@@ -1719,7 +2563,7 @@ def poll_current_pr_head(
     head_oid, head_committed_at = revalidate_current_pr_head(
         repo, pr_num, worktree_path, expected_branch
     )
-    poll_result = poll(repo, pr_num, head_oid, head_committed_at)
+    poll_result = poll(repo, pr_num, head_oid)
     revalidate_current_pr_head(repo, pr_num, worktree_path, expected_branch)
     return poll_result, head_oid, head_committed_at
 
@@ -1771,10 +2615,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     trigger_decision = initial_trigger_decision(
         repo,
         args.pr_num,
-        args.mode,
         args.initial_trigger,
         head_oid,
-        head_committed_at,
     )
     initial_trigger: dict[str, Any] | None = None
     if trigger_decision["trigger"]:
@@ -1783,7 +2625,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             file=sys.stderr,
             flush=True,
         )
-        initial_trigger = trigger_review(repo, args.pr_num, args.mode, args.label)
+        initial_trigger = trigger_review(
+            repo,
+            args.pr_num,
+            args.mode,
+            args.label,
+            force=args.initial_trigger == "always",
+        )
     else:
         print(
             f"Skipping initial trigger: {trigger_decision['reason']}",
@@ -1807,10 +2655,10 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             repo, args.pr_num, worktree_path, pr_branch
         )
         mark_loop_poll(repo, args.pr_num)
+        generation = poll_result.get("generation") or {}
+        generation_result = generation.get("result")
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
-        final_outcome = current_head_decision_outcome(
-            poll_result.get("decision_signal") or {}, head_oid, head_committed_at
-        )
+        final_outcome = poll_result.get("outcome")
         actionable_comments = select_actionable_comments(
             poll_result, handled_comment_ids
         )
@@ -1820,7 +2668,9 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "poll_completed_at": utc_now(),
             "cadence": cadence,
             "review_decision": final_review_decision,
-            "terminal": final_outcome is not None,
+            "aggregate_review_decision": poll_result.get("aggregate_review_decision"),
+            "generation": generation,
+            "terminal": generation_result != "WAITING_FOR_REVIEW",
             "outcome": final_outcome,
             "review_decision_source": poll_result.get("review_decision_source"),
             "new_comments": poll_result.get("new_comments", []),
@@ -1832,6 +2682,45 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "push_result": None,
             "trigger_result": None,
         }
+
+        if generation_result == "RATE_LIMITED_NO_REVIEW":
+            capacity_result = capacity_query(repo, args.pr_num)
+            iteration["capacity_result"] = capacity_result
+            response = (capacity_result.get("capacity_query") or {}).get("response")
+            if (
+                capacity_result.get("result") == "RATE_LIMITED_NO_REVIEW"
+                and isinstance(response, dict)
+                and response.get("capacity_available") is True
+            ):
+                iteration["trigger_result"] = trigger_review(
+                    repo, args.pr_num, "incremental", args.label
+                )
+                iterations.append(iteration)
+                iteration_index += 1
+                continue
+            terminal_reason = (
+                "rate_limited_no_review"
+                if capacity_result.get("result") == "RATE_LIMITED_NO_REVIEW"
+                else "blocked"
+            )
+            iterations.append(iteration)
+            break
+
+        if generation_result == "BLOCKED":
+            terminal_reason = "blocked"
+            iterations.append(iteration)
+            break
+
+        if generation_result == "WAITING_FOR_REVIEW":
+            iterations.append(iteration)
+            print(
+                f"Waiting for a new exact-head CodeRabbit review ID for "
+                f"{repo.slug}#{args.pr_num}",
+                file=sys.stderr,
+                flush=True,
+            )
+            iteration_index += 1
+            continue
 
         if final_outcome == "approved":
             terminal_reason = str(final_outcome)
@@ -1848,7 +2737,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             break
 
         if completed_review_without_terminal_decision(
-            final_review_decision,
             final_outcome,
             actionable_comments,
             bool(poll_result.get("review_completed")),
@@ -1923,6 +2811,8 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 "terminal_reason": None,
                 "needs_caller_decision": True,
                 "review_decision": final_review_decision,
+                "generation_result": generation_result,
+                "generation": generation,
                 "initial_trigger_decision": trigger_decision,
                 "initial_trigger_result": initial_trigger,
                 "iterations": iterations,
@@ -1957,6 +2847,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "changes_requested_without_actionable_comments",
         "review_completed_without_terminal_decision",
     }
+    final_generation = active_review_generation(repo, args.pr_num) or {}
     return {
         "repo": repo.slug,
         "pr_num": args.pr_num,
@@ -1964,11 +2855,18 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "enabled": enabled_payload,
         "loop_started_at": loop_started_at,
         "loop_completed_at": utc_now(),
-        "terminal": not needs_caller_decision,
+        "terminal": final_generation.get("result")
+        in {
+            "REVIEW_COMPLETED",
+            "RATE_LIMITED_NO_REVIEW",
+            "BLOCKED",
+        },
         "terminal_reason": terminal_reason,
         "outcome": terminal_reason,
         "needs_caller_decision": needs_caller_decision,
         "review_decision": final_review_decision,
+        "generation_result": final_generation.get("result", "BLOCKED"),
+        "generation": final_generation,
         "initial_trigger_decision": trigger_decision,
         "initial_trigger_result": initial_trigger,
         "iterations": iterations,
@@ -2014,164 +2912,51 @@ def command_trigger(args: argparse.Namespace) -> int:
 
 def command_poll(args: argparse.Namespace) -> int:
     repo = Repo.parse(args.repo)
-    print(json.dumps(poll(repo, args.pr_num), indent=2, sort_keys=True))
+    head_oid = str(pr_metadata(repo, args.pr_num).get("headRefOid") or "")
+    if not head_oid:
+        raise DriverError(f"could not resolve PR head for {repo.slug}#{args.pr_num}")
+    payload = poll(repo, args.pr_num, head_oid)
+    current_head_oid = str(pr_metadata(repo, args.pr_num).get("headRefOid") or "")
+    if current_head_oid != head_oid:
+        raise DriverError("PR head changed while polling CodeRabbit evidence")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def command_capacity(args: argparse.Namespace) -> int:
+    repo = Repo.parse(args.repo)
+    print(
+        json.dumps(
+            capacity_query(repo, args.pr_num, refresh=args.new_query),
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+def command_open_findings(args: argparse.Namespace) -> int:
+    repo = Repo.parse(args.repo)
+    print(json.dumps(open_findings(repo, args.pr_num), indent=2, sort_keys=True))
     return 0
 
 
 def command_review_loop(args: argparse.Namespace) -> int:
     payload = review_loop(args)
     print(json.dumps(payload, indent=2, sort_keys=True))
+    if payload.get("generation_result") == "BLOCKED":
+        return 2
     if payload.get("needs_caller_decision"):
+        return 3
+    if payload.get("generation_result") == "RATE_LIMITED_NO_REVIEW":
         return 3
     return 0
 
 
 def command_reply(args: argparse.Namespace) -> int:
     repo = Repo.parse(args.repo)
-    body_path = Path(args.body_file)
-    body = body_path.read_text(encoding="utf-8")
-    if not body.strip():
-        raise DriverError("reply body file is empty")
-
-    bot_login = discover_bot_login(repo, args.pr_num)
-    review_comments = gh_paginated_array(
-        f"/repos/{repo.slug}/pulls/{args.pr_num}/comments"
-    )
-    target = next(
-        (
-            comment
-            for comment in review_comments
-            if int(comment.get("id")) == args.comment_id
-        ),
-        None,
-    )
-    if target and not is_bot_login((target.get("user") or {}).get("login"), bot_login):
-        raise DriverError(f"comment {args.comment_id} is not authored by CodeRabbit")
-
-    normalized_body = body.strip()
-    if target:
-        for comment in review_comments:
-            if (
-                comment.get("in_reply_to_id") == args.comment_id
-                and (comment.get("body") or "").strip() == normalized_body
-            ):
-                print(
-                    json.dumps(
-                        {
-                            "repo": repo.slug,
-                            "pr_num": args.pr_num,
-                            "comment_id": args.comment_id,
-                            "posted": False,
-                            "reason": "reply-already-present",
-                            "reply_kind": "review-comment-reply",
-                            "reply_id": comment.get("id"),
-                            "reply_url": comment.get("html_url"),
-                        },
-                        indent=2,
-                        sort_keys=True,
-                    )
-                )
-                return 0
-
-        response = gh_json(
-            [
-                "api",
-                "-X",
-                "POST",
-                f"/repos/{repo.slug}/pulls/{args.pr_num}/comments/{args.comment_id}/replies",
-                "-f",
-                f"body={body}",
-            ]
-        )
-        print(
-            json.dumps(
-                {
-                    "repo": repo.slug,
-                    "pr_num": args.pr_num,
-                    "comment_id": args.comment_id,
-                    "posted": True,
-                    "reply_kind": "review-comment-reply",
-                    "reply_id": response.get("id"),
-                    "reply_url": response.get("html_url"),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        return 0
-
-    issue_comments = gh_paginated_array(
-        f"/repos/{repo.slug}/issues/{args.pr_num}/comments"
-    )
-    issue_target = next(
-        (
-            comment
-            for comment in issue_comments
-            if int(comment.get("id")) == args.comment_id
-        ),
-        None,
-    )
-    if not issue_target:
-        raise DriverError(
-            f"comment {args.comment_id} was not found on PR {args.pr_num}"
-        )
-    if not is_bot_login((issue_target.get("user") or {}).get("login"), bot_login):
-        raise DriverError(f"comment {args.comment_id} is not authored by CodeRabbit")
-
-    target_url = issue_target.get("html_url")
-    mention_login = (
-        bot_login or (issue_target.get("user") or {}).get("login") or "coderabbitai"
-    )
-    issue_body = (
-        f"@{mention_login} re: {target_url}\n\n{body}"
-        if target_url
-        else f"@{mention_login}\n\n{body}"
-    )
-    for comment in issue_comments:
-        if (comment.get("body") or "").strip() == issue_body.strip():
-            print(
-                json.dumps(
-                    {
-                        "repo": repo.slug,
-                        "pr_num": args.pr_num,
-                        "comment_id": args.comment_id,
-                        "posted": False,
-                        "reason": "reply-already-present",
-                        "reply_kind": "issue-comment",
-                        "reply_id": comment.get("id"),
-                        "reply_url": comment.get("html_url"),
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-            return 0
-
-    response = gh_json(
-        [
-            "api",
-            "-X",
-            "POST",
-            f"/repos/{repo.slug}/issues/{args.pr_num}/comments",
-            "-f",
-            f"body={issue_body}",
-        ]
-    )
-    print(
-        json.dumps(
-            {
-                "repo": repo.slug,
-                "pr_num": args.pr_num,
-                "comment_id": args.comment_id,
-                "posted": True,
-                "reply_kind": "issue-comment",
-                "reply_id": response.get("id"),
-                "reply_url": response.get("html_url"),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    payload = post_reply(repo, args.pr_num, args.comment_id, args.body_file)
+    print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
 
@@ -2189,7 +2974,7 @@ def build_parser() -> argparse.ArgumentParser:
     enabled.set_defaults(func=command_is_enabled)
 
     trigger = subparsers.add_parser(
-        "trigger", help="Post a CodeRabbit review command and wait for ack."
+        "trigger", help="Start one baseline-bound CodeRabbit review generation."
     )
     trigger.add_argument("repo")
     trigger.add_argument("pr_num", type=int)
@@ -2199,11 +2984,31 @@ def build_parser() -> argparse.ArgumentParser:
     trigger.set_defaults(func=command_trigger)
 
     poll_parser = subparsers.add_parser(
-        "poll", help="Poll CodeRabbit review state and persist comment files."
+        "poll", help="Poll persisted generation evidence and normalized comments."
     )
     poll_parser.add_argument("repo")
     poll_parser.add_argument("pr_num", type=int)
     poll_parser.set_defaults(func=command_poll)
+
+    capacity_parser = subparsers.add_parser(
+        "capacity", help="Query authoritative CodeRabbit review capacity once."
+    )
+    capacity_parser.add_argument("repo")
+    capacity_parser.add_argument("pr_num", type=int)
+    capacity_parser.add_argument(
+        "--new-query",
+        action="store_true",
+        help="Start a new capacity-query generation instead of polling the persisted one.",
+    )
+    capacity_parser.set_defaults(func=command_capacity)
+
+    findings_parser = subparsers.add_parser(
+        "open-findings",
+        help="Return unresolved in-diff and outside-diff CodeRabbit findings.",
+    )
+    findings_parser.add_argument("repo")
+    findings_parser.add_argument("pr_num", type=int)
+    findings_parser.set_defaults(func=command_open_findings)
 
     review_loop_parser = subparsers.add_parser(
         "review-loop",
@@ -2218,7 +3023,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--initial-trigger",
         choices=("auto", "always", "skip"),
         default="auto",
-        help="Initial trigger policy. auto skips when a trigger ack is newer than the latest CodeRabbit review.",
+        help="Initial trigger policy. auto resumes a matching generation; always explicitly supersedes it.",
     )
     review_loop_parser.add_argument(
         "--worktree-path",
