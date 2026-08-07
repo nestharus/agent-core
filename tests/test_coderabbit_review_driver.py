@@ -677,6 +677,14 @@ def test_capacity_projection_accepts_live_next_review_wording() -> None:
     assert projection["capacity_available"] is False
 
 
+def test_capacity_projection_accepts_live_available_now_wording() -> None:
+    comment = _issue_comment(201, "Reviews are available now.")
+
+    assert driver.is_capacity_response_body(comment["body"]) is True
+    projection = driver.capacity_response_projection(comment)
+    assert projection["capacity_available"] is True
+
+
 @pytest.mark.parametrize(
     ("generation", "reason"),
     [

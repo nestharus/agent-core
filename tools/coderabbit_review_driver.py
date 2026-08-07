@@ -72,6 +72,7 @@ CAPACITY_RESPONSE_MARKERS = (
     "reviews remaining",
     "review available",
     "review will be available",
+    "reviews are available",
     "review limit",
 )
 
@@ -477,8 +478,14 @@ def capacity_response_projection(comment: dict[str, Any]) -> dict[str, Any]:
         marker in normalized
         for marker in ("no reviews available", "0 reviews remaining")
     )
+    available_now = any(
+        marker in normalized
+        for marker in ("review is available now", "reviews are available now")
+    )
     capacity_available: bool | None
-    if remaining is not None:
+    if available_now:
+        capacity_available = True
+    elif remaining is not None:
         capacity_available = remaining > 0 and not (one_at_a_time and active_review)
     elif exhausted or retry_guidance or (one_at_a_time and active_review):
         capacity_available = False
