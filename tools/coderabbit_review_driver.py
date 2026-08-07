@@ -151,6 +151,14 @@ def gh_paginated_array(endpoint: str) -> list[dict[str, Any]]:
     raise DriverError(f"expected array response from {endpoint}")
 
 
+def authenticated_actor_login() -> str:
+    actor = gh_json(["api", "/user"])
+    login = actor.get("login") if isinstance(actor, dict) else None
+    if not isinstance(login, str) or not login:
+        raise DriverError("could not resolve the authenticated GitHub actor")
+    return login
+
+
 def utc_now_dt() -> datetime:
     return datetime.now(UTC)
 
@@ -1185,19 +1193,14 @@ def poll(
     reviews = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/reviews")
     review_comments = gh_paginated_array(f"/repos/{repo.slug}/pulls/{pr_num}/comments")
     issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    if persist_state:
-        bot_login = discover_bot_login(
-            repo, pr_num, reviews, review_comments, issue_comments
-        )
-    else:
-        bot_login = discover_bot_login(
-            repo,
-            pr_num,
-            reviews,
-            review_comments,
-            issue_comments,
-            persist=False,
-        )
+    bot_login = discover_bot_login(
+        repo,
+        pr_num,
+        reviews,
+        review_comments,
+        issue_comments,
+        persist=persist_state,
+    )
     thread_status = graphql_review_threads(repo, pr_num)
 
     latest_review = latest_coderabbit_review(reviews, bot_login)
@@ -1397,11 +1400,14 @@ def inflight_command_candidates(
     baseline = {int(value) for value in marker.get("baseline_issue_comment_ids", [])}
     started_at = parse_time(marker.get("started_at"))
     expected_body = normalized_comment_body(str(marker.get("body") or ""))
-    if not expected_body:
+    actor_login = marker.get("actor_login")
+    if not expected_body or not isinstance(actor_login, str) or not actor_login:
         raise DriverError("persisted in-flight provider command is malformed")
     candidates: list[dict[str, Any]] = []
     for comment in issue_comments:
         if object_id(comment) in baseline:
+            continue
+        if (comment.get("user") or {}).get("login") != actor_login:
             continue
         if normalized_comment_body(str(comment.get("body") or "")) != expected_body:
             continue
@@ -1539,6 +1545,7 @@ def _trigger_review(
             "pr_num": pr_num,
             "mode": mode,
             "body": body,
+            "actor_login": authenticated_actor_login(),
             "expected_head_oid": expected_head_oid,
             "started_at": utc_now(),
             "baseline_review_ids": coderabbit_review_ids(reviews, bot_login),
@@ -1703,6 +1710,7 @@ def _capacity_query(repo: Repo, pr_num: int, refresh: bool) -> dict[str, Any]:
             "query_comment_id": None,
             "query_comment_url": None,
             "body": CAPACITY_QUERY_BODY,
+            "actor_login": authenticated_actor_login(),
             "started_at": utc_now(),
             "queried_at": None,
             "baseline_issue_comment_ids": sorted(

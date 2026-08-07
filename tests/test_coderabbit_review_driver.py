@@ -18,6 +18,11 @@ BOT_LOGIN = "coderabbitai[bot]"
 REPO = driver.Repo(owner="nestharus", name="agent-core")
 
 
+@pytest.fixture(autouse=True)
+def authenticated_actor(monkeypatch) -> None:
+    monkeypatch.setattr(driver, "authenticated_actor_login", lambda: "nestharus")
+
+
 def _review(
     review_id: int,
     state: str,
@@ -180,7 +185,7 @@ def test_aggregate_approval_without_active_generation_is_informational(
             [_review(7, "APPROVED")] if endpoint.endswith("/reviews") else []
         ),
     )
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
     monkeypatch.setattr(driver, "load_state", lambda *args: {})
     monkeypatch.setattr(driver, "save_state", lambda *args: None)
@@ -215,7 +220,7 @@ def test_poll_projects_generation_and_findings_from_one_provider_snapshot(
         return []
 
     monkeypatch.setattr(driver, "gh_paginated_array", fake_paginated)
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
     monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
     monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
@@ -241,7 +246,7 @@ def test_poll_classifies_generation_against_provider_head_not_finding_scope(
             else []
         ),
     )
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
     monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
     monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
@@ -539,6 +544,7 @@ def test_capacity_query_reconciles_inflight_command_before_polling(
         "query_comment_id": None,
         "query_comment_url": None,
         "body": driver.CAPACITY_QUERY_BODY,
+        "actor_login": "nestharus",
         "started_at": "2026-08-07T10:02:00Z",
         "queried_at": None,
         "baseline_issue_comment_ids": [100],
@@ -572,6 +578,80 @@ def test_capacity_query_reconciles_inflight_command_before_polling(
     assert result["capacity_query"]["status"] == "posted"
     assert result["capacity_query"]["query_comment_id"] == 200
     assert result["capacity_query"]["response"]["comment_id"] == 201
+
+
+def test_ambiguous_inflight_capacity_query_blocks(monkeypatch, tmp_path) -> None:
+    generation = _generation()
+    generation["result"] = "RATE_LIMITED_NO_REVIEW"
+    generation["capacity_query"] = {
+        "status": "posting",
+        "body": driver.CAPACITY_QUERY_BODY,
+        "actor_login": "nestharus",
+        "started_at": "2026-08-07T10:02:00Z",
+        "baseline_issue_comment_ids": [100],
+        "response": None,
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, {"active_generation": generation})
+    monkeypatch.setattr(
+        driver,
+        "gh_paginated_array",
+        lambda *args: [
+            _issue_comment(
+                200,
+                driver.CAPACITY_QUERY_BODY,
+                "2026-08-07T10:02:01Z",
+                login="nestharus",
+            ),
+            _issue_comment(
+                201,
+                driver.CAPACITY_QUERY_BODY,
+                "2026-08-07T10:02:02Z",
+                login="nestharus",
+            ),
+        ],
+    )
+
+    result = driver.capacity_query(REPO, 198)
+
+    assert result["result"] == "BLOCKED"
+    assert result["blocked_reason"] == "ambiguous in-flight capacity-query identity"
+    assert result["next_permitted_action"] == "inspect_capacity_query_comments"
+
+
+def test_unobserved_inflight_capacity_query_requires_explicit_refresh(
+    monkeypatch, tmp_path
+) -> None:
+    generation = _generation()
+    generation["result"] = "RATE_LIMITED_NO_REVIEW"
+    generation["capacity_query"] = {
+        "status": "posting",
+        "body": driver.CAPACITY_QUERY_BODY,
+        "actor_login": "nestharus",
+        "started_at": "2026-08-07T10:02:00Z",
+        "baseline_issue_comment_ids": [100],
+        "response": None,
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, {"active_generation": generation})
+    monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [])
+
+    with pytest.raises(driver.DriverError, match="no provider identity yet"):
+        driver.capacity_query(REPO, 198)
+
+    monkeypatch.setattr(
+        driver,
+        "gh_json",
+        lambda *args: _issue_comment(
+            200, driver.CAPACITY_QUERY_BODY, login="nestharus"
+        ),
+    )
+    monkeypatch.setenv("CODERABBIT_CAPACITY_QUERY_ATTEMPTS", "1")
+    refreshed = driver.capacity_query(REPO, 198, refresh=True)
+
+    assert refreshed["capacity_query_history"][0]["abandon_reason"] == (
+        "explicit-refresh-with-no-provider-identity"
+    )
 
 
 def test_capacity_projection_does_not_capture_number_from_later_line() -> None:
@@ -781,6 +861,7 @@ def test_trigger_reconciles_inflight_command_without_duplicate_post(
         "pr_num": 198,
         "mode": "incremental",
         "body": driver.TRIGGER_BODIES["incremental"],
+        "actor_login": "nestharus",
         "expected_head_oid": "head-sha",
         "started_at": "2026-08-07T10:00:00Z",
         "baseline_review_ids": [1],
@@ -835,6 +916,37 @@ def test_trigger_reconciles_inflight_command_without_duplicate_post(
     assert result["supersession_deferred_reason"] == "reconciled-inflight-trigger"
     assert driver.active_review_generation(REPO, 198)["generation_id"] == 200
     assert "inflight_trigger" not in driver.load_state(REPO, 198)
+
+
+def test_inflight_command_candidates_require_authenticated_actor() -> None:
+    marker = {
+        "body": driver.TRIGGER_BODIES["incremental"],
+        "actor_login": "nestharus",
+        "started_at": "2026-08-07T10:00:00Z",
+        "baseline_issue_comment_ids": [10],
+    }
+    comments = [
+        _issue_comment(
+            11,
+            driver.TRIGGER_BODIES["incremental"],
+            "2026-08-07T10:00:01Z",
+            login="foreign-reviewer",
+        ),
+        _issue_comment(
+            12,
+            driver.TRIGGER_BODIES["incremental"],
+            "2026-08-07T10:00:02Z",
+            login="nestharus",
+        ),
+    ]
+
+    assert [
+        comment["id"]
+        for comment in driver.inflight_command_candidates(marker, comments)
+    ] == [12]
+    marker.pop("actor_login")
+    with pytest.raises(driver.DriverError, match="malformed"):
+        driver.inflight_command_candidates(marker, comments)
 
 
 def test_prior_approval_is_archived_but_cannot_approve_rate_limited_new_head(
@@ -1019,7 +1131,7 @@ def test_reply_posts_to_exact_review_thread_and_reads_back_identity(
         "html_url": "https://github.test/replies/99",
         "user": {"login": "nestharus"},
     }
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [target])
     calls: list[list[str]] = []
 
@@ -1051,7 +1163,7 @@ def test_reply_to_outside_diff_comment_is_exact_and_read_back(
         "html_url": "https://github.test/comments/100",
         "user": {"login": "nestharus"},
     }
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     responses = iter([[], [target]])
     monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: next(responses))
     monkeypatch.setattr(
@@ -1084,7 +1196,7 @@ def test_duplicate_review_reply_is_idempotent(monkeypatch, tmp_path) -> None:
         "html_url": "https://github.test/replies/99",
         "user": {"login": "nestharus"},
     }
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [target, duplicate])
     monkeypatch.setattr(
         driver,
@@ -1120,7 +1232,7 @@ def test_reply_rejects_wrong_author_and_missing_exact_comment(
 ) -> None:
     body_file = tmp_path / "reply.md"
     body_file.write_text("Reply.\n", encoding="utf-8")
-    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
     monkeypatch.setattr(
         driver,
         "gh_paginated_array",
