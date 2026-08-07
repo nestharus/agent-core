@@ -483,11 +483,13 @@ def capacity_response_projection(comment: dict[str, Any]) -> dict[str, Any]:
         for marker in ("review is available now", "reviews are available now")
     )
     capacity_available: bool | None
-    if available_now:
+    if one_at_a_time and active_review:
+        capacity_available = False
+    elif available_now:
         capacity_available = True
     elif remaining is not None:
-        capacity_available = remaining > 0 and not (one_at_a_time and active_review)
-    elif exhausted or retry_guidance or (one_at_a_time and active_review):
+        capacity_available = remaining > 0
+    elif exhausted or retry_guidance:
         capacity_available = False
     else:
         capacity_available = None

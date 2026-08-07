@@ -685,6 +685,19 @@ def test_capacity_projection_accepts_live_available_now_wording() -> None:
     assert projection["capacity_available"] is True
 
 
+def test_available_now_does_not_override_active_review_constraint() -> None:
+    projection = driver.capacity_response_projection(
+        _issue_comment(
+            201,
+            "Reviews are available now, but only one review at a time and a review is in progress.",
+        )
+    )
+
+    assert projection["one_review_at_a_time"] is True
+    assert projection["active_review"] is True
+    assert projection["capacity_available"] is False
+
+
 @pytest.mark.parametrize(
     ("generation", "reason"),
     [
