@@ -1401,8 +1401,10 @@ def inflight_command_candidates(
     started_at = parse_time(marker.get("started_at"))
     expected_body = normalized_comment_body(str(marker.get("body") or ""))
     actor_login = marker.get("actor_login")
-    if not expected_body or not isinstance(actor_login, str) or not actor_login:
+    if not expected_body:
         raise DriverError("persisted in-flight provider command is malformed")
+    if not isinstance(actor_login, str) or not actor_login:
+        return []
     candidates: list[dict[str, Any]] = []
     for comment in issue_comments:
         if object_id(comment) in baseline:

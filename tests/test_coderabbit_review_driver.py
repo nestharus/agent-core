@@ -444,6 +444,7 @@ def test_capacity_query_rejects_stale_response(monkeypatch, tmp_path) -> None:
         "response": None,
     }
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(driver, "authenticated_actor_login", lambda: "nestharus")
     driver.save_state(REPO, 198, {"active_generation": generation})
     monkeypatch.setenv("CODERABBIT_CAPACITY_QUERY_ATTEMPTS", "1")
     monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
@@ -635,6 +636,7 @@ def test_unobserved_inflight_capacity_query_requires_explicit_refresh(
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
     driver.save_state(REPO, 198, {"active_generation": generation})
     monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [])
+    monkeypatch.setattr(driver, "authenticated_actor_login", lambda: "nestharus")
 
     with pytest.raises(driver.DriverError, match="no provider identity yet"):
         driver.capacity_query(REPO, 198)
@@ -945,8 +947,7 @@ def test_inflight_command_candidates_require_authenticated_actor() -> None:
         for comment in driver.inflight_command_candidates(marker, comments)
     ] == [12]
     marker.pop("actor_login")
-    with pytest.raises(driver.DriverError, match="malformed"):
-        driver.inflight_command_candidates(marker, comments)
+    assert driver.inflight_command_candidates(marker, comments) == []
 
 
 def test_prior_approval_is_archived_but_cannot_approve_rate_limited_new_head(
