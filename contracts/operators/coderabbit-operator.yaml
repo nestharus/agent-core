@@ -22,23 +22,32 @@ inputs:
 - name: trigger_mode
   type: string
   required: false
-  default_source: incremental
+  default_source: base
   description: incremental for normal review; full only for declared whole-file review.
 - name: initial_trigger
   type: string
   required: false
-  default_source: auto
-  description: auto, always, or skip; skip requires a persisted current-head generation.
+  default_source: base
+  description: auto, always, or skip; always explicitly supersedes the active generation after any persisted in-flight command is reconciled, and skip requires a persisted current-head generation.
 - name: fixer_agent
   type: string
   required: false
-  default_source: agents/coderabbit-comment-fixer.md
+  default_source: base
   description: Agent file used for one persisted CodeRabbit finding.
 defaults:
-- trigger_mode: incremental
-- initial_trigger: auto
-- fixer_agent: agents/coderabbit-comment-fixer.md
+- name: trigger_mode
+  value: incremental
+  source: base
+- name: initial_trigger
+  value: auto
+  source: base
+- name: fixer_agent
+  value: ~/ai/agents/coderabbit-comment-fixer.md
+  source: base
 outputs:
+- task: is-enabled
+  success_shape: Exit 0 when the repository carries the CodeRabbit marker label; exit 1 is clean non-applicability.
+  wrote_lines: []
 - task: review-loop
   success_shape: JSON containing generation_result, generation evidence, terminal_reason, and iteration outcomes.
   wrote_lines:
@@ -49,7 +58,7 @@ outputs:
   success_shape: JSON generation evidence plus normalized comment metadata and persisted body paths.
   wrote_lines: []
 - task: open-findings
-  success_shape: JSON unresolved finding inventory with review/comment/thread IDs, URL, head OID, resolution, and body_path.
+  success_shape: Read-only JSON unresolved finding inventory with review/comment/thread IDs, URL, provider-bound in-diff head OID, null outside-diff head OID, resolution, and body_path.
   wrote_lines: []
 - task: capacity
   success_shape: JSON with one exact capacity-query generation and its bound provider response or BLOCKED result.
@@ -69,6 +78,9 @@ errors:
   recovery: Surface the structured per-comment outcome without re-triggering.
 side_effects:
 - Persists generation state and normalized comment bodies under ~/.cache/coderabbit.
+- Persists pre-POST in-flight markers and reconciles exact provider command identities before retrying.
+- Uses a PR-scoped non-blocking lock to reject concurrent provider-command invocations.
+- Persists a body-revision-bound local replied disposition for handled outside-diff comments.
 - May post one review trigger, one capacity query per query generation, and exact-comment replies.
 - May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []

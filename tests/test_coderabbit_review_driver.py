@@ -219,11 +219,41 @@ def test_poll_projects_generation_and_findings_from_one_provider_snapshot(
     monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
     monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
     monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
 
     result = driver.poll(REPO, 198, head_oid="head-sha")
 
     assert review_calls == 1
     assert result["generation"]["result"] == "WAITING_FOR_REVIEW"
+
+
+def test_poll_classifies_generation_against_provider_head_not_finding_scope(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, {"active_generation": _generation(head_oid="head-a")})
+    monkeypatch.setattr(
+        driver,
+        "gh_paginated_array",
+        lambda endpoint: (
+            [_review(2, "APPROVED", commit_id="head-a")]
+            if endpoint.endswith("/reviews")
+            else []
+        ),
+    )
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args: BOT_LOGIN)
+    monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
+    monkeypatch.setattr(driver, "save_bot_login", lambda *args: None)
+    monkeypatch.setattr(driver, "write_comment_file", lambda *args: None)
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-b"})
+
+    result = driver.poll(REPO, 198, head_oid="head-a")
+
+    assert result["generation"]["result"] == "BLOCKED"
+    assert result["generation"]["current_head_oid"] == "head-b"
+    assert result["generation"]["blocked_reason"] == (
+        "PR head changed during review generation"
+    )
 
 
 def test_post_trigger_rate_limit_comment_is_generation_terminal() -> None:
@@ -245,6 +275,25 @@ def test_post_trigger_rate_limit_comment_is_generation_terminal() -> None:
         "expected_head_oid": "head-sha",
         "check_evidence": [],
     }
+
+
+def test_ambiguous_rate_limit_comments_block_the_generation() -> None:
+    result = driver.classify_review_generation(
+        _generation(),
+        "head-sha",
+        [],
+        [
+            _issue_comment(101, "Review rate limited: couldn't start this review."),
+            _issue_comment(102, "Review rate limited: review limit reached."),
+        ],
+        BOT_LOGIN,
+    )
+
+    assert result["result"] == "BLOCKED"
+    assert result["blocked_reason"] == (
+        "ambiguous rate-limit evidence for trigger generation"
+    )
+    assert result["next_permitted_action"] == "inspect_rate_limit_comments"
 
 
 def test_stale_rate_limit_comment_cannot_classify_later_generation() -> None:
@@ -386,7 +435,7 @@ def test_capacity_query_rejects_stale_response(monkeypatch, tmp_path) -> None:
         "generation_id": 200,
         "query_comment_id": 200,
         "queried_at": "2026-08-07T10:02:00Z",
-        "baseline_issue_comment_ids": [150, 200],
+        "baseline_issue_comment_ids": [200],
         "response": None,
     }
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
@@ -396,7 +445,13 @@ def test_capacity_query_rejects_stale_response(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         driver,
         "gh_paginated_array",
-        lambda *args: [_issue_comment(150, "Review rate limit: 3 reviews remaining.")],
+        lambda *args: [
+            _issue_comment(
+                150,
+                "Review rate limit: 3 reviews remaining.",
+                "2026-08-07T09:00:00Z",
+            )
+        ],
     )
 
     result = driver.capacity_query(REPO, 198)
@@ -457,6 +512,9 @@ def test_capacity_query_posts_at_most_once_per_query_generation(
     monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: next(calls))
 
     def fake_gh_json(args: list[str]) -> dict:
+        persisted = driver.active_review_generation(REPO, 198)
+        assert persisted["capacity_query"]["status"] == "posting"
+        assert persisted["capacity_query"]["query_comment_id"] is None
         posts.append(args)
         return _issue_comment(200, driver.CAPACITY_QUERY_BODY, login="nestharus")
 
@@ -468,6 +526,61 @@ def test_capacity_query_posts_at_most_once_per_query_generation(
     assert len(posts) == 1
     assert first["capacity_query"]["generation_id"] == 200
     assert second["capacity_query"]["generation_id"] == 200
+
+
+def test_capacity_query_reconciles_inflight_command_before_polling(
+    monkeypatch, tmp_path
+) -> None:
+    generation = _generation()
+    generation["result"] = "RATE_LIMITED_NO_REVIEW"
+    generation["capacity_query"] = {
+        "status": "posting",
+        "generation_id": None,
+        "query_comment_id": None,
+        "query_comment_url": None,
+        "body": driver.CAPACITY_QUERY_BODY,
+        "started_at": "2026-08-07T10:02:00Z",
+        "queried_at": None,
+        "baseline_issue_comment_ids": [100],
+        "response": None,
+    }
+    command = _issue_comment(
+        200,
+        driver.CAPACITY_QUERY_BODY,
+        "2026-08-07T10:02:01Z",
+        login="nestharus",
+    )
+    response = _issue_comment(
+        201,
+        "Review rate limit: 1 review remaining.",
+        "2026-08-07T10:03:00Z",
+    )
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, {"active_generation": generation})
+    monkeypatch.setenv("CODERABBIT_CAPACITY_QUERY_ATTEMPTS", "1")
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    calls = iter([[command], [response]])
+    monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: next(calls))
+    monkeypatch.setattr(
+        driver,
+        "gh_json",
+        lambda *args: pytest.fail("reconciled capacity query must not post again"),
+    )
+
+    result = driver.capacity_query(REPO, 198)
+
+    assert result["capacity_query"]["status"] == "posted"
+    assert result["capacity_query"]["query_comment_id"] == 200
+    assert result["capacity_query"]["response"]["comment_id"] == 201
+
+
+def test_capacity_projection_does_not_capture_number_from_later_line() -> None:
+    projection = driver.capacity_response_projection(
+        _issue_comment(201, "Remaining reviews:\nUnrelated issue 99")
+    )
+
+    assert projection["remaining_reviews"] is None
+    assert projection["capacity_available"] is None
 
 
 @pytest.mark.parametrize(
@@ -576,6 +689,121 @@ def test_suppressed_generation_never_posts_second_review_trigger(
     assert result["suppressed"] is True
 
 
+def test_forced_trigger_persists_marker_and_archives_active_generation(
+    monkeypatch, tmp_path
+) -> None:
+    prior = _generation()
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, {"active_generation": prior})
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
+    monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [])
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+
+    def fake_post(args: list[str]) -> dict:
+        state = driver.load_state(REPO, 198)
+        assert state["inflight_trigger"]["expected_head_oid"] == "head-sha"
+        assert state["inflight_trigger"]["body"] == driver.TRIGGER_BODIES["incremental"]
+        return _issue_comment(
+            200,
+            driver.TRIGGER_BODIES["incremental"],
+            login="nestharus",
+        )
+
+    monkeypatch.setattr(driver, "gh_json", fake_post)
+    monkeypatch.setattr(
+        driver,
+        "poll_review_generation",
+        lambda repo, pr_num, generation: {
+            **generation,
+            "result": "REVIEW_COMPLETED",
+        },
+    )
+
+    result = driver.trigger_review(
+        REPO, 198, "incremental", driver.DEFAULT_LABEL, force=True
+    )
+    state = driver.load_state(REPO, 198)
+
+    assert result["generation_id"] == 200
+    assert state["review_generation_history"][0]["generation_id"] == 100
+    assert "inflight_trigger" not in state
+
+
+def test_provider_command_lock_rejects_concurrent_holder(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+
+    with driver.provider_command_lock(REPO, 198):
+        with pytest.raises(driver.DriverError, match="already in progress"):
+            with driver.provider_command_lock(REPO, 198):
+                pytest.fail("nested provider command lock must not be acquired")
+
+
+def test_trigger_reconciles_inflight_command_without_duplicate_post(
+    monkeypatch, tmp_path
+) -> None:
+    inflight = {
+        "schema": "coderabbit-inflight-trigger-v1",
+        "repo": REPO.slug,
+        "pr_num": 198,
+        "mode": "incremental",
+        "body": driver.TRIGGER_BODIES["incremental"],
+        "expected_head_oid": "head-sha",
+        "started_at": "2026-08-07T10:00:00Z",
+        "baseline_review_ids": [1],
+        "baseline_issue_comment_ids": [90],
+    }
+    command = _issue_comment(
+        200,
+        driver.TRIGGER_BODIES["incremental"],
+        "2026-08-07T10:00:01Z",
+        login="nestharus",
+    )
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(
+        REPO,
+        198,
+        {"active_generation": _generation(), "inflight_trigger": inflight},
+    )
+    assert driver.initial_trigger_decision(REPO, 198, "auto", "head-sha") == {
+        "trigger": True,
+        "reason": "initial-trigger-policy:reconcile-inflight-trigger",
+    }
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
+
+    def fake_paginated(endpoint: str) -> list[dict]:
+        return (
+            [_review(1, "CHANGES_REQUESTED")]
+            if endpoint.endswith("/reviews")
+            else [command]
+        )
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_paginated)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(
+        driver,
+        "gh_json",
+        lambda *args: pytest.fail("reconciled trigger must not post again"),
+    )
+    monkeypatch.setattr(
+        driver,
+        "poll_review_generation",
+        lambda repo, pr_num, generation: {
+            **generation,
+            "result": "REVIEW_COMPLETED",
+        },
+    )
+
+    result = driver.trigger_review(REPO, 198, "full", driver.DEFAULT_LABEL, force=True)
+
+    assert result["generation_id"] == 200
+    assert result["mode"] == "incremental"
+    assert result["supersession_deferred_reason"] == "reconciled-inflight-trigger"
+    assert driver.active_review_generation(REPO, 198)["generation_id"] == 200
+    assert "inflight_trigger" not in driver.load_state(REPO, 198)
+
+
 def test_prior_approval_is_archived_but_cannot_approve_rate_limited_new_head(
     monkeypatch, tmp_path
 ) -> None:
@@ -666,7 +894,79 @@ def test_open_findings_include_exact_in_diff_and_outside_diff_identities(
     assert findings[0]["resolution_state"] == "unresolved"
     assert findings[1]["kind"] == "out-of-diff"
     assert findings[1]["thread_id"] is None
+    assert findings[1]["head_oid"] is None
+    assert findings[1]["review_id"] == 0
     assert all(pathlib.Path(item["body_path"]).is_file() for item in findings)
+
+    unbound_record = driver.collect_comment_records(
+        REPO,
+        198,
+        [],
+        [],
+        issue_comments,
+        {},
+        BOT_LOGIN,
+    )[0]
+    assert driver.output_metadata(unbound_record, "head-sha")["head_oid"] is None
+
+
+def test_poll_preserves_unrelated_state_and_open_findings_projection_is_read_only(
+    monkeypatch, tmp_path
+) -> None:
+    initial_state = {
+        "active_generation": _generation(),
+        "last_loop_poll_at": "2026-08-07T09:59:00Z",
+        "custom_future_key": {"preserve": True},
+        "seen_comment_hashes": {},
+        "comment_status": {},
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(REPO, 198, initial_state)
+    monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [])
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(driver, "graphql_review_threads", lambda *args: {})
+    monkeypatch.setattr(driver, "rate_limit_check_evidence", lambda *args: [])
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
+
+    driver.poll(REPO, 198, head_oid="head-sha")
+    persisted = driver.load_state(REPO, 198)
+
+    assert persisted["last_loop_poll_at"] == "2026-08-07T09:59:00Z"
+    assert persisted["custom_future_key"] == {"preserve": True}
+
+    before_read_only_poll = driver.state_path(REPO, 198).read_bytes()
+    driver.poll(REPO, 198, head_oid="head-sha", persist_state=False)
+    assert driver.state_path(REPO, 198).read_bytes() == before_read_only_poll
+
+
+def test_locally_replied_out_of_diff_finding_is_not_reopened(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.mark_out_of_diff_disposition(
+        REPO,
+        198,
+        _issue_comment(50, "Outside diff finding"),
+        {"id": 100, "url": "https://github.test/comments/100"},
+    )
+    record = driver.collect_comment_records(
+        REPO,
+        198,
+        [],
+        [],
+        [_issue_comment(50, "Outside diff finding")],
+        {},
+        BOT_LOGIN,
+    )[0]
+    dispositions = driver.load_state(REPO, 198)["out_of_diff_dispositions"]
+
+    assert driver.is_open_finding_record(record, "head-sha", dispositions) is False
+
+    record["metadata"]["body_sha256"] = driver.hashlib_sha256(
+        "Edited outside diff finding"
+    )
+    record["metadata"]["updated_at"] = "2026-08-07T10:02:00Z"
+    assert driver.is_open_finding_record(record, "head-sha", dispositions) is True
 
 
 def test_reply_posts_to_exact_review_thread_and_reads_back_identity(
@@ -731,6 +1031,13 @@ def test_reply_to_outside_diff_comment_is_exact_and_read_back(
 
     assert result["reply_kind"] == "issue-comment"
     assert result["readback"]["id"] == 100
+    assert (
+        driver.load_state(REPO, 198)["out_of_diff_dispositions"]["50"]["reply_id"]
+        == 100
+    )
+    assert driver.load_state(REPO, 198)["out_of_diff_dispositions"]["50"][
+        "body_sha256"
+    ] == driver.hashlib_sha256("Outside diff finding")
 
 
 def test_duplicate_review_reply_is_idempotent(monkeypatch, tmp_path) -> None:
@@ -757,6 +1064,22 @@ def test_duplicate_review_reply_is_idempotent(monkeypatch, tmp_path) -> None:
     assert result["posted"] is False
     assert result["reason"] == "reply-already-present"
     assert result["reply_id"] == 99
+
+
+def test_reply_body_identity_normalizes_line_endings() -> None:
+    readback = driver.reply_readback(
+        {
+            "id": 99,
+            "body": "Applied.\nVerified.\n",
+            "in_reply_to_id": 42,
+            "html_url": "https://github.test/replies/99",
+            "user": {"login": "nestharus"},
+        },
+        "Applied.\r\nVerified.\r\n",
+        42,
+    )
+
+    assert readback["id"] == 99
 
 
 def test_reply_rejects_wrong_author_and_missing_exact_comment(
@@ -1047,6 +1370,31 @@ def test_poll_aborts_when_external_head_changes_during_poll(
 
     with pytest.raises(driver.DriverError, match="did not match pushed commit"):
         driver.poll_current_pr_head(REPO, 198, tmp_path, "fix/review")
+
+
+def test_command_poll_defaults_to_current_pr_head(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
+    observed: dict[str, str] = {}
+
+    def fake_poll(repo, pr_num, head_oid):
+        observed["repo"] = repo.slug
+        observed["pr_num"] = pr_num
+        observed["head_oid"] = head_oid
+        return {"generation": {"result": "WAITING_FOR_REVIEW"}}
+
+    monkeypatch.setattr(driver, "poll", fake_poll)
+    args = driver.argparse.Namespace(
+        repo=REPO.slug,
+        pr_num=198,
+    )
+
+    assert driver.command_poll(args) == 0
+    assert observed == {
+        "repo": REPO.slug,
+        "pr_num": 198,
+        "head_oid": "head-sha",
+    }
+    assert "WAITING_FOR_REVIEW" in capsys.readouterr().out
 
 
 def test_wait_for_provider_pr_head_allows_metadata_propagation(

@@ -32,8 +32,12 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
 - `worktree_path`: absolute path to the PR head-branch worktree.
 - `trigger_mode`: optional; `incremental` by default, `full` only for a
   code-audit or mass-cleanup whose declared review target is whole files.
-- `initial_trigger`: optional; `auto` by default. `skip` requires a persisted
-  active generation for the current PR head.
+- `initial_trigger`: optional; `auto` by default. `always` explicitly supersedes
+  the active generation and forces a new one. `skip` requires a persisted active
+  generation for the current PR head. A persisted in-flight command is always
+  reconciled first; when observed, the returned generation records
+  `supersession_deferred_reason=reconciled-inflight-trigger` and no duplicate
+  command is posted.
 - `fixer_agent`: optional; defaults to
   `~/ai/agents/coderabbit-comment-fixer.md`.
 
@@ -48,7 +52,9 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
    ```bash
    ~/ai/tools/coderabbit_review_driver.py review-loop {repo} {pr_num} \
      --worktree-path {worktree_path} \
-     --mode incremental
+     --mode {trigger_mode} \
+     --initial-trigger {initial_trigger} \
+     --fixer-agent {fixer_agent}
    ```
 3. Use `--mode full` only for a declared whole-file review target.
 4. Use the generation-aware diagnostic commands when repairing a halted loop:
@@ -61,6 +67,10 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
    `capacity --new-query` starts a new capacity-query generation after the
    provider's prior response or a bounded malformed/unavailable-response halt.
    It never derives capacity from elapsed time or a fair-usage table.
+   After inspecting ambiguous rate-limit comments, use `review-loop
+   --initial-trigger always` to archive the blocked generation and start a new
+   one. This is the explicit repair route; normal trigger calls remain
+   suppressed while the generation is blocked.
 
 ## Generation Contract
 
@@ -88,6 +98,13 @@ The persisted generation object is written inside
 Starting a later trigger generation archives the prior active generation in
 `review_generation_history`. Prior approvals remain historical evidence only.
 They do not approve a new head or a rate-limited new-head generation.
+Before each review-trigger or capacity-query POST, the driver persists an
+in-flight command marker. After an interrupted POST it reconciles the exact
+command body, timestamp, and pre-POST issue-comment baseline before continuing;
+an ambiguous identity blocks instead of posting a duplicate. Explicit `always`
+/ `--new-query` supersession archives an unobserved marker when provider
+inspection confirms no identity. A PR-scoped non-blocking lock rejects a
+concurrent provider-command invocation instead of allowing two POSTs.
 
 Aggregate `reviewDecision`, summary comments, trigger acknowledgements,
 completion acknowledgements, and a passing `Review rate limited` check are
@@ -116,11 +133,16 @@ the new review ID, not a state transition, distinguishes generations.
 
 ## Open Findings
 
-`open-findings` reuses normalized polling and returns unresolved in-diff and
-outside-diff findings by default. Every finding includes exact review and
-comment IDs, thread ID when supported, URL, head OID, resolution state, and
-persisted `body_path`. Resolved findings and trigger/rate/capacity protocol
-comments are excluded.
+`open-findings` uses a read-only generation projection and returns unresolved
+in-diff and outside-diff findings by default without rewriting poll deltas or
+generation state. Every finding includes exact review and comment IDs, thread
+ID when supported, URL, resolution state, and persisted `body_path`. In-diff
+findings carry their provider review head; outside-diff findings use
+`review_id=0` and `head_oid=null` because GitHub does not bind issue comments to
+a pull-request review. Resolved findings, locally replied unchanged revisions
+of outside-diff findings, and trigger/rate/capacity protocol comments are
+excluded. An edited outside-diff comment reopens because the local disposition
+is bound to the replied body hash and update timestamp.
 
 ## Exact Replies
 
@@ -172,7 +194,9 @@ collapse it into a boolean fixed/not-fixed result.
 - `CONVERGED:coderabbit-approved` requires
   `generation_result=REVIEW_COMPLETED` and `terminal_reason=approved`.
 - `CONVERGED:coderabbit-no-value-provided` requires findings from a
-  `REVIEW_COMPLETED` generation and `terminal_reason=no_value_provided`.
+  `REVIEW_COMPLETED` generation, `terminal_reason=no_value_provided`, and every
+  actionable in-diff comment in the latest iteration assessed
+  `review_provided_value: false`.
 - `PENDING:coderabbit-rate-limited` is
   `generation_result=RATE_LIMITED_NO_REVIEW`; do not merge or re-trigger.
 - `PENDING:coderabbit-caller-decision` is a driver exit `3` with
