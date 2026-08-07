@@ -1574,52 +1574,50 @@ def _trigger_review(
         )
         generation.update({"posted": True, "suppressed": False, "trigger_body": body})
         activate_review_generation(repo, pr_num, generation)
-    poll_interval = env_int(
-        "CODERABBIT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
-    )
-
-    while True:
-        generation = poll_review_generation(repo, pr_num, generation)
-        if generation["result"] in {
-            "REVIEW_COMPLETED",
-            "RATE_LIMITED_NO_REVIEW",
-            "BLOCKED",
-        }:
-            generation.update(
-                {"posted": True, "suppressed": False, "trigger_body": body}
-            )
-            return save_review_generation(repo, pr_num, generation)
-        issue_comments = gh_paginated_array(
-            f"/repos/{repo.slug}/issues/{pr_num}/comments"
+    generation = poll_review_generation(repo, pr_num, generation)
+    if generation["result"] in {
+        "REVIEW_COMPLETED",
+        "RATE_LIMITED_NO_REVIEW",
+        "BLOCKED",
+    }:
+        generation.update({"posted": True, "suppressed": False, "trigger_body": body})
+        return save_review_generation(repo, pr_num, generation)
+    issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
+    for comment in issue_comments:
+        comment_id = int(comment.get("id") or 0)
+        if comment_id <= command_comment_id:
+            continue
+        login = (comment.get("user") or {}).get("login")
+        if bot_login and login != bot_login and not is_coderabbit_login(login):
+            continue
+        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
+            continue
+        ack_body = comment.get("body") or ""
+        ack_marker = trigger_ack_marker(ack_body, mode)
+        if ack_marker is None:
+            continue
+        if login:
+            bot_login = login
+            save_bot_login(repo, bot_login, pr_num)
+        generation.update(
+            {
+                "ack_comment_id": comment_id,
+                "ack_comment_url": comment.get("html_url"),
+                "ack_marker": ack_marker,
+                "bot_login": bot_login,
+            }
         )
-        for comment in issue_comments:
-            comment_id = int(comment.get("id") or 0)
-            if comment_id <= command_comment_id:
-                continue
-            login = (comment.get("user") or {}).get("login")
-            if bot_login and login != bot_login and not is_coderabbit_login(login):
-                continue
-            if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
-                continue
-            ack_body = comment.get("body") or ""
-            ack_marker = trigger_ack_marker(ack_body, mode)
-            if ack_marker is None:
-                continue
-            if login:
-                bot_login = login
-                save_bot_login(repo, bot_login, pr_num)
-            generation.update(
-                {
-                    "result": "WAITING_FOR_REVIEW",
-                    "ack_comment_id": comment_id,
-                    "ack_comment_url": comment.get("html_url"),
-                    "ack_marker": ack_marker,
-                    "bot_login": bot_login,
-                    "next_permitted_action": "poll",
-                }
-            )
-            return save_review_generation(repo, pr_num, generation)
-        time.sleep(poll_interval)
+        break
+    generation.update(
+        {
+            "result": "WAITING_FOR_REVIEW",
+            "next_permitted_action": "poll",
+            "posted": True,
+            "suppressed": False,
+            "trigger_body": body,
+        }
+    )
+    return save_review_generation(repo, pr_num, generation)
 
 
 def capacity_query(repo: Repo, pr_num: int, refresh: bool = False) -> dict[str, Any]:

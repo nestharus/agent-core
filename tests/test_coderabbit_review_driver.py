@@ -730,6 +730,39 @@ def test_forced_trigger_persists_marker_and_archives_active_generation(
     assert "inflight_trigger" not in state
 
 
+def test_trigger_returns_waiting_after_one_observation_without_ack(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
+    monkeypatch.setattr(driver, "gh_paginated_array", lambda *args: [])
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(
+        driver,
+        "gh_json",
+        lambda *args: _issue_comment(
+            200,
+            driver.TRIGGER_BODIES["incremental"],
+            login="nestharus",
+        ),
+    )
+    observations = 0
+
+    def observe_once(repo, pr_num, generation):
+        nonlocal observations
+        observations += 1
+        return {**generation, "result": "WAITING_FOR_REVIEW"}
+
+    monkeypatch.setattr(driver, "poll_review_generation", observe_once)
+
+    result = driver.trigger_review(REPO, 198, "incremental", driver.DEFAULT_LABEL)
+
+    assert observations == 1
+    assert result["result"] == "WAITING_FOR_REVIEW"
+    assert result["next_permitted_action"] == "poll"
+
+
 def test_provider_command_lock_rejects_concurrent_holder(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
 
