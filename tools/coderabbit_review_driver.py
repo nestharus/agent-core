@@ -1510,7 +1510,6 @@ def _trigger_review(
                 }
             )
             activate_review_generation(repo, pr_num, generation)
-            command_comment_id = object_id(response)
             mode = recovered_mode
             recovered_trigger = True
 
@@ -1570,7 +1569,6 @@ def _trigger_review(
         )
         if not isinstance(response, dict) or not object_id(response):
             raise DriverError("GitHub did not return a trigger comment identity")
-        command_comment_id = object_id(response)
         generation = new_review_generation(
             repo,
             pr_num,
@@ -1583,38 +1581,6 @@ def _trigger_review(
         )
         generation.update({"posted": True, "suppressed": False, "trigger_body": body})
         activate_review_generation(repo, pr_num, generation)
-    generation = poll_review_generation(repo, pr_num, generation)
-    if generation["result"] in {
-        "REVIEW_COMPLETED",
-        "RATE_LIMITED_NO_REVIEW",
-        "BLOCKED",
-    }:
-        generation.update({"posted": True, "suppressed": False, "trigger_body": body})
-        return save_review_generation(repo, pr_num, generation)
-    issue_comments = gh_paginated_array(f"/repos/{repo.slug}/issues/{pr_num}/comments")
-    for comment in issue_comments:
-        comment_id = int(comment.get("id") or 0)
-        if comment_id <= command_comment_id:
-            continue
-        login = (comment.get("user") or {}).get("login")
-        if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
-            continue
-        ack_body = comment.get("body") or ""
-        ack_marker = trigger_ack_marker(ack_body, mode)
-        if ack_marker is None:
-            continue
-        if login:
-            bot_login = login
-            save_bot_login(repo, bot_login, pr_num)
-        generation.update(
-            {
-                "ack_comment_id": comment_id,
-                "ack_comment_url": comment.get("html_url"),
-                "ack_marker": ack_marker,
-                "bot_login": bot_login,
-            }
-        )
-        break
     generation.update(
         {
             "result": "WAITING_FOR_REVIEW",

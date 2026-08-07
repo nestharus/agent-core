@@ -812,9 +812,7 @@ def test_forced_trigger_persists_marker_and_archives_active_generation(
     assert "inflight_trigger" not in state
 
 
-def test_trigger_returns_waiting_after_one_observation_without_ack(
-    monkeypatch, tmp_path
-) -> None:
+def test_trigger_returns_waiting_without_polling_provider(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
     monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
     monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
@@ -829,18 +827,14 @@ def test_trigger_returns_waiting_after_one_observation_without_ack(
             login="nestharus",
         ),
     )
-    observations = 0
-
-    def observe_once(repo, pr_num, generation):
-        nonlocal observations
-        observations += 1
-        return {**generation, "result": "WAITING_FOR_REVIEW"}
-
-    monkeypatch.setattr(driver, "poll_review_generation", observe_once)
+    monkeypatch.setattr(
+        driver,
+        "poll_review_generation",
+        lambda *args: pytest.fail("trigger must not poll provider review state"),
+    )
 
     result = driver.trigger_review(REPO, 198, "incremental", driver.DEFAULT_LABEL)
 
-    assert observations == 1
     assert result["result"] == "WAITING_FOR_REVIEW"
     assert result["next_permitted_action"] == "poll"
 
