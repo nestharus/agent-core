@@ -1,73 +1,78 @@
 schema: operator-contract-v1
 source: agents/coderabbit-operator.md
 model: gpt-medium
-description: Thin wrapper for the GitHub PR-mode CodeRabbit review loop in tools/coderabbit_review_driver.py.
+description: Generation-aware GitHub PR-mode CodeRabbit review loop wrapper.
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: repo
   type: string
   required: true
   default_source: caller
-  description: '`repo`: GitHub repo in `owner/name` form.'
+  description: GitHub repository in owner/name form.
 - name: pr_num
-  type: string
+  type: integer
   required: true
   default_source: caller
-  description: '`pr_num`: GitHub pull request number.'
+  description: GitHub pull request number.
 - name: worktree_path
   type: string
   required: true
   default_source: caller
-  description: '`worktree_path`: absolute path to the PR head-branch worktree.'
+  description: Absolute path to the exact PR head-branch worktree.
 - name: trigger_mode
   type: string
   required: false
-  default_source: caller
-  description: '`trigger_mode`: optional; `incremental` by default, `full` only for'
-- name: incremental
-  type: string
-  required: false
-  default_source: caller
-  description: '`trigger_mode`: optional; `incremental` by default, `full` only for'
-- name: full
-  type: string
-  required: false
-  default_source: caller
-  description: '`trigger_mode`: optional; `incremental` by default, `full` only for'
+  default_source: incremental
+  description: incremental for normal review; full only for declared whole-file review.
 - name: initial_trigger
   type: string
   required: false
-  default_source: caller
-  description: '`initial_trigger`: optional; `auto` by default. Use `skip` only when the'
-- name: auto
-  type: string
-  required: false
-  default_source: caller
-  description: '`initial_trigger`: optional; `auto` by default. Use `skip` only when the'
-- name: skip
-  type: string
-  required: false
-  default_source: caller
-  description: '`initial_trigger`: optional; `auto` by default. Use `skip` only when the'
+  default_source: auto
+  description: auto, always, or skip; skip requires a persisted current-head generation.
 - name: fixer_agent
   type: string
   required: false
-  default_source: caller
-  description: '`fixer_agent`: optional; defaults to'
-defaults: []
+  default_source: agents/coderabbit-comment-fixer.md
+  description: Agent file used for one persisted CodeRabbit finding.
+defaults:
+- trigger_mode: incremental
+- initial_trigger: auto
+- fixer_agent: agents/coderabbit-comment-fixer.md
 outputs:
-- task: default
-  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
+- task: review-loop
+  success_shape: JSON containing generation_result, generation evidence, terminal_reason, and iteration outcomes.
+  wrote_lines:
+  - generation_result is exactly REVIEW_COMPLETED, RATE_LIMITED_NO_REVIEW, WAITING_FOR_REVIEW, or BLOCKED.
+  - REVIEW_COMPLETED includes a new baseline-external accepted_review_id bound to expected_head_oid with submitted_at no earlier than the trigger.
+  - RATE_LIMITED_NO_REVIEW includes exact trigger-bound rate-limit evidence and capacity-query evidence when queried.
+- task: poll
+  success_shape: JSON generation evidence plus normalized comment metadata and persisted body paths.
+  wrote_lines: []
+- task: open-findings
+  success_shape: JSON unresolved finding inventory with review/comment/thread IDs, URL, head OID, resolution, and body_path.
+  wrote_lines: []
+- task: capacity
+  success_shape: JSON with one exact capacity-query generation and its bound provider response or BLOCKED result.
+  wrote_lines: []
+- task: reply
+  success_shape: JSON exact-comment reply result with posted/reused and readback identity.
   wrote_lines: []
 errors:
+- class: RATE_LIMITED_NO_REVIEW
+  cause: A trigger-bound authoritative CodeRabbit comment says the review did not run.
+  recovery: Use the persisted capacity query and wait for authoritative availability; never infer or storm triggers.
 - class: BLOCKED
-  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
-  recovery: Provide the missing input or route to the correct operator.
+  cause: Head identity changed, generation evidence is missing/ambiguous, or a capacity/reply readback is invalid.
+  recovery: Follow next_permitted_action and preserve the evidence path; do not re-trigger while blocked.
 - class: NEEDS_INPUT
-  cause: A user-owned decision is required before safe completion.
-  recovery: Write the question artifact when the operator convention requires one, then stop.
+  cause: A valuable finding requires caller disposition.
+  recovery: Surface the structured per-comment outcome without re-triggering.
 side_effects:
-- Writes only artifacts declared by the operator body.
+- Persists generation state and normalized comment bodies under ~/.cache/coderabbit.
+- May post one review trigger, one capacity query per query generation, and exact-comment replies.
+- May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []
 forbidden_direct:
-- Do not bypass the operator body, anti-scope, or stop conditions.
+- Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, or checks.
+- Do not infer capacity from elapsed time or a fair-usage table.
+- Do not compose ad hoc GitHub polling or silently fall back to unrelated top-level replies.
