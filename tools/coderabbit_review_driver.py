@@ -1595,8 +1595,6 @@ def _trigger_review(
         if comment_id <= command_comment_id:
             continue
         login = (comment.get("user") or {}).get("login")
-        if bot_login and login != bot_login and not is_coderabbit_login(login):
-            continue
         if not is_bot_login(login, bot_login) and not is_coderabbit_login(login):
             continue
         ack_body = comment.get("body") or ""
