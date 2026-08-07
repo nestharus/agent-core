@@ -71,6 +71,7 @@ CAPACITY_RESPONSE_MARKERS = (
     "review remaining",
     "reviews remaining",
     "review available",
+    "review will be available",
     "review limit",
 )
 
@@ -462,7 +463,7 @@ def capacity_response_projection(comment: dict[str, Any]) -> dict[str, Any]:
     )
     remaining = int(remaining_match.group("count")) if remaining_match else None
     retry_match = re.search(
-        r"next review available in:\s*\*{0,2}(?P<guidance>[^\n<]+)",
+        r"next review (?:will be )?available in:?\s*\*{0,2}(?P<guidance>[^\n<]+)",
         body,
         flags=re.IGNORECASE,
     )

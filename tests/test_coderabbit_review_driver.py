@@ -665,6 +665,18 @@ def test_capacity_projection_does_not_capture_number_from_later_line() -> None:
     assert projection["capacity_available"] is None
 
 
+def test_capacity_projection_accepts_live_next_review_wording() -> None:
+    comment = _issue_comment(
+        201,
+        "You're currently rate limited. Your next review will be available in 29 minutes.",
+    )
+
+    assert driver.is_capacity_response_body(comment["body"]) is True
+    projection = driver.capacity_response_projection(comment)
+    assert projection["retry_guidance"] == "29 minutes."
+    assert projection["capacity_available"] is False
+
+
 @pytest.mark.parametrize(
     ("generation", "reason"),
     [
