@@ -270,17 +270,17 @@ Map the RCA caller's 10-input contract into downstream gate inputs:
 | `original_signal_verification` | verification prerequisite and child context for validation-integrity |
 | `verification_critic` | critic prerequisite and child context for validation-integrity |
 | `actual_diff` | `actual_diff_ref`, `diff_path`, `dossier_diff_path`, and PR-review actual-diff target |
-| `runtime_claim` | `runtime_claim_ref` for code-quality and validation-integrity; the fix decision separately supplies `behavior_claim_ref` for verification-plan review |
+| `runtime_claim` | `runtime_claim_ref` for code-quality and validation-integrity; the fix decision separately supplies `behavior_claim_ref` for verification-plan review and code-quality |
 | `scope` | `scope_ref`, touched-surface evidence, changed-path applicability |
 | `cycle_id` | currentness key and audit-history round linkage |
 
-Derived child inputs include proposal-like review context for PR-review gates, actual diff or dossier diff for code-quality and validation-integrity, verification plan plus behavior claim for verification-plan review, and changed-path scope for applicability.
+Derived child inputs include proposal-like review context for PR-review gates, actual diff or dossier diff for code-quality and validation-integrity, verification plan plus behavior claim for verification-plan review and code-quality, and changed-path scope for applicability.
 
 ## Claim and evidence transport
 
-Behavior claim and verification-plan excerpt are transported to pre-execution review. Runtime claim and observed experiment evidence are transported separately to post-change validation-integrity and code-quality review. Neither is coerced into the other.
+Behavior claim and verification-plan excerpt are transported to pre-execution review and code-quality. Runtime claim and observed experiment evidence are transported separately to post-change validation-integrity and code-quality review. Neither is coerced into the other.
 
-- Code-quality receives `runtime_claim`, `runtime_claim_ref`, actual diff or dossier diff, changed surfaces, and validation-surface context when applicable.
+- Code-quality receives proposal or fix-decision ref, verification-plan excerpt, and behavior claim when plan context applies, plus `runtime_claim`, `runtime_claim_ref`, actual diff or dossier diff, changed surfaces, and validation-surface context when applicable.
 - Verification-plan review receives `verification_plan_ref`, `behavior_claim_ref`, proposal or fix-decision ref, experiment command or action, and expected observation.
 - Validation-integrity receives runtime claim, original-signal verification or actual-diff evidence, dossier diff when present, and `runtime_evidence_ref`/`runtime_evidence_hash` with runtime artifact evidence when available. When `runtime_artifact_evidence_path` is supplied, it must equal `runtime_evidence_ref` and its content hash must equal `runtime_evidence_hash`; a mismatch is blocking.
 

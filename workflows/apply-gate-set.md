@@ -111,7 +111,7 @@ apply-gate-set
 - The operator actively dispatches or verifies child gate evidence. Passive convention-only inheritance is not accepted.
 - Every required row carries currentness fields and file-backed proof unless the row is an explicit non-applicability, skip, bootstrap-exception, or inventory-resolution row.
 - Child verdicts remain raw and visible. Skip and ratification rows explain advancement rules without rewriting non-LOW outputs.
-- Verification-plan excerpts and behavior claims are transported to verification-plan review; runtime claims, actual diffs, and executed evidence are transported separately to code-quality and validation-integrity where applicable.
+- Verification-plan excerpts and behavior claims are transported to both verification-plan review and code-quality when plan context applies; runtime claims, actual diffs, and executed evidence are transported separately to code-quality and validation-integrity where applicable.
 - Inventory-resolution rows dual-score or fold ACR-285 and ACR-286 readings until those trackers settle.
 
 ## Non-goals
