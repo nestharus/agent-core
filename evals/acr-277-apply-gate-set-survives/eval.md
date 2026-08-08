@@ -247,7 +247,9 @@ Intended observation: The RCA orchestrator must run the composite
 code-quality fan-out (A1 auditors plus validation-integrity / verification-plan review
 where applicable) via `workflows/code-quality.md` against the applied
 diff, with `dossier_diff_path` and `runtime_claim` inputs preserved into
-child prompts, before Phase 7+ handoff.
+child prompts, before Phase 7+ handoff. When Phase 4/8 plan context applies,
+the verification-plan reviewer child prompt must also preserve the complete
+`proposal_path`, `verification_plan_excerpt`, and `behavior_claim` tuple.
 
 Gate this scenario covers: `code-quality-composite`,
 `claim-transport`.
@@ -264,6 +266,9 @@ Positive evidence (the eval should produce a finding when):
 - Child code-quality auditor prompts do not include `dossier_diff_path`
   or `runtime_claim` fields, or those fields are present but resolve to
   empty / stale paths.
+- Phase 4/8 plan context applies and the verification-plan reviewer child
+  prompt omits any of `proposal_path`, `verification_plan_excerpt`, or
+  `behavior_claim`, or includes an empty / stale tuple member.
 - The post-apply join manifest has no `gate_name=code-quality` row, or
   the row's `canonical_output_path` does not match the expected
   aggregate path.
@@ -272,7 +277,10 @@ Non-fire cases:
 
 - Aggregate exists, is `LOW`, and the join-manifest row resolves to a
   composite-code-quality invocation whose child prompts include
-  `dossier_diff_path` and `runtime_claim`; or
+  `dossier_diff_path` and `runtime_claim`, and whose verification-plan
+  reviewer child prompt includes the complete non-empty, current
+  `proposal_path`, `verification_plan_excerpt`, and `behavior_claim` tuple
+  when Phase 4/8 plan context applies; or
 - Aggregate is `HIGH` paired with a ratified bootstrap-exception row
   per `APPLY-GATE-SET-006` non-fire conditions.
 
