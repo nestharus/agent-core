@@ -48,6 +48,11 @@ inputs:
   required: true
   default_source: caller
   description: Absolute directory for feature dispatch and trace artifacts.
+- name: local_coverage_command
+  type: string
+  required: true
+  default_source: caller
+  description: Non-blank project coverage command passed unchanged to every direct or refactoring-nested implementation child; its exact SHA-256 binds route dispatch and replay evidence, and missing or blank input blocks before feature worktree creation or route side effects with BLOCKED:missing-local-coverage-command.
 - name: scoped_ticket_list
   type: string_list
   required: true

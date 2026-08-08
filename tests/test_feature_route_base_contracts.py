@@ -85,6 +85,7 @@ FEATURE_INPUT_NAMES = {
     "child_worktrees_root",
     "planning_dir",
     "scratch_dir",
+    "local_coverage_command",
     "scoped_ticket_list",
     "ticket_route_map",
     "successor_manifest_path",
@@ -161,6 +162,7 @@ REFACTOR_INPUT_NAMES = {
     "worktree_path",
     "planning_dir",
     "scratch_dir",
+    "local_coverage_command",
     "trunk_branch",
     "protected_branches",
     "integration_branch_ref",
@@ -293,6 +295,10 @@ def _provider_bundle(
 
 _RUNNER_UUID = "9e69e8cc-616d-4640-bf1d-96f5391b1a2e"
 _SECOND_RUNNER_UUID = "1b54b457-50cb-4f14-a6d0-b2bdfd4322ab"
+_LOCAL_COVERAGE_COMMAND = "coverage-tool --exact project configuration"
+_LOCAL_COVERAGE_COMMAND_SHA256 = hashlib.sha256(
+    _LOCAL_COVERAGE_COMMAND.encode("utf-8")
+).hexdigest()
 
 
 def _runner_envelope(
@@ -344,6 +350,7 @@ def _refactoring_dispatch_plan(**overrides: Any) -> dict[str, Any]:
         "branch_name": "route/age-260",
         "trunk_branch_name": "main",
         "integration_branch_name": "feature/integration",
+        "local_coverage_command": _LOCAL_COVERAGE_COMMAND,
         "protected_branches": ["main", "feature/integration"],
         "worktree_path": "/tmp/worktrees/age-260",
         "planning_dir": "/tmp/planning/age-260",
@@ -355,6 +362,7 @@ def _refactoring_dispatch_plan(**overrides: Any) -> dict[str, Any]:
         [
             {
                 "branch_name": plan["branch_name"],
+                "local_coverage_command": plan["local_coverage_command"],
                 "worktree_path": plan["worktree_path"],
                 "planning_dir": plan["planning_dir"],
                 "scratch_dir": plan["scratch_dir"],
@@ -485,6 +493,7 @@ def _route_attempt(
     dependency_proofs: list[dict[str, Any]] | None = None,
     pre_merge_head_sha: str | None = None,
     feature_branch: str = "feature/hourly-suspicious-process-investigator",
+    local_coverage_command_sha256: str = _LOCAL_COVERAGE_COMMAND_SHA256,
 ) -> dict[str, Any]:
     slug, stem = _route_attempt_names(ticket_id, attempt_number)
     merged = state == "VERIFIED_MERGED"
@@ -503,6 +512,7 @@ def _route_attempt(
         pre_merge_head_sha=pre_merge_head_sha or reviewed_head_sha,
         merge_sha=transition_sha if merged else None,
         resulting_feature_sha=transition_sha if merged else None,
+        local_coverage_command_sha256=local_coverage_command_sha256,
     )
     return {
         "ticket_id": ticket_id,
@@ -1056,6 +1066,7 @@ def _route_lineage_fixture(
     attempt_number: int = 1,
     reviewed: dict[str, Any] | None = None,
     feature_branch: str | None = None,
+    local_coverage_command_sha256: str = _LOCAL_COVERAGE_COMMAND_SHA256,
 ) -> dict[str, Path]:
     _, stem = _route_attempt_names(ticket_id, attempt_number)
     reviewed = reviewed or _provider_bundle()
@@ -1392,6 +1403,7 @@ def _route_lineage_fixture(
         "schema": "feature-route-expected-process-v1",
         "stage": "pre-audit",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "implementation-pipeline",
@@ -1408,6 +1420,7 @@ def _route_lineage_fixture(
         "schema": "feature-route-dispatch-evidence-v1",
         "stage": "pre-audit",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "implementation-pipeline",
@@ -1574,6 +1587,7 @@ def _route_lineage_fixture(
         "schema": "feature-route-expected-process-v1",
         "stage": "final",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "implementation-pipeline",
@@ -1590,6 +1604,7 @@ def _route_lineage_fixture(
         "schema": "feature-route-dispatch-evidence-v1",
         "stage": "final",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "implementation-pipeline",
@@ -1713,6 +1728,7 @@ def _refactoring_route_process_fixture(
     feature_branch: str | None = None,
     nested_base_name: str | None = None,
     observed_base_name: str | None = None,
+    local_coverage_command_sha256: str = _LOCAL_COVERAGE_COMMAND_SHA256,
 ) -> dict[str, Path]:
     assert merge_sha is not None and resulting_feature_sha == merge_sha
     feature_branch = feature_branch or reviewed["base_ref_name"]
@@ -1725,6 +1741,7 @@ def _refactoring_route_process_fixture(
         ticket_id=ticket_id,
         attempt_number=attempt_number,
         reviewed=nested_reviewed,
+        local_coverage_command_sha256=local_coverage_command_sha256,
     )
     nested_result = json.loads(nested["route_output"].read_text(encoding="utf-8"))
     _, stem = _route_attempt_names(ticket_id, attempt_number)
@@ -2029,6 +2046,7 @@ def _refactoring_route_process_fixture(
     expected_common = {
         "schema": "feature-route-expected-process-v1",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "refactoring",
@@ -2042,6 +2060,7 @@ def _refactoring_route_process_fixture(
     dispatch_common = {
         "schema": "feature-route-dispatch-evidence-v1",
         "feature_invocation_uuid": _RUNNER_UUID,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": "refactoring",
@@ -2177,6 +2196,7 @@ def _attempt_proof_fixture(
     pre_merge_head_sha: str,
     merge_sha: str | None,
     resulting_feature_sha: str | None,
+    local_coverage_command_sha256: str = _LOCAL_COVERAGE_COMMAND_SHA256,
 ) -> None:
     slug, stem = _route_attempt_names(ticket_id, attempt_number)
     artifact_root = proof_path.parent / ".artifacts" / stem
@@ -2195,6 +2215,7 @@ def _attempt_proof_fixture(
             merge_sha=merge_sha,
             resulting_feature_sha=resulting_feature_sha,
             feature_branch=feature_branch,
+            local_coverage_command_sha256=local_coverage_command_sha256,
         )
     else:
         paths = _route_lineage_fixture(
@@ -2203,6 +2224,7 @@ def _attempt_proof_fixture(
             attempt_number=attempt_number,
             reviewed=reviewed,
             feature_branch=feature_branch,
+            local_coverage_command_sha256=local_coverage_command_sha256,
         )
     common = validate_route_process_proof(
         owning_route=owning_route,
@@ -2262,6 +2284,7 @@ def _attempt_proof_fixture(
     proof = {
         "schema": "feature-route-attempt-proof-v1",
         "feature_branch": feature_branch,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": owning_route,
@@ -2346,7 +2369,12 @@ def _age255_manifest(tmp_path: Path, mutate=None) -> tuple[Path, list[str]]:
     return path, [row["ticket_key"] for row in manifest.get("successors", [])]
 
 
-def _normalize_age255(tmp_path: Path, mutate=None) -> dict[str, Any]:
+def _normalize_age255(
+    tmp_path: Path,
+    mutate=None,
+    *,
+    local_coverage_command: str = _LOCAL_COVERAGE_COMMAND,
+) -> dict[str, Any]:
     path, tickets = _age255_manifest(tmp_path, mutate)
     scope = tmp_path / "feature-scope.md"
     scope.write_text("# Feature scope\n", encoding="utf-8")
@@ -2362,6 +2390,7 @@ def _normalize_age255(tmp_path: Path, mutate=None) -> dict[str, Any]:
         child_worktrees_root=tmp_path / "worktrees",
         planning_dir=tmp_path / "planning",
         scratch_dir=tmp_path / "scratch",
+        local_coverage_command=local_coverage_command,
     )
 
 
@@ -2378,6 +2407,7 @@ def _normalize_inline_age255(
     *,
     feature_branch: str = "feature/hourly-suspicious-process-investigator",
     ticket_system: str = "linear",
+    local_coverage_command: str = _LOCAL_COVERAGE_COMMAND,
 ) -> dict[str, Any]:
     successor = _normalize_age255(tmp_path)
     records = _inline_records(successor)
@@ -2395,6 +2425,7 @@ def _normalize_inline_age255(
         child_worktrees_root=tmp_path / "worktrees",
         planning_dir=tmp_path / "planning",
         scratch_dir=tmp_path / "scratch",
+        local_coverage_command=local_coverage_command,
     )
 
 
@@ -2439,6 +2470,8 @@ def _route_cli_common(tmp_path: Path, output: Path, tickets: list[str]) -> list[
         str(tmp_path / "planning"),
         "--scratch-dir",
         str(tmp_path / "scratch"),
+        "--local-coverage-command",
+        _LOCAL_COVERAGE_COMMAND,
         "--output",
         str(output),
     ]
@@ -2502,6 +2535,138 @@ def test_feature_invocation_is_canonical_explicit_and_credential_free():
         assert name in workflow_inputs
     assert "worktrees root" not in workflow_inputs
     assert "planning root" not in workflow_inputs
+
+
+def test_feature_coverage_command_contract_and_exact_route_transport():
+    feature_contract = _operator_contract("feature-orchestrator")
+    coverage_input = _input(feature_contract, "local_coverage_command")
+    assert coverage_input["required"] is True
+    assert coverage_input["default_source"] == "caller"
+    assert "passed unchanged" in coverage_input["description"]
+    assert "before feature worktree creation" in coverage_input["description"]
+
+    direct = _section(
+        "agents/feature-orchestrator.md", "#### Direct implementation route"
+    )
+    refactoring = _section(
+        "agents/feature-orchestrator.md", "#### Refactoring route"
+    )
+    for route in (direct, refactoring):
+        assert "local_coverage_command=${local_coverage_command}" in route
+    assert "auto_merge_after_phase_9=false" in direct
+
+    refactoring_contract = _operator_contract("refactoring-orchestrator")
+    nested_input = _input(refactoring_contract, "local_coverage_command")
+    assert nested_input["required"] is False
+    assert "Required for feature-routed calls" in nested_input["description"]
+    child = _fenced_yaml_section(
+        "agents/refactoring-orchestrator.md",
+        "## Implementation Child Invocation Contract",
+    )
+    assert child["conditional_common_fields"]["local_coverage_command"] == {
+        "required_when": "feature-routed",
+        "mapping": "same-name-byte-for-byte",
+    }
+
+
+@pytest.mark.parametrize(
+    ("owning_route", "coverage_command"),
+    [
+        ("implementation-pipeline", None),
+        ("implementation-pipeline", " \t "),
+        ("refactoring", None),
+        ("refactoring", " \t "),
+    ],
+    ids=[
+        "direct-missing",
+        "direct-blank",
+        "refactoring-missing",
+        "refactoring-blank",
+    ],
+)
+def test_feature_route_cli_rejects_missing_or_blank_coverage_before_output(
+    tmp_path: Path, owning_route: str, coverage_command: str | None
+):
+    normalized = _normalize_age255(tmp_path)
+    record = deepcopy(
+        next(row for row in _inline_records(normalized) if row["owning_route"] == owning_route)
+    )
+    record["depends_on"] = []
+    output = tmp_path / "must-not-exist" / f"{owning_route}.json"
+    command = _route_cli_common(tmp_path, output, [record["ticket_id"]])
+    coverage_index = command.index("--local-coverage-command")
+    if coverage_command is None:
+        del command[coverage_index : coverage_index + 2]
+    else:
+        command[coverage_index + 1] = coverage_command
+    command.extend(
+        (
+            "--ticket-route-map-json",
+            json.dumps([record], separators=(",", ":"), sort_keys=True),
+        )
+    )
+
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+
+    assert completed.returncode == 2
+    assert not output.exists()
+    assert not output.parent.exists()
+    assert completed.stdout == "BLOCKED:missing-local-coverage-command\n"
+    assert completed.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "owning_route", ["implementation-pipeline", "refactoring"]
+)
+def test_feature_route_command_hash_is_exact_and_changed_replay_fails_closed(
+    tmp_path: Path, owning_route: str
+):
+    exact_command = "  coverage-tool --preserve exact bytes  "
+    manifest = _normalize_age255(
+        tmp_path, local_coverage_command=exact_command
+    )
+    exact_hash = hashlib.sha256(exact_command.encode("utf-8")).hexdigest()
+    assert manifest["local_coverage_command_sha256"] == exact_hash
+    assert all(
+        "local_coverage_command" not in record["route_payload"]
+        for record in manifest["records"]
+    )
+
+    record = deepcopy(
+        next(record for record in manifest["records"] if record["owning_route"] == owning_route)
+    )
+    record["depends_on"] = []
+    manifest["records"] = [record]
+    roots = _attempt_roots(tmp_path)
+    attempt = _route_attempt(
+        roots,
+        ticket_id=record["ticket_id"],
+        attempt_number=1,
+        owning_route=owning_route,
+        dispatch_base_sha="a0" * 20,
+        reviewed_head_sha="b0" * 20,
+        state="VERIFIED_MERGED",
+        transition_sha="c0" * 20,
+        local_coverage_command_sha256=exact_hash,
+    )
+    index = _route_attempt_index(
+        tmp_path,
+        manifest,
+        [attempt],
+        initial_feature_sha="a0" * 20,
+        current_feature_sha="c0" * 20,
+    )
+    current = validate_route_attempt_transition(manifest, index)
+    assert current["status"] == "VALID", current["errors"]
+
+    changed_manifest = deepcopy(manifest)
+    changed_manifest["local_coverage_command_sha256"] = hashlib.sha256(
+        b"different coverage command"
+    ).hexdigest()
+    decision = validate_route_attempt_transition(changed_manifest, index)
+
+    assert decision["status"] == "INVALID"
+    assert any("local coverage command mismatch" in error for error in decision["errors"])
 
 
 def test_feature_workflow_has_one_exact_mirrored_dispatch_surface():
@@ -2632,6 +2797,7 @@ def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_has
         child_worktrees_root=tmp_path / "worktrees",
         planning_dir=tmp_path / "planning",
         scratch_dir=tmp_path / "scratch",
+        local_coverage_command=_LOCAL_COVERAGE_COMMAND,
     )
     route = next(row for row in result["records"] if row["ticket_id"] == "AGE-259")
 
@@ -2640,6 +2806,7 @@ def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_has
         "source_schema",
         "feature_id",
         "feature_scope_path",
+        "local_coverage_command_sha256",
         "trunk_branch",
         "feature_branch",
         "ticket_system",
@@ -2661,6 +2828,7 @@ def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_has
             "source_path",
             "source_sha256",
             "source_backend",
+            "local_coverage_command_sha256",
             "feature_branch",
             "trunk_branch",
             "ticket_system",
@@ -2672,6 +2840,7 @@ def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_has
         "source_path": str(source_path),
         "source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
         "source_backend": "linear",
+        "local_coverage_command_sha256": _LOCAL_COVERAGE_COMMAND_SHA256,
         "feature_branch": "feature/hourly-suspicious-process-investigator",
         "trunk_branch": "main",
         "ticket_system": "linear",
@@ -2740,6 +2909,8 @@ def test_byte_identical_age255_fixture_rejects_jira_without_output(tmp_path: Pat
         str(tmp_path / "planning"),
         "--scratch-dir",
         str(tmp_path / "scratch"),
+        "--local-coverage-command",
+        _LOCAL_COVERAGE_COMMAND,
         "--output",
         str(output),
     ]
@@ -2803,6 +2974,8 @@ def test_feature_route_manifest_cli_writes_validated_output(tmp_path: Path):
         str(tmp_path / "planning"),
         "--scratch-dir",
         str(tmp_path / "scratch"),
+        "--local-coverage-command",
+        _LOCAL_COVERAGE_COMMAND,
         "--output",
         str(output),
     ]
@@ -2851,6 +3024,8 @@ def test_feature_route_manifest_cli_blocks_on_output_io_error(monkeypatch, capsy
             "/planning",
             "--scratch-dir",
             "/scratch",
+            "--local-coverage-command",
+            _LOCAL_COVERAGE_COMMAND,
             "--output",
             "/route-manifest.json",
         ],
@@ -2878,6 +3053,7 @@ def test_inline_implementation_and_refactoring_records_share_successor_route_gra
         child_worktrees_root=tmp_path / "worktrees",
         planning_dir=tmp_path / "planning",
         scratch_dir=tmp_path / "scratch",
+        local_coverage_command=_LOCAL_COVERAGE_COMMAND,
     )
 
     assert {row["owning_route"] for row in inline["records"]} == {
@@ -2949,6 +3125,7 @@ def test_inline_feature_routes_preserve_existing_provider_issue_identity(
         child_worktrees_root=tmp_path / "positive-worktrees",
         planning_dir=tmp_path / "positive-planning",
         scratch_dir=tmp_path / "positive-scratch",
+        local_coverage_command=_LOCAL_COVERAGE_COMMAND,
     )
 
     normalized = result["records"][0]
@@ -2996,6 +3173,7 @@ def test_inline_route_duplicate_json_keys_fail_before_normalization(tmp_path: Pa
             child_worktrees_root=tmp_path / "worktrees",
             planning_dir=tmp_path / "planning",
             scratch_dir=tmp_path / "scratch",
+            local_coverage_command=_LOCAL_COVERAGE_COMMAND,
         )
 
 
@@ -3174,6 +3352,7 @@ def test_route_function_enforces_source_xor_before_parse(tmp_path: Path):
         "child_worktrees_root": tmp_path / "worktrees",
         "planning_dir": tmp_path / "planning",
         "scratch_dir": tmp_path / "scratch",
+        "local_coverage_command": _LOCAL_COVERAGE_COMMAND,
     }
     with pytest.raises(RouteManifestError, match="exactly one"):
         normalize_route_source(**common)
@@ -3248,6 +3427,8 @@ def test_feature_route_manifest_cli_rejects_invalid_explicit_branches_before_out
         str(tmp_path / "planning"),
         "--scratch-dir",
         str(tmp_path / "scratch"),
+        "--local-coverage-command",
+        _LOCAL_COVERAGE_COMMAND,
         "--output",
         str(output),
     ]
@@ -3283,6 +3464,7 @@ def test_feature_route_manifest_rejects_protected_branch_equality(tmp_path: Path
             child_worktrees_root=tmp_path / "worktrees",
             planning_dir=tmp_path / "planning",
             scratch_dir=tmp_path / "scratch",
+            local_coverage_command=_LOCAL_COVERAGE_COMMAND,
         )
 
 
@@ -3378,6 +3560,7 @@ def test_feature_route_manifest_rejects_noncanonical_or_aliased_roots(
             child_worktrees_root=worktrees,
             planning_dir=planning,
             scratch_dir=scratch,
+            local_coverage_command=_LOCAL_COVERAGE_COMMAND,
         )
 
 
@@ -4789,6 +4972,12 @@ def test_refactoring_child_invocation_contract_is_complete_and_fixed():
             "base_branch",
             "auto_merge_after_phase_9",
         ],
+        "conditional_common_fields": {
+            "local_coverage_command": {
+                "required_when": "feature-routed",
+                "mapping": "same-name-byte-for-byte",
+            }
+        },
         "fixed_values": {
             "branch_name": "${branch_name}",
             "worktree_path": "${worktree_path}",
@@ -4807,7 +4996,11 @@ def test_refactoring_child_invocation_contract_is_complete_and_fixed():
 
 def test_refactoring_dispatch_validator_enforces_one_child_and_exact_branch_projection():
     valid = _refactoring_dispatch_plan()
-    assert validate_refactoring_dispatch(valid)["status"] == "VALID"
+    valid_decision = validate_refactoring_dispatch(valid)
+    assert valid_decision["status"] == "VALID"
+    assert valid_decision["local_coverage_command_sha256"] == (
+        _LOCAL_COVERAGE_COMMAND_SHA256
+    )
 
     second_child = deepcopy(valid["children"][0])
     second_child["branch_name"] = "route/age-261"
@@ -4827,6 +5020,26 @@ def test_refactoring_dispatch_validator_enforces_one_child_and_exact_branch_proj
     decision = validate_refactoring_dispatch(protected)
     assert decision["status"] == "INVALID"
     assert "branch_name must not be protected" in decision["errors"]
+
+    changed_command = _refactoring_dispatch_plan()
+    changed_command["children"][0]["local_coverage_command"] += " --changed"
+    decision = validate_refactoring_dispatch(changed_command)
+    assert decision["status"] == "INVALID"
+    assert (
+        "child local_coverage_command must equal the route projection"
+        in decision["errors"]
+    )
+
+    missing_command = _refactoring_dispatch_plan()
+    missing_command.pop("local_coverage_command")
+    missing_command["children"][0].pop("local_coverage_command")
+    assert validate_refactoring_dispatch(missing_command)["status"] == "VALID"
+
+    blank_command = _refactoring_dispatch_plan(local_coverage_command=" \t ")
+    blank_command["children"][0]["local_coverage_command"] = " \t "
+    decision = validate_refactoring_dispatch(blank_command)
+    assert decision["status"] == "INVALID"
+    assert "local_coverage_command must be a non-blank string" in decision["errors"]
 
 
 @pytest.mark.parametrize(
@@ -6445,6 +6658,7 @@ def test_route_attempt_proof_schema_matches_production_validator():
     assert schema["schema"] == "feature-route-attempt-proof-v1"
     assert schema["identity_fields"] == [
         "feature_branch",
+        "local_coverage_command_sha256",
         "ticket_id",
         "attempt_number",
         "owning_route",

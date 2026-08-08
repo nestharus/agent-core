@@ -13,13 +13,14 @@ workflow_aliases:
 workflow_dispatch_contract:
   orchestrator: feature-orchestrator
   inputs:
-    - "required canonical inputs: feature_id, feature_scope_path, repo_root, explicit trunk_branch, explicit feature_branch, feature_worktree_path, child_worktrees_root, planning_dir, scratch_dir, JSON scoped_ticket_list, ticket_system, matching jira_url, jira_project, and jira_account_email or linear_team_key and optional linear_project_id, manager_flavor, JSON acceptance_evidence_paths, and post_merge_owner; runtime invocation identity is runner-derived"
+    - "required canonical inputs: feature_id, feature_scope_path, repo_root, explicit trunk_branch, explicit feature_branch, feature_worktree_path, child_worktrees_root, planning_dir, scratch_dir, non-blank local_coverage_command, JSON scoped_ticket_list, ticket_system, matching jira_url, jira_project, and jira_account_email or linear_team_key and optional linear_project_id, manager_flavor, JSON acceptance_evidence_paths, and post_merge_owner; runtime invocation identity is runner-derived"
     - "exactly one route source: ticket_route_map, represented by --ticket-route-map-json with closed feature-inline-route-map-v2 records, or successor_manifest_path, represented by --successor-manifest naming the strict feature-successor-envelope-v1; the CLI rejects both/neither before parsing, every record requires one existing backend issue key equal to ticket_id, and both paths emit the same closed feature-route-manifest-v2 record graph"
     - "optional context: prototype_dossier_path, qa_operator, qa_target_descriptor, evidence_pack_context, and audit_history_path derived as planning_dir/feature-audit-history.md"
   expectations:
     - "validates explicit trunk_branch and feature_branch as distinct short GitHub branch names with git check-ref-format --branch exact-output semantics before route derivation or output"
     - "validates the complete raw route set through one shared production ticket-source/backend/branch/protected-ref/canonical-path/payload/dependency/cycle/wave/output contract that rejects wu_brief_path before output, directory creation, dispatch, or any ticket side effect; treats topological waves only as eligibility sets and serializes merge-owning attempts so each ticket has one accepted result across one or more immutable numbered owning-workflow attempts"
     - "forces the one implementation child per route to auto_merge_after_phase_9=false; feature-orchestrator consumes VERIFIED_DRAFT_PR, promotes the exact direct PR only after pre-ready gates, and merges it only after fresh non-draft currentness and lineage authorization, while refactoring-orchestrator alone merges its one child PR"
+    - "validates local_coverage_command before feature worktree creation or route side effects, passes its exact bytes unchanged to direct implementation children and through refactoring to nested implementation, and binds its exact SHA-256 in the normalized manifest plus every route expected/dispatch/proof chain so changed-command replay fails closed"
     - "maps each refactoring route's existing backend issue key and normalized branch to same-named child inputs and accepts only one singular VERIFIED_MERGED child whose PR/head/guard/base identity exactly matches the nested implementation result and whose closed route/feature/attempt-bound auditor index exactly enumerates five pre-merge and five post-merge current LOW reports"
     - "requires the implementation result's immutable caller expected-context and producer ticket-result path/hashes, revalidates exact caller/producer/site/ticket identity, and hash-checks child-owned process proofs instead of trusting a feature-authored PASS wrapper or re-auditing child internals"
     - "derives implementation-pipeline-orchestrator/implementation-pipeline-result-v1 or refactoring-orchestrator/refactoring-route-result-v1 from the manifest; passes the exact normalized feature_branch into production route-process validation; requires proof-envelope/common-result/attempt-index/route-result feature-branch agreement, exact route PR/head/guard/base identity even when OIDs coincide, and refactoring auditor-index/report re-hash plus exact-LOW semantic validation without auditor reruns before acceptance or dependency release"
@@ -57,13 +58,14 @@ Coordinate one scoped feature across heterogeneous ticket owners, integrate all 
 ```yaml
 orchestrator: feature-orchestrator
 inputs:
-  - "required canonical inputs: feature_id, feature_scope_path, repo_root, explicit trunk_branch, explicit feature_branch, feature_worktree_path, child_worktrees_root, planning_dir, scratch_dir, JSON scoped_ticket_list, ticket_system, matching jira_url, jira_project, and jira_account_email or linear_team_key and optional linear_project_id, manager_flavor, JSON acceptance_evidence_paths, and post_merge_owner; runtime invocation identity is runner-derived"
+  - "required canonical inputs: feature_id, feature_scope_path, repo_root, explicit trunk_branch, explicit feature_branch, feature_worktree_path, child_worktrees_root, planning_dir, scratch_dir, non-blank local_coverage_command, JSON scoped_ticket_list, ticket_system, matching jira_url, jira_project, and jira_account_email or linear_team_key and optional linear_project_id, manager_flavor, JSON acceptance_evidence_paths, and post_merge_owner; runtime invocation identity is runner-derived"
   - "exactly one route source: ticket_route_map, represented by --ticket-route-map-json with closed feature-inline-route-map-v2 records, or successor_manifest_path, represented by --successor-manifest naming the strict feature-successor-envelope-v1; the CLI rejects both/neither before parsing, every record requires one existing backend issue key equal to ticket_id, and both paths emit the same closed feature-route-manifest-v2 record graph"
   - "optional context: prototype_dossier_path, qa_operator, qa_target_descriptor, evidence_pack_context, and audit_history_path derived as planning_dir/feature-audit-history.md"
 expectations:
   - "validates explicit trunk_branch and feature_branch as distinct short GitHub branch names with git check-ref-format --branch exact-output semantics before route derivation or output"
   - "validates the complete raw route set through one shared production ticket-source/backend/branch/protected-ref/canonical-path/payload/dependency/cycle/wave/output contract that rejects wu_brief_path before output, directory creation, dispatch, or any ticket side effect; treats topological waves only as eligibility sets and serializes merge-owning attempts so each ticket has one accepted result across one or more immutable numbered owning-workflow attempts"
   - "forces the one implementation child per route to auto_merge_after_phase_9=false; feature-orchestrator consumes VERIFIED_DRAFT_PR, promotes the exact direct PR only after pre-ready gates, and merges it only after fresh non-draft currentness and lineage authorization, while refactoring-orchestrator alone merges its one child PR"
+  - "validates local_coverage_command before feature worktree creation or route side effects, passes its exact bytes unchanged to direct implementation children and through refactoring to nested implementation, and binds its exact SHA-256 in the normalized manifest plus every route expected/dispatch/proof chain so changed-command replay fails closed"
   - "maps each refactoring route's existing backend issue key and normalized branch to same-named child inputs and accepts only one singular VERIFIED_MERGED child whose PR/head/guard/base identity exactly matches the nested implementation result and whose closed route/feature/attempt-bound auditor index exactly enumerates five pre-merge and five post-merge current LOW reports"
   - "requires the implementation result's immutable caller expected-context and producer ticket-result path/hashes, revalidates exact caller/producer/site/ticket identity, and hash-checks child-owned process proofs instead of trusting a feature-authored PASS wrapper or re-auditing child internals"
   - "derives implementation-pipeline-orchestrator/implementation-pipeline-result-v1 or refactoring-orchestrator/refactoring-route-result-v1 from the manifest; passes the exact normalized feature_branch into production route-process validation; requires proof-envelope/common-result/attempt-index/route-result feature-branch agreement, exact route PR/head/guard/base identity even when OIDs coincide, and refactoring auditor-index/report re-hash plus exact-LOW semantic validation without auditor reruns before acceptance or dependency release"
@@ -86,6 +88,34 @@ non_goals:
 The workflow and `agents/feature-orchestrator.md` use the same names. The caller provides explicit `trunk_branch` and `feature_branch`; no cross-project branch default exists. `feature_scope_path` is the scope and acceptance anchor, `feature_worktree_path` is the feature integration worktree, and `child_worktrees_root` is the deterministic root for route-owned worktrees.
 
 The caller also supplies `ticket_system` plus the matching Jira or Linear configuration, JSON arrays for exact scoped tickets and acceptance evidence, exactly one route source, manager flavor, and the downstream `post_merge_owner`. `tools/feature_route_manifest.py` represents that xor mechanically as `--ticket-route-map-json` versus `--successor-manifest`, rejects both/neither before source parsing, and supplies the same explicit feature/trunk/scope/backend/root identities to either normalization path. The operator derives its invocation UUID from runner provenance and joins child UUIDs after dispatch. Prototype, QA, evidence-pack, and second-round audit-history context use the optional names in the dispatch surface.
+
+The feature owner validates non-blank `local_coverage_command` before feature worktree creation or route side effects, passes the exact value unchanged to direct implementation children and through refactoring to its nested implementation child, and binds only its exact SHA-256 in route manifest/dispatch/proof evidence. The command never enters route payload, evidence-pack context, ambient configuration, or free-form anti-scope prose.
+
+## Invocation Example
+
+```yaml
+orchestrator: feature-orchestrator
+inputs:
+  feature_id: AGE-255
+  feature_scope_path: /project/planning/age-255/feature-scope.md
+  repo_root: /project/trunk
+  trunk_branch: main
+  feature_branch: feature/hourly-suspicious-process-investigator
+  feature_worktree_path: /project/worktrees/hourly-suspicious-process-investigator
+  child_worktrees_root: /project/worktrees/routes
+  planning_dir: /project/planning/hourly-suspicious-process-investigator
+  scratch_dir: /project/planning/hourly-suspicious-process-investigator/scratch
+  local_coverage_command: cargo llvm-cov --workspace --no-report && cargo llvm-cov report --json --summary-only --output-path coverage/coverage-summary.json && cargo llvm-cov report --lcov --output-path coverage/lcov.info
+  scoped_ticket_list: '["AGE-259"]'
+  ticket_route_map: '[{"ticket_id":"AGE-259","successor_id":"AGE255-S04","title":"Integrate","brief_path":"/project/planning/age-255/AGE255-S04.md","surfaces":["S1"],"owning_route":"implementation-pipeline","depends_on":[],"branch_name":"route/age-259","ticket_source":{"linear_issue_key":"AGE-259"},"route_payload":{}}]'
+  ticket_system: linear
+  linear_team_key: AGE
+  manager_flavor: manager-max
+  acceptance_evidence_paths: '["/project/planning/age-255/acceptance.md"]'
+  post_merge_owner: work-manager
+```
+
+The implementation record keeps `route_payload` exactly `{}`. A refactoring record also receives the declared coverage command through the feature invocation, not through its route payload.
 
 ## Route And Ownership Contract
 
