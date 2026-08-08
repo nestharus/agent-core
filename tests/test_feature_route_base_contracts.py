@@ -8934,6 +8934,32 @@ def test_pipeline_and_resumer_invoke_exact_runtime_writer_commands():
     assert "do not write either target directly" in resumer
 
 
+def test_direct_and_feature_session_owner_contracts_are_synchronized():
+    pipeline = _read("agents/implementation-pipeline-orchestrator.md")
+    workflow = _read("workflows/implementation-pipeline.md")
+    lifecycle = _read("conventions/wu-session-lifecycle.md")
+    runtime_readme = _read("tools/wu-session-migration/README.md")
+    feature = _read("agents/feature-orchestrator.md")
+    refactoring = _read("agents/refactoring-orchestrator.md")
+    wake = _read("workflows/wu-session-wake.md")
+    resumer = _read("agents/wu-session-resumer.md")
+
+    assert "R=${planning_dir}/.." in pipeline
+    assert "R=${planning_dir}/.." in workflow
+    assert "R=${planning_dir}/.." in lifecycle
+    for text in (pipeline, workflow, lifecycle, runtime_readme):
+        assert "F/routes" in text
+        assert "sessions.active-wake.json" in text
+    assert "route_planning_dir.parent" in feature
+    assert "planning_root=F/routes" in feature
+    assert "planning_dir.parent" in refactoring
+    assert "selects that `F/routes` root explicitly" in refactoring
+    assert "direct callers pass P and feature callers pass F/routes" in wake
+    assert "Never scan ancestors or descendants" in wake
+    assert "Never search ancestors, descendants, or another active index" in resumer
+    assert "exact same-owner `R/sessions.active-wake.json`" in resumer
+
+
 def test_agents_routing_summary_matches_canonical_feature_contract():
     feature_row = _section("AGENTS.md", "### Feature orchestration")
     for value in (

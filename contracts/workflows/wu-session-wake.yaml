@@ -3,7 +3,7 @@ source: workflows/wu-session-wake.md
 workflow_id: wu-session-wake
 orchestrator: root wu-session-wake invocation (scheduler-triggered or manual)
 inputs:
-- sessions.active-wake.json path
+- planning_root plus its exact sessions.active-wake.json path; direct callers pass P and feature callers pass F/routes
 - poller output from tools/pr-batch-poller
 - repo_root plus per-project worktree and planning roots
 - caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION
@@ -16,7 +16,7 @@ expectations:
 - verifies the multi-row expected process and process tree before aggregate completion
 - joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS
 - blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending
-- validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root
+- validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the caller-supplied live runtime root
 - treats a batch containing only valid non-merged skipped rows as a successful audited no-op
 - uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch
 outputs:
