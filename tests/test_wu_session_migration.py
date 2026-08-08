@@ -713,6 +713,7 @@ def _runtime_case(
             "commit.gpgsign=false",
             "commit",
             "-q",
+            "--allow-empty",
             "-m",
             "fixture producer identities",
         ],
