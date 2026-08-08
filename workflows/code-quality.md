@@ -5,7 +5,7 @@ workflow_dispatch_contract:
   orchestrator: "implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-review caller"
   inputs:
     - "repo_root, worktree_path, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout"
-    - "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, proof_plan_excerpt, runtime_claim, and wu_id"
+    - "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, verification_plan_excerpt, behavior_claim, runtime_claim, and wu_id"
     - "required Phase 6 per-component evidence: code_quality_dispatch_dir, contract_path, proposal_path, worktree_path, component_slug, and component scope"
     - "optional PR/RCA evidence: dossier_diff_path, decisions_path, runtime_artifact_evidence_path, and validation-surface context"
     - "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
@@ -33,7 +33,7 @@ implementation-pipeline-orchestrator Phase 4 caller, ad-hoc developer, or PR-rev
 ### Inputs
 
 - repo_root, worktree_path, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout
-- optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, proof_plan_excerpt, runtime_claim, and wu_id
+- optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, verification_plan_excerpt, behavior_claim, runtime_claim, and wu_id
 - required Phase 6 per-component evidence: code_quality_dispatch_dir, contract_path, proposal_path, worktree_path, component_slug, and component scope
 - optional PR/RCA evidence: dossier_diff_path, decisions_path, runtime_artifact_evidence_path, and validation-surface context
 - optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref
@@ -75,7 +75,7 @@ Coordinate a composite gate over the code-quality surface by treating `~/ai/conv
 
 - An implementation-pipeline Phase 4 caller has proposal, touched-surface, and diff or equivalent change evidence and needs one composite code-quality gate.
 - An implementation-pipeline Phase 6 per-component caller has component-local diff evidence and needs a component-scoped composite code-quality gate before component closure.
-- An implementation-pipeline Phase 8 caller has the actual PR diff plus approved proposal/proof-plan context and needs a composite code-quality row in the Phase 8 join manifest.
+- An implementation-pipeline Phase 8 caller has the actual PR diff plus approved proposal/verification-plan context and needs a composite code-quality row in the Phase 8 join manifest.
 - A PR-review caller has branch or PR diff evidence and wants normalized A1 findings from the supported auditor fanout.
 - An ad-hoc developer wants to run the same composite review over a local diff and touched-surface package without entering the implementation pipeline.
 
@@ -96,7 +96,8 @@ Coordinate a composite gate over the code-quality surface by treating `~/ai/conv
 - `proposal_path=<path>`: optional Phase 4 evidence unless A6 children are selected before implementation, then required. Required in Phase 6 per-component mode and passed to every selected auditor.
 - `contract_path=<absolute-path>`: required in Phase 6 per-component mode; this is the Step 6a contract under `${planning_dir}/contracts/`. Every selected auditor must read it before scoring.
 - `code_quality_dispatch_dir=<absolute-path>`: required in Phase 6 per-component mode; nearest existing common ancestor of absolute `worktree_path` and `planning_dir`, used as the `agents -p` working directory for every child auditor dispatch.
-- `proof_plan_excerpt=<text-or-path>`: required when proof-plan/runtime-claim context is selected, including Phase 8 actual-diff callers.
+- `verification_plan_excerpt=<text-or-path>`: required when verification-plan context is selected, including Phase 8 actual-diff callers.
+- `behavior_claim=<text>`: required when verification-plan review is selected. This is the pre-execution claim whose proposed experiment is reviewed; it is distinct from post-change `runtime_claim` evidence consumed by validation-integrity review.
 - `runtime_claim=<text>`: required when validation-integrity is selected, including Phase 8 actual-diff callers and RCA dossier contexts.
 - `dossier_diff_path=<path>`: required when validation-integrity runs in RCA dossier mode.
 - `decisions_path=<path>`: optional ratification evidence for validation-integrity findings.
@@ -146,10 +147,10 @@ Dispatch each auditor named in `conventions/code-quality.md` `## Auditor Set`; t
 | A5 | function-classification-auditor | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/function-classification-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/function-classification-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/function-classification-auditor.md` | true | `worktree_path`, `diff_path`, touched surface evidence; Phase 6 also `contract_path`, `proposal_path` |
 | A6 | cohesion-auditor | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/cohesion-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/cohesion-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/cohesion-auditor.md` | true | `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path`; Phase 6 also `contract_path`, `proposal_path` |
 | A6 | coupling-auditor | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/coupling-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/coupling-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/coupling-auditor.md` | true | `worktree_path`, `planning_dir`, `wu_id`, `touched_surfaces_path`, `diff_path`; Phase 6 also `contract_path`, `proposal_path` |
-| ACR-254 | validation-integrity-auditor | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/validation-integrity-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/validation-integrity-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/validation-integrity-auditor.md` | context-dependent | PR diff or RCA dossier diff context plus `runtime_claim` and `worktree_path`; Phase 6 also `contract_path`, `proposal_path`; optional `decisions_path`, `runtime_artifact_evidence_path` |
-| ACR-254 | proof-risk-auditor | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/proof-risk-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/proof-risk-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/proof-risk-auditor.md` | context-dependent | `proposal_path` or RCA fix-decision artifact with `## Proof plan`, `worktree_path`; Phase 6 also `contract_path`; `proof_plan_excerpt`, `runtime_claim` when supplied by caller |
+| ACR-254 | validation-integrity-auditor | gpt-high | `${scratch_dir}/code-quality/${slug}/prompts/validation-integrity-auditor.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/validation-integrity-auditor.log` | `${planning_dir}/code-quality/${slug}/reports/validation-integrity-auditor.md` | context-dependent | PR diff or RCA dossier diff context plus `runtime_claim` and `worktree_path`; Phase 6 also `contract_path`, `proposal_path`; optional `decisions_path`, `runtime_artifact_evidence_path` |
+| ACR-254 | verification-plan-reviewer | gpt-xhigh | `${scratch_dir}/code-quality/${slug}/prompts/verification-plan-reviewer.prompt.md` | `${scratch_dir}/code-quality/${slug}/logs/verification-plan-reviewer.log` | `${planning_dir}/code-quality/${slug}/reports/verification-plan-reviewer.md` | context-dependent | `proposal_path` or RCA fix-decision artifact with `## Verification plan`, `worktree_path`; Phase 6 also `contract_path`; `verification_plan_excerpt`, `behavior_claim` when supplied by caller |
 
-`Required=false` is allowed only with a written applicability reason in the manifest. Optionality records evidence applicability; it is not a way to demote relevant A1 or ACR-254 review. `validation-integrity-auditor` is `Required=true` when PR/diff/RCA evidence exists with validation-surface change risk or runtime-claim context. `proof-risk-auditor` is `Required=true` when proposal, proof-plan, RCA fix-decision, or runtime-claim context exists. In Phase 8 actual-PR-diff callers, both ACR-254 rows are always `Required=true`: the Phase 3 `## Proof plan` requirement supplies runtime-claim context, and the proposal cited by the PR body's close-keyword footer is the proof-risk artifact under review.
+`Required=false` is allowed only with a written applicability reason in the manifest. Optionality records evidence applicability; it is not a way to demote relevant A1 or ACR-254 review. `validation-integrity-auditor` is `Required=true` when PR/diff/RCA evidence exists with validation-surface change risk or runtime-claim context. `verification-plan-reviewer` is `Required=true` when proposal, verification-plan, RCA fix-decision, or behavior-claim context exists. In Phase 8 actual-PR-diff callers, both ACR-254 rows are always `Required=true`: the Phase 3 `## Verification plan` requirement supplies behavior-claim context, and the proposal cited by the PR body's close-keyword footer is the verification-plan artifact under review.
 
 ## Per-Concern Auditor Routing
 
@@ -187,7 +188,7 @@ Auditor path: `~/ai/agents/coupling-auditor.md`. Model: `gpt-xhigh`.
 
 ### ACR-254 - Validation integrity
 
-Auditor path: `~/ai/agents/validation-integrity-auditor.md`. Model: `gpt-xhigh`.
+Auditor path: `~/ai/agents/validation-integrity-auditor.md`. Model: `gpt-high`.
 
 - Required in `pr-diff` mode when the invocation includes actual PR diff context, validation-surface change risk, or runtime-claim context. Required inputs: `mode=pr-diff`, `diff_path`, `runtime_claim`, `report_path`, and `worktree_path`.
 - Required in `rca-dossier` mode when the invocation includes RCA verification evidence. Required inputs: `mode=rca-dossier`, `dossier_diff_path`, `runtime_claim`, `report_path`, and `worktree_path`.
@@ -197,15 +198,15 @@ Auditor path: `~/ai/agents/validation-integrity-auditor.md`. Model: `gpt-xhigh`.
 - Phase 6 per-component callers set `Required=true` when the component diff has validation-surface change risk or runtime-claim context; otherwise they record `Required=false` with a written reason.
 - Phase 8 actual-PR-diff callers set `Required=true`.
 
-### ACR-254 - Proof risk
+### ACR-254 - Verification-plan review
 
-Auditor path: `~/ai/agents/proof-risk-auditor.md`. Model: `gpt-xhigh`.
+Auditor path: `~/ai/agents/verification-plan-reviewer.md`. Model: `gpt-xhigh`.
 
-- Required when the invocation includes `proposal_path`, RCA fix-decision artifact, `proof_plan_excerpt`, or runtime-claim/proof-plan context.
+- Required when the invocation includes `proposal_path`, RCA fix-decision artifact, `verification_plan_excerpt`, or behavior-claim/verification-plan context.
 - Required inputs: `mode=phase-3-proposal` for implementation-pipeline proposals or `mode=rca-fix-decision` for RCA fix-decision artifacts, plus `proposal_path`, `report_path`, and `worktree_path`.
 - Phase 6 required inputs: `contract_path` and `proposal_path`; the auditor must read both before scoring.
 - Phase 4 proposal-time callers set `Required=true` for the approved Phase 3 proposal.
-- Phase 6 per-component callers set `Required=true` only when component-local proof-plan/runtime-claim context exists; otherwise they record `Required=false` with a written reason.
+- Phase 6 per-component callers set `Required=true` only when component-local verification-plan/behavior-claim context exists; otherwise they record `Required=false` with a written reason.
 - Phase 8 actual-PR-diff callers set `Required=true` and validate the proposal cited in the PR body's close-keyword footer against the actual shipped diff context.
 
 ## Aggregate Verdict
@@ -218,7 +219,7 @@ The aggregate verdict uses these outcomes:
 - `MEDIUM` when any required child returns `MEDIUM` and no child returns `HIGH`.
 - `LOW` when every required child returns `LOW`.
 
-Completed severity rollup is worst-case: `HIGH > MEDIUM > LOW`. `NEEDS_INPUT` and `BLOCKED` are stop states, not severity values, and native child report paths and source verdicts remain visible in the aggregate report. A non-LOW validation-integrity or proof-risk child verdict cannot be hidden by LOW A1 siblings.
+Completed severity rollup is worst-case: `HIGH > MEDIUM > LOW`. `NEEDS_INPUT` and `BLOCKED` are stop states, not severity values, and native child report paths and source verdicts remain visible in the aggregate report. A non-LOW validation-integrity or verification-plan-review child verdict cannot be hidden by LOW A1 siblings.
 
 Under `conventions/code-quality.md` `## Auditor Scope Boundary` and `## Touched-file ownership`, current severity is raised by findings inside touched files/components, including pre-existing findings. Residuals are preserved separately only for genuinely context-only evidence outside the touched file/component set and do not change the current severity rollup.
 
@@ -270,7 +271,7 @@ Prompts and logs are written under `${scratch_dir}/code-quality/${slug}/`; repor
 
 Missing required evidence becomes `BLOCKED:<reason>` instead of an inferred pass.
 
-Pipeline-callable mode is valid from Phase 4 proposal-time review, Phase 6 per-component review, and Phase 8 actual-PR-diff review. Phase 8 callers supply `slug=${wu_lower}-phase-8`, `diff_path=<PR-diff>`, `proposal_path=<proposal-cited-by-PR-footer>`, `proof_plan_excerpt=<excerpt>`, `runtime_claim=<claim>`, and any available runtime-artifact evidence. The Phase 8 aggregate path is `${planning_dir}/code-quality/${wu_lower}-phase-8/aggregate-code-quality.md`; its dispatch manifest must mark `validation-integrity-auditor` and `proof-risk-auditor` as `Required=true`.
+Pipeline-callable mode is valid from Phase 4 proposal-time review, Phase 6 per-component review, and Phase 8 actual-PR-diff review. Phase 8 callers supply `slug=${wu_lower}-phase-8`, `diff_path=<PR-diff>`, `proposal_path=<proposal-cited-by-PR-footer>`, `verification_plan_excerpt=<excerpt>`, `behavior_claim=<claim>`, `runtime_claim=<post-change-runtime-claim>`, and any available runtime-artifact evidence. The Phase 8 aggregate path is `${planning_dir}/code-quality/${wu_lower}-phase-8/aggregate-code-quality.md`; its dispatch manifest must mark `validation-integrity-auditor` and `verification-plan-reviewer` as `Required=true`.
 
 ## Stop Conditions And Escalation
 

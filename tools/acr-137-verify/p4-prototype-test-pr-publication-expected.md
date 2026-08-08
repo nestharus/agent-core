@@ -10,7 +10,7 @@ it as the comparator for the P4 publication subtree.
 - operator: `prototype-orchestrator`
 - phase: `P4 - Hand-off`
 - expected entry condition: P3 human gate approved the dossier, including
-  `dossier/answer.md`, `dossier/proof-test-audit.md`,
+  `dossier/answer.md`, `dossier/prototype-evidence-review.md`,
   `dossier/spawned-tickets.md`, and `dossier/test-publication-manifest.md`.
 
 ## Required Ordered Events

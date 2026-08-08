@@ -2,7 +2,7 @@
 
 ## Prototype-review rule
 
-Prototype review is a review of E2E proof tests, demonstrated outcomes, and dossier verdict support. The reviewer checks what the prototype proves, what it cost, what worked, what broke, and whether the dossier evidence supports the recommended next decision. It is not prototype source-code review.
+Prototype review examines executed prototype behavior tests and observed results, demonstrated outcomes, and dossier-verdict support. The reviewer checks what experiments ran, what they observed, what the prototype cost, what worked, what broke, and whether the dossier evidence supports the recommended next decision. It is not prototype source-code review, and the review itself is not another experiment.
 
 When a prototype-test PR exists, PR comments are in scope only for test design, outcome alignment, pending-marker traceability, and dossier verdict support. The reviewer checks whether the published tests express the behavior the dossier claims and whether the spawned implementation tickets inherit a clear obligation to unmark and pass them.
 
@@ -16,7 +16,7 @@ Prototype-test PRs do not trigger production PR-review gates by default. CodeRab
 
 The human gate owns dossier-verdict and outcomes acceptance: whether `answer.md`, `branch-disposition.md`, `spawned-tickets.md`, and any original-ticket disposition are supportable by the evidence and worth carrying forward.
 
-Model gates own the proof-test audit, one-question check, answer-trace check, and commit hygiene. Those gates establish whether the dossier is coherent and evidence-backed before the human accepts or revises it.
+Model gates own the prototype evidence review, one-question check, answer-trace check, and commit hygiene. Those gates assess whether the dossier is coherent and supported by recorded experiment evidence before the human accepts or revises it. A favorable model review does not establish the prototype behavior by itself.
 
 ## Cross-links
 

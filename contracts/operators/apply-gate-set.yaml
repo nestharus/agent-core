@@ -19,7 +19,12 @@ inputs:
 - {name: head_sha, type: string, required: true, default_source: caller, description: Full reviewed head commit SHA.}
 - {name: diff_sha256, type: string, required: true, default_source: caller, description: Hash of the exact proposal/component/PR diff target.}
 - {name: scope_ref, type: string, required: true, default_source: caller, description: Scope identity and hash source.}
+- {name: verification_plan_ref, type: string, required: false, default_source: caller, description: Exact verification-plan excerpt identity; required when verification-plan review applies.}
+- {name: verification_plan_hash, type: string, required: false, default_source: caller, description: Verification-plan content hash; required when verification-plan review applies.}
+- {name: behavior_claim_ref, type: string, required: false, default_source: caller, description: Pre-execution behavior claim identity; required when verification-plan review applies.}
+- {name: behavior_claim_hash, type: string, required: false, default_source: caller, description: Behavior-claim content hash; required when verification-plan review applies.}
 - {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: Runtime claim identity or explicit non-applicability artifact.}
+- {name: runtime_claim_hash, type: string, required: true, default_source: caller, description: Runtime-claim content hash or explicit n/a marker.}
 - {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: Current contract artifact hashes.}
 - {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: Current caller report hashes.}
 - {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}

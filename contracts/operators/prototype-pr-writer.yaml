@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/prototype-pr-writer.md
 model: gpt-medium
-description: Write a proof-focused PR body for a shippable prototype after validation, QA proof, and deliverable material already exist
+description: Write an evidence-focused PR body for a shippable prototype after behavior tests, recorded QA experiments, and deliverable material already exist
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: truth_branch_ref
@@ -33,7 +33,7 @@ inputs:
   type: string
   required: true
   default_source: caller
-  description: '`--input qa_screenshots_dir=<path>` (required) - directory or manifest containing uploaded screenshot URLs and captions for QA proof.'
+  description: '`--input qa_screenshots_dir=<path>` (required) - directory or manifest containing uploaded screenshot URLs and captions for recorded QA experiment evidence.'
 - name: deliverable_paths
   type: string
   required: true

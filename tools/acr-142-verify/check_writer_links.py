@@ -17,9 +17,9 @@ REQUIRED_PROTOTYPE_INPUTS = [
     "deliverable_paths",
 ]
 ADAPTER_HANDOFF_ANCHORS = [
-    "prototype-validation-proof-bundle-adapter.md",
+    "prototype-validation-evidence-bundle-adapter.md",
     "screenshot_url_manifest_path",
-    "proof_bundle_path",
+    "experiment_evidence_bundle_path",
 ]
 
 
@@ -45,8 +45,8 @@ def check(parsed: ParsedWriterLinks) -> list[Finding]:
     production_lower = production_text.lower()
     if "production" not in production_lower or "implementation" not in production_lower:
         findings.append(_finding(PRODUCTION_WRITER, "missing_production_identity", "production implementation PR writer", "production PR writer identity is not explicit"))
-    if "prototype-validation-proof-bundle-adapter.md" in production_text:
-        findings.append(_finding(PRODUCTION_WRITER, "mixed_writer_scope", "prototype-validation-proof-bundle-adapter.md", "production writer must remain distinct from prototype proof-bundle adapter"))
+    if "prototype-validation-evidence-bundle-adapter.md" in production_text:
+        findings.append(_finding(PRODUCTION_WRITER, "mixed_writer_scope", "prototype-validation-evidence-bundle-adapter.md", "production writer must remain distinct from the prototype evidence-bundle adapter"))
 
     return findings
 

@@ -110,6 +110,9 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `push-pull-auditor` - Audit changed code-level and deployment-level pull sites for A1 push-vs-pull system coupling and report `uncontrolled-source coupler` findings with decoupling direction.
   File: [~/ai/agents/push-pull-auditor.md](agents/push-pull-auditor.md) | Inputs: `repo_root`, `diff_path`, `output_path`, `base_ref?`, `head_ref?`, `changed_files_path?`, `proposal_path?`, `problem_map_path?`, `risk_profile_path?`, `code_quality_ref?` | Model: `gpt-high`
 
+- `verification-plan-reviewer` - Review proposal and RCA fix-decision verification plans for completeness, executability, expected observations, and direct claim-experiment fit without claiming that the experiment ran.
+  File: [~/ai/agents/verification-plan-reviewer.md](agents/verification-plan-reviewer.md) | Inputs: `mode`, `proposal_path`, `report_path`, `worktree_path`, `contract_path?` | Model: `gpt-xhigh`
+
 ### Incident / RCA
 
 - `rca-orchestrator` - Orchestrate the full RCA workflow from trigger classification through reproduction, split root-cause/fix/application dispatches, verify-or-return, and downstream incident lifecycle handoff.
@@ -148,11 +151,11 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `pr-writer` - Author the title and body of a draft pull request for an external reviewer who has no project context — enforces the audience and content rules (no internal jargon, no commit-history sections, no unverified closed-PR or planning-artifact references).
   File: [~/ai/agents/pr-writer.md](agents/pr-writer.md) | Inputs: `branch`, `base`, `base_ref`, `base_sha`, `head_ref`, `head_sha`, `repo_root`, `output_path`, `context_files?`, `stack_parent_pr?`, `merged_refs?`, `linear_issue_keys?` | Model: `gpt-high`
 
-- `prototype-pr-writer` - Author a proof-focused draft PR body for a shippable-prototype PR, centered on shipped use-cases, behavior-test evidence, QA screenshots, observed-vs-expected notes, and deliverable bring-up material; this PR writer does not replace `pr-writer` for production implementation PRs.
+- `prototype-pr-writer` - Author an evidence-focused draft PR body for a shippable-prototype PR, centered on shipped use-cases, behavior-test evidence, QA screenshots, observed-vs-expected notes, and deliverable bring-up material; this PR writer does not replace `pr-writer` for production implementation PRs.
   File: [~/ai/agents/prototype-pr-writer.md](agents/prototype-pr-writer.md) | Inputs: `truth_branch_ref`, `proposal_path`, `behavior_tests_paths`, `test_results`, `qa_walkthrough_report_path`, `qa_screenshots_dir`, `deliverable_paths` | Model: `gpt-medium`
 
-- `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for test-contract review (NOT production implementation, NOT shippable-prototype proof bundles).
-  File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
+- `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for production behavior-test contract review (NOT production implementation, NOT shippable-prototype experiment-evidence bundles).
+  File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `prototype_evidence_review_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
 
 - `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-medium`
@@ -414,8 +417,9 @@ All branch work runs in a git worktree; the central checkout is read-only / bran
 - [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md) - unconditional branch-work isolation and central-checkout read-state rule
 - [`~/ai/conventions/no-backwards-compatibility.md`](conventions/no-backwards-compatibility.md)
 - [`~/ai/conventions/no-deferred-stubs.md`](conventions/no-deferred-stubs.md)
+- [`~/ai/conventions/behavioral-proof.md`](conventions/behavioral-proof.md) - expected-versus-observed experiment evidence and review authority boundaries
 - [`~/ai/conventions/gate-ownership.md`](conventions/gate-ownership.md) - human vs. model gate owners
-- [`~/ai/conventions/prototype-review.md`](conventions/prototype-review.md) - prototype review focus: E2E + outcomes + dossier verdict, not source code
+- [`~/ai/conventions/prototype-review.md`](conventions/prototype-review.md) - prototype review focus: executed experiment evidence, outcomes, and dossier verdict, not source code
 - [`~/ai/conventions/prototype-pending-tests.md`](conventions/prototype-pending-tests.md) - prototype-pending marker reason and runner mapping for fail-expected prototype-test PRs
 - [`~/ai/conventions/proposer-critic-pattern.md`](conventions/proposer-critic-pattern.md) - proposer/critic decomposition for risk-gated implementation
 - [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md) - cue routing precedence

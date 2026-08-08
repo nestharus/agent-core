@@ -22,7 +22,7 @@ PATHS_BY_CHECK = {
         "agents/prototype-validation-contract-validator.md",
         "agents/prototype-validation-screenshot-uploader.md",
         "agents/prototype-validation-packager.md",
-        "agents/prototype-validation-proof-bundle-adapter.md",
+        "agents/prototype-validation-evidence-bundle-adapter.md",
     ],
     "workflow_links": [
         "workflows/build-prototype.md",

@@ -31,7 +31,7 @@ REQUIRED_CONTRACT_ANCHORS = [
     "validation_gate_contract",
     "rca_handback_contract",
     "screenshot_url_manifest_contract",
-    "proof_bundle_contract",
+    "experiment_evidence_bundle_contract",
     "artifact_cleanup_contract",
 ]
 

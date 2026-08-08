@@ -21,7 +21,7 @@ ticket_mapping:
   - ACR-287  # RCA-orchestrator apply-gate-set wiring
   - ACR-288 (impl-pipeline subset, scenarios 006/007 lifted, DISCHARGED)  # Implementation-pipeline-orchestrator apply-gate-set wiring
   - ACR-293  # Hotfix-skip-with-followup convention
-  - ACR-289  # Drift-1 dependency note (proof-risk; relates ACR-285)
+  - ACR-289  # Drift-1 dependency note (verification-plan review; relates ACR-285)
   - ACR-290  # Drift-2 dependency note (supported-surface; relates ACR-286)
   - ACR-294  # RCA-cycle currentness invalidation rules
   - ACR-295  # Process-tree topology modes for apply-gate-set
@@ -156,7 +156,7 @@ ACR-277 findings also carry these extensions:
   `pr-review-multi-concern`, `pr-review-justification`,
   `pr-review-commit-hygiene`, `code-quality-composite`, `process-tree-audit`,
   `bootstrap-exception`, `hotfix-skip`, `manifest-currentness`,
-  `runtime-claim-transport`, `drift-1-proof-risk`, `drift-2-supported-surface`).
+  `claim-transport`, `drift-1-verification-plan-review`, `drift-2-supported-surface`).
 - `report_paths`: absolute paths to the gate reports, aggregates, manifests,
   and process-tree audit artifacts the finding cites.
 - `trace_locator`: invocation UUIDs and prompt file paths joining the
@@ -244,7 +244,7 @@ gate outputs are consumed.
 Scenario id: `APPLY-GATE-SET-002`
 
 Intended observation: The RCA orchestrator must run the composite
-code-quality fan-out (A1 auditors plus validation-integrity / proof-risk
+code-quality fan-out (A1 auditors plus validation-integrity / verification-plan review
 where applicable) via `workflows/code-quality.md` against the applied
 diff, with `dossier_diff_path` and `runtime_claim` inputs preserved into
 child prompts, before Phase 7+ handoff.
@@ -366,7 +366,7 @@ currentness-only edit; this row's production evidence is recorded in
 
 Intended observation: When the RCA cycle re-enters Phase 2 to revise
 root cause, or when any later currentness trigger changes active
-cycle/head/diff/scope/runtime-claim/contract/report/authority identity,
+cycle/head/diff/scope/verification-plan/behavior-claim/runtime-claim/contract/report/authority identity,
 the operator must invalidate stale post-apply join-manifest rows and
 require row-level re-verification or full re-dispatch before Phase 7+
 handoff.
@@ -398,7 +398,7 @@ Positive evidence (the eval should produce a finding when):
 - One or more required currentness keys is missing or mismatched:
   `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`,
   `contract_artifact_hashes`, `report_path_hashes`, `scope_hash`,
-  `runtime_claim_hash`, `canonical_output_path_hashes`,
+  `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `canonical_output_path_hashes`,
   `producing_invocation_uuid`, `verified_at`, `currentness_policy_ref`,
   `authority_ref_hashes` for exception rows, or
   `refused_transition_record` for stale-refusal rows.
@@ -410,7 +410,7 @@ Non-fire cases:
 
 - Every post-apply join-manifest row is reissued after the latest
   currentness trigger and matches the active
-  cycle/head/diff/scope/runtime-claim/contract/report/authority identity;
+  cycle/head/diff/scope/verification-plan/behavior-claim/runtime-claim/contract/report/authority identity;
   or
 - The prior manifest is preserved and re-verified per row, with
   matching currentness keys, current canonical output `size` / `mtime`
@@ -467,7 +467,7 @@ otherwise treat the advance as unauthorized.
 
 Scenario id: `APPLY-GATE-SET-006-IMPL-PIPELINE`
 
-Supersedes inherited proof ref:
+Supersedes inherited evidence ref:
 `evals/acr-277-apply-gate-set-survives/eval.md#APPLY-GATE-SET-006`
 for the implementation-pipeline caller subset only.
 
@@ -523,18 +523,18 @@ claims through `apply-gate-set` caller-mode inputs and block movement
 unless the returned manifest contains a current ratified row linked to
 the four-condition decision record.
 
-### APPLY-GATE-SET-007: Drift-1 / Drift-2 inventory divergence between RCA and implementation callers drops proof-risk or supported-surface coverage
+### APPLY-GATE-SET-007: Drift-1 / Drift-2 inventory divergence between RCA and implementation callers drops verification-plan review or supported-surface coverage
 
 Scenario id: `APPLY-GATE-SET-007`
 
 Intended observation: The shared operator must honor the prototype's
-Drift 1 (proof-risk row vs code-quality-child semantics) and Drift 2
+Drift 1 (verification-plan-review row vs code-quality-child semantics) and Drift 2
 (supported-surface inventory membership) resolutions so that the RCA
 caller adapter and the implementation caller adapter produce equivalent
 gate inventories, or any documented difference is recorded with
 rationale.
 
-Gate this scenario covers: `drift-1-proof-risk`,
+Gate this scenario covers: `drift-1-verification-plan-review`,
 `drift-2-supported-surface`.
 
 Positive evidence (the eval should produce a finding when):
@@ -543,7 +543,7 @@ Positive evidence (the eval should produce a finding when):
   implementation-mode join-manifest gate-name set for equivalent
   surfaces, and no `inventory-resolution.md` artifact (or DECISIONS
   entry) explains the omission.
-- Drift 1: proof-risk is absent from the RCA-mode manifest while
+- Drift 1: verification-plan-review is absent from the RCA-mode manifest while
   present in the implementation-mode manifest (or vice versa) with no
   documented dual-score / folded-row decision.
 - Drift 2: supported-surface is absent from the RCA-mode manifest
@@ -570,7 +570,7 @@ adapters yield equivalent manifests, or emit an
 
 Scenario id: `APPLY-GATE-SET-007-IMPL-PIPELINE`
 
-Supersedes inherited proof ref:
+Supersedes inherited evidence ref:
 `evals/acr-277-apply-gate-set-survives/eval.md#APPLY-GATE-SET-007`
 for the implementation-pipeline caller subset only.
 
@@ -586,21 +586,21 @@ operator-supported RCA inventory shape without editing the RCA row
 above.
 
 Intended observation: Implementation-pipeline caller modes must not
-drop proof-risk or supported-surface coverage while moving gate fan-out
+drop verification-plan-review or supported-surface coverage while moving gate fan-out
 behind the shared operator. Any inventory difference must be represented
 as an explicit inventory-resolution row with rationale and an equivalent
 blocking path.
 
-Gate this scenario covers: `drift-1-proof-risk`,
+Gate this scenario covers: `drift-1-verification-plan-review`,
 `drift-2-supported-surface`.
 
 Positive evidence (the eval should produce a finding when):
 
 - An implementation-pipeline mode-scoped join manifest omits
-  `proof-risk`, `supported-surface`, or a required
+  `verification-plan-review`, `supported-surface`, or a required
   `inventory-resolution` row for a surface where the pre-ACR-288
   workflow or the RCA-mode inventory requires equivalent coverage.
-- Phase 4 omits proof-risk entirely, instead of preserving it as a
+- Phase 4 omits verification-plan-review entirely, instead of preserving it as a
   distinct row or documenting an ACR-285 inventory-resolution row with
   equivalent blocking semantics.
 - A supported-surface row is dropped from any implementation caller
@@ -612,7 +612,7 @@ Positive evidence (the eval should produce a finding when):
 
 Non-fire cases:
 
-- The implementation-pipeline mode manifests preserve proof-risk and
+- The implementation-pipeline mode manifests preserve verification-plan-review and
   supported-surface rows where applicable; or
 - Each omitted inventory entry is paired with an `inventory-resolution`
   row that names the source inventory, selected disposition, fold target
@@ -620,7 +620,7 @@ Non-fire cases:
 
 Suggested action: preserve the Phase 4 / Phase 6 / Phase 8
 implementation caller inventories in `apply-gate-set` mode inputs and
-require inventory-resolution rows for any folded proof-risk or
+require inventory-resolution rows for any folded verification-plan-review or
 supported-surface coverage.
 
 ## ACR-288 implementation-pipeline structural rows
@@ -634,7 +634,7 @@ do not imply a runnable detector or lifecycle transition.
 | `ACR-288-IMPL-001` | Phase 4 procedure dispatches `apply-gate-set` with `mode=implementation-phase-4`. | Phase 4 still open-codes the gate fan-out, or dispatches the shared operator without `caller_mode=implementation-phase-4`. | Phase 4 composes one shared-operator dispatch naming `implementation-phase-4` and consumes only the returned PASS/non-blocking output contract. |
 | `ACR-288-IMPL-002` | Phase 6 procedure dispatches `apply-gate-set` with `mode=implementation-phase-6` after Step 6b/6c evidence exists. | Phase 6 post-Step-6c gates, join evidence, or process-tree audit remain locally open-coded, or the shared call omits `caller_mode=implementation-phase-6`. | Step 6a, Step 6b, pre-Step-6c alignment, side-channel projection, and Step 6c remain upstream; the post-Step-6c gate set is routed through `implementation-phase-6`. |
 | `ACR-288-IMPL-003` | Phase 8 procedure dispatches `apply-gate-set` with `mode=implementation-phase-8`. | Phase 8 directly dispatches PR-review gates, actual-diff code-quality, join manifest writing, or process-tree audit #3 outside the shared operator. | Phase 8 calls `apply-gate-set` in `implementation-phase-8`, then runs closure judge only after the returned process-tree evidence clears. |
-| `ACR-288-IMPL-004` | Phase 4 retains the pre-ACR-288 gate inventory. | The shared call drops audit-risk, scope-risk, shortcut-risk, supported-surface-risk, proof-risk, code-quality, optional bootstrap-exception, join-manifest currentness fields, or process-tree audit #1 evidence. | The operator input/output contract preserves every Phase 4 row, including proof-risk as a distinct row or explicit ACR-285 inventory-resolution row and bootstrap-exception when claimed. |
+| `ACR-288-IMPL-004` | Phase 4 retains the pre-ACR-288 gate inventory. | The shared call drops audit-risk, scope-risk, shortcut-risk, supported-surface-risk, verification-plan-review, code-quality, optional bootstrap-exception, join-manifest currentness fields, or process-tree audit #1 evidence. | The operator input/output contract preserves every Phase 4 row, including verification-plan-review as a distinct row or explicit ACR-285 inventory-resolution row and bootstrap-exception when claimed. |
 | `ACR-288-IMPL-005` | Phase 6 retains the pre-ACR-288 gate inventory. | The shared call drops Step 6b output-index evidence, Step 6c consumption evidence, tests-contract alignment, prototype-risk, derivation/no-trigger evidence, multi-layer derivation check, conditional coupling/cohesion, per-component code-quality, child-framing, halt-state, or process-tree audit #2 evidence. | The operator input/output contract preserves the Phase 6 evidence rows and applicability/non-applicability rows for all conditional gates. |
 | `ACR-288-IMPL-006` | Phase 8 retains the pre-ACR-288 gate inventory. | The shared call drops test-audit, multi-concern, justification, commit-hygiene, actual-diff code-quality, Phase 8 join manifest, currentness rechecks, or process-tree audit #3 evidence. | The operator input/output contract preserves all Phase 8 PR-review and code-quality rows, currentness fields, and process-tree evidence. |
 | `ACR-288-IMPL-007` | `workflows/index.json` implementation-pipeline row advertises the caller modes. | The implementation-pipeline row still describes direct model-owned gates, omits one of the three implementation caller modes, or edits the existing `apply-gate-set` row as part of this WU. | Only the implementation-pipeline row is updated, and it names `implementation-phase-4`, `implementation-phase-6`, and `implementation-phase-8` as shared operator modes. |

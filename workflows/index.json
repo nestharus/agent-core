@@ -140,13 +140,13 @@
           "requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children"
         ],
         "inputs": [
-          "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition",
+          "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition",
           "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields",
           "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
         ],
         "non_goals": [
           "does not wire RCA or implementation-pipeline callers",
-          "does not replace PR-review, code-quality, process-tree, proof-risk, validation-integrity, readiness, or supported-surface gates",
+          "does not replace PR-review, code-quality, process-tree, verification-plan-review, validation-integrity, readiness, or supported-surface gates",
           "does not author eval specs, pytest tests, verifier scripts, hotfix-skip convention detail, or currentness invalidation rules"
         ],
         "orchestrator": "apply-gate-set",
@@ -214,7 +214,7 @@
         "expectations": [
           "uses unconstrained exploration to arrive at a concrete answer before imposing review discipline",
           "stabilizes the demonstrable state and organizes findings into a prototype dossier",
-          "runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene"
+          "runs prototype presentation checks for executed behavior-test evidence, one-question coherence, answer trace, and commit hygiene"
         ],
         "inputs": [
           "prototype question, project planning path, branch or worktree context, and any defer-source ticket",
@@ -248,7 +248,7 @@
         ],
         "inputs": [
           "repo_root, worktree_path, diff_path, touched_surfaces_path, scratch_dir, and planning_dir for pipeline-callable artifact layout",
-          "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, proof_plan_excerpt, runtime_claim, and wu_id",
+          "optional Phase 4 evidence: proposal_path, problem_map_path, risk_profile_path, verification_plan_excerpt, behavior_claim, runtime_claim, and wu_id",
           "required Phase 6 per-component evidence: code_quality_dispatch_dir, contract_path, proposal_path, worktree_path, component_slug, and component scope",
           "optional PR/RCA evidence: dossier_diff_path, decisions_path, runtime_artifact_evidence_path, and validation-surface context",
           "optional refs and inventories: base_ref, head_ref, changed_files_path, changed_functions_path, code_trace_paths, and code_quality_ref"
@@ -339,6 +339,7 @@
           "defaults to normal mode; review_first runs audit after Phase 0 and before Phase 2.5, while plug_existing_review validates a current audit bundle before Phase 3 consumes it",
           "defer-to-prototype carry-forward includes prototype-test PR URL, branch, test paths/node IDs, marker reason, and acceptance criterion: Remove the prototype-pending: markers and make these tests pass.",
           "resolves estimate mutation policy from the authoritative ticket-operator contract and requires verified write or policy-disabled no-write evidence before Phase 4",
+          "requires every Phase 3 proposal to expose Behavior claim, Experiment command or action, Expected observation, and Claim-experiment fit under one exact ## Verification plan section",
           "uses apply-gate-set caller modes implementation-phase-4, implementation-phase-6, and implementation-phase-8 for Phase 4/6/8 gate sets; human gates are limited to Phase 2.5 review and NEEDS_INPUT new-value questions",
           "keeps tests and product code separated between Phase 6b and Phase 6c invocations",
           "freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence",
@@ -500,7 +501,7 @@
       "workflow_dispatch_contract": {
         "expectations": [
           "keeps product code and behavior tests on the truth branch and eval scaffolding on the eval branch",
-          "gates each phase advance on contract-validator acceptance, behavior-test passage, QA walkthrough proof, and deep rebuild verification",
+          "gates each phase advance on contract-validator acceptance, recorded behavior-test results, QA walkthrough experiment evidence, and deep rebuild verification",
           "routes failing behavior tests through the light prototype RCA workflow and applies only RCA-supplied fixes"
         ],
         "inputs": [
@@ -522,8 +523,8 @@
         "orchestrator": "prototype-validation-orchestrator",
         "outputs": [
           "eval branch with compose, Dockerfile, README, and eval helper scripts",
-          "proof bundle covering behavior tests, QA walkthrough, deep rebuild, and package material",
-          "one proof-focused draft PR shipping the stabilized prototype"
+          "experiment-evidence bundle covering behavior tests, QA walkthrough, deep rebuild, and package material",
+          "one evidence-focused draft PR shipping the stabilized prototype"
         ]
       }
     },
@@ -536,17 +537,18 @@
         "expectations": [
           "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle",
           "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS",
-          "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts"
+          "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts",
+          "requires each Phase 3 fix decision to contain Behavior claim, Experiment command or action, Expected observation, and Claim-experiment fit under one exact ## Verification plan section"
         ],
         "inputs": [
           "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed",
           "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis",
           "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly",
-          "post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid"
+          "post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope plus distinct verification-plan/behavior-claim/runtime-claim refs and hashes, process_tree_path, and root_invocation_uuid"
         ],
         "non_goals": [
           "does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
-          "does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring",
+          "does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, verification-plan-review, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring",
           "does not make ticket comments canonical; comments are mirrors of file-backed gate evidence",
           "does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+"
         ],

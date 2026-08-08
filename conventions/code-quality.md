@@ -37,15 +37,15 @@ This section is an inventory catalog of the four A1 auditor modules that make up
 - `agents/function-classification-auditor.md` - A5.
 - `agents/push-pull-auditor.md` - A4.
 - `agents/validation-integrity-auditor.md` - ACR-254 validation-integrity critic for applicable PR diff and RCA dossier contexts.
-- `agents/proof-risk-auditor.md` - ACR-254 proof-risk critic for applicable proposal and RCA fix-decision contexts.
+- `agents/verification-plan-reviewer.md` - pre-execution reviewer for applicable proposal and RCA fix-decision verification plans.
 
 Workflows dispatch by reference to this list rather than by maintaining a separate canonical auditor inventory.
 
-### Active validation-integrity / proof-risk layer
+### Active validation-integrity / verification-plan-review layer
 
-ACR-254 is enforced by active operator dispatch, not by declarative convention text. The enforcement operators are `agents/validation-integrity-auditor.md` and `agents/proof-risk-auditor.md`; workflow callers select them through `workflows/code-quality.md`, `workflows/implementation-pipeline.md`, and RCA critic wiring when their evidence contexts apply.
+ACR-254 is enforced by active operator dispatch, not by declarative convention text. The enforcement operators are `agents/validation-integrity-auditor.md` and `agents/verification-plan-reviewer.md`; workflow callers select them through `workflows/code-quality.md`, `workflows/implementation-pipeline.md`, and RCA critic wiring when their evidence contexts apply. The reviewer assesses a proposed experiment and never claims that the experiment ran; behavioral-evidence terminology follows `conventions/behavioral-proof.md`.
 
-The acceptance criteria for these operators are the WRITE eval specs at `evals/validation-integrity-auditor/eval.md`, `evals/proof-risk-auditor/eval.md`, and the workflow-wiring coverage in `evals/acr-254-workflow-wiring/eval.md`. This convention names the active layer and its composition with the auditor set; the operators define how findings are detected, ratified, and reported.
+The acceptance criteria for these operators are the WRITE eval specs at `evals/validation-integrity-auditor/eval.md`, `evals/verification-plan-reviewer/eval.md`, and the workflow-wiring coverage in `evals/acr-254-workflow-wiring/eval.md`. WRITE specs are acceptance intent rather than executed observations. This convention names the active layer and its composition with the auditor set; the operators define how findings are detected, ratified, and reported.
 
 The LOW-only disposition policy, touched-file ownership, and bootstrap exception below still govern pipeline-callable aggregate results. A non-LOW active-layer child verdict is preserved by aggregation and is not converted into passive advice by this convention.
 
@@ -254,7 +254,7 @@ This convention is canonical for intrinsic-surface declarations. `~/ai/agents/co
 
 ## Adapter-declaration examples
 
-- LOW: `agents/prototype-validation-proof-bundle-adapter.md` is declared with `role: adapter` and `Translates:` containing `prototype-validation-proof-bundle` and `agents/prototype-pr-writer.md`. The component bridges 2 stable contracts, and all external references are subordinate to those surfaces.
+- LOW: `agents/prototype-validation-evidence-bundle-adapter.md` is declared with `role: adapter` and bridges the stable prototype experiment-evidence bundle and `agents/prototype-pr-writer.md` input contracts. All external references are subordinate to those surfaces.
 - HIGH: `agents/release-and-ticket-sync.md` declares `role: adapter` but lists 6 unrelated contracts in `Translates:`, or reaches Slack, Jira, CI, release manifests, code-quality reports, and workflow internals without declaring those surfaces. The adapter declaration does not apply as LOW because the declaration exceeds `N = 5` or because undeclared external contracts are reached.
 
 ## Intrinsic-surface examples

@@ -9,7 +9,7 @@ workflow_dispatch_contract:
   expectations:
     - "uses unconstrained exploration to arrive at a concrete answer before imposing review discipline"
     - "stabilizes the demonstrable state and organizes findings into a prototype dossier"
-    - "runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene"
+    - "runs prototype presentation checks for executed behavior-test evidence, one-question coherence, answer trace, and commit hygiene"
   outputs:
     - "dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md"
     - "recommended downstream tickets, roadmap revisions, or scope-cut decisions"
@@ -45,7 +45,7 @@ prototype-orchestrator
 
 - uses unconstrained exploration to arrive at a concrete answer before imposing review discipline
 - stabilizes the demonstrable state and organizes findings into a prototype dossier
-- runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene
+- runs prototype presentation checks for executed behavior-test evidence, one-question coherence, answer trace, and commit hygiene
 
 ### Outputs
 
@@ -134,8 +134,8 @@ The hacking phase ends with the prototype branch in a messy state. P2 puts a kno
 - **Goal**: get the working state to compile / run / pass any tests that exist on the surface. The state is reproducible.
 - **What to fix**: actual breakage that prevents the answer from being demonstrated — failing imports, missing fixtures, missing config files, environment variables that exist in the prototyper's shell but not in the dossier.
 - **What NOT to fix**: stylistic issues, lint warnings, suboptimal code, missing tests for code that wasn't part of the answer, refactor opportunities. Those land later.
-- **Tests**: write the minimum tests that **demonstrate the answer**. Not characterization tests, not regression tests — proof tests. "Run this test, it passes, that's the evidence the answer is correct." Prototype proof tests include E2E tests when the proved behavior is end-to-end, and they are durable handoff artifacts under `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`, not throwaway prototype evidence. These tests go into the dossier's `evidence/` and, when published through the prototype-test PR, carry forward into the spawned implementation tickets.
-- Proof-test authors follow `~/ai/conventions/testing.md` so the carried-forward contract survives downstream setup changes.
+- **Tests**: write and execute the minimum prototype behavior tests that directly exercise the answer. Record the exact command or action, target, expected observation, actual observation, runner status, and relevant output per `conventions/behavioral-proof.md`. Include E2E tests when the claimed behavior is end-to-end. These records go into the dossier's `evidence/`; future fail-expected production forms are separate pending production behavior-test contracts under `~/ai/conventions/prototype-pending-tests.md`.
+- Behavior-test authors follow `~/ai/conventions/testing.md` so both the executed prototype evidence and carried-forward production contract survive downstream setup changes.
 - **Branch state**: at end of P2, the prototype branch is at a commit you'd be willing to share for someone else to reproduce the answer. It is NOT necessarily a commit you'd merge.
 - **Gate policy**: still none. P2 is a stabilization step, not a review.
 
@@ -171,14 +171,14 @@ Render those fields in each entry as:
 - `**Estimate Rationale:** <one sentence citing prototype evidence>`
 - `**Confidence:** high | medium | low`
 
-#### P3.4 — Proof-test audit (analog of PR-review test-audit)
+#### P3.4 — Prototype evidence review (analog of PR-review test-audit)
 
-PR-review's test-audit verifies the test set covers the proposal's test-intent track. Prototypes have no proposal, but they DO have an answer the dossier claims. Proof-test audit verifies the proof tests in `dossier/evidence/` actually demonstrate the answer.
+PR-review's test-audit verifies the test set covers the proposal's test-intent track. Prototypes have no proposal, but they DO have an answer the dossier claims. Prototype evidence review assesses whether the executed behavior-test records in `dossier/evidence/` directly support the answer. The model review consumes evidence; it is not the experiment that produced the observations.
 
-- Dispatch a `gpt-high` reviewer with the dossier's `answer.md` (claimed answer + evidence pointers) and the proof tests written during P2 stabilization.
-- For each evidence pointer in `answer.md`, the reviewer verifies a corresponding proof test exists, the test is scoped to the claimed behavior, and the test passes against the post-stabilize branch.
-- Verdict: `LOW` (every evidence pointer has a passing proof test scoped to the claim) / `MEDIUM` (one or two pointers covered by adjacent tests rather than direct ones) / `HIGH` (a claim is asserted by no test, OR a test does not actually exercise the claimed behavior — the answer is unproven).
-- Output: `dossier/proof-test-audit.md`. A HIGH verdict halts P3 — the dossier cannot claim an answer the tests don't demonstrate.
+- Dispatch a `gpt-high` reviewer with the dossier's `answer.md` and the executed prototype behavior-test records from P2 stabilization.
+- For each evidence pointer, verify the record identifies the command or action, target, expected observation, observed result, status/output, and direct claim fit.
+- Verdict: `LOW` when every pointer has direct passing experiment evidence; `MEDIUM` when adjacent evidence supports only an explicitly narrower claim; `HIGH` when a claim lacks an executed record or relies on a proxy while claiming broader behavior.
+- Output: `dossier/prototype-evidence-review.md`. A HIGH verdict halts P3. A LOW verdict approves the supplied evidence set for dossier use and does not itself establish behavior.
 
 #### P3.5 — One-question check (analog of PR-review multi-concern)
 
@@ -208,14 +208,14 @@ Write `dossier/branch-disposition.md` with the recommendation: merge / cherry-pi
 
 #### P3 gate
 
-ONE human gate at the end of P3 — per [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md), the user reviews proof tests in `dossier/evidence/`, demonstrated outcomes (what the prototype demonstrates, cost, what worked, and what broke), and dossier verdict support: whether `answer.md`, `branch-disposition.md`, and `spawned-tickets.md` are supportable by the evidence. The human is not reviewing prototype source code. The user either approves or asks for revisions. Revisions are handled like Phase 2.5 in the implementation pipeline: dispatch a revision pass against the specific dossier section, do not re-do P1-P2. If P3.4 / P3.5 / P3.6 returned a halting verdict, the gate cannot present "approve" as an option until the halting condition is resolved.
+ONE human gate at the end of P3 — per [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md), the user reviews executed behavior-test evidence in `dossier/evidence/`, demonstrated outcomes (what the prototype demonstrates, cost, what worked, and what broke), and dossier verdict support: whether `answer.md`, `branch-disposition.md`, and `spawned-tickets.md` are supportable by the evidence. The human is not reviewing prototype source code. The user either approves or asks for revisions. Revisions are handled like Phase 2.5 in the implementation pipeline: dispatch a revision pass against the specific dossier section, do not re-do P1-P2. If P3.4 / P3.5 / P3.6 returned a halting verdict, the gate cannot present "approve" as an option until the halting condition is resolved.
 
 ### Phase P4 — Hand-off
 
 The prototype produces tickets and updates downstream artifacts. Then it's done.
 
 - **File spawned tickets**: dispatch the project ticket-system operator for each entry in `dossier/spawned-tickets.md`. Jira is the default path: dispatch `jira-operator` (`task=create`) and write the integer `story_point_estimate` to Jira `customfield_10016`. When the ticket-system is Linear, write the integer `story_point_estimate` to the Linear `estimate` field. The rendered ticket description must preserve `Story Point Estimate:`, `Estimate Rationale:`, and `Confidence:` lines from the dossier entry. Apply project label conventions (`hardening` for risk-reduction tickets per `~/projects/<name>/AGENTS.md`). Capture each new key + URL in the dossier.
-- **P4 prototype-test PR publication**: after you file spawned tickets, finalize marker reasons on the prototype-test branch with real ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md` § `Carry-forward to implementation`. Push the prototype-test branch. Dispatch `prototype-test-pr-writer` with `prototype_test_branch_ref`, the dossier answer, proof-test audit, spawned tickets, `test_manifest_path`, pending marker convention, implementation ticket URLs, base branch, repo root, and output path. Verify the writer produced title/body files, then run `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`. Capture URL evidence for the draft PR. Write the URL, branch, test paths/node IDs, marker reason format, and ticket mapping into `dossier/answer.md` and `dossier/spawned-tickets.md` without changing the existing dossier file list. Then update each spawned implementation ticket with the carry-forward payload fields `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`; the acceptance criterion must require marker removal, passing the inherited proof tests, and preserving original assertions unless a traceable strictly stronger equivalent supersession is recorded. The prototype-test PR and `dossier/test-publication-manifest.md` are the durable transfer mechanism whether the prototype branch is later merged, cherry-picked, kept, or discarded.
+- **P4 prototype-test PR publication**: after you file spawned tickets, finalize marker reasons on the prototype-test branch with real ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md` § `Carry-Forward To Implementation`. Push the prototype-test branch. Dispatch `prototype-test-pr-writer` with `prototype_test_branch_ref`, the dossier answer, `prototype_evidence_review_path`, spawned tickets, `test_manifest_path`, pending marker convention, implementation ticket URLs, base branch, repo root, and output path. Verify the writer produced title/body files, then run `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`. Capture URL evidence for the draft PR. Write the URL, branch, test paths/node IDs, marker reason format, and ticket mapping into `dossier/answer.md` and `dossier/spawned-tickets.md` without changing the existing dossier file list. Then update each spawned implementation ticket with the carry-forward payload fields `prototype_test_pr_url`, `prototype_test_branch`, `test_paths_or_node_ids`, `marker_reason`, `ticket_mapping`, and `implementation_acceptance_criterion`; the acceptance criterion must require marker removal, passing the inherited pending production behavior tests, and preserving original assertions unless a traceable strictly stronger equivalent supersession is recorded. The prototype-test PR and `dossier/test-publication-manifest.md` are the durable transfer mechanism whether the prototype branch is later merged, cherry-picked, kept, or discarded.
 - **Update project risk profile**: append the prototype's risk-profile entries to `<project>/planning/risk-profile.md` per `~/ai/conventions/risk-profile.md` § Project-level profile.
 - **Apply branch disposition**:
   - **merge**: the prototype branch is rare-but-valid feature work. Run it through the implementation pipeline starting at Phase 6 (the test-and-code structure already exists). The dossier is the proposal-equivalent.
@@ -265,7 +265,7 @@ Implementation WUs spawned from a prototype dossier should:
 
 - Reference the dossier in the JIRA description (path or summary excerpt — local paths are not externally citable, so summarize).
 - Inherit the dossier's risk profile as a starting point; Phase 2.5 may revise scores but should cite dossier evidence to do so.
-- Inherit prototype proof tests as the production E2E/proof coverage for the proved behavior. Run them verbatim unless the implementation records a strictly stronger equivalent supersession in the manifest, spawned ticket payload, or Phase 6 Step 6b output index.
+- Inherit pending production behavior-test contracts as production behavior coverage. Run them verbatim and remove their markers unless the implementation records a strictly stronger equivalent supersession with passing production experiment evidence in the manifest, spawned-ticket payload, or Phase 6 Step 6b output index.
 - Stay narrower than the prototype if the prototype's answer included scope-cut. The dossier's `spawned-tickets.md` is the canonical decomposition; the implementation WUs should not re-aggregate.
 
 ## Anti-pattern

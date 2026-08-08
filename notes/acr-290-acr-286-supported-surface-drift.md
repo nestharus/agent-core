@@ -26,7 +26,7 @@ Canonical row schema: `/home/nes/ai/agents/apply-gate-set.md:258-277`.
 
 Required fields:
 
-- `inventory_name`: `proof-risk` or `supported-surface`
+- `inventory_name`: `verification-plan-review` or `supported-surface`
 - `tracker_ref`: `ACR-285` or `ACR-286`
 - `source_inventory_refs`
 - `caller_mode`
@@ -96,5 +96,5 @@ This artifact remains active until ACR-286 ships its resolution document and the
 - Currentness convention: `/home/nes/ai/conventions/apply-gate-set-currentness.md:121`
 - Implementation caller references: `/home/nes/ai/agents/implementation-pipeline-orchestrator.md:510-516`, `/home/nes/ai/agents/implementation-pipeline-orchestrator.md:577-578`, `/home/nes/ai/agents/implementation-pipeline-orchestrator.md:608-614`, `/home/nes/ai/agents/implementation-pipeline-orchestrator.md:684-690`
 - RCA caller references: `/home/nes/ai/agents/rca-orchestrator.md:86-137`
-- Sibling ACR-289 note: `notes/acr-289-acr-285-proof-risk-drift.md`
-- Sibling ACR-289 source path: `/home/nes/ai/notes/acr-289-acr-285-proof-risk-drift.md`
+- Sibling ACR-289 note: `notes/acr-289-acr-285-verification-plan-review-drift.md`
+- Sibling ACR-289 source path: `/home/nes/ai/notes/acr-289-acr-285-verification-plan-review-drift.md`
