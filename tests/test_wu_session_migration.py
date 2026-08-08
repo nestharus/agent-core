@@ -2378,142 +2378,157 @@ def test_feature_runtime_recovers_interrupted_route_index_transaction(tmp_path: 
     assert json.loads(case["direct_index_path"].read_text())["sessions"] == []
 
 
-def test_runtime_request_path_aliases_and_symlinks_fail_before_mutation(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    expected_errors = {
-        "lexical-alias": "runtime request manifest_path must be normalized and absolute",
-        "symlink": "symlink path component is forbidden",
-        "path-escape": "runtime manifest, planning root, and active index are not canonical",
-    }
-    for mutation in ("lexical-alias", "symlink", "path-escape"):
-        case = _runtime_case(tmp_path / mutation, "phase7-upsert")
-        request = json.loads(case["request_path"].read_text())
-        extra_targets: list[Path] = []
-        if mutation == "lexical-alias":
-            request["manifest_path"] = str(
-                case["manifest_path"].parent
-                / ".."
-                / case["manifest_path"].parent.name
-                / "session.json"
-            )
-        elif mutation == "symlink":
-            alias_project = tmp_path / mutation / "project-link"
-            alias_project.symlink_to(case["planning_root"].parent, target_is_directory=True)
-            alias_root = alias_project / "planning"
-            request["planning_root"] = str(alias_root)
-            request["manifest_path"] = str(
-                alias_root / case["manifest_path"].parent.name / "session.json"
-            )
-            request["index_path"] = str(alias_root / "sessions.active-wake.json")
-        else:
-            escaped_manifest = tmp_path / mutation / "outside" / "session.json"
-            escaped_manifest.parent.mkdir()
-            request["manifest_path"] = str(escaped_manifest)
-            extra_targets.append(escaped_manifest)
-        request["input_set_sha256"], request["payload_sha256"] = (
-            MIGRATION.runtime_request_digests(request)
-        )
-        _write_json(case["request_path"], request)
-
-        addressed_targets = [Path(request["manifest_path"]), Path(request["index_path"])]
-        watched_targets = [
-            case["manifest_path"],
-            case["index_path"],
-            *addressed_targets,
-            *extra_targets,
-        ]
-        before = {
-            path: path.read_bytes() if path.exists() else None for path in watched_targets
-        }
-
-        assert MIGRATION.main(
-            [case["operation"], "--request", str(case["request_path"])]
-        ) == 2
-        assert expected_errors[mutation] in capsys.readouterr().err
-        assert {
-            path: path.read_bytes() if path.exists() else None for path in watched_targets
-        } == before
-        assert not MIGRATION._journal_path().exists()
-        assert not _transaction_artifacts(watched_targets)
-
-
-def test_runtime_request_digests_allowlists_and_exact_row_requirements_fail_before_mutation(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-):
-    refused_cases: list[tuple[dict[str, Any], str]] = []
-
-    input_digest = _runtime_case(tmp_path / "input-digest", "phase7-upsert")
-    request = json.loads(input_digest["request_path"].read_text())
-    request["input_set_sha256"] = "0" * 64
-    _write_json(input_digest["request_path"], request)
-    refused_cases.append((input_digest, "runtime request input-set digest mismatch"))
-
-    payload_digest = _runtime_case(tmp_path / "payload-digest", "phase7-upsert")
-    request = json.loads(payload_digest["request_path"].read_text())
-    request["payload_sha256"] = "0" * 64
-    _write_json(payload_digest["request_path"], request)
-    refused_cases.append((payload_digest, "runtime request payload digest mismatch"))
-
-    forbidden_field = _runtime_case(tmp_path / "forbidden-field", "phase9-update")
-    request = json.loads(forbidden_field["request_path"].read_text())
-    request["replacement_manifest"]["ticket_id"] = "AGE-OTHER"
-    request["input_set_sha256"], request["payload_sha256"] = (
-        MIGRATION.runtime_request_digests(request)
-    )
-    _write_json(forbidden_field["request_path"], request)
-    refused_cases.append(
+@pytest.mark.parametrize(
+    ("mutation", "expected_error"),
+    [
         (
-            forbidden_field,
-            "phase9-update changes forbidden manifest fields",
+            "lexical-alias",
+            "runtime request manifest_path must be normalized and absolute",
+        ),
+        ("symlink", "symlink path component is forbidden"),
+        (
+            "path-escape",
+            "runtime manifest, planning root, and active index are not canonical",
+        ),
+    ],
+    ids=["lexical-alias", "symlink", "path-escape"],
+)
+def test_runtime_request_path_aliases_and_symlinks_fail_before_mutation(
+    mutation: str,
+    expected_error: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    case = _runtime_case(tmp_path / mutation, "phase7-upsert")
+    request = json.loads(case["request_path"].read_text())
+    extra_targets: list[Path] = []
+    if mutation == "lexical-alias":
+        request["manifest_path"] = str(
+            case["manifest_path"].parent
+            / ".."
+            / case["manifest_path"].parent.name
+            / "session.json"
         )
-    )
+    elif mutation == "symlink":
+        alias_project = tmp_path / mutation / "project-link"
+        alias_project.symlink_to(case["planning_root"].parent, target_is_directory=True)
+        alias_root = alias_project / "planning"
+        request["planning_root"] = str(alias_root)
+        request["manifest_path"] = str(
+            alias_root / case["manifest_path"].parent.name / "session.json"
+        )
+        request["index_path"] = str(alias_root / "sessions.active-wake.json")
+    else:
+        escaped_manifest = tmp_path / mutation / "outside" / "session.json"
+        escaped_manifest.parent.mkdir()
+        request["manifest_path"] = str(escaped_manifest)
+        extra_targets.append(escaped_manifest)
+    _resign_runtime_request(case["request_path"], request)
 
-    for operation in ("phase9-update", "resumer-update", "resumer-close"):
-        missing_row = _runtime_case(tmp_path / f"missing-row-{operation}", operation)
+    addressed_targets = [Path(request["manifest_path"]), Path(request["index_path"])]
+    watched_targets = [
+        case["manifest_path"],
+        case["index_path"],
+        *addressed_targets,
+        *extra_targets,
+    ]
+    before = {
+        path: path.read_bytes() if path.exists() else None for path in watched_targets
+    }
+
+    assert MIGRATION.main(
+        [case["operation"], "--request", str(case["request_path"])]
+    ) == 2
+    assert expected_error in capsys.readouterr().err
+    assert {
+        path: path.read_bytes() if path.exists() else None for path in watched_targets
+    } == before
+    assert not MIGRATION._journal_path().exists()
+    assert not _transaction_artifacts(watched_targets)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "operation", "expected_error"),
+    [
+        ("input-digest", "phase7-upsert", "runtime request input-set digest mismatch"),
+        ("payload-digest", "phase7-upsert", "runtime request payload digest mismatch"),
+        (
+            "forbidden-field",
+            "phase9-update",
+            "phase9-update changes forbidden manifest fields",
+        ),
+        (
+            "missing-row",
+            "phase9-update",
+            "runtime active-row identity is missing or duplicated",
+        ),
+        (
+            "missing-row",
+            "resumer-update",
+            "runtime active-row identity is missing or duplicated",
+        ),
+        ("missing-row", "resumer-close", "resumer-close requires one exact active row"),
+    ],
+    ids=[
+        "input-digest",
+        "payload-digest",
+        "forbidden-field",
+        "missing-row-phase9-update",
+        "missing-row-resumer-update",
+        "missing-row-resumer-close",
+    ],
+)
+def test_runtime_request_digests_allowlists_and_exact_row_requirements_fail_before_mutation(
+    mutation: str,
+    operation: str,
+    expected_error: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    case = _runtime_case(tmp_path / f"{mutation}-{operation}", operation)
+    request = json.loads(case["request_path"].read_text())
+    if mutation == "input-digest":
+        request["input_set_sha256"] = "0" * 64
+        _write_json(case["request_path"], request)
+    elif mutation == "payload-digest":
+        request["payload_sha256"] = "0" * 64
+        _write_json(case["request_path"], request)
+    elif mutation == "forbidden-field":
+        request["replacement_manifest"]["ticket_id"] = "AGE-OTHER"
+        _resign_runtime_request(case["request_path"], request)
+    else:
         empty_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": []}
-        _write_json(missing_row["index_path"], empty_index)
+        _write_json(case["index_path"], empty_index)
         replacement_index = (
-            empty_index
-            if operation == "resumer-close"
-            else missing_row["replacement_index"]
+            empty_index if operation == "resumer-close" else case["replacement_index"]
         )
         _write_runtime_request(
-            missing_row["request_path"],
+            case["request_path"],
             operation,
-            missing_row["planning_root"],
-            missing_row["manifest_path"],
-            missing_row["index_path"],
-            missing_row["replacement_manifest"],
+            case["planning_root"],
+            case["manifest_path"],
+            case["index_path"],
+            case["replacement_manifest"],
             replacement_index,
             _row_identity(
                 _expected_active_row(
-                    missing_row["replacement_manifest"], missing_row["manifest_path"]
+                    case["replacement_manifest"], case["manifest_path"]
                 )
             ),
         )
-        expected_error = (
-            "resumer-close requires one exact active row"
-            if operation == "resumer-close"
-            else "runtime active-row identity is missing or duplicated"
-        )
-        refused_cases.append((missing_row, expected_error))
 
-    for case, expected_error in refused_cases:
-        targets = [case["manifest_path"], case["index_path"]]
-        before = {path: path.read_bytes() if path.exists() else None for path in targets}
+    targets = [case["manifest_path"], case["index_path"]]
+    before = {path: path.read_bytes() if path.exists() else None for path in targets}
 
-        assert MIGRATION.main(
-            [case["operation"], "--request", str(case["request_path"])]
-        ) == 2
-        assert expected_error in capsys.readouterr().err
-        assert {
-            path: path.read_bytes() if path.exists() else None for path in targets
-        } == before
-        assert not MIGRATION._journal_path().exists()
-        assert not _transaction_artifacts(targets)
+    assert MIGRATION.main(
+        [case["operation"], "--request", str(case["request_path"])]
+    ) == 2
+    assert expected_error in capsys.readouterr().err
+    assert {
+        path: path.read_bytes() if path.exists() else None for path in targets
+    } == before
+    assert not MIGRATION._journal_path().exists()
+    assert not _transaction_artifacts(targets)
 
 
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
