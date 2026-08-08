@@ -2465,6 +2465,7 @@ def _validate_pre_pr_history(value: Any) -> list[Mapping[str, Any]]:
 
 
 def _normalize_route_text(value: str) -> str:
+    # Route and phase protocol tokens are ASCII; avoid broadening them via Unicode folding.
     folded = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
     return re.sub(r"[\s_-]+", " ", folded).strip()
 
