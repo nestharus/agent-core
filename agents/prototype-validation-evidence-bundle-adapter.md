@@ -69,7 +69,8 @@ write PR prose itself. It transports already-recorded evidence.
 - `BLOCKED:experiment-evidence-bundle-unreadable`: the input is absent,
   unreadable, malformed, or missing recorded experiment identities.
 - `BLOCKED:missing-pr-writer-input`: one of the seven anchors cannot be resolved.
-- `BLOCKED:prototype-pr-writer-failed`: writer dispatch produces no title/body.
+- `BLOCKED:prototype-pr-writer-failed`: writer dispatch produces neither
+  title/body paths nor a PR URL.
 - `NEEDS_INPUT:<question_artifact>`: multiple caller-owned PR targets or evidence
   sources remain plausible after reading the bundle.
 
