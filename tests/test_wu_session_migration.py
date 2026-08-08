@@ -605,10 +605,13 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
     _write_json(
         cold_start_path,
         {
-            "schema": "agent-question-answer-v1",
+            "schema_version": 1,
+            "kind": "agent_answer",
             "question_id": "age-260-cold-start",
-            "owner": "user",
-            "selected_option": "Proceed without a baseline estimate",
+            "answer": {
+                "selected_option_ids": ["proceed-without-baseline-estimate"],
+                "confirmed": True,
+            },
         },
     )
     verification_path = scratch_dir / "ticket-operations" / "estimate-readback.json"
