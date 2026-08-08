@@ -20,6 +20,7 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 - `workflow_index/` — deterministic generator for `workflows/index.json` from YAML frontmatter in `workflows/*.md`. **Status: implemented; see `workflow_index/README.md`.**
 - `feature_route_manifest.py` — strict normalization and validation of feature route sources. **Status: implemented; see `feature-route-manifest/README.md`.**
 - `operational_contracts.py` — fail-closed executable validation for workflow authorization contracts. **Status: implemented; see `operational-contracts/README.md`.**
+- `secret_safe_capture.py` — streams complete child output to stdout and a durable log while redacting values named by the selected operator contract's `secrets` list before either write; malformed contracts fail before log creation, and `presence` emits names with present/absent state only.
 
 ## Composition pattern
 

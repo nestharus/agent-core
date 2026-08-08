@@ -234,8 +234,15 @@ Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition
 ## Auth
 
 ```bash
-env | grep -E '^LINEAR_API_KEY=' >/dev/null || { echo 'BLOCKED: LINEAR_API_KEY not in env'; exit 2; }
+if [[ -v LINEAR_API_KEY ]]; then
+  printf '%s\n' 'LINEAR_API_KEY=present'
+else
+  printf '%s\n' 'BLOCKED:LINEAR_API_KEY=absent'
+  exit 2
+fi
 ```
+
+Presence diagnostics must use a key-presence primitive such as `[[ -v NAME ]]` or `secret_safe_capture.py presence` against the resolved operator contract. Never use `env`, `printenv`, `set`, shell expansion, or another command that can emit the value.
 
 `$LINEAR_API_KEY` is exported from `~/.bashrc`. The token is regenerated at <https://linear.app/settings/api> if rotated.
 
