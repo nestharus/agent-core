@@ -2803,14 +2803,31 @@ def _validate_phase3_artifact_bindings(
         if required_root is not None and not _is_below(Path(cast(str, path_value)), required_root):
             raise InputError(f"phase3-bind {role} path is outside its canonical root")
     manifest_pairs = (
-        ("phase_0_ticket_snapshot_path", "phase_0_ticket_snapshot_sha256"),
-        ("resolved_operator_path", "resolved_operator_sha256"),
+        (
+            "ticket_snapshot_path",
+            "ticket_snapshot_sha256",
+            "phase_0_ticket_snapshot_path",
+            "phase_0_ticket_snapshot_sha256",
+        ),
+        (
+            "resolved_operator_path",
+            "resolved_operator_sha256",
+            "resolved_operator_path",
+            "resolved_operator_sha256",
+        ),
     )
-    for path_key, digest_key in manifest_pairs:
-        if manifest.get(path_key) != estimate.get(path_key) or manifest.get(digest_key) != estimate.get(
-            digest_key
-        ):
-            raise InputError(f"phase3-bind estimate does not match manifest {path_key}")
+    for (
+        manifest_path_key,
+        manifest_digest_key,
+        estimate_path_key,
+        estimate_digest_key,
+    ) in manifest_pairs:
+        if manifest.get(manifest_path_key) != estimate.get(
+            estimate_path_key
+        ) or manifest.get(manifest_digest_key) != estimate.get(estimate_digest_key):
+            raise InputError(
+                f"phase3-bind estimate does not match manifest {manifest_path_key}"
+            )
     manifest_contract_path = manifest.get(
         "resolved_operator_contract_path", manifest.get("resolved_contract_path")
     )
