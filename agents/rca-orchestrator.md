@@ -117,6 +117,8 @@ Adapter inputs passed in the prompt:
 - `behavior_claim_hash`: SHA-256 of that exact behavior claim or extracted artifact.
 - `runtime_claim_ref`: the post-change runtime claim used by validation-integrity when runtime evidence applies, recorded separately from the pre-execution verification-plan fields.
 - `runtime_claim_hash`: SHA-256 of the runtime claim, or an explicit non-applicability marker when no runtime claim applies.
+- `runtime_evidence_ref`: the observed runtime-evidence identity supplied to validation-integrity, or an explicit `n/a:<reason>` marker when runtime evidence does not apply.
+- `runtime_evidence_hash`: SHA-256 of the runtime evidence, or an explicit `n/a:<reason>` marker when runtime evidence does not apply.
 - `scope_ref`: application-plan scope plus changed-path check result, optionally materialized as `${planning_dir}/rca/gate-set/<failure-id>/scope.md`.
 - `cycle_id`: RCA verify-or-return cycle identity including `failure_id` and the numeric Phase 6 loop count.
 - `head_sha`, `base_ref`, and `diff_sha256`: active worktree and actual-diff identity captured after Phase 5 apply and before Phase 6.5.
