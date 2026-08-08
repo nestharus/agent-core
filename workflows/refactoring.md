@@ -11,7 +11,7 @@ workflow_dispatch_contract:
   inputs:
     - "exactly one ticket source: jira_issue_key, linear_issue_key, or canonical wu_brief_path"
     - "required backend selection/configuration: ticket_system plus jira_url, jira_project, and jira_account_email for Jira, or linear_team_key and optional linear_project_id for Linear"
-    - "required coordination inputs: target_list, repo_root, unique branch_name and canonical absolute worktree_path/planning_dir/scratch_dir for the sole child, exact short trunk_branch and integration_branch_ref, canonical JSON protected_branches including both, and slice_bounds; invocation UUID is derived from runner provenance"
+    - "required coordination inputs: target_list, repo_root, unique branch_name and canonical absolute worktree_path/planning_dir/scratch_dir for the sole child, exact short trunk_branch and integration_branch_ref, canonical JSON protected_branches including both, boolean feature_routed, and slice_bounds; invocation UUID is derived from runner provenance"
     - "optional inputs: local_coverage_command required and non-blank for feature-routed calls, wu_brief_context_path valid only with an existing issue key, shim_placement_parameters, prior_refactor_evidence_pointers, manager_flavor, shim_registry_path defaulting to ~/ai/conventions/active-shims.md, and audit_history_path defaulting to planning_dir/refactoring-audit-history.md"
   expectations:
     - "dispatches exactly one implementation child and one ticket PR after executable exact protected-short-branch, canonical root, and cardinality validation; larger refactors decompose into separate refactoring WUs before this workflow"
@@ -58,7 +58,7 @@ orchestrator: refactoring-orchestrator
 inputs:
   - "exactly one ticket source: jira_issue_key, linear_issue_key, or canonical wu_brief_path"
   - "required backend selection/configuration: ticket_system plus jira_url, jira_project, and jira_account_email for Jira, or linear_team_key and optional linear_project_id for Linear"
-  - "required coordination inputs: target_list, repo_root, unique branch_name and canonical absolute worktree_path/planning_dir/scratch_dir for the sole child, exact short trunk_branch and integration_branch_ref, canonical JSON protected_branches including both, and slice_bounds; invocation UUID is derived from runner provenance"
+  - "required coordination inputs: target_list, repo_root, unique branch_name and canonical absolute worktree_path/planning_dir/scratch_dir for the sole child, exact short trunk_branch and integration_branch_ref, canonical JSON protected_branches including both, boolean feature_routed, and slice_bounds; invocation UUID is derived from runner provenance"
   - "optional inputs: local_coverage_command required and non-blank for feature-routed calls, wu_brief_context_path valid only with an existing issue key, shim_placement_parameters, prior_refactor_evidence_pointers, manager_flavor, shim_registry_path defaulting to ~/ai/conventions/active-shims.md, and audit_history_path defaulting to planning_dir/refactoring-audit-history.md"
 expectations:
   - "dispatches exactly one implementation child and one ticket PR after executable exact protected-short-branch, canonical root, and cardinality validation; larger refactors decompose into separate refactoring WUs before this workflow"

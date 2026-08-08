@@ -163,6 +163,7 @@ REFACTOR_INPUT_NAMES = {
     "planning_dir",
     "scratch_dir",
     "local_coverage_command",
+    "feature_routed",
     "trunk_branch",
     "protected_branches",
     "integration_branch_ref",
@@ -350,6 +351,7 @@ def _refactoring_dispatch_plan(**overrides: Any) -> dict[str, Any]:
         "branch_name": "route/age-260",
         "trunk_branch_name": "main",
         "integration_branch_name": "feature/integration",
+        "feature_routed": True,
         "local_coverage_command": _LOCAL_COVERAGE_COMMAND,
         "protected_branches": ["main", "feature/integration"],
         "worktree_path": "/tmp/worktrees/age-260",
@@ -5033,7 +5035,21 @@ def test_refactoring_dispatch_validator_enforces_one_child_and_exact_branch_proj
     missing_command = _refactoring_dispatch_plan()
     missing_command.pop("local_coverage_command")
     missing_command["children"][0].pop("local_coverage_command")
-    assert validate_refactoring_dispatch(missing_command)["status"] == "VALID"
+    decision = validate_refactoring_dispatch(missing_command)
+    assert decision["status"] == "INVALID"
+    assert (
+        "feature-routed dispatch plan must supply local_coverage_command"
+        in decision["errors"]
+    )
+
+    direct_without_command = deepcopy(missing_command)
+    direct_without_command["feature_routed"] = False
+    assert validate_refactoring_dispatch(direct_without_command)["status"] == "VALID"
+
+    invalid_route_origin = _refactoring_dispatch_plan(feature_routed="true")
+    decision = validate_refactoring_dispatch(invalid_route_origin)
+    assert decision["status"] == "INVALID"
+    assert "feature_routed must be a boolean" in decision["errors"]
 
     blank_command = _refactoring_dispatch_plan(local_coverage_command=" \t ")
     blank_command["children"][0]["local_coverage_command"] = " \t "
@@ -5296,6 +5312,7 @@ def test_commit_history_transports_exact_protected_set_to_refactoring_dispatch()
     request = _package_source_request()
     package = request["package_plan"][0]
     plan = _refactoring_dispatch_plan(
+        feature_routed=False,
         branch_name=package["branch_name"],
         trunk_branch_name=request["trunk_branch"],
         integration_branch_name=request["integration_branch_ref"],

@@ -4819,6 +4819,7 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
         "planning_dir",
         "scratch_dir",
         "children",
+        "feature_routed",
     }
     optional = {"local_coverage_command"}
     if not required <= set(plan) or set(plan) - required - optional:
@@ -4830,8 +4831,13 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
         errors.append("schema must equal refactoring-dispatch-plan-v1")
     if plan.get("ticket_pr_cardinality") != "exactly-one":
         errors.append("ticket_pr_cardinality must equal exactly-one")
+    feature_routed = plan.get("feature_routed")
+    if not isinstance(feature_routed, bool):
+        errors.append("feature_routed must be a boolean")
     command_supplied = "local_coverage_command" in plan
     local_coverage_command = plan.get("local_coverage_command")
+    if feature_routed is True and not command_supplied:
+        errors.append("feature-routed dispatch plan must supply local_coverage_command")
     if command_supplied and (
         not isinstance(local_coverage_command, str) or not local_coverage_command.strip()
     ):
