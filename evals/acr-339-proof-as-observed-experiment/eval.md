@@ -74,7 +74,7 @@ Every future finding preserves:
 | Term | Required meaning |
 |---|---|
 | Experiment | Executed command or action against a named target. |
-| Expected result | Observation declared before result interpretation. |
+| Expected result | Observation declared before the experiment executes. |
 | Observed result | Actual status, output, artifact difference, runtime response, or application observation produced by execution. |
 | Behavioral proof | Record comparing expected and observed results at a stated target and scope. |
 | Review | Assessment of a plan, source, diff, log, artifact, or evidence record. |

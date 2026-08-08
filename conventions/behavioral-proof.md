@@ -22,7 +22,7 @@ that the named behavior occurred.
 | Term | Meaning |
 |---|---|
 | Experiment | A deliberately executed command or action against a named target that can produce an observable result relevant to a behavior claim. Planning or reading is not execution. |
-| Expected result | The observation declared before result interpretation that would support the behavior claim at the experiment's stated scope. |
+| Expected result | The observation declared before the experiment executes that would support the behavior claim at the experiment's stated scope. |
 | Observed result | The status, output, artifact difference, runtime response, or application observation produced by executing the experiment. |
 | Proof | The evidence record comparing the expected result with the observed result and stating the supported target and scope. |
 | Review | Reading a plan, source, diff, log, artifact, or evidence record and assessing its completeness, relevance, integrity, or support. |
