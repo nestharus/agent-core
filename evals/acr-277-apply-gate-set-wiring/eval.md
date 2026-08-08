@@ -32,7 +32,7 @@ This WRITE-state structural-verification eval specifies the companion wiring sur
 
 ## Scope
 
-This eval covers only repository-visible wiring and inventory evidence for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, `workflows/index.json`, and the caller-mode manifests/adapters that should expose equivalent active row families. It verifies that verification-plan review, supported-surface, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup rows, and bootstrap-exception ratification rows are present or explicitly resolved for both RCA-mode and implementation-mode.
+This eval covers only repository-visible wiring and inventory evidence for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, `workflows/index.json`, and the caller-mode manifests/adapters that should expose equivalent active row families. It verifies that verification-plan review, supported-surface, distinct verification-plan/behavior-claim/runtime-claim/runtime-evidence transport, process-tree topology mode, currentness keys, skip-with-followup rows, and bootstrap-exception ratification rows are present or explicitly resolved for both RCA-mode and implementation-mode.
 
 ACR-287 overlap is resolved by Option A - Absorb at the RCA caller boundary through the primary RCA eval. This companion eval keeps the shared wiring parity needed for `APPLY-GATE-SET-007` and cites the primary RCA eval as the stricter detector for inherited RCA-mode behavior.
 
@@ -49,7 +49,7 @@ Evidence must bind each caller-mode comparison to current manifest identity, not
 - Repository paths and content hashes for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, and `workflows/index.json`.
 - Workflow/operator frontmatter fields, declared roles, dispatch contract fields, inputs, expectations, outputs, non-goals, caller-mode names, and row-family inventory text.
 - RCA-mode and implementation-mode caller ids, root invocation UUIDs, prompt paths, manifests, currentness keys, and audit-history paths.
-- Inventory rows for verification-plan review, supported-surface review, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup, bootstrap-exception ratification, stale-refusal, and inventory-resolution.
+- Inventory rows for verification-plan review, supported-surface review, distinct verification-plan/behavior-claim/runtime-claim/runtime-evidence transport, process-tree topology mode, currentness keys, skip-with-followup, bootstrap-exception ratification, stale-refusal, and inventory-resolution.
 - `report_paths` and `trace_locator` fields for each compared row family.
 
 ## Finding schema
@@ -201,30 +201,31 @@ Suggested action: preserve both row families in both adapters or record explicit
 
 Supersession linkage: Supports `APPLY-GATE-SET-007` and composes with `ACR277-RCA-011`.
 
-### WIRING-005: Distinct plan, behavior, and runtime claim transport plus process-tree topology mode keys thread through both adapters
+### WIRING-005: Distinct plan, behavior, runtime claim, and runtime evidence transport plus process-tree topology mode keys thread through both adapters
 
 Scenario id: `WIRING-005`
 
-Intended observation: RCA-mode and implementation-mode adapters must keep `verification_plan_ref`, `behavior_claim_ref`, and `runtime_claim_ref` distinct while threading them with process-tree topology-mode keys into manifests, prompts, and reports.
+Intended observation: RCA-mode and implementation-mode adapters must keep `verification_plan_ref`, `behavior_claim_ref`, `runtime_claim_ref`, and `runtime_evidence_ref` distinct while threading them with process-tree topology-mode keys into manifests, prompts, and reports. A conditionally absent identity must use an explicit `n/a:<reason>` marker.
 
-Gate this scenario covers: `verification-plan-behavior-claim-runtime-claim-transport`, `process-tree-topology-mode-key`.
+Gate this scenario covers: `verification-plan-behavior-claim-runtime-claim-runtime-evidence-transport`, `process-tree-topology-mode-key`.
 
-Evidence fields: caller-mode manifests, adapter prompts, verification-plan refs/hashes, behavior-claim refs/hashes, runtime-claim refs/hashes, topology-mode keys, process-tree expected-process manifests/reports, aggregate reports, join-manifest rows, and currentness keys.
+Evidence fields: caller-mode manifests, adapter prompts, verification-plan refs/hashes, behavior-claim refs/hashes, runtime-claim refs/hashes, runtime-evidence refs/hashes, explicit non-applicability markers, topology-mode keys, process-tree expected-process manifests/reports, aggregate reports, join-manifest rows, and currentness keys.
 
 Positive evidence (eval should produce a finding when):
 
-- Any required plan, behavior-claim, or runtime-claim ref/hash is missing, stale, or collapsed into an alias.
+- Any required plan, behavior-claim, runtime-claim, or runtime-evidence ref/hash is missing, stale, or collapsed into an alias.
 - Topology-mode key is present in one caller mode and missing or stale in the other.
-- Prompts or reports drop plan, behavior-claim, runtime-claim, or topology-mode evidence before manifest aggregation.
+- Prompts or reports drop plan, behavior-claim, runtime-claim, runtime-evidence, or topology-mode evidence before manifest aggregation.
+- A conditionally absent plan, behavior-claim, runtime-claim, or runtime-evidence identity lacks an explicit `n/a:<reason>` marker.
 
 Non-fire cases:
 
-- Both adapters preserve distinct plan, behavior-claim, runtime-claim, and topology-mode keys from prompt through manifest/report output.
+- Both adapters preserve distinct plan, behavior-claim, runtime-claim, runtime-evidence, and topology-mode keys from prompt through manifest/report output.
 - A current non-applicability row explains why a key is not required for a specific caller mode and preserves blocking behavior.
 
 Finding schema: common wiring schema plus `scenario_id=WIRING-005`, `caller_modes`, `inventory_rows_compared`, `gate=runtime-and-topology-key-transport`, `report_paths`, and `trace_locator`.
 
-Suggested action: repair adapter input/output threading so verification-plan, behavior-claim, runtime-claim, and topology-mode keys are distinct first-class manifest fields in both caller modes.
+Suggested action: repair adapter input/output threading so verification-plan, behavior-claim, runtime-claim, runtime-evidence, and topology-mode keys are distinct first-class manifest fields in both caller modes.
 
 Supersession linkage: Supports `APPLY-GATE-SET-002`, `APPLY-GATE-SET-003`, and `APPLY-GATE-SET-007`; stricter RCA detectors are `ACR277-RCA-005`, `ACR277-RCA-001`, and `ACR277-RCA-011`.
 

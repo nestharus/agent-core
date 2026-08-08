@@ -140,7 +140,7 @@
           "requires phase-3-estimate-writeback as verified success or policy-disabled non-applicability and rejects forbidden update-estimate children"
         ],
         "inputs": [
-          "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition",
+          "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit non-applicability markers, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition",
           "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields",
           "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
         ],
@@ -544,7 +544,7 @@
           "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed",
           "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis",
           "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly",
-          "post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim refs and hashes, explicit n/a:<reason> markers for non-applicable verification-plan/behavior-claim/runtime-claim identities, process_tree_path, and root_invocation_uuid"
+          "post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim/runtime-evidence refs and hashes, explicit n/a:<reason> markers for non-applicable verification-plan/behavior-claim/runtime-claim/runtime-evidence identities, process_tree_path, and root_invocation_uuid"
         ],
         "non_goals": [
           "does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator",
