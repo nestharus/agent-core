@@ -83,6 +83,7 @@ NORMALIZED_MANIFEST_KEYS = {
     "source_schema",
     "feature_id",
     "feature_scope_path",
+    "local_coverage_command_sha256",
     "trunk_branch",
     "feature_branch",
     "ticket_system",
@@ -118,6 +119,10 @@ class RouteManifestError(ValueError):
     """Raised when route data is unsafe or cannot be normalized."""
 
 
+class CoverageCommandError(RouteManifestError):
+    """Raised when the feature coverage command is absent or blank."""
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -133,6 +138,12 @@ def _nonblank(value: Any, field: str) -> str:
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise RouteManifestError(f"{field} contains a control character")
     return value
+
+
+def _coverage_command_sha256(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CoverageCommandError("local_coverage_command must be a non-blank string")
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _string_list(value: Any, field: str, *, allow_empty: bool) -> list[str]:
@@ -367,6 +378,13 @@ def _validate_normalized_output(manifest: dict[str, Any]) -> None:
     source_sha256 = manifest.get("source_sha256")
     if not isinstance(source_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise RouteManifestError("normalized.source_sha256 must be a lowercase SHA-256")
+    coverage_command_sha256 = manifest.get("local_coverage_command_sha256")
+    if not isinstance(coverage_command_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", coverage_command_sha256
+    ):
+        raise RouteManifestError(
+            "normalized.local_coverage_command_sha256 must be a lowercase SHA-256"
+        )
     records = manifest.get("records")
     if not isinstance(records, list) or not records:
         raise RouteManifestError("normalized manifest records must be non-empty")
@@ -404,6 +422,7 @@ def _normalize_route_records(
     child_worktrees_root: str | Path,
     planning_dir: str | Path,
     scratch_dir: str | Path,
+    local_coverage_command: str,
     source_schema: str,
     source_kind: str,
     source_path: str | None,
@@ -415,6 +434,7 @@ def _normalize_route_records(
         raise RouteManifestError("ticket_system must be jira or linear")
     if source_backend != ticket_system:
         raise RouteManifestError("source backend does not match ticket_system")
+    coverage_command_sha256 = _coverage_command_sha256(local_coverage_command)
     feature_id = _nonblank(feature_id, "feature_id")
     remote_prefixes = _git_remote_prefixes()
     feature_branch = _short_branch(feature_branch, "feature_branch", remote_prefixes)
@@ -535,6 +555,7 @@ def _normalize_route_records(
         "source_schema": source_schema,
         "feature_id": feature_id,
         "feature_scope_path": str(scope_path),
+        "local_coverage_command_sha256": coverage_command_sha256,
         "trunk_branch": trunk_branch,
         "feature_branch": feature_branch,
         "ticket_system": ticket_system,
@@ -592,6 +613,7 @@ def normalize_successor_manifest(
     child_worktrees_root: str | Path,
     planning_dir: str | Path,
     scratch_dir: str | Path,
+    local_coverage_command: str,
 ) -> dict[str, Any]:
     """Normalize a strict successor envelope without performing writes."""
     envelope, source_sha256 = load_successor_manifest(manifest_path)
@@ -724,6 +746,7 @@ def normalize_successor_manifest(
         child_worktrees_root=child_worktrees_root,
         planning_dir=planning_dir,
         scratch_dir=scratch_dir,
+        local_coverage_command=local_coverage_command,
         source_schema=SOURCE_SCHEMA,
         source_kind="successor_manifest_path",
         source_path=str(_canonical_absolute(manifest_path, "successor_manifest_path")),
@@ -745,6 +768,7 @@ def normalize_ticket_route_map(
     child_worktrees_root: str | Path,
     planning_dir: str | Path,
     scratch_dir: str | Path,
+    local_coverage_command: str,
 ) -> dict[str, Any]:
     """Normalize strict inline records through the shared canonical validator."""
     records, source_sha256 = load_ticket_route_map(ticket_route_map_json)
@@ -760,6 +784,7 @@ def normalize_ticket_route_map(
         child_worktrees_root=child_worktrees_root,
         planning_dir=planning_dir,
         scratch_dir=scratch_dir,
+        local_coverage_command=local_coverage_command,
         source_schema=INLINE_SOURCE_SCHEMA,
         source_kind="ticket_route_map",
         source_path=None,
@@ -780,6 +805,7 @@ def normalize_route_source(
         raise RouteManifestError(
             "exactly one of successor_manifest_path or ticket_route_map_json is required"
         )
+    _coverage_command_sha256(common.get("local_coverage_command"))
     if successor_manifest_path is not None:
         return normalize_successor_manifest(successor_manifest_path, **common)
     assert ticket_route_map_json is not None
@@ -821,6 +847,7 @@ def main() -> int:
     parser.add_argument("--child-worktrees-root", required=True)
     parser.add_argument("--planning-dir", required=True)
     parser.add_argument("--scratch-dir", required=True)
+    parser.add_argument("--local-coverage-command")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
@@ -837,8 +864,12 @@ def main() -> int:
             child_worktrees_root=args.child_worktrees_root,
             planning_dir=args.planning_dir,
             scratch_dir=args.scratch_dir,
+            local_coverage_command=args.local_coverage_command,
         )
         write_manifest(args.output, manifest)
+    except CoverageCommandError:
+        print("BLOCKED:missing-local-coverage-command")
+        return 2
     except (RouteManifestError, OSError) as error:
         print(f"BLOCKED:invalid-ticket-route-manifest: {error}")
         return 2

@@ -83,6 +83,16 @@ inputs:
   required: true
   default_source: caller
   description: Unique canonical absolute scratch root passed unchanged to the sole implementation child; aliases, symlinks, and dot components are invalid.
+- name: local_coverage_command
+  type: string
+  required: false
+  default_source: caller
+  description: Required for feature-routed calls; passed byte-for-byte to the sole implementation child and hash-bound in refactoring dispatch validation when supplied.
+- name: feature_routed
+  type: bool
+  required: true
+  default_source: caller
+  description: True only when feature-orchestrator selected this route; controls executable coverage-command enforcement.
 - name: trunk_branch
   type: string
   required: true

@@ -2,7 +2,7 @@
 
 `tools/feature_route_manifest.py` is the strict route-source adapter for feature orchestration. It accepts exactly one of inline `--ticket-route-map-json` or `--successor-manifest` before parsing either source and rejects duplicate JSON keys.
 
-Both inputs pass through the same closed validator for backend, branch, protected-ref, canonical-path, payload, dependency, cycle, wave, and output contracts. Each feature record must contain one existing backend issue key equal to immutable `ticket_id`; `wu_brief_path` is rejected before output or side effects. The tool writes only fully validated `feature-route-manifest-v2` records.
+Both inputs pass through the same closed validator for the required non-blank `--local-coverage-command`, backend, branch, protected-ref, canonical-path, payload, dependency, cycle, wave, and output contracts. Each feature record must contain one existing backend issue key equal to immutable `ticket_id`; `wu_brief_path` is rejected before output or side effects. The tool keeps execution configuration outside route payloads and writes only the exact coverage-command SHA-256 plus fully validated `feature-route-manifest-v2` records.
 
 ## Used By
 

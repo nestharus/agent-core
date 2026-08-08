@@ -91,6 +91,16 @@ inputs:
     required: true
     default_source: caller
     description: "Unique canonical absolute scratch root passed unchanged to the sole implementation child; aliases, symlinks, and dot components are invalid."
+  - name: local_coverage_command
+    type: string
+    required: false
+    default_source: caller
+    description: "Required for feature-routed calls; passed byte-for-byte to the sole implementation child and hash-bound in refactoring dispatch validation when supplied."
+  - name: feature_routed
+    type: bool
+    required: true
+    default_source: caller
+    description: "True only when feature-orchestrator selected this route; controls executable coverage-command enforcement."
   - name: trunk_branch
     type: string
     required: true
@@ -235,8 +245,11 @@ The ticket source is required for every run, not only feature-routed runs. A fea
 - `audit_history_path` (defaults to `${planning_dir}/refactoring-audit-history.md`)
 - `manager_flavor`
 - `wu_brief_context_path` (existing-issue context only; never a replacement source)
+- `local_coverage_command` (required and non-blank for feature-routed calls)
 
 ## Canonical Invocation
+
+Require boolean `feature_routed` from every caller. `feature-orchestrator` passes `true`; direct and commit-history callers pass `false`. For a feature-routed call, reject absent or whitespace-only `local_coverage_command` with `BLOCKED:missing-local-coverage-command` before Phase 0, worktree, ticket, or route side effects. When supplied, preserve its exact bytes for the sole implementation child and hash the exact UTF-8 value in refactoring dispatch validation.
 
 Reject anything other than exactly one of the three ticket-source fields with `BLOCKED:invalid-refactor-ticket-source`. `ticket_system=jira` accepts only `jira_issue_key` or `wu_brief_path` and requires `jira_url`, `jira_project`, and `jira_account_email`; `ticket_system=linear` accepts only `linear_issue_key` or `wu_brief_path` and requires `linear_team_key`, with optional `linear_project_id`. Reject opposite-backend issue keys or configuration instead of inferring a backend. If `wu_brief_context_path` is present, require a readable non-empty file and an existing backend-matching issue key; reject context plus `wu_brief_path` source or context without a key as `BLOCKED:invalid-refactor-ticket-context`. No context field can be promoted to ticket source.
 
@@ -244,14 +257,17 @@ Derive `refactoring_invocation_uuid` from the runner-provided `OULIPOLY_PARENT_I
 
 Treat `trunk_branch` and `integration_branch_ref` as exact short branch names. Accept only non-empty names that pass `git check-ref-format --branch`; reject `refs/heads/*`, `refs/remotes/*`, and remote-tracking forms such as `origin/*` with `BLOCKED:unsupported-protected-branch-ref` or `BLOCKED:unsupported-integration-branch-ref`. After validation, set `trunk_branch_name=${trunk_branch}` and `integration_branch_name=${integration_branch_ref}`. Use the integration name unchanged for child `base_branch`, GitHub `baseRefName`, fetch, refresh, and result comparisons. Do not strip or otherwise normalize unsupported full or remote refs.
 
-Validate required `branch_name` independently with `git check-ref-format --branch` exact-output semantics. It must remain exactly the caller-supplied short name and not equal any member of the exact caller-supplied `protected_branches`. Validate every protected-list entry independently as a unique exact short branch before membership checks; require the canonical list order to be `trunk_branch`, then `integration_branch_ref` when distinct, then additional names in lexical order. Full refs, remote-tracking forms, invalid aliases, duplicate entries, missing trunk/integration identities, and semantically disguised protected names invalidate the plan rather than weakening membership. Require worktree/planning/scratch values to be pairwise distinct exact canonical absolute paths: reject `.` / `..`, symlinks, lexical-versus-`resolve(strict=False)` differences, and canonical aliases. Invalid branch or path identity is `BLOCKED:invalid-refactor-child-branch` or `BLOCKED:invalid-refactor-route-roots`. Before dispatch, write `${scratch_dir}/refactoring-dispatch-plan.json` with `schema=refactoring-dispatch-plan-v1`, `ticket_pr_cardinality=exactly-one`, top-level `branch_name`, `trunk_branch_name`, `integration_branch_name`, roots, the unchanged `protected_branches`, and exactly one identical child row. Run `python3 ~/ai/tools/operational_contracts.py validate-refactoring-dispatch --plan ${scratch_dir}/refactoring-dispatch-plan.json --output ${planning_dir}/refactoring-dispatch-validation.json`; only `status=VALID` permits the sole child dispatch.
+Validate required `branch_name` independently with `git check-ref-format --branch` exact-output semantics. It must remain exactly the caller-supplied short name and not equal any member of the exact caller-supplied `protected_branches`. Validate every protected-list entry independently as a unique exact short branch before membership checks; require the canonical list order to be `trunk_branch`, then `integration_branch_ref` when distinct, then additional names in lexical order. Full refs, remote-tracking forms, invalid aliases, duplicate entries, missing trunk/integration identities, and semantically disguised protected names invalidate the plan rather than weakening membership. Require worktree/planning/scratch values to be pairwise distinct exact canonical absolute paths: reject `.` / `..`, symlinks, lexical-versus-`resolve(strict=False)` differences, and canonical aliases. Invalid branch or path identity is `BLOCKED:invalid-refactor-child-branch` or `BLOCKED:invalid-refactor-route-roots`. Before dispatch, write `${scratch_dir}/refactoring-dispatch-plan.json` with `schema=refactoring-dispatch-plan-v1`, `ticket_pr_cardinality=exactly-one`, top-level boolean `feature_routed`, `branch_name`, `trunk_branch_name`, `integration_branch_name`, roots, the unchanged `protected_branches`, and exactly one identical child row. Run `python3 ~/ai/tools/operational_contracts.py validate-refactoring-dispatch --plan ${scratch_dir}/refactoring-dispatch-plan.json --output ${planning_dir}/refactoring-dispatch-validation.json`; only `status=VALID` permits the sole child dispatch.
 
 ## Non-Negotiables
+
+For a feature-routed call, the persisted `refactoring-dispatch-plan-v1` carries top-level exact `local_coverage_command` and one child row carrying that same command byte-for-byte. `validate-refactoring-dispatch` rejects blank or changed values and writes their exact SHA-256 to `${planning_dir}/refactoring-dispatch-validation.json` before the sole child dispatch.
 
 - Follow `~/ai/conventions/refactoring-workflow.md` as the rule source.
 - The sole refactor PR is a single commit and is the sole ticket PR for this WU.
 - The sole refactor PR targets the integration buffer, not trunk.
 - The sole implementation-pipeline dispatch receives caller-supplied `branch_name` unchanged and `base_branch=${integration_branch_ref}` after both short-name validations. The base value is explicit even when the integration branch happens to be `main`; `integration_branch_name` is the equal validated comparison identity recorded in evidence.
+- The sole implementation-pipeline dispatch receives `local_coverage_command=${local_coverage_command}` byte-for-byte from the validated refactoring input; neither owner trims, rewrites, infers, or relocates it.
 - The sole implementation-pipeline dispatch receives `auto_merge_after_phase_9=false`; this refactoring owner is the sole child-PR merge owner.
 - A feature-routed run forwards the exact existing issue source, backend configuration, normalized branch, and unique route roots to the sole implementation child; it does not infer ticket or branch identity from targets or ambient context. The unchanged `planning_dir.parent` is the child's declared `F/routes` live runtime root and owns exactly `F/routes/sessions.active-wake.json`; the separately normalized `scratch_dir` remains under the same top-level project planning tree. Later wake composition selects that `F/routes` root explicitly by passing `planning_root=F/routes`, which binds only `F/routes/sessions.active-wake.json` and must not select another index. A direct run instead passes `planning_root=P`, which binds only `P/sessions.active-wake.json` and must not select another index.
 - A commit-history package forwards its caller-owned existing issue key as the sole ticket source and its generated brief only as `wu_brief_context_path`; the implementation child must read the issue and must not enter Phase 0 ticket creation.
@@ -290,6 +306,10 @@ required_common_fields:
   - branch_name
   - base_branch
   - auto_merge_after_phase_9
+conditional_common_fields:
+  local_coverage_command:
+    required_when: feature-routed
+    mapping: same-name-byte-for-byte
 fixed_values:
   branch_name: ${branch_name}
   worktree_path: ${worktree_path}
@@ -299,7 +319,7 @@ fixed_values:
   auto_merge_after_phase_9: false
 ```
 
-Reject a child prompt that omits any required projection, carries both issue systems, changes a same-name ticket-source mapping, changes `branch_name` or any route root, substitutes a default base, permits child auto-merge, or implies another child/PR. Persist the fully composed prompt and its resolved input row before dispatch. If another PR is required, stop with `BLOCKED:refactor-wu-decomposition-required` so the caller can create a separate refactoring WU; do not loop internally.
+Reject a child prompt that omits any required projection, carries both issue systems, changes a same-name ticket-source mapping, changes `branch_name`, any route root, or `local_coverage_command`, substitutes a default base, permits child auto-merge, or implies another child/PR. Persist the fully composed prompt and its resolved input row before dispatch. If another PR is required, stop with `BLOCKED:refactor-wu-decomposition-required` so the caller can create a separate refactoring WU; do not loop internally.
 
 ## Refactoring Auditor Contract
 
@@ -502,7 +522,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 1. Phase 0 - Derive runtime invocation identity, validate the canonical ticket/backend invocation and target provenance, reject unsupported integration/child ref forms, refresh `integration_branch_name`, validate the exactly-one dispatch plan with `tools/operational_contracts.py`, and confirm the requested work is one refactoring WU rather than behavior change or a multi-PR effort. Create stable dispatch, split expected-process, and auditor-index artifact skeletons; do not create a successful route result before final evidence exists.
 2. Phase 1 - Map contract surfaces for the target slice: code signatures, emitted artifacts, cloud permissions, external readers, and no-contract permission surfaces.
 3. Phase 2 - Encapsulate unsafe surfaces before internal replacement. Register every placed shim in the active shim registry (`shim_registry_path` when provided; otherwise `~/ai/conventions/active-shims.md`).
-4. Phase 3 - Capture `auditor_baseline_sha`, run or validate the baseline auditor set, then dispatch exactly one bounded implementation-pipeline WU with the exact ticket source and backend configuration, optional same-name `wu_brief_context_path`, caller-supplied `branch_name`, unchanged `worktree_path` / `planning_dir` / `scratch_dir`, `base_branch=${integration_branch_ref}` (the validated short `integration_branch_name`), `auto_merge_after_phase_9=false`, and output constrained to one commit and one ticket PR. Persist the complete prompt/log/invocation/session/base input evidence; do not let implementation-pipeline defaults select another branch or merge owner. A context brief never replaces the issue key and never permits Phase 0 create.
+4. Phase 3 - Capture `auditor_baseline_sha`, run or validate the baseline auditor set, then dispatch exactly one bounded implementation-pipeline WU with the exact ticket source and backend configuration, optional same-name `wu_brief_context_path`, caller-supplied `branch_name`, unchanged `worktree_path` / `planning_dir` / `scratch_dir`, `base_branch=${integration_branch_ref}` (the validated short `integration_branch_name`), feature-route-required exact unchanged `local_coverage_command=${local_coverage_command}` when supplied, `auto_merge_after_phase_9=false`, and output constrained to one commit and one ticket PR. Persist the complete prompt/log/invocation/session/base input evidence; do not let implementation-pipeline defaults select another branch, supplied coverage command, or merge owner. A context brief never replaces the issue key and never permits Phase 0 create.
 5. Phase 4 - Freshly fetch the integration branch, query the exact open PR URL/number, set `reviewed_base_sha` from the equal fetched/provider base OID, and require `state=OPEN`, exact boolean `is_draft=true`, `baseRefName == ${integration_branch_name}`, `headRefName` equal the declared and nested implementation reviewed child head branch, and full `headRefOid` equal the declared child head SHA and nested `phase_8_reviewed_head_sha`. Require the child PR URL/number to equal the nested implementation result before promotion. Return `BLOCKED:refactor-pr-base-mismatch` or `BLOCKED:refactor-pr-head-mismatch` on mismatch. Require the implementation result's exact current expected-context/result path-hashes and exact three implementation-owned Phase 4/6/8 proof rows. Re-run `tools/operational_contracts.py validate-ticket-operation-result --result <child-result-path> --expected-context <child-expected-context-path> --output <refactoring-validation-path>` and require exact `VALID` equality to this ticket/backend/site/attempt/PR/reviewed identity; re-hash but do not re-audit the child's process-proof artifacts. Require every final implementation, behavior-test, coverage, test-audit, PR-review, and five-auditor result to bind this same `reviewed_base_sha` and exact head. Freeze the closed index's exact five pre-merge rows, re-hash and parse every report's exact LOW verdict, freeze the immutable pre-merge process projection and PASS report, and require ticket-scoped pre-merge evidence to be PASS, hashed, and current to the same identity; otherwise return `BLOCKED:refactor-pr-evidence-not-ready`.
 6. Phase 5 - As sole merge owner, run exactly `gh pr ready "${pr_url}" --repo "${repo}"`, then immediately fetch both the exact integration and child head branches and resolve full `pre_merge_base_sha` and `pre_merge_head_sha`. Re-query the exact PR into the provider bundle consumed by `tools/operational_contracts.py validate-pr-currentness --fetched-base-sha ${pre_merge_base_sha} --fetched-head-sha ${pre_merge_head_sha}`, compare it with the frozen reviewed-open bundle, and require the same URL/number, `state=OPEN`, non-draft state, unchanged base/head names, `pre_merge_head_sha == reviewed_head_sha == headRefOid`, and `pre_merge_base_sha == reviewed_base_sha == baseRefOid`; only the validator's exact `READY` / `PASS` result recording both fetched SHAs may be persisted before merge.
 

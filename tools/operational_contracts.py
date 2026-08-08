@@ -283,6 +283,7 @@ _ROUTE_PROCESS_EXPECTED_FIELDS = {
     "schema",
     "stage",
     "feature_invocation_uuid",
+    "local_coverage_command_sha256",
     "ticket_id",
     "attempt_number",
     "owning_route",
@@ -298,6 +299,7 @@ _ROUTE_PROCESS_DISPATCH_FIELDS = {
     "schema",
     "stage",
     "feature_invocation_uuid",
+    "local_coverage_command_sha256",
     "ticket_id",
     "attempt_number",
     "owning_route",
@@ -376,6 +378,7 @@ _ROUTE_PROOF_ARTIFACT_FIELDS = (
 _ROUTE_ATTEMPT_PROOF_FIELDS = {
     "schema",
     "feature_branch",
+    "local_coverage_command_sha256",
     "ticket_id",
     "attempt_number",
     "owning_route",
@@ -3394,6 +3397,13 @@ def _route_expected_nodes(
         )
     if expected.get("schema") != "feature-route-expected-process-v1":
         errors.append(f"{stage} expected-process schema is invalid")
+    coverage_command_sha256 = expected.get("local_coverage_command_sha256")
+    if not isinstance(coverage_command_sha256, str) or not _SHA256.fullmatch(
+        coverage_command_sha256
+    ):
+        errors.append(
+            f"{stage} expected-process local_coverage_command_sha256 must be a lowercase SHA-256"
+        )
     route_spec = _ROUTE_KIND_SPECS[owning_route]
     for field, value in (
         ("stage", stage),
@@ -3480,6 +3490,7 @@ def _route_dispatch_nodes(
     ticket_id: Any,
     attempt_number: Any,
     owning_route: str,
+    local_coverage_command_sha256: Any,
     expected_path: Path,
     expected_sha256: str,
     errors: list[str],
@@ -3504,6 +3515,7 @@ def _route_dispatch_nodes(
     fixed = {
         "stage": stage,
         "feature_invocation_uuid": root_uuid,
+        "local_coverage_command_sha256": local_coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": owning_route,
@@ -3621,6 +3633,9 @@ def _validate_route_process_stage(
             ticket_id=acceptance.get("ticket_id"),
             attempt_number=acceptance.get("attempt_number"),
             owning_route=owning_route,
+            local_coverage_command_sha256=expected.get(
+                "local_coverage_command_sha256"
+            ),
             expected_path=expected_path,
             expected_sha256=artifact_hashes.get(f"{prefix}_expected_process", ""),
             errors=errors,
@@ -3787,6 +3802,11 @@ def validate_route_process_proof(
         root_uuid=root_uuid,
         errors=errors,
     )
+    coverage_command_sha256 = pre_expected.get("local_coverage_command_sha256")
+    if final_expected.get("local_coverage_command_sha256") != coverage_command_sha256:
+        errors.append(
+            "final expected process must preserve local_coverage_command_sha256"
+        )
     if pre_expected.get("nodes") and final_expected.get("nodes"):
         if pre_expected["nodes"][0] != final_expected["nodes"][0]:
             errors.append("final expected process must preserve the exact pre-audit route child")
@@ -3985,6 +4005,7 @@ def validate_route_process_proof(
         "schema": "feature-route-process-proof-validation-v1",
         "status": "PASS" if not errors else "INVALID",
         "feature_branch": feature_branch,
+        "local_coverage_command_sha256": coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": owning_route,
@@ -4014,6 +4035,7 @@ def validate_route_attempt_proof(proof_path: Path) -> dict[str, Any]:
             "proof_envelope_path": str(proof_path.resolve(strict=False)),
             "proof_envelope_sha256": None,
             "feature_branch": None,
+            "local_coverage_command_sha256": None,
             "ticket_id": None,
             "attempt_number": None,
             "owning_route": None,
@@ -4032,7 +4054,14 @@ def validate_route_attempt_proof(proof_path: Path) -> dict[str, Any]:
     attempt_number = proof.get("attempt_number")
     owning_route = proof.get("owning_route")
     feature_branch = proof.get("feature_branch")
+    coverage_command_sha256 = proof.get("local_coverage_command_sha256")
     errors.extend(_validate_short_branch(feature_branch, "route attempt proof feature_branch"))
+    if not isinstance(coverage_command_sha256, str) or not _SHA256.fullmatch(
+        coverage_command_sha256
+    ):
+        errors.append(
+            "route attempt proof local_coverage_command_sha256 must be a lowercase SHA-256"
+        )
     if not _nonblank(ticket_id):
         errors.append("route attempt proof ticket_id must be non-blank")
     if not isinstance(attempt_number, int) or attempt_number <= 0:
@@ -4123,6 +4152,10 @@ def validate_route_attempt_proof(proof_path: Path) -> dict[str, Any]:
             errors.append("common route process validation artifact bindings mismatch")
         if common_validation.get("child_owned_process_proofs") != proof_companions:
             errors.append("common route process child companion bindings mismatch")
+        if common_validation.get("local_coverage_command_sha256") != coverage_command_sha256:
+            errors.append(
+                "common route process local_coverage_command_sha256 mismatch"
+            )
     recorded_common: dict[str, Any] = {}
     common_path = artifact_paths.get("common_validation_result")
     if common_path is not None:
@@ -4195,6 +4228,7 @@ def validate_route_attempt_proof(proof_path: Path) -> dict[str, Any]:
         "proof_envelope_path": str(proof_identity),
         "proof_envelope_sha256": proof_sha256,
         "feature_branch": feature_branch,
+        "local_coverage_command_sha256": coverage_command_sha256,
         "ticket_id": ticket_id,
         "attempt_number": attempt_number,
         "owning_route": owning_route,
@@ -4785,15 +4819,29 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
         "planning_dir",
         "scratch_dir",
         "children",
+        "feature_routed",
     }
-    if set(plan) != required:
+    optional = {"local_coverage_command"}
+    if not required <= set(plan) or set(plan) - required - optional:
         errors.append(
-            "dispatch plan fields must exactly equal: " + ",".join(sorted(required))
+            "dispatch plan fields must equal the required set plus optional local_coverage_command: "
+            + ",".join(sorted(required))
         )
     if plan.get("schema") != "refactoring-dispatch-plan-v1":
         errors.append("schema must equal refactoring-dispatch-plan-v1")
     if plan.get("ticket_pr_cardinality") != "exactly-one":
         errors.append("ticket_pr_cardinality must equal exactly-one")
+    feature_routed = plan.get("feature_routed")
+    if not isinstance(feature_routed, bool):
+        errors.append("feature_routed must be a boolean")
+    command_supplied = "local_coverage_command" in plan
+    local_coverage_command = plan.get("local_coverage_command")
+    if feature_routed is True and not command_supplied:
+        errors.append("feature-routed dispatch plan must supply local_coverage_command")
+    if command_supplied and (
+        not isinstance(local_coverage_command, str) or not local_coverage_command.strip()
+    ):
+        errors.append("local_coverage_command must be a non-blank string")
 
     branch = plan.get("branch_name")
     trunk = plan.get("trunk_branch_name")
@@ -4832,10 +4880,13 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
             "scratch_dir",
             "ticket_pr_cardinality",
         }
-        if not isinstance(child, dict) or set(child) != child_required:
+        expected_child_fields = child_required | (
+            {"local_coverage_command"} if command_supplied else set()
+        )
+        if not isinstance(child, dict) or set(child) != expected_child_fields:
             errors.append(
                 "implementation child fields must exactly equal: "
-                + ",".join(sorted(child_required))
+                + ",".join(sorted(expected_child_fields))
             )
         else:
             if child["ticket_pr_cardinality"] != "exactly-one":
@@ -4843,6 +4894,10 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
             for field in ("branch_name", "worktree_path", "planning_dir", "scratch_dir"):
                 if child[field] != plan.get(field):
                     errors.append(f"child {field} must equal the route projection")
+            if command_supplied and child["local_coverage_command"] != local_coverage_command:
+                errors.append(
+                    "child local_coverage_command must equal the route projection"
+                )
 
     accepted = not errors
     return {
@@ -4850,6 +4905,11 @@ def validate_refactoring_dispatch(plan: dict[str, Any]) -> dict[str, Any]:
         "status": "VALID" if accepted else "INVALID",
         "ticket_pr_cardinality": "exactly-one" if accepted else None,
         "branch_name": branch,
+        "local_coverage_command_sha256": (
+            hashlib.sha256(local_coverage_command.encode("utf-8")).hexdigest()
+            if isinstance(local_coverage_command, str) and local_coverage_command.strip()
+            else None
+        ),
         "errors": errors,
     }
 
@@ -4879,6 +4939,13 @@ def validate_route_attempt_transition(
     errors: list[str] = []
     if route_manifest.get("schema") != "feature-route-manifest-v2":
         errors.append("route manifest schema must equal feature-route-manifest-v2")
+    coverage_command_sha256 = route_manifest.get("local_coverage_command_sha256")
+    if not isinstance(coverage_command_sha256, str) or not _SHA256.fullmatch(
+        coverage_command_sha256
+    ):
+        errors.append(
+            "route manifest local_coverage_command_sha256 must be a lowercase SHA-256"
+        )
     records = route_manifest.get("records")
     if not isinstance(records, list) or not records:
         errors.append("route manifest records must be a non-empty object list")
@@ -5119,11 +5186,21 @@ def validate_route_attempt_transition(
                     errors.append(f"{label} route attempt proof {field} mismatch")
             if proof_validation.get("feature_branch") != route_index.get("feature_branch"):
                 errors.append(f"{label} route attempt proof feature_branch mismatch")
+            if proof_validation.get("local_coverage_command_sha256") != coverage_command_sha256:
+                errors.append(
+                    f"{label} route attempt proof local coverage command mismatch"
+                )
             common_validation = proof_validation.get("common_validation")
             if not isinstance(common_validation, dict) or common_validation.get(
                 "feature_branch"
             ) != route_index.get("feature_branch"):
                 errors.append(f"{label} common route validation feature_branch mismatch")
+            if not isinstance(common_validation, dict) or common_validation.get(
+                "local_coverage_command_sha256"
+            ) != coverage_command_sha256:
+                errors.append(
+                    f"{label} common route validation local coverage command mismatch"
+                )
             outcome = proof_validation.get("route_specific_evidence")
             if not isinstance(outcome, dict):
                 outcome = {}
