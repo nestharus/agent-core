@@ -74,7 +74,7 @@ Stale evidence is not strategy-selection input. A stale row routes to row rerun,
 
 Row-level re-verification is acceptable only for same-identity reuse. It is permitted only when all conditions below hold:
 
-1. `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, `scope_hash`, `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `runtime_evidence_ref`, and `runtime_evidence_hash` or their explicit `n/a:<reason>` markers all match the manifest values.
+1. `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, `scope_hash`, `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `runtime_evidence_ref`, and `runtime_evidence_hash` or their explicit `n/a:<reason>` markers all match the manifest values, and every `contract_artifact_hashes` and `report_path_hashes` entry matches the manifest values.
 2. Every `canonical_output_path` in the row's `canonical_output_path_hashes` exists on disk.
 3. For each existing canonical path, current `size`, `mtime`, and `sha256` all match the manifest values.
 4. For each existing canonical path, the current `verdict_line` re-parsed from disk matches the manifest's `verdict_line`.
