@@ -587,22 +587,51 @@ def _write_runtime_request(
     return request_path
 
 
-def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
-    planning_root = tmp_path / "project" / "planning"
+def _runtime_case(
+    tmp_path: Path, target_operation: str, *, feature: bool = False
+) -> dict[str, Any]:
+    project_planning_root = tmp_path / "project" / "planning"
+    planning_root = (
+        project_planning_root / "features" / "acr-337" / "routes"
+        if feature
+        else project_planning_root
+    )
     planning_root.mkdir(parents=True)
     manifest_path, initial_manifest = _runtime_manifest(planning_root)
     active_path = planning_root / "sessions.active-wake.json"
+    direct_index_path = project_planning_root / "sessions.active-wake.json"
+    if feature:
+        initial_manifest.update(
+            {
+                "repo_root": str(project_planning_root.parent / "trunk"),
+                "worktree_path": str(
+                    project_planning_root.parent / "worktrees" / "age-260-runtime"
+                ),
+                "scratch_dir": str(
+                    project_planning_root
+                    / "features"
+                    / "acr-337-scratch"
+                    / "routes"
+                    / "age-260"
+                ),
+            }
+        )
+        if not direct_index_path.exists():
+            _write_json(
+                direct_index_path,
+                {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": []},
+            )
     scratch_dir = Path(initial_manifest["scratch_dir"])
     scratch_dir.mkdir(parents=True)
     repo_root = Path(initial_manifest["repo_root"])
-    repo_root.mkdir(parents=True)
+    repo_root.mkdir(parents=True, exist_ok=True)
     ticket_snapshot = scratch_dir / "ticket.md"
     ticket_snapshot.write_text("# AGE-260\n")
     operator_path = repo_root / "agents" / "linear-operator.md"
-    operator_path.parent.mkdir(parents=True)
+    operator_path.parent.mkdir(parents=True, exist_ok=True)
     operator_path.write_text("# linear operator\n")
     contract_path = repo_root / "contracts" / "linear-operator.yaml"
-    contract_path.parent.mkdir(parents=True)
+    contract_path.parent.mkdir(parents=True, exist_ok=True)
     contract_path.write_text("source: linear-operator\n")
     proposal_path = manifest_path.parent / "proposals" / "age-260-AGE-260.md"
     proposal_path.parent.mkdir(parents=True)
@@ -798,9 +827,11 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
             return {
                 "operation": operation,
                 "request_path": request_path,
+                "project_planning_root": project_planning_root,
                 "planning_root": planning_root,
                 "manifest_path": manifest_path,
                 "index_path": index_path,
+                "direct_index_path": direct_index_path,
                 "replacement_manifest": replacement_manifest,
                 "replacement_index": replacement_index,
                 "artifacts": artifacts,
@@ -892,6 +923,7 @@ def _run_production_runtime_lifecycle(
     planning_root = tmp_path / "project" / "planning"
     planning_root.mkdir(parents=True)
     manifest_path, initial_manifest = _production_runtime_manifest(planning_root)
+    Path(initial_manifest["scratch_dir"]).mkdir()
     index_path = planning_root / "sessions.active-wake.json"
     source_index_path = planning_root / "sessions.index.json"
     initial_index: dict[str, Any] = {
@@ -2112,6 +2144,237 @@ def test_direct_runtime_preserves_reviewed_active_index_metadata(tmp_path: Path)
     assert lifecycle["source_index_path"].read_bytes() == lifecycle["source_index_before"]
     assert Path(expected_metadata["source_index_path"]).parent == lifecycle["planning_root"]
     assert not MIGRATION._journal_path().exists()
+
+
+def test_feature_runtime_phase0_uses_route_index_and_same_project_scratch(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase0-init", feature=True)
+    direct_before = case["direct_index_path"].read_bytes()
+    direct_stat = case["direct_index_path"].stat()
+
+    MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+    manifest = json.loads(case["manifest_path"].read_text())
+    assert Path(manifest["planning_dir"]).parent == case["planning_root"]
+    assert Path(manifest["scratch_dir"]).is_relative_to(case["project_planning_root"])
+    assert not Path(manifest["scratch_dir"]).is_relative_to(case["planning_root"])
+    assert json.loads(case["index_path"].read_text())["sessions"] == []
+    assert case["direct_index_path"].read_bytes() == direct_before
+    current_direct_stat = case["direct_index_path"].stat()
+    assert (
+        current_direct_stat.st_dev,
+        current_direct_stat.st_ino,
+        current_direct_stat.st_mode,
+    ) == (direct_stat.st_dev, direct_stat.st_ino, direct_stat.st_mode)
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize(
+    ("operation", "changed_keys"),
+    [
+        ("cold-start-disposition-bind", {"cold_start_disposition_ref"}),
+        (
+            "phase3-bind",
+            {
+                "phase_3_estimate_writeback_ref",
+                "phase_3_estimate_writeback_sha256",
+                "phase_history",
+            },
+        ),
+    ],
+)
+def test_feature_pre_pr_binds_preserve_route_index_and_pass_closed_readback(
+    operation: str, changed_keys: set[str], tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation, feature=True)
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    feature_index_before = case["index_path"].read_bytes()
+    feature_index_stat = case["index_path"].stat()
+    direct_index_before = case["direct_index_path"].read_bytes()
+
+    MIGRATION.apply_runtime_request(case["request_path"], operation)
+    readback_path = tmp_path / f"{operation}.readback.json"
+    _write_json(readback_path, _pre_pr_readback(case, source_manifest))
+
+    assert MIGRATION.validate_pre_pr_readback(readback_path) is None
+    current_manifest = json.loads(case["manifest_path"].read_text())
+    assert {
+        key
+        for key in set(source_manifest) | set(current_manifest)
+        if source_manifest.get(key) != current_manifest.get(key)
+    } == changed_keys
+    assert case["index_path"].read_bytes() == feature_index_before
+    current_feature_stat = case["index_path"].stat()
+    assert (
+        current_feature_stat.st_dev,
+        current_feature_stat.st_ino,
+        current_feature_stat.st_mode,
+    ) == (
+        feature_index_stat.st_dev,
+        feature_index_stat.st_ino,
+        feature_index_stat.st_mode,
+    )
+    assert case["direct_index_path"].read_bytes() == direct_index_before
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_rows"),
+    [
+        ("phase7-upsert", 1),
+        ("phase9-update", 1),
+        ("resumer-update", 1),
+        ("resumer-close", 0),
+    ],
+)
+def test_feature_active_lifecycle_mutates_only_the_route_index(
+    operation: str, expected_rows: int, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation, feature=True)
+    direct_before = case["direct_index_path"].read_bytes()
+
+    MIGRATION.apply_runtime_request(case["request_path"], operation)
+
+    rows = json.loads(case["index_path"].read_text())["sessions"]
+    assert len(rows) == expected_rows
+    assert all(row["session_manifest_path"] == str(case["manifest_path"]) for row in rows)
+    assert case["direct_index_path"].read_bytes() == direct_before
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_direct_and_feature_sessions_coexist_in_separate_owner_indexes(tmp_path: Path):
+    direct = _runtime_case(tmp_path, "phase7-upsert")
+    MIGRATION.apply_runtime_request(direct["request_path"], direct["operation"])
+    feature = _runtime_case(tmp_path, "phase7-upsert", feature=True)
+    direct_before_feature_upsert = direct["index_path"].read_bytes()
+
+    MIGRATION.apply_runtime_request(feature["request_path"], feature["operation"])
+
+    direct_rows = json.loads(direct["index_path"].read_text())["sessions"]
+    feature_rows = json.loads(feature["index_path"].read_text())["sessions"]
+    assert len(direct_rows) == 1
+    assert len(feature_rows) == 1
+    assert direct["index_path"].read_bytes() == direct_before_feature_upsert
+    assert direct_rows[0]["session_manifest_path"] == str(direct["manifest_path"])
+    assert feature_rows[0]["session_manifest_path"] == str(feature["manifest_path"])
+    assert direct_rows[0]["session_manifest_path"] != feature_rows[0][
+        "session_manifest_path"
+    ]
+    assert not MIGRATION._journal_path().exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["unsupported-owner", "wrong-index", "nested-session", "cross-tree-scratch"],
+)
+def test_feature_runtime_rejects_noncanonical_owner_relationships_before_mutation(
+    mutation: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    case = _runtime_case(tmp_path, "phase0-init", feature=True)
+    request = json.loads(case["request_path"].read_text())
+    if mutation == "unsupported-owner":
+        request["planning_root"] = str(
+            case["project_planning_root"] / "features" / "acr-337" / "runtime"
+        )
+    elif mutation == "wrong-index":
+        request["index_path"] = str(case["direct_index_path"])
+        request["sources"]["index"] = MIGRATION.runtime_source_identity(
+            case["direct_index_path"]
+        )
+    elif mutation == "nested-session":
+        manifest_path = case["planning_root"] / "nested" / "AGE-260" / "session.json"
+        request["manifest_path"] = str(manifest_path)
+        request["replacement_manifest"]["planning_dir"] = str(manifest_path.parent)
+        request["replacement_manifest"]["session_manifest_path"] = str(manifest_path)
+    else:
+        foreign_scratch = tmp_path / "foreign" / "planning" / "scratch"
+        foreign_scratch.mkdir(parents=True)
+        request["replacement_manifest"]["scratch_dir"] = str(foreign_scratch)
+    _resign_runtime_request(case["request_path"], request)
+    targets = [case["manifest_path"], case["index_path"], case["direct_index_path"]]
+    before = {path: path.read_bytes() if path.exists() else None for path in targets}
+
+    assert MIGRATION.main(
+        [case["operation"], "--request", str(case["request_path"])]
+    ) == 2
+
+    assert "canonical" in capsys.readouterr().err
+    assert {path: path.read_bytes() if path.exists() else None for path in targets} == before
+    assert not MIGRATION._journal_path().exists()
+    assert not _transaction_artifacts(targets)
+
+
+def test_feature_runtime_rejects_symlinked_route_owner_before_mutation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    case = _runtime_case(tmp_path, "phase0-init", feature=True)
+    request = json.loads(case["request_path"].read_text())
+    feature_dir = case["planning_root"].parent
+    alias_dir = feature_dir.parent / "acr-337-link"
+    alias_dir.symlink_to(feature_dir, target_is_directory=True)
+    alias_root = alias_dir / "routes"
+    alias_manifest = alias_root / case["manifest_path"].parent.name / "session.json"
+    request.update(
+        {
+            "planning_root": str(alias_root),
+            "manifest_path": str(alias_manifest),
+            "index_path": str(alias_root / "sessions.active-wake.json"),
+        }
+    )
+    request["replacement_manifest"]["planning_dir"] = str(alias_manifest.parent)
+    request["replacement_manifest"]["session_manifest_path"] = str(alias_manifest)
+    _resign_runtime_request(case["request_path"], request)
+    targets = [case["manifest_path"], case["index_path"], case["direct_index_path"]]
+    before = {path: path.read_bytes() if path.exists() else None for path in targets}
+
+    assert MIGRATION.main(
+        [case["operation"], "--request", str(case["request_path"])]
+    ) == 2
+
+    assert "symlink path component is forbidden" in capsys.readouterr().err
+    assert {path: path.read_bytes() if path.exists() else None for path in targets} == before
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_feature_runtime_recovers_interrupted_route_index_transaction(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase7-upsert", feature=True)
+    command = [
+        sys.executable,
+        str(TOOL_DIR),
+        case["operation"],
+        "--request",
+        str(case["request_path"]),
+    ]
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "commit-parent-fsync:0"
+
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    assert MIGRATION._journal_path().exists()
+    env.pop("WU_SESSION_MIGRATION_INTERRUPT")
+    stale = subprocess.run(command, env=env, text=True, capture_output=True)
+    assert stale.returncode == 3
+    assert not MIGRATION._journal_path().exists()
+
+    refreshed = _write_runtime_request(
+        case["request_path"],
+        case["operation"],
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        case["replacement_index"],
+        _row_identity(_active_row(case["replacement_manifest"], case["manifest_path"])),
+    )
+    completed = subprocess.run(
+        [sys.executable, str(TOOL_DIR), case["operation"], "--request", str(refreshed)],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert len(json.loads(case["index_path"].read_text())["sessions"]) == 1
+    assert json.loads(case["direct_index_path"].read_text())["sessions"] == []
 
 
 def test_runtime_request_path_aliases_and_symlinks_fail_before_mutation(

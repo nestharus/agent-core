@@ -542,6 +542,7 @@ def validate_pre_pr_readback(readback_path: Path) -> None:
         cast(str, operation),
         Path(request["planning_root"]),
         manifest_path,
+        index_path,
         source_manifest,
         index_document,
         request["replacement_manifest"],
@@ -2170,14 +2171,11 @@ def _validate_runtime_request(
     planning_root = _absolute_path_field(request, "planning_root")
     manifest_path = _absolute_path_field(request, "manifest_path")
     index_path = _absolute_path_field(request, "index_path")
-    if (
-        planning_root.name != "planning"
-        or manifest_path.name != "session.json"
-        or manifest_path.parent.parent != planning_root
-        or index_path != planning_root / "sessions.active-wake.json"
-    ):
-        raise InputError("runtime manifest, planning root, and active index are not canonical")
+    project_planning_root = _runtime_session_topology(
+        planning_root, manifest_path.parent, manifest_path, index_path
+    )
     if check_paths:
+        _validate_runtime_directory(project_planning_root, "project planning root")
         _validate_runtime_directory(planning_root, "planning root")
         _validate_runtime_directory(manifest_path.parent, "session planning directory")
         _assert_safe_output(manifest_path)
@@ -2235,6 +2233,7 @@ def _validate_runtime_request(
             cast(str, operation),
             planning_root,
             manifest_path,
+            index_path,
             source_manifest,
             source_index,
             replacement_manifest,
@@ -2254,7 +2253,7 @@ def _validate_runtime_request(
         )
     else:
         writes.append(_runtime_write(index_path, source_records["index"], replacement_index))
-    _validate_writes(writes, [planning_root], check_paths=check_paths)
+    _validate_write_records(writes, [planning_root], check_paths=check_paths)
     _validate_read_only_guards(guards, check_paths=check_paths)
     return writes, guards, [planning_root]
 
@@ -2391,6 +2390,7 @@ def _validate_runtime_projection(
     operation: str,
     planning_root: Path,
     manifest_path: Path,
+    index_path: Path,
     source_manifest: Mapping[str, Any] | None,
     source_index: Mapping[str, Any],
     replacement_manifest: Mapping[str, Any],
@@ -2399,13 +2399,16 @@ def _validate_runtime_projection(
     artifact_records: Sequence[Mapping[str, Any]],
     artifact_documents: Mapping[str, Mapping[str, Any]],
 ) -> None:
-    _validate_runtime_manifest(replacement_manifest, manifest_path, planning_root)
+    project_planning_root = _validate_runtime_manifest(
+        replacement_manifest, manifest_path, index_path, planning_root
+    )
     _validate_active_index_document(
         source_index,
         planning_root=planning_root,
         allow_uninitialized=True,
     )
     if operation == "phase0-init":
+        _manifest_scratch_dir(replacement_manifest, project_planning_root)
         if source_manifest is not None:
             raise InputError("phase0-init requires an absent manifest source")
         if any(replacement_manifest.get(key) is not None for key in ("draft_pr_url", "draft_pr_head_sha", "pre_merge_base_sha", "closed_at")):
@@ -2424,6 +2427,7 @@ def _validate_runtime_projection(
         _validate_pre_pr_bind_projection(
             operation,
             planning_root,
+            project_planning_root,
             manifest_path,
             source_manifest,
             source_index,
@@ -2481,6 +2485,7 @@ def _validate_runtime_projection(
 def _validate_pre_pr_bind_projection(
     operation: str,
     planning_root: Path,
+    project_planning_root: Path,
     manifest_path: Path,
     source_manifest: Mapping[str, Any],
     source_index: Mapping[str, Any],
@@ -2506,7 +2511,7 @@ def _validate_pre_pr_bind_projection(
             f"{operation} must change exactly {sorted(expected_changes)}; got {sorted(changed)}"
         )
     records = {record["role"]: record for record in artifact_records}
-    scratch_dir = _manifest_scratch_dir(source_manifest, planning_root)
+    scratch_dir = _manifest_scratch_dir(source_manifest, project_planning_root)
     if operation == "cold-start-disposition-bind":
         _validate_cold_start_bind(
             source_manifest,
@@ -2637,7 +2642,9 @@ def _validate_pre_pr_index_absence(
             raise InputError("pre-PR manifest already has an active-row identity")
 
 
-def _manifest_scratch_dir(manifest: Mapping[str, Any], planning_root: Path) -> Path:
+def _manifest_scratch_dir(
+    manifest: Mapping[str, Any], project_planning_root: Path
+) -> Path:
     value = manifest.get("scratch_dir")
     if not isinstance(value, str):
         raise InputError("pre-PR manifest lacks scratch_dir")
@@ -2645,7 +2652,7 @@ def _manifest_scratch_dir(manifest: Mapping[str, Any], planning_root: Path) -> P
     if (
         not scratch_dir.is_absolute()
         or str(scratch_dir) != os.path.normpath(str(scratch_dir))
-        or not _is_below(scratch_dir, planning_root)
+        or not _is_below(scratch_dir, project_planning_root)
     ):
         raise InputError("pre-PR manifest scratch_dir is noncanonical or cross-root")
     _validate_runtime_directory(scratch_dir, "session scratch directory")
@@ -2912,8 +2919,11 @@ def _validate_canonical_phase3_history_entry(entry: Any) -> None:
 
 
 def _validate_runtime_manifest(
-    manifest: Mapping[str, Any], manifest_path: Path, planning_root: Path
-) -> None:
+    manifest: Mapping[str, Any],
+    manifest_path: Path,
+    index_path: Path,
+    planning_root: Path,
+) -> Path:
     for key in (
         "ticket_id",
         "ticket_system",
@@ -2932,10 +2942,12 @@ def _validate_runtime_manifest(
         raise InputError("runtime manifest path identity mismatch")
     if not Path(manifest["planning_dir"]).is_absolute() or not Path(manifest["worktree_path"]).is_absolute():
         raise InputError("runtime manifest planning/worktree paths must be absolute")
-    if Path(manifest["planning_dir"]) != manifest_path.parent:
-        raise InputError("runtime manifest planning_dir does not match its canonical parent")
-    if manifest_path.parent.parent != planning_root:
-        raise InputError("runtime manifest does not belong to the declared project planning root")
+    return _runtime_session_topology(
+        planning_root,
+        Path(manifest["planning_dir"]),
+        manifest_path,
+        index_path,
+    )
 
 
 def _validate_active_index_document(
@@ -3123,16 +3135,17 @@ def _canonical_runtime_row_manifest(
     planning_value = row["planning_dir"]
     manifest_path = Path(manifest_value)
     planning_dir = Path(planning_value)
-    if (
-        not manifest_path.is_absolute()
-        or str(manifest_path) != os.path.normpath(str(manifest_path))
-        or not planning_dir.is_absolute()
-        or str(planning_dir) != os.path.normpath(str(planning_dir))
-        or manifest_path.name != "session.json"
-        or manifest_path.parent != planning_dir
-        or planning_dir.parent != planning_root
-    ):
-        raise InputError(f"runtime active row {position} has noncanonical planning paths")
+    try:
+        _runtime_session_topology(
+            planning_root,
+            planning_dir,
+            manifest_path,
+            planning_root / "sessions.active-wake.json",
+        )
+    except InputError as exc:
+        raise InputError(
+            f"runtime active row {position} has noncanonical planning paths"
+        ) from exc
     _validate_runtime_directory(planning_dir, f"active row {position} planning directory")
     try:
         _assert_safe_existing(manifest_path)
@@ -3209,11 +3222,17 @@ def _verify_plan_inputs(plan: Mapping[str, Any]) -> None:
 def _validate_writes(
     writes: Any, planning_roots: list[Path], *, check_paths: bool = True
 ) -> None:
-    if not isinstance(writes, list):
-        raise InputError("plan writes must be an array")
     for root in planning_roots:
         if not root.is_absolute() or str(root) != os.path.normpath(str(root)) or root.name != "planning":
             raise InputError(f"planned planning root is not canonical: {root}")
+    _validate_write_records(writes, planning_roots, check_paths=check_paths)
+
+
+def _validate_write_records(
+    writes: Any, containment_roots: list[Path], *, check_paths: bool = True
+) -> None:
+    if not isinstance(writes, list):
+        raise InputError("plan writes must be an array")
     paths: list[Path] = []
     write_keys = {
         "path",
@@ -3234,7 +3253,7 @@ def _validate_writes(
         path = Path(path_value)
         if path.name not in {"session.json", "sessions.index.json", "sessions.active-wake.json"}:
             raise InputError(f"planned target has an unsupported basename: {path}")
-        if not any(_is_below(path, root) for root in planning_roots):
+        if not any(_is_below(path, root) for root in containment_roots):
             raise InputError(f"planned target escapes reviewed planning roots: {path}")
         if check_paths:
             _assert_safe_output(path)
@@ -3358,6 +3377,39 @@ def _planning_root(path: Path) -> Path:
     if not positions:
         raise InputError(f"path is outside a planning tree: {path}")
     return Path(*path.parts[: positions[0] + 1])
+
+
+def _runtime_session_topology(
+    planning_root: Path,
+    planning_dir: Path,
+    manifest_path: Path,
+    index_path: Path,
+) -> Path:
+    paths = (planning_root, planning_dir, manifest_path, index_path)
+    if any(
+        not path.is_absolute() or str(path) != os.path.normpath(str(path))
+        for path in paths
+    ):
+        raise InputError("runtime manifest, planning root, and active index are not canonical")
+    try:
+        project_planning_root = _planning_root(manifest_path)
+    except InputError as exc:
+        raise InputError(
+            "runtime manifest, planning root, and active index are not canonical"
+        ) from exc
+    direct_owner = planning_root == project_planning_root
+    feature_owner = planning_root.name == "routes" and _is_below(
+        planning_root, project_planning_root
+    )
+    if (
+        not (direct_owner or feature_owner)
+        or manifest_path.name != "session.json"
+        or manifest_path.parent != planning_dir
+        or planning_dir.parent != planning_root
+        or index_path != planning_root / "sessions.active-wake.json"
+    ):
+        raise InputError("runtime manifest, planning root, and active index are not canonical")
+    return project_planning_root
 
 
 def _manifest_repo_root(manifest_path: Path) -> Path:
