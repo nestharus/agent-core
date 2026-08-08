@@ -2362,22 +2362,25 @@ def test_pre_pr_bind_recovery_rejects_substituted_guard_projection(tmp_path: Pat
 
 def test_lifecycle_tool_readmes_and_operator_contract_name_both_pre_pr_operations():
     root = Path(__file__).resolve().parents[1]
-    paths = [
-        root / "agents" / "implementation-pipeline-orchestrator.md",
-        root / "contracts" / "operators" / "implementation-pipeline-orchestrator.yaml",
-        root / "workflows" / "implementation-pipeline.md",
-        root / "conventions" / "wu-session-lifecycle.md",
-        root / "tools" / "wu-session-migration" / "README.md",
-        root / "tools" / "README.md",
+    relative_paths = [
+        "agents/implementation-pipeline-orchestrator.md",
+        "contracts/operators/implementation-pipeline-orchestrator.yaml",
+        "workflows/implementation-pipeline.md",
+        "conventions/wu-session-lifecycle.md",
+        "tools/wu-session-migration/README.md",
+        "tools/README.md",
     ]
-    contents = [path.read_text() for path in paths]
+    contents = {path: (root / path).read_text() for path in relative_paths}
 
-    assert all("cold-start-disposition-bind" in content for content in contents)
-    assert all("phase3-bind" in content for content in contents)
-    assert "before the separate terrain/risk/defer gate" in contents[0]
-    assert "before Phase 4" in contents[0]
-    assert "row_identity=null" in contents[3]
-    assert "read-only guard" in contents[4]
+    for path, content in contents.items():
+        assert "cold-start-disposition-bind" in content, path
+        assert "phase3-bind" in content, path
+
+    orchestrator = contents["agents/implementation-pipeline-orchestrator.md"]
+    assert "before the separate terrain/risk/defer gate" in orchestrator
+    assert "before Phase 4" in orchestrator
+    assert "row_identity=null" in contents["conventions/wu-session-lifecycle.md"]
+    assert "read-only guard" in contents["tools/wu-session-migration/README.md"]
 
 
 def test_malformed_committed_recovery_journal_is_concise_and_retained(tmp_path: Path):
