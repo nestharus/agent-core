@@ -222,6 +222,7 @@ decisions snippet:
 runtime artifact evidence:
   /tmp/acr-254/evidence/container-api-legacy-payload.log
   content: built API image handles legacy payload through production request path
+  provenance: runner execution record run-legacy-payload-42 binds the expected HTTP response before command start
 ```
 
 Expected operator verdict: `LOW`.
@@ -343,6 +344,7 @@ diff:
   + runtime validation note: built worker image consumed message from queue emulator via production command
 runtime artifact evidence:
   /tmp/acr-254/evidence/worker-container-queue-run.log
+  provenance: runner execution record run-worker-queue-17 binds the expected consumed-message observation before command start
 decisions_path: absent
 ```
 
@@ -351,6 +353,29 @@ Expected operator verdict: `LOW`.
 Expected finding-id namespace: none.
 
 Rationale: Proxy evidence is scoped to proxy behavior and the runtime claim has separate runtime-artifact proof.
+
+### VIA-015: self-attested runtime report cannot suppress proxy-only finding
+
+Fixture: Synthetic PR diff plus a model-authored evidence report:
+
+```text
+mode: pr-diff
+runtime_claim: "The worker container processes one production-path queue message."
+diff:
+  + validation note: unit proxy check reports queue formatting success
+runtime artifact evidence:
+  /tmp/acr-254/evidence/worker-runtime-report.md
+  content: command, target, expected result, observed result, status, output, and claimed provenance are all stated in prose
+  producer record: absent
+  pre-execution expected-result binding: absent
+decisions_path: absent
+```
+
+Expected operator verdict: `HIGH`.
+
+Expected finding-id namespace: `VI-007`.
+
+Rationale: Self-attested report fields do not independently establish execution provenance or that the expected result preceded execution.
 
 ## Non-Fire Cases
 

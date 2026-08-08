@@ -86,6 +86,14 @@ status, relevant output or retained observation, and provenance. Evidence paths
 and bundles are references or transports; a path's existence alone does not
 establish that its contents came from the claimed execution.
 
+Provenance must resolve to producer-native evidence rather than a self-attested
+summary. Command- or runner-based experiments cite a runner-emitted immutable
+execution record with a stable invocation identity. Recorded application
+interactions cite the native session or action-capture identity and retained
+observation. In either class, the producer record must bind the expected result
+before execution starts; an expected result added only to a later report cannot
+validate the experiment.
+
 Post-implementation passing claims cite the executed experiment record and its
 observed result. Pending or fail-expected production tests remain future
 behavior contracts and cannot be represented as passing production behavior.
