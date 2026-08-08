@@ -8947,9 +8947,15 @@ def test_direct_and_feature_session_owner_contracts_are_synchronized():
     assert "R=${planning_dir}/.." in pipeline
     assert "R=${planning_dir}/.." in workflow
     assert "R=${planning_dir}/.." in lifecycle
-    for text in (pipeline, workflow, lifecycle, runtime_readme):
-        assert "F/routes" in text
-        assert "sessions.active-wake.json" in text
+    documents = {
+        "agents/implementation-pipeline-orchestrator.md": pipeline,
+        "workflows/implementation-pipeline.md": workflow,
+        "conventions/wu-session-lifecycle.md": lifecycle,
+        "tools/wu-session-migration/README.md": runtime_readme,
+    }
+    for name, text in documents.items():
+        assert "F/routes" in text, name
+        assert "sessions.active-wake.json" in text, name
     assert "route_planning_dir.parent" in feature
     assert "planning_root=F/routes" in feature
     assert "planning_dir.parent" in refactoring
