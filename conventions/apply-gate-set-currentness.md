@@ -88,7 +88,7 @@ This extends the existing Canonical Join Manifest Re-Verification primitive with
 
 Full re-dispatch is required when any same-identity condition fails, including:
 
-- Any of `cycle_id`, `head_sha`, `diff_hash`, `scope_hash`, `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `runtime_evidence_ref`, `runtime_evidence_hash`, any `contract_artifact_hashes` entry, or any `report_path_hashes` entry changes.
+- Any of `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, `scope_hash`, `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `runtime_evidence_ref`, `runtime_evidence_hash`, any `contract_artifact_hashes` entry, or any `report_path_hashes` entry changes.
 - Any canonical output is missing, renamed, moved, unreadable, stat-mismatched, hash-mismatched, or has a changed parsed `verdict_line`.
 - Any `producing_invocation_uuid` is untraceable for the active identity.
 - For an exception row, the referenced hotfix-skip authority, bootstrap-exception authority, or inventory-resolution authority has changed or gone stale.
