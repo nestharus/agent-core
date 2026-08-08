@@ -809,6 +809,204 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
     raise AssertionError(target_operation)
 
 
+def _production_runtime_manifest(planning_root: Path) -> tuple[Path, dict[str, Any]]:
+    manifest_path, manifest = _runtime_manifest(planning_root)
+    scratch_dir = manifest_path.parent / ".scratch"
+    manifest.update(
+        {
+            "session_id": "62df1deb-d32e-4de3-8007-41129d47cd54",
+            "implementation_invocation_uuid": "62df1deb-d32e-4de3-8007-41129d47cd54",
+            "auto_merge_after_phase_9": False,
+            "cold_start_disposition_ref": None,
+            "contract_resolution_path": str(scratch_dir / "phase0-contract-resolution.json"),
+            "contract_resolution_producing_invocation_uuid": "654884b3-5ae9-4508-94e1-a142dffeacc8",
+            "contract_resolution_sha256": "1" * 64,
+            "estimate_capability_evidence": {
+                "output_task": "update-estimate",
+                "side_effect": "linear-update-estimate",
+            },
+            "estimate_field": "estimate",
+            "estimate_mutation_policy": {
+                "resolution": "legacy_capability",
+                "source": "legacy_capability",
+                "value": None,
+            },
+            "estimate_writeback_disposition": "update_estimate_required",
+            "local_coverage_command": "coverage run -m pytest -q",
+            "phase_3_estimate_writeback_ref": None,
+            "phase_3_estimate_writeback_sha256": None,
+            "phase_8_reviewed_artifact_path": None,
+            "phase_8_reviewed_artifact_sha256": None,
+            "phase_8_reviewed_base_sha": None,
+            "phase_8_reviewed_head_sha": None,
+            "phase_8_reviewed_is_draft": None,
+            "phase_9_currentness_path": None,
+            "phase_9_currentness_result": None,
+            "phase_9_currentness_sha256": None,
+            "predecessor_session_manifest_path": None,
+            "resolved_contract_path": str(scratch_dir / "linear-operator.yaml"),
+            "resolved_contract_sha256": "2" * 64,
+            "resolved_defaults_source": {"linear_team_key": "caller"},
+            "resolved_operator_contract_path": str(scratch_dir / "linear-operator.yaml"),
+            "resolved_operator_path": str(scratch_dir / "linear-operator.md"),
+            "resolved_operator_sha256": "3" * 64,
+            "route_attempt_number": 1,
+            "spawned_at": "2026-08-08T04:01:03.610682795Z",
+            "ticket_snapshot_path": str(scratch_dir / "ticket.md"),
+            "ticket_snapshot_producing_invocation_uuid": "cfeb1847-219b-4f0a-9a56-72cab7770e85",
+            "ticket_snapshot_sha256": "4" * 64,
+            "topology_revalidation_path": str(scratch_dir / "phase0-topology-revalidation.json"),
+            "topology_revalidation_sha256": "5" * 64,
+            "wu_brief_context_path": str(scratch_dir / "wu-brief-context.md"),
+            "wu_brief_context_sha256": "6" * 64,
+            "wu_brief_context_source_path": str(scratch_dir / "current-route-assessment.md"),
+            "wu_brief_context_source_sha256": "6" * 64,
+        }
+    )
+    return manifest_path, manifest
+
+
+def _expected_active_row(manifest: dict[str, Any], manifest_path: Path) -> dict[str, Any]:
+    return {
+        "ticket_id": manifest["ticket_id"],
+        "ticket_system": manifest["ticket_system"],
+        "branch": manifest["branch"],
+        "base_branch": manifest["base_branch"],
+        "branch_out_sha": manifest["branch_out_sha"],
+        "draft_pr_url": manifest["draft_pr_url"],
+        "draft_pr_number": manifest["draft_pr_number"],
+        "draft_pr_head_sha": manifest["draft_pr_head_sha"],
+        "pr_open_base_sha": manifest["pr_open_base_sha"],
+        "pre_merge_base_sha": manifest["pre_merge_base_sha"],
+        "merge_sha": manifest["merge_sha"],
+        "merged_at": manifest["merged_at"],
+        "session_manifest_path": str(manifest_path),
+        "worktree_path": manifest["worktree_path"],
+        "planning_dir": manifest["planning_dir"],
+    }
+
+
+def _run_production_runtime_lifecycle(
+    tmp_path: Path, *, reviewed_index: bool = False
+) -> dict[str, Any]:
+    planning_root = tmp_path / "project" / "planning"
+    planning_root.mkdir(parents=True)
+    manifest_path, initial_manifest = _production_runtime_manifest(planning_root)
+    index_path = planning_root / "sessions.active-wake.json"
+    source_index_path = planning_root / "sessions.index.json"
+    initial_index: dict[str, Any] = {
+        "schema": MIGRATION.ACTIVE_INDEX_SCHEMA,
+        "sessions": [],
+    }
+    source_index_before: bytes | None = None
+    if reviewed_index:
+        _write_json(source_index_path, {"sessions": [{"historical": True}]})
+        source_index_before = source_index_path.read_bytes()
+        initial_index.update(
+            {
+                "reviewed_inventory_sha256": "7" * 64,
+                "source_index_path": str(source_index_path),
+            }
+        )
+        _write_json(index_path, initial_index)
+
+    snapshots: dict[str, dict[str, Any]] = {}
+    for operation in (
+        "phase0-init",
+        "phase7-upsert",
+        "phase9-update",
+        "resumer-update",
+        "resumer-close",
+    ):
+        if operation == "phase0-init":
+            replacement_manifest = copy.deepcopy(initial_manifest)
+            replacement_index = copy.deepcopy(initial_index)
+            row_identity = None
+        else:
+            replacement_manifest = json.loads(manifest_path.read_text())
+            if operation == "phase7-upsert":
+                replacement_manifest.update(
+                    {
+                        "draft_pr_url": "https://github.com/example/repo/pull/260",
+                        "draft_pr_number": 260,
+                        "draft_pr_head_sha": B,
+                        "pr_open_base_sha": C,
+                        "phase_history": ["phase7"],
+                    }
+                )
+            elif operation == "phase9-update":
+                replacement_manifest.update(
+                    {
+                        "phase_8_reviewed_is_draft": True,
+                        "phase_8_reviewed_base_sha": C,
+                        "phase_8_reviewed_head_sha": B,
+                        "phase_8_reviewed_artifact_path": str(
+                            manifest_path.parent / "phase-8-reviewed.json"
+                        ),
+                        "phase_8_reviewed_artifact_sha256": "8" * 64,
+                        "phase_9_currentness_result": "PASS",
+                        "phase_9_currentness_path": str(
+                            manifest_path.parent / "phase-9-currentness.json"
+                        ),
+                        "phase_9_currentness_sha256": "9" * 64,
+                        "phase_history": ["phase7", "phase9"],
+                    }
+                )
+            elif operation == "resumer-update":
+                replacement_manifest.update(
+                    {
+                        "pre_merge_base_sha": C,
+                        "merge_sha": E,
+                        "merged_at": "2026-08-08T05:00:00Z",
+                        "phase_history": ["phase7", "phase9", "wake"],
+                    }
+                )
+            else:
+                replacement_manifest.update(
+                    {
+                        "closed_at": "2026-08-08T06:00:00Z",
+                        "post_merge": {"tests": "PASS", "coverage": "PASS"},
+                        "phase_history": ["phase7", "phase9", "wake", "closed"],
+                    }
+                )
+
+            row = _expected_active_row(replacement_manifest, manifest_path)
+            row_identity = _row_identity(row)
+            replacement_index = json.loads(index_path.read_text())
+            if operation == "phase7-upsert":
+                replacement_index["sessions"] = [row]
+            elif operation == "resumer-close":
+                replacement_index["sessions"] = []
+            else:
+                replacement_index["sessions"] = [row]
+
+        request_path = _write_runtime_request(
+            tmp_path / "requests" / f"{operation}.json",
+            operation,
+            planning_root,
+            manifest_path,
+            index_path,
+            replacement_manifest,
+            replacement_index,
+            row_identity,
+        )
+        MIGRATION.apply_runtime_request(request_path, operation)
+        snapshots[operation] = {
+            "manifest": json.loads(manifest_path.read_text()),
+            "index": json.loads(index_path.read_text()),
+        }
+
+    return {
+        "planning_root": planning_root,
+        "manifest_path": manifest_path,
+        "index_path": index_path,
+        "source_index_path": source_index_path,
+        "source_index_before": source_index_before,
+        "initial_manifest": initial_manifest,
+        "snapshots": snapshots,
+    }
+
+
 def _transaction_artifacts(paths: list[Path]) -> list[Path]:
     artifacts: list[Path] = []
     for path in paths:
@@ -1837,6 +2035,221 @@ def test_runtime_writer_operations_execute_nominally(operation: str, tmp_path: P
     assert json.loads(case["manifest_path"].read_text()) == case["replacement_manifest"]
     assert json.loads(case["index_path"].read_text()) == case["replacement_index"]
     assert not MIGRATION._journal_path().exists()
+
+
+def test_direct_runtime_preserves_full_session_identity_across_all_operations(
+    tmp_path: Path,
+):
+    lifecycle = _run_production_runtime_lifecycle(tmp_path)
+    initial = lifecycle["initial_manifest"]
+    identity_fields = (
+        "session_id",
+        "implementation_invocation_uuid",
+        "ticket_id",
+        "ticket_system",
+        "branch",
+        "base_branch",
+        "branch_out_sha",
+        "repo_root",
+        "worktree_path",
+        "planning_dir",
+        "scratch_dir",
+        "session_manifest_path",
+        "route_attempt_number",
+        "resolved_operator_path",
+        "resolved_operator_sha256",
+        "resolved_contract_path",
+        "resolved_contract_sha256",
+        "resolved_operator_contract_path",
+        "resolved_defaults_source",
+        "contract_resolution_path",
+        "contract_resolution_sha256",
+        "contract_resolution_producing_invocation_uuid",
+        "ticket_snapshot_path",
+        "ticket_snapshot_sha256",
+        "ticket_snapshot_producing_invocation_uuid",
+        "estimate_mutation_policy",
+        "estimate_field",
+        "estimate_writeback_disposition",
+        "spawned_at",
+        "auto_merge_after_phase_9",
+        "topology_revalidation_path",
+        "topology_revalidation_sha256",
+        "wu_brief_context_path",
+        "wu_brief_context_sha256",
+        "wu_brief_context_source_path",
+        "wu_brief_context_source_sha256",
+    )
+    expected_identity = {field: initial[field] for field in identity_fields}
+
+    assert list(lifecycle["snapshots"]) == [
+        "phase0-init",
+        "phase7-upsert",
+        "phase9-update",
+        "resumer-update",
+        "resumer-close",
+    ]
+    for snapshot in lifecycle["snapshots"].values():
+        persisted = snapshot["manifest"]
+        assert {field: persisted[field] for field in identity_fields} == expected_identity
+    assert lifecycle["snapshots"]["phase0-init"]["index"]["sessions"] == []
+    assert len(lifecycle["snapshots"]["phase7-upsert"]["index"]["sessions"]) == 1
+    assert lifecycle["snapshots"]["resumer-close"]["index"]["sessions"] == []
+
+
+def test_direct_runtime_preserves_reviewed_active_index_metadata(tmp_path: Path):
+    lifecycle = _run_production_runtime_lifecycle(tmp_path, reviewed_index=True)
+    expected_metadata = {
+        "schema": MIGRATION.ACTIVE_INDEX_SCHEMA,
+        "reviewed_inventory_sha256": "7" * 64,
+        "source_index_path": str(lifecycle["planning_root"] / "sessions.index.json"),
+    }
+
+    for snapshot in lifecycle["snapshots"].values():
+        index = snapshot["index"]
+        assert {field: index[field] for field in expected_metadata} == expected_metadata
+        assert set(index) == {*expected_metadata, "sessions"}
+    assert lifecycle["source_index_path"].read_bytes() == lifecycle["source_index_before"]
+    assert Path(expected_metadata["source_index_path"]).parent == lifecycle["planning_root"]
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_runtime_request_path_aliases_and_symlinks_fail_before_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    expected_errors = {
+        "lexical-alias": "runtime request manifest_path must be normalized and absolute",
+        "symlink": "symlink path component is forbidden",
+        "path-escape": "runtime manifest, planning root, and active index are not canonical",
+    }
+    for mutation in ("lexical-alias", "symlink", "path-escape"):
+        case = _runtime_case(tmp_path / mutation, "phase7-upsert")
+        request = json.loads(case["request_path"].read_text())
+        extra_targets: list[Path] = []
+        if mutation == "lexical-alias":
+            request["manifest_path"] = str(
+                case["manifest_path"].parent
+                / ".."
+                / case["manifest_path"].parent.name
+                / "session.json"
+            )
+        elif mutation == "symlink":
+            alias_project = tmp_path / mutation / "project-link"
+            alias_project.symlink_to(case["planning_root"].parent, target_is_directory=True)
+            alias_root = alias_project / "planning"
+            request["planning_root"] = str(alias_root)
+            request["manifest_path"] = str(
+                alias_root / case["manifest_path"].parent.name / "session.json"
+            )
+            request["index_path"] = str(alias_root / "sessions.active-wake.json")
+        else:
+            escaped_manifest = tmp_path / mutation / "outside" / "session.json"
+            escaped_manifest.parent.mkdir()
+            request["manifest_path"] = str(escaped_manifest)
+            extra_targets.append(escaped_manifest)
+        request["input_set_sha256"], request["payload_sha256"] = (
+            MIGRATION.runtime_request_digests(request)
+        )
+        _write_json(case["request_path"], request)
+
+        addressed_targets = [Path(request["manifest_path"]), Path(request["index_path"])]
+        watched_targets = [
+            case["manifest_path"],
+            case["index_path"],
+            *addressed_targets,
+            *extra_targets,
+        ]
+        before = {
+            path: path.read_bytes() if path.exists() else None for path in watched_targets
+        }
+
+        assert MIGRATION.main(
+            [case["operation"], "--request", str(case["request_path"])]
+        ) == 2
+        assert expected_errors[mutation] in capsys.readouterr().err
+        assert {
+            path: path.read_bytes() if path.exists() else None for path in watched_targets
+        } == before
+        assert not MIGRATION._journal_path().exists()
+        assert not _transaction_artifacts(watched_targets)
+
+
+def test_runtime_request_digests_allowlists_and_exact_row_requirements_fail_before_mutation(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    refused_cases: list[tuple[dict[str, Any], str]] = []
+
+    input_digest = _runtime_case(tmp_path / "input-digest", "phase7-upsert")
+    request = json.loads(input_digest["request_path"].read_text())
+    request["input_set_sha256"] = "0" * 64
+    _write_json(input_digest["request_path"], request)
+    refused_cases.append((input_digest, "runtime request input-set digest mismatch"))
+
+    payload_digest = _runtime_case(tmp_path / "payload-digest", "phase7-upsert")
+    request = json.loads(payload_digest["request_path"].read_text())
+    request["payload_sha256"] = "0" * 64
+    _write_json(payload_digest["request_path"], request)
+    refused_cases.append((payload_digest, "runtime request payload digest mismatch"))
+
+    forbidden_field = _runtime_case(tmp_path / "forbidden-field", "phase9-update")
+    request = json.loads(forbidden_field["request_path"].read_text())
+    request["replacement_manifest"]["ticket_id"] = "AGE-OTHER"
+    request["input_set_sha256"], request["payload_sha256"] = (
+        MIGRATION.runtime_request_digests(request)
+    )
+    _write_json(forbidden_field["request_path"], request)
+    refused_cases.append(
+        (
+            forbidden_field,
+            "phase9-update changes forbidden manifest fields",
+        )
+    )
+
+    for operation in ("phase9-update", "resumer-update", "resumer-close"):
+        missing_row = _runtime_case(tmp_path / f"missing-row-{operation}", operation)
+        empty_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": []}
+        _write_json(missing_row["index_path"], empty_index)
+        replacement_index = (
+            empty_index
+            if operation == "resumer-close"
+            else missing_row["replacement_index"]
+        )
+        _write_runtime_request(
+            missing_row["request_path"],
+            operation,
+            missing_row["planning_root"],
+            missing_row["manifest_path"],
+            missing_row["index_path"],
+            missing_row["replacement_manifest"],
+            replacement_index,
+            _row_identity(
+                _expected_active_row(
+                    missing_row["replacement_manifest"], missing_row["manifest_path"]
+                )
+            ),
+        )
+        expected_error = (
+            "resumer-close requires one exact active row"
+            if operation == "resumer-close"
+            else "runtime active-row identity is missing or duplicated"
+        )
+        refused_cases.append((missing_row, expected_error))
+
+    for case, expected_error in refused_cases:
+        targets = [case["manifest_path"], case["index_path"]]
+        before = {path: path.read_bytes() if path.exists() else None for path in targets}
+
+        assert MIGRATION.main(
+            [case["operation"], "--request", str(case["request_path"])]
+        ) == 2
+        assert expected_error in capsys.readouterr().err
+        assert {
+            path: path.read_bytes() if path.exists() else None for path in targets
+        } == before
+        assert not MIGRATION._journal_path().exists()
+        assert not _transaction_artifacts(targets)
 
 
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))

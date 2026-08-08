@@ -2613,6 +2613,94 @@ def test_real_age255_manifest_normalizes_routes_dependencies_and_waves(tmp_path:
     }
 
 
+def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_hash(
+    tmp_path: Path,
+):
+    source_path, tickets = _age255_manifest(tmp_path)
+    scope_path = tmp_path / "feature-scope.md"
+    scope_path.write_text("# Feature scope\n", encoding="utf-8")
+
+    result = normalize_successor_manifest(
+        source_path,
+        feature_id="AGE-255",
+        feature_scope_path=scope_path,
+        feature_branch="feature/hourly-suspicious-process-investigator",
+        trunk_branch="main",
+        manager_flavor="manager-max",
+        ticket_system="linear",
+        scoped_ticket_list=tickets,
+        child_worktrees_root=tmp_path / "worktrees",
+        planning_dir=tmp_path / "planning",
+        scratch_dir=tmp_path / "scratch",
+    )
+    route = next(row for row in result["records"] if row["ticket_id"] == "AGE-259")
+
+    assert set(result) == {
+        "schema",
+        "source_schema",
+        "feature_id",
+        "feature_scope_path",
+        "trunk_branch",
+        "feature_branch",
+        "ticket_system",
+        "source_backend",
+        "manager_flavor",
+        "source_kind",
+        "source_path",
+        "source_sha256",
+        "topological_order",
+        "waves",
+        "records",
+    }
+    assert {
+        field: result[field]
+        for field in (
+            "schema",
+            "source_schema",
+            "source_kind",
+            "source_path",
+            "source_sha256",
+            "source_backend",
+            "feature_branch",
+            "trunk_branch",
+            "ticket_system",
+        )
+    } == {
+        "schema": "feature-route-manifest-v2",
+        "source_schema": "feature-successor-envelope-v1",
+        "source_kind": "successor_manifest_path",
+        "source_path": str(source_path),
+        "source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_backend": "linear",
+        "feature_branch": "feature/hourly-suspicious-process-investigator",
+        "trunk_branch": "main",
+        "ticket_system": "linear",
+    }
+    assert set(route) == {
+        "ticket_id",
+        "successor_id",
+        "title",
+        "brief_path",
+        "surfaces",
+        "owning_route",
+        "depends_on",
+        "branch_name",
+        "ticket_source",
+        "route_payload",
+        "route_worktree_path",
+        "route_planning_dir",
+        "route_scratch_dir",
+    }
+    assert route["branch_name"] == "route/age-259"
+    assert route["route_worktree_path"] == str(tmp_path / "worktrees" / "age-259")
+    assert route["route_planning_dir"] == str(
+        tmp_path / "planning" / "routes" / "age-259"
+    )
+    assert route["route_scratch_dir"] == str(
+        tmp_path / "scratch" / "routes" / "age-259"
+    )
+
+
 @pytest.mark.skipif(
     not REAL_AGE255_MANIFEST.is_file(),
     reason="external AGE-255 provenance source is unavailable",
