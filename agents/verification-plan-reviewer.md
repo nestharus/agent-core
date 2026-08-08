@@ -106,8 +106,27 @@ or parsed at all.
 |---|---:|---|
 
 ## Findings
-| Finding ID | Severity | Behavior claim | Experiment command or action | Expected observation | Proxy class | Evidence refs | Blocks pipeline |
-|---|---|---|---|---|---|---|---|
+
+### Finding `VPR-<NNN>`
+
+| Field | Value |
+|---|---|
+| eval_id | `verification-plan-reviewer` |
+| finding_ids | `VPR-<NNN>` |
+| severity | |
+| evidence_paths | |
+| summary | |
+| suggested_action | |
+| confidence | |
+| behavior_claim | |
+| verification_plan_excerpt | |
+| experiment_command_or_action | |
+| expected_observation | |
+| claim_experiment_fit | |
+| proxy_class | |
+| evidence_refs | |
+| expected_terminal_verdict | |
+| blocks_pipeline | |
 
 ## Claim-experiment decision
 
@@ -116,10 +135,10 @@ or parsed at all.
 <terminal verdict>
 ```
 
-Finding records include `id`, `severity`, `behavior_claim`,
-`verification_plan_excerpt`, `experiment_command_or_action`,
-`expected_observation`, `claim_experiment_fit`, `proxy_class`, `evidence_refs`,
-and `blocks_pipeline`.
+Repeat the per-finding subsection for every finding and populate every field;
+do not rename, combine, or omit fields. `finding_ids` contains one report-local
+`VPR-<NNN>` ID for each record. `blocks_pipeline` is the reviewer's pipeline
+decision in addition to the canonical eval finding fields.
 
 ## Verdict
 
