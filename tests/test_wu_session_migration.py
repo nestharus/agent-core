@@ -1579,6 +1579,73 @@ def test_phase3_bind_updates_only_phase3_bindings_and_preserves_active_index_byt
     assert not MIGRATION._journal_path().exists()
 
 
+def _pre_pr_readback(case: dict[str, Any], source_manifest: dict[str, Any]) -> dict[str, Any]:
+    request_path = case["request_path"]
+    request = json.loads(request_path.read_text())
+    manifest_path = case["manifest_path"]
+    index_path = case["index_path"]
+    current_manifest = json.loads(manifest_path.read_text())
+    return {
+        "schema": MIGRATION.PRE_PR_READBACK_SCHEMA,
+        "operation": case["operation"],
+        "request_path": str(request_path),
+        "request_sha256": _digest(request_path.read_bytes()),
+        "source_manifest": source_manifest,
+        "manifest_identity": MIGRATION.runtime_source_identity(manifest_path),
+        "changed_keys": sorted(
+            key
+            for key in set(source_manifest) | set(current_manifest)
+            if source_manifest.get(key) != current_manifest.get(key)
+        ),
+        "artifact_identities": [
+            {**record, **MIGRATION.runtime_source_identity(Path(record["path"]))}
+            for record in request["sources"]["artifacts"]
+        ],
+        "active_index_identity": MIGRATION.runtime_source_identity(index_path),
+        "active_index_rows": json.loads(index_path.read_text())["sessions"],
+        "synthesized_row": False,
+        "journal_retained": False,
+        "verdict": "PASS",
+    }
+
+
+def test_validate_pre_pr_readback_machine_validates_phase3_pass(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    readback_path = tmp_path / "phase3-bind.readback.json"
+    _write_json(readback_path, _pre_pr_readback(case, source_manifest))
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(TOOL_DIR),
+            "validate-pre-pr-readback",
+            "--readback",
+            str(readback_path),
+        ],
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "WU-SESSION-PRE-PR-READBACK: PASS" in result.stdout
+
+
+def test_validate_pre_pr_readback_rejects_self_asserted_pass(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    readback = _pre_pr_readback(case, source_manifest)
+    readback["changed_keys"] = ["phase_history"]
+    readback_path = tmp_path / "phase3-bind.readback.json"
+    _write_json(readback_path, readback)
+
+    with pytest.raises(InputError, match="changed keys mismatch"):
+        MIGRATION.validate_pre_pr_readback(readback_path)
+
+
 def test_cold_start_disposition_bind_updates_only_disposition_ref(tmp_path: Path):
     case = _runtime_case(tmp_path, "cold-start-disposition-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())

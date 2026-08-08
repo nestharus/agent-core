@@ -29,6 +29,7 @@ CONFLICT_RESOLUTION_SCHEMA = "wu-session-conflict-resolutions-v1"
 ACTIVE_INDEX_SCHEMA = "wu-sessions-active-wake-v1"
 JOURNAL_SCHEMA = "wu-session-migration-journal-v1"
 RUNTIME_REQUEST_SCHEMA = "wu-session-runtime-write-v1"
+PRE_PR_READBACK_SCHEMA = "wu-session-pre-pr-write-readback-v1"
 RUNTIME_OPERATIONS = {
     "cold-start-disposition-bind",
     "phase3-bind",
@@ -90,6 +91,21 @@ RUNTIME_REQUEST_KEYS = {
     "replacement_index",
     "input_set_sha256",
     "payload_sha256",
+}
+PRE_PR_READBACK_KEYS = {
+    "schema",
+    "operation",
+    "request_path",
+    "request_sha256",
+    "source_manifest",
+    "manifest_identity",
+    "changed_keys",
+    "artifact_identities",
+    "active_index_identity",
+    "active_index_rows",
+    "synthesized_row",
+    "journal_retained",
+    "verdict",
 }
 SOURCE_IDENTITY_KEYS = {"exists", "sha256", "device", "inode", "mode"}
 ARTIFACT_IDENTITY_KEYS = {"role", "path", "sha256", "device", "inode", "mode"}
@@ -193,6 +209,9 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--reviewed-inventory-sha256", required=True)
     capture.add_argument("--output", type=Path, required=True)
 
+    readback = subparsers.add_parser("validate-pre-pr-readback")
+    readback.add_argument("--readback", type=Path, required=True)
+
     apply = subparsers.add_parser("apply")
     apply.add_argument("--plan", type=Path, required=True)
     for operation in sorted(RUNTIME_OPERATIONS):
@@ -205,6 +224,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(list(argv) if argv is not None else None)
     try:
         with _cutover_lock():
+            if args.command == "validate-pre-pr-readback":
+                validate_pre_pr_readback(args.readback)
+                print(f"WU-SESSION-PRE-PR-READBACK: PASS; evidence={args.readback}")
+                return 0
             recover_incomplete_transaction()
             if args.command == "dry-run":
                 plan = build_plan(
@@ -484,6 +507,97 @@ def apply_runtime_request(
             _apply_runtime_request_locked(request_path, operation)
         return
     _apply_runtime_request_locked(request_path, operation)
+
+
+def validate_pre_pr_readback(readback_path: Path) -> None:
+    readback = _decode_json(_safe_read_bytes(readback_path), readback_path)
+    if set(readback) != PRE_PR_READBACK_KEYS or readback.get("schema") != PRE_PR_READBACK_SCHEMA:
+        raise InputError(f"pre-PR readback must use closed schema {PRE_PR_READBACK_SCHEMA}")
+    operation = readback.get("operation")
+    if operation not in PRE_PR_BIND_OPERATIONS:
+        raise InputError("pre-PR readback operation mismatch")
+    request_path = _absolute_path_field(readback, "request_path")
+    request_raw = _safe_read_bytes(request_path)
+    if readback.get("request_sha256") != _sha256(request_raw):
+        raise InputError("pre-PR readback request digest mismatch")
+    request = _decode_json(request_raw, request_path)
+    _validate_runtime_request(request, cast(str, operation), check_sources=False)
+
+    source_manifest = readback.get("source_manifest")
+    if not isinstance(source_manifest, dict):
+        raise InputError("pre-PR readback source_manifest must be an object")
+    if _sha256(_json_bytes(source_manifest)) != request["sources"]["manifest"]["sha256"]:
+        raise InputError("pre-PR readback source manifest digest mismatch")
+
+    manifest_path = Path(request["manifest_path"])
+    index_path = Path(request["index_path"])
+    index_document = _decode_json(_safe_read_bytes(index_path), index_path)
+    artifact_records, artifact_documents = _validate_runtime_artifact_sources(
+        request["sources"],
+        operation=cast(str, operation),
+        check_sources=True,
+        check_paths=True,
+    )
+    _validate_runtime_projection(
+        cast(str, operation),
+        Path(request["planning_root"]),
+        manifest_path,
+        source_manifest,
+        index_document,
+        request["replacement_manifest"],
+        request["replacement_index"],
+        None,
+        artifact_records,
+        artifact_documents,
+    )
+
+    current_manifest = _decode_json(_safe_read_bytes(manifest_path), manifest_path)
+    if current_manifest != request["replacement_manifest"]:
+        raise ApplyError("pre-PR readback manifest does not match the replacement")
+    changed_keys = sorted(
+        key
+        for key in set(source_manifest) | set(current_manifest)
+        if source_manifest.get(key) != current_manifest.get(key)
+    )
+    if (
+        readback.get("changed_keys") != changed_keys
+        or set(changed_keys) != RUNTIME_ALLOWED_MANIFEST_CHANGES[cast(str, operation)]
+    ):
+        raise InputError("pre-PR readback changed keys mismatch")
+    if operation == "phase3-bind":
+        source_history = _validate_pre_pr_history(source_manifest.get("phase_history"))
+        current_history = current_manifest.get("phase_history")
+        if not isinstance(current_history, list) or current_history[:-1] != source_history:
+            raise InputError("pre-PR readback Phase 3 history prefix mismatch")
+        if len(current_history) != len(source_history) + 1:
+            raise InputError("pre-PR readback Phase 3 history is not one exact append")
+        _validate_canonical_phase3_history_entry(current_history[-1])
+    if readback.get("manifest_identity") != runtime_source_identity(manifest_path):
+        raise ApplyError("pre-PR readback manifest identity mismatch")
+
+    artifact_identities = [
+        {**record, **runtime_source_identity(Path(record["path"]))}
+        for record in artifact_records
+    ]
+    if readback.get("artifact_identities") != artifact_identities:
+        raise ApplyError("pre-PR readback artifact identities mismatch")
+
+    index_identity = runtime_source_identity(index_path)
+    index_rows = index_document.get("sessions")
+    if (
+        index_identity != request["sources"]["index"]
+        or readback.get("active_index_identity") != index_identity
+        or readback.get("active_index_rows") != index_rows
+        or index_document != request["replacement_index"]
+    ):
+        raise ApplyError("pre-PR readback active index changed")
+    if readback.get("synthesized_row") is not False:
+        raise InputError("pre-PR readback must prove no synthesized row")
+    journal_retained = _journal_path().exists()
+    if readback.get("journal_retained") is not journal_retained or journal_retained:
+        raise ApplyError("pre-PR readback found a retained journal")
+    if readback.get("verdict") != "PASS":
+        raise InputError("pre-PR readback verdict must equal PASS")
 
 
 def _apply_runtime_request_locked(request_path: Path, operation: str) -> None:
