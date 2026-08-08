@@ -1629,9 +1629,12 @@ def test_phase3_bind_maps_canonical_snapshot_keys_and_preserves_source_and_index
     assert MIGRATION.validate_pre_pr_readback(readback_path) is None
 
 
-@pytest.mark.parametrize("mismatch", ["path", "digest"])
+@pytest.mark.parametrize(
+    ("mismatch", "expected_field"),
+    [("path", "ticket_snapshot_path"), ("digest", "ticket_snapshot_sha256")],
+)
 def test_phase3_bind_rejects_manifest_snapshot_identity_mismatch(
-    mismatch: str, tmp_path: Path
+    mismatch: str, expected_field: str, tmp_path: Path
 ):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
@@ -1672,7 +1675,7 @@ def test_phase3_bind_rejects_manifest_snapshot_identity_mismatch(
 
     with pytest.raises(
         InputError,
-        match="does not match manifest ticket_snapshot_path",
+        match=rf"does not match manifest {expected_field}",
     ):
         MIGRATION.apply_runtime_request(request_path, "phase3-bind")
 

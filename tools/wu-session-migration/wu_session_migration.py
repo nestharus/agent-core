@@ -2822,11 +2822,13 @@ def _validate_phase3_artifact_bindings(
         estimate_path_key,
         estimate_digest_key,
     ) in manifest_pairs:
-        if manifest.get(manifest_path_key) != estimate.get(
-            estimate_path_key
-        ) or manifest.get(manifest_digest_key) != estimate.get(estimate_digest_key):
+        if manifest.get(manifest_path_key) != estimate.get(estimate_path_key):
             raise InputError(
                 f"phase3-bind estimate does not match manifest {manifest_path_key}"
+            )
+        if manifest.get(manifest_digest_key) != estimate.get(estimate_digest_key):
+            raise InputError(
+                f"phase3-bind estimate does not match manifest {manifest_digest_key}"
             )
     manifest_contract_path = manifest.get(
         "resolved_operator_contract_path", manifest.get("resolved_contract_path")
