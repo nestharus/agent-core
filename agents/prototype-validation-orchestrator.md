@@ -49,10 +49,10 @@ Sequence `~/ai/workflows/prototype-validation-shipping.md` from root input valid
 
 Child dispatch registry:
 
-- `prototype-validation-contract-validator.md` through `agents -m gpt-high -f <prompt-file>` for root-input, branch-separation, phase-output, stop-condition, RCA-envelope, evidence-bundle, and cleanup-scope checks.
-- `prototype-validation-screenshot-uploader.md` through `agents -m gpt-high -f <prompt-file>` for GitHub user-attachments upload and `screenshot_url_manifest_path` writing.
-- `prototype-validation-packager.md` through `agents -m gpt-high -f <prompt-file>` for image tag, zip path, package manifest, experiment-evidence bundle, and cleanup report work.
-- `prototype-validation-evidence-bundle-adapter.md` through `agents -m gpt-high -f <prompt-file>` for evidence-bundle parsing and `prototype-pr-writer.md` dispatch.
+- `prototype-validation-contract-validator.md` through `agents -a <selected-operator-path> -p <phase-owned-truth-or-eval-worktree> -f <prompt-file> 2>&1 | tee <log-path>` for root-input, branch-separation, phase-output, stop-condition, RCA-envelope, evidence-bundle, and cleanup-scope checks.
+- `prototype-validation-screenshot-uploader.md` through `agents -a <selected-operator-path> -p <eval_worktree_path> -f <prompt-file> 2>&1 | tee <log-path>` for GitHub user-attachments upload and `screenshot_url_manifest_path` writing.
+- `prototype-validation-packager.md` through `agents -a <selected-operator-path> -p <eval_worktree_path> -f <prompt-file> 2>&1 | tee <log-path>` for image tag, zip path, package manifest, experiment-evidence bundle, and cleanup report work.
+- `prototype-validation-evidence-bundle-adapter.md` through `agents -a <selected-operator-path> -p <truth_worktree_path> -f <prompt-file> 2>&1 | tee <log-path>` for evidence-bundle parsing and `prototype-pr-writer.md` dispatch.
 
 ## Procedure
 
