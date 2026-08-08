@@ -29,13 +29,17 @@ CONFLICT_RESOLUTION_SCHEMA = "wu-session-conflict-resolutions-v1"
 ACTIVE_INDEX_SCHEMA = "wu-sessions-active-wake-v1"
 JOURNAL_SCHEMA = "wu-session-migration-journal-v1"
 RUNTIME_REQUEST_SCHEMA = "wu-session-runtime-write-v1"
+PRE_PR_READBACK_SCHEMA = "wu-session-pre-pr-write-readback-v1"
 RUNTIME_OPERATIONS = {
+    "cold-start-disposition-bind",
+    "phase3-bind",
     "phase0-init",
     "phase7-upsert",
     "phase9-update",
     "resumer-update",
     "resumer-close",
 }
+PRE_PR_BIND_OPERATIONS = {"cold-start-disposition-bind", "phase3-bind"}
 SUPPORTED_TICKET_SYSTEMS = {"jira", "linear"}
 EXPECTED_COUNTS = {
     "manifest_files": 306,
@@ -88,7 +92,23 @@ RUNTIME_REQUEST_KEYS = {
     "input_set_sha256",
     "payload_sha256",
 }
+PRE_PR_READBACK_KEYS = {
+    "schema",
+    "operation",
+    "request_path",
+    "request_sha256",
+    "source_manifest",
+    "manifest_identity",
+    "changed_keys",
+    "artifact_identities",
+    "active_index_identity",
+    "active_index_rows",
+    "synthesized_row",
+    "journal_retained",
+    "verdict",
+}
 SOURCE_IDENTITY_KEYS = {"exists", "sha256", "device", "inode", "mode"}
+ARTIFACT_IDENTITY_KEYS = {"role", "path", "sha256", "device", "inode", "mode"}
 ROW_IDENTITY_KEYS = {"ticket_id", "branch", "draft_pr_url", "session_manifest_path"}
 ACTIVE_ROW_KEYS = {
     "ticket_id",
@@ -108,6 +128,12 @@ ACTIVE_ROW_KEYS = {
     "planning_dir",
 }
 RUNTIME_ALLOWED_MANIFEST_CHANGES = {
+    "cold-start-disposition-bind": {"cold_start_disposition_ref"},
+    "phase3-bind": {
+        "phase_3_estimate_writeback_ref",
+        "phase_3_estimate_writeback_sha256",
+        "phase_history",
+    },
     "phase7-upsert": {
         "draft_pr_url",
         "draft_pr_number",
@@ -183,6 +209,9 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--reviewed-inventory-sha256", required=True)
     capture.add_argument("--output", type=Path, required=True)
 
+    readback = subparsers.add_parser("validate-pre-pr-readback")
+    readback.add_argument("--readback", type=Path, required=True)
+
     apply = subparsers.add_parser("apply")
     apply.add_argument("--plan", type=Path, required=True)
     for operation in sorted(RUNTIME_OPERATIONS):
@@ -196,6 +225,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with _cutover_lock():
             recover_incomplete_transaction()
+            if args.command == "validate-pre-pr-readback":
+                validate_pre_pr_readback(args.readback)
+                print(f"WU-SESSION-PRE-PR-READBACK: PASS; evidence={args.readback}")
+                return 0
             if args.command == "dry-run":
                 plan = build_plan(
                     args.inventory,
@@ -476,11 +509,107 @@ def apply_runtime_request(
     _apply_runtime_request_locked(request_path, operation)
 
 
+def validate_pre_pr_readback(readback_path: Path) -> None:
+    readback = _decode_json(_safe_read_bytes(readback_path), readback_path)
+    if set(readback) != PRE_PR_READBACK_KEYS or readback.get("schema") != PRE_PR_READBACK_SCHEMA:
+        raise InputError(f"pre-PR readback must use closed schema {PRE_PR_READBACK_SCHEMA}")
+    operation = readback.get("operation")
+    if operation not in PRE_PR_BIND_OPERATIONS:
+        raise InputError("pre-PR readback operation mismatch")
+    request_path = _absolute_path_field(readback, "request_path")
+    request_raw = _safe_read_bytes(request_path)
+    if readback.get("request_sha256") != _sha256(request_raw):
+        raise InputError("pre-PR readback request digest mismatch")
+    request = _decode_json(request_raw, request_path)
+    _validate_runtime_request(request, cast(str, operation), check_sources=False)
+
+    source_manifest = readback.get("source_manifest")
+    if not isinstance(source_manifest, dict):
+        raise InputError("pre-PR readback source_manifest must be an object")
+    if _sha256(_json_bytes(source_manifest)) != request["sources"]["manifest"]["sha256"]:
+        raise InputError("pre-PR readback source manifest digest mismatch")
+
+    manifest_path = Path(request["manifest_path"])
+    index_path = Path(request["index_path"])
+    index_document = _decode_json(_safe_read_bytes(index_path), index_path)
+    artifact_records, artifact_documents = _validate_runtime_artifact_sources(
+        request["sources"],
+        operation=cast(str, operation),
+        check_sources=True,
+        check_paths=True,
+    )
+    _validate_runtime_projection(
+        cast(str, operation),
+        Path(request["planning_root"]),
+        manifest_path,
+        source_manifest,
+        index_document,
+        request["replacement_manifest"],
+        request["replacement_index"],
+        None,
+        artifact_records,
+        artifact_documents,
+    )
+
+    current_manifest = _decode_json(_safe_read_bytes(manifest_path), manifest_path)
+    if current_manifest != request["replacement_manifest"]:
+        raise ApplyError("pre-PR readback manifest does not match the replacement")
+    changed_keys = sorted(
+        key
+        for key in set(source_manifest) | set(current_manifest)
+        if source_manifest.get(key) != current_manifest.get(key)
+    )
+    if (
+        readback.get("changed_keys") != changed_keys
+        or set(changed_keys) != RUNTIME_ALLOWED_MANIFEST_CHANGES[cast(str, operation)]
+    ):
+        raise InputError("pre-PR readback changed keys mismatch")
+    if operation == "phase3-bind":
+        source_history = _validate_pre_pr_history(source_manifest.get("phase_history"))
+        current_history = current_manifest.get("phase_history")
+        if not isinstance(current_history, list) or current_history[:-1] != source_history:
+            raise InputError("pre-PR readback Phase 3 history prefix mismatch")
+        if len(current_history) != len(source_history) + 1:
+            raise InputError("pre-PR readback Phase 3 history is not one exact append")
+        _validate_canonical_phase3_history_entry(current_history[-1])
+    if readback.get("manifest_identity") != runtime_source_identity(manifest_path):
+        raise ApplyError("pre-PR readback manifest identity mismatch")
+
+    artifact_identities = [
+        {**record, **runtime_source_identity(Path(record["path"]))}
+        for record in artifact_records
+    ]
+    if readback.get("artifact_identities") != artifact_identities:
+        raise ApplyError("pre-PR readback artifact identities mismatch")
+
+    index_identity = runtime_source_identity(index_path)
+    index_rows = index_document.get("sessions")
+    if (
+        index_identity != request["sources"]["index"]
+        or readback.get("active_index_identity") != index_identity
+        or readback.get("active_index_rows") != index_rows
+        or index_document != request["replacement_index"]
+    ):
+        raise ApplyError("pre-PR readback active index changed")
+    if readback.get("synthesized_row") is not False:
+        raise InputError("pre-PR readback must prove no synthesized row")
+    journal_retained = _journal_path().exists()
+    if readback.get("journal_retained") is not journal_retained or journal_retained:
+        raise ApplyError("pre-PR readback found a retained journal")
+    if readback.get("verdict") != "PASS":
+        raise InputError("pre-PR readback verdict must equal PASS")
+
+
 def _apply_runtime_request_locked(request_path: Path, operation: str) -> None:
     request_raw = _safe_read_bytes(request_path)
     request = _decode_json(request_raw, request_path)
-    writes, planning_roots = _validate_runtime_request(request, operation, check_sources=True)
-    _reject_cross_aliases([request_path], [Path(write["path"]) for write in writes])
+    writes, guards, planning_roots = _validate_runtime_request(
+        request, operation, check_sources=True
+    )
+    _reject_cross_aliases(
+        [request_path],
+        [Path(item["path"]) for item in [*writes, *guards]],
+    )
     _execute_transaction(
         plan_path=request_path,
         plan_raw=request_raw,
@@ -489,6 +618,7 @@ def _apply_runtime_request_locked(request_path: Path, operation: str) -> None:
         input_set_sha256=request["input_set_sha256"],
         planning_roots=planning_roots,
         writes=writes,
+        read_only_guards=guards,
     )
 
 
@@ -501,12 +631,13 @@ def _execute_transaction(
     input_set_sha256: str,
     planning_roots: list[Path],
     writes: Sequence[Mapping[str, Any]],
+    read_only_guards: Sequence[Mapping[str, Any]] = (),
 ) -> None:
     transaction_id = str(uuid.uuid4())
     targets: list[dict[str, Any]] = []
     held_parents: dict[Path, dict[str, Any]] = {}
     try:
-        for write in writes:
+        for write in [*writes, *read_only_guards]:
             path = Path(write["path"])
             if path.parent not in held_parents:
                 held_parents[path.parent] = _open_held_parent(path.parent)
@@ -546,6 +677,21 @@ def _execute_transaction(
                 }
             )
 
+        guard_records = [
+            {
+                "role": guard["role"],
+                "path": guard["path"],
+                "parent_path": str(Path(guard["path"]).parent),
+                "parent_device": held_parents[Path(guard["path"]).parent]["device"],
+                "parent_inode": held_parents[Path(guard["path"]).parent]["inode"],
+                "source_sha256": guard["source_sha256"],
+                "source_device": guard["source_device"],
+                "source_inode": guard["source_inode"],
+                "source_mode": guard["source_mode"],
+            }
+            for guard in read_only_guards
+        ]
+        _verify_read_only_guards(read_only_guards, held_parents)
         journal = {
             "schema": JOURNAL_SCHEMA,
             "transaction_id": transaction_id,
@@ -559,9 +705,12 @@ def _execute_transaction(
             "ordered_targets": targets,
             "completed_replacements": [],
         }
+        if operation in PRE_PR_BIND_OPERATIONS:
+            journal["read_only_guards"] = guard_records
         _inject_fault("journal", 0)
         _inject_fault("journal-create", 0)
         _write_journal(journal)
+        _verify_read_only_guards(read_only_guards, held_parents)
 
         for index, (write, target) in enumerate(zip(writes, targets)):
             _inject_fault("stage", index)
@@ -595,6 +744,7 @@ def _execute_transaction(
                 parent, target["replacement_name"]
             )
             _write_journal(journal)
+        _verify_read_only_guards(read_only_guards, held_parents)
         for write in writes:
             path = Path(write["path"])
             _verify_source_identity_at(held_parents[path.parent], path.name, write, path)
@@ -604,6 +754,7 @@ def _execute_transaction(
         for write in writes:
             path = Path(write["path"])
             _verify_source_identity_at(held_parents[path.parent], path.name, write, path)
+        _verify_read_only_guards(read_only_guards, held_parents)
         journal["phase"] = "prepared"
         _write_journal(journal)
         _inject_fault("journal-transition", 0)
@@ -615,6 +766,7 @@ def _execute_transaction(
             parent = held_parents[path.parent]
             _verify_held_parent(parent)
             _verify_source_identity_at(parent, path.name, write, path)
+        _verify_read_only_guards(read_only_guards, held_parents)
         for index, (write, target) in enumerate(zip(writes, targets)):
             parent = held_parents[Path(target["parent_path"])]
             _verify_held_parent(parent)
@@ -630,6 +782,8 @@ def _execute_transaction(
             _inject_fault("directory-fsync", index)
             _inject_fault("commit-parent-fsync", index)
             os.fsync(parent["fd"])
+            _inject_fault("after-replace-before-guard-check", index)
+            _verify_read_only_guards(read_only_guards, held_parents)
             journal["completed_replacements"].append(index)
             _inject_fault("journal", index + 1)
             _inject_fault("journal-transition", index + 1)
@@ -907,6 +1061,9 @@ def _validate_recovery_journal(document: Mapping[str, Any]) -> dict[str, Any]:
             "ordered_targets",
             "completed_replacements",
         }
+        operation = document.get("operation")
+        if operation in PRE_PR_BIND_OPERATIONS:
+            journal_keys.add("read_only_guards")
         target_keys = {
             "path",
             "name",
@@ -938,7 +1095,6 @@ def _validate_recovery_journal(document: Mapping[str, Any]) -> dict[str, Any]:
             uuid.UUID(cast(str, transaction_id))
         except (TypeError, ValueError) as exc:
             raise InputError("recovery journal transaction id is malformed") from exc
-        operation = document.get("operation")
         if operation != "migration-apply" and operation not in RUNTIME_OPERATIONS:
             raise InputError("recovery journal operation is unsupported")
         phase = document.get("phase")
@@ -979,7 +1135,7 @@ def _validate_recovery_journal(document: Mapping[str, Any]) -> dict[str, Any]:
                 raise InputError("recovery journal input-set digest mismatch")
             _validate_writes(writes, planning_roots, check_paths=False)
         else:
-            writes, planning_roots = _validate_runtime_request(
+            writes, guards, planning_roots = _validate_runtime_request(
                 plan, cast(str, operation), check_sources=False, check_paths=False
             )
             if document.get("plan_payload_sha256") != plan["payload_sha256"]:
@@ -990,6 +1146,12 @@ def _validate_recovery_journal(document: Mapping[str, Any]) -> dict[str, Any]:
             raise InputError("recovery journal planning-root projection mismatch")
         if len(targets) != len(writes):
             raise InputError("recovery journal target count does not match the bound plan")
+        guards = guards if operation != "migration-apply" else []
+        raw_guards = document.get("read_only_guards", [])
+        if operation in PRE_PR_BIND_OPERATIONS:
+            _validate_recovery_guard_projection(raw_guards, guards)
+        elif raw_guards:
+            raise InputError("legacy recovery journal cannot contain read-only guards")
 
         normalized: set[str] = {_normalized(plan_path)}
         for index, (raw_target, write) in enumerate(zip(targets, writes)):
@@ -1052,11 +1214,57 @@ def _validate_recovery_journal(document: Mapping[str, Any]) -> dict[str, Any]:
                 if norm in normalized:
                     raise InputError(f"duplicate recovery journal path: {artifact}")
                 normalized.add(norm)
+        for raw_guard in raw_guards:
+            guard_path = Path(raw_guard["path"])
+            norm = _normalized(guard_path)
+            if norm in normalized:
+                raise InputError(f"duplicate recovery journal path: {guard_path}")
+            normalized.add(norm)
         return dict(document)
     except ApplyError:
         raise
     except (MigrationError, OSError, KeyError, TypeError, ValueError) as exc:
         raise ApplyError(f"malformed or substituted recovery journal: {exc}") from exc
+
+
+def _validate_recovery_guard_projection(
+    raw_guards: Any, guards: Sequence[Mapping[str, Any]]
+) -> None:
+    guard_keys = {
+        "role",
+        "path",
+        "parent_path",
+        "parent_device",
+        "parent_inode",
+        "source_sha256",
+        "source_device",
+        "source_inode",
+        "source_mode",
+    }
+    if not isinstance(raw_guards, list) or len(raw_guards) != len(guards):
+        raise InputError("recovery journal read-only guard count mismatch")
+    for index, (raw_guard, guard) in enumerate(zip(raw_guards, guards)):
+        if not isinstance(raw_guard, dict) or set(raw_guard) != guard_keys:
+            raise InputError(
+                f"recovery journal read-only guard {index} has unknown or missing fields"
+            )
+        path = Path(guard["path"])
+        expected = {
+            "role": guard["role"],
+            "path": guard["path"],
+            "parent_path": str(path.parent),
+            "source_sha256": guard["source_sha256"],
+            "source_device": guard["source_device"],
+            "source_inode": guard["source_inode"],
+            "source_mode": guard["source_mode"],
+        }
+        if any(raw_guard.get(key) != value for key, value in expected.items()):
+            raise InputError(f"recovery journal read-only guard projection mismatch: {path}")
+        if not all(
+            isinstance(raw_guard.get(key), int) and raw_guard[key] >= 0
+            for key in ("parent_device", "parent_inode")
+        ):
+            raise InputError(f"recovery journal guard parent identity is malformed: {path}")
 
 
 def capture_evidence(
@@ -1945,7 +2153,7 @@ def _validate_runtime_request(
     *,
     check_sources: bool,
     check_paths: bool = True,
-) -> tuple[list[dict[str, Any]], list[Path]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[Path]]:
     if set(request) != RUNTIME_REQUEST_KEYS or request.get("schema") != RUNTIME_REQUEST_SCHEMA:
         raise InputError(f"runtime request must use closed schema {RUNTIME_REQUEST_SCHEMA}")
     operation = request.get("operation")
@@ -1977,8 +2185,13 @@ def _validate_runtime_request(
         _reject_path_aliases([manifest_path, index_path], allow_missing=True)
 
     sources = request.get("sources")
-    if not isinstance(sources, dict) or set(sources) != {"manifest", "index"}:
-        raise InputError("runtime request sources must contain exact manifest and index identities")
+    expected_source_keys = (
+        {"manifest", "index", "artifacts"}
+        if operation in PRE_PR_BIND_OPERATIONS
+        else {"manifest", "index"}
+    )
+    if not isinstance(sources, dict) or set(sources) != expected_source_keys:
+        raise InputError("runtime request sources have unknown or missing fields")
     source_records: dict[str, Mapping[str, Any]] = {}
     for name, path in (("manifest", manifest_path), ("index", index_path)):
         record = sources.get(name)
@@ -1988,15 +2201,26 @@ def _validate_runtime_request(
         if check_sources and runtime_source_identity(path) != record:
             raise ApplyError(f"stale runtime {name} source identity: {path}")
         source_records[name] = record
+    artifact_records, artifact_documents = _validate_runtime_artifact_sources(
+        sources,
+        operation=cast(str, operation),
+        check_sources=check_sources,
+        check_paths=check_paths,
+    )
+    if check_paths and artifact_records:
+        _reject_path_aliases(
+            [manifest_path, index_path]
+            + [Path(record["path"]) for record in artifact_records]
+        )
 
     replacement_manifest = request.get("replacement_manifest")
     replacement_index = request.get("replacement_index")
     if not isinstance(replacement_manifest, dict) or not isinstance(replacement_index, dict):
         raise InputError("runtime replacements must be JSON objects")
     row_identity = request.get("row_identity")
-    if operation == "phase0-init":
+    if operation == "phase0-init" or operation in PRE_PR_BIND_OPERATIONS:
         if row_identity is not None:
-            raise InputError("phase0-init row_identity must be null")
+            raise InputError(f"{operation} row_identity must be null")
     else:
         _validate_row_identity(row_identity, manifest_path)
 
@@ -2016,14 +2240,151 @@ def _validate_runtime_request(
             replacement_manifest,
             replacement_index,
             cast(Mapping[str, Any] | None, row_identity),
+            artifact_records,
+            artifact_documents,
         )
 
-    writes = [
-        _runtime_write(manifest_path, source_records["manifest"], replacement_manifest),
-        _runtime_write(index_path, source_records["index"], replacement_index),
-    ]
+    writes = [_runtime_write(manifest_path, source_records["manifest"], replacement_manifest)]
+    guards: list[dict[str, Any]] = []
+    if operation in PRE_PR_BIND_OPERATIONS:
+        guards.append(_runtime_guard("active-index", index_path, source_records["index"]))
+        guards.extend(
+            _runtime_guard(record["role"], Path(record["path"]), record)
+            for record in artifact_records
+        )
+    else:
+        writes.append(_runtime_write(index_path, source_records["index"], replacement_index))
     _validate_writes(writes, [planning_root], check_paths=check_paths)
-    return writes, [planning_root]
+    _validate_read_only_guards(guards, check_paths=check_paths)
+    return writes, guards, [planning_root]
+
+
+def _validate_runtime_artifact_sources(
+    sources: Mapping[str, Any],
+    *,
+    operation: str,
+    check_sources: bool,
+    check_paths: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
+    if operation not in PRE_PR_BIND_OPERATIONS:
+        return [], {}
+    raw_records = sources.get("artifacts")
+    if not isinstance(raw_records, list):
+        raise InputError("pre-PR runtime artifact sources must be an array")
+    records: list[dict[str, Any]] = []
+    documents: dict[str, Mapping[str, Any]] = {}
+    roles: set[str] = set()
+    paths: set[str] = set()
+    prior_sort_key: tuple[str, str] | None = None
+    for index, raw_record in enumerate(raw_records):
+        if not isinstance(raw_record, dict) or set(raw_record) != ARTIFACT_IDENTITY_KEYS:
+            raise InputError(f"runtime artifact source {index} has unknown or missing fields")
+        role = raw_record.get("role")
+        path_value = raw_record.get("path")
+        digest = raw_record.get("sha256")
+        identity = (
+            raw_record.get("device"),
+            raw_record.get("inode"),
+            raw_record.get("mode"),
+        )
+        if not isinstance(role, str) or not role:
+            raise InputError(f"runtime artifact source {index} has a malformed role")
+        if not isinstance(path_value, str):
+            raise InputError(f"runtime artifact source {index} has a malformed path")
+        path = Path(path_value)
+        if not path.is_absolute() or str(path) != os.path.normpath(str(path)):
+            raise InputError(f"runtime artifact source path must be normalized and absolute: {path}")
+        _require_sha256(digest, f"runtime artifact {role}")
+        if not all(isinstance(value, int) and value >= 0 for value in identity):
+            raise InputError(f"runtime artifact source identity is malformed: {role}")
+        sort_key = (role, path_value)
+        if prior_sort_key is not None and sort_key <= prior_sort_key:
+            raise InputError("runtime artifact sources must be uniquely sorted by role and path")
+        if role in roles or path_value in paths:
+            raise InputError("runtime artifact source roles and paths must be unique")
+        prior_sort_key = sort_key
+        roles.add(role)
+        paths.add(path_value)
+        record = dict(raw_record)
+        records.append(record)
+        if check_paths:
+            _assert_safe_existing(path)
+        if check_sources:
+            observed = runtime_source_identity(path)
+            expected = {
+                "exists": True,
+                "sha256": digest,
+                "device": identity[0],
+                "inode": identity[1],
+                "mode": identity[2],
+            }
+            if observed != expected:
+                raise ApplyError(f"stale runtime artifact source identity: {path}")
+            if role in {"cold-start-disposition", "phase-3-estimate-writeback"}:
+                documents[role] = _decode_json(_safe_read_bytes(path), path)
+    return records, documents
+
+
+def _runtime_guard(
+    role: str, path: Path, source: Mapping[str, Any]
+) -> dict[str, Any]:
+    return {
+        "role": role,
+        "path": str(path),
+        "source_exists": source.get("exists", True),
+        "source_sha256": source["sha256"],
+        "source_device": source["device"],
+        "source_inode": source["inode"],
+        "source_mode": source["mode"],
+    }
+
+
+def _validate_read_only_guards(
+    guards: Sequence[Mapping[str, Any]], *, check_paths: bool
+) -> None:
+    guard_keys = {
+        "role",
+        "path",
+        "source_exists",
+        "source_sha256",
+        "source_device",
+        "source_inode",
+        "source_mode",
+    }
+    paths: list[Path] = []
+    roles: set[str] = set()
+    for index, guard in enumerate(guards):
+        if set(guard) != guard_keys or guard.get("source_exists") is not True:
+            raise InputError(f"read-only guard {index} is malformed or absent")
+        role = guard.get("role")
+        if not isinstance(role, str) or not role or role in roles:
+            raise InputError(f"read-only guard {index} role is malformed or duplicated")
+        roles.add(role)
+        _require_sha256(guard.get("source_sha256"), f"read-only guard {role}")
+        if not all(
+            isinstance(guard.get(key), int) and guard[key] >= 0
+            for key in ("source_device", "source_inode", "source_mode")
+        ):
+            raise InputError(f"read-only guard {role} identity is malformed")
+        path = Path(cast(str, guard.get("path")))
+        if not path.is_absolute() or str(path) != os.path.normpath(str(path)):
+            raise InputError(f"read-only guard path must be normalized and absolute: {path}")
+        paths.append(path)
+    if check_paths and paths:
+        _reject_path_aliases(paths)
+    elif len({_normalized(path) for path in paths}) != len(paths):
+        raise InputError("read-only guards contain duplicate normalized paths")
+
+
+def _verify_read_only_guards(
+    guards: Sequence[Mapping[str, Any]],
+    held_parents: Mapping[Path, Mapping[str, Any]],
+) -> None:
+    for guard in guards:
+        path = Path(guard["path"])
+        parent = held_parents[path.parent]
+        _verify_held_parent(parent)
+        _verify_source_identity_at(parent, path.name, guard, path)
 
 
 def _validate_runtime_projection(
@@ -2035,6 +2396,8 @@ def _validate_runtime_projection(
     replacement_manifest: Mapping[str, Any],
     replacement_index: Mapping[str, Any],
     row_identity: Mapping[str, Any] | None,
+    artifact_records: Sequence[Mapping[str, Any]],
+    artifact_documents: Mapping[str, Mapping[str, Any]],
 ) -> None:
     _validate_runtime_manifest(replacement_manifest, manifest_path, planning_root)
     _validate_active_index_document(
@@ -2050,6 +2413,26 @@ def _validate_runtime_projection(
         expected_index = copy.deepcopy(dict(source_index))
         if expected_index == {"sessions": []}:
             expected_index["schema"] = ACTIVE_INDEX_SCHEMA
+    elif operation in PRE_PR_BIND_OPERATIONS:
+        if source_manifest is None:
+            raise InputError(f"{operation} requires an existing manifest")
+        _validate_active_index_document(
+            source_index,
+            planning_root=planning_root,
+            allow_uninitialized=False,
+        )
+        _validate_pre_pr_bind_projection(
+            operation,
+            planning_root,
+            manifest_path,
+            source_manifest,
+            source_index,
+            replacement_manifest,
+            replacement_index,
+            artifact_records,
+            artifact_documents,
+        )
+        expected_index = copy.deepcopy(dict(source_index))
     else:
         if source_manifest is None:
             raise InputError(f"{operation} requires an existing manifest")
@@ -2093,6 +2476,420 @@ def _validate_runtime_projection(
         planning_root=planning_root,
         allow_uninitialized=False,
     )
+
+
+def _validate_pre_pr_bind_projection(
+    operation: str,
+    planning_root: Path,
+    manifest_path: Path,
+    source_manifest: Mapping[str, Any],
+    source_index: Mapping[str, Any],
+    replacement_manifest: Mapping[str, Any],
+    replacement_index: Mapping[str, Any],
+    artifact_records: Sequence[Mapping[str, Any]],
+    artifact_documents: Mapping[str, Mapping[str, Any]],
+) -> None:
+    _validate_open_pre_pr_manifest(source_manifest)
+    _validate_pre_pr_index_absence(source_index, source_manifest, manifest_path)
+    if replacement_index != source_index:
+        raise InputError(f"{operation} cannot change the active index")
+    if set(replacement_manifest) != set(source_manifest):
+        raise InputError(f"{operation} cannot add or remove manifest fields")
+    changed = {
+        key
+        for key in source_manifest
+        if source_manifest[key] != replacement_manifest[key]
+    }
+    expected_changes = RUNTIME_ALLOWED_MANIFEST_CHANGES[operation]
+    if changed != expected_changes:
+        raise InputError(
+            f"{operation} must change exactly {sorted(expected_changes)}; got {sorted(changed)}"
+        )
+    records = {record["role"]: record for record in artifact_records}
+    scratch_dir = _manifest_scratch_dir(source_manifest, planning_root)
+    if operation == "cold-start-disposition-bind":
+        _validate_cold_start_bind(
+            source_manifest,
+            replacement_manifest,
+            records,
+            artifact_documents,
+            scratch_dir,
+        )
+        return
+    _validate_phase3_bind(
+        source_manifest,
+        replacement_manifest,
+        records,
+        artifact_documents,
+        manifest_path,
+        scratch_dir,
+    )
+
+
+def _validate_open_pre_pr_manifest(manifest: Mapping[str, Any]) -> None:
+    required_bindings = {
+        "cold_start_disposition_ref",
+        "phase_3_estimate_writeback_ref",
+        "phase_3_estimate_writeback_sha256",
+    }
+    if not required_bindings <= set(manifest):
+        raise InputError("pre-PR manifest lacks required binding fields")
+    for key in (
+        "draft_pr_url",
+        "draft_pr_number",
+        "draft_pr_head_sha",
+        "pr_open_base_sha",
+        "pre_merge_base_sha",
+        "merge_sha",
+        "post_merge_base_sha",
+        "merged_at",
+        "closed_at",
+        "successor_session_brief",
+    ):
+        value = manifest.get(key)
+        if value is not None and value != "":
+            raise InputError(f"pre-PR manifest has bound lifecycle field: {key}")
+    for key, value in manifest.items():
+        if key.startswith(("phase_8_reviewed_", "phase_9_currentness_")) and (
+            value is not None and value != ""
+        ):
+            raise InputError(f"pre-PR manifest has bound lifecycle field: {key}")
+    post_merge = manifest.get("post_merge")
+    if post_merge is not None and post_merge != {}:
+        raise InputError("pre-PR manifest has post-merge state")
+    _validate_pre_pr_history(manifest.get("phase_history"))
+    _validate_pre_pr_route_eligibility(manifest)
+
+
+def _validate_pre_pr_history(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, list):
+        raise InputError("pre-PR phase_history must be an object list")
+    result: list[Mapping[str, Any]] = []
+    for index, entry in enumerate(value):
+        if (
+            not isinstance(entry, dict)
+            or not isinstance(entry.get("phase"), str)
+            or not entry["phase"].strip()
+        ):
+            raise InputError(f"pre-PR phase_history entry {index} is malformed")
+        if _is_phase3_marker(entry["phase"]):
+            raise InputError("pre-PR phase_history already contains Phase 3")
+        result.append(entry)
+    return result
+
+
+def _normalize_route_text(value: str) -> str:
+    # Route and phase protocol tokens are ASCII; avoid broadening them via Unicode folding.
+    folded = "".join(chr(ord(char) + 32) if "A" <= char <= "Z" else char for char in value)
+    return re.sub(r"[\s_-]+", " ", folded).strip()
+
+
+def _is_phase3_marker(value: str) -> bool:
+    normalized = _normalize_route_text(value)
+    return normalized == "3" or normalized == "phase 3" or normalized.startswith("phase 3 ")
+
+
+def _validate_pre_pr_route_eligibility(manifest: Mapping[str, Any]) -> None:
+    markers = (
+        "work manager decomposition",
+        "decomposition",
+        "decomposed",
+        "feature development",
+        "feature handoff",
+        "defer to prototype",
+        "deferred",
+        "termination",
+        "terminated",
+        "superseded",
+        "replaced",
+        "successor handoff",
+    )
+    candidates: list[str] = []
+    for key in ("route", "disposition", "owner"):
+        if isinstance(manifest.get(key), str):
+            candidates.append(manifest[key])
+    for entry in cast(list[Mapping[str, Any]], manifest["phase_history"]):
+        candidates.extend(
+            entry[key]
+            for key in ("phase", "status", "route", "disposition", "owner")
+            if isinstance(entry.get(key), str)
+        )
+    for candidate in candidates:
+        normalized = _normalize_route_text(candidate)
+        if any(normalized == marker or normalized.startswith(marker + " ") for marker in markers):
+            raise InputError("pre-PR manifest is diverted from implementation-pipeline ownership")
+    for key in ("continuation_owner", "continuation_owner_route", "lifecycle_owner"):
+        owner = manifest.get(key)
+        if isinstance(owner, str) and _normalize_route_text(owner) != "implementation pipeline":
+            raise InputError("pre-PR manifest selects another continuation owner")
+
+
+def _validate_pre_pr_index_absence(
+    source_index: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    manifest_path: Path,
+) -> None:
+    for row in cast(list[Mapping[str, Any]], source_index["sessions"]):
+        if row.get("session_manifest_path") == str(manifest_path) or (
+            row.get("ticket_id"),
+            row.get("branch"),
+        ) == (manifest.get("ticket_id"), manifest.get("branch")):
+            raise InputError("pre-PR manifest already has an active-row identity")
+
+
+def _manifest_scratch_dir(manifest: Mapping[str, Any], planning_root: Path) -> Path:
+    value = manifest.get("scratch_dir")
+    if not isinstance(value, str):
+        raise InputError("pre-PR manifest lacks scratch_dir")
+    scratch_dir = Path(value)
+    if (
+        not scratch_dir.is_absolute()
+        or str(scratch_dir) != os.path.normpath(str(scratch_dir))
+        or not _is_below(scratch_dir, planning_root)
+    ):
+        raise InputError("pre-PR manifest scratch_dir is noncanonical or cross-root")
+    _validate_runtime_directory(scratch_dir, "session scratch directory")
+    return scratch_dir
+
+
+def _validate_cold_start_bind(
+    source_manifest: Mapping[str, Any],
+    replacement_manifest: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    documents: Mapping[str, Mapping[str, Any]],
+    scratch_dir: Path,
+) -> None:
+    if set(records) != {"cold-start-disposition"}:
+        raise InputError("cold-start-disposition-bind requires only its answer artifact")
+    if any(
+        source_manifest.get(key) is not None
+        for key in (
+            "cold_start_disposition_ref",
+            "phase_3_estimate_writeback_ref",
+            "phase_3_estimate_writeback_sha256",
+        )
+    ):
+        raise InputError("cold-start-disposition-bind requires null source bindings")
+    record = records["cold-start-disposition"]
+    path = Path(record["path"])
+    if not _is_below(path, scratch_dir):
+        raise InputError("cold-start disposition artifact is outside the declared scratch_dir")
+    if replacement_manifest.get("cold_start_disposition_ref") != str(path):
+        raise InputError("cold-start disposition replacement does not bind the guarded answer")
+    _validate_cold_start_answer(documents.get("cold-start-disposition"))
+
+
+def _validate_cold_start_answer(document: Mapping[str, Any] | None) -> None:
+    if document is None:
+        raise InputError("cold-start disposition answer is missing or malformed")
+    if document.get("schema_version") == 1 and document.get("kind") == "agent_answer":
+        answer = document.get("answer")
+        if (
+            isinstance(answer, dict)
+            and answer.get("confirmed") is True
+            and isinstance(answer.get("selected_option_ids"), list)
+            and any(isinstance(value, str) and value for value in answer["selected_option_ids"])
+        ):
+            return
+    if (
+        document.get("schema") == "agent-question-answer-v1"
+        and document.get("owner") == "user"
+        and isinstance(document.get("selected_option"), str)
+        and document["selected_option"].strip()
+    ):
+        return
+    raise InputError("cold-start disposition answer is not an accepted confirmed variant")
+
+
+def _validate_phase3_bind(
+    source_manifest: Mapping[str, Any],
+    replacement_manifest: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    documents: Mapping[str, Mapping[str, Any]],
+    manifest_path: Path,
+    scratch_dir: Path,
+) -> None:
+    if any(
+        source_manifest.get(key) is not None
+        for key in ("phase_3_estimate_writeback_ref", "phase_3_estimate_writeback_sha256")
+    ):
+        raise InputError("phase3-bind requires null source estimate bindings")
+    estimate = documents.get("phase-3-estimate-writeback")
+    if estimate is None:
+        raise InputError("phase3-bind lacks a valid estimate-writeback artifact")
+    ticket_id = cast(str, source_manifest["ticket_id"])
+    estimate_path = manifest_path.parent / "risk" / f"{ticket_id.lower()}-phase-3-estimate-writeback.json"
+    estimate_record = records.get("phase-3-estimate-writeback")
+    if estimate_record is None or estimate_record.get("path") != str(estimate_path):
+        raise InputError("phase3-bind estimate artifact path is not canonical")
+    if (
+        estimate.get("schema_version") != "phase-3-estimate-writeback-v1"
+        or estimate.get("ticket_id") != ticket_id
+        or estimate.get("ticket_system") != source_manifest.get("ticket_system")
+    ):
+        raise InputError("phase3-bind estimate artifact identity is malformed")
+    disposition = estimate.get("disposition")
+    required_roles = {
+        "phase-3-estimate-writeback",
+        "phase-0-ticket-snapshot",
+        "phase-3-proposal",
+        "resolved-ticket-operator",
+        "resolved-ticket-contract",
+    }
+    cold_start_ref = estimate.get("cold_start_disposition_ref")
+    if cold_start_ref is not None:
+        required_roles.add("cold-start-disposition")
+    if disposition == "write_verified":
+        required_roles.add("write-verification-evidence")
+    if set(records) != required_roles:
+        raise InputError("phase3-bind artifact roles are partial, mixed, or unknown")
+    _validate_phase3_artifact_bindings(
+        source_manifest, estimate, records, scratch_dir, manifest_path.parent
+    )
+    _validate_phase3_disposition(estimate, records, disposition)
+    if source_manifest.get("cold_start_disposition_ref") != cold_start_ref:
+        raise InputError("phase3-bind cold-start reference does not match the bound manifest")
+    if replacement_manifest.get("cold_start_disposition_ref") != source_manifest.get(
+        "cold_start_disposition_ref"
+    ):
+        raise InputError("phase3-bind cannot change cold-start disposition")
+    if replacement_manifest.get("phase_3_estimate_writeback_ref") != str(estimate_path):
+        raise InputError("phase3-bind replacement estimate reference is wrong")
+    if replacement_manifest.get("phase_3_estimate_writeback_sha256") != estimate_record["sha256"]:
+        raise InputError("phase3-bind replacement estimate digest is wrong")
+    source_history = _validate_pre_pr_history(source_manifest.get("phase_history"))
+    replacement_history = replacement_manifest.get("phase_history")
+    if not isinstance(replacement_history, list) or replacement_history[:-1] != source_history:
+        raise InputError("phase3-bind must preserve the complete history prefix")
+    if len(replacement_history) != len(source_history) + 1:
+        raise InputError("phase3-bind must append exactly one history entry")
+    _validate_canonical_phase3_history_entry(replacement_history[-1])
+
+
+def _validate_phase3_artifact_bindings(
+    manifest: Mapping[str, Any],
+    estimate: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    scratch_dir: Path,
+    planning_dir: Path,
+) -> None:
+    bindings = (
+        (
+            "phase-0-ticket-snapshot",
+            "phase_0_ticket_snapshot_path",
+            "phase_0_ticket_snapshot_sha256",
+            scratch_dir,
+        ),
+        ("phase-3-proposal", "phase_3_proposal_path", "phase_3_proposal_sha256", planning_dir),
+        ("resolved-ticket-operator", "resolved_operator_path", "resolved_operator_sha256", None),
+        (
+            "resolved-ticket-contract",
+            "resolved_operator_contract_path",
+            "resolved_contract_sha256",
+            None,
+        ),
+    )
+    currentness = estimate.get("currentness")
+    if not isinstance(currentness, dict):
+        raise InputError("phase3-bind estimate currentness is malformed")
+    for role, path_key, digest_key, required_root in bindings:
+        path_value = estimate.get(path_key)
+        digest = estimate.get(digest_key)
+        record = records[role]
+        if record.get("path") != path_value or record.get("sha256") != digest:
+            raise InputError(f"phase3-bind {role} identity does not match estimate artifact")
+        if currentness.get(digest_key) != digest:
+            raise InputError(f"phase3-bind {role} currentness digest mismatch")
+        if required_root is not None and not _is_below(Path(cast(str, path_value)), required_root):
+            raise InputError(f"phase3-bind {role} path is outside its canonical root")
+    manifest_pairs = (
+        ("phase_0_ticket_snapshot_path", "phase_0_ticket_snapshot_sha256"),
+        ("resolved_operator_path", "resolved_operator_sha256"),
+    )
+    for path_key, digest_key in manifest_pairs:
+        if manifest.get(path_key) != estimate.get(path_key) or manifest.get(digest_key) != estimate.get(
+            digest_key
+        ):
+            raise InputError(f"phase3-bind estimate does not match manifest {path_key}")
+    manifest_contract_path = manifest.get(
+        "resolved_operator_contract_path", manifest.get("resolved_contract_path")
+    )
+    if (
+        manifest_contract_path != estimate.get("resolved_operator_contract_path")
+        or manifest.get("resolved_contract_sha256") != estimate.get("resolved_contract_sha256")
+    ):
+        raise InputError("phase3-bind estimate does not match manifest contract identity")
+    cold_ref = estimate.get("cold_start_disposition_ref")
+    if cold_ref is not None:
+        cold_record = records["cold-start-disposition"]
+        if cold_record.get("path") != cold_ref or currentness.get(
+            "cold_start_disposition_sha256"
+        ) != cold_record.get("sha256"):
+            raise InputError("phase3-bind cold-start artifact identity mismatch")
+        if not _is_below(Path(cast(str, cold_ref)), scratch_dir):
+            raise InputError("phase3-bind cold-start artifact is outside scratch_dir")
+
+
+def _validate_phase3_disposition(
+    estimate: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    disposition: Any,
+) -> None:
+    if disposition == "write_verified":
+        evidence = estimate.get("write_verification_evidence")
+        currentness = cast(Mapping[str, Any], estimate["currentness"])
+        record = records["write-verification-evidence"]
+        if (
+            estimate.get("update_estimate_dispatch_expected") is not True
+            or estimate.get("update_estimate_dispatch_executed") is not True
+            or not isinstance(evidence, dict)
+            or evidence.get("status") != "PASS"
+            or evidence.get("path") != record.get("path")
+            or evidence.get("sha256") != record.get("sha256")
+            or currentness.get("write_verification_sha256") != record.get("sha256")
+        ):
+            raise InputError("phase3-bind write_verified evidence is incomplete or stale")
+        return
+    if disposition == "no_write_policy_disabled":
+        policy = estimate.get("estimate_mutation_policy")
+        currentness = estimate.get("currentness")
+        null_fields = (
+            "update_estimate_prompt_path",
+            "update_estimate_prompt_sha256",
+            "update_estimate_log_path",
+            "update_estimate_log_sha256",
+            "update_estimate_invocation_uuid",
+            "write_verification_evidence",
+        )
+        if (
+            estimate.get("update_estimate_dispatch_expected") is not False
+            or estimate.get("update_estimate_dispatch_executed") is not False
+            or not isinstance(policy, dict)
+            or policy.get("value") is not False
+            or not isinstance(currentness, dict)
+            or currentness.get("write_verification_sha256") is not None
+            or any(estimate.get(key) is not None for key in null_fields)
+        ):
+            raise InputError("phase3-bind policy-disabled no-write evidence is invalid")
+        return
+    raise InputError("phase3-bind estimate disposition is unsupported")
+
+
+def _validate_canonical_phase3_history_entry(entry: Any) -> None:
+    if (
+        not isinstance(entry, dict)
+        or set(entry) != {"phase", "status", "ts"}
+        or entry.get("phase") != "3"
+        or entry.get("status") != "complete"
+        or not isinstance(entry.get("ts"), str)
+    ):
+        raise InputError("phase3-bind history append is not canonical")
+    try:
+        parsed = datetime.strptime(entry["ts"], "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as exc:
+        raise InputError("phase3-bind history timestamp is malformed") from exc
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != entry["ts"]:
+        raise InputError("phase3-bind history timestamp is not canonical UTC")
 
 
 def _validate_runtime_manifest(
@@ -2983,6 +3780,11 @@ def _required_string(mapping: Mapping[str, Any], key: str) -> str:
 def _require_full_oid(value: Any, label: str) -> None:
     if not isinstance(value, str) or not FULL_OID_RE.fullmatch(value.lower()):
         raise MigrationError(f"invalid-or-abbreviated-{label}")
+
+
+def _require_sha256(value: Any, label: str) -> None:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise InputError(f"{label} must be a lowercase full SHA-256")
 
 
 def _require_git_oid_operand(
