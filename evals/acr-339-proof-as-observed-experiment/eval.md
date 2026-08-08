@@ -63,8 +63,12 @@ Every future finding preserves:
 - `suggested_action`
 - `confidence`
 - `claim`
+- `experiment_command_or_action`
+- `target`
+- `scope`
 - `expected_observation`
 - `observed_result_ref`
+- `observed_status`
 - `evidence_role`
 - `active_identity`
 - `blocks_pipeline`
