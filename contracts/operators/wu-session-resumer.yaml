@@ -42,7 +42,7 @@ inputs:
   type: path
   required: true
   default_source: caller
-  description: Absolute path to the one persisted WU session manifest.
+  description: Absolute path to the one persisted WU session manifest; its planning_dir parent relation determines the exact live runtime root and active index owner.
 - name: test_command
   type: string
   required: false

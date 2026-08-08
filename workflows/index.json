@@ -343,7 +343,7 @@
           "freshly fetches both exact remote base and head refs and transports separate short branch plus immutable Phase 8 reviewed base/head identity through every parent-sensitive boundary; provider/fetched/reviewed inequality for either OID invalidates prior evidence",
           "Phase 7 opens one exact draft PR, Phase 8 freezes the exact closed provider identity including boolean is_draft=true and reviews that base/head with local coverage plus production-validated nested test-audit process evidence, and Phase 9 validates one immediate provider capture before side effects and returns one stable VERIFIED_DRAFT_PR or VERIFIED_MERGED result envelope",
           "Phase 9 writes and hashes a closed caller-owned ticket-operation-expected-context-v1 before dispatch, requires the selected named ticket operator's exact comment/readback result to validate against it, and returns both path/hash pairs plus current owned Phase 4/6/8 process-proof path/hashes",
-          "Phase 0, Phase 7, and Phase 9 invoke exact wu-session-migration operations phase0-init, phase7-upsert, and phase9-update with closed wu-session-runtime-write-v1 requests; the shared executable owns lock, journal, held-parent, rollback, and recovery mechanics while sessions.index.json remains historical source inventory",
+          "Phase 0, Phase 7, and Phase 9 invoke exact wu-session-migration operations against one declared live runtime root: direct WUs use the top-level project planning tree and feature direct/refactoring children use their normalized F/routes root; the shared executable owns lock, journal, held-parent, rollback, and recovery mechanics while sessions.index.json remains historical source inventory",
           "each Phase 8 rerun allocates a new exact-identity PR-review run and keeps every runner log distinct from its canonical result while preserving prior run lineage",
           "a feature-routed draft result exposes implementation-pipeline-result-v1 with base_branch equal to the dispatched feature branch, base_ref equal to its fetched refs/remotes/origin identity, reviewed/current provider base_ref_name equal to that exact branch even when OIDs coincide, and current Phase 4/6/8 proof rows for the parent's common feature-route-attempt-proof-v1 gate; direct merge authorization remains a separate parent composition with ticket/currentness/acceptance evidence"
         ],
@@ -363,7 +363,7 @@
           "planning_dir/phase-8-reviewed-pr.json, planning_dir/phase-9-currentness.json recording required fetched base/head SHAs, and conditional planning_dir/phase-9-ready-restoration.json exact provider-state evidence",
           "planning_dir/ticket-operations/<wu>-phase-9-expected-context.json, <wu>-phase-9-comment.json, and <wu>-phase-9-validation.json caller context, producer comment/readback, and validation evidence",
           "planning_dir/implementation-pipeline-result.json with a conditional Phase 9 VERIFIED_DRAFT_PR or VERIFIED_MERGED outcome, exact is_draft and phase_8_reviewed_is_draft booleans, immutable Phase 8 reviewed identities, expected-context and validated ticket-result path/hashes, owned Phase 4/6/8 process-proof path/hashes, final equality/restoration result, and artifact hashes",
-          "planning_dir/../sessions.active-wake.json canonical row after exact Phase 7 PR acquisition",
+          "planning_dir/../sessions.active-wake.json canonical owner row after exact Phase 7 PR acquisition",
           "ticket comments and audit-history closure evidence at PR and finalization points"
         ]
       }
@@ -938,12 +938,12 @@
           "verifies the multi-row expected process and process tree before aggregate completion",
           "joins each actual resumer UUID only from its completed log marker and accepts only a canonical header-first process-tree-auditor report with one PASS verdict, a producer-owned machine binding, and final stdout PASS",
           "blocks every excluded or accepted-breakage classification found in sessions.active-wake.json; only a canonical OPEN row that currently polls non-merged may remain pending",
-          "validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the canonical planning root",
+          "validates run_id and ticket_id as canonical safe tokens and proves every generated wake, prompt, and log path remains under the caller-supplied live runtime root",
           "treats a batch containing only valid non-merged skipped rows as a successful audited no-op",
           "uses active-index pre_merge_base_sha as the single dispatch source and blocks any manifest mismatch before dispatch"
         ],
         "inputs": [
-          "sessions.active-wake.json path",
+          "planning_root plus its exact sessions.active-wake.json path; direct callers pass P and feature callers pass F/routes",
           "poller output from tools/pr-batch-poller",
           "repo_root plus per-project worktree and planning roots",
           "caller-owned unique run_id; wake_invocation_uuid is derived inside the root from runner-provided OULIPOLY_PARENT_INVOCATION",

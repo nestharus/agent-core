@@ -2613,6 +2613,94 @@ def test_real_age255_manifest_normalizes_routes_dependencies_and_waves(tmp_path:
     }
 
 
+def test_feature_route_manifest_emits_exact_nested_route_identity_and_source_hash(
+    tmp_path: Path,
+):
+    source_path, tickets = _age255_manifest(tmp_path)
+    scope_path = tmp_path / "feature-scope.md"
+    scope_path.write_text("# Feature scope\n", encoding="utf-8")
+
+    result = normalize_successor_manifest(
+        source_path,
+        feature_id="AGE-255",
+        feature_scope_path=scope_path,
+        feature_branch="feature/hourly-suspicious-process-investigator",
+        trunk_branch="main",
+        manager_flavor="manager-max",
+        ticket_system="linear",
+        scoped_ticket_list=tickets,
+        child_worktrees_root=tmp_path / "worktrees",
+        planning_dir=tmp_path / "planning",
+        scratch_dir=tmp_path / "scratch",
+    )
+    route = next(row for row in result["records"] if row["ticket_id"] == "AGE-259")
+
+    assert set(result) == {
+        "schema",
+        "source_schema",
+        "feature_id",
+        "feature_scope_path",
+        "trunk_branch",
+        "feature_branch",
+        "ticket_system",
+        "source_backend",
+        "manager_flavor",
+        "source_kind",
+        "source_path",
+        "source_sha256",
+        "topological_order",
+        "waves",
+        "records",
+    }
+    assert {
+        field: result[field]
+        for field in (
+            "schema",
+            "source_schema",
+            "source_kind",
+            "source_path",
+            "source_sha256",
+            "source_backend",
+            "feature_branch",
+            "trunk_branch",
+            "ticket_system",
+        )
+    } == {
+        "schema": "feature-route-manifest-v2",
+        "source_schema": "feature-successor-envelope-v1",
+        "source_kind": "successor_manifest_path",
+        "source_path": str(source_path),
+        "source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "source_backend": "linear",
+        "feature_branch": "feature/hourly-suspicious-process-investigator",
+        "trunk_branch": "main",
+        "ticket_system": "linear",
+    }
+    assert set(route) == {
+        "ticket_id",
+        "successor_id",
+        "title",
+        "brief_path",
+        "surfaces",
+        "owning_route",
+        "depends_on",
+        "branch_name",
+        "ticket_source",
+        "route_payload",
+        "route_worktree_path",
+        "route_planning_dir",
+        "route_scratch_dir",
+    }
+    assert route["branch_name"] == "route/age-259"
+    assert route["route_worktree_path"] == str(tmp_path / "worktrees" / "age-259")
+    assert route["route_planning_dir"] == str(
+        tmp_path / "planning" / "routes" / "age-259"
+    )
+    assert route["route_scratch_dir"] == str(
+        tmp_path / "scratch" / "routes" / "age-259"
+    )
+
+
 @pytest.mark.skipif(
     not REAL_AGE255_MANIFEST.is_file(),
     reason="external AGE-255 provenance source is unavailable",
@@ -8844,6 +8932,38 @@ def test_pipeline_and_resumer_invoke_exact_runtime_writer_commands():
         assert f"python3 ~/ai/tools/wu-session-migration {operation} --request" in resumer
     assert "do not write either target directly" in pipeline
     assert "do not write either target directly" in resumer
+
+
+def test_direct_and_feature_session_owner_contracts_are_synchronized():
+    pipeline = _read("agents/implementation-pipeline-orchestrator.md")
+    workflow = _read("workflows/implementation-pipeline.md")
+    lifecycle = _read("conventions/wu-session-lifecycle.md")
+    runtime_readme = _read("tools/wu-session-migration/README.md")
+    feature = _read("agents/feature-orchestrator.md")
+    refactoring = _read("agents/refactoring-orchestrator.md")
+    wake = _read("workflows/wu-session-wake.md")
+    resumer = _read("agents/wu-session-resumer.md")
+
+    assert "R=${planning_dir}/.." in pipeline
+    assert "R=${planning_dir}/.." in workflow
+    assert "R=${planning_dir}/.." in lifecycle
+    documents = {
+        "agents/implementation-pipeline-orchestrator.md": pipeline,
+        "workflows/implementation-pipeline.md": workflow,
+        "conventions/wu-session-lifecycle.md": lifecycle,
+        "tools/wu-session-migration/README.md": runtime_readme,
+    }
+    for name, text in documents.items():
+        assert "F/routes" in text, name
+        assert "sessions.active-wake.json" in text, name
+    assert "route_planning_dir.parent" in feature
+    assert "planning_root=F/routes" in feature
+    assert "planning_dir.parent" in refactoring
+    assert "selects that `F/routes` root explicitly" in refactoring
+    assert "direct callers pass P and feature callers pass F/routes" in wake
+    assert "Never scan ancestors or descendants" in wake
+    assert "Never search ancestors, descendants, or another active index" in resumer
+    assert "exact same-owner `R/sessions.active-wake.json`" in resumer
 
 
 def test_agents_routing_summary_matches_canonical_feature_contract():

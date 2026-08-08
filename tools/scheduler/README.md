@@ -10,7 +10,7 @@ Schedule a task to run on a specified time pattern. The task can be a shell scri
 
 - The scheduler does NOT know what its scheduled tasks do. It runs them.
 - The scheduler does NOT batch external API calls. (That's `pr-batch-poller` or another batching tool.)
-- The scheduler does NOT track WU sessions or merge events. For this lifecycle it invokes the `wu-session-wake` workflow root; that root reads only `sessions.active-wake.json`, invokes the status-only poller, and dispatches exact joined rows to resumers.
+- The scheduler does NOT track WU sessions or merge events. For this lifecycle a configured task invokes the `wu-session-wake` workflow root with one explicit `planning_root`; that root reads only its exact `sessions.active-wake.json`, invokes the status-only poller, and dispatches exact joined rows to resumers. Direct tasks pass `P`; feature tasks pass the selected `F/routes`; the scheduler never discovers either.
 - The scheduler does NOT decide a script's exit-code semantics — the script does.
 
 ## Inputs (proposed)
@@ -30,7 +30,7 @@ Schedule a task to run on a specified time pattern. The task can be a shell scri
 ## Outputs
 
 - A list of run records per `task_id`: start time, end time, exit code, log path.
-- The scheduler is **passive** — it does not push notifications, read historical `sessions.index.json`, or dispatch resumers. A scheduled WU-session task starts `wu-session-wake`, the same root used manually.
+- The scheduler is **passive** — it does not push notifications, read historical `sessions.index.json`, discover active indexes, or dispatch resumers. A scheduled WU-session task starts `wu-session-wake` with its configured explicit root, the same root used manually.
 
 ## Storage
 
