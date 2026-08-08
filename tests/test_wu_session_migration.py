@@ -103,6 +103,34 @@ def test_trusted_command_timeout_is_bounded_and_translated(
     assert observed_timeout == MIGRATION.TRUSTED_COMMAND_TIMEOUT_SECONDS
 
 
+@pytest.mark.parametrize("helper_name", ["_run_text_command", "_run_bytes_command"])
+def test_trusted_commands_sanitize_inherited_git_environment(
+    helper_name: str, monkeypatch: pytest.MonkeyPatch
+):
+    observed_environment = None
+
+    def capture_environment(command: list[str], **kwargs: Any):
+        nonlocal observed_environment
+        observed_environment = kwargs.get("env")
+        stdout = b"" if helper_name == "_run_bytes_command" else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setenv("GIT_DIR", "/untrusted/repository/.git")
+    monkeypatch.setenv("GIT_WORK_TREE", "/untrusted/worktree")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setattr(MIGRATION.subprocess, "run", capture_environment)
+
+    getattr(MIGRATION, helper_name)(["git", "status"])
+
+    assert observed_environment is not None
+    assert "GIT_DIR" not in observed_environment
+    assert "GIT_WORK_TREE" not in observed_environment
+    assert "GIT_CONFIG_COUNT" not in observed_environment
+    assert observed_environment["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert observed_environment["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert observed_environment["GIT_TERMINAL_PROMPT"] == "0"
+
+
 def _merge_method_capture(
     pr_url: str,
     head_sha: str,

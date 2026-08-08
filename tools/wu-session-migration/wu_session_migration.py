@@ -3920,6 +3920,20 @@ def _run_json_command(command: list[str]) -> dict[str, Any]:
     return value
 
 
+def _trusted_command_environment() -> dict[str, str]:
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
 def _run_text_command(command: list[str], *, input_text: str | None = None) -> str:
     try:
         result = subprocess.run(
@@ -3929,6 +3943,7 @@ def _run_text_command(command: list[str], *, input_text: str | None = None) -> s
             capture_output=True,
             input=input_text,
             timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
+            env=_trusted_command_environment(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
@@ -3942,6 +3957,7 @@ def _run_bytes_command(command: list[str]) -> bytes:
             check=True,
             capture_output=True,
             timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
+            env=_trusted_command_environment(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
