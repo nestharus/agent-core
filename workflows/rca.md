@@ -7,7 +7,7 @@ workflow_dispatch_contract:
     - "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed"
     - "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis"
     - "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly"
-    - "post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope plus distinct verification-plan/behavior-claim/runtime-claim refs and hashes, process_tree_path, and root_invocation_uuid"
+    - "post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim refs and hashes, explicit n/a:<reason> markers for non-applicable verification-plan/behavior-claim/runtime-claim identities, process_tree_path, and root_invocation_uuid"
   expectations:
     - "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle"
     - "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS"
@@ -43,7 +43,7 @@ rca-orchestrator
 - incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to `${planning_dir}/audit-history.md`, ticket_system, and tracker operator inputs when downstream filing is needed
 - for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis
 - for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly
-- post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid
+- post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim refs and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim identities, process_tree_path, and root_invocation_uuid
 
 ### Expectations
 
@@ -113,7 +113,7 @@ The three translated surfaces are the complete adapter declaration. The new curr
 - `audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.
 - `process_tree_path?`: RCA root invocation process-tree trace when process-tree verification is required.
 - `root_invocation_uuid?`: RCA root invocation UUID when process-tree verification is required.
-- `currentness inputs?`: `cycle_id`, `head_sha`, `base_ref`, diff hash, scope reference or hash, runtime-claim reference or hash, producing invocation refs, and verified-at data when available for Phase 6.5.
+- `currentness inputs`: `cycle_id`, `head_sha`, `base_ref`, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim references and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim identities, producing invocation refs, and verified-at data for Phase 6.5.
 - `ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.
 
 ## Output Paths
