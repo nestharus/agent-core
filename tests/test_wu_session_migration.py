@@ -591,6 +591,7 @@ def _runtime_case(
     tmp_path: Path, target_operation: str, *, feature: bool = False
 ) -> dict[str, Any]:
     project_planning_root = tmp_path / "project" / "planning"
+    request_dir = tmp_path / "requests" / ("feature" if feature else "direct")
     planning_root = (
         project_planning_root / "features" / "acr-337" / "routes"
         if feature
@@ -813,7 +814,7 @@ def _runtime_case(
                     else:
                         replacement_index["sessions"] = [row]
         request_path = _write_runtime_request(
-            tmp_path / "requests" / f"{operation}.json",
+            request_dir / f"{operation}.json",
             operation,
             planning_root,
             manifest_path,
