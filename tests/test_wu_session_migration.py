@@ -624,8 +624,11 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
     _write_json(verification_path, {"status": "PASS", "estimate": 8})
     initial_manifest.update(
         {
-            "phase_0_ticket_snapshot_path": str(ticket_snapshot),
-            "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+            "ticket_snapshot_path": str(ticket_snapshot),
+            "ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+            "ticket_snapshot_producing_invocation_uuid": (
+                "11111111-1111-4111-8111-111111111111"
+            ),
             "resolved_operator_path": str(operator_path),
             "resolved_operator_sha256": _digest(operator_path.read_bytes()),
             "resolved_operator_contract_path": str(contract_path),
@@ -644,6 +647,9 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
         "cold_start_disposition_ref": str(cold_start_path),
         "phase_0_ticket_snapshot_path": str(ticket_snapshot),
         "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+        "phase_0_ticket_snapshot_producing_invocation_uuid": (
+            "22222222-2222-4222-8222-222222222222"
+        ),
         "phase_3_proposal_path": str(proposal_path),
         "phase_3_proposal_sha256": _digest(proposal_path.read_bytes()),
         "resolved_operator_path": str(operator_path),
@@ -1535,13 +1541,38 @@ def test_capture_evidence_rejects_malformed_git_oid_before_invocation(
         )
 
 
-def test_phase3_bind_updates_only_phase3_bindings_and_preserves_active_index_bytes(
+def test_phase3_bind_maps_canonical_snapshot_keys_and_preserves_source_and_index(
     tmp_path: Path,
 ):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
+    estimate = json.loads(
+        case["artifacts"]["phase-3-estimate-writeback"].read_text()
+    )
     original_index_bytes = case["index_path"].read_bytes()
     original_index_stat = case["index_path"].stat()
+    manifest_snapshot_aliases = {
+        "phase_0_ticket_snapshot_path",
+        "phase_0_ticket_snapshot_sha256",
+        "phase_0_ticket_snapshot_producing_invocation_uuid",
+    }
+    estimate_snapshot_aliases = {
+        "ticket_snapshot_path",
+        "ticket_snapshot_sha256",
+        "ticket_snapshot_producing_invocation_uuid",
+    }
+
+    assert manifest_snapshot_aliases.isdisjoint(source_manifest)
+    assert estimate_snapshot_aliases.isdisjoint(estimate)
+    assert source_manifest["ticket_snapshot_path"] == estimate[
+        "phase_0_ticket_snapshot_path"
+    ]
+    assert source_manifest["ticket_snapshot_sha256"] == estimate[
+        "phase_0_ticket_snapshot_sha256"
+    ]
+    assert source_manifest["ticket_snapshot_producing_invocation_uuid"] != estimate[
+        "phase_0_ticket_snapshot_producing_invocation_uuid"
+    ]
 
     result = subprocess.run(
         [
@@ -1569,12 +1600,86 @@ def test_phase3_bind_updates_only_phase3_bindings_and_preserves_active_index_byt
         "phase_history",
     }
     assert updated_manifest == case["replacement_manifest"]
+    assert manifest_snapshot_aliases.isdisjoint(updated_manifest)
+    assert updated_manifest["ticket_snapshot_producing_invocation_uuid"] == source_manifest[
+        "ticket_snapshot_producing_invocation_uuid"
+    ]
     assert updated_manifest["cold_start_disposition_ref"] == source_manifest[
         "cold_start_disposition_ref"
     ]
     assert updated_manifest["phase_history"] == source_manifest["phase_history"] + [
         {"phase": "3", "status": "complete", "ts": "2026-07-19T00:00:00Z"}
     ]
+    assert all(
+        updated_manifest[key] == value
+        for key, value in source_manifest.items()
+        if key not in changed_fields
+    )
+    assert case["index_path"].read_bytes() == original_index_bytes
+    updated_index_stat = case["index_path"].stat()
+    assert (updated_index_stat.st_dev, updated_index_stat.st_ino, updated_index_stat.st_mode) == (
+        original_index_stat.st_dev,
+        original_index_stat.st_ino,
+        original_index_stat.st_mode,
+    )
+    assert not MIGRATION._journal_path().exists()
+
+    readback_path = tmp_path / "phase3-bind.readback.json"
+    _write_json(readback_path, _pre_pr_readback(case, source_manifest))
+    assert MIGRATION.validate_pre_pr_readback(readback_path) is None
+
+
+@pytest.mark.parametrize(
+    ("mismatch", "expected_field"),
+    [("path", "ticket_snapshot_path"), ("digest", "ticket_snapshot_sha256")],
+)
+def test_phase3_bind_rejects_manifest_snapshot_identity_mismatch(
+    mismatch: str, expected_field: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    if mismatch == "path":
+        source_manifest["ticket_snapshot_path"] = str(
+            Path(source_manifest["scratch_dir"]) / "other-ticket.md"
+        )
+    else:
+        source_manifest["ticket_snapshot_sha256"] = "0" * 64
+    _write_json(case["manifest_path"], source_manifest)
+    replacement = copy.deepcopy(source_manifest)
+    replacement.update(
+        {
+            "phase_3_estimate_writeback_ref": case["replacement_manifest"][
+                "phase_3_estimate_writeback_ref"
+            ],
+            "phase_3_estimate_writeback_sha256": case["replacement_manifest"][
+                "phase_3_estimate_writeback_sha256"
+            ],
+            "phase_history": case["replacement_manifest"]["phase_history"],
+        }
+    )
+    request_path = _write_runtime_request(
+        tmp_path / "requests" / f"phase3-snapshot-{mismatch}-mismatch.json",
+        "phase3-bind",
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        replacement,
+        case["replacement_index"],
+        None,
+        case["artifacts"],
+    )
+    original_manifest_bytes = case["manifest_path"].read_bytes()
+    original_index_bytes = case["index_path"].read_bytes()
+    original_index_stat = case["index_path"].stat()
+    assert not MIGRATION._journal_path().exists()
+
+    with pytest.raises(
+        InputError,
+        match=rf"does not match manifest {expected_field}",
+    ):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+    assert case["manifest_path"].read_bytes() == original_manifest_bytes
     assert case["index_path"].read_bytes() == original_index_bytes
     updated_index_stat = case["index_path"].stat()
     assert (updated_index_stat.st_dev, updated_index_stat.st_ino, updated_index_stat.st_mode) == (
