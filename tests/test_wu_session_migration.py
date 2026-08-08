@@ -2266,18 +2266,36 @@ def test_direct_and_feature_sessions_coexist_in_separate_owner_indexes(tmp_path:
 
 
 @pytest.mark.parametrize(
-    "mutation",
+    ("mutation", "expected_error"),
     [
-        "unsupported-owner",
-        "sibling-routes",
-        "nested-routes",
-        "wrong-index",
-        "nested-session",
-        "cross-tree-scratch",
+        (
+            "unsupported-owner",
+            "runtime planning root is not a supported session owner",
+        ),
+        (
+            "sibling-routes",
+            "runtime planning root is not a supported session owner",
+        ),
+        (
+            "nested-routes",
+            "runtime planning root is not a supported session owner",
+        ),
+        ("wrong-index", "runtime active index path does not match planning_root"),
+        (
+            "nested-session",
+            "runtime planning_dir must be a direct child of planning_root",
+        ),
+        (
+            "cross-tree-scratch",
+            "pre-PR manifest scratch_dir is noncanonical or cross-root",
+        ),
     ],
 )
 def test_feature_runtime_rejects_noncanonical_owner_relationships_before_mutation(
-    mutation: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    mutation: str,
+    expected_error: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ):
     case = _runtime_case(tmp_path, "phase0-init", feature=True)
     request = json.loads(case["request_path"].read_text())
@@ -2325,7 +2343,7 @@ def test_feature_runtime_rejects_noncanonical_owner_relationships_before_mutatio
         [case["operation"], "--request", str(case["request_path"])]
     ) == 2
 
-    assert "canonical" in capsys.readouterr().err
+    assert expected_error in capsys.readouterr().err
     assert {path: path.read_bytes() if path.exists() else None for path in targets} == before
     assert not MIGRATION._journal_path().exists()
     assert not _transaction_artifacts(targets)
@@ -2413,7 +2431,7 @@ def test_feature_runtime_recovers_interrupted_route_index_transaction(tmp_path: 
         ("symlink", "symlink path component is forbidden"),
         (
             "path-escape",
-            "runtime manifest, planning root, and active index are not canonical",
+            "runtime manifest path is outside a planning tree",
         ),
     ],
     ids=["lexical-alias", "symlink", "path-escape"],

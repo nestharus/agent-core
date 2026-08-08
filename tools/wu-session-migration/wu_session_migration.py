@@ -3390,26 +3390,24 @@ def _runtime_session_topology(
         not path.is_absolute() or str(path) != os.path.normpath(str(path))
         for path in paths
     ):
-        raise InputError("runtime manifest, planning root, and active index are not canonical")
+        raise InputError("runtime session topology paths must be normalized and absolute")
     try:
         project_planning_root = _planning_root(manifest_path)
     except InputError as exc:
-        raise InputError(
-            "runtime manifest, planning root, and active index are not canonical"
-        ) from exc
+        raise InputError("runtime manifest path is outside a planning tree") from exc
     direct_owner = planning_root == project_planning_root
     feature_owner = (
         planning_root.name == "routes"
         and planning_root.parent.parent == project_planning_root / "features"
     )
-    if (
-        not (direct_owner or feature_owner)
-        or manifest_path.name != "session.json"
-        or manifest_path.parent != planning_dir
-        or planning_dir.parent != planning_root
-        or index_path != planning_root / "sessions.active-wake.json"
-    ):
-        raise InputError("runtime manifest, planning root, and active index are not canonical")
+    if not (direct_owner or feature_owner):
+        raise InputError("runtime planning root is not a supported session owner")
+    if manifest_path.name != "session.json" or manifest_path.parent != planning_dir:
+        raise InputError("runtime manifest must be session.json in planning_dir")
+    if planning_dir.parent != planning_root:
+        raise InputError("runtime planning_dir must be a direct child of planning_root")
+    if index_path != planning_root / "sessions.active-wake.json":
+        raise InputError("runtime active index path does not match planning_root")
     return project_planning_root
 
 
