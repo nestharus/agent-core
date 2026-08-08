@@ -82,13 +82,45 @@ def _require_any(text: str, needles: list[str], context: str) -> None:
 
 
 def _require_phase(text: str, phase: int, context: str) -> str:
-    match = re.search(
-        rf"^##\s+Phase {phase}\b.*?(?=^##\s+|\Z)",
-        text,
-        flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    headings: list[tuple[int, bool]] = []
+    offset = 0
+    fence: tuple[str, int] | None = None
+    phase_heading = re.compile(
+        rf"^[ ]{{0,3}}##(?!#)\s+Phase\s+{phase}\b", re.IGNORECASE
     )
-    _require(match is not None, f"{context}: missing Phase {phase} section")
-    return match.group(0)
+
+    for line in text.splitlines(keepends=True):
+        content = line.rstrip("\r\n")
+        stripped = content.lstrip(" ")
+        indent = len(content) - len(stripped)
+
+        if fence is not None:
+            marker, minimum_length = fence
+            candidate = stripped.rstrip(" ")
+            if (
+                indent <= 3
+                and len(candidate) >= minimum_length
+                and candidate == marker * len(candidate)
+            ):
+                fence = None
+        elif indent <= 3 and (match := re.match(r"(`{3,}|~{3,})", stripped)):
+            marker = match.group(1)
+            fence = (marker[0], len(marker))
+        elif re.match(r"^[ ]{0,3}##(?!#)(?:\s|$)", content):
+            headings.append((offset, phase_heading.match(content) is not None))
+
+        offset += len(line)
+
+    matches = [index for index, (_, is_phase) in enumerate(headings) if is_phase]
+    _require(matches, f"{context}: missing Phase {phase} section")
+    _require(
+        len(matches) == 1,
+        f"{context}: duplicate Phase {phase} sections",
+    )
+    heading_index = matches[0]
+    start = headings[heading_index][0]
+    end = headings[heading_index + 1][0] if heading_index + 1 < len(headings) else len(text)
+    return text[start:end]
 
 
 def _require_window_all_any(
