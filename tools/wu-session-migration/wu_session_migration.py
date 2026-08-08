@@ -3398,8 +3398,9 @@ def _runtime_session_topology(
             "runtime manifest, planning root, and active index are not canonical"
         ) from exc
     direct_owner = planning_root == project_planning_root
-    feature_owner = planning_root.name == "routes" and _is_below(
-        planning_root, project_planning_root
+    feature_owner = (
+        planning_root.name == "routes"
+        and planning_root.parent.parent == project_planning_root / "features"
     )
     if (
         not (direct_owner or feature_owner)

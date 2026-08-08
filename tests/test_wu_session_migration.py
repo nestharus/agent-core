@@ -2267,7 +2267,14 @@ def test_direct_and_feature_sessions_coexist_in_separate_owner_indexes(tmp_path:
 
 @pytest.mark.parametrize(
     "mutation",
-    ["unsupported-owner", "wrong-index", "nested-session", "cross-tree-scratch"],
+    [
+        "unsupported-owner",
+        "sibling-routes",
+        "nested-routes",
+        "wrong-index",
+        "nested-session",
+        "cross-tree-scratch",
+    ],
 )
 def test_feature_runtime_rejects_noncanonical_owner_relationships_before_mutation(
     mutation: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -2278,6 +2285,24 @@ def test_feature_runtime_rejects_noncanonical_owner_relationships_before_mutatio
         request["planning_root"] = str(
             case["project_planning_root"] / "features" / "acr-337" / "runtime"
         )
+    elif mutation in {"sibling-routes", "nested-routes"}:
+        planning_root = (
+            case["project_planning_root"] / "other" / "routes"
+            if mutation == "sibling-routes"
+            else case["planning_root"].parent / "nested" / "routes"
+        )
+        manifest_path = (
+            planning_root / case["manifest_path"].parent.name / "session.json"
+        )
+        request.update(
+            {
+                "planning_root": str(planning_root),
+                "manifest_path": str(manifest_path),
+                "index_path": str(planning_root / "sessions.active-wake.json"),
+            }
+        )
+        request["replacement_manifest"]["planning_dir"] = str(manifest_path.parent)
+        request["replacement_manifest"]["session_manifest_path"] = str(manifest_path)
     elif mutation == "wrong-index":
         request["index_path"] = str(case["direct_index_path"])
         request["sources"]["index"] = MIGRATION.runtime_source_identity(
