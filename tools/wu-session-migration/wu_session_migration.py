@@ -41,6 +41,7 @@ RUNTIME_OPERATIONS = {
 }
 PRE_PR_BIND_OPERATIONS = {"cold-start-disposition-bind", "phase3-bind"}
 SUPPORTED_TICKET_SYSTEMS = {"jira", "linear"}
+TRUSTED_COMMAND_TIMEOUT_SECONDS = 60
 EXPECTED_COUNTS = {
     "manifest_files": 306,
     "index_files": 7,
@@ -2799,11 +2800,14 @@ def _validate_phase3_artifact_bindings(
     currentness = estimate.get("currentness")
     if not isinstance(currentness, dict):
         raise InputError("phase3-bind estimate currentness is malformed")
+    producer_roles = {"resolved-ticket-operator", "resolved-ticket-contract"}
     for role, path_key, digest_key, required_root in bindings:
         path_value = estimate.get(path_key)
         digest = estimate.get(digest_key)
         record = records[role]
-        if record.get("path") != path_value or record.get("sha256") != digest:
+        if record.get("path") != path_value or (
+            role not in producer_roles and record.get("sha256") != digest
+        ):
             raise InputError(f"phase3-bind {role} identity does not match estimate artifact")
         if currentness.get(digest_key) != digest:
             raise InputError(f"phase3-bind {role} currentness digest mismatch")
@@ -2845,6 +2849,7 @@ def _validate_phase3_artifact_bindings(
         or manifest.get("resolved_contract_sha256") != estimate.get("resolved_contract_sha256")
     ):
         raise InputError("phase3-bind estimate does not match manifest contract identity")
+    _validate_phase3_producer_git_identities(manifest, estimate)
     cold_ref = estimate.get("cold_start_disposition_ref")
     if cold_ref is not None:
         cold_record = records["cold-start-disposition"]
@@ -2854,6 +2859,125 @@ def _validate_phase3_artifact_bindings(
             raise InputError("phase3-bind cold-start artifact identity mismatch")
         if not _is_below(Path(cast(str, cold_ref)), scratch_dir):
             raise InputError("phase3-bind cold-start artifact is outside scratch_dir")
+
+
+def _validate_phase3_producer_git_identities(
+    manifest: Mapping[str, Any], estimate: Mapping[str, Any]
+) -> None:
+    repo_value = manifest.get("repo_root")
+    if not isinstance(repo_value, str):
+        raise InputError("phase3-bind producer repository is malformed")
+    repo_root = Path(repo_value)
+    if (
+        not repo_root.is_absolute()
+        or str(repo_root) != repo_value
+        or repo_value != os.path.normpath(repo_value)
+    ):
+        raise InputError("phase3-bind producer repository is noncanonical")
+    _reject_symlink_components(repo_root)
+    try:
+        resolved_repo = repo_root.resolve(strict=True)
+    except OSError as exc:
+        raise InputError("phase3-bind producer repository is missing") from exc
+    if resolved_repo != repo_root or not repo_root.is_dir():
+        raise InputError("phase3-bind producer repository is noncanonical")
+
+    top_level = _run_text_command(
+        ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"]
+    ).strip()
+    if top_level != str(repo_root):
+        raise InputError("phase3-bind producer repository is not the Git worktree root")
+
+    branch_out_sha = manifest.get("branch_out_sha")
+    _require_full_oid(branch_out_sha, "branch-out-oid")
+    commit = cast(str, branch_out_sha).lower()
+    object_type = _run_text_command(
+        ["git", "-C", str(repo_root), "cat-file", "--batch-check=%(objecttype)"],
+        input_text=f"{commit}\n",
+    ).strip()
+    if object_type != "commit":
+        raise InputError("phase3-bind branch_out_sha is not an exact commit")
+
+    identities = (
+        (
+            "resolved-ticket-operator",
+            estimate.get("resolved_operator_path"),
+            estimate.get("resolved_operator_sha256"),
+        ),
+        (
+            "resolved-ticket-contract",
+            estimate.get("resolved_operator_contract_path"),
+            estimate.get("resolved_contract_sha256"),
+        ),
+    )
+    for role, path_value, digest in identities:
+        if not isinstance(path_value, str):
+            raise InputError(f"phase3-bind {role} historical path is malformed")
+        path = Path(path_value)
+        if (
+            not path.is_absolute()
+            or str(path) != path_value
+            or path_value != os.path.normpath(path_value)
+        ):
+            raise InputError(f"phase3-bind {role} historical path is noncanonical")
+        try:
+            relative_path = path.relative_to(repo_root)
+        except ValueError as exc:
+            raise InputError(
+                f"phase3-bind {role} historical path is outside the declared repository"
+            ) from exc
+        if relative_path == Path(".") or repo_root / relative_path != path:
+            raise InputError(f"phase3-bind {role} historical path is noncanonical")
+        _require_sha256(digest, f"phase3-bind {role} historical digest")
+        _verify_historical_git_blob(
+            repo_root, commit, relative_path.as_posix(), cast(str, digest), role
+        )
+
+
+def _verify_historical_git_blob(
+    repo_root: Path,
+    commit: str,
+    relative_path: str,
+    expected_sha256: str,
+    role: str,
+) -> None:
+    tree_output = _run_bytes_command(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "ls-tree",
+            "-z",
+            "--full-tree",
+            commit,
+            "--",
+            f":(top,literal){relative_path}",
+        ]
+    )
+    entries = tree_output.split(b"\0")
+    if len(entries) != 2 or entries[1] or not entries[0]:
+        raise InputError(f"phase3-bind {role} historical path is missing or ambiguous")
+    metadata, separator, tracked_path = entries[0].partition(b"\t")
+    fields = metadata.split(b" ")
+    if (
+        not separator
+        or tracked_path != os.fsencode(relative_path)
+        or len(fields) != 3
+        or fields[0] not in {b"100644", b"100755"}
+        or fields[1] != b"blob"
+    ):
+        raise InputError(f"phase3-bind {role} historical object is not a regular blob")
+    try:
+        blob_oid = fields[2].decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise InputError(f"phase3-bind {role} historical blob identity is malformed") from exc
+    if not FULL_OID_RE.fullmatch(blob_oid):
+        raise InputError(f"phase3-bind {role} historical blob identity is malformed")
+    blob = _run_bytes_command(
+        ["git", "-C", str(repo_root), "cat-file", "blob", blob_oid]
+    )
+    if _sha256(blob) != expected_sha256:
+        raise InputError(f"phase3-bind {role} historical blob digest mismatch")
 
 
 def _validate_phase3_disposition(
@@ -3796,10 +3920,46 @@ def _run_json_command(command: list[str]) -> dict[str, Any]:
     return value
 
 
-def _run_text_command(command: list[str]) -> str:
+def _trusted_command_environment() -> dict[str, str]:
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
+def _run_text_command(command: list[str], *, input_text: str | None = None) -> str:
     try:
-        result = subprocess.run(command, check=True, text=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
+        result = subprocess.run(
+            command,
+            check=True,
+            text=True,
+            capture_output=True,
+            input=input_text,
+            timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
+            env=_trusted_command_environment(),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
+    return result.stdout
+
+
+def _run_bytes_command(command: list[str]) -> bytes:
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
+            env=_trusted_command_environment(),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
     return result.stdout
 
