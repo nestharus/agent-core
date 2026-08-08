@@ -34,6 +34,16 @@ inputs:
   required: false
   default_source: caller
   description: '`runtime_artifact_evidence_path=<absolute-path>` (optional) - runtime-artifact validation evidence such as a build log, container exec log, production-path command log, state DB evidence, or deployed environment check.'
+- name: runtime_evidence_ref
+  type: string
+  required: false
+  default_source: caller
+  description: Runtime-evidence identity; required and equal to runtime_artifact_evidence_path when that path is supplied.
+- name: runtime_evidence_hash
+  type: string
+  required: false
+  default_source: caller
+  description: SHA-256 of runtime artifact evidence; required and content-matched when runtime_artifact_evidence_path is supplied.
 - name: report_path
   type: path
   required: true

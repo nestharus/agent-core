@@ -55,6 +55,8 @@ inputs:
   - {name: behavior_claim_hash, type: string, required: false, default_source: caller, description: "Behavior-claim content hash; required when verification-plan review applies."}
   - {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: "Runtime claim identity or explicit non-applicability artifact."}
   - {name: runtime_claim_hash, type: string, required: true, default_source: caller, description: "Runtime-claim content hash or explicit n/a marker."}
+  - {name: runtime_evidence_ref, type: string, required: true, default_source: caller, description: "Runtime evidence identity or explicit non-applicability artifact."}
+  - {name: runtime_evidence_hash, type: string, required: true, default_source: caller, description: "Runtime-evidence content hash or explicit n/a marker."}
   - {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: "Current contract artifact hashes."}
   - {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: "Current caller report hashes."}
   - {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}
@@ -125,7 +127,7 @@ All caller modes require:
 - `caller_mode`: one of `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
 - `process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.
-- Currentness identity: `cycle_id`, `head_sha`, `diff_sha256`, scope ref, distinct verification-plan/behavior-claim/runtime-claim refs and hashes where applicable, and contract/report hashes. Implementation modes additionally require freshly resolved `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; an invalid or stale full SHA blocks without fallback.
+- Currentness identity: `cycle_id`, `head_sha`, `diff_sha256`, scope ref, distinct verification-plan/behavior-claim/runtime-claim/runtime-evidence refs and hashes where applicable, and contract/report hashes. Implementation modes additionally require freshly resolved `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; an invalid or stale full SHA blocks without fallback.
 - Explicit output paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, raw process tree, independent process-tree report, and stable result envelope.
 
 `rca-post-apply` additionally requires `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `verification_plan_ref`/`verification_plan_hash` and `behavior_claim_ref`/`behavior_claim_hash` when plan review applies, `runtime_claim_ref`/`runtime_claim_hash`, `scope_ref`, and `cycle_id`.
@@ -201,9 +203,10 @@ The join manifest is JSON-compatible and mode-scoped. Each row uses snake_case f
 - `normalized_verdict`: parsed blocking value used by this operator.
 - `applicability`: `required`, `optional`, `not_applicable`, `skipped`, `ratified`, `inventory_resolution`, or `stale_refusal`.
 - `runtime_claim_ref`: path, hash, or stable identifier for the runtime claim supplied to child gates.
+- `runtime_evidence_ref`: path or stable identifier for observed runtime evidence supplied to child gates, otherwise an explicit non-applicability artifact.
 - `verification_plan_ref`: path, hash, or stable identifier for the verification plan supplied to plan-review rows, otherwise `null`.
 - `behavior_claim_ref`: path, hash, or stable identifier for the pre-execution behavior claim supplied to plan-review rows, otherwise `null`.
-- `currentness_key.verification_plan_hash`, `currentness_key.behavior_claim_hash`, and `currentness_key.runtime_claim_hash`: distinct content hashes or explicit non-applicability markers; one cannot substitute for another.
+- `currentness_key.verification_plan_hash`, `currentness_key.behavior_claim_hash`, `currentness_key.runtime_claim_hash`, and `currentness_key.runtime_evidence_hash`: distinct content hashes or explicit non-applicability markers; one cannot substitute for another.
 - `producing_invocation_uuid`: child invocation UUID or explicit external artifact producer UUID.
 - `verified_at`: ISO-8601 timestamp when the row was stat/hash/read verified.
 - `skip_metadata`: object for skip rows, otherwise `null`.
@@ -279,7 +282,7 @@ Behavior claim and verification-plan excerpt are transported to pre-execution re
 
 - Code-quality receives `runtime_claim`, `runtime_claim_ref`, actual diff or dossier diff, changed surfaces, and validation-surface context when applicable.
 - Verification-plan review receives `verification_plan_ref`, `behavior_claim_ref`, proposal or fix-decision ref, experiment command or action, and expected observation.
-- Validation-integrity receives runtime claim, original-signal verification or actual-diff evidence, dossier diff when present, and runtime artifact evidence when available.
+- Validation-integrity receives runtime claim, original-signal verification or actual-diff evidence, dossier diff when present, and `runtime_evidence_ref`/`runtime_evidence_hash` with runtime artifact evidence when available. When `runtime_artifact_evidence_path` is supplied, it must equal `runtime_evidence_ref` and its content hash must equal `runtime_evidence_hash`; a mismatch is blocking.
 
 Every child prompt and manifest row that consumes one of these fields preserves the corresponding ref and distinct hash in `currentness_key`. Missing or cross-coerced transport for an applicable child is blocking.
 

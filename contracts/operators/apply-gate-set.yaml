@@ -25,6 +25,8 @@ inputs:
 - {name: behavior_claim_hash, type: string, required: false, default_source: caller, description: Behavior-claim content hash; required when verification-plan review applies.}
 - {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: Runtime claim identity or explicit non-applicability artifact.}
 - {name: runtime_claim_hash, type: string, required: true, default_source: caller, description: Runtime-claim content hash or explicit n/a marker.}
+- {name: runtime_evidence_ref, type: string, required: true, default_source: caller, description: Runtime evidence identity or explicit non-applicability artifact.}
+- {name: runtime_evidence_hash, type: string, required: true, default_source: caller, description: Runtime-evidence content hash or explicit n/a marker.}
 - {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: Current contract artifact hashes.}
 - {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: Current caller report hashes.}
 - {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}
