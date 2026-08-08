@@ -113,7 +113,7 @@ The three translated surfaces are the complete adapter declaration. The new curr
 - `audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.
 - `process_tree_path?`: RCA root invocation process-tree trace when process-tree verification is required.
 - `root_invocation_uuid?`: RCA root invocation UUID when process-tree verification is required.
-- `currentness inputs`: `cycle_id`, `head_sha`, `base_ref`, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim references and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim identities, producing invocation refs, and verified-at data for Phase 6.5.
+- `currentness inputs`: `cycle_id`, `head_sha`, `base_ref`, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim/runtime-evidence references and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim/runtime-evidence identities, producing invocation refs, and verified-at data for Phase 6.5.
 - `ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.
 
 ## Output Paths
