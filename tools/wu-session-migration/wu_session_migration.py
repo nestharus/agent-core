@@ -41,6 +41,7 @@ RUNTIME_OPERATIONS = {
 }
 PRE_PR_BIND_OPERATIONS = {"cold-start-disposition-bind", "phase3-bind"}
 SUPPORTED_TICKET_SYSTEMS = {"jira", "linear"}
+TRUSTED_COMMAND_TIMEOUT_SECONDS = 60
 EXPECTED_COUNTS = {
     "manifest_files": 306,
     "index_files": 7,
@@ -3922,17 +3923,27 @@ def _run_json_command(command: list[str]) -> dict[str, Any]:
 def _run_text_command(command: list[str], *, input_text: str | None = None) -> str:
     try:
         result = subprocess.run(
-            command, check=True, text=True, capture_output=True, input=input_text
+            command,
+            check=True,
+            text=True,
+            capture_output=True,
+            input=input_text,
+            timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+    except (OSError, subprocess.SubprocessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
     return result.stdout
 
 
 def _run_bytes_command(command: list[str]) -> bytes:
     try:
-        result = subprocess.run(command, check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError) as exc:
+        result = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            timeout=TRUSTED_COMMAND_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
     return result.stdout
 

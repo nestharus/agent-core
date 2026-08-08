@@ -84,6 +84,25 @@ def _capture(command: list[str], payload: object) -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("helper_name", ["_run_text_command", "_run_bytes_command"])
+def test_trusted_command_timeout_is_bounded_and_translated(
+    helper_name: str, monkeypatch: pytest.MonkeyPatch
+):
+    observed_timeout = None
+
+    def timeout(command: list[str], **kwargs: Any):
+        nonlocal observed_timeout
+        observed_timeout = kwargs.get("timeout")
+        raise subprocess.TimeoutExpired(command, observed_timeout)
+
+    monkeypatch.setattr(MIGRATION.subprocess, "run", timeout)
+
+    with pytest.raises(ApplyError, match="trusted evidence capture failed"):
+        getattr(MIGRATION, helper_name)(["git", "status"])
+
+    assert observed_timeout == MIGRATION.TRUSTED_COMMAND_TIMEOUT_SECONDS
+
+
 def _merge_method_capture(
     pr_url: str,
     head_sha: str,
