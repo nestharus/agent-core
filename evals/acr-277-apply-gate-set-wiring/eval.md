@@ -32,7 +32,7 @@ This WRITE-state structural-verification eval specifies the companion wiring sur
 
 ## Scope
 
-This eval covers only repository-visible wiring and inventory evidence for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, `workflows/index.json`, and the caller-mode manifests/adapters that should expose equivalent active row families. It verifies that verification-plan review, validation-surface, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup rows, and bootstrap-exception ratification rows are present or explicitly resolved for both RCA-mode and implementation-mode.
+This eval covers only repository-visible wiring and inventory evidence for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, `workflows/index.json`, and the caller-mode manifests/adapters that should expose equivalent active row families. It verifies that verification-plan review, supported-surface, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup rows, and bootstrap-exception ratification rows are present or explicitly resolved for both RCA-mode and implementation-mode.
 
 ACR-287 overlap is resolved by Option A - Absorb at the RCA caller boundary through the primary RCA eval. This companion eval keeps the shared wiring parity needed for `APPLY-GATE-SET-007` and cites the primary RCA eval as the stricter detector for inherited RCA-mode behavior.
 
@@ -49,7 +49,7 @@ Evidence must bind each caller-mode comparison to current manifest identity, not
 - Repository paths and content hashes for `agents/apply-gate-set.md`, `workflows/apply-gate-set.md`, and `workflows/index.json`.
 - Workflow/operator frontmatter fields, declared roles, dispatch contract fields, inputs, expectations, outputs, non-goals, caller-mode names, and row-family inventory text.
 - RCA-mode and implementation-mode caller ids, root invocation UUIDs, prompt paths, manifests, currentness keys, and audit-history paths.
-- Inventory rows for verification-plan review, validation-surface review, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup, bootstrap-exception ratification, stale-refusal, and inventory-resolution.
+- Inventory rows for verification-plan review, supported-surface review, distinct verification-plan/behavior-claim/runtime-claim transport, process-tree topology mode, currentness keys, skip-with-followup, bootstrap-exception ratification, stale-refusal, and inventory-resolution.
 - `report_paths` and `trace_locator` fields for each compared row family.
 
 ## Finding schema
