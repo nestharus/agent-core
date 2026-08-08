@@ -81,6 +81,16 @@ def _require_any(text: str, needles: list[str], context: str) -> None:
     )
 
 
+def _require_phase(text: str, phase: int, context: str) -> str:
+    match = re.search(
+        rf"^##\s+Phase {phase}\b.*?(?=^##\s+|\Z)",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    _require(match is not None, f"{context}: missing Phase {phase} section")
+    return match.group(0)
+
+
 def _require_window_all_any(
     text: str,
     required: list[str],
@@ -142,12 +152,14 @@ def _check_a8(text: str) -> None:
 
 
 def _check_a9(text: str) -> None:
-    _require_all(text, ["Step 6b output index", "inherited pending production"], "A9")
+    phase = _require_phase(text, 6, "A9")
+    _require_all(phase, ["Step 6b output index", "inherited pending production"], "A9")
 
 
 def _check_a10(text: str) -> None:
+    phase = _require_phase(text, 7, "A10")
     _require_all(
-        text,
+        phase,
         ["inherited pending production", "Pre-CodeRabbit readiness refuses to advance"],
         "A10",
     )
