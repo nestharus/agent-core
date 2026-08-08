@@ -626,7 +626,9 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
         {
             "ticket_snapshot_path": str(ticket_snapshot),
             "ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
-            "ticket_snapshot_producing_invocation_uuid": "phase-0-invocation",
+            "ticket_snapshot_producing_invocation_uuid": (
+                "11111111-1111-4111-8111-111111111111"
+            ),
             "resolved_operator_path": str(operator_path),
             "resolved_operator_sha256": _digest(operator_path.read_bytes()),
             "resolved_operator_contract_path": str(contract_path),
@@ -645,7 +647,9 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
         "cold_start_disposition_ref": str(cold_start_path),
         "phase_0_ticket_snapshot_path": str(ticket_snapshot),
         "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
-        "phase_0_ticket_snapshot_producing_invocation_uuid": "phase-0-invocation",
+        "phase_0_ticket_snapshot_producing_invocation_uuid": (
+            "22222222-2222-4222-8222-222222222222"
+        ),
         "phase_3_proposal_path": str(proposal_path),
         "phase_3_proposal_sha256": _digest(proposal_path.read_bytes()),
         "resolved_operator_path": str(operator_path),
@@ -1547,16 +1551,26 @@ def test_phase3_bind_maps_canonical_snapshot_keys_and_preserves_source_and_index
     )
     original_index_bytes = case["index_path"].read_bytes()
     original_index_stat = case["index_path"].stat()
+    manifest_snapshot_aliases = {
+        "phase_0_ticket_snapshot_path",
+        "phase_0_ticket_snapshot_sha256",
+        "phase_0_ticket_snapshot_producing_invocation_uuid",
+    }
+    estimate_snapshot_aliases = {
+        "ticket_snapshot_path",
+        "ticket_snapshot_sha256",
+        "ticket_snapshot_producing_invocation_uuid",
+    }
 
-    assert "phase_0_ticket_snapshot_path" not in source_manifest
-    assert "phase_0_ticket_snapshot_sha256" not in source_manifest
+    assert manifest_snapshot_aliases.isdisjoint(source_manifest)
+    assert estimate_snapshot_aliases.isdisjoint(estimate)
     assert source_manifest["ticket_snapshot_path"] == estimate[
         "phase_0_ticket_snapshot_path"
     ]
     assert source_manifest["ticket_snapshot_sha256"] == estimate[
         "phase_0_ticket_snapshot_sha256"
     ]
-    assert source_manifest["ticket_snapshot_producing_invocation_uuid"] == estimate[
+    assert source_manifest["ticket_snapshot_producing_invocation_uuid"] != estimate[
         "phase_0_ticket_snapshot_producing_invocation_uuid"
     ]
 
@@ -1586,6 +1600,10 @@ def test_phase3_bind_maps_canonical_snapshot_keys_and_preserves_source_and_index
         "phase_history",
     }
     assert updated_manifest == case["replacement_manifest"]
+    assert manifest_snapshot_aliases.isdisjoint(updated_manifest)
+    assert updated_manifest["ticket_snapshot_producing_invocation_uuid"] == source_manifest[
+        "ticket_snapshot_producing_invocation_uuid"
+    ]
     assert updated_manifest["cold_start_disposition_ref"] == source_manifest[
         "cold_start_disposition_ref"
     ]
@@ -1647,12 +1665,26 @@ def test_phase3_bind_rejects_manifest_snapshot_identity_mismatch(
         None,
         case["artifacts"],
     )
+    original_manifest_bytes = case["manifest_path"].read_bytes()
+    original_index_bytes = case["index_path"].read_bytes()
+    original_index_stat = case["index_path"].stat()
+    assert not MIGRATION._journal_path().exists()
 
     with pytest.raises(
         InputError,
         match="does not match manifest ticket_snapshot_path",
     ):
         MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+    assert case["manifest_path"].read_bytes() == original_manifest_bytes
+    assert case["index_path"].read_bytes() == original_index_bytes
+    updated_index_stat = case["index_path"].stat()
+    assert (updated_index_stat.st_dev, updated_index_stat.st_ino, updated_index_stat.st_mode) == (
+        original_index_stat.st_dev,
+        original_index_stat.st_ino,
+        original_index_stat.st_mode,
+    )
+    assert not MIGRATION._journal_path().exists()
 
 
 def _pre_pr_readback(case: dict[str, Any], source_manifest: dict[str, Any]) -> dict[str, Any]:
