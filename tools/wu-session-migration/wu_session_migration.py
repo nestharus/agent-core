@@ -2891,20 +2891,10 @@ def _validate_phase3_producer_git_identities(
     _require_full_oid(branch_out_sha, "branch-out-oid")
     commit = cast(str, branch_out_sha).lower()
     object_type = _run_text_command(
-        ["git", "-C", str(repo_root), "cat-file", "-t", commit]
+        ["git", "-C", str(repo_root), "cat-file", "--batch-check=%(objecttype)"],
+        input_text=f"{commit}\n",
     ).strip()
-    resolved_commit = _run_text_command(
-        [
-            "git",
-            "-C",
-            str(repo_root),
-            "rev-parse",
-            "--verify",
-            "--end-of-options",
-            f"{commit}^{{commit}}",
-        ]
-    ).strip()
-    if object_type != "commit" or resolved_commit.lower() != commit:
+    if object_type != "commit":
         raise InputError("phase3-bind branch_out_sha is not an exact commit")
 
     identities = (
@@ -3929,9 +3919,11 @@ def _run_json_command(command: list[str]) -> dict[str, Any]:
     return value
 
 
-def _run_text_command(command: list[str]) -> str:
+def _run_text_command(command: list[str], *, input_text: str | None = None) -> str:
     try:
-        result = subprocess.run(command, check=True, text=True, capture_output=True)
+        result = subprocess.run(
+            command, check=True, text=True, capture_output=True, input=input_text
+        )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ApplyError(f"trusted evidence capture failed: {' '.join(command)}: {exc}") from exc
     return result.stdout

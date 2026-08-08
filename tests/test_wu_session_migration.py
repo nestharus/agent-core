@@ -3526,7 +3526,7 @@ def test_phase3_bind_rejects_unknown_or_noncommit_branch_out(
         case, f"{ref_kind}-branch-out", branch_out_sha=branch_out_sha
     )
 
-    with pytest.raises(ApplyError, match="trusted evidence capture failed"):
+    with pytest.raises(InputError, match="branch_out_sha is not an exact commit"):
         MIGRATION.apply_runtime_request(request_path, "phase3-bind")
 
 
