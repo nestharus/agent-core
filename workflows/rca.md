@@ -7,11 +7,12 @@ workflow_dispatch_contract:
     - "incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to ${planning_dir}/audit-history.md, ticket_system, and tracker operator inputs when downstream filing is needed"
     - "for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis"
     - "for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly"
-    - "post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid"
+    - "post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim/runtime-evidence refs and hashes, explicit n/a:<reason> markers for non-applicable verification-plan/behavior-claim/runtime-claim/runtime-evidence identities, process_tree_path, and root_invocation_uuid"
   expectations:
     - "runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle"
     - "uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS"
     - "returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts"
+    - "requires each Phase 3 fix decision to contain Behavior claim, Experiment command or action, Expected observation, and Claim-experiment fit under one exact ## Verification plan section"
   outputs:
     - "reproduction artifact, root-cause artifact, fix-decision artifact, application-plan artifact, applied-fix artifact, and RCA-scoped gate-set artifacts"
     - "gate-set dispatch manifest, join manifest, aggregate report, child report index, expected-process manifest, process-tree report reference or non-applicability record, audit-history records, and optional ticket-comment payload"
@@ -19,7 +20,7 @@ workflow_dispatch_contract:
     - "NEEDS_INPUT question artifacts or BLOCKED stop-state evidence when RCA cannot safely proceed"
   non_goals:
     - "does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator"
-    - "does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring"
+    - "does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, verification-plan-review, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring"
     - "does not make ticket comments canonical; comments are mirrors of file-backed gate evidence"
     - "does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+"
 ---
@@ -42,13 +43,14 @@ rca-orchestrator
 - incident_id or failure_id, trigger_type failing_test or incident, trigger_evidence_path, repo_root, worktree_path, scratch_dir, planning_dir, audit_history_path defaulting to `${planning_dir}/audit-history.md`, ticket_system, and tracker operator inputs when downstream filing is needed
 - for incident triggers, enough incident context or incident brief material to author a real reproduction test in the worktree before root-cause analysis
 - for failing_test triggers, the existing failing test command or node id and evidence needed to enter root-cause analysis directly
-- post-apply gate currentness and trace inputs when available, including cycle_id, head_sha, base_ref, diff hash, scope/runtime-claim refs or hashes, process_tree_path, and root_invocation_uuid
+- post-apply gate currentness and trace inputs, including cycle_id, head_sha, base_ref, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim/runtime-evidence refs and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim/runtime-evidence identities, process_tree_path, and root_invocation_uuid
 
 ### Expectations
 
 - runs a reproduction-first RCA loop: classify the trigger, author or accept the failing test, split root cause, fix choice, application plan, and application into separate fresh invocations, verify-or-return, then run apply-gate-set(caller_mode=rca-post-apply) before downstream lifecycle
 - uses rca-orchestrator as the procedural owner at agents/rca-orchestrator.md and preserves downstream post-mortem, action-item, runbook, tracker-comment, and close-or-pending work behind a current Phase 6.5 PASS
 - returns to root-cause analysis on every red verification; iterates until verification is green or the operator halts
+- requires each Phase 3 fix decision to contain `Behavior claim`, `Experiment command or action`, `Expected observation`, and `Claim-experiment fit` under one exact `## Verification plan` section
 
 ### Outputs
 
@@ -60,7 +62,7 @@ rca-orchestrator
 ### Non-goals
 
 - does not edit rca-prototype, prototype-rca-orchestrator, incident-investigator, behavior-investigator, post-mortem-author, ticket operators, or implementation-pipeline-orchestrator
-- does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring
+- does not introduce machine-enforcement framing, replace implementation-pipeline, CodeRabbit, PR-review, verification-plan-review, validation-integrity, process-tree, or ticket-system gates, or wire implementation-pipeline callers; ACR-288 owns implementation-pipeline caller wiring
 - does not make ticket comments canonical; comments are mirrors of file-backed gate evidence
 - does not delete the downstream incident lifecycle; post-mortem authoring, action-item tickets, runbooks, tracker comments, and close-or-pending handling remain Phase 7+
 
@@ -111,7 +113,7 @@ The three translated surfaces are the complete adapter declaration. The new curr
 - `audit_history_path?`: audit-history path for gate-set evidence, defaulting to `${planning_dir}/audit-history.md`.
 - `process_tree_path?`: RCA root invocation process-tree trace when process-tree verification is required.
 - `root_invocation_uuid?`: RCA root invocation UUID when process-tree verification is required.
-- `currentness inputs?`: `cycle_id`, `head_sha`, `base_ref`, diff hash, scope reference or hash, runtime-claim reference or hash, producing invocation refs, and verified-at data when available for Phase 6.5.
+- `currentness inputs`: `cycle_id`, `head_sha`, `base_ref`, diff hash, distinct scope/verification-plan/behavior-claim/runtime-claim/runtime-evidence references and hashes, explicit `n/a:<reason>` markers for non-applicable verification-plan/behavior-claim/runtime-claim/runtime-evidence identities, producing invocation refs, and verified-at data for Phase 6.5.
 - `ticket_system?`: `linear` or `jira` when downstream tracker filing or comments are in scope.
 
 ## Output Paths
@@ -180,6 +182,12 @@ Phase 3 selects the best appropriate fix from the root-cause artifact. Dispatch 
 
 The Phase 3 artifact explains why the selected fix addresses the root cause and why rejected options are worse. It must NOT determine the application strategy and must NOT apply code changes.
 
+It also contains one `## Verification plan` following
+`conventions/behavioral-proof.md`, with exact non-blank fields `Behavior claim`,
+`Experiment command or action`, `Expected observation`, and
+`Claim-experiment fit`. This section is reviewed before application; it is not
+the Phase 6 observed result.
+
 If the fix decision depends on product judgment or an unacceptable tradeoff, emit `NEEDS_INPUT:<absolute_artifact_path>`.
 
 ## Phase 4 - Best Way To Apply
@@ -210,7 +218,7 @@ If the rerun is green, preserve the passing command, output, applied artifact re
 
 Phase 6.5 dispatches `apply-gate-set` through `rca-orchestrator` in `caller_mode=rca-post-apply` after Phase 5 changed-path check PASS, Phase 6 original-signal rerun GREEN, and Verification-phase critic PASS. The dispatch prompt lives at `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md`, the durable log lives at `${scratch_dir}/logs/<failure-id>-apply-gate-set.log`, and the canonical output root is `${planning_dir}/rca/gate-set/<failure-id>/`.
 
-The gate prompt supplies root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification-critic, actual-diff, runtime-claim, scope, cycle id, audit-history, currentness, output-path, and process-tree inputs when required. Required output paths are `dispatch-manifest.md`, `join-manifest.json`, `aggregate-report.md`, `child-report-index.md`, `expected-process.json`, `process-tree-report.md` or `process-tree-not-applicable.md`, and optional `ticket-comment-payload.md` when a tracker mirror is requested.
+The gate prompt supplies root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification-critic, actual-diff, runtime-claim, runtime-evidence, scope, cycle id, audit-history, currentness, output-path, and process-tree inputs when required. Required output paths are `dispatch-manifest.md`, `join-manifest.json`, `aggregate-report.md`, `child-report-index.md`, `expected-process.json`, `process-tree-report.md` or `process-tree-not-applicable.md`, and optional `ticket-comment-payload.md` when a tracker mirror is requested.
 
 Downstream lifecycle is blocked unless the returned gate-set status is `PASS` and the join manifest has no unresolved missing, stale, malformed, unsupported, non-LOW, unratified, invalid skip, bootstrap-exception, inventory-resolution, or process-tree blocking rows. Currentness decisions and stale-refusal records are delegated to `~/ai/conventions/apply-gate-set-currentness.md` § `Invalidation trigger matrix` and § `Stale-refusal records`. `BLOCKED`, `NEEDS_INPUT`, `MEDIUM`, `HIGH`, and `STALE_REFUSAL` all stop before Phase 7 and follow the operator-returned repair route. RCA records the returned manifest path, aggregate path, blocking rows, exception rows, inventory-resolution rows, currentness key, decision, and repair route in audit-history metadata.
 
@@ -263,7 +271,7 @@ Gate-set currentness is stricter than local RCA artifact reuse. Phase 6.5 curren
 - Do not edit `agents/incident-investigator.md`, `agents/behavior-investigator.md`, or `agents/post-mortem-author.md`.
 - Do not introduce machine-enforcement framing.
 - Do not delete the downstream lifecycle; it remains Phase 7+.
-- Do not replace implementation-pipeline, CodeRabbit, PR-review, proof-risk, validation-integrity, process-tree, Linear, or Jira operator gates.
+- Do not replace implementation-pipeline, CodeRabbit, PR-review, verification-plan-review, validation-integrity, process-tree, Linear, or Jira operator gates.
 - Do not treat ticket comments as canonical gate evidence; comments are mirrors of file-backed Phase 6.5 artifacts.
 
 ## Cross-References

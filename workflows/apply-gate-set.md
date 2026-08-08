@@ -5,7 +5,7 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: apply-gate-set
   inputs:
-    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
+    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit non-applicability markers, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
     - "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
     - "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
   expectations:
@@ -19,7 +19,7 @@ workflow_dispatch_contract:
     - "file-first evidence suitable for RCA or implementation-pipeline caller consumption"
   non_goals:
     - "does not wire RCA or implementation-pipeline callers"
-    - "does not replace PR-review, code-quality, process-tree, proof-risk, validation-integrity, readiness, or supported-surface gates"
+    - "does not replace PR-review, code-quality, process-tree, verification-plan-review, validation-integrity, readiness, or supported-surface gates"
     - "does not author eval specs, pytest tests, verifier scripts, hotfix-skip convention detail, or currentness invalidation rules"
 ---
 
@@ -61,7 +61,7 @@ apply-gate-set
 
 ### Inputs
 
-- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, runtime_claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
+- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit non-applicability markers, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
 - child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
 - implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command
 
@@ -81,7 +81,7 @@ apply-gate-set
 ### Non-goals
 
 - does not wire RCA or implementation-pipeline callers
-- does not replace PR-review, code-quality, process-tree, proof-risk, validation-integrity, readiness, or supported-surface gates
+- does not replace PR-review, code-quality, process-tree, verification-plan-review, validation-integrity, readiness, or supported-surface gates
 - does not author eval specs, pytest tests, verifier scripts, hotfix-skip convention detail, or currentness invalidation rules
 
 ## Required Inputs
@@ -90,10 +90,10 @@ apply-gate-set
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
 - Trace/currentness inputs: runtime-derived root invocation UUID, `cycle_id`, full `head_sha`, diff/scope/runtime/contract/report hashes, producing invocation UUIDs, and verified-at timestamps. Implementation modes also require exact `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; Phase 8 requires non-blank `local_coverage_command`.
 - Mode-specific artifacts:
-  - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, runtime claim, scope, and cycle id.
-  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, and bootstrap-exception refs when claimed.
-  - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, runtime claim, and side-channel or derivation evidence when applicable.
-  - `implementation-phase-8`: actual branch or PR diff, proposal/proof-plan refs, prior join refs when present, runtime claim, supported-surface inventory context, and base/head identity.
+  - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit `n/a:<reason>` markers, scope, and cycle id.
+  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit `n/a:<reason>` markers, and bootstrap-exception refs when claimed.
+  - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit `n/a:<reason>` markers, and side-channel or derivation evidence when applicable.
+  - `implementation-phase-8`: actual branch or PR diff, proposal, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit `n/a:<reason>` markers, prior join refs when present, supported-surface inventory context, and base/head identity.
 
 ## Outputs
 
@@ -111,7 +111,7 @@ apply-gate-set
 - The operator actively dispatches or verifies child gate evidence. Passive convention-only inheritance is not accepted.
 - Every required row carries currentness fields and file-backed proof unless the row is an explicit non-applicability, skip, bootstrap-exception, or inventory-resolution row.
 - Child verdicts remain raw and visible. Skip and ratification rows explain advancement rules without rewriting non-LOW outputs.
-- Runtime claims and actual diffs are transported into code-quality, proof-risk, and validation-integrity children where applicable.
+- Verification-plan excerpts and behavior claims are transported to both verification-plan review and code-quality when plan context applies; runtime claims, actual diffs, and executed evidence are transported separately to code-quality and validation-integrity where applicable.
 - Inventory-resolution rows dual-score or fold ACR-285 and ACR-286 readings until those trackers settle.
 
 ## Non-goals
@@ -125,7 +125,7 @@ apply-gate-set
 
 `rca-post-apply` runs after RCA applies the fix and has current original-signal verification and verification-critic evidence. It requires actual-diff PR-review-style rows, code-quality, proof/runtime rows where applicable, process-tree evidence, skip/ratification/currentness rows, and inventory-resolution rows.
 
-`implementation-phase-4` runs after Phase 3 proposal and estimate write/no-write disposition. It requires a `phase-3-estimate-writeback` row plus proposal-risk rows, supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality, valid bootstrap-exception ratification when claimed, join manifest, process-tree evidence, and audit-history records. The row accepts only verified mutation success or contract-bound `no_write_policy_disabled`; null inherited estimates retain `over_2x: unknown` and require the recorded cold-start disposition.
+`implementation-phase-4` runs after Phase 3 proposal and estimate write/no-write disposition. It requires a `phase-3-estimate-writeback` row plus proposal-risk rows, supported-surface evidence, verification-plan-review inventory representation, Phase 4 code-quality, valid bootstrap-exception ratification when claimed, join manifest, process-tree evidence, and audit-history records. The row accepts only verified mutation success or contract-bound `no_write_policy_disabled`; null inherited estimates retain `over_2x: unknown` and require the recorded cold-start disposition.
 
 For `no_write_policy_disabled`, the expected-process manifest contains a selected-ticket-operator `task=update-estimate` pattern with `required: false`, `blocking_if_missing: false`, and `blocking_if_present: true`. A matching child is blocking. For `write_verified`, the manifest requires the producing update invocation, or current exact issue/field/value readback when a migration record proves an earlier verified mutation was reused without a duplicate write.
 

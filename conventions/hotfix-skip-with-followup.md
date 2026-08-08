@@ -6,7 +6,7 @@ This convention defines the canonical evidence artifact for a hotfix path that s
 
 `parser`, `validator`, `mapper`, `formatter`.
 
-This file-local declaration overrides the documented path default per `~/ai/conventions/code-quality.md` § `Declared roles`. The role set covers parsing the canonical skip row, validating required evidence fields, mapping prototype-era names and inherited proof into the canonical schema, and formatting auditor-readable file-first evidence.
+This file-local declaration overrides the documented path default per `~/ai/conventions/code-quality.md` § `Declared roles`. The role set covers parsing the canonical skip row, validating required evidence fields, mapping prototype-era names and inherited evidence into the canonical schema, and formatting auditor-readable file-first evidence.
 
 ## Intrinsic-surface declarations
 

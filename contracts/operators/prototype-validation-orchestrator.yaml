@@ -1,93 +1,31 @@
 schema: operator-contract-v1
 source: agents/prototype-validation-orchestrator.md
 model: gpt-xhigh
-description: Orchestrate validation, packaging, PR proof, and cleanup for a shippable prototype
-contract_status: minimum-generated-from-operator-sections
+description: Orchestrate validation, evidence packaging, PR presentation, and cleanup for a shippable prototype.
 inputs:
-- name: truth_branch_ref
-  type: string
-  required: true
-  default_source: caller
-  description: '`truth_branch_ref`: branch or commit containing product code and behavior tests.'
-- name: truth_worktree_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`truth_worktree_path`: writable checkout for truth-branch code and tests.'
-- name: eval_branch_ref
-  type: string
-  required: true
-  default_source: caller
-  description: '`eval_branch_ref`: branch for compose, Dockerfile, README, eval scripts, and package staging.'
-- name: eval_worktree_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`eval_worktree_path`: writable checkout for eval-only scaffolding.'
-- name: planning_dir
-  type: string
-  required: true
-  default_source: caller
-  description: '`planning_dir` and `scratch_dir`: durable artifacts and transient prompts/logs.'
-- name: scratch_dir
-  type: string
-  required: true
-  default_source: caller
-  description: '`planning_dir` and `scratch_dir`: durable artifacts and transient prompts/logs.'
-- name: proposal_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`proposal_path` or dossier reference naming shipped use cases and expectations.'
-- name: behavior_tests_paths
-  type: string
-  required: true
-  default_source: caller
-  description: '`behavior_tests_paths` or behavior test manifest.'
-- name: qa_use_case_manifest
-  type: string
-  required: true
-  default_source: caller
-  description: '`qa_use_case_manifest`: QA walkthrough selectors, expected observations, and screenshot requirements.'
-- name: registry_target
-  type: string
-  required: true
-  default_source: caller
-  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
-- name: image_tag
-  type: string
-  required: true
-  default_source: caller
-  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
-- name: zip_path
-  type: string
-  required: true
-  default_source: caller
-  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
-- name: base_branch
-  type: string
-  required: true
-  default_source: caller
-  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
-- name: prototype_slug
-  type: string
-  required: true
-  default_source: caller
-  description: '`registry_target`, `image_tag`, `zip_path`, `base_branch`, and `prototype_slug`.'
+- {name: truth_branch_ref, type: string, required: true, default_source: caller, description: Branch or commit containing product code and behavior tests.}
+- {name: truth_worktree_path, type: path, required: true, default_source: caller, description: Writable truth-branch checkout.}
+- {name: eval_branch_ref, type: string, required: true, default_source: caller, description: Eval-only scaffolding branch.}
+- {name: eval_worktree_path, type: path, required: true, default_source: caller, description: Writable eval-only checkout.}
+- {name: planning_dir, type: path, required: true, default_source: caller, description: Durable validation and shipping artifacts.}
+- {name: scratch_dir, type: path, required: true, default_source: caller, description: Transient prompts and logs.}
+- {name: proposal_path, type: path, required: true, default_source: caller, description: Proposal or dossier naming shipped use cases and expected observations.}
+- {name: behavior_tests_paths, type: path_list, required: true, default_source: caller, description: Behavior-test files or manifest paths.}
+- {name: qa_use_case_manifest, type: path, required: true, default_source: caller, description: QA actions, environments, expected observations, and screenshot requirements.}
+- {name: registry_target, type: string, required: true, default_source: caller, description: Prototype image registry target.}
+- {name: image_tag, type: string, required: true, default_source: caller, description: Exact prototype image tag.}
+- {name: zip_path, type: path, required: true, default_source: caller, description: Exact prototype zip output.}
+- {name: base_branch, type: string, required: true, default_source: caller, description: Explicit draft-PR base branch.}
+- {name: prototype_slug, type: string, required: true, default_source: caller, description: Stable prototype identity and cleanup scope.}
 defaults: []
 outputs:
 - task: default
-  success_shape: Follow the operator Output Contract/Output section and final stdout sentinel.
-  wrote_lines: []
+  success_shape: Truth-branch draft PR evidence plus validated package, experiment-evidence bundle, and optional cleanup artifacts.
+  wrote_lines:
+  - ${planning_dir}/** validation and shipping artifacts named by the procedure
 errors:
-- class: BLOCKED
-  cause: Required input or required artifact is missing, unreadable, or outside operator scope.
-  recovery: Provide the missing input or route to the correct operator.
-- class: NEEDS_INPUT
-  cause: A user-owned decision is required before safe completion.
-  recovery: Write the question artifact when the operator convention requires one, then stop.
-side_effects:
-- Writes only artifacts declared by the operator body.
-must_delegate: []
-forbidden_direct:
-- Do not bypass the operator body, anti-scope, or stop conditions.
+- {class: BLOCKED, cause: A required phase contract, experiment record, handback, package, PR, or cleanup boundary is invalid., recovery: Repair the named child evidence and rerun the affected phase.}
+- {class: NEEDS_INPUT, cause: A caller-owned scope, credential, registry, branch, or terminal-cleanup decision is unresolved., recovery: Answer the emitted question artifact and resume.}
+side_effects: [child-operator-dispatches, truth-and-eval-worktree-writes, package-writes, draft-pr-create-or-refresh, scoped-cleanup]
+must_delegate: [contract-validation, screenshot-upload, package-and-evidence-bundle, evidence-bundle-adapter, prototype-rca]
+forbidden_direct: [claim-unexecuted-behavior, cross-truth-eval-ownership-boundary]

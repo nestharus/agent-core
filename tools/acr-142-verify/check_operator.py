@@ -33,12 +33,12 @@ CHILD_OPERATORS = [
     "prototype-validation-contract-validator.md",
     "prototype-validation-screenshot-uploader.md",
     "prototype-validation-packager.md",
-    "prototype-validation-proof-bundle-adapter.md",
+    "prototype-validation-evidence-bundle-adapter.md",
 ]
 HANDOFF_ANCHORS = [
     "rca_handback_path",
     "screenshot_url_manifest_path",
-    "proof_bundle_path",
+    "experiment_evidence_bundle_path",
     "pr_writer_input_bundle_path",
     "package_manifest_path",
     "cleanup_report_path",
@@ -112,7 +112,7 @@ def _check_uploader_before_packager(parsed: ParsedOperator, findings: list[Findi
     phase_blocks = parsed.get("procedure_phase_blocks", {})
     phase_3 = phase_blocks.get("Phase 3")
     phase_4b = phase_blocks.get("Phase 4b")
-    packager_anchor = parsed.get("procedure_packager_proof_bundle_anchor")
+    packager_anchor = parsed.get("procedure_packager_evidence_bundle_anchor")
     uploader_positions = list(parsed.get("procedure_uploader_dispatch_positions", []))
     walkthrough_positions = list(parsed.get("procedure_walkthrough_positions", []))
 
@@ -122,7 +122,7 @@ def _check_uploader_before_packager(parsed: ParsedOperator, findings: list[Findi
     if phase_4b is None:
         invalid_reasons.append("Phase 4b numbered procedure block is absent")
     if packager_anchor is None:
-        invalid_reasons.append("packager proof-bundle assembly anchor is absent")
+        invalid_reasons.append("packager experiment-evidence-bundle assembly anchor is absent")
     if not uploader_positions:
         invalid_reasons.append("uploader dispatch anchor is absent from the procedure body")
 
@@ -137,12 +137,12 @@ def _check_uploader_before_packager(parsed: ParsedOperator, findings: list[Findi
             invalid_reasons.append("uploader dispatch appears outside Phase 3 / Phase 4b QA walkthrough blocks")
             break
         if packager_anchor is not None and uploader_pos > packager_anchor:
-            invalid_reasons.append("uploader dispatch appears after packager proof-bundle assembly")
+            invalid_reasons.append("uploader dispatch appears after packager experiment-evidence-bundle assembly")
             break
 
     if packager_anchor is not None and phase_3 and phase_4b:
         if phase_3[1] > packager_anchor or phase_4b[1] > packager_anchor:
-            invalid_reasons.append("Phase 3 and Phase 4b walkthrough blocks must both precede packager proof-bundle assembly")
+            invalid_reasons.append("Phase 3 and Phase 4b walkthrough blocks must both precede packager experiment-evidence-bundle assembly")
 
     if invalid_reasons:
         findings.append(_finding(path, "missing_ordering_anchor", ORDERING_ANCHOR, "; ".join(dict.fromkeys(invalid_reasons))))

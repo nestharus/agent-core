@@ -56,8 +56,8 @@ The future auditor reads these dispatcher procedure sections:
 | `/home/nes/ai/agents/roadmap-orchestrator.md` | Research, proposer, risk, prototype, and ticket-generation dispatches. |
 | `/home/nes/ai/agents/alignment-cycle-orchestrator.md` | Bootstrap, alignment, classify, and integrate dispatches. |
 | `/home/nes/ai/agents/prototype-orchestrator.md` | P1/P2/P3/P4 child dispatches and ticket handoff. |
-| `/home/nes/ai/agents/prototype-validation-orchestrator.md` | Validator, uploader, packager, proof-bundle, PR writer, and RCA dispatches. |
-| `/home/nes/ai/agents/rca-orchestrator.md` | Reproduction, root-cause, fix, application, critic, proof, and handoff dispatches. |
+| `/home/nes/ai/agents/prototype-validation-orchestrator.md` | Validator, uploader, packager, experiment-evidence bundle adapter, PR writer, and RCA dispatches. |
+| `/home/nes/ai/agents/rca-orchestrator.md` | Reproduction, root-cause, fix, application, verification-plan review, experiment execution, and handoff dispatches. |
 | `/home/nes/ai/agents/prototype-rca-orchestrator.md` | Behavior/root-cause and fix dispatches. |
 | `/home/nes/ai/agents/regression-investigator.md` | Commit-history, pattern-auditor, A1, and ticket-operator handoffs. |
 | `/home/nes/ai/agents/wu-session-resumer.md` | Drift-checker and ticket-operator cross-link dispatches. |

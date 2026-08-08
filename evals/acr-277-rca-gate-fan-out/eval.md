@@ -90,7 +90,7 @@ The ACR-287 eval at `evals/acr-287-rca-post-apply-gate-set/eval.md` is the absor
 
 ## Drift inheritance
 
-- ACR-285 - Proof-risk row drift between workflow doc and orchestrator doc. Disposition: dual-score. Both proof-risk rows must remain present in the join manifest and both verdicts must be emitted unless an inventory-resolution row records source row, fold target, rationale, and equivalent blocking semantics.
+- ACR-285 - Verification-plan-review row drift between workflow doc and orchestrator doc. Disposition: dual-score. Both verification-plan-review rows must remain present in the join manifest and both verdicts must be emitted unless an inventory-resolution row records source row, fold target, rationale, and equivalent blocking semantics.
 - ACR-286 - Supported-surface row drift around PR-review/Phase 8. Disposition: dual-score. Both supported-surface rows must remain present in the join manifest and both verdicts must be emitted unless an inventory-resolution row records source row, fold target, rationale, and equivalent blocking semantics.
 
 ## Scenarios
@@ -204,31 +204,31 @@ Suggested action: rerun the justification gate against the active applied diff a
 
 Supersession linkage: Strengthens the justification subset of `APPLY-GATE-SET-001`.
 
-### ACR277-RCA-005: Composite code-quality fan-out preserves runtime claim and bootstrap-exception evidence
+### ACR277-RCA-005: Composite code-quality fan-out preserves distinct plan, behavior, and runtime claims plus bootstrap-exception evidence
 
 Scenario id: `ACR277-RCA-005`
 
-Intended observation: RCA post-apply must run composite code-quality fan-out with `dossier_diff_path` and `runtime_claim` transport, and must verify bootstrap-exception ratification inventory before non-LOW evidence authorizes handoff.
+Intended observation: RCA post-apply must run composite code-quality fan-out with `dossier_diff_path`, distinct `verification_plan_ref`, `behavior_claim_ref`, and `runtime_claim_ref` transport, and bootstrap-exception ratification inventory before non-LOW evidence authorizes handoff.
 
-Gate this scenario covers: `code-quality-composite`, `runtime-claim-transport`, `bootstrap-exception-ratification`, `proof-risk`.
+Gate this scenario covers: `code-quality-composite`, `claim-transport`, `bootstrap-exception-ratification`, `verification-plan-review`.
 
-Evidence fields: aggregate code-quality report, child A1 auditor reports, proof-risk and validation-integrity rows, `dossier_diff_path`, `runtime_claim` ref/hash, bootstrap-exception row, DECISIONS entry path, join-manifest row, and handoff artifact path.
+Evidence fields: aggregate code-quality report, child A1 auditor reports, verification-plan-review and validation-integrity rows, `dossier_diff_path`, distinct verification-plan/behavior-claim/runtime-claim refs and hashes, bootstrap-exception row, DECISIONS entry path, join-manifest row, and handoff artifact path.
 
 Positive evidence (eval should produce a finding when):
 
 - Handoff exists without a current aggregate code-quality row for the actual applied diff.
-- Child prompts or aggregate rows omit `dossier_diff_path` or `runtime_claim`, or resolve those inputs to stale/missing paths.
+- Child prompts or aggregate rows omit `dossier_diff_path`, collapse the three claim roles into one field, or resolve required claim inputs to stale/missing paths.
 - Aggregate verdict is non-LOW, NEEDS_INPUT, or BLOCKED, and no ratified bootstrap-exception row blocks or authorizes the path.
 - A bootstrap-exception row exists without DECISIONS authority or without the four-condition ratification record.
 
 Non-fire cases:
 
-- Composite code-quality rows are current, LOW/PASS, and preserve `dossier_diff_path` plus `runtime_claim` into child prompts.
+- Composite code-quality rows are current, LOW/PASS, and preserve `dossier_diff_path` plus distinct plan, behavior, and runtime claims into child prompts.
 - Non-LOW aggregate evidence is paired with a current ratified bootstrap-exception row and DECISIONS entry, or blocks handoff with repair route.
 
 Finding schema: common schema plus `scenario_id=ACR277-RCA-005`, `gate=code-quality-composite`, `phase=rca-post-apply-before-handoff`, `report_paths`, and `trace_locator`.
 
-Suggested action: rerun composite code-quality through `apply-gate-set`, preserve runtime-claim transport, and repair or ratify bootstrap-exception evidence before handoff.
+Suggested action: rerun composite code-quality through `apply-gate-set`, preserve distinct claim transport, and repair or ratify bootstrap-exception evidence before handoff.
 
 Supersession linkage: Strengthens `APPLY-GATE-SET-002` and `APPLY-GATE-SET-006`; cites ACR-288 implementation-pipeline `APPLY-GATE-SET-006` discharge as peer evidence where the implementation caller boundary is relevant.
 
@@ -236,15 +236,15 @@ Supersession linkage: Strengthens `APPLY-GATE-SET-002` and `APPLY-GATE-SET-006`;
 
 Scenario id: `ACR277-RCA-006`
 
-Intended observation: RCA post-apply handoff must wait for inherited prototype proof applicability, integration readiness, and prototype-swap readiness rows, or explicit current non-applicability rows, before any caller-mode-equivalent handoff.
+Intended observation: RCA post-apply handoff must wait for inherited pending production behavior-test applicability, integration readiness, and prototype-swap readiness rows, or explicit current non-applicability rows, before any caller-mode-equivalent handoff.
 
 Gate this scenario covers: `inherited-prototype-tests-readiness`, `integration-tests-readiness`, `prototype-swap-record-readiness`.
 
-Evidence fields: inherited prototype proof applicability row, integration test or `LevelComponentSet` evidence, `PrototypeSwapRecord` path or non-applicability statement, readiness manifest rows, caller mode, currentness keys, and handoff artifact path.
+Evidence fields: inherited pending production behavior-test applicability row, integration test or `LevelComponentSet` evidence, `PrototypeSwapRecord` path or non-applicability statement, readiness manifest rows, caller mode, currentness keys, and handoff artifact path.
 
 Positive evidence (eval should produce a finding when):
 
-- Handoff exists without readiness rows for inherited prototype proof, integration tests, or swap-record applicability.
+- Handoff exists without readiness rows for inherited pending production behavior tests, integration tests, or swap-record applicability.
 - A readiness row is stale, malformed, or bound to a different component inventory/caller mode.
 - A non-applicability claim lacks a current artifact and rationale.
 
@@ -255,7 +255,7 @@ Non-fire cases:
 
 Finding schema: common schema plus `scenario_id=ACR277-RCA-006`, `gate=readiness`, `phase=pre-handoff-readiness`, `report_paths`, and `trace_locator`.
 
-Suggested action: emit and consume readiness rows before handoff, or block until the inherited proof, integration, and swap-record obligations are current or explicitly non-applicable.
+Suggested action: emit and consume readiness rows before handoff, or block until the inherited pending tests, integration, and swap-record obligations are current or explicitly non-applicable.
 
 Supersession linkage: Strengthens the handoff-readiness portion of `APPLY-GATE-SET-001` while preserving the prototype no-silent-drop rule.
 
@@ -305,7 +305,7 @@ Positive evidence (eval should produce a finding when):
 
 Non-fire cases:
 
-- All reused rows are reissued or re-verified against active cycle, head, diff, scope, runtime claim, and artifact hashes.
+- All reused rows are reissued or re-verified against active cycle, head, diff, scope, distinct verification-plan/behavior-claim/runtime-claim hashes, and artifact hashes.
 - Stale rows are explicitly refused and block handoff until repaired.
 - Skip and exception rows are current, complete, and tied to valid follow-up/DECISIONS evidence.
 
@@ -374,17 +374,17 @@ Supersession linkage: Strengthens the audit trail portion of `APPLY-GATE-SET-001
 
 Scenario id: `ACR277-RCA-011`
 
-Intended observation: RCA-mode and implementation-mode adapters must expose equivalent active inventory rows for proof-risk, supported-surface, runtime-claim transport, process-tree mode, currentness keys, skip rows, and exception rows, or record explicit inventory-resolution evidence with equivalent blocking semantics.
+Intended observation: RCA-mode and implementation-mode adapters must expose equivalent active inventory rows for verification-plan review, supported-surface, distinct claim transport, process-tree mode, currentness keys, skip rows, and exception rows, or record explicit inventory-resolution evidence with equivalent blocking semantics.
 
-Gate this scenario covers: `caller-mode-inventory-equivalence`, `proof-risk`, `supported-surface`, `runtime-claim`, `topology-mode`, `currentness`, `skip-exception`.
+Gate this scenario covers: `caller-mode-inventory-equivalence`, `verification-plan-review`, `supported-surface`, `claim-transport`, `topology-mode`, `currentness`, `skip-exception`.
 
-Evidence fields: RCA-mode manifest rows, implementation-mode manifest rows, caller-mode ids, proof-risk rows, supported-surface rows, runtime-claim keys, process-tree topology-mode keys, currentness keys, skip/exception rows, inventory-resolution rows, DECISIONS entries, and peer ACR-288 implementation-mode evidence when available.
+Evidence fields: RCA-mode manifest rows, implementation-mode manifest rows, caller-mode ids, verification-plan-review rows, supported-surface rows, distinct plan/behavior/runtime claim keys, process-tree topology-mode keys, currentness keys, skip/exception rows, inventory-resolution rows, DECISIONS entries, and peer ACR-288 implementation-mode evidence when available.
 
 Positive evidence (eval should produce a finding when):
 
 - RCA and implementation caller inventories diverge on required active rows without dual-score or fold rationale.
-- Proof-risk or supported-surface rows are dropped in either caller mode without equivalent blocking semantics.
-- Runtime-claim, topology-mode, currentness, skip, or exception rows exist in one caller mode but not the other with no resolution record.
+- Verification-plan-review or supported-surface rows are dropped in either caller mode without equivalent blocking semantics.
+- Claim-role, topology-mode, currentness, skip, or exception rows exist in one caller mode but not the other with no resolution record.
 - Inventory-resolution evidence is stale, missing source/fold target/rationale, or does not preserve blocking behavior.
 
 Non-fire cases:

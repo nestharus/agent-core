@@ -38,7 +38,11 @@ Every manifest row that can authorize advancement carries a `currentness_key`. T
 | `contract_artifact_hashes` | yes | object: `path -> SHA-256` | Content-derived hashes of proposal, root-cause, fix-decision, application plan, Step 6a contract, alignment, critic, or equivalent contract artifacts consumed by the row. |
 | `report_path_hashes` | yes | object: `path -> SHA-256` | Content-derived hashes of child reports, gate reports, process-tree reports, aggregate reports, and indexes consumed by the row. |
 | `scope_hash` | yes | SHA-256 string or stable scope-ref hash | Content-derived hash of approved scope, touched-path set, or application scope. |
+| `verification_plan_hash` | yes when plan review applies; otherwise explicit `n/a:<reason>` | SHA-256 string or non-applicability marker | Content-derived hash of the exact pre-execution verification-plan excerpt. |
+| `behavior_claim_hash` | yes when plan review applies; otherwise explicit `n/a:<reason>` | SHA-256 string or non-applicability marker | Content-derived hash of the pre-execution behavior claim, kept distinct from runtime-claim evidence. |
 | `runtime_claim_hash` | yes when applicable; otherwise explicit `n/a:<reason>` | SHA-256 string or non-applicability marker | Content-derived hash of runtime-claim text or referenced artifact. |
+| `runtime_evidence_ref` | yes when applicable; otherwise explicit `n/a:<reason>` | path or stable identifier, or non-applicability marker | Identity of the observed runtime evidence whose content is hashed separately. |
+| `runtime_evidence_hash` | yes when applicable; otherwise explicit `n/a:<reason>` | SHA-256 string or non-applicability marker | Content-derived hash of observed runtime evidence, kept distinct from the runtime claim. |
 | `canonical_output_path_hashes` | yes for row-level reuse | object: `path -> { sha256, size, mtime }` | Content-derived canonical-output integrity bundle. |
 | `producing_invocation_uuid` | yes | UUID string or `row_id -> UUID` map | Runtime-only producer identity joined through process-tree or canonical-output evidence. |
 | `verified_at` | yes | ISO-8601 timestamp | Runtime verification moment. |
@@ -55,10 +59,10 @@ Any trigger below makes the prior matching row historical context unless `## Row
 | Trigger | What changes | Fields losing match | Affected row kinds |
 |---|---|---|---|
 | RCA Phase 2 root-cause re-entry | Root-cause artifact and downstream artifacts. | `cycle_id`, `contract_artifact_hashes`, often `scope_hash`. | All row kinds. |
-| RCA Phase 3 fix-decision revision | Fix-decision artifact. | `contract_artifact_hashes`, possibly `scope_hash`. | All row kinds whose contract artifacts include the fix decision. |
+| RCA Phase 3 fix-decision revision | Fix-decision artifact, verification plan, and behavior claim. | `contract_artifact_hashes`, `verification_plan_hash`, `behavior_claim_hash`, possibly `scope_hash`. | All row kinds whose contract artifacts include the fix decision. |
 | RCA Phase 4 application-plan revision | Application plan and possibly application scope. | `contract_artifact_hashes`, `scope_hash` when scope changes. | All row kinds whose contract artifacts include the application plan. |
 | RCA Phase 5 apply re-run | Applied worktree content and child producer set. | `head_sha`, `diff_hash`, `producing_invocation_uuid`. | All row kinds; full re-dispatch is required. |
-| RCA Phase 6 verify-or-return repair | Verification artifacts. | `report_path_hashes`, often `canonical_output_path_hashes`. | Rows that cite verification artifacts. |
+| RCA Phase 6 verify-or-return repair | Verification artifacts. | `runtime_evidence_ref`, `runtime_evidence_hash`, `report_path_hashes`, often `canonical_output_path_hashes`. | Rows that cite verification artifacts. |
 | Human halt / scope expansion | RCA or implementation scope. | `scope_hash`, often `contract_artifact_hashes`. | All row kinds whose scope is affected. |
 | Rebase | Base/head relation and active diff. | `head_sha`, `base_ref`, `diff_hash`. | All row kinds. Currentness applies after `~/ai/conventions/rebase-verification.md` clears. |
 | Verification repair | Canonical output content, stat bundle, parsed verdict, or report set. | `canonical_output_path_hashes`, possibly `report_path_hashes`. | Rows that cite the affected canonical output. |
@@ -70,7 +74,7 @@ Stale evidence is not strategy-selection input. A stale row routes to row rerun,
 
 Row-level re-verification is acceptable only for same-identity reuse. It is permitted only when all conditions below hold:
 
-1. `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, `scope_hash`, and `runtime_claim_hash` or the explicit `n/a:<reason>` marker all match the manifest values.
+1. `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, and `scope_hash` match the manifest values exactly. The verification-plan, behavior-claim, runtime-claim, and runtime-evidence fields match the manifest values, or use `n/a:<reason>` only where the schema permits non-applicability, and every `contract_artifact_hashes` and `report_path_hashes` entry matches the manifest values.
 2. Every `canonical_output_path` in the row's `canonical_output_path_hashes` exists on disk.
 3. For each existing canonical path, current `size`, `mtime`, and `sha256` all match the manifest values.
 4. For each existing canonical path, the current `verdict_line` re-parsed from disk matches the manifest's `verdict_line`.
@@ -84,7 +88,7 @@ This extends the existing Canonical Join Manifest Re-Verification primitive with
 
 Full re-dispatch is required when any same-identity condition fails, including:
 
-- Any of `cycle_id`, `head_sha`, `diff_hash`, `scope_hash`, `runtime_claim_hash`, any `contract_artifact_hashes` entry, or any `report_path_hashes` entry changes.
+- Any of `cycle_id`, `caller_mode`, `head_sha`, `base_ref`, `diff_hash`, `scope_hash`, `verification_plan_hash`, `behavior_claim_hash`, `runtime_claim_hash`, `runtime_evidence_ref`, `runtime_evidence_hash`, any `contract_artifact_hashes` entry, or any `report_path_hashes` entry changes.
 - Any canonical output is missing, renamed, moved, unreadable, stat-mismatched, hash-mismatched, or has a changed parsed `verdict_line`.
 - Any `producing_invocation_uuid` is untraceable for the active identity.
 - For an exception row, the referenced hotfix-skip authority, bootstrap-exception authority, or inventory-resolution authority has changed or gone stale.
@@ -118,4 +122,4 @@ The currentness overlay applies to all row kinds that can authorize advancement:
 1. Successful gate rows apply the currentness key, trigger matrix, row-level re-verification, and full re-dispatch rules directly.
 2. Hotfix-skip rows preserve the seven-field `hotfix-skip-with-followup` schema owned by `~/ai/conventions/hotfix-skip-with-followup.md`. ACR-294 adds only the currentness overlay: stale skip rows are invalidated when cycle, head, diff, scope, runtime claim, authority, or the skip's follow-up vehicle shifts or goes stale.
 3. Bootstrap-exception rows preserve `~/ai/conventions/code-quality.md` section `Bootstrap exception` authority. They are invalidated when the convention citation goes stale, when the four-condition evidence is invalidated by a phase change, or when the DECISIONS ratification entry is removed or superseded.
-4. Inventory-resolution rows preserve ACR-285/ACR-286 `dual_score` and `folded_equivalent` behavior. ACR-294 does not settle those trackers; it invalidates inventory-resolution rows when upstream proof-risk inventory, supported-surface inventory, authority, scope, or contract evidence shifts.
+4. Inventory-resolution rows preserve ACR-285/ACR-286 `dual_score` and `folded_equivalent` behavior. ACR-294 does not settle those trackers; it invalidates inventory-resolution rows when upstream verification-plan-review inventory, supported-surface inventory, authority, scope, or contract evidence shifts.

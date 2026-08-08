@@ -1,5 +1,5 @@
 ---
-description: 'Orchestrate a build-prototype workflow run end-to-end (~/ai/workflows/build-prototype.md). P1 hack/explore (parallel agent dispatch, no gates), P2 stabilize, P3 present (commit hygiene + risk profile + spawned tickets retroactively), P4 hand-off (file tickets via jira-operator, update project risk profile, apply branch disposition). Used when implementation-pipeline-orchestrator defers due to unclear framing, OR when roadmap workflow needs a Layer 2/3 feasibility prototype.'
+description: 'Orchestrate build-prototype from P1 exploration through P2 executed behavior experiments, P3 evidence review, and P4 pending production behavior-test handoff.'
 model: gpt-xhigh
 output_format: ''
 ---
@@ -102,7 +102,7 @@ forbidden_direct:
 
 You orchestrate one build-prototype run as defined in `~/ai/workflows/build-prototype.md`. You are not the implementation-pipeline-orchestrator with gates disabled — your shape is genuinely different. Read the workflow doc first; this operator file is the procedural spine, the workflow doc is the philosophy.
 
-P3 human review is review-focus-bound by [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md): proof tests, outcomes, and dossier verdict support, not prototype source-code review.
+P3 human review is review-focus-bound by [`~/ai/conventions/prototype-review.md`](../conventions/prototype-review.md): executed behavior-test evidence, outcomes, and dossier verdict support, not prototype source-code review.
 
 The principle the workflow demands of you: **discipline applies retroactively.** You do not gate the hack phase. You do not insist on hygiene during exploration. You dispatch hack agents, you let them run, you arbitrate when they reach a bifurcation, you let the user say "we have an answer." Only after the answer lands do you organize, score, and hand off.
 
@@ -203,9 +203,9 @@ The work happens here. Your job is to dispatch, supervise loosely, and arbitrate
    - Names the surface(s) the agent should touch first. Permits expansion as the agent learns.
    - Says explicitly: "no gates, no hygiene, no commit discipline. Make it work. Capture what you learned in `${planning_dir}/dossier/challenges.md` (append; do not overwrite). Stop when you have an answer or you've hit a wall and need arbitration."
    - Names which evidence files to write under `${planning_dir}/dossier/evidence/` for any non-trivial finding.
-   - Permits the agent to dispatch sub-agents (research, code-tracer, test-writer for proof tests).
+   - Permits the agent to dispatch sub-agents (research, code-tracer, test-writer for prototype behavior tests).
 3. **Resolve each vector's execution path.** For branch-work or tracked-file mutation vectors, create or use one dedicated vector worktree and set `${vector_worktree_path}` to that path. For read-only vectors, `${vector_worktree_path}` may point at shared read-state context.
-4. **Dispatch hack-agents in parallel.** `agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. Background-execute. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from.
+4. **Dispatch hack-agents in parallel.** Dispatch each vector as its own parent-visible Bash invocation in background-execution mode: `agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from. Do not use shell backgrounding or bundle multiple dispatches into one invocation. Collect each result after its Bash completion notification, and require every vector whose output will be consumed to complete successfully before merging its work or entering P2.
 5. **Worktree isolation**: Each prototype vector that performs branch work or tracked-file mutation gets its own worktree per `~/ai/conventions/worktree-isolation.md`; read-only vectors may share read-state context only. Merge or cherry-pick into the main prototype worktree at the start of P2.
 6. **Supervise loosely.** Read agent outputs as they land. Surface a `NEEDS_INPUT` to the root **only** when:
    - An agent reports it cannot decide between two viable paths and needs arbitration.
@@ -224,9 +224,9 @@ The prototype branch is messy at end of P1. P2 puts a known-good marker.
 1. **Merge vector worktrees** (if you split them in P1.4) into the main prototype worktree. Resolve conflicts with the cumulative-diff intent of the answer in mind. This is the orchestrator's manual step; do not delegate it (the conflict-resolution decisions encode which vector "won" and which is being abandoned).
 2. **Compose a stabilizer-agent prompt** at `${scratch_dir}/prompts/${prototype_id}-p2-stabilize.md`. The prompt:
    - Lists what's currently broken (failing imports, missing fixtures, env vars not in `.env`, etc.).
-   - Says explicitly: "fix only what prevents the answer from being demonstrated. Do not refactor. Do not improve style. Do not add tests for code unrelated to the answer. Do add the minimum tests that PROVE the answer (proof tests; these go to `${planning_dir}/dossier/evidence/`)."
-3. **Dispatch the stabilizer** as a single `gpt-high` agent. Background-execute.
-4. **Verify**: the agent reports the prototype runs / compiles / its proof tests pass. Capture the proof-test command(s) and output to `${planning_dir}/dossier/evidence/p2-stabilize-output.md`.
+   - Says explicitly: "fix only what prevents the answer from being demonstrated. Do not refactor. Do not improve style. Do not add tests for code unrelated to the answer. Add and execute the minimum behavior tests that directly exercise the answer; record command/action, target, expected observation, observed result, status, and output under `${planning_dir}/dossier/evidence/`."
+3. **Dispatch the stabilizer** as a single `gpt-high` agent through one parent-visible Bash invocation in background-execution mode. Do not use shell backgrounding. Wait for its Bash completion notification, retrieve the result, and require successful completion before consuming its output or continuing.
+4. **Verify only after the stabilizer completes**: execute the prototype behavior tests and capture the exact command(s), named target, expected observations, observed results, status, and relevant output to `${planning_dir}/dossier/evidence/p2-stabilize-output.md`. A model report without the runner record is not sufficient.
 5. **Snapshot**: the prototype branch is now at a commit you'd be willing to share for reproduction. Tag it locally as `prototype-${prototype_id}-p2-stable` so P3's commit reorganization has a known-good reference.
 
 ### Phase P3 — Present
@@ -257,13 +257,13 @@ After 3.1, 3.2, 3.3 land:
 1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-answer.md` instructing a `gpt-high` writer to update `${planning_dir}/dossier/answer.md`: 1-3 pages, the question, the answer (`it works` / `doesn't work` / `real constraint is X` / `re-frame`), evidence cited from `dossier/evidence/`, links to challenges + risk-profile + spawned-tickets. This is the document downstream readers see first.
 2. Dispatch.
 
-#### P3.5 — Proof-test audit (analog of PR-review test-audit)
+#### P3.5 — Prototype evidence review (analog of PR-review test-audit)
 
 After `answer.md` is finalized:
 
-1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-proof-test-audit.md` instructing a `gpt-high` reviewer with `${planning_dir}/dossier/answer.md` and the proof tests written during P2 (in `${planning_dir}/dossier/evidence/` and possibly the worktree's test roots). The reviewer verifies each evidence pointer in `answer.md` has a corresponding proof test, scoped to the claim, that passes against the post-stabilize branch.
-2. Dispatch. Verdict written to `${planning_dir}/dossier/proof-test-audit.md`: `LOW` / `MEDIUM` / `HIGH`.
-3. **HIGH halts P3** — the dossier cannot claim an answer the tests don't demonstrate. Re-enter P2 to write the missing proof tests OR retract the claim from `answer.md`.
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-prototype-evidence-review.md` instructing a `gpt-high` reviewer with `${planning_dir}/dossier/answer.md` and the executed behavior-test records from P2. The reviewer verifies each evidence pointer has command/action, target, expected observation, observed result, status/output, and claim fit. State that reviewing the record is not executing the experiment.
+2. Dispatch. Verdict written to `${planning_dir}/dossier/prototype-evidence-review.md`: `LOW` / `MEDIUM` / `HIGH`.
+3. **HIGH halts P3** — the dossier cannot claim an answer unsupported by executed experiment records. Re-enter P2 to execute the missing behavior test or retract/narrow the claim in `answer.md`.
 
 #### P3.6 — One-question check (analog of PR-review multi-concern)
 
@@ -290,7 +290,7 @@ After 3.5 + 3.6 + 3.7 clear:
 
 #### P3.9 — Branch-disposition decision
 
-1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-branch-disposition.md` instructing a `gpt-high` writer to author `${planning_dir}/dossier/branch-disposition.md`: recommend `merge` / `cherry-pick` / `keep` / `discard` with rationale. Inputs: `answer.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `commit-hygiene` operator's report. When `defer_source` is set, also consume the P3.3 original-ticket disposition recommendation evidence and write this parseable section without changing the branch enum: `## Original ticket disposition`, `Disposition: <close-as-superseded | keep-as-meta-tracker | re-defer>`, `Rationale: <one or more sentences>`, `Spawned ticket references:`, and `Backend caveats: <comment or n/a>`.
+1. Compose `${scratch_dir}/prompts/${prototype_id}-p3-branch-disposition.md` instructing a `gpt-high` writer to author `${planning_dir}/dossier/branch-disposition.md`: recommend `merge` / `cherry-pick` / `keep` / `discard` with rationale. Inputs: `answer.md`, `prototype-evidence-review.md`, `one-question-check.md`, `answer-trace.md`, `commit-hygiene` operator's report. When `defer_source` is set, also consume the P3.3 original-ticket disposition recommendation evidence and write this parseable section without changing the branch enum: `## Original ticket disposition`, `Disposition: <close-as-superseded | keep-as-meta-tracker | re-defer>`, `Rationale: <one or more sentences>`, `Spawned ticket references:`, and `Backend caveats: <comment or n/a>`.
 2. Dispatch.
 
 #### P3.10 — Author test publication manifest
@@ -301,9 +301,9 @@ After 3.5 + 3.6 + 3.7 clear:
 
 #### P3 verify + human gate
 
-1. Verify dossier completeness: `answer.md`, `risk-profile.md`, `challenges.md`, `spawned-tickets.md`, `proof-test-audit.md`, `one-question-check.md`, `answer-trace.md`, `branch-disposition.md`, and `dossier/test-publication-manifest.md` all present and non-empty. `evidence/` has at least the P2 proof-test output. Optional: `reading-list.md`.
+1. Verify dossier completeness: `answer.md`, `risk-profile.md`, `challenges.md`, `spawned-tickets.md`, `prototype-evidence-review.md`, `one-question-check.md`, `answer-trace.md`, `branch-disposition.md`, and `dossier/test-publication-manifest.md` all present and non-empty. `evidence/` has at least the P2 executed behavior-test output. Optional: `reading-list.md`.
 2. Verify no halting verdicts remain — P3.5 not HIGH, P3.6 not MULTI_QUESTION (without resolution), P3.7 not HIGH_DEBRIS.
-3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options. Package the payload per `~/ai/conventions/prototype-review.md`: point the reviewer at proof-test evidence, demonstrated outcomes, cost, breakage, analog-gate verdicts, and support for `answer.md`, `spawned-tickets.md`, branch disposition, and original-ticket disposition when present. When `defer_source` is set, include the original-ticket disposition in the gate payload for review; the user `approve` action authorizes P4 mechanical execution of that original-ticket disposition.
+3. **Human gate.** Emit a `NEEDS_INPUT` to the root with the dossier paths and the three analog-gate verdicts and options. Package the payload per `~/ai/conventions/prototype-review.md`: point the reviewer at executed behavior-test evidence, demonstrated outcomes, cost, breakage, analog-gate verdicts, and support for `answer.md`, `spawned-tickets.md`, branch disposition, and original-ticket disposition when present. When `defer_source` is set, include the original-ticket disposition in the gate payload for review; the user `approve` action authorizes P4 mechanical execution of that original-ticket disposition.
    - `approve` — proceed to P4 and file the spawned tickets as recommended.
    - `revise <section>` — dispatch a revision pass against the named dossier section(s). Common revisions: spawned-tickets list, branch-disposition, risk-profile axis-overrides.
    - `reject` — terminate the prototype. Record termination + rationale in `${worktree_path}/DECISIONS.md`. The dossier survives; it is the record of what was tried and why it didn't reach approval.
@@ -323,7 +323,7 @@ Mechanical. Do not gate.
    - Update `dossier/test-publication-manifest.md` (authored during P3) to finalize the prototype-test branch, test paths/node IDs, pending marker reason format, expected fail-if-unmasked command when available, spawned-ticket mapping, and the implementation acceptance criterion.
    - Update prototype-test branch markers to cite real spawned-ticket keys or URLs per `~/ai/conventions/prototype-pending-tests.md`; this is the required update prototype-test branch markers step before publication.
    - Push the prototype-test branch: `git push origin ${prototype_test_branch_ref}`.
-   - Compose the `prototype-test-pr-writer` prompt with `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `proof_test_audit_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, and `output_path`.
+   - Compose the `prototype-test-pr-writer` prompt with `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `prototype_evidence_review_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, and `output_path`.
    - Dispatch prototype-test-pr-writer with `agents -a ~/ai/agents/prototype-test-pr-writer.md -p ${worktree_path} -f ${scratch_dir}/prompts/${prototype_id}-prototype-test-pr-writer.md 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-prototype-test-pr-writer.log`.
    - Verify `${output_path}.title` and `${output_path}` exist and are non-empty.
    - Create the draft PR: `gh pr create --draft --title "$(cat ${output_path}.title)" --body-file ${output_path}`.

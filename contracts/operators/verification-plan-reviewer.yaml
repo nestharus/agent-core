@@ -1,0 +1,52 @@
+schema: operator-contract-v1
+source: agents/verification-plan-reviewer.md
+model: gpt-xhigh
+description: Review proposal and RCA fix-decision verification plans for completeness, executability, and claim-experiment fit.
+inputs:
+- name: mode
+  type: enum
+  options:
+  - phase-3-proposal
+  - rca-fix-decision
+  required: true
+  default_source: caller
+  description: Selects the proposal or RCA fix-decision context.
+- name: proposal_path
+  type: path
+  required: true
+  default_source: caller
+  description: Absolute proposal or RCA fix-decision artifact path.
+- name: report_path
+  type: path
+  required: true
+  default_source: caller
+  description: Absolute Markdown report destination and the only written path.
+- name: worktree_path
+  type: path
+  required: true
+  default_source: caller
+  description: Absolute repository worktree used to resolve relative evidence paths.
+- name: contract_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for Phase 6 per-component code-quality; unreadable or absent Phase 6 contract context blocks review.
+defaults: []
+outputs:
+- task: default
+  success_shape: Markdown verification-plan review ending with LOW, MEDIUM, HIGH, NEEDS_INPUT:<absolute_artifact_path>, or BLOCKED:<reason>.
+  wrote_lines:
+  - ${report_path}
+errors:
+- class: BLOCKED
+  cause: Required input is missing, unreadable, unparseable, or unsafe for the selected mode.
+  recovery: Supply the exact required artifact or correct the dispatch context.
+- class: NEEDS_INPUT
+  cause: A genuine human-owned claim or scope ambiguity materially changes the verdict.
+  recovery: Answer the emitted question artifact and rerun the review.
+side_effects:
+- writes-verification-plan-review-report
+must_delegate: []
+forbidden_direct:
+- execute-experiment-or-claim-observed-behavior
+- edit-proposal-code-or-tests

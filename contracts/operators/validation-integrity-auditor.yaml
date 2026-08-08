@@ -10,13 +10,13 @@ inputs:
   default_source: caller
   description: '`mode=<pr-diff|rca-dossier>` (required) - selects the input surface.'
 - name: diff_path
-  type: string
-  required: true
+  type: path
+  required: false
   default_source: caller
   description: '`diff_path=<absolute-path>` (required when `mode=pr-diff`) - unified PR diff or equivalent patch evidence.'
 - name: dossier_diff_path
-  type: string
-  required: true
+  type: path
+  required: false
   default_source: caller
   description: '`dossier_diff_path=<absolute-path>` (required when `mode=rca-dossier`) - RCA verification-phase diff or dossier patch evidence.'
 - name: runtime_claim
@@ -25,25 +25,45 @@ inputs:
   default_source: caller
   description: '`runtime_claim=<text>` (required) - one paragraph naming the runtime behavior the diff or dossier claims to validate.'
 - name: decisions_path
-  type: string
+  type: path
   required: false
   default_source: caller
   description: '`decisions_path=<absolute-path>` (optional) - DECISIONS.md path used only for explicit validation-surface weakening ratification.'
 - name: runtime_artifact_evidence_path
-  type: string
+  type: path
   required: false
   default_source: caller
   description: '`runtime_artifact_evidence_path=<absolute-path>` (optional) - runtime-artifact validation evidence such as a build log, container exec log, production-path command log, state DB evidence, or deployed environment check.'
-- name: report_path
+- name: runtime_evidence_ref
   type: string
+  required: false
+  default_source: caller
+  description: Runtime-evidence identity; required and equal to runtime_artifact_evidence_path when that path is supplied.
+- name: runtime_evidence_hash
+  type: string
+  required: false
+  default_source: caller
+  description: SHA-256 of runtime artifact evidence; required and content-matched when runtime_artifact_evidence_path is supplied.
+- name: report_path
+  type: path
   required: true
   default_source: caller
   description: '`report_path=<absolute-path>` (required) - Markdown report destination; this is the only path you write.'
 - name: worktree_path
-  type: string
+  type: path
   required: true
   default_source: caller
   description: '`worktree_path=<absolute-path>` (required) - repository worktree used to resolve relative evidence paths.'
+- name: contract_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for Phase 6 per-component code-quality and must be read before scoring.
+- name: proposal_path
+  type: path
+  required: false
+  default_source: caller
+  description: Required for Phase 6 per-component code-quality to resolve validation intent and runtime claim identity.
 - name: wu_id
   type: string
   required: false

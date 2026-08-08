@@ -5716,7 +5716,7 @@ def test_refactoring_auditor_gate_is_exact_current_and_round_aware():
     )
     for name in REFACTOR_AUDITORS:
         assert f"`{name}`" in auditor
-    assert "`proof-risk-auditor` is not route-level applicable" in auditor
+    assert "`verification-plan-reviewer` is not route-level applicable" in auditor
     for value in (
         "auditor_baseline_sha",
         "pre_merge_current_sha",

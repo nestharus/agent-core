@@ -11,7 +11,7 @@ description: Structural verification that RCA post-apply handoff is gated by app
 
 ## Purpose
 
-This WRITE-state structural-verification eval specifies that the RCA orchestrator wires the shared `apply-gate-set` operator in `mode=rca-post-apply` after Phase 6 original-signal GREEN and `VERIFICATION-CRITIC: PASS`, before any downstream lifecycle handoff. It verifies that downstream post-mortem, action-item, runbook, tracker, and close paths are blocked on missing, stale, non-LOW, malformed, unsupported, or unratified gate rows; that ACR-254 proof-risk, validation-integrity, and original-signal checks remain prerequisites rather than substitutes; and that `agents/rca-orchestrator.md`, `workflows/rca.md`, and the RCA `workflows/index.json` entry agree.
+This WRITE-state structural-verification eval specifies that the RCA orchestrator wires the shared `apply-gate-set` operator in `mode=rca-post-apply` after Phase 6 original-signal GREEN and `VERIFICATION-CRITIC: PASS`, before any downstream lifecycle handoff. It verifies that downstream post-mortem, action-item, runbook, tracker, and close paths are blocked on missing, stale, non-LOW, malformed, unsupported, or unratified gate rows; that ACR-254 verification-plan review, validation-integrity, and original-signal checks remain prerequisites rather than substitutes; and that `agents/rca-orchestrator.md`, `workflows/rca.md`, and the RCA `workflows/index.json` entry agree.
 
 ## Scope
 
@@ -25,9 +25,9 @@ This eval covers only the RCA caller wiring for `apply-gate-set(caller_mode=rca-
 | `APPLY-GATE-SET-002` | Discharged for the RCA caller by `ACR287-RCA-GATE-001` and `ACR287-RCA-GATE-002`, which require the gate-set PASS boundary and block downstream handoff when code-quality aggregate rows, runtime-claim transport, or dossier/actual-diff evidence is missing or non-PASS. |
 | `APPLY-GATE-SET-003` | Discharged for the RCA caller by `ACR287-RCA-GATE-001`, which requires Phase 6.5 gate-set PASS before handoff, including expected-process and process-tree evidence produced by the consumed operator contract. |
 | `APPLY-GATE-SET-004` | Discharged for the RCA caller by `ACR287-RCA-GATE-002`, which treats missing gate rows without explicit skip-with-followup or repair evidence as blocking before downstream lifecycle. |
-| `APPLY-GATE-SET-005` | Discharged for the RCA caller by `ACR287-RCA-GATE-003`, which rejects stale manifest reuse after RCA re-entry unless the active cycle/head/diff/scope/runtime-claim keys match or `apply-gate-set` emits stale-refusal evidence. |
+| `APPLY-GATE-SET-005` | Discharged for the RCA caller by `ACR287-RCA-GATE-003`, which rejects stale manifest reuse after RCA re-entry unless the active cycle/head/diff/scope and distinct verification-plan/behavior-claim/runtime-claim keys match or `apply-gate-set` emits stale-refusal evidence. |
 | `APPLY-GATE-SET-006` | Discharged for the RCA caller by `ACR287-RCA-GATE-002`, which prevents bootstrap-exception, skip, or ratification rows from authorizing downstream advance without valid evidence and repair routing. |
-| `APPLY-GATE-SET-007` | Partially discharged for the RCA-mode adapter subset by `ACR287-RCA-GATE-006`, which requires RCA adapter inputs and inventory-resolution evidence for proof-risk and supported-surface coverage. Implementation-mode equivalence remains owned by ACR-288. |
+| `APPLY-GATE-SET-007` | Partially discharged for the RCA-mode adapter subset by `ACR287-RCA-GATE-006`, which requires RCA adapter inputs and inventory-resolution evidence for verification-plan-review and supported-surface coverage. Implementation-mode equivalence remains owned by ACR-288. |
 
 ## Scenarios
 
@@ -59,7 +59,7 @@ Residual-risk note: This scenario verifies the block boundary and does not judge
 
 Scenario name: `ACR287-RCA-GATE-003`.
 
-Behavior under verification: Currentness re-verification occurs when RCA Phase 6 returns to Phase 2, Phase 3 revises the fix decision, Phase 4 revises the application plan, or Phase 5 reapplies code. Old manifest rows reused without matching active cycle/head/diff/scope/runtime-claim keys must fire unless stale-refusal evidence blocks handoff.
+Behavior under verification: Currentness re-verification occurs when RCA Phase 6 returns to Phase 2, Phase 3 revises the fix decision, Phase 4 revises the application plan, or Phase 5 reapplies code. Old manifest rows reused without matching active cycle/head/diff/scope and distinct verification-plan/behavior-claim/runtime-claim keys must fire unless stale-refusal evidence blocks handoff.
 
 Fixture source / evidence anchors: Multi-cycle RCA trace; prior and current `${planning_dir}/rca/gate-set/<failure-id>/join-manifest.json`; currentness keys containing `caller_mode`, `cycle_id`, `head_sha`, `base_ref`, diff hash, scope reference/hash, runtime-claim reference/hash, relevant contract/report hashes, producer UUID, and verification time; `STALE_REFUSAL` rows and `next_action` repair route.
 
@@ -99,7 +99,7 @@ Behavior under verification: Required RCA adapter inputs are complete when `rca-
 
 Fixture source / evidence anchors: `${scratch_dir}/prompts/<failure-id>-apply-gate-set.md`; `${scratch_dir}/logs/<failure-id>-apply-gate-set.log`; `agents/rca-orchestrator.md` procedure text; canonical RCA artifacts under `${planning_dir}/rca/` and `${planning_dir}/rca/gate-set/<failure-id>/`.
 
-Observable signal (assertion shape): A future detector reports a finding if the gate prompt/dispatch omits any of `caller_mode`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `audit_history_path`, `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `runtime_claim_ref`, `scope_ref`, `cycle_id`, currentness identity, process-tree inputs when required, or canonical output paths.
+Observable signal (assertion shape): A future detector reports a finding if the gate prompt/dispatch omits any of `caller_mode`, `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, `audit_history_path`, `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `verification_plan_ref`, `behavior_claim_ref`, `runtime_claim_ref`, `scope_ref`, `cycle_id`, currentness identity, process-tree inputs when required, or canonical output paths.
 
 Residual-risk note: This scenario assumes the shared operator validates deeper row semantics after the caller supplies the adapter inputs.
 
@@ -107,11 +107,11 @@ Residual-risk note: This scenario assumes the shared operator validates deeper r
 
 Scenario name: `ACR287-RCA-GATE-007`.
 
-Behavior under verification: ACR-254 proof-risk, validation-integrity, and original-signal rerun wiring remain present and are not counted as the broader gate-set PASS.
+Behavior under verification: ACR-254 verification-plan review, validation-integrity, and original-signal rerun wiring remain present and are not counted as the broader gate-set PASS.
 
-Fixture source / evidence anchors: `agents/rca-orchestrator.md` text for Phase 3 fix-decision critic/proof-risk fallback, Phase 6 original-signal rerun, verification critic, and validation-integrity fallback; `${planning_dir}/rca/<failure-id>-proof-risk.md`; `${planning_dir}/rca/<failure-id>-validation-integrity.md`; gate-set manifest rows.
+Fixture source / evidence anchors: `agents/rca-orchestrator.md` text for Phase 3 fix-decision verification-plan reviewer, Phase 6 original-signal rerun, verification critic, and validation-integrity fallback; `${planning_dir}/rca/<failure-id>-verification-plan-review.md`; `${planning_dir}/rca/<failure-id>-validation-integrity.md`; gate-set manifest rows.
 
-Observable signal (assertion shape): A future detector reports a finding if RCA removes or weakens the original-signal rerun, proof-risk, or validation-integrity critic wiring, or if the RCA gate-set status treats those local prerequisites as sufficient evidence for broader `apply-gate-set` PASS without the required Phase 6.5 manifest and aggregate.
+Observable signal (assertion shape): A future detector reports a finding if RCA removes or weakens the original-signal rerun, verification-plan review, or validation-integrity critic wiring, or if the RCA gate-set status treats those local prerequisites as sufficient evidence for broader `apply-gate-set` PASS without the required Phase 6.5 manifest and aggregate.
 
 Residual-risk note: This scenario preserves ACR-254 wiring but does not re-audit the ACR-254 child auditors.
 

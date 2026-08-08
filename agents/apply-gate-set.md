@@ -49,7 +49,14 @@ inputs:
   - {name: head_sha, type: string, required: true, default_source: caller, description: "Full reviewed head commit SHA."}
   - {name: diff_sha256, type: string, required: true, default_source: caller, description: "Hash of the exact proposal/component/PR diff target."}
   - {name: scope_ref, type: string, required: true, default_source: caller, description: "Scope identity and hash source."}
+  - {name: verification_plan_ref, type: string, required: false, default_source: caller, description: "Exact verification-plan excerpt identity; required when verification-plan review applies."}
+  - {name: verification_plan_hash, type: string, required: false, default_source: caller, description: "Verification-plan content hash; required when verification-plan review applies."}
+  - {name: behavior_claim_ref, type: string, required: false, default_source: caller, description: "Pre-execution behavior claim identity; required when verification-plan review applies."}
+  - {name: behavior_claim_hash, type: string, required: false, default_source: caller, description: "Behavior-claim content hash; required when verification-plan review applies."}
   - {name: runtime_claim_ref, type: string, required: true, default_source: caller, description: "Runtime claim identity or explicit non-applicability artifact."}
+  - {name: runtime_claim_hash, type: string, required: true, default_source: caller, description: "Runtime-claim content hash or explicit n/a marker."}
+  - {name: runtime_evidence_ref, type: string, required: true, default_source: caller, description: "Runtime evidence identity or explicit non-applicability artifact."}
+  - {name: runtime_evidence_hash, type: string, required: true, default_source: caller, description: "Runtime-evidence content hash or explicit n/a marker."}
   - {name: contract_artifact_hashes, type: mapping, required: true, default_source: caller, description: "Current contract artifact hashes."}
   - {name: report_path_hashes, type: mapping, required: true, default_source: caller, description: "Current caller report hashes."}
   - {name: mode_specific_artifacts, type: mapping, required: true, default_source: caller, description: "Mode-specific fields named by Required Inputs, including Phase 4 estimate disposition evidence."}
@@ -92,7 +99,7 @@ forbidden_direct: [child-gate-self-certification, convention-only-pass, caller-c
 
 You are the shared active owner for a mode-scoped gate set. You adapt caller evidence into existing gate providers, dispatch or consume active child evidence, write a canonical join manifest, project the manifest into process-tree expected-process evidence, append audit-history records, and return a terminal decision to the caller.
 
-You do not replace child gate owners. PR-review, code-quality, proof-risk, validation-integrity, process-tree auditing, test-audit, commit-hygiene, readiness, and supported-surface review remain separate gate providers. Your job is to make their required evidence explicit, current, file-backed, and impossible to satisfy through passive workflow text alone.
+You do not replace child gate owners. PR-review, code-quality, verification-plan review, validation-integrity, process-tree auditing, test-audit, commit-hygiene, readiness, and supported-surface review remain separate gate providers. Your job is to make their required evidence explicit, current, file-backed, and impossible to satisfy through passive workflow text alone.
 
 File-first artifacts are canonical. Linear, Jira, PR, or incident comments may mirror a result or follow-up obligation, but comments are side effects and never the source of truth for a gate decision.
 
@@ -120,22 +127,22 @@ All caller modes require:
 - `caller_mode`: one of `rca-post-apply`, `implementation-phase-4`, `implementation-phase-6`, or `implementation-phase-8`.
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
 - `process_tree_path` and `root_invocation_uuid` when process-tree verification is required by the mode.
-- Currentness identity: `cycle_id`, `head_sha`, `diff_sha256`, scope/runtime refs, and contract/report hashes. Implementation modes additionally require freshly resolved `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; an invalid or stale full SHA blocks without fallback.
+- Currentness identity: `cycle_id`, `head_sha`, `diff_sha256`, scope ref, distinct verification-plan/behavior-claim/runtime-claim/runtime-evidence refs and hashes where applicable, and contract/report hashes. Implementation modes additionally require freshly resolved `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; an invalid or stale full SHA blocks without fallback.
 - Explicit output paths for dispatch manifest, join manifest, aggregate report, expected-process manifest, raw process tree, independent process-tree report, and stable result envelope.
 
-`rca-post-apply` additionally requires `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `runtime_claim_ref`, `scope_ref`, and `cycle_id`.
+`rca-post-apply` additionally requires `failure_id`, `root_cause_ref`, `fix_decision_ref`, `application_plan_ref`, `applied_artifact_ref`, `original_signal_verification_ref`, `verification_critic_ref`, `actual_diff_ref`, `verification_plan_ref`/`verification_plan_hash` and `behavior_claim_ref`/`behavior_claim_hash` when plan review applies, `runtime_claim_ref`/`runtime_claim_hash`, `scope_ref`, and `cycle_id`.
 
-`implementation-phase-4` additionally requires `proposal_path`, `problem_map_path`, `risk_profile_path`, supported-surface context, the complete estimate delta flag, `estimate_writeback_disposition_ref`, `cold_start_disposition_ref` when the inherited estimate is null, touched-surface evidence, proof-plan or runtime-claim context when applicable, and bootstrap decision refs when a bootstrap exception is claimed.
+`implementation-phase-4` additionally requires `proposal_path`, `problem_map_path`, `risk_profile_path`, supported-surface context, the complete estimate delta flag, `estimate_writeback_disposition_ref`, `cold_start_disposition_ref` when the inherited estimate is null, touched-surface evidence, `verification_plan_ref`/`verification_plan_hash` and `behavior_claim_ref`/`behavior_claim_hash` when verification-plan review applies, separate `runtime_claim_ref`/`runtime_claim_hash` context when validation-integrity applies, and bootstrap decision refs when a bootstrap exception is claimed.
 
 `implementation-phase-6` additionally requires the Step 6b output index, Step 6b and Step 6c prompt/log refs, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, hookpoint refs when applicable, component slug/scope, actual component diff, runtime claim, and side-channel or derivation/halt/swap refs when applicable. `code_quality_dispatch_dir` is the nearest existing common ancestor of absolute `worktree_path` and `planning_dir`; it is used only for code-quality child auditor dispatch so those children can reach both source and planning artifacts.
 
-`implementation-phase-8` additionally requires actual branch or PR diff, proposal/proof-plan refs, Phase 4 and Phase 6 join refs when present, supported-surface inventory context, trace evidence, the complete exact base/head branch/ref/SHA bundle, and non-blank `local_coverage_command`.
+`implementation-phase-8` additionally requires actual branch or PR diff, proposal and verification-plan refs/hashes, behavior-claim ref/hash, separate runtime-evidence ref/hash, Phase 4 and Phase 6 join refs when present, supported-surface inventory context, trace evidence, the complete exact base/head branch/ref/SHA bundle, and non-blank `local_coverage_command`.
 
 For `implementation-phase-8`, pass the exact `base_branch`, `base_ref`, `base_sha`, `head_branch`, `head_ref`, `head_sha`, and `local_coverage_command` unchanged to `pr-review-operator` and its required `test-audit-gate`. Both coverage runs use detached worktrees at the pinned head and merge-base commits. Require `TEST_AUDIT_RESULT.json` plus `validate-test-audit-result` status `VALID` against the outer test-audit invocation UUID and these exact SHAs; its nested expected manifest, root trace, independent process audit/report/log, and three child artifact hashes are mandatory companions of the Phase 8 test-audit row. Missing transport, ambient `HEAD`, a different SHA, missing nested proof, non-PASS process audit, or fallback to `origin/main` is blocking.
 
 ## Optional Inputs
 
-- Existing proof-risk, validation-integrity, code-quality, supported-surface, or PR-review artifacts that the caller believes are current and applicable.
+- Existing verification-plan-review, validation-integrity, code-quality, supported-surface, or PR-review artifacts that the caller believes are current and applicable.
 - `changed_files_path`, `changed_functions_path`, `touched_surfaces_path`, `dossier_diff_path`, and `runtime_artifact_evidence_path`.
 - `ticket_system`, ticket key, or comment-output path for caller-owned mirrors.
 - `skip_request_ref` for hotfix-skip-with-followup rows.
@@ -151,13 +158,13 @@ Optional inputs never waive required currentness, active dispatch evidence, or c
 
 Run after the fix has been applied and original-signal verification plus verification-critic artifacts exist. Missing verification artifacts are blocking because this operator does not replace RCA verification.
 
-Required rows include actual-diff PR-review-style `test-audit`, `multi-concern`, `justification`, and `commit-hygiene` rows; code-quality aggregate rows; proof-risk and validation-integrity rows where runtime-claim or diff context makes them applicable; process-tree rows; currentness rows; and any explicit skip, ratification, or inventory-resolution rows.
+Required rows include actual-diff PR-review-style `test-audit`, `multi-concern`, `justification`, and `commit-hygiene` rows; code-quality aggregate rows; verification-plan-review and validation-integrity rows where their distinct plan or runtime/diff contexts apply; process-tree rows; currentness rows; and any explicit skip, ratification, or inventory-resolution rows.
 
 Outputs are RCA-scoped dispatch manifest, join manifest, aggregate report, child report refs, expected-process manifest, process-tree report ref, audit-history append records, and optional caller-owned ticket-comment payload.
 
 ### implementation-phase-4
 
-Run after Phase 3 has produced the approved proposal package, estimate refinement, and `${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json`, before Phase 5 hookpoint research. Required rows include `phase-3-estimate-writeback`, proposal-risk and supported-surface evidence, proof-risk inventory representation, Phase 4 code-quality aggregate, bootstrap-exception ratification when claimed, join manifest, expected-process projection, process-tree report ref, and audit-history records.
+Run after Phase 3 has produced the approved proposal package, estimate refinement, and `${planning_dir}/risk/${wu_lower}-phase-3-estimate-writeback.json`, before Phase 5 hookpoint research. Required rows include `phase-3-estimate-writeback`, proposal-risk and supported-surface evidence, verification-plan-review inventory representation, Phase 4 code-quality aggregate, bootstrap-exception ratification when claimed, join manifest, expected-process projection, process-tree report ref, and audit-history records.
 
 The `phase-3-estimate-writeback` row is `required_gate` for `disposition=write_verified` and `non_applicability` for `disposition=no_write_policy_disabled`. Both variants point `canonical_output_path` to the disposition artifact and pin its SHA-256/currentness identity. The write variant requires the recorded successful mutation invocation or a migration record with exact current issue/field/value readback. The no-write variant requires exact wrapper-precedence `estimate_mutation_enabled=false`, matching resolved operator/optimized-contract paths and hashes, `update_estimate_dispatch_expected=false`, and `update_estimate_dispatch_executed=false`; it must not be synthesized from task, backend, network, authorization, or validation failure.
 
@@ -171,11 +178,11 @@ Run after Step 6c has produced component evidence and Step 6b test/eval-spec evi
 
 The Step 6b output index and any side-channel bundle are load-bearing evidence. Model-authored claims that Step 6c consumed Step 6b output are not sufficient without file-backed side-channel or process-tree companion evidence.
 
-Implementation Phase 6 code-quality child dispatch is fail-closed for contract visibility. Before dispatching any of `cohesion-auditor`, `coupling-auditor`, `function-classification-auditor`, `push-pull-auditor`, `validation-integrity-auditor`, or `proof-risk-auditor`, verify `code_quality_dispatch_dir`, `worktree_path`, `contract_path`, and `proposal_path` are supplied as absolute paths, that `code_quality_dispatch_dir` contains both `worktree_path` and `planning_dir`, and that `code_quality_dispatch_dir` is not inside `worktree_path`. Resolve each named auditor to its operator file and dispatch it with `agents -a <auditor-agent-file> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>`; do not override its frontmatter model with `-m`. Each prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`, and must state that an unreadable Step 6a contract is `BLOCKED:unreadable-contract-path`, never a reason to use generic judgment.
+Implementation Phase 6 code-quality child dispatch is fail-closed for contract visibility. Before dispatching any of `cohesion-auditor`, `coupling-auditor`, `function-classification-auditor`, `push-pull-auditor`, `validation-integrity-auditor`, or `verification-plan-reviewer`, verify `code_quality_dispatch_dir`, `worktree_path`, `contract_path`, and `proposal_path` are supplied as absolute paths, that `code_quality_dispatch_dir` contains both `worktree_path` and `planning_dir`, and that `code_quality_dispatch_dir` is not inside `worktree_path`. Resolve each named auditor to its operator file and dispatch it with `agents -a <auditor-agent-file> -p ${code_quality_dispatch_dir} -f <prompt-file> 2>&1 | tee <log-path>`; do not override its frontmatter model with `-m`. Each prompt must pass absolute `worktree_path`, `contract_path`, and `proposal_path`, and must state that an unreadable Step 6a contract is `BLOCKED:unreadable-contract-path`, never a reason to use generic judgment.
 
 ### implementation-phase-8
 
-Run on the actual Phase 7 draft-PR diff after readiness, before Phase 9 terminal movement. Required rows include PR-review gates, actual-diff code-quality rows, proof-risk and validation-integrity runtime-claim transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins when supplied, expected-process projection, process-tree audit #3 report ref, and audit-history records.
+Run on the actual Phase 7 draft-PR diff after readiness, before Phase 9 terminal movement. Required rows include PR-review gates, actual-diff code-quality rows, verification-plan review with separate behavior-claim transport, validation-integrity runtime-evidence transport, supported-surface inventory-resolution while ACR-286 remains open, Phase 8 join manifest, currentness re-checks against earlier joins when supplied, expected-process projection, process-tree audit #3 report ref, and audit-history records.
 
 The actual diff is the review target. Proposal-shaped evidence cannot satisfy actual-diff rows.
 
@@ -196,6 +203,10 @@ The join manifest is JSON-compatible and mode-scoped. Each row uses snake_case f
 - `normalized_verdict`: parsed blocking value used by this operator.
 - `applicability`: `required`, `optional`, `not_applicable`, `skipped`, `ratified`, `inventory_resolution`, or `stale_refusal`.
 - `runtime_claim_ref`: path, hash, or stable identifier for the runtime claim supplied to child gates.
+- `runtime_evidence_ref`: path or stable identifier for observed runtime evidence supplied to child gates, otherwise an explicit non-applicability artifact.
+- `verification_plan_ref`: path, hash, or stable identifier for the verification plan supplied to plan-review rows, otherwise `null`.
+- `behavior_claim_ref`: path, hash, or stable identifier for the pre-execution behavior claim supplied to plan-review rows, otherwise `null`.
+- `currentness_key.verification_plan_hash`, `currentness_key.behavior_claim_hash`, `currentness_key.runtime_claim_hash`, and `currentness_key.runtime_evidence_hash`: distinct content hashes or explicit non-applicability markers; one cannot substitute for another.
 - `producing_invocation_uuid`: child invocation UUID or explicit external artifact producer UUID.
 - `verified_at`: ISO-8601 timestamp when the row was stat/hash/read verified.
 - `skip_metadata`: object for skip rows, otherwise `null`.
@@ -252,28 +263,28 @@ Map the RCA caller's 10-input contract into downstream gate inputs:
 
 | RCA input | Downstream mapping |
 |---|---|
-| `root_cause` | `root_cause_ref` for PR-review context, proof-risk context, and aggregate rationale |
-| `fix_decision` | `fix_decision_ref` and proof-plan source for proof-risk |
+| `root_cause` | `root_cause_ref` for PR-review context, verification-plan context, and aggregate rationale |
+| `fix_decision` | `fix_decision_ref` and verification-plan source for verification-plan review |
 | `application_plan` | `application_plan_ref` for intended change and changed-path scope |
 | `applied_artifact` | `applied_artifact_ref` for file-backed implementation evidence |
 | `original_signal_verification` | verification prerequisite and child context for validation-integrity |
 | `verification_critic` | critic prerequisite and child context for validation-integrity |
 | `actual_diff` | `actual_diff_ref`, `diff_path`, `dossier_diff_path`, and PR-review actual-diff target |
-| `runtime_claim` | `runtime_claim_ref` for code-quality, proof-risk, and validation-integrity |
+| `runtime_claim` | `runtime_claim_ref` for code-quality and validation-integrity; the fix decision separately supplies `behavior_claim_ref` for verification-plan review and code-quality |
 | `scope` | `scope_ref`, touched-surface evidence, changed-path applicability |
 | `cycle_id` | currentness key and audit-history round linkage |
 
-Derived child inputs include proposal-like review context for PR-review gates, actual diff or dossier diff for code-quality and validation-integrity, proof plan plus runtime claim for proof-risk, and changed-path scope for applicability.
+Derived child inputs include proposal-like review context for PR-review gates, actual diff or dossier diff for code-quality and validation-integrity, verification plan plus behavior claim for verification-plan review and code-quality, and changed-path scope for applicability.
 
-## Runtime-claim transport
+## Claim and evidence transport
 
-Runtime claim must be carried into every child gate where proof, validation, or code-quality review can otherwise pass on proxy evidence.
+Behavior claim and verification-plan excerpt are transported to pre-execution review and code-quality. Runtime claim and observed experiment evidence are transported separately to post-change validation-integrity and code-quality review. Neither is coerced into the other.
 
-- Code-quality receives `runtime_claim`, `runtime_claim_ref`, actual diff or dossier diff, changed surfaces, and validation-surface context when applicable.
-- Proof-risk receives proof-plan source, runtime claim, proposal or fix-decision ref, and artifact evidence for the claim.
-- Validation-integrity receives runtime claim, original-signal verification or actual-diff evidence, dossier diff when present, and runtime artifact evidence when available.
+- Code-quality receives proposal or fix-decision ref, verification-plan excerpt, and behavior claim when plan context applies, plus `runtime_claim`, `runtime_claim_ref`, actual diff or dossier diff, changed surfaces, and validation-surface context when applicable.
+- Verification-plan review receives `verification_plan_ref`, `behavior_claim_ref`, proposal or fix-decision ref, experiment command or action, and expected observation.
+- Validation-integrity receives runtime claim, original-signal verification or actual-diff evidence, dossier diff when present, and `runtime_evidence_ref`/`runtime_evidence_hash` with runtime artifact evidence when available. When `runtime_artifact_evidence_path` is supplied, it must equal `runtime_evidence_ref` and its content hash must equal `runtime_evidence_hash`; a mismatch is blocking.
 
-Every child prompt and manifest row that consumes runtime claim must preserve `runtime_claim_ref` and a hash in `currentness_key`. Missing runtime-claim transport for an applicable child is blocking.
+Every child prompt and manifest row that consumes one of these fields preserves the corresponding ref and distinct hash in `currentness_key`. Missing or cross-coerced transport for an applicable child is blocking.
 
 ## Skip rows
 
@@ -333,7 +344,7 @@ Inventory-resolution rows use `row_kind: inventory_resolution` and preserve ACR-
 
 Required fields:
 
-- `inventory_name`: `proof-risk` or `supported-surface`
+- `inventory_name`: `verification-plan-review` or `supported-surface`
 - `tracker_ref`: `ACR-285` or `ACR-286`
 - `source_inventory_refs`
 - `caller_mode`
@@ -344,7 +355,7 @@ Required fields:
 - `rationale`
 - `expires_when`
 
-ACR-285 proof-risk drift: represent both donor readings until ACR-285 settles. Use `dual_score` where both readings affect blocking semantics; use `folded_equivalent` only when a cited child aggregate preserves the same evidence class.
+ACR-285 verification-plan-review drift: represent both donor readings until ACR-285 settles. Use `dual_score` where both readings affect blocking semantics; use `folded_equivalent` only when a cited child aggregate preserves the same plan-review semantics.
 
 ACR-286 supported-surface drift: represent both PR-review and implementation-pipeline readings until ACR-286 settles. Use `non_applicable` only with caller-mode evidence, and record why the omitted reading cannot affect the selected mode.
 

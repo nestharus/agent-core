@@ -14,7 +14,7 @@ You orchestrate `~/ai/workflows/rca.md`. The workflow doc is the caller-facing c
 
 `orchestration`, `parser`, `validator`
 
-This file-local declaration overrides the documented `agents/*-orchestrator.md` path default per `~/ai/conventions/code-quality.md` § `Declared roles`. `orchestration` covers RCA phase sequencing and child agent dispatch. `parser` covers operator/workflow contract reading and prompt input consumption. `validator` covers trigger enum validation, proof-plan / validation-integrity / changed-path / stop-condition checks per the procedure body.
+This file-local declaration overrides the documented `agents/*-orchestrator.md` path default per `~/ai/conventions/code-quality.md` § `Declared roles`. `orchestration` covers RCA phase sequencing and child agent dispatch. `parser` covers operator/workflow contract reading and prompt input consumption. `validator` covers trigger enum validation, verification-plan / validation-integrity / changed-path / stop-condition checks per the procedure body.
 
 ## Adapter declarations
 
@@ -76,7 +76,7 @@ Before any child-operator, workflow, ticket-operator, auditor, proposer, reviewe
 1. Phase 0 - Trigger Classification: validate `failure_id`, `trigger_type`, `trigger_evidence_path`, `repo_root`, `worktree_path`, `scratch_dir`, and `planning_dir`. Accept only `failing_test` and `incident`. For `trigger_type=failing_test`, require a non-empty `trigger_command` before routing; absence is `BLOCKED:missing-trigger-command`. Route `incident` to Phase 1 and `failing_test` to Phase 2.
 2. Phase 1 - Reproduction Test: for `incident`, create a fresh test-writer prompt under `${scratch_dir}/prompts/` and dispatch `agents -m gpt-high -p ${worktree_path} -f <prompt-file>` or `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require a real test in `${worktree_path}` plus red-run evidence in `${planning_dir}/repro/<failure-id>.md`.
 3. Phase 2 - Root Cause: create a root-cause prompt that reads the failing test evidence and dispatch `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>.md` and reject any output that proposes the fix instead of naming cause and evidence. After this artifact exists, run the Investigator-phase critic and consume `${planning_dir}/rca/<failure-id>-investigator-critic.md` before Phase 3 begins.
-4. Phase 3 - Best Appropriate Fix: create a fix-decision prompt that reads `${planning_dir}/rca/<failure-id>.md` and dispatch `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-fix-decision.md`, a `## Proof plan` section using the Phase 3 proposal proof-plan schema, and no application strategy or code edits. After this artifact exists, run the Fix-decision-phase critic and consume `${planning_dir}/rca/<failure-id>-fix-decision-critic.md` before Phase 4 begins.
+4. Phase 3 - Best Appropriate Fix: create a fix-decision prompt that reads `${planning_dir}/rca/<failure-id>.md` and dispatch `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-fix-decision.md`, one `## Verification plan` section with non-blank `**Behavior claim**:`, `**Experiment command or action**:`, `**Expected observation**:`, and `**Claim-experiment fit**:` fields from `conventions/behavioral-proof.md`, and no application strategy or code edits. The plan is pre-execution review input and not the observed verification result. After this artifact exists, run the Fix-decision-phase critic and consume `${planning_dir}/rca/<failure-id>-fix-decision-critic.md` before Phase 4 begins.
 5. Phase 4 - Best Way To Apply: create an application-plan prompt that reads root cause plus fix decision and dispatch `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-application-plan.md` and no code application.
 6. Phase 5 - Apply: create an apply prompt that reads `${planning_dir}/rca/<failure-id>-application-plan.md`, edits only `${worktree_path}`, and dispatch `agents -m gpt-xhigh -p ${worktree_path} -f <prompt-file>`. Require `${planning_dir}/rca/<failure-id>-applied.md` with changed paths, rationale, and local verification notes. After apply, run an orchestrator-side changed-path check such as `git -C ${worktree_path} diff --name-only` and fail with `BLOCKED:out-of-scope-apply-paths` if any path is outside the approved RCA application scope.
 7. Phase 6 - Verify-Or-Return Gate: rerun the original failing test or the Phase 1 reproduction command. If red, return to Phase 2 with new evidence and iterate until verification is green or the operator halts. If green, run the Verification-phase critic and consume `${planning_dir}/rca/<failure-id>-verification-critic.md`; only `VERIFICATION-CRITIC: PASS` may advance to Phase 6.5.
@@ -111,7 +111,14 @@ Adapter inputs passed in the prompt:
 - `original_signal_verification_ref`: `${planning_dir}/rca/<failure-id>-original-signal-verification.md` or the explicit Phase 6 verification-log artifact recorded before the critic runs.
 - `verification_critic_ref`: `${planning_dir}/rca/<failure-id>-verification-critic.md`, with optional validation-integrity evidence at `${planning_dir}/rca/<failure-id>-validation-integrity.md`.
 - `actual_diff_ref`: `${planning_dir}/rca/gate-set/<failure-id>/actual-diff.patch` or an explicit dossier-diff reference generated after Phase 5 changed-path check and refreshed before Phase 6.5.
-- `runtime_claim_ref`: the Phase 3 fix-decision `## Proof plan` runtime claim, optionally extracted to `${planning_dir}/rca/gate-set/<failure-id>/runtime-claim.md` with a back-reference to the fix-decision artifact.
+- `verification_plan_ref`: the exact Phase 3 fix-decision `## Verification plan`, optionally extracted to `${planning_dir}/rca/gate-set/<failure-id>/verification-plan.md` with a back-reference to the fix-decision artifact.
+- `verification_plan_hash`: SHA-256 of that exact plan excerpt or extracted artifact.
+- `behavior_claim_ref`: the plan's `Behavior claim`, optionally extracted to `${planning_dir}/rca/gate-set/<failure-id>/behavior-claim.md`.
+- `behavior_claim_hash`: SHA-256 of that exact behavior claim or extracted artifact.
+- `runtime_claim_ref`: the post-change runtime claim used by validation-integrity when runtime evidence applies, recorded separately from the pre-execution verification-plan fields.
+- `runtime_claim_hash`: SHA-256 of the runtime claim, or an explicit non-applicability marker when no runtime claim applies.
+- `runtime_evidence_ref`: the observed runtime-evidence identity supplied to validation-integrity, or an explicit `n/a:<reason>` marker when runtime evidence does not apply.
+- `runtime_evidence_hash`: SHA-256 of the runtime evidence, or an explicit `n/a:<reason>` marker when runtime evidence does not apply.
 - `scope_ref`: application-plan scope plus changed-path check result, optionally materialized as `${planning_dir}/rca/gate-set/<failure-id>/scope.md`.
 - `cycle_id`: RCA verify-or-return cycle identity including `failure_id` and the numeric Phase 6 loop count.
 - `head_sha`, `base_ref`, and `diff_sha256`: active worktree and actual-diff identity captured after Phase 5 apply and before Phase 6.5.
@@ -134,7 +141,7 @@ The RCA caller appends the gate-set output contract to the RCA success or block 
 
 Currentness re-verification is caller-visible and operator-owned. RCA delegates currentness decisions to `apply-gate-set` using `~/ai/conventions/apply-gate-set-currentness.md` § `Invalidation trigger matrix` and § `Stale-refusal records`; RCA does not redefine those triggers locally. RCA Phase 2 root-cause re-entry, Phase 3 fix-decision revision, Phase 4 application-plan revision, Phase 5 apply re-run, Phase 6 verify-or-return repair, scope expansion, rebase, verification repair, and substantive contract/test revision all require the prior gate-set manifest for `<failure-id>` to be rerun or re-verified through `apply-gate-set` before downstream handoff. A `STALE_REFUSAL` is a blocking state, and its `next_action` drives repair routing to Phase 6 evidence repair, Phase 2 root-cause iteration, Phase 3 fix revision, Phase 4 plan revision, Phase 5 re-apply, scope handling, rebase verification, or full gate re-dispatch as applicable.
 
-ACR-254 critics remain wired and are not replaced or double-counted by Phase 6.5. The fix-decision critic continues to call proof-risk when the proof plan is missing, malformed, proxy-only, or evidence-class mismatched. The verification critic continues to call validation-integrity when verification cites tests or validation-surface risk exists. The original-signal rerun remains Phase 6 and is a prerequisite to Phase 6.5. The new gate consumes those artifacts and adds the broader post-apply gate-set decision; those RCA-local prerequisites are never sufficient evidence for the broader gate-set `PASS`.
+ACR-254 critics remain wired and are not replaced or double-counted by Phase 6.5. The fix-decision critic continues to call verification-plan review when the plan is missing, malformed, non-executable, lacks an expected observation, or substitutes a proxy for a broader claim. The verification critic continues to call validation-integrity when verification cites tests or validation-surface risk exists. The original-signal rerun remains Phase 6 and is a prerequisite to Phase 6.5. The new gate consumes those artifacts and adds the broader post-apply gate-set decision; those RCA-local prerequisites are never sufficient evidence for the broader gate-set `PASS`.
 
 ## Investigator-Phase Critic
 
@@ -149,23 +156,24 @@ The critic verifies:
 
 Verdict line: `INVESTIGATOR-CRITIC: PASS | DOWNGRADE-CONFIDENCE | BLOCK`.
 
-`BLOCK` halts before fix-decision and returns the dossier to Phase 2 with the critic report as evidence. `DOWNGRADE-CONFIDENCE` does not halt by itself, but the Phase 3 fix-decision prompt must carry the downgraded confidence and may not present the runtime claim as fully proven.
+`BLOCK` halts before fix-decision and returns the dossier to Phase 2 with the critic report as evidence. `DOWNGRADE-CONFIDENCE` does not halt by itself, but the Phase 3 fix-decision prompt must carry the downgraded confidence and may not present the runtime claim as established by evidence it does not have.
 
 ## Fix-Decision-Phase Critic
 
 Dispatch this critic immediately after Phase 3 emits `${planning_dir}/rca/<failure-id>-fix-decision.md` and before Phase 4 application-plan prompt composition. The critic prompt is written under `${scratch_dir}/prompts/<failure-id>-fix-decision-critic.md`, dispatched with `agents -m gpt-high -p ${worktree_path} -f <prompt-file>`, and writes `${planning_dir}/rca/<failure-id>-fix-decision-critic.md`.
 
-The critic verifies that the fix-decision artifact has a `## Proof plan` with:
+The critic verifies that the fix-decision artifact has a `## Verification plan` with:
 
-- `**Runtime claim**:`
-- `**Proof method**:`
-- `**Evidence-class match**:`
+- `**Behavior claim**:`
+- `**Experiment command or action**:`
+- `**Expected observation**:`
+- `**Claim-experiment fit**:`
 
-When the section is missing, malformed, proxy-only, or evidence-class mismatched, dispatch `agents/proof-risk-auditor.md` in `mode=rca-fix-decision` against the fix-decision artifact and consume its verdict before application planning. The proof-risk report path is `${planning_dir}/rca/<failure-id>-proof-risk.md`.
+When the section is missing, malformed, non-executable, lacks an expected observation, or substitutes a proxy for a broader claim, resolve the current project wrapper for `verification-plan-reviewer` first when one applies, otherwise resolve `~/ai/agents/verification-plan-reviewer.md`, and validate its optimized contract before dispatch. Write the prompt to `${scratch_dir}/prompts/<failure-id>-verification-plan-review.md`, dispatch the resolved defined operator with `agents -a <resolved-agent.md> -p ${worktree_path} -f <prompt-file> 2>&1 | tee ${scratch_dir}/logs/<failure-id>-verification-plan-review.log`, and consume its `mode=rca-fix-decision` verdict against the fix-decision artifact before application planning. The distinct report path is `${planning_dir}/rca/<failure-id>-verification-plan-review.md`.
 
-Verdict line: `FIX-DECISION-CRITIC: PASS | PROOF-PLAN-MISSING | PROOF-RISK-HIGH`.
+Verdict line: `FIX-DECISION-CRITIC: PASS | VERIFICATION-PLAN-MISSING | VERIFICATION-PLAN-REVIEW-HIGH`.
 
-`PROOF-PLAN-MISSING`, `PROOF-RISK-HIGH`, or any `HIGH`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>` proof-risk verdict blocks Phase 4 application planning and returns to Phase 3 fix-decision revision.
+`VERIFICATION-PLAN-MISSING`, `VERIFICATION-PLAN-REVIEW-HIGH`, or any `HIGH`, `NEEDS_INPUT:<absolute_artifact_path>`, or `BLOCKED:<reason>` verification-plan-review verdict blocks Phase 4 application planning and returns to Phase 3 fix-decision revision.
 
 ## Verification-Phase Critic
 

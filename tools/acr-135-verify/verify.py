@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static verifier for ACR-135 prototype proof-test carry-forward docs."""
+"""Static verifier for ACR-135 pending behavior-test carry-forward docs."""
 
 from __future__ import annotations
 
@@ -81,6 +81,48 @@ def _require_any(text: str, needles: list[str], context: str) -> None:
     )
 
 
+def _require_phase(text: str, phase: int, context: str) -> str:
+    headings: list[tuple[int, bool]] = []
+    offset = 0
+    fence: tuple[str, int] | None = None
+    phase_heading = re.compile(
+        rf"^[ ]{{0,3}}##(?!#)\s+Phase\s+{phase}\b", re.IGNORECASE
+    )
+
+    for line in text.splitlines(keepends=True):
+        content = line.rstrip("\r\n")
+        stripped = content.lstrip(" ")
+        indent = len(content) - len(stripped)
+
+        if fence is not None:
+            marker, minimum_length = fence
+            candidate = stripped.rstrip(" ")
+            if (
+                indent <= 3
+                and len(candidate) >= minimum_length
+                and candidate == marker * len(candidate)
+            ):
+                fence = None
+        elif indent <= 3 and (match := re.match(r"(`{3,}|~{3,})", stripped)):
+            marker = match.group(1)
+            fence = (marker[0], len(marker))
+        elif re.match(r"^[ ]{0,3}##(?!#)(?:\s|$)", content):
+            headings.append((offset, phase_heading.match(content) is not None))
+
+        offset += len(line)
+
+    matches = [index for index, (_, is_phase) in enumerate(headings) if is_phase]
+    _require(matches, f"{context}: missing Phase {phase} section")
+    _require(
+        len(matches) == 1,
+        f"{context}: duplicate Phase {phase} sections",
+    )
+    heading_index = matches[0]
+    start = headings[heading_index][0]
+    end = headings[heading_index + 1][0] if heading_index + 1 < len(headings) else len(text)
+    return text[start:end]
+
+
 def _require_window_all_any(
     text: str,
     required: list[str],
@@ -110,15 +152,11 @@ def _check_a1(text: str) -> None:
 
 
 def _check_a2(text: str) -> None:
-    _require_any(
-        text,
-        ["production solution's behavior test", "inherits that test verbatim"],
-        "A2",
-    )
+    _require_all(text, ["pending production behavior-test contract", "inherited verbatim"], "A2")
 
 
 def _check_a3(text: str) -> None:
-    _require_contains(text, "strictly stronger equivalent", "A3")
+    _require_regex(text, r"strictly\s+stronger\s+equivalent", "A3")
 
 
 def _check_a4(text: str) -> None:
@@ -134,7 +172,7 @@ def _check_a5(text: str) -> None:
 
 
 def _check_a6(text: str) -> None:
-    _require_any(text, ["implementation is wrong", "prototype's verdict was wrong"], "A6")
+    _require_any(text, ["implementation is wrong", "prototype verdict requires explicit re-evaluation"], "A6")
 
 
 def _check_a7(text: str) -> None:
@@ -146,14 +184,15 @@ def _check_a8(text: str) -> None:
 
 
 def _check_a9(text: str) -> None:
-    _require_all(text, ["Step 6b output index", "inherited prototype"], "A9")
+    phase = _require_phase(text, 6, "A9")
+    _require_all(phase, ["Step 6b output index", "inherited pending production"], "A9")
 
 
 def _check_a10(text: str) -> None:
-    _require_window_all_any(
-        text,
-        ["inherited prototype"],
-        ["refuses to advance", "pre-dispatch readiness", "pre-CodeRabbit"],
+    phase = _require_phase(text, 7, "A10")
+    _require_all(
+        phase,
+        ["inherited pending production", "Pre-CodeRabbit readiness refuses to advance"],
         "A10",
     )
 
@@ -176,8 +215,8 @@ def _check_a13(text: str) -> None:
 def _check_a14(text: str) -> None:
     _require_window_all_any(
         text,
-        ["coderabbit", "inherited prototype"],
-        ["refuse", "refusal", "pre-dispatch"],
+        ["coderabbit", "inherited pending production"],
+        ["enforce", "refuse", "pre-dispatch"],
         "A14",
     )
 
@@ -206,16 +245,16 @@ ANCHORS = [
         "conventions/prototype-pending-tests.md",
         "Identity statement (C1)",
         "case-insensitive any-substring",
-        "production solution's behavior test|inherits that test verbatim",
-        "Prototype proof tests must be identified as inherited production behavior tests.",
+        "pending production behavior-test contract AND inherited verbatim",
+        "Pending prototype tests must be identified as inherited production behavior contracts.",
         _check_a2,
     ),
     Anchor(
         "A3",
         "conventions/prototype-pending-tests.md",
         "No-rewrite rule (C2)",
-        "case-insensitive substring",
-        "strictly stronger equivalent",
+        "case-insensitive whitespace regex",
+        r"strictly\s+stronger\s+equivalent",
         "The convention must define the no-rewrite stronger-equivalent rule.",
         _check_a3,
     ),
@@ -234,7 +273,7 @@ ANCHORS = [
         "No silent drop (C4)",
         "case-insensitive any-substring",
         "silent drop|silently drop|workflow violation",
-        "Dropping inherited proof tests must be named as a workflow violation.",
+        "Dropping inherited pending production tests must be named as a workflow violation.",
         _check_a5,
     ),
     Anchor(
@@ -242,8 +281,8 @@ ANCHORS = [
         "conventions/prototype-pending-tests.md",
         "Drift = regression (C5)",
         "case-insensitive any-substring",
-        "implementation is wrong|prototype's verdict was wrong",
-        "Failure to pass inherited proof tests must be treated as implementation or prototype-verdict drift.",
+        "implementation is wrong|prototype verdict requires explicit re-evaluation",
+        "Failure to pass inherited pending tests must require implementation correction or explicit prototype-verdict re-evaluation.",
         _check_a6,
     ),
     Anchor(
@@ -269,8 +308,8 @@ ANCHORS = [
         "workflows/implementation-pipeline.md",
         "Phase 6 inherited-test mapping",
         "case-insensitive all-substrings",
-        "Step 6b output index AND inherited prototype",
-        "Phase 6 must map inherited prototype tests through the Step 6b output index.",
+        "Step 6b output index AND inherited pending production",
+        "Phase 6 must map inherited pending production tests through the Step 6b output index.",
         _check_a9,
     ),
     Anchor(
@@ -278,8 +317,8 @@ ANCHORS = [
         "workflows/implementation-pipeline.md",
         "Phase 7 readiness predicate",
         "case-insensitive local mixed all/any substrings",
-        "inherited prototype AND (refuses to advance OR pre-dispatch readiness OR pre-CodeRabbit)",
-        "Phase 7 readiness must refuse missing or invalid inherited prototype tests.",
+        "inherited pending production AND pre-CodeRabbit readiness refuses to advance",
+        "Phase 7 readiness must refuse missing or invalid inherited pending tests.",
         _check_a10,
     ),
     Anchor(
@@ -314,8 +353,8 @@ ANCHORS = [
         "agents/implementation-pipeline-orchestrator.md",
         "Phase 7 refusal condition",
         "case-insensitive local mixed all/any substrings",
-        "coderabbit AND inherited prototype AND (refuse OR refusal OR pre-dispatch)",
-        "Implementation orchestrator must refuse CodeRabbit dispatch when inherited prototype tests are unresolved.",
+        "coderabbit AND inherited pending production AND (enforce OR refuse OR pre-dispatch)",
+        "Implementation orchestrator must refuse CodeRabbit dispatch when inherited pending tests are unresolved.",
         _check_a14,
     ),
     Anchor(

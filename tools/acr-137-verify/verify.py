@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Static verifier for ACR-137 Phase 6 product-document edits."""
+"""Deprecated ACR-137 historical snapshot verifier.
+
+Current terminology anchors may be reconciled, but the frozen workflow-index
+digest and historical model/dispatch predicates are not live freshness gates.
+"""
 
 from __future__ import annotations
 
@@ -166,7 +170,7 @@ def check_operator_format() -> None:
         "base",
         "repo_root",
         "dossier_answer_path",
-        "proof_test_audit_path",
+        "prototype_evidence_review_path",
         "spawned_tickets_path",
         "test_manifest_path",
         "pending_marker_convention_path",
@@ -222,7 +226,7 @@ def check_operator_format() -> None:
             "pending_marker_convention_path",
             "implementation_ticket_urls",
             "answer.md",
-            "proof-test audit",
+            "prototype evidence review",
         ],
         "Stop Conditions",
     )

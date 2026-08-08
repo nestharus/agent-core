@@ -15,7 +15,7 @@ evidence_source_kinds:
   - runtime-claim
   - decisions-record
   - runtime-artifact-evidence
-suggested_action_class: revise-fix-or-supply-ratification-plus-runtime-artifact-proof
+suggested_action_class: revise-fix-or-supply-ratification-plus-runtime-artifact-evidence
 supersedes: []
 ---
 
@@ -67,6 +67,8 @@ Validation-integrity findings also carry:
 - `worktree_path`
 - optional `decisions_path`
 - optional `runtime_artifact_evidence_path`
+- `runtime_evidence_ref` equal to `runtime_artifact_evidence_path` when evidence is supplied
+- `runtime_evidence_hash` equal to the SHA-256 of the materialized evidence file when evidence is supplied
 - optional `wu_id`
 
 Missing required inputs must produce `BLOCKED:<reason>`. Missing optional evidence that is needed for ratification keeps the original non-LOW verdict.
@@ -91,7 +93,7 @@ Expected operator verdict: `HIGH`.
 
 Expected finding-id namespace: `VI-001`.
 
-Rationale: Removing a previously asserted runtime condition is validation weakening. The runtime claim is artifact-bound, and neither ratification nor runtime-artifact proof is present.
+Rationale: Removing a previously asserted runtime condition is validation weakening. The runtime claim is artifact-bound, and neither ratification nor runtime-artifact evidence is present.
 
 ### VIA-002: runtime-condition pytest skip
 
@@ -196,7 +198,7 @@ Fixture: Synthetic PR diff and evidence fragment:
 mode: pr-diff
 runtime_claim: "The container image imports module X at startup."
 diff:
-  + proof note: "import X passes in the test environment"
+  + evidence note: "import X passes in the test environment"
 runtime_artifact_evidence_path: absent
 decisions_path: absent
 ```
@@ -219,16 +221,19 @@ diff:
 decisions snippet:
   ### ACR-254-demo - Validation-surface weakening ratification
   Ratifies the schema relaxation for legacy alias compatibility and cites this diff hunk.
-runtime artifact evidence:
-  /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_evidence_ref: /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   content: built API image handles legacy payload through production request path
+  provenance: runner execution record run-legacy-payload-42 binds the expected HTTP response before command start
 ```
 
 Expected operator verdict: `LOW`.
 
 Expected finding-id namespace: `VI-001` with ratification status `ratified`.
 
-Rationale: The pattern would fire as schema relaxation, but explicit ratification and runtime-artifact proof downgrade MEDIUM to LOW.
+Rationale: The pattern would fire as schema relaxation, but explicit ratification and runtime-artifact evidence downgrade MEDIUM to LOW.
 
 ### VIA-009: ratification-only exception is not enough
 
@@ -260,8 +265,10 @@ runtime_claim: "The service image starts with the required native dependency."
 diff:
   - behavior check: native dependency is imported during image startup
   + behavior check: startup path uses stub dependency when missing
-runtime artifact evidence:
-  /tmp/acr-254/evidence/service-container-start.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/service-container-start.log
+runtime_evidence_ref: /tmp/acr-254/evidence/service-container-start.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   content: container starts successfully
 decisions_path: absent
 ```
@@ -304,6 +311,8 @@ diff:
   unchanged behavior: built updater image startup still validates dependency availability
 decisions_path: absent
 runtime_artifact_evidence_path: /tmp/acr-254/evidence/updater-container-start.log
+runtime_evidence_ref: /tmp/acr-254/evidence/updater-container-start.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
 ```
 
 Expected operator verdict: `LOW`.
@@ -330,7 +339,7 @@ Expected operator verdict: `HIGH`.
 
 Expected finding-id namespace: `VI-005`.
 
-Rationale: RCA closure must be blocked when the verification phase changes a fixture to a stub and presents tests-only proof for a runtime claim.
+Rationale: RCA closure must be blocked when the verification phase changes a fixture to a stub and presents tests-only evidence for a runtime claim.
 
 ### VIA-014: runtime and proxy evidence honestly scoped
 
@@ -341,8 +350,11 @@ runtime_claim: "The worker container processes one production-path queue message
 diff:
   + validation note: unit proxy check covers formatting only
   + runtime validation note: built worker image consumed message from queue emulator via production command
-runtime artifact evidence:
-  /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_evidence_ref: /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
+  provenance: runner execution record run-worker-queue-17 binds the expected consumed-message observation before command start
 decisions_path: absent
 ```
 
@@ -352,13 +364,37 @@ Expected finding-id namespace: none.
 
 Rationale: Proxy evidence is scoped to proxy behavior and the runtime claim has separate runtime-artifact proof.
 
+### VIA-015: self-attested runtime report cannot suppress proxy-only finding
+
+Fixture: Synthetic PR diff plus a model-authored evidence report:
+
+```text
+mode: pr-diff
+runtime_claim: "The worker container processes one production-path queue message."
+diff:
+  + validation note: unit proxy check reports queue formatting success
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/worker-runtime-report.md
+runtime_evidence_ref: /tmp/acr-254/evidence/worker-runtime-report.md
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
+  content: command, target, expected result, observed result, status, output, and claimed provenance are all stated in prose
+  producer record: absent
+  pre-execution expected-result binding: absent
+decisions_path: absent
+```
+
+Expected operator verdict: `HIGH`.
+
+Expected finding-id namespace: `VI-007`.
+
+Rationale: Self-attested report fields do not independently establish execution provenance or that the expected result preceded execution.
+
 ## Non-Fire Cases
 
 - Pure naming, formatting, or helper extraction changes that preserve the same runtime condition.
 - Proxy evidence used only for a proxy-layer claim.
-- Runtime-artifact proof accompanying unchanged validation surfaces.
+- Runtime-artifact evidence accompanying unchanged validation surfaces.
 
 ## Lifecycle Notes
 
-Lifecycle is `WRITE`: this file defines the behavior contract before `agents/validation-integrity-auditor.md` exists. Runnable detector code, fixture files, CLI integration, and enforcement-state transitions are out of scope for this WU.
-
+Lifecycle is `WRITE`: this file defines acceptance intent for the current `agents/validation-integrity-auditor.md`; it does not establish that any scenario ran or passed. Runnable detector code, fixture files, CLI integration, and enforcement-state transitions remain downstream work.

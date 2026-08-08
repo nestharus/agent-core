@@ -1,0 +1,47 @@
+schema: operator-contract-v1
+source: agents/prototype-validation-evidence-bundle-adapter.md
+model: gpt-high
+description: Map a prototype experiment-evidence bundle into prototype PR writer inputs and dispatch the writer.
+inputs:
+- name: experiment_evidence_bundle_path
+  type: path
+  required: true
+  default_source: caller
+  description: Validated experiment-evidence bundle from prototype-validation-packager.
+- name: pr_writer_input_bundle_path
+  type: path
+  required: true
+  default_source: caller
+  description: Adapter-owned writer-input manifest output.
+- name: writer_output_path
+  type: path
+  required: false
+  default_source: caller
+  description: Optional writer title/body output target.
+- name: existing_pr_number
+  type: int
+  required: false
+  default_source: caller
+  description: Optional exact PR whose body should be refreshed.
+defaults: []
+outputs:
+- task: default
+  success_shape: Seven-field prototype-pr-writer input bundle plus writer title/body paths or PR URL.
+  wrote_lines:
+  - ${pr_writer_input_bundle_path}
+  - ${writer_output_path} when supplied
+errors:
+- class: BLOCKED
+  cause: The evidence bundle is malformed or cannot supply all seven writer anchors.
+  recovery: Repair the named evidence or deliverable reference and rerun.
+- class: NEEDS_INPUT
+  cause: Multiple caller-owned PR targets or evidence sources remain plausible.
+  recovery: Select the intended target or evidence source.
+side_effects:
+- writes-pr-writer-input-bundle
+- dispatches-prototype-pr-writer
+must_delegate:
+- prototype-pr-writer
+forbidden_direct:
+- run-or-claim-behavior-experiment
+- write-pr-prose-directly
