@@ -167,7 +167,7 @@ The critic verifies that the fix-decision artifact has a `## Verification plan` 
 - `**Expected observation**:`
 - `**Claim-experiment fit**:`
 
-When the section is missing, malformed, non-executable, lacks an expected observation, or substitutes a proxy for a broader claim, dispatch `agents/verification-plan-reviewer.md` in `mode=rca-fix-decision` against the fix-decision artifact and consume its verdict before application planning. The report path is `${planning_dir}/rca/<failure-id>-verification-plan-review.md`.
+When the section is missing, malformed, non-executable, lacks an expected observation, or substitutes a proxy for a broader claim, resolve the current project wrapper for `verification-plan-reviewer` first when one applies, otherwise resolve `~/ai/agents/verification-plan-reviewer.md`, and validate its optimized contract before dispatch. Write the prompt to `${scratch_dir}/prompts/<failure-id>-verification-plan-review.md`, dispatch the resolved defined operator with `agents -a <resolved-agent.md> -p ${worktree_path} -f <prompt-file> 2>&1 | tee ${scratch_dir}/logs/<failure-id>-verification-plan-review.log`, and consume its `mode=rca-fix-decision` verdict against the fix-decision artifact before application planning. The distinct report path is `${planning_dir}/rca/<failure-id>-verification-plan-review.md`.
 
 Verdict line: `FIX-DECISION-CRITIC: PASS | VERIFICATION-PLAN-MISSING | VERIFICATION-PLAN-REVIEW-HIGH`.
 
