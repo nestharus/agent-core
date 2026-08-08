@@ -512,7 +512,13 @@ def _runtime_manifest(planning_root: Path) -> tuple[Path, dict[str, Any]]:
         "cold_start_disposition_ref": None,
         "phase_3_estimate_writeback_ref": None,
         "phase_3_estimate_writeback_sha256": None,
-        "phase_history": [],
+        "phase_history": [
+            {
+                "phase": "2.5",
+                "status": "complete",
+                "ts": "2026-07-18T00:00:00Z",
+            }
+        ],
         "draft_pr_url": None,
         "draft_pr_number": None,
         "draft_pr_head_sha": None,
@@ -703,7 +709,7 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
                         "phase_3_estimate_writeback_sha256": _digest(
                             estimate_path.read_bytes()
                         ),
-                        "phase_history": [
+                        "phase_history": replacement_manifest["phase_history"] + [
                             {
                                 "phase": "3",
                                 "status": "complete",
@@ -1612,6 +1618,15 @@ def _pre_pr_readback(case: dict[str, Any], source_manifest: dict[str, Any]) -> d
 def test_validate_pre_pr_readback_machine_validates_phase3_pass(tmp_path: Path):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
+    assert source_manifest["phase_history"]
+    assert case["replacement_manifest"]["phase_history"][:-1] == source_manifest[
+        "phase_history"
+    ]
+    assert case["replacement_manifest"]["phase_history"][-1] == {
+        "phase": "3",
+        "status": "complete",
+        "ts": "2026-07-19T00:00:00Z",
+    }
     MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
     readback_path = tmp_path / "phase3-bind.readback.json"
     _write_json(readback_path, _pre_pr_readback(case, source_manifest))
@@ -2187,8 +2202,10 @@ def test_pre_pr_bind_operations_reject_mixed_fields_index_changes_and_row_identi
     case = _runtime_case(tmp_path, operation)
     request = json.loads(case["request_path"].read_text())
     if mutation == "history":
-        request["replacement_manifest"]["phase_history"] = [
-            {"phase": "2.5", "status": "complete", "ts": "2026-07-18T00:00:00Z"}
+        request["replacement_manifest"]["phase_history"] = request[
+            "replacement_manifest"
+        ]["phase_history"] + [
+            {"phase": "2.6", "status": "complete", "ts": "2026-07-18T01:00:00Z"}
         ]
     elif mutation == "cold-start":
         request["replacement_manifest"]["cold_start_disposition_ref"] = None
