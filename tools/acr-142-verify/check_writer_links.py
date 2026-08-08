@@ -58,7 +58,7 @@ def _has_active_adapter_reference(document: dict[str, object]) -> bool:
     sections = document.get("sections", {})
     if isinstance(sections, dict) and sections:
         anti_scope_headings = ("do not use", "anti-scope", "out of scope")
-        active_text = "\n".join(
+        active_text = "\n\n".join(
             str(text)
             for heading, text in sections.items()
             if not any(marker in str(heading).lower() for marker in anti_scope_headings)
@@ -66,10 +66,10 @@ def _has_active_adapter_reference(document: dict[str, object]) -> bool:
     else:
         active_text = str(document.get("text", ""))
 
-    negative_line = re.compile(r"\b(?:do not use|must not|forbid(?:den)?|anti-scope)\b", re.IGNORECASE)
+    negative_paragraph = re.compile(r"\b(?:do not use|must not|forbid(?:den)?|anti-scope)\b", re.IGNORECASE)
     return any(
-        ADAPTER_PATH in line and not negative_line.search(line)
-        for line in active_text.splitlines()
+        ADAPTER_PATH in paragraph and not negative_paragraph.search(paragraph)
+        for paragraph in re.split(r"\n\s*\n", active_text)
     )
 
 

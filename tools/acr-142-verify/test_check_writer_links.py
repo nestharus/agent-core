@@ -16,6 +16,15 @@ def test_anti_scope_adapter_reference_is_allowed() -> None:
     assert not check_writer_links._has_active_adapter_reference(document)
 
 
+def test_wrapped_anti_scope_adapter_reference_is_allowed() -> None:
+    document = {
+        "text": "Do not use\nprototype-validation-evidence-bundle-adapter.md here.\n",
+        "sections": {},
+    }
+
+    assert not check_writer_links._has_active_adapter_reference(document)
+
+
 def test_active_adapter_reference_is_rejected() -> None:
     document = {
         "text": "Use prototype-validation-evidence-bundle-adapter.md for this handoff.\n",
