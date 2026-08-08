@@ -1383,6 +1383,77 @@ def test_capture_evidence_rejects_malformed_git_oid_before_invocation(
         )
 
 
+def test_phase3_bind_updates_only_phase3_bindings_and_preserves_active_index_bytes(
+    tmp_path: Path,
+):
+    operation = "phase3-bind"
+    planning_root = tmp_path / "project" / "planning"
+    planning_root.mkdir(parents=True)
+    manifest_path, source_manifest = _runtime_manifest(planning_root)
+    source_manifest.update(
+        {
+            "cold_start_disposition_ref": None,
+            "phase_3_estimate_writeback_ref": None,
+            "phase_3_estimate_writeback_sha256": None,
+            "unrelated_phase_state": {"preserve": ["all", "manifest", "data"]},
+        }
+    )
+    _write_json(manifest_path, source_manifest)
+    index_path = planning_root / "sessions.active-wake.json"
+    original_index_bytes = (
+        b'{\n  "sessions": [],\n  "schema": "wu-sessions-active-wake-v1"\n}\n'
+    )
+    index_path.write_bytes(original_index_bytes)
+
+    replacement_manifest = copy.deepcopy(source_manifest)
+    replacement_manifest.update(
+        {
+            "cold_start_disposition_ref": str(
+                manifest_path.parent / ".scratch" / "questions" / "phase-3-answer.json"
+            ),
+            "phase_3_estimate_writeback_ref": str(
+                manifest_path.parent / "risk" / "phase-3-estimate-writeback.json"
+            ),
+            "phase_3_estimate_writeback_sha256": "d" * 64,
+            "phase_history": ["phase3"],
+        }
+    )
+    request_path = _write_runtime_request(
+        tmp_path / "requests" / f"{operation}.json",
+        operation,
+        planning_root,
+        manifest_path,
+        index_path,
+        replacement_manifest,
+        json.loads(original_index_bytes),
+        _row_identity(_active_row(replacement_manifest, manifest_path)),
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL_DIR), operation, "--request", str(request_path)],
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    updated_manifest = json.loads(manifest_path.read_text())
+    changed_fields = {
+        key
+        for key in set(source_manifest) | set(updated_manifest)
+        if source_manifest.get(key) != updated_manifest.get(key)
+    }
+    assert changed_fields == {
+        "cold_start_disposition_ref",
+        "phase_3_estimate_writeback_ref",
+        "phase_3_estimate_writeback_sha256",
+        "phase_history",
+    }
+    assert updated_manifest == replacement_manifest
+    assert updated_manifest["phase_history"] == ["phase3"]
+    assert index_path.read_bytes() == original_index_bytes
+
+
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
 def test_runtime_writer_operations_execute_nominally(operation: str, tmp_path: Path):
     case = _runtime_case(tmp_path, operation)
