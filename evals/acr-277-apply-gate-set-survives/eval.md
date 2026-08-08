@@ -250,7 +250,7 @@ diff, with `dossier_diff_path` and `runtime_claim` inputs preserved into
 child prompts, before Phase 7+ handoff.
 
 Gate this scenario covers: `code-quality-composite`,
-`runtime-claim-transport`.
+`claim-transport`.
 
 Positive evidence (the eval should produce a finding when):
 
