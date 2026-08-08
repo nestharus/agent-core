@@ -43,6 +43,11 @@ REAL_INVENTORY_SHA256 = "f48f87265635fb362a37294071cef7f8d016c5ad502a4cda27491a8
 FROZEN_REAL_SQUASH_EVIDENCE = (
     Path(__file__).resolve().parent / "fixtures" / "age-260-merged-squash-evidence.json"
 )
+GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+}
 
 
 @pytest.fixture(autouse=True)
@@ -634,7 +639,7 @@ def _runtime_case(
     contract_path = repo_root / "contracts" / "linear-operator.yaml"
     contract_path.parent.mkdir(parents=True, exist_ok=True)
     contract_path.write_text("source: linear-operator\n")
-    subprocess.run(["git", "init", "-q", str(repo_root)], check=True)
+    subprocess.run(["git", "init", "-q", str(repo_root)], check=True, env=GIT_ENV)
     subprocess.run(
         [
             "git",
@@ -646,6 +651,7 @@ def _runtime_case(
             "contracts/linear-operator.yaml",
         ],
         check=True,
+        env=GIT_ENV,
     )
     subprocess.run(
         [
@@ -656,19 +662,22 @@ def _runtime_case(
             "user.name=Session Test",
             "-c",
             "user.email=session-test@example.com",
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "-q",
-            "--allow-empty",
             "-m",
             "fixture producer identities",
         ],
         check=True,
+        env=GIT_ENV,
     )
     initial_manifest["branch_out_sha"] = subprocess.run(
         ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
         check=True,
         text=True,
         capture_output=True,
+        env=GIT_ENV,
     ).stdout.strip()
     proposal_path = manifest_path.parent / "proposals" / "age-260-AGE-260.md"
     proposal_path.parent.mkdir(parents=True)
@@ -952,18 +961,22 @@ def _commit_fixture_repo(repo_root: Path, message: str) -> str:
             "user.name=Session Test",
             "-c",
             "user.email=session-test@example.com",
+            "-c",
+            "commit.gpgsign=false",
             "commit",
             "-q",
             "-m",
             message,
         ],
         check=True,
+        env=GIT_ENV,
     )
     return subprocess.run(
         ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
         check=True,
         text=True,
         capture_output=True,
+        env=GIT_ENV,
     ).stdout.strip()
 
 
@@ -3477,6 +3490,7 @@ def test_phase3_bind_rejects_valid_but_wrong_historical_commit(tmp_path: Path):
     subprocess.run(
         ["git", "-C", str(case["repo_root"]), "add", "--", "agents/linear-operator.md"],
         check=True,
+        env=GIT_ENV,
     )
     wrong_commit = _commit_fixture_repo(case["repo_root"], "wrong producer commit")
     request_path = _rewrite_phase3_request(
@@ -3506,6 +3520,7 @@ def test_phase3_bind_rejects_unknown_or_noncommit_branch_out(
             check=True,
             text=True,
             capture_output=True,
+            env=GIT_ENV,
         ).stdout.strip()
     request_path = _rewrite_phase3_request(
         case, f"{ref_kind}-branch-out", branch_out_sha=branch_out_sha
@@ -3557,6 +3572,7 @@ def test_phase3_bind_rejects_unsupported_historical_git_object_form(
         subprocess.run(
             ["git", "-C", str(repo_root), "add", "--", "agents/linear-operator.md"],
             check=True,
+            env=GIT_ENV,
         )
     else:
         target_commit = subprocess.run(
@@ -3564,6 +3580,7 @@ def test_phase3_bind_rejects_unsupported_historical_git_object_form(
             check=True,
             text=True,
             capture_output=True,
+            env=GIT_ENV,
         ).stdout.strip()
         subprocess.run(
             [
@@ -3576,6 +3593,7 @@ def test_phase3_bind_rejects_unsupported_historical_git_object_form(
                 f"160000,{target_commit},agents/linear-operator.md",
             ],
             check=True,
+            env=GIT_ENV,
         )
     unsupported_commit = _commit_fixture_repo(
         repo_root, f"unsupported {object_form} producer identity"
