@@ -60,7 +60,7 @@ If `base` is missing or empty, halt with `NEEDS_INPUT:missing-prototype-test-pr-
 
 1. Validate every required input exists and is readable. Validate `implementation_ticket_urls` is a non-empty JSON array.
 2. Read `test_manifest_path` and extract the test files, node IDs, expected fail-if-unmasked command when present, prototype-test branch/ref, and marker reason format.
-3. Read `dossier_answer_path`, `prototype_evidence_review_path`, and `spawned_tickets_path` to determine the dossier verdict and spawned implementation ticket mapping.
+3. Read the dossier verdict (`CONFIRM`, `DECOMPOSE`, `HALT`, or `RE-FRAME`) from `dossier_answer_path`, read the evidence-review classification (`LOW`, `MEDIUM`, or `HIGH`) separately from `prototype_evidence_review_path`, and read the spawned implementation ticket mapping from `spawned_tickets_path`.
 4. Read `pending_marker_convention_path` and use its `prototype-pending:` reason format exactly.
 5. Write the title file at `${output_path}.title`. The title must be a single line and < 70 chars.
 6. Write the body file at `${output_path}` using the Output Contract section order below.
@@ -72,7 +72,7 @@ The body at `${output_path}` must contain these reviewer-facing sections in this
 
 ### Verdict
 
-One paragraph naming the dossier verdict (`CONFIRM`, `DECOMPOSE`, `HALT`, or `RE-FRAME`) and the evidence-backed rationale.
+One paragraph naming the dossier verdict (`CONFIRM`, `DECOMPOSE`, `HALT`, or `RE-FRAME`) from `dossier_answer_path`, the separate evidence-review classification (`LOW`, `MEDIUM`, or `HIGH`) from `prototype_evidence_review_path`, and the evidence-backed rationale.
 
 ### Reviewer focus
 
