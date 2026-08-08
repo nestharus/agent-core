@@ -634,6 +634,42 @@ def _runtime_case(
     contract_path = repo_root / "contracts" / "linear-operator.yaml"
     contract_path.parent.mkdir(parents=True, exist_ok=True)
     contract_path.write_text("source: linear-operator\n")
+    subprocess.run(["git", "init", "-q", str(repo_root)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "add",
+            "--",
+            "agents/linear-operator.md",
+            "contracts/linear-operator.yaml",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "-c",
+            "user.name=Session Test",
+            "-c",
+            "user.email=session-test@example.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "fixture producer identities",
+        ],
+        check=True,
+    )
+    initial_manifest["branch_out_sha"] = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
     proposal_path = manifest_path.parent / "proposals" / "age-260-AGE-260.md"
     proposal_path.parent.mkdir(parents=True)
     proposal_path.write_text("# Proposal\n")
@@ -833,12 +869,102 @@ def _runtime_case(
                 "manifest_path": manifest_path,
                 "index_path": index_path,
                 "direct_index_path": direct_index_path,
+                "repo_root": repo_root,
                 "replacement_manifest": replacement_manifest,
                 "replacement_index": replacement_index,
                 "artifacts": artifacts,
             }
         MIGRATION.apply_runtime_request(request_path, operation)
     raise AssertionError(target_operation)
+
+
+def _rewrite_phase3_request(
+    case: dict[str, Any],
+    name: str,
+    *,
+    producer_role: str | None = None,
+    producer_path: Path | None = None,
+    producer_digest: str | None = None,
+    repo_root: Path | None = None,
+    branch_out_sha: str | None = None,
+) -> Path:
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate = json.loads(estimate_path.read_text())
+    artifacts = dict(case["artifacts"])
+    if producer_role is not None:
+        fields = {
+            "resolved-ticket-operator": (
+                "resolved_operator_path",
+                "resolved_operator_sha256",
+            ),
+            "resolved-ticket-contract": (
+                "resolved_operator_contract_path",
+                "resolved_contract_sha256",
+            ),
+        }
+        path_key, digest_key = fields[producer_role]
+        if producer_path is not None:
+            source_manifest[path_key] = str(producer_path)
+            estimate[path_key] = str(producer_path)
+            artifacts[producer_role] = producer_path
+            if producer_role == "resolved-ticket-contract":
+                source_manifest["resolved_contract_path"] = str(producer_path)
+        if producer_digest is not None:
+            source_manifest[digest_key] = producer_digest
+            estimate[digest_key] = producer_digest
+            estimate["currentness"][digest_key] = producer_digest
+    if repo_root is not None:
+        source_manifest["repo_root"] = str(repo_root)
+    if branch_out_sha is not None:
+        source_manifest["branch_out_sha"] = branch_out_sha
+    _write_json(case["manifest_path"], source_manifest)
+    _write_json(estimate_path, estimate)
+    replacement = copy.deepcopy(source_manifest)
+    replacement.update(
+        {
+            "phase_3_estimate_writeback_ref": str(estimate_path),
+            "phase_3_estimate_writeback_sha256": _digest(estimate_path.read_bytes()),
+            "phase_history": source_manifest["phase_history"]
+            + [case["replacement_manifest"]["phase_history"][-1]],
+        }
+    )
+    return _write_runtime_request(
+        case["request_path"].with_name(f"phase3-{name}.json"),
+        "phase3-bind",
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        replacement,
+        case["replacement_index"],
+        None,
+        artifacts,
+    )
+
+
+def _commit_fixture_repo(repo_root: Path, message: str) -> str:
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "-c",
+            "user.name=Session Test",
+            "-c",
+            "user.email=session-test@example.com",
+            "commit",
+            "-q",
+            "-m",
+            message,
+        ],
+        check=True,
+    )
+    return subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
 
 
 def _production_runtime_manifest(planning_root: Path) -> tuple[Path, dict[str, Any]]:
@@ -3285,6 +3411,205 @@ def test_phase3_bind_rejects_malformed_history_append(
     _resign_runtime_request(case["request_path"], request)
 
     assert MIGRATION.main([case["operation"], "--request", str(case["request_path"])]) == 2
+
+
+def test_phase3_bind_accepts_historical_producer_identities_after_live_file_drift(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    drifted = {
+        role: path.read_bytes() + f"# live drift for {role}\n".encode()
+        for role, path in case["artifacts"].items()
+        if role in {"resolved-ticket-operator", "resolved-ticket-contract"}
+    }
+    for role, payload in drifted.items():
+        case["artifacts"][role].write_bytes(payload)
+    request_path = _rewrite_phase3_request(case, "live-producer-drift")
+
+    MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+    assert json.loads(case["manifest_path"].read_text())[
+        "phase_3_estimate_writeback_ref"
+    ] == str(case["artifacts"]["phase-3-estimate-writeback"])
+    assert all(
+        case["artifacts"][role].read_bytes() == payload
+        for role, payload in drifted.items()
+    )
+
+
+@pytest.mark.parametrize(
+    "role", ["resolved-ticket-operator", "resolved-ticket-contract"]
+)
+def test_phase3_bind_rejects_wrong_historical_producer_hash(
+    role: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    request_path = _rewrite_phase3_request(
+        case,
+        f"wrong-{role}-hash",
+        producer_role=role,
+        producer_digest="0" * 64,
+    )
+
+    with pytest.raises(InputError, match=rf"{role} historical blob digest mismatch"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+def test_phase3_bind_rejects_uncommitted_only_producer_path(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    untracked_operator = case["repo_root"] / "agents" / "untracked-operator.md"
+    untracked_operator.write_text("# untracked operator\n")
+    request_path = _rewrite_phase3_request(
+        case,
+        "untracked-operator",
+        producer_role="resolved-ticket-operator",
+        producer_path=untracked_operator,
+    )
+
+    with pytest.raises(InputError, match="historical path is missing or ambiguous"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+def test_phase3_bind_rejects_valid_but_wrong_historical_commit(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    operator_path = case["artifacts"]["resolved-ticket-operator"]
+    operator_path.write_text("# operator from the wrong commit\n")
+    subprocess.run(
+        ["git", "-C", str(case["repo_root"]), "add", "--", "agents/linear-operator.md"],
+        check=True,
+    )
+    wrong_commit = _commit_fixture_repo(case["repo_root"], "wrong producer commit")
+    request_path = _rewrite_phase3_request(
+        case, "wrong-commit", branch_out_sha=wrong_commit
+    )
+
+    with pytest.raises(InputError, match="historical blob digest mismatch"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+@pytest.mark.parametrize("ref_kind", ["unknown", "blob"])
+def test_phase3_bind_rejects_unknown_or_noncommit_branch_out(
+    ref_kind: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    if ref_kind == "unknown":
+        branch_out_sha = "f" * 40
+    else:
+        branch_out_sha = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(case["repo_root"]),
+                "rev-parse",
+                "HEAD:agents/linear-operator.md",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+    request_path = _rewrite_phase3_request(
+        case, f"{ref_kind}-branch-out", branch_out_sha=branch_out_sha
+    )
+
+    with pytest.raises(ApplyError, match="trusted evidence capture failed"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+@pytest.mark.parametrize("invalid_input", ["non-repository", "path-escape"])
+def test_phase3_bind_rejects_nonrepository_and_escaped_producer_paths(
+    invalid_input: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    if invalid_input == "non-repository":
+        non_repository = tmp_path / "not-a-repository"
+        non_repository.mkdir()
+        request_path = _rewrite_phase3_request(
+            case, invalid_input, repo_root=non_repository
+        )
+        expected_error = ApplyError
+        expected_message = "trusted evidence capture failed"
+    else:
+        escaped_path = tmp_path / "escaped-operator.md"
+        escaped_path.write_text("# escaped operator\n")
+        request_path = _rewrite_phase3_request(
+            case,
+            invalid_input,
+            producer_role="resolved-ticket-operator",
+            producer_path=escaped_path,
+        )
+        expected_error = InputError
+        expected_message = "outside the declared repository"
+
+    with pytest.raises(expected_error, match=expected_message):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+@pytest.mark.parametrize("object_form", ["symlink", "gitlink"])
+def test_phase3_bind_rejects_unsupported_historical_git_object_form(
+    object_form: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    repo_root = case["repo_root"]
+    operator_path = case["artifacts"]["resolved-ticket-operator"]
+    if object_form == "symlink":
+        operator_path.unlink()
+        operator_path.symlink_to("producer-target.md")
+        subprocess.run(
+            ["git", "-C", str(repo_root), "add", "--", "agents/linear-operator.md"],
+            check=True,
+        )
+    else:
+        target_commit = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                f"160000,{target_commit},agents/linear-operator.md",
+            ],
+            check=True,
+        )
+    unsupported_commit = _commit_fixture_repo(
+        repo_root, f"unsupported {object_form} producer identity"
+    )
+    if operator_path.is_symlink():
+        operator_path.unlink()
+        operator_path.write_text("# current regular operator\n")
+    request_path = _rewrite_phase3_request(
+        case, f"unsupported-{object_form}", branch_out_sha=unsupported_commit
+    )
+
+    with pytest.raises(InputError, match="historical object is not a regular blob"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+def test_phase3_bind_rejects_manifest_estimate_producer_disagreement(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    source_manifest["resolved_operator_sha256"] = "0" * 64
+    _write_json(case["manifest_path"], source_manifest)
+    request_path = _rewrite_phase3_request(case, "manifest-estimate-disagreement")
+
+    with pytest.raises(InputError, match="does not match manifest resolved_operator_sha256"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
+@pytest.mark.parametrize("role", ["phase-0-ticket-snapshot", "phase-3-proposal"])
+def test_phase3_bind_keeps_current_source_validation_strict(role: str, tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    current_source = case["artifacts"][role]
+    current_source.write_bytes(current_source.read_bytes() + b"stale\n")
+
+    with pytest.raises(ApplyError, match="stale runtime artifact source identity"):
+        MIGRATION.apply_runtime_request(case["request_path"], "phase3-bind")
 
 
 def test_pre_pr_bind_rejects_stale_artifact_identity(tmp_path: Path):
