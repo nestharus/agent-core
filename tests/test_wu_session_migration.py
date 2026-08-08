@@ -509,6 +509,9 @@ def _runtime_manifest(planning_root: Path) -> tuple[Path, dict[str, Any]]:
         "planning_dir": str(manifest_path.parent),
         "scratch_dir": str(manifest_path.parent / ".scratch"),
         "session_manifest_path": str(manifest_path),
+        "cold_start_disposition_ref": None,
+        "phase_3_estimate_writeback_ref": None,
+        "phase_3_estimate_writeback_sha256": None,
         "phase_history": [],
         "draft_pr_url": None,
         "draft_pr_number": None,
@@ -541,7 +544,25 @@ def _write_runtime_request(
     replacement_manifest: dict[str, Any],
     replacement_index: dict[str, Any],
     row_identity: dict[str, Any] | None,
+    artifacts: dict[str, Path] | None = None,
 ) -> Path:
+    sources: dict[str, Any] = {
+        "manifest": MIGRATION.runtime_source_identity(manifest_path),
+        "index": MIGRATION.runtime_source_identity(index_path),
+    }
+    if operation in MIGRATION.PRE_PR_BIND_OPERATIONS:
+        sources["artifacts"] = [
+            {
+                "role": role,
+                "path": str(path),
+                **{
+                    key: value
+                    for key, value in MIGRATION.runtime_source_identity(path).items()
+                    if key != "exists"
+                },
+            }
+            for role, path in sorted((artifacts or {}).items())
+        ]
     request = {
         "schema": MIGRATION.RUNTIME_REQUEST_SCHEMA,
         "operation": operation,
@@ -549,10 +570,7 @@ def _write_runtime_request(
         "manifest_path": str(manifest_path),
         "index_path": str(index_path),
         "row_identity": row_identity,
-        "sources": {
-            "manifest": MIGRATION.runtime_source_identity(manifest_path),
-            "index": MIGRATION.runtime_source_identity(index_path),
-        },
+        "sources": sources,
         "replacement_manifest": replacement_manifest,
         "replacement_index": replacement_index,
         "input_set_sha256": "",
@@ -568,7 +586,96 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
     planning_root.mkdir(parents=True)
     manifest_path, initial_manifest = _runtime_manifest(planning_root)
     active_path = planning_root / "sessions.active-wake.json"
-    operations = ["phase0-init", "phase7-upsert", "phase9-update", "resumer-update", "resumer-close"]
+    scratch_dir = Path(initial_manifest["scratch_dir"])
+    scratch_dir.mkdir(parents=True)
+    repo_root = Path(initial_manifest["repo_root"])
+    repo_root.mkdir(parents=True)
+    ticket_snapshot = scratch_dir / "ticket.md"
+    ticket_snapshot.write_text("# AGE-260\n")
+    operator_path = repo_root / "agents" / "linear-operator.md"
+    operator_path.parent.mkdir(parents=True)
+    operator_path.write_text("# linear operator\n")
+    contract_path = repo_root / "contracts" / "linear-operator.yaml"
+    contract_path.parent.mkdir(parents=True)
+    contract_path.write_text("source: linear-operator\n")
+    proposal_path = manifest_path.parent / "proposals" / "age-260-AGE-260.md"
+    proposal_path.parent.mkdir(parents=True)
+    proposal_path.write_text("# Proposal\n")
+    cold_start_path = scratch_dir / "questions" / "cold-start.answer.json"
+    _write_json(
+        cold_start_path,
+        {
+            "schema": "agent-question-answer-v1",
+            "question_id": "age-260-cold-start",
+            "owner": "user",
+            "selected_option": "Proceed without a baseline estimate",
+        },
+    )
+    verification_path = scratch_dir / "ticket-operations" / "estimate-readback.json"
+    _write_json(verification_path, {"status": "PASS", "estimate": 8})
+    initial_manifest.update(
+        {
+            "phase_0_ticket_snapshot_path": str(ticket_snapshot),
+            "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+            "resolved_operator_path": str(operator_path),
+            "resolved_operator_sha256": _digest(operator_path.read_bytes()),
+            "resolved_operator_contract_path": str(contract_path),
+            "resolved_contract_path": str(contract_path),
+            "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+        }
+    )
+    estimate_path = (
+        manifest_path.parent / "risk" / "age-260-phase-3-estimate-writeback.json"
+    )
+    estimate = {
+        "schema_version": "phase-3-estimate-writeback-v1",
+        "ticket_id": "AGE-260",
+        "ticket_system": "linear",
+        "disposition": "write_verified",
+        "cold_start_disposition_ref": str(cold_start_path),
+        "phase_0_ticket_snapshot_path": str(ticket_snapshot),
+        "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+        "phase_3_proposal_path": str(proposal_path),
+        "phase_3_proposal_sha256": _digest(proposal_path.read_bytes()),
+        "resolved_operator_path": str(operator_path),
+        "resolved_operator_sha256": _digest(operator_path.read_bytes()),
+        "resolved_operator_contract_path": str(contract_path),
+        "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+        "update_estimate_dispatch_expected": True,
+        "update_estimate_dispatch_executed": True,
+        "write_verification_evidence": {
+            "status": "PASS",
+            "path": str(verification_path),
+            "sha256": _digest(verification_path.read_bytes()),
+        },
+        "currentness": {
+            "cold_start_disposition_sha256": _digest(cold_start_path.read_bytes()),
+            "phase_0_ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
+            "phase_3_proposal_sha256": _digest(proposal_path.read_bytes()),
+            "resolved_operator_sha256": _digest(operator_path.read_bytes()),
+            "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+            "write_verification_sha256": _digest(verification_path.read_bytes()),
+        },
+    }
+    _write_json(estimate_path, estimate)
+    phase3_artifacts = {
+        "cold-start-disposition": cold_start_path,
+        "phase-0-ticket-snapshot": ticket_snapshot,
+        "phase-3-estimate-writeback": estimate_path,
+        "phase-3-proposal": proposal_path,
+        "resolved-ticket-contract": contract_path,
+        "resolved-ticket-operator": operator_path,
+        "write-verification-evidence": verification_path,
+    }
+    operations = [
+        "phase0-init",
+        "cold-start-disposition-bind",
+        "phase3-bind",
+        "phase7-upsert",
+        "phase9-update",
+        "resumer-update",
+        "resumer-close",
+    ]
 
     for operation in operations:
         if operation == "phase0-init":
@@ -576,18 +683,44 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
             replacement_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": []}
             index_path = active_path
             identity = None
+            artifacts = None
         else:
             current_manifest = json.loads(manifest_path.read_text())
             replacement_manifest = copy.deepcopy(current_manifest)
             index_path = active_path
-            if operation == "phase7-upsert":
+            if operation == "cold-start-disposition-bind":
+                replacement_manifest["cold_start_disposition_ref"] = str(cold_start_path)
+                replacement_index = json.loads(active_path.read_text())
+                identity = None
+                artifacts = {"cold-start-disposition": cold_start_path}
+            elif operation == "phase3-bind":
+                replacement_manifest.update(
+                    {
+                        "phase_3_estimate_writeback_ref": str(estimate_path),
+                        "phase_3_estimate_writeback_sha256": _digest(
+                            estimate_path.read_bytes()
+                        ),
+                        "phase_history": [
+                            {
+                                "phase": "3",
+                                "status": "complete",
+                                "ts": "2026-07-19T00:00:00Z",
+                            }
+                        ],
+                    }
+                )
+                replacement_index = json.loads(active_path.read_text())
+                identity = None
+                artifacts = phase3_artifacts
+            elif operation == "phase7-upsert":
                 replacement_manifest.update(
                     {
                         "draft_pr_url": "https://github.com/example/repo/pull/260",
                         "draft_pr_number": 260,
                         "draft_pr_head_sha": B,
                         "pr_open_base_sha": C,
-                        "phase_history": ["phase7"],
+                        "phase_history": replacement_manifest["phase_history"]
+                        + [{"phase": "7", "status": "complete", "ts": "2026-07-19T00:10:00Z"}],
                     }
                 )
             elif operation == "phase9-update":
@@ -597,7 +730,8 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
                         "phase_8_reviewed_base_sha": C,
                         "phase_8_reviewed_head_sha": B,
                         "phase_9_currentness_result": "PASS",
-                        "phase_history": ["phase7", "phase9"],
+                        "phase_history": replacement_manifest["phase_history"]
+                        + [{"phase": "9", "status": "complete", "ts": "2026-07-19T00:20:00Z"}],
                     }
                 )
             elif operation == "resumer-update":
@@ -606,7 +740,8 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
                         "pre_merge_base_sha": C,
                         "merge_sha": E,
                         "merged_at": "2026-07-19T00:00:00Z",
-                        "phase_history": ["phase7", "phase9", "wake"],
+                        "phase_history": replacement_manifest["phase_history"]
+                        + [{"phase": "wake", "status": "complete", "ts": "2026-07-19T00:30:00Z"}],
                     }
                 )
             else:
@@ -614,19 +749,25 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
                     {
                         "closed_at": "2026-07-19T01:00:00Z",
                         "post_merge": {"tests": "PASS"},
-                        "phase_history": ["phase7", "phase9", "wake", "closed"],
+                        "phase_history": replacement_manifest["phase_history"]
+                        + [{"phase": "closed", "status": "complete", "ts": "2026-07-19T01:00:00Z"}],
                     }
                 )
-            row = _active_row(replacement_manifest, manifest_path)
-            identity = _row_identity(row)
-            if operation == "phase7-upsert":
-                replacement_index = {"schema": MIGRATION.ACTIVE_INDEX_SCHEMA, "sessions": [row]}
-            else:
-                replacement_index = json.loads(active_path.read_text())
-                if operation == "resumer-close":
-                    replacement_index["sessions"] = []
+            if operation not in MIGRATION.PRE_PR_BIND_OPERATIONS:
+                artifacts = None
+                row = _active_row(replacement_manifest, manifest_path)
+                identity = _row_identity(row)
+                if operation == "phase7-upsert":
+                    replacement_index = {
+                        "schema": MIGRATION.ACTIVE_INDEX_SCHEMA,
+                        "sessions": [row],
+                    }
                 else:
-                    replacement_index["sessions"] = [row]
+                    replacement_index = json.loads(active_path.read_text())
+                    if operation == "resumer-close":
+                        replacement_index["sessions"] = []
+                    else:
+                        replacement_index["sessions"] = [row]
         request_path = _write_runtime_request(
             tmp_path / "requests" / f"{operation}.json",
             operation,
@@ -636,6 +777,7 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
             replacement_manifest,
             replacement_index,
             identity,
+            artifacts,
         )
         if operation == target_operation:
             return {
@@ -646,6 +788,7 @@ def _runtime_case(tmp_path: Path, target_operation: str) -> dict[str, Any]:
                 "index_path": index_path,
                 "replacement_manifest": replacement_manifest,
                 "replacement_index": replacement_index,
+                "artifacts": artifacts,
             }
         MIGRATION.apply_runtime_request(request_path, operation)
     raise AssertionError(target_operation)
@@ -1386,72 +1529,71 @@ def test_capture_evidence_rejects_malformed_git_oid_before_invocation(
 def test_phase3_bind_updates_only_phase3_bindings_and_preserves_active_index_bytes(
     tmp_path: Path,
 ):
-    operation = "phase3-bind"
-    planning_root = tmp_path / "project" / "planning"
-    planning_root.mkdir(parents=True)
-    manifest_path, source_manifest = _runtime_manifest(planning_root)
-    source_manifest.update(
-        {
-            "cold_start_disposition_ref": None,
-            "phase_3_estimate_writeback_ref": None,
-            "phase_3_estimate_writeback_sha256": None,
-            "unrelated_phase_state": {"preserve": ["all", "manifest", "data"]},
-        }
-    )
-    _write_json(manifest_path, source_manifest)
-    index_path = planning_root / "sessions.active-wake.json"
-    original_index_bytes = (
-        b'{\n  "sessions": [],\n  "schema": "wu-sessions-active-wake-v1"\n}\n'
-    )
-    index_path.write_bytes(original_index_bytes)
-
-    replacement_manifest = copy.deepcopy(source_manifest)
-    replacement_manifest.update(
-        {
-            "cold_start_disposition_ref": str(
-                manifest_path.parent / ".scratch" / "questions" / "phase-3-answer.json"
-            ),
-            "phase_3_estimate_writeback_ref": str(
-                manifest_path.parent / "risk" / "phase-3-estimate-writeback.json"
-            ),
-            "phase_3_estimate_writeback_sha256": "d" * 64,
-            "phase_history": ["phase3"],
-        }
-    )
-    request_path = _write_runtime_request(
-        tmp_path / "requests" / f"{operation}.json",
-        operation,
-        planning_root,
-        manifest_path,
-        index_path,
-        replacement_manifest,
-        json.loads(original_index_bytes),
-        _row_identity(_active_row(replacement_manifest, manifest_path)),
-    )
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    original_index_bytes = case["index_path"].read_bytes()
+    original_index_stat = case["index_path"].stat()
 
     result = subprocess.run(
-        [sys.executable, str(TOOL_DIR), operation, "--request", str(request_path)],
+        [
+            sys.executable,
+            str(TOOL_DIR),
+            "phase3-bind",
+            "--request",
+            str(case["request_path"]),
+        ],
         env=os.environ.copy(),
         text=True,
         capture_output=True,
     )
 
     assert result.returncode == 0, result.stderr
-    updated_manifest = json.loads(manifest_path.read_text())
+    updated_manifest = json.loads(case["manifest_path"].read_text())
     changed_fields = {
         key
         for key in set(source_manifest) | set(updated_manifest)
         if source_manifest.get(key) != updated_manifest.get(key)
     }
     assert changed_fields == {
-        "cold_start_disposition_ref",
         "phase_3_estimate_writeback_ref",
         "phase_3_estimate_writeback_sha256",
         "phase_history",
     }
-    assert updated_manifest == replacement_manifest
-    assert updated_manifest["phase_history"] == ["phase3"]
-    assert index_path.read_bytes() == original_index_bytes
+    assert updated_manifest == case["replacement_manifest"]
+    assert updated_manifest["cold_start_disposition_ref"] == source_manifest[
+        "cold_start_disposition_ref"
+    ]
+    assert updated_manifest["phase_history"] == source_manifest["phase_history"] + [
+        {"phase": "3", "status": "complete", "ts": "2026-07-19T00:00:00Z"}
+    ]
+    assert case["index_path"].read_bytes() == original_index_bytes
+    updated_index_stat = case["index_path"].stat()
+    assert (updated_index_stat.st_dev, updated_index_stat.st_ino, updated_index_stat.st_mode) == (
+        original_index_stat.st_dev,
+        original_index_stat.st_ino,
+        original_index_stat.st_mode,
+    )
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_cold_start_disposition_bind_updates_only_disposition_ref(tmp_path: Path):
+    case = _runtime_case(tmp_path, "cold-start-disposition-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    original_index = case["index_path"].read_bytes()
+
+    MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+    updated = json.loads(case["manifest_path"].read_text())
+    changed = {
+        key
+        for key in set(source_manifest) | set(updated)
+        if source_manifest.get(key) != updated.get(key)
+    }
+    assert changed == {"cold_start_disposition_ref"}
+    assert updated["phase_3_estimate_writeback_ref"] is None
+    assert updated["phase_3_estimate_writeback_sha256"] is None
+    assert updated["phase_history"] == source_manifest["phase_history"]
+    assert case["index_path"].read_bytes() == original_index
 
 
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
@@ -1512,8 +1654,9 @@ def test_runtime_writer_operations_recover_subprocess_interruption(operation: st
         case["replacement_manifest"],
         case["replacement_index"],
         None
-        if operation == "phase0-init"
+        if operation == "phase0-init" or operation in MIGRATION.PRE_PR_BIND_OPERATIONS
         else _row_identity(_active_row(case["replacement_manifest"], case["manifest_path"])),
+        case.get("artifacts"),
     )
     completed = subprocess.run(
         [sys.executable, str(TOOL_DIR), operation, "--request", str(refreshed)],
@@ -1907,6 +2050,324 @@ def test_phase7_upsert_rejects_any_existing_join_collision(
     )
 
     assert MIGRATION.main([case["operation"], "--request", str(request_path)]) == 2
+
+
+def _resign_runtime_request(path: Path, request: dict[str, Any]) -> None:
+    request["input_set_sha256"], request["payload_sha256"] = (
+        MIGRATION.runtime_request_digests(request)
+    )
+    _write_json(path, request)
+
+
+@pytest.mark.parametrize(
+    ("operation", "mutation"),
+    [
+        ("cold-start-disposition-bind", "history"),
+        ("cold-start-disposition-bind", "index"),
+        ("cold-start-disposition-bind", "row-identity"),
+        ("phase3-bind", "cold-start"),
+        ("phase3-bind", "index"),
+        ("phase3-bind", "row-identity"),
+    ],
+)
+def test_pre_pr_bind_operations_reject_mixed_fields_index_changes_and_row_identity(
+    operation: str, mutation: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation)
+    request = json.loads(case["request_path"].read_text())
+    if mutation == "history":
+        request["replacement_manifest"]["phase_history"] = [
+            {"phase": "2.5", "status": "complete", "ts": "2026-07-18T00:00:00Z"}
+        ]
+    elif mutation == "cold-start":
+        request["replacement_manifest"]["cold_start_disposition_ref"] = None
+    elif mutation == "index":
+        request["replacement_index"]["reviewed_inventory_sha256"] = "f" * 64
+    else:
+        request["row_identity"] = {
+            "ticket_id": "AGE-260",
+            "branch": "age-260-runtime",
+            "draft_pr_url": "https://github.com/example/repo/pull/260",
+            "session_manifest_path": str(case["manifest_path"]),
+        }
+    _resign_runtime_request(case["request_path"], request)
+    before_manifest = case["manifest_path"].read_bytes()
+    before_index = case["index_path"].read_bytes()
+
+    assert MIGRATION.main([operation, "--request", str(case["request_path"])]) == 2
+    assert case["manifest_path"].read_bytes() == before_manifest
+    assert case["index_path"].read_bytes() == before_index
+
+
+@pytest.mark.parametrize(
+    "operation", ["cold-start-disposition-bind", "phase3-bind"]
+)
+def test_pre_pr_bind_operations_refuse_semantic_replay(
+    operation: str, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation)
+    MIGRATION.apply_runtime_request(case["request_path"], operation)
+    replay = _write_runtime_request(
+        tmp_path / "requests" / f"{operation}-replay.json",
+        operation,
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        case["replacement_index"],
+        None,
+        case["artifacts"],
+    )
+
+    assert MIGRATION.main([operation, "--request", str(replay)]) == 2
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_roles"),
+    [
+        (
+            "cold-start-disposition-bind",
+            ["active-index", "cold-start-disposition"],
+        ),
+        (
+            "phase3-bind",
+            [
+                "active-index",
+                "cold-start-disposition",
+                "phase-0-ticket-snapshot",
+                "phase-3-estimate-writeback",
+                "phase-3-proposal",
+                "resolved-ticket-contract",
+                "resolved-ticket-operator",
+                "write-verification-evidence",
+            ],
+        ),
+    ],
+)
+def test_pre_pr_bind_operations_journal_one_target_and_read_only_guards(
+    operation: str, expected_roles: list[str], tmp_path: Path
+):
+    case = _runtime_case(tmp_path, operation)
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "journal-transition:0"
+    command = [
+        sys.executable,
+        str(TOOL_DIR),
+        operation,
+        "--request",
+        str(case["request_path"]),
+    ]
+
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    assert [target["path"] for target in journal["ordered_targets"]] == [
+        str(case["manifest_path"])
+    ]
+    assert [guard["role"] for guard in journal["read_only_guards"]] == expected_roles
+    assert str(case["index_path"]) not in {
+        target["path"] for target in journal["ordered_targets"]
+    }
+    MIGRATION.recover_incomplete_transaction()
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_pre_pr_bind_guard_race_rolls_back_manifest_without_rewriting_index(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    manifest_before = case["manifest_path"].read_bytes()
+    raced_index = b'{"schema":"wu-sessions-active-wake-v1","sessions":[]}\n'
+
+    def mutate_index(point: str, index: int) -> None:
+        if (point, index) == ("after-replace-before-guard-check", 0):
+            case["index_path"].write_bytes(raced_index)
+
+    setattr(MIGRATION, "FAULT_HOOK", mutate_index)
+    with pytest.raises(ApplyError):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    setattr(MIGRATION, "FAULT_HOOK", None)
+
+    assert case["manifest_path"].read_bytes() == manifest_before
+    assert case["index_path"].read_bytes() == raced_index
+    assert not MIGRATION._journal_path().exists()
+
+
+def test_phase3_bind_accepts_policy_disabled_no_write(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate = json.loads(estimate_path.read_text())
+    estimate.update(
+        {
+            "disposition": "no_write_policy_disabled",
+            "estimate_mutation_policy": {"value": False},
+            "update_estimate_dispatch_expected": False,
+            "update_estimate_dispatch_executed": False,
+            "update_estimate_prompt_path": None,
+            "update_estimate_prompt_sha256": None,
+            "update_estimate_log_path": None,
+            "update_estimate_log_sha256": None,
+            "update_estimate_invocation_uuid": None,
+            "write_verification_evidence": None,
+        }
+    )
+    estimate["currentness"].pop("write_verification_sha256")
+    _write_json(estimate_path, estimate)
+    artifacts = dict(case["artifacts"])
+    artifacts.pop("write-verification-evidence")
+    replacement = copy.deepcopy(case["replacement_manifest"])
+    replacement["phase_3_estimate_writeback_sha256"] = _digest(
+        estimate_path.read_bytes()
+    )
+    request_path = _write_runtime_request(
+        tmp_path / "requests" / "phase3-no-write.json",
+        "phase3-bind",
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        replacement,
+        case["replacement_index"],
+        None,
+        artifacts,
+    )
+
+    MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+    assert json.loads(case["manifest_path"].read_text()) == replacement
+
+
+def test_phase3_bind_accepts_trusted_estimate_with_null_cold_start(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source = json.loads(case["manifest_path"].read_text())
+    source["cold_start_disposition_ref"] = None
+    _write_json(case["manifest_path"], source)
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate = json.loads(estimate_path.read_text())
+    estimate["cold_start_disposition_ref"] = None
+    estimate["currentness"].pop("cold_start_disposition_sha256")
+    _write_json(estimate_path, estimate)
+    artifacts = dict(case["artifacts"])
+    artifacts.pop("cold-start-disposition")
+    replacement = copy.deepcopy(case["replacement_manifest"])
+    replacement["cold_start_disposition_ref"] = None
+    replacement["phase_3_estimate_writeback_sha256"] = _digest(
+        estimate_path.read_bytes()
+    )
+    request_path = _write_runtime_request(
+        tmp_path / "requests" / "phase3-trusted-estimate.json",
+        "phase3-bind",
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        replacement,
+        case["replacement_index"],
+        None,
+        artifacts,
+    )
+
+    MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+    assert json.loads(case["manifest_path"].read_text()) == replacement
+
+
+@pytest.mark.parametrize("confirmed", [True, False])
+def test_cold_start_bind_validates_agent_answer_confirmation(
+    confirmed: bool, tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "cold-start-disposition-bind")
+    answer_path = case["artifacts"]["cold-start-disposition"]
+    _write_json(
+        answer_path,
+        {
+            "schema_version": 1,
+            "kind": "agent_answer",
+            "answer": {"confirmed": confirmed, "selected_option_ids": ["A"]},
+        },
+    )
+    request_path = _write_runtime_request(
+        tmp_path / "requests" / f"cold-start-confirmed-{confirmed}.json",
+        case["operation"],
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        case["replacement_manifest"],
+        case["replacement_index"],
+        None,
+        case["artifacts"],
+    )
+
+    result = MIGRATION.main([case["operation"], "--request", str(request_path)])
+
+    assert result == (0 if confirmed else 2)
+
+
+@pytest.mark.parametrize(
+    "history",
+    [
+        [{"phase": "3", "status": "complete", "ts": "2026-07-19T00:00:00+00:00"}],
+        [{"phase": "3", "status": "complete", "ts": "2026-07-19T00:00:00Z", "extra": True}],
+        ["phase3"],
+    ],
+)
+def test_phase3_bind_rejects_malformed_history_append(
+    history: list[Any], tmp_path: Path
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    request = json.loads(case["request_path"].read_text())
+    request["replacement_manifest"]["phase_history"] = history
+    _resign_runtime_request(case["request_path"], request)
+
+    assert MIGRATION.main([case["operation"], "--request", str(case["request_path"])]) == 2
+
+
+def test_pre_pr_bind_rejects_stale_artifact_identity(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate_path.write_bytes(estimate_path.read_bytes() + b" ")
+
+    assert MIGRATION.main(
+        [case["operation"], "--request", str(case["request_path"])]
+    ) == 3
+
+
+def test_pre_pr_bind_recovery_rejects_substituted_guard_projection(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    env = os.environ.copy()
+    env["WU_SESSION_MIGRATION_INTERRUPT"] = "journal-transition:0"
+    command = [
+        sys.executable,
+        str(TOOL_DIR),
+        case["operation"],
+        "--request",
+        str(case["request_path"]),
+    ]
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 97
+    journal = json.loads(MIGRATION._journal_path().read_text())
+    journal["read_only_guards"][0]["source_sha256"] = "0" * 64
+    _write_json(MIGRATION._journal_path(), journal)
+
+    with pytest.raises(ApplyError, match="guard projection mismatch"):
+        MIGRATION.recover_incomplete_transaction()
+    assert MIGRATION._journal_path().exists()
+
+
+def test_lifecycle_tool_readmes_and_operator_contract_name_both_pre_pr_operations():
+    root = Path(__file__).resolve().parents[1]
+    paths = [
+        root / "agents" / "implementation-pipeline-orchestrator.md",
+        root / "contracts" / "operators" / "implementation-pipeline-orchestrator.yaml",
+        root / "workflows" / "implementation-pipeline.md",
+        root / "conventions" / "wu-session-lifecycle.md",
+        root / "tools" / "wu-session-migration" / "README.md",
+        root / "tools" / "README.md",
+    ]
+    contents = [path.read_text() for path in paths]
+
+    assert all("cold-start-disposition-bind" in content for content in contents)
+    assert all("phase3-bind" in content for content in contents)
+    assert "before the separate terrain/risk/defer gate" in contents[0]
+    assert "before Phase 4" in contents[0]
+    assert "row_identity=null" in contents[3]
+    assert "read-only guard" in contents[4]
 
 
 def test_malformed_committed_recovery_journal_is_concise_and_retained(tmp_path: Path):
