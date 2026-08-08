@@ -1633,6 +1633,40 @@ def test_validate_pre_pr_readback_machine_validates_phase3_pass(tmp_path: Path):
     assert "WU-SESSION-PRE-PR-READBACK: PASS" in result.stdout
 
 
+def test_validate_pre_pr_readback_recovers_committed_transaction(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+
+    def fail(point: str, index: int) -> None:
+        if (point, index) == ("cleanup-unlink", 0):
+            raise OSError("cleanup fault")
+
+    setattr(MIGRATION, "FAULT_HOOK", fail)
+    with pytest.raises(ApplyError, match="recovery remains pending"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    setattr(MIGRATION, "FAULT_HOOK", None)
+    assert MIGRATION._journal_path().exists()
+
+    readback_path = tmp_path / "phase3-bind.readback.json"
+    _write_json(readback_path, _pre_pr_readback(case, source_manifest))
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(TOOL_DIR),
+            "validate-pre-pr-readback",
+            "--readback",
+            str(readback_path),
+        ],
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "WU-SESSION-PRE-PR-READBACK: PASS" in result.stdout
+    assert not MIGRATION._journal_path().exists()
+
+
 def test_validate_pre_pr_readback_rejects_self_asserted_pass(tmp_path: Path):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())

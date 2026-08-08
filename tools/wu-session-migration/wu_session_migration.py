@@ -224,11 +224,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(list(argv) if argv is not None else None)
     try:
         with _cutover_lock():
+            recover_incomplete_transaction()
             if args.command == "validate-pre-pr-readback":
                 validate_pre_pr_readback(args.readback)
                 print(f"WU-SESSION-PRE-PR-READBACK: PASS; evidence={args.readback}")
                 return 0
-            recover_incomplete_transaction()
             if args.command == "dry-run":
                 plan = build_plan(
                     args.inventory,
