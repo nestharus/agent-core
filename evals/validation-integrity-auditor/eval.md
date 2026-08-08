@@ -67,6 +67,8 @@ Validation-integrity findings also carry:
 - `worktree_path`
 - optional `decisions_path`
 - optional `runtime_artifact_evidence_path`
+- `runtime_evidence_ref` equal to `runtime_artifact_evidence_path` when evidence is supplied
+- `runtime_evidence_hash` equal to the SHA-256 of the materialized evidence file when evidence is supplied
 - optional `wu_id`
 
 Missing required inputs must produce `BLOCKED:<reason>`. Missing optional evidence that is needed for ratification keeps the original non-LOW verdict.
@@ -219,8 +221,10 @@ diff:
 decisions snippet:
   ### ACR-254-demo - Validation-surface weakening ratification
   Ratifies the schema relaxation for legacy alias compatibility and cites this diff hunk.
-runtime artifact evidence:
-  /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_evidence_ref: /tmp/acr-254/evidence/container-api-legacy-payload.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   content: built API image handles legacy payload through production request path
   provenance: runner execution record run-legacy-payload-42 binds the expected HTTP response before command start
 ```
@@ -261,8 +265,10 @@ runtime_claim: "The service image starts with the required native dependency."
 diff:
   - behavior check: native dependency is imported during image startup
   + behavior check: startup path uses stub dependency when missing
-runtime artifact evidence:
-  /tmp/acr-254/evidence/service-container-start.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/service-container-start.log
+runtime_evidence_ref: /tmp/acr-254/evidence/service-container-start.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   content: container starts successfully
 decisions_path: absent
 ```
@@ -305,6 +311,8 @@ diff:
   unchanged behavior: built updater image startup still validates dependency availability
 decisions_path: absent
 runtime_artifact_evidence_path: /tmp/acr-254/evidence/updater-container-start.log
+runtime_evidence_ref: /tmp/acr-254/evidence/updater-container-start.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
 ```
 
 Expected operator verdict: `LOW`.
@@ -342,8 +350,10 @@ runtime_claim: "The worker container processes one production-path queue message
 diff:
   + validation note: unit proxy check covers formatting only
   + runtime validation note: built worker image consumed message from queue emulator via production command
-runtime artifact evidence:
-  /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_evidence_ref: /tmp/acr-254/evidence/worker-container-queue-run.log
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   provenance: runner execution record run-worker-queue-17 binds the expected consumed-message observation before command start
 decisions_path: absent
 ```
@@ -363,8 +373,10 @@ mode: pr-diff
 runtime_claim: "The worker container processes one production-path queue message."
 diff:
   + validation note: unit proxy check reports queue formatting success
-runtime artifact evidence:
-  /tmp/acr-254/evidence/worker-runtime-report.md
+runtime_artifact_evidence_path: /tmp/acr-254/evidence/worker-runtime-report.md
+runtime_evidence_ref: /tmp/acr-254/evidence/worker-runtime-report.md
+runtime_evidence_hash: <SHA-256 of the materialized evidence file>
+runtime artifact evidence content:
   content: command, target, expected result, observed result, status, output, and claimed provenance are all stated in prose
   producer record: absent
   pre-execution expected-result binding: absent
