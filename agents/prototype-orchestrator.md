@@ -205,7 +205,7 @@ The work happens here. Your job is to dispatch, supervise loosely, and arbitrate
    - Names which evidence files to write under `${planning_dir}/dossier/evidence/` for any non-trivial finding.
    - Permits the agent to dispatch sub-agents (research, code-tracer, test-writer for prototype behavior tests).
 3. **Resolve each vector's execution path.** For branch-work or tracked-file mutation vectors, create or use one dedicated vector worktree and set `${vector_worktree_path}` to that path. For read-only vectors, `${vector_worktree_path}` may point at shared read-state context.
-4. **Dispatch hack-agents in parallel.** `agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. Background-execute. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from.
+4. **Dispatch hack-agents in parallel.** Dispatch each vector as its own parent-visible Bash invocation in background-execution mode: `agents -m gpt-high -p ${vector_worktree_path} -f ${prompt} 2>&1 | tee ${scratch_dir}/logs/${prototype_id}-p1-${vector_name}.log`. For multi-vector prototypes, dispatch all vectors concurrently — this is where prototype speed comes from. Do not use shell backgrounding or bundle multiple dispatches into one invocation. Collect each result after its Bash completion notification, and require every vector whose output will be consumed to complete successfully before merging its work or entering P2.
 5. **Worktree isolation**: Each prototype vector that performs branch work or tracked-file mutation gets its own worktree per `~/ai/conventions/worktree-isolation.md`; read-only vectors may share read-state context only. Merge or cherry-pick into the main prototype worktree at the start of P2.
 6. **Supervise loosely.** Read agent outputs as they land. Surface a `NEEDS_INPUT` to the root **only** when:
    - An agent reports it cannot decide between two viable paths and needs arbitration.
@@ -225,8 +225,8 @@ The prototype branch is messy at end of P1. P2 puts a known-good marker.
 2. **Compose a stabilizer-agent prompt** at `${scratch_dir}/prompts/${prototype_id}-p2-stabilize.md`. The prompt:
    - Lists what's currently broken (failing imports, missing fixtures, env vars not in `.env`, etc.).
    - Says explicitly: "fix only what prevents the answer from being demonstrated. Do not refactor. Do not improve style. Do not add tests for code unrelated to the answer. Add and execute the minimum behavior tests that directly exercise the answer; record command/action, target, expected observation, observed result, status, and output under `${planning_dir}/dossier/evidence/`."
-3. **Dispatch the stabilizer** as a single `gpt-high` agent. Background-execute.
-4. **Verify**: execute the prototype behavior tests and capture the exact command(s), named target, expected observations, observed results, status, and relevant output to `${planning_dir}/dossier/evidence/p2-stabilize-output.md`. A model report without the runner record is not sufficient.
+3. **Dispatch the stabilizer** as a single `gpt-high` agent through one parent-visible Bash invocation in background-execution mode. Do not use shell backgrounding. Wait for its Bash completion notification, retrieve the result, and require successful completion before consuming its output or continuing.
+4. **Verify only after the stabilizer completes**: execute the prototype behavior tests and capture the exact command(s), named target, expected observations, observed results, status, and relevant output to `${planning_dir}/dossier/evidence/p2-stabilize-output.md`. A model report without the runner record is not sufficient.
 5. **Snapshot**: the prototype branch is now at a commit you'd be willing to share for reproduction. Tag it locally as `prototype-${prototype_id}-p2-stable` so P3's commit reorganization has a known-good reference.
 
 ### Phase P3 — Present
