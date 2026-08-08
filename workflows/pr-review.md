@@ -30,7 +30,7 @@ Model-owned gates may block on their own evidence questions, but a human does no
 
 This phase is decomposition review plus supported-surface verification, test-coverage, and commit-organization checks. Each gate presupposes a **proposal** as the contract being enforced — the gates are not directly applicable to work without a proposal (e.g. prototypes).
 
-For prototype presentation — work that arrived at an answer without a proposal — see `~/ai/workflows/build-prototype.md` § Phase P3, which runs the **functional analogs** of these gates (proof-test audit, one-question check, answer-trace, commit-hygiene) without requiring a proposal contract. The two workflows share `commit-hygiene-operator` but are otherwise distinct: PR-review presents *implementation*, P3 presents *prototypes*.
+For prototype presentation — work that arrived at an answer without a proposal — see `~/ai/workflows/build-prototype.md` § Phase P3, which runs the **functional analogs** of these gates (prototype evidence review, one-question check, answer-trace, commit-hygiene) without requiring a proposal contract. The evidence review consumes executed behavior-test records and is not the experiment that produced them. The two workflows share `commit-hygiene-operator` but are otherwise distinct: PR-review presents *implementation*, P3 presents *prototypes*.
 
 Run on the **actual diff**, not the proposal. Proposals can look reasonable while the diff bundles too much.
 

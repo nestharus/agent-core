@@ -8,7 +8,7 @@ inputs:
 expectations:
 - uses unconstrained exploration to arrive at a concrete answer before imposing review discipline
 - stabilizes the demonstrable state and organizes findings into a prototype dossier
-- runs prototype presentation checks for proof tests, one-question coherence, answer trace, and commit hygiene
+- runs prototype presentation checks for executed behavior-test evidence, one-question coherence, answer trace, and commit hygiene
 outputs:
 - dossier with answer.md, evidence, risk-profile.md, challenges.md, spawned-tickets.md, and branch-disposition.md
 - recommended downstream tickets, roadmap revisions, or scope-cut decisions

@@ -75,7 +75,7 @@ def parse_document(path: str, loaded: dict[str, str]) -> dict[str, object]:
         "procedure_phase_blocks": parse_numbered_phase_blocks(procedure),
         "procedure_uploader_dispatch_positions": parse_token_positions(procedure, UPLOADER_DISPATCH),
         "procedure_walkthrough_positions": parse_token_positions(procedure.lower(), "walkthrough"),
-        "procedure_packager_proof_bundle_anchor": parse_packager_proof_bundle_anchor(procedure),
+        "procedure_packager_evidence_bundle_anchor": parse_packager_evidence_bundle_anchor(procedure),
         "responsibility_prose": responsibility_prose,
         "normalized_responsibility_prose": normalize_text(responsibility_prose, colon_spacing=True),
     }
@@ -231,14 +231,17 @@ def parse_token_positions(text: str, token: str) -> list[int]:
     return [match.start() for match in re.finditer(re.escape(token), text)]
 
 
-def parse_packager_proof_bundle_anchor(text: str) -> int | None:
+def parse_packager_evidence_bundle_anchor(text: str) -> int | None:
     paragraph_pattern = re.compile(r"(?ms)(?:^|\n)([^\n].*?)(?=\n\s*\n|\Z)")
     for match in paragraph_pattern.finditer(text):
         paragraph = match.group(1)
         normalized = normalize_text(paragraph)
         if PACKAGER_DISPATCH not in paragraph:
             continue
-        if "proof bundle" not in normalized and "proof_bundle_path" not in paragraph:
+        if (
+            "experiment evidence bundle" not in normalized
+            and "experiment_evidence_bundle_path" not in paragraph
+        ):
             continue
         if not any(token in normalized for token in ("assembl", "build", "create", "produce", "write")):
             continue

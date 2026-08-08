@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/prototype-orchestrator.md
 model: gpt-xhigh
-description: Orchestrate a build-prototype workflow run end-to-end (~/ai/workflows/build-prototype.md). P1 hack/explore (parallel agent dispatch, no gates), P2 stabilize, P3 present (commit hygiene + risk profile + spawned tickets retroactively), P4 hand-off (file tickets via jira-operator, update project risk profile, apply branch disposition). Used when implementation-pipeline-orchestrator defers due to unclear framing, OR when roadmap workflow needs a Layer 2/3 feasibility prototype.
+description: Orchestrate build-prototype from P1 exploration through P2 executed behavior experiments, P3 evidence review, and P4 pending production behavior-test handoff.
 inputs:
 - name: prototype_id
   type: string

@@ -6,7 +6,7 @@ inputs:
   - base
   - repo_root
   - dossier_answer_path
-  - proof_test_audit_path
+  - prototype_evidence_review_path
   - spawned_tickets_path
   - test_manifest_path
   - pending_marker_convention_path
@@ -29,13 +29,13 @@ This operator constrains that base flow to prototype-test PRs: fail-expected or 
 
 ## Use When
 
-Use this operator when a prototype has produced reviewable production-tree proof tests that are intentionally fail-expected or pending until spawned implementation tickets complete. The PR is a prototype-test PR: a commentable test contract linked to the dossier and implementation tickets, not a production-ready implementation branch. It publishes durable implementation coverage for the spawned tickets, not throwaway prototype artifacts.
+Use this operator when a prototype has produced reviewable pending production behavior-test contracts that are intentionally fail-expected until spawned implementation tickets complete. The PR is a prototype-test PR: a commentable test contract linked to the dossier and implementation tickets, not a production-ready implementation branch. It publishes durable implementation coverage for the spawned tickets, not passing production evidence.
 
 ## Do Not Use When
 
 - The PR is a production implementation PR. Use `~/ai/agents/pr-writer.md`.
-- The PR ships a validated shippable prototype proof bundle with QA screenshots, deliverables, and passing behavior evidence. Use `~/ai/agents/prototype-pr-writer.md`.
-- The caller lacks the test manifest, spawned implementation tickets, pending-marker convention, dossier answer, or proof-test audit.
+- The PR ships a validated shippable prototype experiment-evidence bundle with QA screenshots, deliverables, and passing prototype behavior evidence. Use `~/ai/agents/prototype-pr-writer.md`.
+- The caller lacks the test manifest, spawned implementation tickets, pending-marker convention, dossier answer, or prototype evidence review.
 
 ## Required Inputs
 
@@ -43,7 +43,7 @@ Use this operator when a prototype has produced reviewable production-tree proof
 - `base` - target branch for the draft PR; caller supplies the repository default branch or an explicit review target, but this must not be hard-coded to `main`.
 - `repo_root` - absolute path to the repository.
 - `dossier_answer_path` - path to the prototype dossier `answer.md`.
-- `proof_test_audit_path` - path to the proof-test audit evidence.
+- `prototype_evidence_review_path` - path to the prototype evidence review.
 - `spawned_tickets_path` - path to `dossier/spawned-tickets.md`.
 - `test_manifest_path` - path to `dossier/test-publication-manifest.md`.
 - `pending_marker_convention_path` - path to `~/ai/conventions/prototype-pending-tests.md`.
@@ -60,7 +60,7 @@ If `base` is missing or empty, halt with `NEEDS_INPUT:missing-prototype-test-pr-
 
 1. Validate every required input exists and is readable. Validate `implementation_ticket_urls` is a non-empty JSON array.
 2. Read `test_manifest_path` and extract the test files, node IDs, expected fail-if-unmasked command when present, prototype-test branch/ref, and marker reason format.
-3. Read `dossier_answer_path`, `proof_test_audit_path`, and `spawned_tickets_path` to determine the dossier verdict and spawned implementation ticket mapping.
+3. Read `dossier_answer_path`, `prototype_evidence_review_path`, and `spawned_tickets_path` to determine the dossier verdict and spawned implementation ticket mapping.
 4. Read `pending_marker_convention_path` and use its `prototype-pending:` reason format exactly.
 5. Write the title file at `${output_path}.title`. The title must be a single line and < 70 chars.
 6. Write the body file at `${output_path}` using the Output Contract section order below.
@@ -88,7 +88,7 @@ Point to `~/ai/conventions/prototype-pending-tests.md`. Include the marker reaso
 
 ### Dossier link
 
-Link or name the dossier evidence, including `answer.md`, `risk-profile.md`, and `evidence/`. Include `proof_test_audit_path` when it is separate from those paths.
+Link or name the dossier evidence, including `answer.md`, `risk-profile.md`, and `evidence/`. Include `prototype_evidence_review_path` when it is separate from those paths. State that the review assesses supplied records and is not the experiment that produced them.
 
 ### Spawned implementation tickets
 
@@ -111,5 +111,5 @@ Return `BLOCKED` and do not write partial PR prose when any of these are true:
 - Missing or unreadable `pending_marker_convention_path`.
 - Empty `implementation_ticket_urls`.
 - Missing dossier `answer.md` at `dossier_answer_path`.
-- Missing proof-test audit at `proof_test_audit_path`.
+- Missing prototype evidence review at `prototype_evidence_review_path`.
 - The test manifest does not name test paths or node IDs.

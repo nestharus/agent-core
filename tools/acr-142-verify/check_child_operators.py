@@ -14,7 +14,7 @@ CHILD_SPECS = {
             ("phase output", "phase output"),
             ("stop condition", "stop condition"),
             ("rca envelope", "rca envelope"),
-            ("proof bundle", "proof bundle"),
+            ("experiment evidence bundle", "experiment evidence bundle"),
             ("cleanup scope", "cleanup scope"),
         ],
     },
@@ -33,12 +33,12 @@ CHILD_SPECS = {
             ("image tag", "image tag"),
             ("zip path", "zip path"),
             ("package manifest", "package manifest"),
-            ("proof bundle", "proof bundle"),
+            ("experiment evidence bundle", "experiment evidence bundle"),
             ("cleanup report", "cleanup report"),
             ("validator approved", "validator approved"),
         ],
     },
-    "agents/prototype-validation-proof-bundle-adapter.md": {
+    "agents/prototype-validation-evidence-bundle-adapter.md": {
         "roles": ["parser", "orchestration"],
         "anchors": [
             ("truth_branch_ref", "truth branch ref"),
@@ -116,10 +116,13 @@ def _check_packager_consumes_uploader_manifest(document: dict[str, object], find
     has_manifest = "screenshot url manifest path" in normalized
     has_uploader_producer = UPLOADER_PRODUCER in prose
     has_consumption = any(token in normalized for token in ("consume", "consumes", "consuming", "consumed"))
-    has_proof_bundle = "proof bundle" in normalized or "proof_bundle_path" in prose
+    has_evidence_bundle = (
+        "experiment evidence bundle" in normalized
+        or "experiment_evidence_bundle_path" in prose
+    )
 
-    if not (has_manifest and has_uploader_producer and has_consumption and has_proof_bundle):
-        findings.append(_finding(path, "missing_packager_uploader_manifest_consumption", f"{UPLOADER_MANIFEST_ANCHOR} from {UPLOADER_PRODUCER}", "packager must state that proof-bundle assembly consumes the uploader-produced screenshot URL manifest"))
+    if not (has_manifest and has_uploader_producer and has_consumption and has_evidence_bundle):
+        findings.append(_finding(path, "missing_packager_uploader_manifest_consumption", f"{UPLOADER_MANIFEST_ANCHOR} from {UPLOADER_PRODUCER}", "packager must state that experiment-evidence-bundle assembly consumes the uploader-produced screenshot URL manifest"))
 
 
 def _finding(path: str, code: str, anchor: str, message: str) -> Finding:

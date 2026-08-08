@@ -15,7 +15,7 @@ evidence_source_kinds:
   - runtime-claim
   - decisions-record
   - runtime-artifact-evidence
-suggested_action_class: revise-fix-or-supply-ratification-plus-runtime-artifact-proof
+suggested_action_class: revise-fix-or-supply-ratification-plus-runtime-artifact-evidence
 supersedes: []
 ---
 
@@ -91,7 +91,7 @@ Expected operator verdict: `HIGH`.
 
 Expected finding-id namespace: `VI-001`.
 
-Rationale: Removing a previously asserted runtime condition is validation weakening. The runtime claim is artifact-bound, and neither ratification nor runtime-artifact proof is present.
+Rationale: Removing a previously asserted runtime condition is validation weakening. The runtime claim is artifact-bound, and neither ratification nor runtime-artifact evidence is present.
 
 ### VIA-002: runtime-condition pytest skip
 
@@ -196,7 +196,7 @@ Fixture: Synthetic PR diff and evidence fragment:
 mode: pr-diff
 runtime_claim: "The container image imports module X at startup."
 diff:
-  + proof note: "import X passes in the test environment"
+  + evidence note: "import X passes in the test environment"
 runtime_artifact_evidence_path: absent
 decisions_path: absent
 ```
@@ -228,7 +228,7 @@ Expected operator verdict: `LOW`.
 
 Expected finding-id namespace: `VI-001` with ratification status `ratified`.
 
-Rationale: The pattern would fire as schema relaxation, but explicit ratification and runtime-artifact proof downgrade MEDIUM to LOW.
+Rationale: The pattern would fire as schema relaxation, but explicit ratification and runtime-artifact evidence downgrade MEDIUM to LOW.
 
 ### VIA-009: ratification-only exception is not enough
 
@@ -330,7 +330,7 @@ Expected operator verdict: `HIGH`.
 
 Expected finding-id namespace: `VI-005`.
 
-Rationale: RCA closure must be blocked when the verification phase changes a fixture to a stub and presents tests-only proof for a runtime claim.
+Rationale: RCA closure must be blocked when the verification phase changes a fixture to a stub and presents tests-only evidence for a runtime claim.
 
 ### VIA-014: runtime and proxy evidence honestly scoped
 
@@ -356,9 +356,8 @@ Rationale: Proxy evidence is scoped to proxy behavior and the runtime claim has 
 
 - Pure naming, formatting, or helper extraction changes that preserve the same runtime condition.
 - Proxy evidence used only for a proxy-layer claim.
-- Runtime-artifact proof accompanying unchanged validation surfaces.
+- Runtime-artifact evidence accompanying unchanged validation surfaces.
 
 ## Lifecycle Notes
 
-Lifecycle is `WRITE`: this file defines the behavior contract before `agents/validation-integrity-auditor.md` exists. Runnable detector code, fixture files, CLI integration, and enforcement-state transitions are out of scope for this WU.
-
+Lifecycle is `WRITE`: this file defines acceptance intent for the current `agents/validation-integrity-auditor.md`; it does not establish that any scenario ran or passed. Runnable detector code, fixture files, CLI integration, and enforcement-state transitions remain downstream work.

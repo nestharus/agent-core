@@ -15,13 +15,13 @@ Upload local QA walkthrough screenshots to GitHub user attachments and format th
 ## Use When
 
 - Phase 3 or Phase 4b QA walkthroughs produced local screenshots plus metadata.
-- The proof bundle or PR writer needs GitHub `user-attachments` URLs instead of local screenshot paths.
+- The experiment-evidence bundle or PR writer needs GitHub `user-attachments` URLs instead of local screenshot paths.
 - The caller needs a durable manifest mapping each use case, caption, URL, and ordering value.
 
 ## Do Not Use When
 
 - Screenshots still need to be selected, captured, or QA-validated.
-- The task is to assemble the proof bundle, package deliverables, or write PR prose.
+- The task is to assemble the experiment-evidence bundle, package deliverables, or write PR prose.
 - GitHub authentication or repository context is unavailable; do not fall back to committing screenshots.
 
 ## Inputs
