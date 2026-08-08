@@ -63,13 +63,13 @@ root orchestrator or workflow operator invoking agents CLI
 2. Read the operator contract sidecar when present at `contracts/operators/<operator-name>.yaml`; otherwise read the operator's `## Contract` block. Parse the YAML and validate `schema: operator-contract-v1`.
 3. Apply `defaults:` to the input set and verify all required inputs are present from defaults or caller-supplied values.
 4. Honor the `must_delegate:` and `forbidden_direct:` boundaries when constructing the dispatch prompt; do not inline procedure that belongs to the operator.
-5. Then invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
+5. Inspect the validated contract's `secrets:` list before dispatch. When it is empty, invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. When it is non-empty, replace only the capture sink with `python3 ~/ai/tools/secret_safe_capture.py capture --contract <resolved-contract> --log <log>` as shown below. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
 
 The workflow sidecar at `contracts/workflows/<workflow-id>.yaml`, when present, is the optimized workflow dispatch surface. Otherwise use the `workflow_dispatch_contract` frontmatter. The operator contract sidecar is the analogous optimized surface for operator dispatch.
 
 ## Standard invocation shape
 
-Two shapes, selected by whether you are dispatching a defined agent or an ad-hoc prompt:
+The `agents` invocation core has two shapes, selected by whether you are dispatching a defined agent or an ad-hoc prompt. The resolved contract then selects raw `tee` or declared-secret capture as the sink:
 
 ```bash
 # Defined agent: frontmatter drives the model. No -m.
@@ -77,6 +77,9 @@ agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 
 # Ad-hoc / undefined agent: no agent file to read frontmatter from, so -m is required.
 agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
+
+# Selected operator declares one or more secrets: preserve the agents invocation core.
+agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | python3 ~/ai/tools/secret_safe_capture.py capture --contract <resolved-contract> --log <log-path>
 ```
 
 - `-a <agent.md>`: path or named-agent reference; the `model:` value in the agent's frontmatter selects the model. **Do not** combine with `-m` — `-m` shadows the frontmatter and silently defeats any model rebalancing.
@@ -84,12 +87,15 @@ agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 - `-p <worktree-path>`: the agent's working directory; for branch work or tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
 - `2>&1 | tee <log-path>`: capture the complete merged runner envelope into a dedicated `.log` file. A successful stream contains exactly one `OULIPOLY_INVOCATION`, exactly one optional `OULIPOLY_SESSION` immediately after it, provider payload, then exactly one terminal `OULIPOLY_RESULT`; it is never a canonical provider result/report path. The session envelope is optional because the production runner emits none when session resolution/capture returns `emitted=false`.
+- `2>&1 | secret_safe_capture.py capture ...`: the required capture form when the selected contract declares secrets. The helper validates `schema` and `secrets` before opening the log, replaces every non-empty declared environment value before writing to stdout or disk, and otherwise preserves the complete byte stream. Missing, blank, malformed, wrong-schema, non-list, duplicate, or invalid-name contract data is blocking and creates no new log.
 
 Use the README for other invocation forms. In `~/ai/`, the patterns above are the default pipeline entry point.
 
 ## Log Capture And Consumption
 
 The canonical `2>&1 | tee <log-path>` shape is a producer-side capture rule. It prevents live dispatch filters from hiding invocation markers or terminal evidence; it does not require an auditor to load the complete resulting log into model context.
+
+The declared-secret capture form is the only non-`tee` producer sink. It is not a truncating or summarizing filter: non-secret output, runner markers, provider payload extraction, and process-evidence parsing remain byte-complete. Callers must pass the exact already-resolved operator contract rather than hard-code credential names. For auth diagnostics, run `python3 ~/ai/tools/secret_safe_capture.py presence --contract <resolved-contract>`; its output contains only each declared environment name and `present` or `absent`, never a value.
 
 Consumers inspect completed logs programmatically with targeted search, bounded line ranges, or bounded tails. They MUST NOT add arbitrary maximum log-byte acceptance thresholds to proposals, expected-process manifests, audit history, or gate logic. Runtime retention, rotation, or truncation markers are context for evidence availability, not failures by themselves; use `~/ai/conventions/workflow-execution-violations.md` when a specific required fact is genuinely unavailable.
 
@@ -145,6 +151,7 @@ For agents expected to run longer than about 30 seconds:
       description="Run <child role>"
   )
   ```
+  When the selected operator contract declares secrets, preserve the same `agents` arguments and replace only `tee` with the declared-secret capture sink from `## Standard invocation shape`.
   Use `-m <model>` instead of `-a <agent.md>` only when the dispatch has no agent file (ad-hoc prompt). Never combine `-m` with `-a`.
 - Do not use shell job control or custom watcher machinery for `agents` dispatches. Forbidden patterns: trailing shell `&`, `disown`, bundled wrapper scripts around multiple `agents` calls, shell `wait` after `agents` fanout, PID-capture plus PID waits around `agents` invocations, trace polling loops as the waiting primitive, and piping live `agents` stdout through truncating filters such as `head -N` or `grep -m1`.
 - The forbidden trace-loop class includes repeated `agents trace --json` inspection used to decide when a child is complete.
@@ -161,8 +168,8 @@ On opencode (gpt-*) runtimes, the bash tool is the **agent-bash spooler**: every
 background automatically (no opencode bash timeout applies) and the completion is **delivered back to you** by
 agent-runner — you do not poll and you do not manage the child.
 
-- **Dispatch exactly the canonical shape** through the bash tool:
-  `agents -a <agent.md> -p <worktree> -f <prompt> 2>&1 | tee <log>`. The spooler returns quickly: short commands
+- **Dispatch exactly the canonical shape** through the bash tool. For `secrets: []`, use
+  `agents -a <agent.md> -p <worktree> -f <prompt> 2>&1 | tee <log>`; for declared secrets, preserve that invocation core and use the secret-safe sink from `## Standard invocation shape`. The spooler returns quickly: short commands
   return their output in-call; long ones return a `handle` and keep running detached.
 - **Delivery is push, not poll.** When the child completes, agent-runner resolves your session and delivers an
   `[OULIPOLY NOTIFICATIONS]` envelope: headless sessions are **resumed** with it at the next turn; live interactive

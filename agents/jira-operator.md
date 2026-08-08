@@ -228,7 +228,7 @@ curl -u "${jira_account_email}:$JIRA_API_KEY" "${jira_url}/rest/api/3/..."
 
 `$JIRA_API_KEY` is exported from `~/.bashrc`. Email is `${jira_account_email}`.
 
-If auth fails: check that `$JIRA_API_KEY` is in env (`env | grep JIRA_API_KEY`); the token rotates periodically. If rotated, the user regenerates at https://id.atlassian.com/manage-profile/security/api-tokens.
+If auth fails, check presence without expanding or printing the value: `if [[ -v JIRA_API_KEY ]]; then printf '%s\n' 'JIRA_API_KEY=present'; else printf '%s\n' 'JIRA_API_KEY=absent'; fi`. Presence diagnostics must never use `env`, `printenv`, `set`, shell expansion, or another command that can emit the value. The token rotates periodically. If rotated, the user regenerates at https://id.atlassian.com/manage-profile/security/api-tokens.
 
 ## Error Handling
 
