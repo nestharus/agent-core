@@ -99,6 +99,19 @@ def _next_secret(
     return match_start, match_value
 
 
+def _overlapping_secret_end(
+    data: bytes, values: Sequence[bytes], match_start: int, match_value: bytes
+) -> int:
+    match_end = match_start + len(match_value)
+    search_start = match_start + 1
+    while search_start < match_end:
+        for value in values:
+            if data.startswith(value, search_start):
+                match_end = max(match_end, search_start + len(value))
+        search_start += 1
+    return match_end
+
+
 def _redact_ready(
     data: bytes, values: Sequence[bytes], *, final: bool
 ) -> tuple[bytes, bytes]:
@@ -114,8 +127,13 @@ def _redact_ready(
             cursor = safe_limit
             break
         match_start, match_value = match
+        match_end = _overlapping_secret_end(data, values, match_start, match_value)
+        if not final and match_end > safe_limit:
+            redacted.append(data[cursor:match_start])
+            cursor = match_start
+            break
         redacted.extend((data[cursor:match_start], REDACTION))
-        cursor = match_start + len(match_value)
+        cursor = match_end
 
     return b"".join(redacted), data[cursor:]
 

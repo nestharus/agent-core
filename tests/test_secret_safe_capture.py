@@ -114,6 +114,17 @@ def test_capture_redacts_values_split_across_read_boundaries() -> None:
     assert durable.getvalue() == stdout.getvalue()
 
 
+def test_capture_merges_overlapping_values_across_read_boundaries() -> None:
+    source = io.BytesIO(b"before-abcdef-after")
+    stdout = io.BytesIO()
+    durable = io.BytesIO()
+
+    capture_stream(source, (stdout, durable), (b"abc", b"bcdef"), chunk_size=2)
+
+    assert stdout.getvalue() == b"before-" + REDACTION + b"-after"
+    assert durable.getvalue() == stdout.getvalue()
+
+
 def test_presence_diagnostics_reveal_only_declared_state(tmp_path: Path) -> None:
     contract = _contract(
         tmp_path / "operator.yaml", "[SYNTHETIC_PRESENT, SYNTHETIC_ABSENT]"
