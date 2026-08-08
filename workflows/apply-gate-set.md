@@ -5,7 +5,7 @@ workflow:
 workflow_dispatch_contract:
   orchestrator: apply-gate-set
   inputs:
-    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
+    - "caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit non-applicability markers, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition"
     - "child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields"
     - "implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command"
   expectations:
@@ -61,7 +61,7 @@ apply-gate-set
 
 ### Inputs
 
-- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
+- caller_mode rca-post-apply, implementation-phase-4, implementation-phase-6, or implementation-phase-8 with repo_root, worktree_path, planning_dir, scratch_dir, audit_history_path, trace/currentness inputs, separate verification-plan, behavior-claim, runtime-claim, and runtime-evidence refs/hashes where applicable or explicit non-applicability markers, scope, and mode-specific artifacts including Phase 4 estimate-writeback disposition
 - child gate context including actual diff or proposal/component evidence, process-tree trace path, root invocation UUID, and currentness key fields
 - implementation modes carry exact base/head branch, freshly fetched ref, and full SHA; implementation-phase-8 also requires local_coverage_command
 
@@ -90,10 +90,10 @@ apply-gate-set
 - `repo_root`, `worktree_path`, `planning_dir`, `scratch_dir`, and `audit_history_path`.
 - Trace/currentness inputs: runtime-derived root invocation UUID, `cycle_id`, full `head_sha`, diff/scope/runtime/contract/report hashes, producing invocation UUIDs, and verified-at timestamps. Implementation modes also require exact `base_branch`, `base_ref`, `base_sha`, `head_branch`, and `head_ref`; Phase 8 requires non-blank `local_coverage_command`.
 - Mode-specific artifacts:
-  - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, runtime claim, scope, and cycle id.
-  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, and bootstrap-exception refs when claimed.
-  - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, runtime claim, and side-channel or derivation evidence when applicable.
-  - `implementation-phase-8`: actual branch or PR diff, proposal and verification-plan refs, behavior claim, prior join refs when present, separate runtime claim and executed evidence, supported-surface inventory context, and base/head identity.
+  - `rca-post-apply`: root-cause, fix-decision, application-plan, applied-artifact, original-signal verification, verification critic, actual diff, verification-plan and behavior-claim refs/hashes when plan review applies, separate runtime-claim ref/hash, scope, and cycle id.
+  - `implementation-phase-4`: proposal, problem map, risk profile, supported-surface context, complete estimate delta flag, estimate-writeback disposition ref, cold-start disposition ref when inherited is null, touched-surface evidence, verification-plan and behavior-claim refs/hashes when plan review applies, separate runtime-claim ref/hash when validation-integrity applies, and bootstrap-exception refs when claimed.
+  - `implementation-phase-6`: Step 6b output index, Step 6a `contract_path`, approved `proposal_path`, `code_quality_dispatch_dir`, Step 6b/6c prompts and logs, component diff, component scope, separate verification-plan and behavior-claim refs/hashes when component-local plan review applies, runtime-claim ref/hash when validation-integrity applies, and side-channel or derivation evidence when applicable.
+  - `implementation-phase-8`: actual branch or PR diff, proposal and verification-plan refs/hashes, behavior-claim ref/hash, prior join refs when present, separate runtime-claim and runtime-evidence refs/hashes, supported-surface inventory context, and base/head identity.
 
 ## Outputs
 
