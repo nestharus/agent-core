@@ -1583,6 +1583,7 @@ def test_cold_start_disposition_bind_updates_only_disposition_ref(tmp_path: Path
     case = _runtime_case(tmp_path, "cold-start-disposition-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
     original_index = case["index_path"].read_bytes()
+    original_index_stat = case["index_path"].stat()
 
     MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
 
@@ -1597,6 +1598,12 @@ def test_cold_start_disposition_bind_updates_only_disposition_ref(tmp_path: Path
     assert updated["phase_3_estimate_writeback_sha256"] is None
     assert updated["phase_history"] == source_manifest["phase_history"]
     assert case["index_path"].read_bytes() == original_index
+    updated_index_stat = case["index_path"].stat()
+    assert (updated_index_stat.st_dev, updated_index_stat.st_ino, updated_index_stat.st_mode) == (
+        original_index_stat.st_dev,
+        original_index_stat.st_ino,
+        original_index_stat.st_mode,
+    )
 
 
 @pytest.mark.parametrize("operation", sorted(MIGRATION.RUNTIME_OPERATIONS))
