@@ -290,6 +290,10 @@ outputs:
   - ${planning_dir}/session.json
   - ${planning_dir}/../sessions.active-wake.json initialized empty in Phase 0 and populated after exact Phase 7 PR acquisition
   - ${scratch_dir}/session-writes/phase0-init.json
+  - ${scratch_dir}/session-writes/cold-start-disposition-bind.json
+  - ${scratch_dir}/session-writes/cold-start-disposition-bind.readback.json
+  - ${scratch_dir}/session-writes/phase3-bind.json
+  - ${scratch_dir}/session-writes/phase3-bind.readback.json
   - ${scratch_dir}/session-writes/phase7-upsert.json
   - ${scratch_dir}/session-writes/phase9-update.json
   - ${planning_dir}/audit-history.md
