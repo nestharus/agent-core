@@ -157,8 +157,8 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for production behavior-test contract review (NOT production implementation, NOT shippable-prototype experiment-evidence bundles).
   File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `prototype_evidence_review_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
 
-- `coderabbit-operator` - Run iterative CodeRabbit passes on one branch until the remaining comments stop paying for another loop.
-  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `branch`, `base`, `worktree_path`, `test_command?`, `max_passes?`, `audit_history_path?` | Model: `gpt-medium`
+- `coderabbit-operator` - Run exactly one generation-aware CodeRabbit review and finding-application pass for one GitHub PR, then reuse its persisted completion on rerun.
+  File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `repo`, `pr_num`, `worktree_path`, `trigger_mode?`, `initial_trigger?`, `fixer_agent?` | Model: `gpt-medium`
 
 - `commit-hygiene-operator` - Audit or rewrite a branch's commits into small, testable, reviewable history without changing the cumulative diff.
   File: [~/ai/agents/commit-hygiene-operator.md](agents/commit-hygiene-operator.md) | Inputs: `branch`, `base`, `mode`, `target_commit_plan?`, `repo_root`, `worktrees_root?`, `worktree_path?`, `python_bin?` | Model: `gpt-high`

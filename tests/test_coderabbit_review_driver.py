@@ -84,6 +84,21 @@ def _generation(
     }
 
 
+def _review_loop_args(tmp_path: pathlib.Path) -> driver.argparse.Namespace:
+    return driver.argparse.Namespace(
+        repo=REPO.slug,
+        pr_num=198,
+        label=driver.DEFAULT_LABEL,
+        worktree_path=str(tmp_path),
+        fixer_agent=None,
+        fixer_model="gpt-high",
+        template=str(driver.DEFAULT_FIX_BRIEF_TEMPLATE),
+        poll_interval_seconds=driver.DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS,
+        initial_trigger="auto",
+        mode="incremental",
+    )
+
+
 @pytest.mark.parametrize("first_head", ["old-head", "head-sha"])
 def test_new_changes_requested_review_completes_changed_and_unchanged_head_generations(
     first_head: str,
@@ -1285,6 +1300,281 @@ def test_review_loop_does_not_redispatch_handled_comment_ids() -> None:
 
     assert driver.select_actionable_comments(poll_result) == [first, second]
     assert driver.select_actionable_comments(poll_result, {42}) == [second]
+
+
+@pytest.mark.parametrize(
+    ("include_caller_decision", "terminal_reason", "needs_caller_decision"),
+    [
+        (False, "review_applied", False),
+        (True, "caller_decision_required", True),
+    ],
+)
+def test_review_loop_applies_one_review_and_reuses_persisted_completion(
+    monkeypatch,
+    tmp_path,
+    include_caller_decision: bool,
+    terminal_reason: str,
+    needs_caller_decision: bool,
+) -> None:
+    head = {"oid": "reviewed-head"}
+    review_generation = {
+        **_generation(head_oid="reviewed-head"),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 2,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "reviewed-head",
+    }
+    comments = [
+        {
+            "comment_id": 42,
+            "kind": "in-diff",
+            "resolved": False,
+            "body_path": str(tmp_path / "comment-42.md"),
+        }
+    ]
+    if include_caller_decision:
+        comments.append(
+            {
+                "comment_id": 43,
+                "kind": "in-diff",
+                "resolved": False,
+                "body_path": str(tmp_path / "comment-43.md"),
+            }
+        )
+    trigger_calls: list[str] = []
+    poll_calls: list[str] = []
+
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {
+            "headRefName": "fix/review",
+            "headRefOid": head["oid"],
+            "isDraft": True,
+        },
+    )
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: head["oid"])
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: (
+            "fix/review",
+            head["oid"],
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "trigger_review",
+        lambda *args, **kwargs: (
+            trigger_calls.append(head["oid"]),
+            driver.save_review_generation(REPO, 198, review_generation),
+        )[1],
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+
+    def fake_poll(*args):
+        poll_calls.append(head["oid"])
+        return (
+            {
+                "generation": review_generation,
+                "review_decision": "CHANGES_REQUESTED",
+                "aggregate_review_decision": "CHANGES_REQUESTED",
+                "outcome": "changes_requested",
+                "review_decision_source": "review_generation",
+                "new_comments": comments,
+                "actionable_comments": comments,
+                "resolved_since_last_poll": [],
+                "bot_login": BOT_LOGIN,
+                "review_completed": True,
+            },
+            "reviewed-head",
+            driver.utc_now_dt(),
+        )
+
+    monkeypatch.setattr(driver, "poll_current_pr_head", fake_poll)
+    monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+    def fake_dispatch(**kwargs):
+        comment_id = kwargs["comment"]["comment_id"]
+        if comment_id == 43:
+            return {
+                "comment_id": 43,
+                "outcome": "deferred",
+                "commit_sha": None,
+                "reply_body_file": None,
+                "rationale": "Caller disposition required.",
+                "files_touched": [],
+                "review_provided_value": True,
+            }
+        return {
+            "comment_id": 42,
+            "outcome": "fixed",
+            "commit_sha": "fixed-head",
+            "reply_body_file": None,
+            "rationale": "Applied the review finding.",
+            "files_touched": ["tools/example.py"],
+            "review_provided_value": True,
+        }
+
+    monkeypatch.setattr(driver, "dispatch_comment_agent", fake_dispatch)
+
+    def fake_push(*args):
+        head["oid"] = "fixed-head"
+        return {"head_sha": "fixed-head"}
+
+    monkeypatch.setattr(driver, "push_branch", fake_push)
+    monkeypatch.setattr(
+        driver,
+        "wait_for_provider_pr_head",
+        lambda *args: ("fixed-head", driver.utc_now_dt()),
+    )
+
+    first = driver.review_loop(_review_loop_args(tmp_path))
+    second = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert first["terminal_reason"] == terminal_reason
+    assert first["needs_caller_decision"] is needs_caller_decision
+    assert first["terminal"] is (not needs_caller_decision)
+    assert first["generation_result"] == "REVIEW_COMPLETED"
+    assert first["single_review_completion"]["reviewed_head_oid"] == "reviewed-head"
+    assert first["single_review_completion"]["final_head_oid"] == "fixed-head"
+    assert len(trigger_calls) == 1
+    assert len(poll_calls) == 1
+    assert second["completion_reused"] is True
+    assert second["terminal_reason"] == terminal_reason
+    assert second["needs_caller_decision"] is needs_caller_decision
+    assert len(trigger_calls) == 1
+    assert len(poll_calls) == 1
+
+
+def test_completed_pr_suppresses_even_forced_direct_trigger(monkeypatch, tmp_path) -> None:
+    generation = {
+        **_generation(),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 2,
+        "accepted_review_state": "APPROVED",
+        "accepted_review_commit_id": "head-sha",
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_review_generation(REPO, 198, generation)
+    driver.save_single_review_completion(
+        REPO,
+        198,
+        {
+            "pr": {"headRefOid": "head-sha"},
+            "terminal": True,
+            "terminal_reason": "approved",
+            "outcome": "approved",
+            "needs_caller_decision": False,
+            "review_decision": "APPROVED",
+            "generation": generation,
+            "iterations": [],
+        },
+    )
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: pytest.fail("completed PR must not be queried for a new trigger"),
+    )
+
+    result = driver.trigger_review(
+        REPO, 198, "incremental", driver.DEFAULT_LABEL, force=True
+    )
+
+    assert result["posted"] is False
+    assert result["suppressed"] is True
+    assert (
+        result["suppression_reason"]
+        == "single-review-policy:pr-review-already-completed"
+    )
+
+
+def test_rate_limit_capacity_does_not_trigger_again_in_same_pass(
+    monkeypatch, tmp_path
+) -> None:
+    generation = {
+        **_generation(),
+        "result": "RATE_LIMITED_NO_REVIEW",
+        "next_permitted_action": "query_capacity",
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    driver.save_review_generation(REPO, 198, generation)
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {"headRefName": "fix/review", "headRefOid": "head-sha"},
+    )
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: "head-sha")
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: (
+            "fix/review",
+            "head-sha",
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "trigger_review",
+        lambda *args, **kwargs: pytest.fail(
+            "one pass must not auto-trigger after a capacity response"
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+    monkeypatch.setattr(
+        driver,
+        "poll_current_pr_head",
+        lambda *args: (
+            {
+                "generation": generation,
+                "review_decision": "NONE",
+                "outcome": None,
+                "new_comments": [],
+                "actionable_comments": [],
+            },
+            "head-sha",
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "capacity_query",
+        lambda *args: {
+            **generation,
+            "capacity_query": {"response": {"capacity_available": True}},
+        },
+    )
+    args = _review_loop_args(tmp_path)
+    args.initial_trigger = "skip"
+
+    result = driver.review_loop(args)
+
+    assert result["generation_result"] == "RATE_LIMITED_NO_REVIEW"
+    assert result["terminal_reason"] == "rate_limited_no_review"
+    assert "single_review_completion" not in result
 
 
 def test_non_value_outcome_must_use_rejected_contract() -> None:

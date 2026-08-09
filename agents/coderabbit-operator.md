@@ -1,5 +1,5 @@
 ---
-description: 'Thin wrapper for the generation-aware GitHub PR-mode CodeRabbit review loop in tools/coderabbit_review_driver.py.'
+description: 'Thin wrapper for one generation-aware GitHub PR-mode CodeRabbit review and finding-application pass.'
 model: gpt-medium
 output_format: ''
 ---
@@ -7,10 +7,11 @@ output_format: ''
 # CodeRabbit Operator
 
 This operator delegates CodeRabbit PR-mode review to
-`~/ai/tools/coderabbit_review_driver.py review-loop`. The driver owns trigger
+`~/ai/tools/coderabbit_review_driver.py review-loop`. The driver owns one trigger
 generation baselines, exact-head review acceptance, authoritative rate-limit
 and capacity evidence, normalized finding persistence, per-comment fixer
-dispatch, exact-comment replies, branch pushes, re-triggers, and final JSON.
+dispatch, exact-comment replies, branch pushes, persisted PR completion, and
+final JSON. It never requests a follow-up review after a completed review.
 
 The repository-level `coderabbit` label is only an installation marker;
 applying it to a PR suppresses CodeRabbit and is never a trigger path.
@@ -32,9 +33,8 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
 - `worktree_path`: absolute path to the PR head-branch worktree.
 - `trigger_mode`: optional; `incremental` by default, `full` only for a
   code-audit or mass-cleanup whose declared review target is whole files.
-- `initial_trigger`: optional; `auto` by default. `always` explicitly supersedes
-  the active generation and forces a new one. `skip` requires a persisted active
-  generation for the current PR head. A persisted in-flight command is always
+- `initial_trigger`: optional; `auto` by default. `skip` requires a persisted
+  active generation for the current PR head. A persisted in-flight command is
   reconciled first; when observed, the returned generation records
   `supersession_deferred_reason=reconciled-inflight-trigger` and no duplicate
   command is posted.
@@ -48,7 +48,7 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
    ~/ai/tools/coderabbit_review_driver.py is-enabled {repo}
    ```
    Exit `0` means enabled. Exit `1` is clean non-applicability.
-2. Run the normal loop:
+2. Run the single review/application pass:
    ```bash
    ~/ai/tools/coderabbit_review_driver.py review-loop {repo} {pr_num} \
      --worktree-path {worktree_path} \
@@ -57,7 +57,7 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
      --fixer-agent {fixer_agent}
    ```
 3. Use `--mode full` only for a declared whole-file review target.
-4. Use the generation-aware diagnostic commands when repairing a halted loop:
+4. Use the generation-aware diagnostic commands when repairing a halted pass:
    ```bash
    ~/ai/tools/coderabbit_review_driver.py poll {repo} {pr_num}
    ~/ai/tools/coderabbit_review_driver.py capacity {repo} {pr_num}
@@ -67,10 +67,9 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
    `capacity --new-query` starts a new capacity-query generation after the
    provider's prior response or a bounded malformed/unavailable-response halt.
    It never derives capacity from elapsed time or a fair-usage table.
-   After inspecting ambiguous rate-limit comments, use `review-loop
-   --initial-trigger always` to archive the blocked generation and start a new
-   one. This is the explicit repair route; normal trigger calls remain
-   suppressed while the generation is blocked.
+   A retry is permitted only when the prior request did not produce a review
+   and authoritative capacity evidence allows it. A completed review is never
+   superseded or requested again for the PR.
 
 ## Generation Contract
 
@@ -95,22 +94,22 @@ The persisted generation object is written inside
   and each bound response when present;
 - `next_permitted_action`, `blocked_reason`, and `evidence_path`.
 
-Starting a later trigger generation archives the prior active generation in
-`review_generation_history`. Prior approvals remain historical evidence only.
-They do not approve a new head or a rate-limited new-head generation.
+Starting a retry generation after a request that produced no review archives
+the prior active generation in `review_generation_history`. A completed review
+writes `single_review_completion`; all later review requests for that PR are
+suppressed even if the branch head changes.
 Before each review-trigger or capacity-query POST, the driver persists an
 in-flight command marker. After an interrupted POST it reconciles the exact
 command body, timestamp, and pre-POST issue-comment baseline before continuing;
-an ambiguous identity blocks instead of posting a duplicate. Explicit `always`
-/ `--new-query` supersession archives an unobserved marker when provider
+an ambiguous identity blocks instead of posting a duplicate. Explicit
+`--new-query` capacity supersession archives an unobserved marker when provider
 inspection confirms no identity. A PR-scoped non-blocking lock rejects a
 concurrent provider-command invocation instead of allowing two POSTs.
 
 Aggregate `reviewDecision`, summary comments, trigger acknowledgements,
 completion acknowledgements, and a passing `Review rate limited` check are
-informational only. None can produce `REVIEW_COMPLETED`. This permits
-back-to-back `CHANGES_REQUESTED` reviews and unchanged-head re-triggers because
-the new review ID, not a state transition, distinguishes generations.
+informational only. None can produce `REVIEW_COMPLETED`; only the first exact
+trigger-bound pull-request review can complete the PR's single review pass.
 
 ## Rate Limits
 
@@ -127,9 +126,10 @@ the new review ID, not a state transition, distinguishes generations.
 - Stale, ambiguous, or malformed responses produce `BLOCKED`; an unavailable
   response uses bounded backoff and then produces `BLOCKED`.
 - The driver suppresses another review trigger while a request is outstanding,
-  capacity is unavailable, one-review-at-a-time is active, or the current
-  generation is blocked. Only an authoritative response with
-  `capacity_available=true` permits another trigger.
+  capacity is unavailable, one-review-at-a-time is active, the current
+  generation is blocked, or `single_review_completion` exists. An authoritative
+  `capacity_available=true` response permits a retry only when no review was
+  completed.
 
 ## Open Findings
 
@@ -155,9 +155,9 @@ top-level comment. Exact duplicate replies are reused idempotently, and every
 posted or reused result returns its read-back ID, URL, author, and parent ID
 when supported.
 
-## Driver Loop Contract
+## Single-Review Contract
 
-The loop:
+The pass:
 
 - resumes a matching persisted generation or creates a new trigger generation;
 - revalidates provider head identity before and after every poll;
@@ -165,10 +165,13 @@ The loop:
 - dispatches each unresolved current-head in-diff comment ID at most once per
   run and preserves each structured fixer outcome;
 - pushes fixed commits, waits for provider head readback, posts exact replies,
-  and starts a new incremental generation, including unchanged-head re-triggers;
-- stops successfully only after a `REVIEW_COMPLETED` generation whose accepted
-  review state is `APPROVED`, or with the existing no-value convergence after
-  processing findings from a completed generation;
+  and terminates without requesting another review;
+- succeeds after an approved review, after all completed-review findings are
+  assessed as non-value, or after the useful findings from the completed review
+  are applied;
+- persists `single_review_completion` with the reviewed head, final head,
+  terminal result, and structured outcomes; later runs return this evidence
+  without polling, dispatching, or triggering;
 - surfaces `RATE_LIMITED_NO_REVIEW` as non-success after the bound capacity
   query reports no availability, and surfaces `BLOCKED` without retriggering.
 
@@ -197,6 +200,9 @@ collapse it into a boolean fixed/not-fixed result.
   `REVIEW_COMPLETED` generation, `terminal_reason=no_value_provided`, and every
   actionable in-diff comment in the latest iteration assessed
   `review_provided_value: false`.
+- `CONVERGED:coderabbit-review-applied` requires
+  `generation_result=REVIEW_COMPLETED`, `terminal_reason=review_applied`, and
+  persisted `single_review_completion` after all fixes, pushes, and replies.
 - `PENDING:coderabbit-rate-limited` is
   `generation_result=RATE_LIMITED_NO_REVIEW`; do not merge or re-trigger.
 - `PENDING:coderabbit-caller-decision` is a driver exit `3` with
@@ -213,4 +219,6 @@ collapse it into a boolean fixed/not-fixed result.
 - No inferred capacity, retry timestamp, or fair-usage-table calculation.
 - No repeated trigger or capacity-query comments while authoritative evidence
   forbids them.
+- No follow-up review request after `REVIEW_COMPLETED`, including after fixes,
+  replies, later branch changes, or a rerun of the operator.
 - No comment-body fan-in to the orchestrator context.

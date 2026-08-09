@@ -68,7 +68,7 @@ release-orchestrator
 
 ## Do Not Use When
 
-- The work is ordinary implementation, RCA, proposal, test writing, CodeRabbit, PR review, or commit hygiene; use `~/ai/workflows/implementation-pipeline.md`, `~/ai/workflows/coderabbit-loop.md`, or PR-review workflows.
+- The work is ordinary implementation, RCA, proposal, test writing, CodeRabbit, PR review, or commit hygiene; use `~/ai/workflows/implementation-pipeline.md`, `~/ai/agents/coderabbit-operator.md`, or PR-review workflows.
 - The target is workflow, operator, runtime, or rebase-drift audit; use `~/ai/workflows/audit.md`.
 - The request is only branch/worktree setup for a Work Unit; use the worktree and git conventions, not release-management.
 - The request requires live repository settings, branch protection, required checks mutation, customer-visible deployment, or publication approval before the human-owned gate in `~/ai/workflows/tiered-approval.md` clears.
@@ -136,7 +136,7 @@ Existing sibling references:
 - `~/ai/workflows/implementation-pipeline.md` for phase/gate lifecycle and Phase 6b/6c separation.
 - `~/ai/workflows/code-quality.md` for workflow boundary shape.
 - `~/ai/workflows/audit.md` for workflow-design and process audit handoff.
-- `~/ai/workflows/coderabbit-loop.md` for review-loop convergence boundaries.
+- `~/ai/agents/coderabbit-operator.md` for the one-review-per-PR CodeRabbit boundary.
 - `~/ai/conventions/gate-ownership.md` for human/model gate ownership.
 - `~/ai/workflows/tiered-approval.md` for Tier-3 action approval.
 

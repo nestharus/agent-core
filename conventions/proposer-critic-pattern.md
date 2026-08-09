@@ -57,7 +57,7 @@ Workflow-local verdict vocabulary, critic count, escalation rules, and oscillati
 
 `~/ai/workflows/roadmap.md` layer risk gates use LOW/MEDIUM/HIGH per layer. All risks must be LOW before a layer advances, and a revised layer artifact gets a full re-gate after revision.
 
-`~/ai/workflows/coderabbit-loop.md` is a proposer/critic loop with different vocabulary. Its accept equivalent is value-zero / useful-finding convergence, not LOW/MEDIUM/HIGH.
+CodeRabbit is not a proposer/critic loop: `~/ai/agents/coderabbit-operator.md` permits one review and finding-application pass per PR, with no critic rerun after fixes. Other proposer/critic workflows retain their local convergence rules.
 
 These citations are read-only references to existing workflow authority. The convention names the shared meta-pattern; it does not rewrite any local workflow rule.
 

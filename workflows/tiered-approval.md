@@ -119,7 +119,7 @@ opened as a non-draft review artifact.
 - Opening a draft PR -> **Tier 2**.
 - Amending a commit on a draft PR -> **Tier 2**.
 - Force-pushing with `--force-with-lease` to a draft PR during the
-  CodeRabbit loop -> **Tier 2**.
+  CodeRabbit review/application pass -> **Tier 2**.
 - Promoting a draft to ready-for-review on an **internal** repo
   -> **Tier 2**.
 - Promoting a draft to ready-for-review on a

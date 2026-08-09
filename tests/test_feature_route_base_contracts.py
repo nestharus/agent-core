@@ -7006,7 +7006,7 @@ def test_implementation_contract_declares_destructive_effects_and_outcomes():
 def test_phase_7_acquires_one_verified_pr_before_coderabbit():
     phase_7 = _section(
         "agents/implementation-pipeline-orchestrator.md",
-        "#### Draft PR acquisition and CodeRabbit review loop",
+        "#### Draft PR acquisition and single CodeRabbit review",
     )
     for value in (
         "agents -a pr-writer",
@@ -7029,6 +7029,14 @@ def test_phase_7_acquires_one_verified_pr_before_coderabbit():
     assert phase_7.index("${scratch_dir}/pr-number.txt") < phase_7.index(
         "coderabbit_review_driver.py review-loop"
     )
+    for value in (
+        "exactly one CodeRabbit review",
+        "single_review_completion",
+        "must not request a follow-up review",
+    ):
+        assert value in phase_7
+    assert "starts incremental follow-up generations" not in phase_7
+    assert "unchanged-head re-triggers" not in phase_7
     pr_writer = _section("agents/pr-writer.md", "## Procedure")
     assert "merge-base --is-ancestor <sha> ${base_sha}" in pr_writer
     assert "merge-base --is-ancestor <sha> origin/main" not in pr_writer

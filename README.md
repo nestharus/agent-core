@@ -47,7 +47,7 @@ Reusable process docs.
 
 - [`workflows/code-quality.md`](workflows/code-quality.md) — Composite A1 code-quality auditor fanout, normalized findings, and aggregate verdict.
 
-- [`workflows/coderabbit-loop.md`](workflows/coderabbit-loop.md) — Step-7 review loop for running CodeRabbit passes until findings stop paying off.
+- [`agents/coderabbit-operator.md`](agents/coderabbit-operator.md) - Step-7 operator for one CodeRabbit review and finding-application pass per PR.
 
 - [`workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md) — End-to-end delivery pipeline from trigger through merge, including RCA routing for bugs.
 

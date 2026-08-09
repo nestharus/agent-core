@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/coderabbit-operator.md
 model: gpt-medium
-description: Generation-aware GitHub PR-mode CodeRabbit review loop wrapper.
+description: One generation-aware GitHub PR-mode CodeRabbit review and finding-application pass per PR.
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: repo
@@ -28,7 +28,7 @@ inputs:
   type: string
   required: false
   default_source: base
-  description: auto, always, or skip; always explicitly supersedes the active generation after any persisted in-flight command is reconciled, and skip requires a persisted current-head generation.
+  description: auto or skip; skip requires a persisted current-head generation, and neither policy may supersede a completed PR review.
 - name: fixer_agent
   type: string
   required: false
@@ -49,10 +49,11 @@ outputs:
   success_shape: Exit 0 when the repository carries the CodeRabbit marker label; exit 1 is clean non-applicability.
   wrote_lines: []
 - task: review-loop
-  success_shape: JSON containing generation_result, generation evidence, terminal_reason, and iteration outcomes.
+  success_shape: JSON containing one completed generation, terminal_reason, iteration outcomes, and persisted single_review_completion evidence; reruns reuse that evidence.
   wrote_lines:
   - generation_result is exactly REVIEW_COMPLETED, RATE_LIMITED_NO_REVIEW, WAITING_FOR_REVIEW, or BLOCKED.
   - REVIEW_COMPLETED includes a new baseline-external accepted_review_id bound to expected_head_oid with submitted_at no earlier than the trigger.
+  - review_applied records the reviewed head and post-fix final head without requesting a follow-up review.
   - RATE_LIMITED_NO_REVIEW includes exact trigger-bound rate-limit evidence and capacity-query evidence when queried.
 - task: poll
   success_shape: JSON generation evidence plus normalized comment metadata and persisted body paths.
@@ -81,10 +82,11 @@ side_effects:
 - Persists pre-POST in-flight markers and reconciles exact provider command identities before retrying.
 - Uses a PR-scoped non-blocking lock to reject concurrent provider-command invocations.
 - Persists a body-revision-bound local replied disposition for handled outside-diff comments.
-- May post one review trigger, one capacity query per query generation, and exact-comment replies.
+- May post one review trigger, a retry only when no review completed and capacity allows it, one capacity query per query generation, and exact-comment replies.
 - May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []
 forbidden_direct:
 - Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, or checks.
 - Do not infer capacity from elapsed time or a fair-usage table.
 - Do not compose ad hoc GitHub polling or silently fall back to unrelated top-level replies.
+- Do not request a follow-up review after REVIEW_COMPLETED or bypass persisted single_review_completion.

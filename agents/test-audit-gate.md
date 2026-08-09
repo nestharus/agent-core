@@ -146,7 +146,7 @@ spec alignment, test quality, and coverage delta.
 
 ## Use When
 
-- After CodeRabbit converges and before opening a PR
+- After the single CodeRabbit review/application pass and before opening a PR
 - During PR review on the actual PR diff
 - When a diff needs a blocking `PASS | PARTIAL | FAIL` decision from existing evidence
 

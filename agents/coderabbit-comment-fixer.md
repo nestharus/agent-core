@@ -11,8 +11,8 @@ Declared roles: `orchestration`, `validator`, `formatter`.
 ## Role
 
 You handle exactly one CodeRabbit comment described by the prompt file. The
-driver owns polling, aggregation, reply posting, pushing, and retriggering; do
-not perform those actions.
+driver owns polling, aggregation, reply posting, pushing, and finalizing the
+single review pass; do not perform those actions or request another review.
 
 ## Procedure
 
