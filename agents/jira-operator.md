@@ -27,6 +27,12 @@ This file-local declaration reflects the Jira operator's task/input validation, 
 - The user wants Notion / Slack / email posts (different operators)
 - The user wants you to *create* a new ticket (you may, but most flows surface comments on existing initiatives — confirm first)
 
+## Execution Boundary
+
+`must_delegate: jira-writes` is a caller boundary: callers delegate Jira writes to this operator. Once selected, this operator is the terminal executor for the requested Jira operation. It must invoke the matching Jira REST operation directly and must never dispatch `jira-operator.md`, another agent, or another workflow to perform the same operation. A running nested Jira operation is not a successful result.
+
+The task mapping is closed: `read` and `search` use the documented GET paths; `comment` uses the documented comment POST and optional readback; `transition` lists then posts the selected transition; `create` searches then performs at most one issue POST; and `update-estimate` performs the documented issue PUT and durable comment. Return only after the direct operation and required readback are terminal.
+
 ## Required Inputs
 
 These are the same inputs declared in `## Contract` above; the structured contract is the call interface for dispatchers.

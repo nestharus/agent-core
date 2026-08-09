@@ -62,8 +62,10 @@ root orchestrator or workflow operator invoking agents CLI
 1. Resolve the selected operator path: use the project wrapper when execution is in project scope and the wrapper is current; otherwise use the base operator.
 2. Read the operator contract sidecar when present at `contracts/operators/<operator-name>.yaml`; otherwise read the operator's `## Contract` block. Parse the YAML and validate `schema: operator-contract-v1`.
 3. Apply `defaults:` to the input set and verify all required inputs are present from defaults or caller-supplied values.
-4. Honor the `must_delegate:` and `forbidden_direct:` boundaries when constructing the dispatch prompt; do not inline procedure that belongs to the operator.
+4. At the caller boundary, honor `must_delegate:` by selecting the operator as the execution endpoint and honor `forbidden_direct:` by refusing prohibited direct work. Do not inline procedure that belongs to the operator or copy `must_delegate:` into the prompt as an instruction for the selected endpoint to redispatch itself.
 5. Inspect the validated contract's `secrets:` list before dispatch. When it is empty, invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. When it is non-empty, replace only the capture sink with `python3 ~/ai/tools/secret_safe_capture.py capture --contract <resolved-contract> --log <log>` as shown below. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
+
+Once the selected operator invocation begins, its own `must_delegate:` declaration is satisfied for that operation. The endpoint executes its bounded procedure directly and never dispatches the same operator for the same operation. Valid child delegation remains allowed only for a different concern explicitly owned by the endpoint procedure; it uses the canonical invocation and capture shape so the caller-to-endpoint and endpoint-to-child edges remain visible in process-tree evidence.
 
 The workflow sidecar at `contracts/workflows/<workflow-id>.yaml`, when present, is the optimized workflow dispatch surface. Otherwise use the `workflow_dispatch_contract` frontmatter. The operator contract sidecar is the analogous optimized surface for operator dispatch.
 
