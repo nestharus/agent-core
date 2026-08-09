@@ -10,7 +10,7 @@ The branch exists for the case where a critic's non-accept verdict exposes a rea
 
 This convention applies only to B4-style proposer/critic loops that explicitly opt into this branch. It covers proposal-revision work where the proposer has already received a non-accept critic concern and cannot close the concern from the proposal, problem statement, repository context, or already-approved planning materials.
 
-It does not silently rewrite every workflow that performs research. Roadmap Layer 0 market research, PR review research, PR justification research, CodeRabbit loops, tickets-first review, prototype dossiers, and one-shot Phase 1 problem research remain under their local workflow rules unless a later work unit deliberately opts them in.
+It does not silently rewrite every workflow that performs research. Roadmap Layer 0 market research, PR review research, PR justification research, the single CodeRabbit pass, tickets-first review, prototype dossiers, and one-shot Phase 1 problem research remain under their local workflow rules unless a later work unit deliberately opts them in.
 
 The convention is additive to B4. It preserves B4's rule that workflows compose their own proposers, critics, dispatch rules, critic count, verdict vocabulary, and acceptance equivalents.
 

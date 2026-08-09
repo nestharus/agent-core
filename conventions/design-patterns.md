@@ -22,7 +22,7 @@ intrinsic_surface_declarations:
 ### DP-001 - Proposer/critic revise-review loop
 - Short statement: Proposers author or revise the artifact, independent critics review it, and accepts apply only to the same current artifact.
 - Canonical authority: `~/ai/conventions/proposer-critic-pattern.md`
-- Exemplars: `~/ai/workflows/implementation-pipeline.md` Phase 4; `~/ai/workflows/roadmap.md`; `~/ai/workflows/coderabbit-loop.md`
+- Exemplars: `~/ai/workflows/implementation-pipeline.md` Phase 4; `~/ai/workflows/roadmap.md`
 - Auditor use: Cite when a workflow allows stale accepts, lets a proposer self-certify, or fails to rerun required critics after substantive revision.
 
 ### DP-002 - All-current-artifact accept rule
@@ -34,7 +34,7 @@ intrinsic_surface_declarations:
 ### DP-003 - Per-role audit history through one canonical file
 - Short statement: Repeated review loops keep role outputs, decisions, watch signals, and round summaries in one canonical audit-history file.
 - Canonical authority: `~/ai/conventions/audit-history.md`
-- Exemplars: `~/ai/agents/decision-encoder.md`; `~/ai/workflows/pr-review.md`; `~/ai/workflows/coderabbit-loop.md`
+- Exemplars: `~/ai/agents/decision-encoder.md`; `~/ai/workflows/pr-review.md`
 - Auditor use: Cite when a repeated loop scatters review memory, creates competing history files, or leaves no decision-encoder handoff.
 
 ### DP-004 - Single-concern operator/tool composition
@@ -52,7 +52,7 @@ intrinsic_surface_declarations:
 ### DP-006 - Workflow frontmatter and dispatch contract
 - Short statement: Shared workflows need stable identity metadata and a dispatch contract that callers can inspect before invoking them.
 - Canonical authority: `~/ai/conventions/workflow-aliases.md`
-- Exemplars: `~/ai/workflows/implementation-pipeline.md`; `~/ai/workflows/pr-review.md`; `~/ai/workflows/coderabbit-loop.md`
+- Exemplars: `~/ai/workflows/implementation-pipeline.md`; `~/ai/workflows/pr-review.md`
 - Auditor use: Cite when workflow identity, inputs, caller contract, or index expectations are missing or contradictory.
 
 ### DP-007 - Operator frontmatter and recommended body skeleton
@@ -76,7 +76,7 @@ intrinsic_surface_declarations:
 ### DP-010 - Sub-workflow composition with standalone and pipeline-callable modes
 - Short statement: Reusable sub-workflows should define how direct invocation and pipeline invocation share one contract without absorbing caller-specific policy.
 - Canonical authority: `~/ai/VALUES.md`
-- Exemplars: `~/ai/workflows/research.md`; `~/ai/workflows/coderabbit-loop.md`; `~/ai/workflows/pr-review.md`
+- Exemplars: `~/ai/workflows/research.md`; `~/ai/workflows/pr-review.md`
 - Auditor use: Cite when a workflow cannot be called both directly and by an orchestrator without hidden assumptions or caller-specific procedure drift.
 
 ### DP-011 - AGENTS.md as routing and topology

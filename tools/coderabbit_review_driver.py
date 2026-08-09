@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive generation-aware GitHub PR-mode CodeRabbit reviews."""
+"""Drive one generation-aware GitHub PR-mode CodeRabbit review per PR."""
 
 from __future__ import annotations
 
@@ -53,6 +53,7 @@ SUMMARY_COMMENT_MARKER = (
     "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->"
 )
 GENERATION_SCHEMA = "coderabbit-review-generation-v1"
+SINGLE_REVIEW_COMPLETION_SCHEMA = "coderabbit-single-review-completion-v1"
 GENERATION_RESULTS = {
     "REVIEW_COMPLETED",
     "RATE_LIMITED_NO_REVIEW",
@@ -252,6 +253,54 @@ def load_state(repo: Repo, pr_num: int) -> dict[str, Any]:
 
 def save_state(repo: Repo, pr_num: int, state: dict[str, Any]) -> None:
     write_json_file(state_path(repo, pr_num), state)
+
+
+def single_review_completion(repo: Repo, pr_num: int) -> dict[str, Any] | None:
+    completion = load_state(repo, pr_num).get("single_review_completion")
+    if not isinstance(completion, dict):
+        return None
+    if (
+        completion.get("schema") != SINGLE_REVIEW_COMPLETION_SCHEMA
+        or completion.get("repo") != repo.slug
+        or completion.get("pr_num") != pr_num
+        or completion.get("generation_result") != "REVIEW_COMPLETED"
+    ):
+        raise DriverError("persisted CodeRabbit single-review completion is malformed")
+    return dict(completion)
+
+
+def save_single_review_completion(
+    repo: Repo, pr_num: int, payload: dict[str, Any]
+) -> dict[str, Any]:
+    generation = payload.get("generation") or {}
+    if generation.get("result") != "REVIEW_COMPLETED":
+        raise DriverError("single-review completion requires a completed review generation")
+    completion = {
+        "schema": SINGLE_REVIEW_COMPLETION_SCHEMA,
+        "repo": repo.slug,
+        "pr_num": pr_num,
+        "completed_at": utc_now(),
+        "generation_id": generation.get("generation_id"),
+        "accepted_review_id": generation.get("accepted_review_id"),
+        "accepted_review_state": generation.get("accepted_review_state"),
+        "reviewed_head_oid": generation.get("accepted_review_commit_id"),
+        "final_head_oid": (payload.get("pr") or {}).get("headRefOid"),
+        "terminal": payload.get("terminal"),
+        "terminal_reason": payload.get("terminal_reason"),
+        "outcome": payload.get("outcome"),
+        "needs_caller_decision": payload.get("needs_caller_decision"),
+        "caller_decision_outcomes": payload.get("caller_decision_outcomes", []),
+        "review_decision": payload.get("review_decision"),
+        "generation_result": generation.get("result"),
+        "generation": generation,
+        "iterations": payload.get("iterations", []),
+        "rate_limit_observations": payload.get("rate_limit_observations", []),
+        "evidence_path": generation_evidence_path(repo, pr_num),
+    }
+    state = load_state(repo, pr_num)
+    state["single_review_completion"] = completion
+    save_state(repo, pr_num, state)
+    return completion
 
 
 def load_cached_bot_login(repo: Repo, pr_num: int | None = None) -> str | None:
@@ -1448,6 +1497,15 @@ def _trigger_review(
             "CodeRabbit marker label is absent from repository", exit_code=1
         )
 
+    completion = single_review_completion(repo, pr_num)
+    if completion:
+        return {
+            "posted": False,
+            "suppressed": True,
+            "suppression_reason": "single-review-policy:pr-review-already-completed",
+            "single_review_completion": completion,
+        }
+
     metadata = pr_metadata(repo, pr_num)
     expected_head_oid = str(metadata.get("headRefOid") or "")
     if not expected_head_oid:
@@ -1854,8 +1912,6 @@ def initial_trigger_decision(
             "trigger": True,
             "reason": "initial-trigger-policy:reconcile-inflight-trigger",
         }
-    if policy == "always":
-        return {"trigger": True, "reason": "initial-trigger-policy:always"}
     active = state.get("active_generation")
     generation = active if isinstance(active, dict) else None
     matching_generation = bool(
@@ -2612,6 +2668,42 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     loop_started_at = utc_now()
+    completion = single_review_completion(repo, args.pr_num)
+    if completion:
+        return {
+            "repo": repo.slug,
+            "pr_num": args.pr_num,
+            "pr": metadata,
+            "enabled": enabled_payload,
+            "loop_started_at": loop_started_at,
+            "loop_completed_at": utc_now(),
+            "terminal": completion.get("terminal"),
+            "terminal_reason": completion.get("terminal_reason"),
+            "outcome": completion.get("outcome"),
+            "needs_caller_decision": completion.get("needs_caller_decision", False),
+            "caller_decision_outcomes": completion.get(
+                "caller_decision_outcomes", []
+            ),
+            "review_decision": completion.get("review_decision", "NONE"),
+            "generation_result": completion.get("generation_result"),
+            "generation": completion.get("generation", {}),
+            "initial_trigger_decision": {
+                "trigger": False,
+                "reason": "single-review-policy:pr-review-already-completed",
+            },
+            "initial_trigger_result": None,
+            "iterations": completion.get("iterations", []),
+            "rate_limit_observations": completion.get(
+                "rate_limit_observations", []
+            ),
+            "completion_reused": True,
+            "single_review_completion": completion,
+            "poll_cadence_enforcement": {
+                "location": "tools/coderabbit_review_driver.py review-loop wait_for_loop_poll_cadence",
+                "min_interval_seconds": min_poll_interval,
+            },
+        }
+
     trigger_decision = initial_trigger_decision(
         repo,
         args.pr_num,
@@ -2630,7 +2722,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             args.pr_num,
             args.mode,
             args.label,
-            force=args.initial_trigger == "always",
         )
     else:
         print(
@@ -2686,18 +2777,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         if generation_result == "RATE_LIMITED_NO_REVIEW":
             capacity_result = capacity_query(repo, args.pr_num)
             iteration["capacity_result"] = capacity_result
-            response = (capacity_result.get("capacity_query") or {}).get("response")
-            if (
-                capacity_result.get("result") == "RATE_LIMITED_NO_REVIEW"
-                and isinstance(response, dict)
-                and response.get("capacity_available") is True
-            ):
-                iteration["trigger_result"] = trigger_review(
-                    repo, args.pr_num, "incremental", args.label
-                )
-                iterations.append(iteration)
-                iteration_index += 1
-                continue
             terminal_reason = (
                 "rate_limited_no_review"
                 if capacity_result.get("result") == "RATE_LIMITED_NO_REVIEW"
@@ -2799,25 +2878,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         if caller_decision:
             iteration["needs_caller_decision"] = True
             iteration["caller_decision_outcomes"] = caller_decision
-            iterations.append(iteration)
-            return {
-                "repo": repo.slug,
-                "pr_num": args.pr_num,
-                "pr": metadata,
-                "enabled": enabled_payload,
-                "loop_started_at": loop_started_at,
-                "loop_completed_at": utc_now(),
-                "terminal": False,
-                "terminal_reason": None,
-                "needs_caller_decision": True,
-                "review_decision": final_review_decision,
-                "generation_result": generation_result,
-                "generation": generation,
-                "initial_trigger_decision": trigger_decision,
-                "initial_trigger_result": initial_trigger,
-                "iterations": iterations,
-                "rate_limit_observations": rate_limit_observations,
-            }
 
         if any(outcome["outcome"] in FIX_OUTCOMES for outcome in iteration["outcomes"]):
             iteration["push_result"] = push_branch(worktree_path, pr_branch)
@@ -2837,18 +2897,24 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 iteration["reply_results"].append(reply_result)
 
-        iteration["trigger_result"] = trigger_review(
-            repo, args.pr_num, "incremental", args.label
+        terminal_reason = (
+            "caller_decision_required" if caller_decision else "review_applied"
         )
         iterations.append(iteration)
-        iteration_index += 1
+        break
 
     needs_caller_decision = terminal_reason in {
         "changes_requested_without_actionable_comments",
         "review_completed_without_terminal_decision",
+        "caller_decision_required",
     }
     final_generation = active_review_generation(repo, args.pr_num) or {}
-    return {
+    caller_decision_outcomes = [
+        outcome
+        for iteration in iterations
+        for outcome in iteration.get("caller_decision_outcomes", [])
+    ]
+    payload = {
         "repo": repo.slug,
         "pr_num": args.pr_num,
         "pr": metadata,
@@ -2856,14 +2922,12 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "loop_started_at": loop_started_at,
         "loop_completed_at": utc_now(),
         "terminal": final_generation.get("result")
-        in {
-            "REVIEW_COMPLETED",
-            "RATE_LIMITED_NO_REVIEW",
-            "BLOCKED",
-        },
+        in {"REVIEW_COMPLETED", "RATE_LIMITED_NO_REVIEW", "BLOCKED"}
+        and not needs_caller_decision,
         "terminal_reason": terminal_reason,
         "outcome": terminal_reason,
         "needs_caller_decision": needs_caller_decision,
+        "caller_decision_outcomes": caller_decision_outcomes,
         "review_decision": final_review_decision,
         "generation_result": final_generation.get("result", "BLOCKED"),
         "generation": final_generation,
@@ -2876,6 +2940,11 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "min_interval_seconds": min_poll_interval,
         },
     }
+    if final_generation.get("result") == "REVIEW_COMPLETED":
+        payload["single_review_completion"] = save_single_review_completion(
+            repo, args.pr_num, payload
+        )
+    return payload
 
 
 def command_is_enabled(args: argparse.Namespace) -> int:
@@ -3012,7 +3081,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     review_loop_parser = subparsers.add_parser(
         "review-loop",
-        help="Run the unbounded CodeRabbit PR review loop with centralized 5-minute poll cadence.",
+        help="Run one CodeRabbit review/application pass with centralized 5-minute poll cadence.",
     )
     review_loop_parser.add_argument("repo")
     review_loop_parser.add_argument("pr_num", type=int)
@@ -3021,9 +3090,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_loop_parser.add_argument(
         "--initial-trigger",
-        choices=("auto", "always", "skip"),
+        choices=("auto", "skip"),
         default="auto",
-        help="Initial trigger policy. auto resumes a matching generation; always explicitly supersedes it.",
+        help="Initial trigger policy. auto resumes a matching generation; skip requires one for the current head.",
     )
     review_loop_parser.add_argument(
         "--worktree-path",

@@ -38,7 +38,7 @@ This table is the authoritative source for pipeline phase ownership.
 | Hookpoint research | `gpt-high` | Analysis |
 | Implementation | `gpt-high` | Build |
 | Test writing (separate agent) | `gpt-high` | Enumerate cases from contract |
-| CodeRabbit loop (operator + per-comment fixer) | `gpt-medium` | Structured per-comment automation against the PR-mode driver. |
+| CodeRabbit single review (operator + per-comment fixer) | `gpt-medium` | One structured review and per-comment application pass against the PR-mode driver. |
 | Test-audit gate | `gpt-high` | Checklist against stated acceptance criteria |
 | Commit-hygiene check | `gpt-high` | Checklist against small-testable-commit rules |
 | Multi-concern PR review | `gpt-high` | Decide whether the PR should be split. |

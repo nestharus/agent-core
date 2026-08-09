@@ -34,7 +34,7 @@ Example:
 
 ```yaml
 ---
-description: 'Run the CodeRabbit review loop until review value converges'
+description: 'Run one CodeRabbit review and finding-application pass per PR'
 model: gpt-high
 output_format: ''
 ---

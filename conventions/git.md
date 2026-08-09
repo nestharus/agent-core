@@ -55,7 +55,7 @@ git config --global commit.gpgsign true
 - Store the signing key under `~/.gnupg/`.
 - Use an RSA 4096-bit key unless the repository documents a different standard.
 - Upload the public key to GitHub so signatures show as verified in the UI.
-- **Prefer new commits over amends.** Amend only when the previous commit has not been pushed, or during the CodeRabbit loop described in `~/ai/workflows/coderabbit-loop.md`.
+- **Prefer new commits over amends.** Amend only when the previous commit has not been pushed, or while applying findings from the single CodeRabbit review described in `~/ai/agents/coderabbit-operator.md`.
 - Never amend a pushed commit outside that narrow loop.
 - **No agent authorship attribution.** Agents do not add `Co-Authored-By:`, `Generated-By:`, provider-specific "wrote this" notes, "Generated with ...", or similar trailers.
 - The commit author is the human operator who ran the pipeline; agents are tools.

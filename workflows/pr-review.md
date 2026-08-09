@@ -269,7 +269,7 @@ If any gate surfaces findings that require code changes:
 
 1. A `gpt-high` agent applies the fixes, combined with any remaining useful findings from the upstream optional PR-mode review operator.
 2. Amend the commit.
-3. If Phase 7 was enabled for this PR, rerun through `~/ai/agents/coderabbit-operator.md`; if Phase 7 was skipped by its gate, do not synthesize or request a review pass.
+3. If Phase 7 was enabled for this PR, retain its persisted `single_review_completion`; do not request another CodeRabbit review after this fix pass. If Phase 7 was skipped by its gate, do not synthesize a review pass.
 4. Re-run only the gates that flagged findings, unless the fix touched another gate's area.
 
 ## Decomposition
