@@ -45,8 +45,16 @@ ACK_COMPLETION_MARKERS = {
 ACK_ACTION_MARKERS = ("Action performed", "Actions performed")
 FIX_OUTCOMES = {"fixed", "fixed_and_replied"}
 REPLY_OUTCOMES = {"replied", "fixed_and_replied"}
-CALLER_DECISION_OUTCOMES = {"rejected", "deferred"}
+CALLER_DECISION_OUTCOMES = {"deferred"}
 VALID_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES | CALLER_DECISION_OUTCOMES
+OUTCOME_FIELDS = {
+    "comment_id",
+    "outcome",
+    "commit_sha",
+    "reply_body_file",
+    "rationale",
+    "files_touched",
+}
 TERMINAL_REVIEW_STATES = {"APPROVED", "CHANGES_REQUESTED"}
 REVIEW_STATES = TERMINAL_REVIEW_STATES | {"COMMENTED"}
 SUMMARY_COMMENT_MARKER = (
@@ -1243,6 +1251,41 @@ def is_open_finding_record(
     )
 
 
+def out_of_diff_comment_matches_review_generation(
+    metadata: dict[str, Any], generation: dict[str, Any] | None
+) -> bool:
+    if (
+        metadata.get("kind") != "out-of-diff"
+        or metadata.get("source") != "issue-comment"
+        or not isinstance(generation, dict)
+        or generation.get("schema") != GENERATION_SCHEMA
+    ):
+        return False
+    comment_id = int(metadata.get("comment_id") or 0)
+    baseline_ids = {
+        int(value) for value in generation.get("baseline_issue_comment_ids", [])
+    }
+    if comment_id == 0 or comment_id in baseline_ids:
+        return False
+    posted_at = parse_time(metadata.get("posted_at"))
+    triggered_at = parse_time(generation.get("triggered_at"))
+    return posted_at is not None and triggered_at is not None and posted_at >= triggered_at
+
+
+def is_actionable_finding_record(
+    record: dict[str, Any],
+    head_oid: str | None,
+    out_of_diff_dispositions: dict[str, dict[str, Any]],
+    generation: dict[str, Any] | None,
+) -> bool:
+    if not is_open_finding_record(record, head_oid, out_of_diff_dispositions):
+        return False
+    metadata = record["metadata"]
+    if metadata.get("kind") == "in-diff":
+        return True
+    return out_of_diff_comment_matches_review_generation(metadata, generation)
+
+
 def poll(
     repo: Repo,
     pr_num: int,
@@ -1291,6 +1334,7 @@ def poll(
     )
 
     state = load_state(repo, pr_num)
+    active_generation = state.get("active_generation")
     out_of_diff_dispositions = state.get("out_of_diff_dispositions", {})
     if not isinstance(out_of_diff_dispositions, dict):
         out_of_diff_dispositions = {}
@@ -1324,11 +1368,11 @@ def poll(
         write_comment_file(record["path"], metadata, record["body"])
         if is_open_finding_record(record, head_oid, out_of_diff_dispositions):
             unresolved_findings.append(output_metadata(record, head_oid))
-        if (
-            not metadata.get("resolved")
-            and metadata.get("kind") == "in-diff"
-            and metadata.get("source") != "trigger-ack"
-            and comment_matches_review_head(metadata, head_oid)
+        if is_actionable_finding_record(
+            record,
+            head_oid,
+            out_of_diff_dispositions,
+            active_generation if isinstance(active_generation, dict) else None,
         ):
             actionable_comments.append(output_metadata(record, head_oid))
         if (
@@ -1369,7 +1413,6 @@ def poll(
     if bot_login and persist_state:
         save_bot_login(repo, bot_login, pr_num)
 
-    active_generation = state.get("active_generation")
     current_generation_head_oid = None
     if isinstance(active_generation, dict):
         current_generation_head_oid = str(
@@ -2070,6 +2113,13 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
         raise DriverError(
             f"agent outcome for comment {comment_id} is not a JSON object"
         )
+    if set(raw) != OUTCOME_FIELDS:
+        missing = sorted(OUTCOME_FIELDS - set(raw))
+        unexpected = sorted(set(raw) - OUTCOME_FIELDS)
+        raise DriverError(
+            f"agent outcome for comment {comment_id} has invalid fields; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     outcome = raw.get("outcome")
     if outcome not in VALID_OUTCOMES:
         raise DriverError(
@@ -2093,15 +2143,6 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
         raise DriverError(
             f"agent outcome for comment {comment_id} has invalid files_touched"
         )
-    if not isinstance(raw.get("review_provided_value"), bool):
-        raise DriverError(
-            f"agent outcome for comment {comment_id} is missing review_provided_value"
-        )
-    if raw["review_provided_value"] is False and outcome != "rejected":
-        raise DriverError(
-            f"agent outcome for comment {comment_id} must reject non-value feedback"
-        )
-
     commit_sha = raw.get("commit_sha")
     if commit_sha is not None and not isinstance(commit_sha, str):
         raise DriverError(
@@ -2129,7 +2170,6 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
         "reply_body_file": reply_body_file,
         "rationale": raw["rationale"].strip(),
         "files_touched": raw["files_touched"],
-        "review_provided_value": raw["review_provided_value"],
     }
 
 
@@ -2471,15 +2511,11 @@ def select_actionable_comments(
     poll_result: dict[str, Any], handled_comment_ids: set[int] | None = None
 ) -> list[dict[str, Any]]:
     handled_comment_ids = handled_comment_ids or set()
-    candidates = [
-        *poll_result.get("new_comments", []),
-        *poll_result.get("actionable_comments", []),
-    ]
+    candidates = poll_result.get("actionable_comments", [])
     comments_by_id = {
         int(comment.get("comment_id") or 0): comment
         for comment in candidates
-        if comment.get("kind") == "in-diff"
-        and not comment.get("resolved")
+        if not comment.get("resolved")
         and int(comment.get("comment_id") or 0) not in handled_comment_ids
     }
     comments_by_id.pop(0, None)
@@ -2801,7 +2837,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iteration_index += 1
             continue
 
-        if final_outcome == "approved":
+        if final_outcome == "approved" and not actionable_comments:
             terminal_reason = str(final_outcome)
             iterations.append(iteration)
             break
@@ -2829,7 +2865,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         if not actionable_comments:
             iterations.append(iteration)
             print(
-                f"No actionable in-diff comments yet for {repo.slug}#{args.pr_num}; waiting for next poll",
+                f"No actionable findings yet for {repo.slug}#{args.pr_num}; waiting for next poll",
                 file=sys.stderr,
                 flush=True,
             )
@@ -2861,19 +2897,10 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iteration["outcomes"].append(outcome)
             handled_comment_ids.add(int(comment["comment_id"]))
 
-        if iteration["outcomes"] and all(
-            outcome["review_provided_value"] is False
-            for outcome in iteration["outcomes"]
-        ):
-            terminal_reason = "no_value_provided"
-            iterations.append(iteration)
-            break
-
         caller_decision = [
             outcome
             for outcome in iteration["outcomes"]
-            if outcome["review_provided_value"]
-            and outcome["outcome"] in CALLER_DECISION_OUTCOMES
+            if outcome["outcome"] in CALLER_DECISION_OUTCOMES
         ]
         if caller_decision:
             iteration["needs_caller_decision"] = True

@@ -32,7 +32,7 @@ You audit completed workflow runs, not source-code quality, test quality, PR val
 - The only evidence is one executing agent's step log for one operator. Use `workflow-reviewer`.
 - The question is workflow document design. Use `workflow-design-auditor`.
 - The question is operator prompt design. Use `agent-design-auditor`.
-- The question is test quality, coverage value, CodeRabbit value, PR diff justification, or commit hygiene. Use the existing gates for those concerns.
+- The question is test quality, coverage value, CodeRabbit finding resolution, PR diff justification, or commit hygiene. Use the existing gates for those concerns.
 - The caller wants canonical audit history updated. Use `decision-encoder` after this operator emits its role output.
 
 ## Inputs

@@ -121,7 +121,7 @@ Acceptable shortcuts: targeted smoke tests only, minimal conflict resolution, ac
 | Phase 6 alignment NEEDS_REVISION or MISALIGNED | Make the smallest textual fix that lets the gate proceed; do not broaden design analysis. |
 | Phase 6 prototype-risk HIGH | Prefer prototype/hack path or minimum proof over full implementation derisking. |
 | Phase 6 derivation multi-layer violation | Collapse to the minimum usable contract for the immediate feature and record the derivation residual. |
-| Phase 7 CodeRabbit non-trivial advisory | Ignore unless it blocks function, build, or merge. Record residual if necessary. |
+| Phase 7 CodeRabbit finding | Resolve every finding before Phase 8 with a focused fix or exact rationale reply. A concrete caller-owned decision may defer and block; never request a follow-up review generation. |
 | Phase 8 PR-review test-audit FAIL | Add or fix the smallest functional test that proves the immediate behavior; do not expand coverage. |
 | Phase 8 PR-review commit-hygiene split signal | Keep history as-is unless the platform or reviewer blocks merge. |
 | Phase 8 user-review gate (proceed-to-Phase-9 approval) | Auto-approve option A only when mandatory PR-review gates pass, pipeline-callable code-quality aggregates are LOW, and the diff stays within audit-owned touched surfaces or authorized decomposition boundaries. Stable HIGH residuals do not override touched-file ownership or LOW-only gates. |

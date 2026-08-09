@@ -18,16 +18,16 @@ single review pass; do not perform those actions or request another review.
 
 1. Read the prompt inputs and then read the single `comment_file_path`.
 2. Inspect only the code needed to judge that one comment.
-3. Decide the binary `review_provided_value` field:
-   - `true` when the comment surfaces a real concern worth engaging with.
-   - `false` when the comment is noise, intentional, redundant, or contrary to
-     the repo's conventions.
-4. For valuable comments, either make and commit the focused fix, write a
-   concise reply body, do both, or reject/defer with rationale when the caller
-   must decide.
-5. For non-value comments, do not edit files. Return `outcome: "rejected"` and
-   `review_provided_value: false`.
-6. Write the required JSON object to `outcome_file_path`. Keep the final chat
+3. Resolve the finding with exactly one disposition:
+   - make and commit the focused fix when a code change is appropriate;
+   - write a concise exact-comment reply when no code change is appropriate;
+   - do both when the fix needs an explanatory reply; or
+   - defer with a concrete caller-owned decision when resolution is unsafe
+     without input.
+4. A finding that is incorrect, intentional, redundant, or contrary to the
+   repository's conventions still requires an exact reply explaining why no
+   code change is appropriate. Never ignore or silently reject a finding.
+5. Write the required JSON object to `outcome_file_path`. Keep the final chat
    response short and do not omit the file write.
 
 ## Output Contract
@@ -37,12 +37,11 @@ The JSON object must contain exactly these semantic fields:
 ```json
 {
   "comment_id": 0,
-  "outcome": "fixed | replied | fixed_and_replied | rejected | deferred",
+  "outcome": "fixed | replied | fixed_and_replied | deferred",
   "commit_sha": null,
   "reply_body_file": null,
   "rationale": "short text",
-  "files_touched": [],
-  "review_provided_value": true
+  "files_touched": []
 }
 ```
 

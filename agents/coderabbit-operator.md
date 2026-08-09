@@ -162,13 +162,12 @@ The pass:
 - resumes a matching persisted generation or creates a new trigger generation;
 - revalidates provider head identity before and after every poll;
 - waits at least 300 seconds between loop-owned polls;
-- dispatches each unresolved current-head in-diff comment ID at most once per
-  run and preserves each structured fixer outcome;
+- dispatches each unresolved current-generation finding ID at most once per run
+  and preserves each structured fixer outcome;
 - pushes fixed commits, waits for provider head readback, posts exact replies,
   and terminates without requesting another review;
-- succeeds after an approved review, after all completed-review findings are
-  assessed as non-value, or after the useful findings from the completed review
-  are applied;
+- succeeds after an approved review with no findings or after every finding from
+  the completed review is resolved by a validated fix or exact reply;
 - persists `single_review_completion` with the reviewed head, final head,
   terminal result, and structured outcomes; later runs return this evidence
   without polling, dispatching, or triggering;
@@ -180,12 +179,11 @@ The pass:
 ```json
 {
   "comment_id": 0,
-  "outcome": "fixed | replied | fixed_and_replied | rejected | deferred",
+  "outcome": "fixed | replied | fixed_and_replied | deferred",
   "commit_sha": null,
   "reply_body_file": null,
   "rationale": "short text",
-  "files_touched": [],
-  "review_provided_value": true
+  "files_touched": []
 }
 ```
 
@@ -194,19 +192,16 @@ collapse it into a boolean fixed/not-fixed result.
 
 ## Terminal States
 
-- `CONVERGED:coderabbit-approved` requires
+- `COMPLETED:coderabbit-approved` requires
   `generation_result=REVIEW_COMPLETED` and `terminal_reason=approved`.
-- `CONVERGED:coderabbit-no-value-provided` requires findings from a
-  `REVIEW_COMPLETED` generation, `terminal_reason=no_value_provided`, and every
-  actionable in-diff comment in the latest iteration assessed
-  `review_provided_value: false`.
-- `CONVERGED:coderabbit-review-applied` requires
+- `COMPLETED:coderabbit-findings-resolved` requires
   `generation_result=REVIEW_COMPLETED`, `terminal_reason=review_applied`, and
-  persisted `single_review_completion` after all fixes, pushes, and replies.
+  persisted `single_review_completion` after every finding has a validated
+  fix/reply disposition and all required pushes and replies have exact readback.
 - `PENDING:coderabbit-rate-limited` is
   `generation_result=RATE_LIMITED_NO_REVIEW`; do not merge or re-trigger.
 - `PENDING:coderabbit-caller-decision` is a driver exit `3` with
-  `needs_caller_decision=true`.
+  `needs_caller_decision=true` after a `deferred` finding.
 - `BLOCKED:coderabbit-generation` is `generation_result=BLOCKED`.
 - `BLOCKED:coderabbit-script-failed` is any other unexpected nonzero exit.
 

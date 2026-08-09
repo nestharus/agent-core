@@ -1292,7 +1292,7 @@ def test_reply_rejects_wrong_author_and_missing_exact_comment(
 
 def test_review_loop_does_not_redispatch_handled_comment_ids() -> None:
     first = {"comment_id": 42, "kind": "in-diff", "resolved": False}
-    second = {"comment_id": 43, "kind": "in-diff", "resolved": False}
+    second = {"comment_id": 43, "kind": "out-of-diff", "resolved": False}
     poll_result = {
         "new_comments": [first],
         "actionable_comments": [first, second],
@@ -1300,6 +1300,29 @@ def test_review_loop_does_not_redispatch_handled_comment_ids() -> None:
 
     assert driver.select_actionable_comments(poll_result) == [first, second]
     assert driver.select_actionable_comments(poll_result, {42}) == [second]
+
+
+def test_out_of_diff_finding_is_bound_to_current_review_generation() -> None:
+    generation = _generation(baseline_issue_comment_ids=[50])
+    generation["triggered_at"] = "2026-08-07T10:00:00Z"
+    record = driver.collect_comment_records(
+        REPO,
+        198,
+        [],
+        [],
+        [_issue_comment(51, "Outside diff finding", observed_at="2026-08-07T10:01:00Z")],
+        {},
+        BOT_LOGIN,
+    )[0]
+
+    assert driver.is_actionable_finding_record(record, "head-sha", {}, generation)
+
+    generation["baseline_issue_comment_ids"].append(51)
+    assert not driver.is_actionable_finding_record(record, "head-sha", {}, generation)
+
+    generation["baseline_issue_comment_ids"].remove(51)
+    record["metadata"]["posted_at"] = "2026-08-07T09:59:59Z"
+    assert not driver.is_actionable_finding_record(record, "head-sha", {}, generation)
 
 
 @pytest.mark.parametrize(
@@ -1330,7 +1353,13 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
             "kind": "in-diff",
             "resolved": False,
             "body_path": str(tmp_path / "comment-42.md"),
-        }
+        },
+        {
+            "comment_id": 44,
+            "kind": "out-of-diff",
+            "resolved": False,
+            "body_path": str(tmp_path / "comment-44.md"),
+        },
     ]
     if include_caller_decision:
         comments.append(
@@ -1343,6 +1372,9 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         )
     trigger_calls: list[str] = []
     poll_calls: list[str] = []
+    reply_calls: list[int] = []
+    reply_path = tmp_path / "reply-44.md"
+    reply_path.write_text("No code change is appropriate because the existing contract is exact.\n")
 
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
     monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
@@ -1415,7 +1447,15 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
                 "reply_body_file": None,
                 "rationale": "Caller disposition required.",
                 "files_touched": [],
-                "review_provided_value": True,
+            }
+        if comment_id == 44:
+            return {
+                "comment_id": 44,
+                "outcome": "replied",
+                "commit_sha": None,
+                "reply_body_file": str(reply_path),
+                "rationale": "Resolved with an exact rationale reply.",
+                "files_touched": [],
             }
         return {
             "comment_id": 42,
@@ -1424,7 +1464,6 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
             "reply_body_file": None,
             "rationale": "Applied the review finding.",
             "files_touched": ["tools/example.py"],
-            "review_provided_value": True,
         }
 
     monkeypatch.setattr(driver, "dispatch_comment_agent", fake_dispatch)
@@ -1439,6 +1478,14 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         "wait_for_provider_pr_head",
         lambda *args: ("fixed-head", driver.utc_now_dt()),
     )
+    monkeypatch.setattr(
+        driver,
+        "post_reply",
+        lambda repo, pr_num, comment_id, body_file: (
+            reply_calls.append(comment_id),
+            {"posted": True, "reply_id": 99},
+        )[1],
+    )
 
     first = driver.review_loop(_review_loop_args(tmp_path))
     second = driver.review_loop(_review_loop_args(tmp_path))
@@ -1451,6 +1498,7 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
     assert first["single_review_completion"]["final_head_oid"] == "fixed-head"
     assert len(trigger_calls) == 1
     assert len(poll_calls) == 1
+    assert reply_calls == [44]
     assert second["completion_reused"] is True
     assert second["terminal_reason"] == terminal_reason
     assert second["needs_caller_decision"] is needs_caller_decision
@@ -1577,17 +1625,50 @@ def test_rate_limit_capacity_does_not_trigger_again_in_same_pass(
     assert "single_review_completion" not in result
 
 
-def test_non_value_outcome_must_use_rejected_contract() -> None:
-    with pytest.raises(driver.DriverError, match="must reject non-value feedback"):
+def test_new_outcome_rejects_value_judgment_and_unresolved_rejection(tmp_path) -> None:
+    reply_path = tmp_path / "reply.md"
+    reply_path.write_text("The finding is resolved by this rationale.\n", encoding="utf-8")
+
+    with pytest.raises(driver.DriverError, match="unexpected=.*review_provided_value"):
         driver.validate_outcome(
             {
                 "comment_id": 42,
-                "outcome": "fixed",
+                "outcome": "replied",
                 "commit_sha": None,
-                "reply_body_file": None,
-                "rationale": "Incorrectly marked a fix as non-value.",
+                "reply_body_file": str(reply_path),
+                "rationale": "Obsolete value judgment.",
                 "files_touched": [],
                 "review_provided_value": False,
+            },
+            42,
+        )
+
+    with pytest.raises(driver.DriverError, match="invalid outcome 'rejected'"):
+        driver.validate_outcome(
+            {
+                "comment_id": 42,
+                "outcome": "rejected",
+                "commit_sha": None,
+                "reply_body_file": None,
+                "rationale": "Unresolved rejection is forbidden.",
+                "files_touched": [],
+            },
+            42,
+        )
+
+
+def test_rationale_only_resolution_requires_exact_reply_file(tmp_path) -> None:
+    missing_reply = tmp_path / "missing.md"
+
+    with pytest.raises(driver.DriverError, match="does not exist"):
+        driver.validate_outcome(
+            {
+                "comment_id": 42,
+                "outcome": "replied",
+                "commit_sha": None,
+                "reply_body_file": str(missing_reply),
+                "rationale": "No code change is appropriate.",
+                "files_touched": [],
             },
             42,
         )
@@ -1628,7 +1709,6 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
                 "reply_body_file": None,
                 "rationale": "Stale outcome from an earlier invocation.",
                 "files_touched": ["tools/stale.py"],
-                "review_provided_value": True,
             }
         ),
         encoding="utf-8",
@@ -1640,7 +1720,6 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
         "reply_body_file": None,
         "rationale": "Applied the focused fix.",
         "files_touched": ["tools/example.py"],
-        "review_provided_value": True,
     }
     monkeypatch.setattr(
         driver.subprocess,
@@ -1683,7 +1762,6 @@ def test_dispatch_comment_agent_rejects_fix_without_new_commit(
         "reply_body_file": None,
         "rationale": "Applied the focused fix.",
         "files_touched": ["tools/example.py"],
-        "review_provided_value": True,
     }
     monkeypatch.setattr(
         driver.subprocess,
@@ -1722,7 +1800,6 @@ def test_dispatch_comment_agent_rejects_reported_commit_that_is_not_head(
         "reply_body_file": None,
         "rationale": "Applied the focused fix.",
         "files_touched": ["tools/example.py"],
-        "review_provided_value": True,
     }
     monkeypatch.setattr(
         driver.subprocess,

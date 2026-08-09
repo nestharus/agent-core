@@ -1,6 +1,6 @@
 # CodeRabbit Comment Fix Brief
 
-You are addressing exactly one CodeRabbit in-diff review comment.
+You are addressing exactly one CodeRabbit finding.
 
 ## Inputs
 
@@ -17,10 +17,10 @@ You are addressing exactly one CodeRabbit in-diff review comment.
 
 1. Work only in `${worktree_path}` on branch `${pr_branch}`.
 2. Read `${comment_file_path}` and inspect the referenced code.
-3. Decide whether the CodeRabbit comment provided real review value.
-4. If the comment is valid and a code change is appropriate, make the smallest correct fix, run the focused verification that fits the touched surface, and commit the change.
-5. If the comment is better answered with a reply, write the reply body to a sibling Markdown file near `${outcome_file_path}` and reference that path in the JSON outcome.
-6. If the comment is noise, intentional, redundant, or not worth acting on, do not edit files. Mark `review_provided_value: false` and use `outcome: "rejected"` with a concise rationale.
+3. Resolve the finding. If a code change is appropriate, make the smallest correct fix, run the focused verification that fits the touched surface, and commit the change.
+4. If no code change is appropriate because the finding is incorrect, intentional, redundant, or contrary to repository conventions, write a concrete reply to a sibling Markdown file near `${outcome_file_path}` and use `outcome: "replied"`.
+5. Use `fixed_and_replied` when both a committed fix and an explanatory reply are required.
+6. Use `deferred` only when a concrete caller-owned decision prevents safe resolution. Never ignore or silently reject a finding.
 7. Do not push, trigger CodeRabbit, post GitHub replies, or process any other CodeRabbit comment.
 
 ## Required Output
@@ -30,12 +30,11 @@ Write exactly one JSON object to `${outcome_file_path}` with this shape:
 ```json
 {
   "comment_id": ${comment_id},
-  "outcome": "fixed | replied | fixed_and_replied | rejected | deferred",
+  "outcome": "fixed | replied | fixed_and_replied | deferred",
   "commit_sha": "sha-or-null",
   "reply_body_file": "path-or-null",
   "rationale": "short justification",
-  "files_touched": ["path"],
-  "review_provided_value": true
+  "files_touched": ["path"]
 }
 ```
 
