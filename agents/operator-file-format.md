@@ -60,7 +60,7 @@ The schema fields are:
 - `outputs:` - return envelope shape by task. Each output has `task`, `success_shape`, and `wrote_lines`.
 - `errors:` - known error envelope shapes. Each error has `class`, `cause`, and `recovery`.
 - `side_effects:` - file, system, or external-API mutations.
-- `must_delegate:` - operations callers MUST invoke through this operator.
+- `must_delegate:` - operations callers MUST route to this operator as the execution endpoint.
 - `may_direct:` - operations callers MAY invoke directly.
 - `forbidden_direct:` - operations callers MUST NEVER do directly.
 - `inherits:` - project-wrapper-only base operator path or identity.
@@ -99,6 +99,12 @@ may_direct:
 forbidden_direct:
   - <operation-name>
 ```
+
+## `must_delegate` endpoint semantics
+
+`must_delegate:` is a caller-routing boundary. A caller that owns an operation listed there MUST select and invoke this operator instead of performing that operation directly. The declaration is satisfied when the selected operator invocation begins; it is not an instruction that the selected endpoint applies to itself.
+
+Once selected, the operator directly executes its bounded procedure for the requested operation. It MUST NOT dispatch another copy of itself for the same operation merely because its own contract contains `must_delegate:`. An endpoint may delegate only an explicitly different owned concern named by its procedure or contract; that child uses the normal `agents` invocation and capture rules so the valid parent-to-child edge remains visible in process-tree evidence.
 
 ## Wrapper inheritance pattern
 
