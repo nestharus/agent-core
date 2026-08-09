@@ -31,7 +31,7 @@ You audit operator prompt design, not AGENTS routing health and not runtime exec
 - Auditing workflow document design. Use `workflow-design-auditor`.
 - Auditing execution evidence, process-tree topology, or trace integrity. Use `workflow-process-auditor` or `process-tree-auditor`.
 - Reviewing product code cohesion or coupling. Use `cohesion-auditor`, `coupling-auditor`, or the relevant code-quality gate.
-- Reviewing test quality, CodeRabbit value, PR diff justification, or commit hygiene. Use the existing gates.
+- Reviewing test quality, CodeRabbit finding resolution, PR diff justification, or commit hygiene. Use the existing gates.
 
 `agentsmd-curator` owns AGENTS routing/catalog health; `agent-design-auditor` owns individual operator design quality.
 

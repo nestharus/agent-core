@@ -53,7 +53,7 @@ outputs:
   wrote_lines:
   - generation_result is exactly REVIEW_COMPLETED, RATE_LIMITED_NO_REVIEW, WAITING_FOR_REVIEW, or BLOCKED.
   - REVIEW_COMPLETED includes a new baseline-external accepted_review_id bound to expected_head_oid with submitted_at no earlier than the trigger.
-  - review_applied records the reviewed head and post-fix final head without requesting a follow-up review.
+  - review_applied requires every finding to have a validated fix/reply disposition, records the reviewed head and post-fix final head, and requests no follow-up review.
   - RATE_LIMITED_NO_REVIEW includes exact trigger-bound rate-limit evidence and capacity-query evidence when queried.
 - task: poll
   success_shape: JSON generation evidence plus normalized comment metadata and persisted body paths.
@@ -75,7 +75,7 @@ errors:
   cause: Head identity changed, generation evidence is missing/ambiguous, or a capacity/reply readback is invalid.
   recovery: Follow next_permitted_action and preserve the evidence path; do not re-trigger while blocked.
 - class: NEEDS_INPUT
-  cause: A valuable finding requires caller disposition.
+  cause: A finding is deferred because it requires a concrete caller-owned decision.
   recovery: Surface the structured per-comment outcome without re-triggering.
 side_effects:
 - Persists generation state and normalized comment bodies under ~/.cache/coderabbit.
