@@ -86,7 +86,7 @@ side_effects:
 - May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []
 forbidden_direct:
-- Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, pushes, reply readbacks, body markers, outdated positions, or checks; require GraphQL thread resolution plus exact-current-head CodeRabbit approval.
+- Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, pushes, reply readbacks, body markers, outdated positions, or checks; require GraphQL isResolved=true for each in-diff review thread, a matching body-revision-bound disposition for each outside-diff finding, and exact-current-head CodeRabbit approval.
 - Do not infer capacity from elapsed time or a fair-usage table.
 - Do not compose ad hoc GitHub polling or silently fall back to unrelated top-level replies.
 - Do not request a follow-up review after REVIEW_COMPLETED or bypass persisted single_review_completion.
