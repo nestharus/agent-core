@@ -1464,6 +1464,15 @@ def test_fixed_out_of_diff_finding_is_bound_to_exact_body_revision(
     assert disposition["status"] == "fixed"
     assert disposition["commit_sha"] == "fixed-head"
     assert disposition["body_sha256"] == finding["body_sha256"]
+    assert disposition["updated_at"] == finding["updated_at"]
+
+    with pytest.raises(driver.DriverError, match="exact binding evidence"):
+        driver.mark_out_of_diff_fixed_disposition(
+            REPO,
+            198,
+            {**finding, "updated_at": None},
+            {"outcome": "fixed", "commit_sha": "fixed-head"},
+        )
 
 
 def test_reply_posts_to_exact_review_thread_and_reads_back_identity(
