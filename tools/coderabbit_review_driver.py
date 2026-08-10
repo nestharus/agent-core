@@ -3154,6 +3154,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         poll_result, head_oid, head_committed_at = poll_current_pr_head(
             repo, args.pr_num, worktree_path, pr_branch
         )
+        metadata = pr_metadata(repo, args.pr_num)
         mark_loop_poll(repo, args.pr_num)
         generation = poll_result.get("generation") or {}
         generation_result = generation.get("result")
@@ -3290,7 +3291,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 iteration["push_result"]["head_sha"],
             )
             head_oid = iteration["push_result"]["head_sha"]
-            metadata = pr_metadata(repo, args.pr_num)
 
         replies_by_comment: dict[int, dict[str, Any]] = {}
         for outcome in iteration["outcomes"]:

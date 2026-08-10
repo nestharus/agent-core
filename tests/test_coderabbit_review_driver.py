@@ -1888,6 +1888,86 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         assert len(poll_calls) == poll_count
 
 
+def test_review_loop_refreshes_metadata_for_approved_external_head(
+    monkeypatch, tmp_path
+) -> None:
+    old_head = "old-head"
+    current_head = "external-head"
+    generation = {
+        **_generation(head_oid=current_head),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 9,
+        "accepted_review_state": "APPROVED",
+        "accepted_review_commit_id": current_head,
+    }
+    metadata_calls = 0
+
+    def fake_metadata(*args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "headRefName": "fix/review",
+            "headRefOid": old_head if metadata_calls == 1 else current_head,
+        }
+
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "pr_metadata", fake_metadata)
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: old_head)
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: ("fix/review", old_head, driver.utc_now_dt()),
+    )
+    monkeypatch.setattr(
+        driver,
+        "initial_trigger_decision",
+        lambda *args: {"trigger": False, "reason": "test"},
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+    monkeypatch.setattr(
+        driver,
+        "poll_current_pr_head",
+        lambda *args: (
+            {
+                "generation": generation,
+                "review_decision": "APPROVED",
+                "approval_signal": {
+                    "decision": "APPROVED",
+                    "review_id": 9,
+                    "commit_id": current_head,
+                    "submitted_at": "2026-08-07T10:05:00Z",
+                    "author_login": BOT_LOGIN,
+                },
+                "all_conversations_resolved": True,
+                "resolved_conversations": [],
+                "unresolved_findings": [],
+                "actionable_comments": [],
+                "outcome": "approved",
+            },
+            current_head,
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(driver, "active_review_generation", lambda *args: generation)
+
+    result = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert result["terminal_reason"] == "approved"
+    assert result["pr"]["headRefOid"] == current_head
+    assert result["single_review_completion"]["final_head_oid"] == current_head
+    assert metadata_calls == 2
+
+
 def test_review_loop_stops_before_dispatching_beyond_remediation_limit(
     monkeypatch, tmp_path
 ) -> None:
