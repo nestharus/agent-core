@@ -26,6 +26,7 @@ CACHE_ROOT = Path.home() / ".cache" / "coderabbit"
 DEFAULT_ENABLED_TTL_SECONDS = 3600
 DEFAULT_POLL_INTERVAL_SECONDS = 15
 DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS = 300
+MAX_REMEDIATION_PASSES = 3
 DEFAULT_CAPACITY_QUERY_ATTEMPTS = 4
 AI_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIX_BRIEF_TEMPLATE = AI_ROOT / "templates" / "coderabbit-fix-brief.md"
@@ -3115,6 +3116,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     final_all_conversations_resolved = False
     final_resolved_conversations: list[dict[str, Any]] = []
     rate_limit_observations: list[str] = []
+    remediation_passes = 0
 
     while True:
         iteration_dir = cache_dir(repo, args.pr_num) / f"iter-{iteration_index}"
@@ -3210,6 +3212,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iteration_index += 1
             continue
 
+        if remediation_passes >= MAX_REMEDIATION_PASSES:
+            iteration["terminal"] = True
+            iteration["decomposition_required"] = True
+            iterations.append(iteration)
+            terminal_reason = "max_passes_reached"
+            break
+
         if git_dirty_paths(worktree_path):
             raise DriverError(
                 f"worktree is dirty before comment dispatch: {worktree_path}"
@@ -3287,6 +3296,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         if caller_decision:
             terminal_reason = "caller_decision_required"
             break
+        remediation_passes += 1
         iteration_index += 1
 
     needs_caller_decision = terminal_reason in {
@@ -3306,9 +3316,14 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "loop_started_at": loop_started_at,
         "loop_completed_at": utc_now(),
         "terminal": terminal_reason
-        in {"approved", "rate_limited_no_review", "blocked"},
+        in {"approved", "rate_limited_no_review", "blocked", "max_passes_reached"},
         "terminal_reason": terminal_reason,
-        "outcome": terminal_reason,
+        "outcome": (
+            "MAX_PASSES_REACHED"
+            if terminal_reason == "max_passes_reached"
+            else terminal_reason
+        ),
+        "decomposition_required": terminal_reason == "max_passes_reached",
         "needs_caller_decision": needs_caller_decision,
         "caller_decision_outcomes": caller_decision_outcomes,
         "review_decision": final_review_decision,
@@ -3404,6 +3419,8 @@ def command_review_loop(args: argparse.Namespace) -> int:
     if payload.get("needs_caller_decision"):
         return 3
     if payload.get("generation_result") == "RATE_LIMITED_NO_REVIEW":
+        return 3
+    if payload.get("outcome") == "MAX_PASSES_REACHED":
         return 3
     return 0
 

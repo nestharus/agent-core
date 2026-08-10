@@ -1849,6 +1849,130 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         assert len(poll_calls) == poll_count
 
 
+def test_review_loop_stops_before_dispatching_beyond_remediation_limit(
+    monkeypatch, tmp_path
+) -> None:
+    generation = {
+        **_generation(),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 2,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "head-sha",
+    }
+    comment = {
+        "comment_id": 42,
+        "kind": "in-diff",
+        "resolved": False,
+        "body_path": str(tmp_path / "comment-42.md"),
+        "root_comment_id": 42,
+        "thread_id": "thread-42",
+        "conversation_revision": "revision-1",
+        "latest_bot_comment_id": 42,
+    }
+    poll_calls: list[None] = []
+    dispatch_calls: list[None] = []
+
+    monkeypatch.setattr(driver, "MAX_REMEDIATION_PASSES", 1)
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {"headRefName": "fix/review", "headRefOid": "head-sha"},
+    )
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: "head-sha")
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: (
+            "fix/review",
+            "head-sha",
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "initial_trigger_decision",
+        lambda *args: {"trigger": False, "reason": "test"},
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+
+    def fake_poll(*args):
+        poll_calls.append(None)
+        return (
+            {
+                "generation": generation,
+                "review_decision": "CHANGES_REQUESTED",
+                "approval_signal": {"decision": "CHANGES_REQUESTED"},
+                "all_conversations_resolved": False,
+                "unresolved_findings": [comment],
+                "actionable_comments": [comment],
+                "outcome": "changes_requested",
+            },
+            "head-sha",
+            driver.utc_now_dt(),
+        )
+
+    monkeypatch.setattr(driver, "poll_current_pr_head", fake_poll)
+    monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+    monkeypatch.setattr(
+        driver,
+        "dispatch_comment_agent",
+        lambda **kwargs: (
+            dispatch_calls.append(None),
+            {
+                "comment_id": 42,
+                "outcome": "replied",
+                "commit_sha": None,
+                "reply_body_file": str(tmp_path / "reply.md"),
+                "rationale": "Addressed.",
+                "files_touched": [],
+            },
+        )[1],
+    )
+    monkeypatch.setattr(driver, "post_reply", lambda *args: {"posted": True})
+    monkeypatch.setattr(driver, "mark_conversation_awaiting", lambda *args: None)
+    monkeypatch.setattr(driver, "mark_out_of_diff_fixed_disposition", lambda *args: None)
+    monkeypatch.setattr(driver, "active_review_generation", lambda *args: generation)
+
+    result = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert len(poll_calls) == 2
+    assert len(dispatch_calls) == 1
+    assert result["terminal"] is True
+    assert result["terminal_reason"] == "max_passes_reached"
+    assert result["outcome"] == "MAX_PASSES_REACHED"
+    assert result["decomposition_required"] is True
+    assert result["iterations"][-1]["actionable_comments"] == [comment]
+    assert result["iterations"][-1]["decomposition_required"] is True
+
+
+def test_review_loop_command_returns_nonzero_at_remediation_limit(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(
+        driver,
+        "review_loop",
+        lambda args: {
+            "generation_result": "REVIEW_COMPLETED",
+            "outcome": "MAX_PASSES_REACHED",
+            "needs_caller_decision": False,
+        },
+    )
+
+    assert driver.command_review_loop(object()) == 3
+    assert "MAX_PASSES_REACHED" in capsys.readouterr().out
+
+
 def test_completed_pr_suppresses_even_forced_direct_trigger(
     monkeypatch, tmp_path
 ) -> None:
