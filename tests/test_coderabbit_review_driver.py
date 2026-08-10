@@ -1344,20 +1344,41 @@ def test_completion_requires_resolved_threads_and_exact_current_head_approval(
             "author_login": BOT_LOGIN,
         },
     }
-    with pytest.raises(driver.DriverError, match="resolved conversations"):
+    approval_error = (
+        "single-review completion requires resolved conversations and "
+        "exact-current-head CodeRabbit approval"
+    )
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
         driver.save_single_review_completion(REPO, 198, payload)
 
     payload["all_conversations_resolved"] = True
     payload["approval_signal"]["commit_id"] = "prior-head"
-    with pytest.raises(driver.DriverError, match="exact-current-head"):
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
         driver.save_single_review_completion(REPO, 198, payload)
 
     payload["approval_signal"]["commit_id"] = "fixed-head"
     payload["approval_signal"]["author_login"] = "human-reviewer"
-    with pytest.raises(driver.DriverError, match="CodeRabbit approval"):
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
         driver.save_single_review_completion(REPO, 198, payload)
 
     payload["approval_signal"]["author_login"] = BOT_LOGIN
+    missing_review_id = {
+        **payload,
+        "approval_signal": {**payload["approval_signal"], "review_id": None},
+    }
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
+        driver.save_single_review_completion(REPO, 198, missing_review_id)
+
+    incomplete_generation = {
+        **payload,
+        "generation": {**generation, "result": "WAITING_FOR_REVIEW"},
+    }
+    with pytest.raises(
+        driver.DriverError,
+        match="^single-review completion requires a completed review generation$",
+    ):
+        driver.save_single_review_completion(REPO, 198, incomplete_generation)
+
     completion = driver.save_single_review_completion(REPO, 198, payload)
     assert completion["approval_review_id"] == 9
     assert completion["all_conversations_resolved"] is True
