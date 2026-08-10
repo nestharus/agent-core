@@ -1213,6 +1213,12 @@ def test_conversation_history_and_pushback_advance_independently(
         for record in records
         if record["metadata"].get("thread_parent") is None
     }
+    records_by_id = {record["metadata"]["comment_id"]: record for record in records}
+    assert records_by_id[42]["metadata"]["conversation_path"] == records_by_id[44][
+        "metadata"
+    ]["conversation_path"]
+    assert not (tmp_path / "nestharus" / "agent-core" / "pr-198" / "review-9").exists()
+    assert len(list(tmp_path.rglob("conversation-*.md"))) == 2
     history = pathlib.Path(roots[42]["metadata"]["conversation_path"]).read_text()
     assert history.index("Initial finding") < history.index("Our first reply")
     assert history.index("Our first reply") < history.index("CodeRabbit pushback")

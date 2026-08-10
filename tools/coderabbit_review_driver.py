@@ -1199,6 +1199,9 @@ def collect_comment_records(
         for review in reviews
         if review.get("id") is not None
     }
+    conversation_cache: dict[
+        int, tuple[list[dict[str, Any]], dict[str, Any] | None, Path, str]
+    ] = {}
 
     for comment in review_comments:
         login = (comment.get("user") or {}).get("login")
@@ -1212,43 +1215,68 @@ def collect_comment_records(
         root_comment_id = int(
             status.get("root_comment_id") or comment.get("in_reply_to_id") or comment_id
         )
-        thread_comment_ids = {
-            int(value) for value in status.get("comment_ids", []) if int(value)
-        }
-        conversation_comments = sorted(
-            [
-                item
-                for item in review_comments
-                if (
-                    object_id(item) in thread_comment_ids
-                    if thread_comment_ids
-                    else object_id(item) == root_comment_id
-                    or item.get("in_reply_to_id") == root_comment_id
-                )
-            ],
-            key=review_comment_sort_key,
-        )
-        latest_bot_comment = next(
+        cached_conversation = conversation_cache.get(root_comment_id)
+        if cached_conversation is None:
+            thread_comment_ids = {
+                int(value) for value in status.get("comment_ids", []) if int(value)
+            }
+            conversation_comments = sorted(
+                [
+                    item
+                    for item in review_comments
+                    if (
+                        object_id(item) in thread_comment_ids
+                        if thread_comment_ids
+                        else object_id(item) == root_comment_id
+                        or item.get("in_reply_to_id") == root_comment_id
+                    )
+                ],
+                key=review_comment_sort_key,
+            )
+            latest_bot_comment = next(
+                (
+                    item
+                    for item in reversed(conversation_comments)
+                    if is_bot_login(
+                        (item.get("user") or {}).get("login"), bot_login
+                    )
+                ),
+                None,
+            )
+            root_review_id = next(
+                (
+                    int(item.get("pull_request_review_id") or 0)
+                    for item in conversation_comments
+                    if object_id(item) == root_comment_id
+                ),
+                review_id,
+            )
+            conversation_path = conversation_file_path(
+                repo, pr_num, root_review_id, root_comment_id
+            )
+            revision = write_conversation_file(
+                conversation_path,
+                repo=repo,
+                pr_num=pr_num,
+                review_id=root_review_id,
+                root_comment_id=root_comment_id,
+                thread_id=status.get("thread_id"),
+                resolved=resolved,
+                comments=conversation_comments,
+            )
+            conversation_cache[root_comment_id] = (
+                conversation_comments,
+                latest_bot_comment,
+                conversation_path,
+                revision,
+            )
+        else:
             (
-                item
-                for item in reversed(conversation_comments)
-                if is_bot_login((item.get("user") or {}).get("login"), bot_login)
-            ),
-            None,
-        )
-        conversation_path = conversation_file_path(
-            repo, pr_num, review_id, root_comment_id
-        )
-        revision = write_conversation_file(
-            conversation_path,
-            repo=repo,
-            pr_num=pr_num,
-            review_id=review_id,
-            root_comment_id=root_comment_id,
-            thread_id=status.get("thread_id"),
-            resolved=resolved,
-            comments=conversation_comments,
-        )
+                conversation_comments,
+                latest_bot_comment,
+                conversation_path,
+                revision,
+            ) = cached_conversation
         body = comment.get("body") or ""
         metadata = base_comment_metadata(
             repo,
