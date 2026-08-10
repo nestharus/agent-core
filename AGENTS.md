@@ -157,7 +157,7 @@ Optimized contract sidecars live under `contracts/operators/` and `contracts/wor
 - `prototype-test-pr-writer` - Author fail-expected/pending prototype-test PR body files for production behavior-test contract review (NOT production implementation, NOT shippable-prototype experiment-evidence bundles).
   File: [~/ai/agents/prototype-test-pr-writer.md](agents/prototype-test-pr-writer.md) | Inputs: `prototype_test_branch_ref`, `base`, `repo_root`, `dossier_answer_path`, `prototype_evidence_review_path`, `spawned_tickets_path`, `test_manifest_path`, `pending_marker_convention_path`, `implementation_ticket_urls`, `output_path` | Model: `gpt-medium`
 
-- `coderabbit-operator` - Run exactly one generation-aware CodeRabbit review, resolve every finding by a validated fix or exact rationale reply, and reuse its persisted completion on rerun.
+- `coderabbit-operator` - Run exactly one generated CodeRabbit review, continue each finding conversation independently until its thread resolves, require CodeRabbit approval on the exact final head, and reuse persisted completion on rerun.
   File: [~/ai/agents/coderabbit-operator.md](agents/coderabbit-operator.md) | Inputs: `repo`, `pr_num`, `worktree_path`, `trigger_mode?`, `initial_trigger?`, `fixer_agent?` | Model: `gpt-medium`
 
 - `commit-hygiene-operator` - Audit or rewrite a branch's commits into small, testable, reviewable history without changing the cumulative diff.

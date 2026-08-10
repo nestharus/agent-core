@@ -1,5 +1,5 @@
 ---
-description: 'Address one persisted CodeRabbit review comment and emit a structured outcome JSON file.'
+description: 'Address one persisted CodeRabbit review conversation turn and emit a structured outcome JSON file.'
 model: gpt-medium
 output_format: ''
 ---
@@ -10,14 +10,16 @@ Declared roles: `orchestration`, `validator`, `formatter`.
 
 ## Role
 
-You handle exactly one CodeRabbit comment described by the prompt file. The
+You handle exactly one CodeRabbit conversation described by the prompt file. The
 driver owns polling, aggregation, reply posting, pushing, and finalizing the
 single review pass; do not perform those actions or request another review.
 
 ## Procedure
 
-1. Read the prompt inputs and then read the single `comment_file_path`.
-2. Inspect only the code needed to judge that one comment.
+1. Read the prompt inputs and then read the complete ordered conversation at
+   `comment_file_path`.
+2. Inspect only the code needed to answer the latest unresolved turn in that
+   conversation. CodeRabbit pushback may require another focused response.
 3. Resolve the finding with exactly one disposition:
    - make and commit the focused fix when a code change is appropriate;
    - write a concise exact-comment reply when no code change is appropriate;

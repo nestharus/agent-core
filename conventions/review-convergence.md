@@ -1,7 +1,7 @@
 # Review Loop Convergence — Decomposition as a Hard Signal
 
-When a multi-round review loop (Phase 4 risk gates, Phase 7 CodeRabbit
-loop, Phase 8 PR review gates) keeps surfacing new findings each
+When a multi-round review loop (Phase 4 risk gates or Phase 8 PR review
+gates) keeps surfacing new findings each
 round rather than closing prior findings to a stable terminal verdict,
 that is **not** a sign to push through more rounds. It is a hard
 signal that the artifact under review is too large for the review
@@ -41,8 +41,8 @@ Treat any of these as a hard decomposition trigger:
    closures count** (more findings opened than closed).
 3. **A round that re-classifies a prior LOW item as MEDIUM/HIGH**
    without a substantive change to that item.
-4. **A `MAX_PASSES_REACHED` outcome** from `coderabbit-operator` or
-   any equivalent loop operator with non-empty residual findings.
+4. **A `MAX_PASSES_REACHED` outcome** from an equivalent multi-round loop
+   operator with non-empty residual findings.
 
 ## Action when the trigger fires
 
