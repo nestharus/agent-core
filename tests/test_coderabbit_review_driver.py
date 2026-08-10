@@ -860,7 +860,9 @@ def test_forced_trigger_persists_marker_and_archives_active_generation(
     assert "inflight_trigger" not in state
 
 
-def test_trigger_returns_waiting_without_polling_provider(monkeypatch, tmp_path) -> None:
+def test_trigger_returns_waiting_without_polling_provider(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
     monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
     monkeypatch.setattr(driver, "pr_metadata", lambda *args: {"headRefOid": "head-sha"})
@@ -1098,6 +1100,297 @@ def test_open_findings_include_exact_in_diff_and_outside_diff_identities(
     assert driver.output_metadata(unbound_record, "head-sha")["head_oid"] is None
 
 
+def test_review_thread_resolution_is_authoritative_over_outdated_diff(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    comment = {
+        "id": 42,
+        "pull_request_review_id": 7,
+        "body": "finding",
+        "position": None,
+        "path": "tools/example.py",
+        "created_at": "2026-08-07T10:02:00Z",
+        "user": {"login": BOT_LOGIN},
+    }
+    record = driver.collect_comment_records(
+        REPO,
+        198,
+        [_review(7, "CHANGES_REQUESTED")],
+        [comment],
+        [],
+        {
+            42: {
+                "thread_id": "thread-42",
+                "root_comment_id": 42,
+                "comment_ids": [42],
+                "is_resolved": False,
+                "is_outdated": True,
+            }
+        },
+        BOT_LOGIN,
+    )[0]
+
+    assert record["metadata"]["outdated"] is True
+    assert driver.is_open_finding_record(record, "head-sha") is True
+
+    record["metadata"]["resolved"] = True
+    assert driver.is_open_finding_record(record, "head-sha") is False
+
+
+def test_conversation_history_and_pushback_advance_independently(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    comments = [
+        {
+            "id": 42,
+            "pull_request_review_id": 7,
+            "body": "Initial finding",
+            "position": 1,
+            "path": "tools/example.py",
+            "created_at": "2026-08-07T10:02:00Z",
+            "user": {"login": BOT_LOGIN},
+        },
+        {
+            "id": 43,
+            "pull_request_review_id": 8,
+            "in_reply_to_id": 42,
+            "body": "Our first reply",
+            "position": 1,
+            "path": "tools/example.py",
+            "created_at": "2026-08-07T10:03:00Z",
+            "user": {"login": "nestharus"},
+        },
+        {
+            "id": 44,
+            "pull_request_review_id": 9,
+            "in_reply_to_id": 42,
+            "body": "CodeRabbit pushback",
+            "position": 1,
+            "path": "tools/example.py",
+            "created_at": "2026-08-07T10:04:00Z",
+            "user": {"login": BOT_LOGIN},
+        },
+        {
+            "id": 52,
+            "pull_request_review_id": 7,
+            "body": "Independent finding",
+            "position": 1,
+            "path": "tools/other.py",
+            "created_at": "2026-08-07T10:02:00Z",
+            "user": {"login": BOT_LOGIN},
+        },
+    ]
+    thread_status = {
+        comment_id: {
+            "thread_id": "thread-42",
+            "root_comment_id": 42,
+            "comment_ids": [42, 43, 44],
+            "is_resolved": False,
+            "is_outdated": False,
+        }
+        for comment_id in (42, 43, 44)
+    }
+    thread_status[52] = {
+        "thread_id": "thread-52",
+        "root_comment_id": 52,
+        "comment_ids": [52],
+        "is_resolved": False,
+        "is_outdated": False,
+    }
+    records = driver.collect_comment_records(
+        REPO,
+        198,
+        [_review(7, "CHANGES_REQUESTED")],
+        comments,
+        [],
+        thread_status,
+        BOT_LOGIN,
+    )
+    roots = {
+        record["metadata"]["comment_id"]: record
+        for record in records
+        if record["metadata"].get("thread_parent") is None
+    }
+    records_by_id = {record["metadata"]["comment_id"]: record for record in records}
+    assert (
+        records_by_id[42]["metadata"]["conversation_path"]
+        == records_by_id[44]["metadata"]["conversation_path"]
+    )
+    assert not (tmp_path / "nestharus" / "agent-core" / "pr-198" / "review-9").exists()
+    assert len(list(tmp_path.rglob("conversation-*.md"))) == 2
+    history = pathlib.Path(roots[42]["metadata"]["conversation_path"]).read_text()
+    assert history.index("Initial finding") < history.index("Our first reply")
+    assert history.index("Our first reply") < history.index("CodeRabbit pushback")
+
+    actions = {
+        "42": {"latest_bot_comment_id": 42},
+        "52": {"latest_bot_comment_id": 52},
+    }
+    generation = {
+        **_generation(),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 7,
+    }
+    assert driver.conversation_resolution_state(roots[42], actions) == "pushback"
+    assert driver.is_actionable_finding_record(
+        roots[42], "new-head", {}, generation, actions
+    )
+
+    assert (
+        driver.conversation_resolution_state(roots[52], actions)
+        == "awaiting_coderabbit"
+    )
+    assert not driver.is_actionable_finding_record(
+        roots[52], "new-head", {}, generation, actions
+    )
+
+    actions["52"]["status"] = "resolved"
+    assert driver.conversation_resolution_state(roots[52], actions) == "pushback"
+    assert driver.is_actionable_finding_record(
+        roots[52], "new-head", {}, generation, actions
+    )
+
+    actions["42"]["latest_bot_comment_id"] = 44
+    assert (
+        driver.conversation_resolution_state(roots[42], actions)
+        == "awaiting_coderabbit"
+    )
+    assert not driver.is_actionable_finding_record(
+        roots[42], "new-head", {}, generation, actions
+    )
+
+    roots[42]["metadata"]["latest_bot_comment_id"] = 46
+    assert driver.conversation_resolution_state(roots[42], actions) == "pushback"
+    assert driver.is_actionable_finding_record(
+        roots[42], "new-head", {}, generation, actions
+    )
+
+
+def test_completed_generation_survives_fix_push_and_suppresses_second_trigger() -> None:
+    generation = {
+        **_generation(head_oid="reviewed-head"),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 7,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "reviewed-head",
+    }
+
+    classified = driver.classify_review_generation(
+        generation, "fixed-head", [], [], BOT_LOGIN
+    )
+
+    assert classified == generation
+    assert driver.generation_suppresses_trigger(classified) == (
+        True,
+        "the single review generation is already complete",
+    )
+
+
+def test_completed_generation_suppresses_forced_trigger_before_final_approval(
+    monkeypatch, tmp_path
+) -> None:
+    generation = {
+        **_generation(head_oid="reviewed-head"),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 7,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "reviewed-head",
+    }
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_review_generation(REPO, 198, generation)
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {"headRefOid": "fixed-head"},
+    )
+    monkeypatch.setattr(
+        driver,
+        "gh_json",
+        lambda *args: pytest.fail("completed generation must not post another review"),
+    )
+
+    result = driver.trigger_review(
+        REPO, 198, "incremental", driver.DEFAULT_LABEL, force=True
+    )
+
+    assert result["posted"] is False
+    assert result["suppression_reason"] == (
+        "single-review-policy:generation-already-completed"
+    )
+
+
+def test_completion_requires_resolved_threads_and_exact_current_head_approval(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    generation = {
+        **_generation(head_oid="reviewed-head"),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 7,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "reviewed-head",
+    }
+    payload = {
+        "pr": {"headRefOid": "fixed-head"},
+        "terminal": True,
+        "terminal_reason": "approved",
+        "outcome": "approved",
+        "needs_caller_decision": False,
+        "review_decision": "CHANGES_REQUESTED",
+        "generation": generation,
+        "iterations": [],
+        "resolved_conversations": [{"thread_id": "thread-42"}],
+        "all_conversations_resolved": False,
+        "approval_signal": {
+            "decision": "APPROVED",
+            "review_id": 9,
+            "commit_id": "fixed-head",
+            "author_login": BOT_LOGIN,
+        },
+    }
+    approval_error = (
+        "single-review completion requires resolved conversations and "
+        "exact-current-head CodeRabbit approval"
+    )
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
+        driver.save_single_review_completion(REPO, 198, payload)
+
+    payload["all_conversations_resolved"] = True
+    payload["approval_signal"]["commit_id"] = "prior-head"
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
+        driver.save_single_review_completion(REPO, 198, payload)
+
+    payload["approval_signal"]["commit_id"] = "fixed-head"
+    payload["approval_signal"]["author_login"] = "human-reviewer"
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
+        driver.save_single_review_completion(REPO, 198, payload)
+
+    payload["approval_signal"]["author_login"] = BOT_LOGIN
+    missing_review_id = {
+        **payload,
+        "approval_signal": {**payload["approval_signal"], "review_id": None},
+    }
+    with pytest.raises(driver.DriverError, match=rf"^{approval_error}$"):
+        driver.save_single_review_completion(REPO, 198, missing_review_id)
+
+    incomplete_generation = {
+        **payload,
+        "generation": {**generation, "result": "WAITING_FOR_REVIEW"},
+    }
+    with pytest.raises(
+        driver.DriverError,
+        match="^single-review completion requires a completed review generation$",
+    ):
+        driver.save_single_review_completion(REPO, 198, incomplete_generation)
+
+    completion = driver.save_single_review_completion(REPO, 198, payload)
+    assert completion["approval_review_id"] == 9
+    assert completion["all_conversations_resolved"] is True
+
+
 def test_poll_preserves_unrelated_state_and_open_findings_projection_is_read_only(
     monkeypatch, tmp_path
 ) -> None:
@@ -1155,6 +1448,38 @@ def test_locally_replied_out_of_diff_finding_is_not_reopened(
     )
     record["metadata"]["updated_at"] = "2026-08-07T10:02:00Z"
     assert driver.is_open_finding_record(record, "head-sha", dispositions) is True
+
+
+def test_fixed_out_of_diff_finding_is_bound_to_exact_body_revision(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    finding = {
+        "comment_id": 50,
+        "kind": "out-of-diff",
+        "body_sha256": driver.hashlib_sha256("Outside diff finding"),
+        "updated_at": "2026-08-07T10:01:00Z",
+    }
+    driver.mark_out_of_diff_fixed_disposition(
+        REPO,
+        198,
+        finding,
+        {"outcome": "fixed", "commit_sha": "fixed-head"},
+    )
+    disposition = driver.load_state(REPO, 198)["out_of_diff_dispositions"]["50"]
+
+    assert disposition["status"] == "fixed"
+    assert disposition["commit_sha"] == "fixed-head"
+    assert disposition["body_sha256"] == finding["body_sha256"]
+    assert disposition["updated_at"] == finding["updated_at"]
+
+    with pytest.raises(driver.DriverError, match="exact binding evidence"):
+        driver.mark_out_of_diff_fixed_disposition(
+            REPO,
+            198,
+            {**finding, "updated_at": None},
+            {"outcome": "fixed", "commit_sha": "fixed-head"},
+        )
 
 
 def test_reply_posts_to_exact_review_thread_and_reads_back_identity(
@@ -1254,6 +1579,94 @@ def test_duplicate_review_reply_is_idempotent(monkeypatch, tmp_path) -> None:
     assert result["reply_id"] == 99
 
 
+def test_missing_fixed_reply_is_recovered_once_from_durable_outcome(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(
+        REPO,
+        198,
+        {
+            "conversation_actions": {
+                "42": {
+                    "root_comment_id": 42,
+                    "thread_id": "thread-42",
+                    "status": "awaiting_coderabbit",
+                    "outcome": "fixed",
+                    "commit_sha": "fixed-head",
+                    "reply_id": None,
+                    "reply_url": None,
+                }
+            }
+        },
+    )
+    iteration_dir = driver.cache_dir(REPO, 198) / "iter-3"
+    iteration_dir.mkdir(parents=True)
+    outcome_path = iteration_dir / "agent-42.prompt.outcome.json"
+    outcome_path.write_text(
+        driver.json.dumps(
+            {
+                "comment_id": 42,
+                "outcome": "fixed",
+                "commit_sha": "fixed-head",
+                "reply_body_file": None,
+                "rationale": "Applied the requested fix.",
+                "files_touched": ["tools/example.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    reply_calls: list[tuple[int, str]] = []
+
+    def fake_post_reply(repo, pr_num, comment_id, body_file):
+        reply_calls.append((comment_id, pathlib.Path(body_file).read_text()))
+        return {
+            "posted": True,
+            "comment_id": comment_id,
+            "reply_id": 99,
+            "reply_url": "https://github.test/replies/99",
+        }
+
+    monkeypatch.setattr(driver, "post_reply", fake_post_reply)
+
+    recovered = driver.recover_missing_conversation_replies(REPO, 198)
+
+    assert len(recovered) == 1
+    assert reply_calls == [
+        (42, "Fixed in `fixed-head`.\n\nApplied the requested fix.\n")
+    ]
+    action = driver.load_state(REPO, 198)["conversation_actions"]["42"]
+    assert action["reply_id"] == 99
+    assert action["reply_url"] == "https://github.test/replies/99"
+    persisted_outcome = driver.json.loads(outcome_path.read_text())
+    assert pathlib.Path(persisted_outcome["reply_body_file"]).is_file()
+
+    assert driver.recover_missing_conversation_replies(REPO, 198) == []
+    assert len(reply_calls) == 1
+
+
+def test_conversation_cannot_wait_without_exact_reply_readback(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    finding = {
+        "comment_id": 42,
+        "root_comment_id": 42,
+        "thread_id": "thread-42",
+        "kind": "in-diff",
+    }
+
+    with pytest.raises(driver.DriverError, match="without an exact reply readback"):
+        driver.mark_conversation_awaiting(
+            REPO,
+            198,
+            finding,
+            {"outcome": "fixed", "commit_sha": "fixed-head"},
+            None,
+            "fixed-head",
+        )
+
+
 def test_reply_body_identity_normalizes_line_endings() -> None:
     readback = driver.reply_readback(
         {
@@ -1310,7 +1723,11 @@ def test_out_of_diff_finding_is_bound_to_current_review_generation() -> None:
         198,
         [],
         [],
-        [_issue_comment(51, "Outside diff finding", observed_at="2026-08-07T10:01:00Z")],
+        [
+            _issue_comment(
+                51, "Outside diff finding", observed_at="2026-08-07T10:01:00Z"
+            )
+        ],
         {},
         BOT_LOGIN,
     )[0]
@@ -1326,10 +1743,10 @@ def test_out_of_diff_finding_is_bound_to_current_review_generation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("include_caller_decision", "terminal_reason", "needs_caller_decision"),
+    ("include_caller_decision", "terminal_reason", "poll_count"),
     [
-        (False, "review_applied", False),
-        (True, "caller_decision_required", True),
+        (False, "approved", 2),
+        (True, "caller_decision_required", 1),
     ],
 )
 def test_review_loop_applies_one_review_and_reuses_persisted_completion(
@@ -1337,7 +1754,7 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
     tmp_path,
     include_caller_decision: bool,
     terminal_reason: str,
-    needs_caller_decision: bool,
+    poll_count: int,
 ) -> None:
     head = {"oid": "reviewed-head"}
     review_generation = {
@@ -1353,6 +1770,10 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
             "kind": "in-diff",
             "resolved": False,
             "body_path": str(tmp_path / "comment-42.md"),
+            "root_comment_id": 42,
+            "thread_id": "thread-42",
+            "conversation_revision": "revision-1",
+            "latest_bot_comment_id": 42,
         },
         {
             "comment_id": 44,
@@ -1368,13 +1789,19 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
                 "kind": "in-diff",
                 "resolved": False,
                 "body_path": str(tmp_path / "comment-43.md"),
+                "root_comment_id": 43,
+                "thread_id": "thread-43",
+                "conversation_revision": "revision-1",
+                "latest_bot_comment_id": 43,
             }
         )
     trigger_calls: list[str] = []
     poll_calls: list[str] = []
     reply_calls: list[int] = []
     reply_path = tmp_path / "reply-44.md"
-    reply_path.write_text("No code change is appropriate because the existing contract is exact.\n")
+    reply_path.write_text(
+        "No code change is appropriate because the existing contract is exact.\n"
+    )
 
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
     monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
@@ -1418,11 +1845,48 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
 
     def fake_poll(*args):
         poll_calls.append(head["oid"])
+        if len(poll_calls) > 1:
+            approval = {
+                "decision": "APPROVED",
+                "source": "github_review",
+                "review_id": 9,
+                "commit_id": "fixed-head",
+                "submitted_at": "2026-08-07T10:05:00Z",
+                "author_login": BOT_LOGIN,
+            }
+            return (
+                {
+                    "generation": review_generation,
+                    "review_decision": "CHANGES_REQUESTED",
+                    "aggregate_review_decision": "APPROVED",
+                    "approval_signal": approval,
+                    "all_conversations_resolved": True,
+                    "resolved_conversations": [
+                        {"root_comment_id": 42, "thread_id": "thread-42"}
+                    ],
+                    "unresolved_findings": [],
+                    "actionable_comments": [],
+                    "conversation_statuses": [],
+                    "outcome": "changes_requested",
+                    "review_completed": True,
+                },
+                "fixed-head",
+                driver.utc_now_dt(),
+            )
         return (
             {
                 "generation": review_generation,
                 "review_decision": "CHANGES_REQUESTED",
                 "aggregate_review_decision": "CHANGES_REQUESTED",
+                "approval_signal": {
+                    "decision": "CHANGES_REQUESTED",
+                    "review_id": 2,
+                    "commit_id": "reviewed-head",
+                },
+                "all_conversations_resolved": False,
+                "resolved_conversations": [],
+                "unresolved_findings": comments,
+                "conversation_statuses": [],
                 "outcome": "changes_requested",
                 "review_decision_source": "review_generation",
                 "new_comments": comments,
@@ -1437,6 +1901,7 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
 
     monkeypatch.setattr(driver, "poll_current_pr_head", fake_poll)
     monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+
     def fake_dispatch(**kwargs):
         comment_id = kwargs["comment"]["comment_id"]
         if comment_id == 43:
@@ -1483,30 +1948,245 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         "post_reply",
         lambda repo, pr_num, comment_id, body_file: (
             reply_calls.append(comment_id),
-            {"posted": True, "reply_id": 99},
+            {"posted": True, "comment_id": comment_id, "reply_id": 99},
         )[1],
     )
 
     first = driver.review_loop(_review_loop_args(tmp_path))
-    second = driver.review_loop(_review_loop_args(tmp_path))
 
     assert first["terminal_reason"] == terminal_reason
-    assert first["needs_caller_decision"] is needs_caller_decision
-    assert first["terminal"] is (not needs_caller_decision)
+    assert first["needs_caller_decision"] is include_caller_decision
+    assert first["terminal"] is (not include_caller_decision)
     assert first["generation_result"] == "REVIEW_COMPLETED"
-    assert first["single_review_completion"]["reviewed_head_oid"] == "reviewed-head"
-    assert first["single_review_completion"]["final_head_oid"] == "fixed-head"
     assert len(trigger_calls) == 1
-    assert len(poll_calls) == 1
-    assert reply_calls == [44]
-    assert second["completion_reused"] is True
-    assert second["terminal_reason"] == terminal_reason
-    assert second["needs_caller_decision"] is needs_caller_decision
-    assert len(trigger_calls) == 1
-    assert len(poll_calls) == 1
+    assert len(poll_calls) == poll_count
+    assert reply_calls == [42, 44]
+    if include_caller_decision:
+        assert "single_review_completion" not in first
+    else:
+        assert first["single_review_completion"]["reviewed_head_oid"] == "reviewed-head"
+        assert first["single_review_completion"]["final_head_oid"] == "fixed-head"
+        assert first["single_review_completion"]["approval_review_id"] == 9
+        second = driver.review_loop(_review_loop_args(tmp_path))
+        assert second["completion_reused"] is True
+        assert second["terminal_reason"] == "approved"
+        assert second["approval_signal"]["review_id"] == 9
+        assert second["approval_signal"]["commit_id"] == "fixed-head"
+        assert second["all_conversations_resolved"] is True
+        assert len(trigger_calls) == 1
+        assert len(poll_calls) == poll_count
 
 
-def test_completed_pr_suppresses_even_forced_direct_trigger(monkeypatch, tmp_path) -> None:
+def test_review_loop_refreshes_metadata_for_approved_external_head(
+    monkeypatch, tmp_path
+) -> None:
+    old_head = "old-head"
+    current_head = "external-head"
+    generation = {
+        **_generation(head_oid=current_head),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 9,
+        "accepted_review_state": "APPROVED",
+        "accepted_review_commit_id": current_head,
+    }
+    metadata_calls = 0
+
+    def fake_metadata(*args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "headRefName": "fix/review",
+            "headRefOid": old_head if metadata_calls == 1 else current_head,
+        }
+
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(driver, "pr_metadata", fake_metadata)
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: old_head)
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: ("fix/review", old_head, driver.utc_now_dt()),
+    )
+    monkeypatch.setattr(
+        driver,
+        "initial_trigger_decision",
+        lambda *args: {"trigger": False, "reason": "test"},
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+    monkeypatch.setattr(
+        driver,
+        "poll_current_pr_head",
+        lambda *args: (
+            {
+                "generation": generation,
+                "review_decision": "APPROVED",
+                "approval_signal": {
+                    "decision": "APPROVED",
+                    "review_id": 9,
+                    "commit_id": current_head,
+                    "submitted_at": "2026-08-07T10:05:00Z",
+                    "author_login": BOT_LOGIN,
+                },
+                "all_conversations_resolved": True,
+                "resolved_conversations": [],
+                "unresolved_findings": [],
+                "actionable_comments": [],
+                "outcome": "approved",
+            },
+            current_head,
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(driver, "active_review_generation", lambda *args: generation)
+
+    result = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert result["terminal_reason"] == "approved"
+    assert result["pr"]["headRefOid"] == current_head
+    assert result["single_review_completion"]["final_head_oid"] == current_head
+    assert metadata_calls == 2
+
+
+def test_review_loop_stops_before_dispatching_beyond_remediation_limit(
+    monkeypatch, tmp_path
+) -> None:
+    generation = {
+        **_generation(),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 2,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": "head-sha",
+    }
+    comment = {
+        "comment_id": 42,
+        "kind": "in-diff",
+        "resolved": False,
+        "body_path": str(tmp_path / "comment-42.md"),
+        "root_comment_id": 42,
+        "thread_id": "thread-42",
+        "conversation_revision": "revision-1",
+        "latest_bot_comment_id": 42,
+    }
+    poll_calls: list[None] = []
+    dispatch_calls: list[None] = []
+    (tmp_path / "reply.md").write_text("Addressed.\n", encoding="utf-8")
+
+    monkeypatch.setattr(driver, "MAX_REMEDIATION_PASSES", 1)
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {"headRefName": "fix/review", "headRefOid": "head-sha"},
+    )
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: "head-sha")
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: (
+            "fix/review",
+            "head-sha",
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "initial_trigger_decision",
+        lambda *args: {"trigger": False, "reason": "test"},
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+
+    def fake_poll(*args):
+        poll_calls.append(None)
+        return (
+            {
+                "generation": generation,
+                "review_decision": "CHANGES_REQUESTED",
+                "approval_signal": {"decision": "CHANGES_REQUESTED"},
+                "all_conversations_resolved": False,
+                "unresolved_findings": [comment],
+                "actionable_comments": [comment],
+                "outcome": "changes_requested",
+            },
+            "head-sha",
+            driver.utc_now_dt(),
+        )
+
+    monkeypatch.setattr(driver, "poll_current_pr_head", fake_poll)
+    monkeypatch.setattr(driver, "git_dirty_paths", lambda *args: [])
+    monkeypatch.setattr(
+        driver,
+        "dispatch_comment_agent",
+        lambda **kwargs: (
+            dispatch_calls.append(None),
+            {
+                "comment_id": 42,
+                "outcome": "replied",
+                "commit_sha": None,
+                "reply_body_file": str(tmp_path / "reply.md"),
+                "rationale": "Addressed.",
+                "files_touched": [],
+            },
+        )[1],
+    )
+    monkeypatch.setattr(driver, "post_reply", lambda *args: {"posted": True})
+    monkeypatch.setattr(driver, "mark_conversation_awaiting", lambda *args: None)
+    monkeypatch.setattr(
+        driver, "mark_out_of_diff_fixed_disposition", lambda *args: None
+    )
+    monkeypatch.setattr(driver, "active_review_generation", lambda *args: generation)
+
+    result = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert len(poll_calls) == 2
+    assert len(dispatch_calls) == 1
+    assert result["terminal"] is True
+    assert result["terminal_reason"] == "max_passes_reached"
+    assert result["outcome"] == "MAX_PASSES_REACHED"
+    assert result["decomposition_required"] is True
+    assert result["iterations"][-1]["actionable_comments"] == [comment]
+    assert result["iterations"][-1]["decomposition_required"] is True
+
+
+def test_review_loop_command_returns_nonzero_at_remediation_limit(
+    monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(
+        driver,
+        "review_loop",
+        lambda args: {
+            "generation_result": "REVIEW_COMPLETED",
+            "outcome": "MAX_PASSES_REACHED",
+            "needs_caller_decision": False,
+        },
+    )
+
+    assert driver.command_review_loop(object()) == 3
+    assert "MAX_PASSES_REACHED" in capsys.readouterr().out
+
+
+def test_completed_pr_suppresses_even_forced_direct_trigger(
+    monkeypatch, tmp_path
+) -> None:
     generation = {
         **_generation(),
         "result": "REVIEW_COMPLETED",
@@ -1526,6 +2206,15 @@ def test_completed_pr_suppresses_even_forced_direct_trigger(monkeypatch, tmp_pat
             "outcome": "approved",
             "needs_caller_decision": False,
             "review_decision": "APPROVED",
+            "approval_signal": {
+                "decision": "APPROVED",
+                "review_id": 7,
+                "commit_id": "head-sha",
+                "submitted_at": "2026-08-07T10:01:00Z",
+                "author_login": BOT_LOGIN,
+            },
+            "all_conversations_resolved": True,
+            "resolved_conversations": [],
             "generation": generation,
             "iterations": [],
         },
@@ -1627,7 +2316,9 @@ def test_rate_limit_capacity_does_not_trigger_again_in_same_pass(
 
 def test_new_outcome_rejects_value_judgment_and_unresolved_rejection(tmp_path) -> None:
     reply_path = tmp_path / "reply.md"
-    reply_path.write_text("The finding is resolved by this rationale.\n", encoding="utf-8")
+    reply_path.write_text(
+        "The finding is resolved by this rationale.\n", encoding="utf-8"
+    )
 
     with pytest.raises(driver.DriverError, match="unexpected=.*review_provided_value"):
         driver.validate_outcome(
@@ -1747,6 +2438,10 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
     persisted = driver.json.loads(outcome_path.read_text(encoding="utf-8"))
     assert outcome["commit_sha"] == "agent-commit-sha"
     assert persisted["commit_sha"] == "agent-commit-sha"
+    assert persisted["reply_body_file"] == outcome["reply_body_file"]
+    assert pathlib.Path(outcome["reply_body_file"]).read_text() == (
+        "Fixed in `agent-commit-sha`.\n\nApplied the focused fix.\n"
+    )
 
 
 def test_dispatch_comment_agent_rejects_fix_without_new_commit(

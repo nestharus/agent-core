@@ -1,5 +1,5 @@
 ---
-description: 'Thin wrapper for one generation-aware GitHub PR-mode CodeRabbit review and finding-application pass.'
+description: 'Thin wrapper for one generated CodeRabbit review, independent finding dialogues, and exact-current-head approval.'
 model: gpt-medium
 output_format: ''
 ---
@@ -9,9 +9,10 @@ output_format: ''
 This operator delegates CodeRabbit PR-mode review to
 `~/ai/tools/coderabbit_review_driver.py review-loop`. The driver owns one trigger
 generation baselines, exact-head review acceptance, authoritative rate-limit
-and capacity evidence, normalized finding persistence, per-comment fixer
-dispatch, exact-comment replies, branch pushes, persisted PR completion, and
-final JSON. It never requests a follow-up review after a completed review.
+and capacity evidence, normalized finding persistence, per-conversation fixer
+dispatch, exact-comment replies, branch pushes, GraphQL thread resolution,
+exact-current-head CodeRabbit approval, persisted PR completion, and final JSON.
+It never requests a follow-up review after a completed review.
 
 The repository-level `coderabbit` label is only an installation marker;
 applying it to a PR suppresses CodeRabbit and is never a trigger path.
@@ -34,7 +35,8 @@ applying it to a PR suppresses CodeRabbit and is never a trigger path.
 - `trigger_mode`: optional; `incremental` by default, `full` only for a
   code-audit or mass-cleanup whose declared review target is whole files.
 - `initial_trigger`: optional; `auto` by default. `skip` requires a persisted
-  active generation for the current PR head. A persisted in-flight command is
+  active generation; a completed generation remains authoritative after fixer
+  pushes change the PR head. A persisted in-flight command is
   reconciled first; when observed, the returned generation records
   `supersession_deferred_reason=reconciled-inflight-trigger` and no duplicate
   command is posted.
@@ -96,8 +98,9 @@ The persisted generation object is written inside
 
 Starting a retry generation after a request that produced no review archives
 the prior active generation in `review_generation_history`. A completed review
-writes `single_review_completion`; all later review requests for that PR are
-suppressed even if the branch head changes.
+freezes the one generation and suppresses all later review requests even if the
+branch head changes. It writes `single_review_completion` only after every
+scoped conversation is resolved and CodeRabbit approves the exact final head.
 Before each review-trigger or capacity-query POST, the driver persists an
 in-flight command marker. After an interrupted POST it reconciles the exact
 command body, timestamp, and pre-POST issue-comment baseline before continuing;
@@ -107,9 +110,10 @@ inspection confirms no identity. A PR-scoped non-blocking lock rejects a
 concurrent provider-command invocation instead of allowing two POSTs.
 
 Aggregate `reviewDecision`, summary comments, trigger acknowledgements,
-completion acknowledgements, and a passing `Review rate limited` check are
-informational only. None can produce `REVIEW_COMPLETED`; only the first exact
-trigger-bound pull-request review can complete the PR's single review pass.
+completion acknowledgements, and a passing `Review rate limited` check cannot
+produce `REVIEW_COMPLETED`; only the first exact trigger-bound pull-request
+review completes the generation. Final PR completion separately requires an
+exact CodeRabbit `APPROVED` review whose `commit_id` equals the current head.
 
 ## Rate Limits
 
@@ -136,7 +140,8 @@ trigger-bound pull-request review can complete the PR's single review pass.
 `open-findings` uses a read-only generation projection and returns unresolved
 in-diff and outside-diff findings by default without rewriting poll deltas or
 generation state. Every finding includes exact review and comment IDs, thread
-ID when supported, URL, resolution state, and persisted `body_path`. In-diff
+ID when supported, URL, resolution state, persisted `body_path`, and a complete
+ordered `conversation_path` for an in-diff review thread. In-diff
 findings carry their provider review head; outside-diff findings use
 `review_id=0` and `head_oid=null` because GitHub does not bind issue comments to
 a pull-request review. Resolved findings, locally replied unchanged revisions
@@ -153,7 +158,31 @@ the exact source comment URL because GitHub exposes no issue-comment thread
 endpoint. A missing review comment is never silently replaced by an unrelated
 top-level comment. Exact duplicate replies are reused idempotently, and every
 posted or reused result returns its read-back ID, URL, author, and parent ID
-when supported.
+when supported. That readback is intermediate evidence only: the conversation
+remains open until CodeRabbit responds and GitHub GraphQL reports the exact
+thread `isResolved=true`.
+
+## Conversation And Approval Gates
+
+- Each root review comment is one independently tracked conversation. A
+  separate fixer invocation receives only that thread's complete ordered
+  history.
+- After a fix push, the driver posts and reads back an exact-thread reply before
+  the conversation becomes `awaiting_coderabbit`. A plain fix outcome gets a
+  deterministic commit-and-rationale reply; a persisted action with a missing
+  reply identity is recovered idempotently from its durable outcome artifact.
+  It is not redispatched until CodeRabbit adds a newer reply or resolves the
+  thread.
+- A newer CodeRabbit reply on an unresolved thread is `pushback`; only that
+  conversation is redispatched with its updated history. Multiple turns are
+  allowed without creating another review generation.
+- `isResolved=true` is the authoritative per-conversation completion signal.
+  Outdated position, push, reply readback, body marker, or elapsed time cannot
+  substitute for it.
+- After all findings are resolved, the driver keeps polling until a CodeRabbit
+  review with state `APPROVED` is bound to the exact current PR head OID.
+- `single_review_completion` records resolved thread identities and the final
+  approval review ID/state/commit only after both gates pass.
 
 ## Single-Review Contract
 
@@ -162,12 +191,14 @@ The pass:
 - resumes a matching persisted generation or creates a new trigger generation;
 - revalidates provider head identity before and after every poll;
 - waits at least 300 seconds between loop-owned polls;
-- dispatches each unresolved current-generation finding ID at most once per run
-  and preserves each structured fixer outcome;
+- dispatches one fixer per actionable conversation and preserves each
+  structured outcome;
 - pushes fixed commits, waits for provider head readback, posts exact replies,
-  and terminates without requesting another review;
-- succeeds after an approved review with no findings or after every finding from
-  the completed review is resolved by a validated fix or exact reply;
+  and then waits independently for each CodeRabbit response;
+- continues a conversation after CodeRabbit pushback and never requests another
+  review generation;
+- succeeds only after every scoped finding is resolved and CodeRabbit approves
+  the exact final head;
 - persists `single_review_completion` with the reviewed head, final head,
   terminal result, and structured outcomes; later runs return this evidence
   without polling, dispatching, or triggering;
@@ -193,11 +224,9 @@ collapse it into a boolean fixed/not-fixed result.
 ## Terminal States
 
 - `COMPLETED:coderabbit-approved` requires
-  `generation_result=REVIEW_COMPLETED` and `terminal_reason=approved`.
-- `COMPLETED:coderabbit-findings-resolved` requires
-  `generation_result=REVIEW_COMPLETED`, `terminal_reason=review_applied`, and
-  persisted `single_review_completion` after every finding has a validated
-  fix/reply disposition and all required pushes and replies have exact readback.
+  `generation_result=REVIEW_COMPLETED`, `terminal_reason=approved`, no unresolved
+  scoped findings, GraphQL-resolved review threads, and CodeRabbit `APPROVED`
+  bound to the exact final head in persisted `single_review_completion`.
 - `PENDING:coderabbit-rate-limited` is
   `generation_result=RATE_LIMITED_NO_REVIEW`; do not merge or re-trigger.
 - `PENDING:coderabbit-caller-decision` is a driver exit `3` with
@@ -209,7 +238,8 @@ collapse it into a boolean fixed/not-fixed result.
 
 - No inline GitHub polling or ad hoc review-loop composition.
 - No PR label mutation.
-- No aggregate `reviewDecision` or `statusCheckRollup` completion inference.
+- No aggregate `reviewDecision` or `statusCheckRollup` substitution for the
+  exact bot-authored current-head approval review.
 - No CodeRabbit CLI mode or dashboard credential.
 - No inferred capacity, retry timestamp, or fair-usage-table calculation.
 - No repeated trigger or capacity-query comments while authoritative evidence

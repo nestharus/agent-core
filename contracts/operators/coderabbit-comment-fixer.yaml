@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/coderabbit-comment-fixer.md
 model: gpt-medium
-description: Address one persisted CodeRabbit review comment and emit a structured outcome JSON file.
+description: Address the latest turn in one persisted CodeRabbit review conversation and emit a structured outcome JSON file.
 contract_status: minimum-generated-from-operator-sections
 inputs: []
 defaults: []

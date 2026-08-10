@@ -26,6 +26,7 @@ CACHE_ROOT = Path.home() / ".cache" / "coderabbit"
 DEFAULT_ENABLED_TTL_SECONDS = 3600
 DEFAULT_POLL_INTERVAL_SECONDS = 15
 DEFAULT_REVIEW_LOOP_POLL_INTERVAL_SECONDS = 300
+MAX_REMEDIATION_PASSES = 3
 DEFAULT_CAPACITY_QUERY_ATTEMPTS = 4
 AI_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIX_BRIEF_TEMPLATE = AI_ROOT / "templates" / "coderabbit-fix-brief.md"
@@ -45,6 +46,7 @@ ACK_COMPLETION_MARKERS = {
 ACK_ACTION_MARKERS = ("Action performed", "Actions performed")
 FIX_OUTCOMES = {"fixed", "fixed_and_replied"}
 REPLY_OUTCOMES = {"replied", "fixed_and_replied"}
+RESOLUTION_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES
 CALLER_DECISION_OUTCOMES = {"deferred"}
 VALID_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES | CALLER_DECISION_OUTCOMES
 OUTCOME_FIELDS = {
@@ -282,7 +284,22 @@ def save_single_review_completion(
 ) -> dict[str, Any]:
     generation = payload.get("generation") or {}
     if generation.get("result") != "REVIEW_COMPLETED":
-        raise DriverError("single-review completion requires a completed review generation")
+        raise DriverError(
+            "single-review completion requires a completed review generation"
+        )
+    approval = payload.get("approval_signal") or {}
+    final_head_oid = (payload.get("pr") or {}).get("headRefOid")
+    if (
+        payload.get("terminal_reason") != "approved"
+        or payload.get("all_conversations_resolved") is not True
+        or approval.get("decision") != "APPROVED"
+        or approval.get("commit_id") != final_head_oid
+        or not approval.get("review_id")
+        or not is_coderabbit_login(approval.get("author_login"))
+    ):
+        raise DriverError(
+            "single-review completion requires resolved conversations and exact-current-head CodeRabbit approval"
+        )
     completion = {
         "schema": SINGLE_REVIEW_COMPLETION_SCHEMA,
         "repo": repo.slug,
@@ -292,7 +309,14 @@ def save_single_review_completion(
         "accepted_review_id": generation.get("accepted_review_id"),
         "accepted_review_state": generation.get("accepted_review_state"),
         "reviewed_head_oid": generation.get("accepted_review_commit_id"),
-        "final_head_oid": (payload.get("pr") or {}).get("headRefOid"),
+        "final_head_oid": final_head_oid,
+        "approval_review_id": approval.get("review_id"),
+        "approval_review_state": approval.get("decision"),
+        "approval_review_commit_id": approval.get("commit_id"),
+        "approval_review_submitted_at": approval.get("submitted_at"),
+        "approval_review_author_login": approval.get("author_login"),
+        "all_conversations_resolved": True,
+        "resolved_conversations": payload.get("resolved_conversations", []),
         "terminal": payload.get("terminal"),
         "terminal_reason": payload.get("terminal_reason"),
         "outcome": payload.get("outcome"),
@@ -733,6 +757,8 @@ def classify_review_generation(
     bot_login: str | None,
 ) -> dict[str, Any]:
     classified = dict(generation)
+    if classified.get("result") == "REVIEW_COMPLETED":
+        return classified
     expected_head_oid = str(classified.get("expected_head_oid") or "")
     classified["current_head_oid"] = current_head_oid
     if not current_head_oid or current_head_oid != expected_head_oid:
@@ -985,12 +1011,21 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
         data = gh_json(args)
         threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]
         for thread in threads["nodes"]:
-            for comment in thread["comments"]["nodes"]:
+            comments = thread["comments"]["nodes"]
+            comment_ids = [
+                int(comment["databaseId"])
+                for comment in comments
+                if comment.get("databaseId") is not None
+            ]
+            root_comment_id = comment_ids[0] if comment_ids else None
+            for comment in comments:
                 database_id = comment.get("databaseId")
                 if database_id is None:
                     continue
                 by_comment[int(database_id)] = {
                     "thread_id": thread.get("id"),
+                    "root_comment_id": root_comment_id,
+                    "comment_ids": comment_ids,
                     "is_resolved": bool(thread.get("isResolved")),
                     "is_outdated": bool(thread.get("isOutdated")),
                 }
@@ -1003,6 +1038,80 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
 
 def comment_file_path(repo: Repo, pr_num: int, review_id: int, comment_id: int) -> Path:
     return cache_dir(repo, pr_num) / f"review-{review_id}" / f"comment-{comment_id}.md"
+
+
+def conversation_file_path(
+    repo: Repo, pr_num: int, review_id: int, root_comment_id: int
+) -> Path:
+    return (
+        cache_dir(repo, pr_num)
+        / f"review-{review_id}"
+        / f"conversation-{root_comment_id}.md"
+    )
+
+
+def review_comment_sort_key(comment: dict[str, Any]) -> tuple[str, int]:
+    return (
+        comment.get("created_at") or comment.get("updated_at") or "",
+        object_id(comment),
+    )
+
+
+def conversation_revision(comments: list[dict[str, Any]]) -> str:
+    projection = [
+        {
+            "id": object_id(comment),
+            "author": (comment.get("user") or {}).get("login"),
+            "created_at": comment.get("created_at"),
+            "updated_at": comment.get("updated_at"),
+            "body": normalized_comment_body(str(comment.get("body") or "")),
+        }
+        for comment in comments
+    ]
+    return hashlib_sha256(json.dumps(projection, sort_keys=True, separators=(",", ":")))
+
+
+def write_conversation_file(
+    path: Path,
+    *,
+    repo: Repo,
+    pr_num: int,
+    review_id: int,
+    root_comment_id: int,
+    thread_id: str | None,
+    resolved: bool,
+    comments: list[dict[str, Any]],
+) -> str:
+    revision = conversation_revision(comments)
+    metadata = {
+        "kind": "coderabbit-review-conversation",
+        "repo": repo.slug,
+        "pr_num": pr_num,
+        "review_id": review_id,
+        "root_comment_id": root_comment_id,
+        "thread_id": thread_id,
+        "resolved": resolved,
+        "conversation_revision": revision,
+        "turn_count": len(comments),
+        "captured_at": utc_now(),
+    }
+    turns: list[str] = []
+    for index, comment in enumerate(comments, start=1):
+        turns.extend(
+            [
+                f"## Turn {index}",
+                "",
+                f"- `comment_id`: `{object_id(comment)}`",
+                f"- `author`: `{(comment.get('user') or {}).get('login') or ''}`",
+                f"- `created_at`: `{comment.get('created_at') or ''}`",
+                f"- `url`: `{comment.get('html_url') or ''}`",
+                "",
+                str(comment.get("body") or ""),
+                "",
+            ]
+        )
+    write_comment_file(path, metadata, "\n".join(turns).rstrip())
+    return revision
 
 
 def yaml_value(value: Any) -> str:
@@ -1091,6 +1200,9 @@ def collect_comment_records(
         for review in reviews
         if review.get("id") is not None
     }
+    conversation_cache: dict[
+        int, tuple[list[dict[str, Any]], dict[str, Any] | None, Path, str]
+    ] = {}
 
     for comment in review_comments:
         login = (comment.get("user") or {}).get("login")
@@ -1100,9 +1212,70 @@ def collect_comment_records(
         review_id = int(comment.get("pull_request_review_id") or 0)
         status = thread_status.get(comment_id, {})
         position = comment.get("position")
-        resolved = bool(
-            status.get("is_resolved") or status.get("is_outdated") or position is None
+        resolved = bool(status.get("is_resolved"))
+        root_comment_id = int(
+            status.get("root_comment_id") or comment.get("in_reply_to_id") or comment_id
         )
+        cached_conversation = conversation_cache.get(root_comment_id)
+        if cached_conversation is None:
+            thread_comment_ids = {
+                int(value) for value in status.get("comment_ids", []) if int(value)
+            }
+            conversation_comments = sorted(
+                [
+                    item
+                    for item in review_comments
+                    if (
+                        object_id(item) in thread_comment_ids
+                        if thread_comment_ids
+                        else object_id(item) == root_comment_id
+                        or item.get("in_reply_to_id") == root_comment_id
+                    )
+                ],
+                key=review_comment_sort_key,
+            )
+            latest_bot_comment = next(
+                (
+                    item
+                    for item in reversed(conversation_comments)
+                    if is_bot_login((item.get("user") or {}).get("login"), bot_login)
+                ),
+                None,
+            )
+            root_review_id = next(
+                (
+                    int(item.get("pull_request_review_id") or 0)
+                    for item in conversation_comments
+                    if object_id(item) == root_comment_id
+                ),
+                review_id,
+            )
+            conversation_path = conversation_file_path(
+                repo, pr_num, root_review_id, root_comment_id
+            )
+            revision = write_conversation_file(
+                conversation_path,
+                repo=repo,
+                pr_num=pr_num,
+                review_id=root_review_id,
+                root_comment_id=root_comment_id,
+                thread_id=status.get("thread_id"),
+                resolved=resolved,
+                comments=conversation_comments,
+            )
+            conversation_cache[root_comment_id] = (
+                conversation_comments,
+                latest_bot_comment,
+                conversation_path,
+                revision,
+            )
+        else:
+            (
+                conversation_comments,
+                latest_bot_comment,
+                conversation_path,
+                revision,
+            ) = cached_conversation
         body = comment.get("body") or ""
         metadata = base_comment_metadata(
             repo,
@@ -1126,8 +1299,17 @@ def collect_comment_records(
                 "side": comment.get("side"),
                 "thread_parent": comment.get("in_reply_to_id"),
                 "thread_id": status.get("thread_id"),
+                "root_comment_id": root_comment_id,
                 "resolved": resolved,
                 "outdated": bool(status.get("is_outdated") or position is None),
+                "conversation_revision": revision,
+                "conversation_path": str(conversation_path),
+                "latest_comment_id": object_id(conversation_comments[-1])
+                if conversation_comments
+                else comment_id,
+                "latest_bot_comment_id": object_id(latest_bot_comment)
+                if latest_bot_comment
+                else comment_id,
                 "posted_at": comment.get("created_at"),
                 "updated_at": comment.get("updated_at"),
                 "commit_id": comment.get("commit_id"),
@@ -1192,11 +1374,19 @@ def output_metadata(
     finding_head_oid = metadata.get("review_commit_id") or (
         current_head_oid if metadata.get("kind") == "in-diff" else None
     )
+    conversation_path = metadata.get("conversation_path")
     return {
         "comment_id": metadata["comment_id"],
+        "root_comment_id": metadata.get("root_comment_id"),
         "kind": metadata["kind"],
-        "file_path": str(record["path"]),
+        "file_path": conversation_path or str(record["path"]),
         "body_path": str(record["path"]),
+        "conversation_path": conversation_path,
+        "conversation_revision": metadata.get("conversation_revision"),
+        "latest_comment_id": metadata.get("latest_comment_id"),
+        "latest_bot_comment_id": metadata.get("latest_bot_comment_id"),
+        "body_sha256": metadata.get("body_sha256"),
+        "updated_at": metadata.get("updated_at") or metadata.get("posted_at"),
         "code_path": metadata.get("code_path"),
         "code_line": metadata.get("code_line"),
         "review_id": metadata.get("review_id"),
@@ -1216,10 +1406,26 @@ def comment_matches_review_head(metadata: dict[str, Any], head_oid: str | None) 
     return head_oid is None or metadata.get("review_commit_id") == head_oid
 
 
+def in_diff_comment_matches_review_generation(
+    metadata: dict[str, Any],
+    head_oid: str | None,
+    generation: dict[str, Any] | None,
+) -> bool:
+    if isinstance(generation, dict) and generation.get("schema") == GENERATION_SCHEMA:
+        accepted_review_id = generation.get("accepted_review_id")
+        if generation.get("result") == "REVIEW_COMPLETED" and accepted_review_id:
+            return metadata.get("review_id") == accepted_review_id
+        expected_head_oid = generation.get("expected_head_oid")
+        if expected_head_oid:
+            return metadata.get("review_commit_id") == expected_head_oid
+    return comment_matches_review_head(metadata, head_oid)
+
+
 def is_open_finding_record(
     record: dict[str, Any],
     head_oid: str | None,
     out_of_diff_dispositions: dict[str, dict[str, Any]] | None = None,
+    generation: dict[str, Any] | None = None,
 ) -> bool:
     metadata = record["metadata"]
     body = str(record.get("body") or "")
@@ -1228,7 +1434,7 @@ def is_open_finding_record(
     if metadata.get("source") == "trigger-ack":
         return False
     if metadata.get("kind") == "in-diff":
-        return comment_matches_review_head(metadata, head_oid)
+        return in_diff_comment_matches_review_generation(metadata, head_oid, generation)
     disposition = (out_of_diff_dispositions or {}).get(
         str(int(metadata.get("comment_id") or 0))
     )
@@ -1269,7 +1475,9 @@ def out_of_diff_comment_matches_review_generation(
         return False
     posted_at = parse_time(metadata.get("posted_at"))
     triggered_at = parse_time(generation.get("triggered_at"))
-    return posted_at is not None and triggered_at is not None and posted_at >= triggered_at
+    return (
+        posted_at is not None and triggered_at is not None and posted_at >= triggered_at
+    )
 
 
 def is_actionable_finding_record(
@@ -1277,13 +1485,118 @@ def is_actionable_finding_record(
     head_oid: str | None,
     out_of_diff_dispositions: dict[str, dict[str, Any]],
     generation: dict[str, Any] | None,
+    conversation_actions: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
-    if not is_open_finding_record(record, head_oid, out_of_diff_dispositions):
+    if not is_open_finding_record(
+        record, head_oid, out_of_diff_dispositions, generation
+    ):
         return False
     metadata = record["metadata"]
     if metadata.get("kind") == "in-diff":
-        return True
+        root_comment_id = str(
+            int(metadata.get("root_comment_id") or metadata.get("comment_id") or 0)
+        )
+        action = (conversation_actions or {}).get(root_comment_id)
+        if not isinstance(action, dict):
+            return True
+        if action.get("status") == "resolved":
+            return True
+        return action.get("latest_bot_comment_id") != metadata.get(
+            "latest_bot_comment_id"
+        )
     return out_of_diff_comment_matches_review_generation(metadata, generation)
+
+
+def conversation_resolution_state(
+    record: dict[str, Any],
+    conversation_actions: dict[str, dict[str, Any]],
+) -> str:
+    metadata = record["metadata"]
+    if metadata.get("resolved"):
+        return "resolved"
+    root_comment_id = str(
+        int(metadata.get("root_comment_id") or metadata.get("comment_id") or 0)
+    )
+    action = conversation_actions.get(root_comment_id)
+    if not isinstance(action, dict):
+        return "actionable"
+    if action.get("status") == "resolved":
+        return "pushback"
+    if action.get("latest_bot_comment_id") != metadata.get("latest_bot_comment_id"):
+        return "pushback"
+    return "awaiting_coderabbit"
+
+
+def mark_conversation_awaiting(
+    repo: Repo,
+    pr_num: int,
+    finding: dict[str, Any],
+    outcome: dict[str, Any],
+    reply: dict[str, Any] | None,
+    head_oid: str,
+) -> dict[str, Any]:
+    root_comment_id = int(
+        finding.get("root_comment_id") or finding.get("comment_id") or 0
+    )
+    if finding.get("kind") != "in-diff" or not root_comment_id:
+        return {}
+    if not (reply or {}).get("reply_id"):
+        raise DriverError(
+            f"conversation {root_comment_id} cannot await CodeRabbit without an exact reply readback"
+        )
+    action = {
+        "root_comment_id": root_comment_id,
+        "thread_id": finding.get("thread_id"),
+        "status": "awaiting_coderabbit",
+        "conversation_revision": finding.get("conversation_revision"),
+        "latest_bot_comment_id": finding.get("latest_bot_comment_id"),
+        "outcome": outcome.get("outcome"),
+        "commit_sha": outcome.get("commit_sha"),
+        "reply_id": (reply or {}).get("reply_id"),
+        "reply_url": (reply or {}).get("reply_url"),
+        "head_oid": head_oid,
+        "recorded_at": utc_now(),
+    }
+    state = load_state(repo, pr_num)
+    actions = state.setdefault("conversation_actions", {})
+    actions[str(root_comment_id)] = action
+    save_state(repo, pr_num, state)
+    return action
+
+
+def mark_out_of_diff_fixed_disposition(
+    repo: Repo,
+    pr_num: int,
+    finding: dict[str, Any],
+    outcome: dict[str, Any],
+    reply: dict[str, Any] | None = None,
+) -> None:
+    if finding.get("kind") != "out-of-diff" or outcome.get("outcome") != "fixed":
+        return
+    comment_id = int(finding.get("comment_id") or 0)
+    body_sha256 = finding.get("body_sha256")
+    updated_at = finding.get("updated_at")
+    if (
+        not comment_id
+        or not body_sha256
+        or not updated_at
+        or not outcome.get("commit_sha")
+    ):
+        raise DriverError(
+            "out-of-diff fix disposition is missing exact binding evidence"
+        )
+    state = load_state(repo, pr_num)
+    dispositions = state.setdefault("out_of_diff_dispositions", {})
+    dispositions[str(comment_id)] = {
+        "status": "fixed_and_replied" if reply else "fixed",
+        "body_sha256": body_sha256,
+        "updated_at": updated_at,
+        "commit_sha": outcome["commit_sha"],
+        "reply_id": (reply or {}).get("reply_id"),
+        "reply_url": (reply or {}).get("reply_url"),
+        "recorded_at": utc_now(),
+    }
+    save_state(repo, pr_num, state)
 
 
 def poll(
@@ -1321,6 +1634,9 @@ def poll(
     aggregate_decision_signal = {
         "decision": aggregate_decision,
         "source": "github_review" if latest_scoped_review else "none",
+        "author_login": (latest_scoped_review.get("user") or {}).get("login")
+        if latest_scoped_review
+        else None,
         "review_id": latest_scoped_review.get("id") if latest_scoped_review else None,
         "commit_id": latest_scoped_review.get("commit_id")
         if latest_scoped_review
@@ -1338,6 +1654,9 @@ def poll(
     out_of_diff_dispositions = state.get("out_of_diff_dispositions", {})
     if not isinstance(out_of_diff_dispositions, dict):
         out_of_diff_dispositions = {}
+    conversation_actions = state.get("conversation_actions", {})
+    if not isinstance(conversation_actions, dict):
+        conversation_actions = {}
     previous_hashes: dict[str, str] = state.get("seen_comment_hashes", {})
     previous_status: dict[str, dict[str, Any]] = state.get("comment_status", {})
     current_hashes: dict[str, str] = {}
@@ -1347,6 +1666,7 @@ def poll(
     new_comments: list[dict[str, Any]] = []
     actionable_comments: list[dict[str, Any]] = []
     unresolved_findings: list[dict[str, Any]] = []
+    conversation_statuses: list[dict[str, Any]] = []
     for record in records:
         key = record["key"]
         metadata = record["metadata"]
@@ -1366,22 +1686,46 @@ def poll(
             int(metadata["comment_id"])
         )
         write_comment_file(record["path"], metadata, record["body"])
-        if is_open_finding_record(record, head_oid, out_of_diff_dispositions):
+        if is_open_finding_record(
+            record,
+            head_oid,
+            out_of_diff_dispositions,
+            active_generation if isinstance(active_generation, dict) else None,
+        ):
             unresolved_findings.append(output_metadata(record, head_oid))
         if is_actionable_finding_record(
             record,
             head_oid,
             out_of_diff_dispositions,
             active_generation if isinstance(active_generation, dict) else None,
+            conversation_actions,
         ):
             actionable_comments.append(output_metadata(record, head_oid))
+        if (
+            metadata.get("kind") == "in-diff"
+            and metadata.get("thread_parent") is None
+            and in_diff_comment_matches_review_generation(
+                metadata,
+                head_oid,
+                active_generation if isinstance(active_generation, dict) else None,
+            )
+        ):
+            conversation = output_metadata(record, head_oid)
+            conversation["dialogue_state"] = conversation_resolution_state(
+                record, conversation_actions
+            )
+            conversation_statuses.append(conversation)
         if (
             previous_hashes.get(key) != digest
             and not metadata.get("resolved")
             and metadata.get("source") != "trigger-ack"
             and (
                 metadata.get("kind") != "in-diff"
-                or comment_matches_review_head(metadata, head_oid)
+                or in_diff_comment_matches_review_generation(
+                    metadata,
+                    head_oid,
+                    active_generation if isinstance(active_generation, dict) else None,
+                )
             )
         ):
             new_comments.append(output_metadata(record, head_oid))
@@ -1395,6 +1739,19 @@ def poll(
             resolved_since_last_poll.append(int(new_status["comment_id"]))
 
     new_state = dict(state)
+    updated_conversation_actions = dict(conversation_actions)
+    for conversation in conversation_statuses:
+        root_comment_id = str(int(conversation.get("root_comment_id") or 0))
+        action = updated_conversation_actions.get(root_comment_id)
+        if not isinstance(action, dict):
+            continue
+        action = dict(action)
+        action["status"] = conversation["dialogue_state"]
+        action["last_observed_at"] = utc_now()
+        if conversation["dialogue_state"] == "resolved":
+            action["resolved_thread_id"] = conversation.get("thread_id")
+            action["resolved_at"] = utc_now()
+        updated_conversation_actions[root_comment_id] = action
     new_state.update(
         {
             "last_polled_at": utc_now(),
@@ -1406,6 +1763,7 @@ def poll(
             "seen_comment_hashes": current_hashes,
             "comment_status": current_status,
             "seen_comment_ids_per_review": seen_by_review,
+            "conversation_actions": updated_conversation_actions,
         }
     )
     if persist_state:
@@ -1457,6 +1815,8 @@ def poll(
         "review_decision": decision,
         "aggregate_review_decision": aggregate_decision,
         "aggregate_decision_signal": aggregate_decision_signal,
+        "approval_signal": aggregate_decision_signal,
+        "current_head_oid": head_oid,
         "terminal": generation.get("result") != "WAITING_FOR_REVIEW",
         "outcome": outcome,
         "decision_signal": decision_signal,
@@ -1470,6 +1830,13 @@ def poll(
         "new_comments": new_comments,
         "actionable_comments": actionable_comments,
         "unresolved_findings": unresolved_findings,
+        "conversation_statuses": conversation_statuses,
+        "all_conversations_resolved": not unresolved_findings,
+        "resolved_conversations": [
+            conversation
+            for conversation in conversation_statuses
+            if conversation.get("dialogue_state") == "resolved"
+        ],
         "resolved_since_last_poll": resolved_since_last_poll,
         "bot_login": bot_login,
     }
@@ -1481,6 +1848,8 @@ def generation_suppresses_trigger(
     if not generation or generation.get("schema") != GENERATION_SCHEMA:
         return False, None
     result = generation.get("result")
+    if result == "REVIEW_COMPLETED":
+        return True, "the single review generation is already complete"
     if result == "WAITING_FOR_REVIEW":
         return True, "review request is already outstanding"
     if result == "BLOCKED":
@@ -1626,6 +1995,13 @@ def _trigger_review(
 
     if not recovered_trigger:
         existing = active_review_generation(repo, pr_num)
+        if existing and existing.get("result") == "REVIEW_COMPLETED":
+            return {
+                **existing,
+                "posted": False,
+                "suppressed": True,
+                "suppression_reason": "single-review-policy:generation-already-completed",
+            }
         replaceable_head_change = bool(
             existing
             and existing.get("result") == "BLOCKED"
@@ -1957,6 +2333,12 @@ def initial_trigger_decision(
         }
     active = state.get("active_generation")
     generation = active if isinstance(active, dict) else None
+    if generation and generation.get("result") == "REVIEW_COMPLETED":
+        return {
+            "trigger": False,
+            "reason": "initial-trigger-policy:single-review-generation-completed",
+            "generation_result": "REVIEW_COMPLETED",
+        }
     matching_generation = bool(
         generation
         and generation.get("schema") == GENERATION_SCHEMA
@@ -2173,6 +2555,36 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
     }
 
 
+def ensure_resolution_reply_body(outcome: dict[str, Any], reply_path: Path) -> str:
+    body_file = outcome.get("reply_body_file")
+    if body_file:
+        if not Path(body_file).is_file():
+            raise DriverError(
+                f"reply body file for comment {outcome['comment_id']} does not exist: {body_file}"
+            )
+        return str(body_file)
+    if outcome.get("outcome") != "fixed":
+        raise DriverError(
+            f"resolution outcome for comment {outcome['comment_id']} is missing a reply body"
+        )
+    commit_sha = outcome.get("commit_sha")
+    if not commit_sha:
+        raise DriverError(
+            f"fixed outcome for comment {outcome['comment_id']} is missing a commit SHA"
+        )
+    reply_path.parent.mkdir(parents=True, exist_ok=True)
+    reply_path.write_text(
+        f"Fixed in `{commit_sha}`.\n\n{outcome['rationale']}\n",
+        encoding="utf-8",
+    )
+    outcome["reply_body_file"] = str(reply_path)
+    return str(reply_path)
+
+
+def semantic_outcome(outcome: dict[str, Any]) -> dict[str, Any]:
+    return {field: outcome.get(field) for field in OUTCOME_FIELDS}
+
+
 def dispatch_comment_agent(
     *,
     comment: dict[str, Any],
@@ -2275,9 +2687,12 @@ def dispatch_comment_agent(
                 f"{outcome['commit_sha']} but worktree HEAD is {head_after}"
             )
         outcome["commit_sha"] = head_after
-        outcome_path.write_text(
-            json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+    if outcome["outcome"] in RESOLUTION_OUTCOMES:
+        ensure_resolution_reply_body(outcome, outcome_path.with_suffix(".reply.md"))
+    outcome_path.write_text(
+        json.dumps(semantic_outcome(outcome), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     outcome.update(
         {
@@ -2467,6 +2882,91 @@ def post_reply(
     return reply_result(repo, pr_num, comment_id, "issue-comment", True, readback)
 
 
+def latest_outcome_artifact(repo: Repo, pr_num: int, comment_id: int) -> Path:
+    candidates = list(
+        cache_dir(repo, pr_num).glob(f"iter-*/agent-{comment_id}.prompt.outcome.json")
+    )
+    if not candidates:
+        raise DriverError(
+            f"conversation {comment_id} is missing its durable fixer outcome artifact"
+        )
+
+    def iteration_number(path: Path) -> int:
+        try:
+            return int(path.parent.name.removeprefix("iter-"))
+        except ValueError:
+            return -1
+
+    return max(
+        candidates, key=lambda path: (iteration_number(path), path.stat().st_mtime_ns)
+    )
+
+
+def recover_missing_conversation_replies(
+    repo: Repo, pr_num: int
+) -> list[dict[str, Any]]:
+    state = load_state(repo, pr_num)
+    actions = state.get("conversation_actions", {})
+    if not isinstance(actions, dict):
+        return []
+    pending = [
+        (int(root_comment_id), dict(action))
+        for root_comment_id, action in actions.items()
+        if isinstance(action, dict)
+        and action.get("status") in {"awaiting_coderabbit", "resolved"}
+        and not action.get("reply_id")
+        and action.get("thread_id")
+    ]
+    recovered: list[dict[str, Any]] = []
+    for root_comment_id, action in sorted(pending):
+        outcome_path = latest_outcome_artifact(repo, pr_num, root_comment_id)
+        try:
+            raw = json.loads(outcome_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            raise DriverError(
+                f"could not load durable fixer outcome for conversation {root_comment_id}: {outcome_path}"
+            ) from err
+        outcome = validate_outcome(raw, root_comment_id)
+        if outcome.get("outcome") not in RESOLUTION_OUTCOMES:
+            raise DriverError(
+                f"conversation {root_comment_id} has non-resolution outcome {outcome.get('outcome')!r}"
+            )
+        if outcome.get("outcome") in FIX_OUTCOMES and action.get(
+            "commit_sha"
+        ) != outcome.get("commit_sha"):
+            raise DriverError(
+                f"conversation {root_comment_id} action/outcome commit identity mismatch"
+            )
+        body_file = ensure_resolution_reply_body(
+            outcome, outcome_path.with_suffix(".reply.md")
+        )
+        outcome_path.write_text(
+            json.dumps(semantic_outcome(outcome), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        reply = post_reply(repo, pr_num, root_comment_id, body_file)
+        current_state = load_state(repo, pr_num)
+        current_actions = current_state.setdefault("conversation_actions", {})
+        current_action = current_actions.get(str(root_comment_id))
+        if not isinstance(current_action, dict):
+            raise DriverError(
+                f"conversation {root_comment_id} action disappeared during reply recovery"
+            )
+        current_action["reply_id"] = reply.get("reply_id")
+        current_action["reply_url"] = reply.get("reply_url")
+        current_action["reply_body_file"] = body_file
+        current_action["reply_recovered_at"] = utc_now()
+        save_state(repo, pr_num, current_state)
+        recovered.append(
+            {
+                "root_comment_id": root_comment_id,
+                "outcome_file": str(outcome_path),
+                "reply_result": reply,
+            }
+        )
+    return recovered
+
+
 def wait_for_loop_poll_cadence(
     repo: Repo, pr_num: int, min_interval_seconds: int
 ) -> dict[str, Any]:
@@ -2520,22 +3020,6 @@ def select_actionable_comments(
     }
     comments_by_id.pop(0, None)
     return list(comments_by_id.values())
-
-
-def changes_requested_without_actionable_comments(
-    review_decision: str, outcome: Any, actionable_comments: list[dict[str, Any]]
-) -> bool:
-    return not actionable_comments and (
-        review_decision.upper() == "CHANGES_REQUESTED" or outcome == "changes_requested"
-    )
-
-
-def completed_review_without_terminal_decision(
-    outcome: Any,
-    actionable_comments: list[dict[str, Any]],
-    review_completed: bool,
-) -> bool:
-    return review_completed and not actionable_comments and outcome is None
 
 
 def validated_pr_head_identity(
@@ -2717,10 +3201,19 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "terminal_reason": completion.get("terminal_reason"),
             "outcome": completion.get("outcome"),
             "needs_caller_decision": completion.get("needs_caller_decision", False),
-            "caller_decision_outcomes": completion.get(
-                "caller_decision_outcomes", []
-            ),
+            "caller_decision_outcomes": completion.get("caller_decision_outcomes", []),
             "review_decision": completion.get("review_decision", "NONE"),
+            "approval_signal": {
+                "decision": completion.get("approval_review_state"),
+                "review_id": completion.get("approval_review_id"),
+                "commit_id": completion.get("approval_review_commit_id"),
+                "submitted_at": completion.get("approval_review_submitted_at"),
+                "author_login": completion.get("approval_review_author_login"),
+            },
+            "all_conversations_resolved": completion.get(
+                "all_conversations_resolved", False
+            ),
+            "resolved_conversations": completion.get("resolved_conversations", []),
             "generation_result": completion.get("generation_result"),
             "generation": completion.get("generation", {}),
             "initial_trigger_decision": {
@@ -2729,9 +3222,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             },
             "initial_trigger_result": None,
             "iterations": completion.get("iterations", []),
-            "rate_limit_observations": completion.get(
-                "rate_limit_observations", []
-            ),
+            "rate_limit_observations": completion.get("rate_limit_observations", []),
             "completion_reused": True,
             "single_review_completion": completion,
             "poll_cadence_enforcement": {
@@ -2770,8 +3261,14 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
     iteration_index = 1
     terminal_reason: str | None = None
     final_review_decision = "NONE"
+    final_approval_signal: dict[str, Any] = {
+        "decision": "NONE",
+        "source": "none",
+    }
+    final_all_conversations_resolved = False
+    final_resolved_conversations: list[dict[str, Any]] = []
     rate_limit_observations: list[str] = []
-    handled_comment_ids: set[int] = set()
+    remediation_passes = 0
 
     while True:
         iteration_dir = cache_dir(repo, args.pr_num) / f"iter-{iteration_index}"
@@ -2781,14 +3278,21 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         poll_result, head_oid, head_committed_at = poll_current_pr_head(
             repo, args.pr_num, worktree_path, pr_branch
         )
+        metadata = pr_metadata(repo, args.pr_num)
         mark_loop_poll(repo, args.pr_num)
         generation = poll_result.get("generation") or {}
         generation_result = generation.get("result")
         final_review_decision = str(poll_result.get("review_decision") or "NONE")
-        final_outcome = poll_result.get("outcome")
-        actionable_comments = select_actionable_comments(
-            poll_result, handled_comment_ids
+        final_approval_signal = dict(poll_result.get("approval_signal") or {})
+        final_all_conversations_resolved = bool(
+            poll_result.get("all_conversations_resolved")
         )
+        final_resolved_conversations = list(
+            poll_result.get("resolved_conversations") or []
+        )
+        final_outcome = poll_result.get("outcome")
+        actionable_comments = select_actionable_comments(poll_result)
+        unresolved_findings = list(poll_result.get("unresolved_findings") or [])
         iteration: dict[str, Any] = {
             "iteration": iteration_index,
             "poll_started_at": poll_started_at,
@@ -2796,6 +3300,10 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "cadence": cadence,
             "review_decision": final_review_decision,
             "aggregate_review_decision": poll_result.get("aggregate_review_decision"),
+            "approval_signal": final_approval_signal,
+            "all_conversations_resolved": final_all_conversations_resolved,
+            "conversation_statuses": poll_result.get("conversation_statuses", []),
+            "unresolved_findings": unresolved_findings,
             "generation": generation,
             "terminal": generation_result != "WAITING_FOR_REVIEW",
             "outcome": final_outcome,
@@ -2806,9 +3314,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "bot_login": poll_result.get("bot_login"),
             "outcomes": [],
             "reply_results": [],
+            "recovered_reply_results": [],
             "push_result": None,
             "trigger_result": None,
         }
+        iteration["recovered_reply_results"] = recover_missing_conversation_replies(
+            repo, args.pr_num
+        )
 
         if generation_result == "RATE_LIMITED_NO_REVIEW":
             capacity_result = capacity_query(repo, args.pr_num)
@@ -2837,40 +3349,32 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             iteration_index += 1
             continue
 
-        if final_outcome == "approved" and not actionable_comments:
-            terminal_reason = str(final_outcome)
-            iterations.append(iteration)
-            break
-
-        if changes_requested_without_actionable_comments(
-            final_review_decision, final_outcome, actionable_comments
+        if (
+            final_all_conversations_resolved
+            and final_approval_signal.get("decision") == "APPROVED"
+            and final_approval_signal.get("commit_id") == head_oid
+            and final_approval_signal.get("review_id")
         ):
-            terminal_reason = "changes_requested_without_actionable_comments"
-            iteration["needs_caller_decision"] = True
-            iteration["escalation_reason"] = terminal_reason
-            iterations.append(iteration)
-            break
-
-        if completed_review_without_terminal_decision(
-            final_outcome,
-            actionable_comments,
-            bool(poll_result.get("review_completed")),
-        ):
-            terminal_reason = "review_completed_without_terminal_decision"
-            iteration["needs_caller_decision"] = True
-            iteration["escalation_reason"] = terminal_reason
+            terminal_reason = "approved"
             iterations.append(iteration)
             break
 
         if not actionable_comments:
             iterations.append(iteration)
             print(
-                f"No actionable findings yet for {repo.slug}#{args.pr_num}; waiting for next poll",
+                f"Waiting for CodeRabbit conversation resolution and exact-current-head approval for {repo.slug}#{args.pr_num}",
                 file=sys.stderr,
                 flush=True,
             )
             iteration_index += 1
             continue
+
+        if remediation_passes >= MAX_REMEDIATION_PASSES:
+            iteration["terminal"] = True
+            iteration["decomposition_required"] = True
+            iterations.append(iteration)
+            terminal_reason = "max_passes_reached"
+            break
 
         if git_dirty_paths(worktree_path):
             raise DriverError(
@@ -2895,7 +3399,6 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 fixer_model=fixer_model,
             )
             iteration["outcomes"].append(outcome)
-            handled_comment_ids.add(int(comment["comment_id"]))
 
         caller_decision = [
             outcome
@@ -2915,24 +3418,54 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
                 pr_branch,
                 iteration["push_result"]["head_sha"],
             )
-            metadata = pr_metadata(repo, args.pr_num)
+            head_oid = iteration["push_result"]["head_sha"]
 
+        replies_by_comment: dict[int, dict[str, Any]] = {}
         for outcome in iteration["outcomes"]:
-            if outcome["outcome"] in REPLY_OUTCOMES:
+            if outcome["outcome"] in RESOLUTION_OUTCOMES:
+                body_file = ensure_resolution_reply_body(
+                    outcome,
+                    iteration_dir / f"agent-{outcome['comment_id']}.reply.md",
+                )
                 reply_result = post_reply(
-                    repo, args.pr_num, outcome["comment_id"], outcome["reply_body_file"]
+                    repo, args.pr_num, outcome["comment_id"], body_file
                 )
                 iteration["reply_results"].append(reply_result)
+                replies_by_comment[int(outcome["comment_id"])] = reply_result
 
-        terminal_reason = (
-            "caller_decision_required" if caller_decision else "review_applied"
-        )
+        findings_by_comment = {
+            int(comment["comment_id"]): comment for comment in actionable_comments
+        }
+        for outcome in iteration["outcomes"]:
+            if outcome["outcome"] in CALLER_DECISION_OUTCOMES:
+                continue
+            finding = findings_by_comment[int(outcome["comment_id"])]
+            action = mark_conversation_awaiting(
+                repo,
+                args.pr_num,
+                finding,
+                outcome,
+                replies_by_comment.get(int(outcome["comment_id"])),
+                head_oid,
+            )
+            if action:
+                iteration.setdefault("conversation_actions", []).append(action)
+            mark_out_of_diff_fixed_disposition(
+                repo,
+                args.pr_num,
+                finding,
+                outcome,
+                replies_by_comment.get(int(outcome["comment_id"])),
+            )
+
         iterations.append(iteration)
-        break
+        if caller_decision:
+            terminal_reason = "caller_decision_required"
+            break
+        remediation_passes += 1
+        iteration_index += 1
 
     needs_caller_decision = terminal_reason in {
-        "changes_requested_without_actionable_comments",
-        "review_completed_without_terminal_decision",
         "caller_decision_required",
     }
     final_generation = active_review_generation(repo, args.pr_num) or {}
@@ -2948,14 +3481,21 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
         "enabled": enabled_payload,
         "loop_started_at": loop_started_at,
         "loop_completed_at": utc_now(),
-        "terminal": final_generation.get("result")
-        in {"REVIEW_COMPLETED", "RATE_LIMITED_NO_REVIEW", "BLOCKED"}
-        and not needs_caller_decision,
+        "terminal": terminal_reason
+        in {"approved", "rate_limited_no_review", "blocked", "max_passes_reached"},
         "terminal_reason": terminal_reason,
-        "outcome": terminal_reason,
+        "outcome": (
+            "MAX_PASSES_REACHED"
+            if terminal_reason == "max_passes_reached"
+            else terminal_reason
+        ),
+        "decomposition_required": terminal_reason == "max_passes_reached",
         "needs_caller_decision": needs_caller_decision,
         "caller_decision_outcomes": caller_decision_outcomes,
         "review_decision": final_review_decision,
+        "approval_signal": final_approval_signal,
+        "all_conversations_resolved": final_all_conversations_resolved,
+        "resolved_conversations": final_resolved_conversations,
         "generation_result": final_generation.get("result", "BLOCKED"),
         "generation": final_generation,
         "initial_trigger_decision": trigger_decision,
@@ -2967,7 +3507,7 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "min_interval_seconds": min_poll_interval,
         },
     }
-    if final_generation.get("result") == "REVIEW_COMPLETED":
+    if terminal_reason == "approved":
         payload["single_review_completion"] = save_single_review_completion(
             repo, args.pr_num, payload
         )
@@ -3046,12 +3586,21 @@ def command_review_loop(args: argparse.Namespace) -> int:
         return 3
     if payload.get("generation_result") == "RATE_LIMITED_NO_REVIEW":
         return 3
+    if payload.get("outcome") == "MAX_PASSES_REACHED":
+        return 3
     return 0
 
 
 def command_reply(args: argparse.Namespace) -> int:
     repo = Repo.parse(args.repo)
     payload = post_reply(repo, args.pr_num, args.comment_id, args.body_file)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def command_recover_replies(args: argparse.Namespace) -> int:
+    repo = Repo.parse(args.repo)
+    payload = recover_missing_conversation_replies(repo, args.pr_num)
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -3157,6 +3706,14 @@ def build_parser() -> argparse.ArgumentParser:
     reply.add_argument("comment_id", type=int)
     reply.add_argument("body_file")
     reply.set_defaults(func=command_reply)
+
+    recover_replies = subparsers.add_parser(
+        "recover-replies",
+        help="Post and read back persisted conversation replies missing from GitHub.",
+    )
+    recover_replies.add_argument("repo")
+    recover_replies.add_argument("pr_num", type=int)
+    recover_replies.set_defaults(func=command_recover_replies)
 
     return parser
 

@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/coderabbit-operator.md
 model: gpt-medium
-description: One generation-aware GitHub PR-mode CodeRabbit review and finding-application pass per PR.
+description: One generated CodeRabbit review with independent finding dialogues and exact-current-head approval per PR.
 contract_status: minimum-generated-from-operator-sections
 inputs:
 - name: repo
@@ -28,7 +28,7 @@ inputs:
   type: string
   required: false
   default_source: base
-  description: auto or skip; skip requires a persisted current-head generation, and neither policy may supersede a completed PR review.
+  description: auto or skip; skip requires a persisted generation, and neither policy may supersede a completed review generation even after the head changes.
 - name: fixer_agent
   type: string
   required: false
@@ -49,11 +49,11 @@ outputs:
   success_shape: Exit 0 when the repository carries the CodeRabbit marker label; exit 1 is clean non-applicability.
   wrote_lines: []
 - task: review-loop
-  success_shape: JSON containing one completed generation, terminal_reason, iteration outcomes, and persisted single_review_completion evidence; reruns reuse that evidence.
+  success_shape: JSON containing one completed generation, independently resolved conversations, exact-current-head CodeRabbit approval, iteration outcomes, and persisted single_review_completion evidence; reruns reuse that evidence.
   wrote_lines:
   - generation_result is exactly REVIEW_COMPLETED, RATE_LIMITED_NO_REVIEW, WAITING_FOR_REVIEW, or BLOCKED.
   - REVIEW_COMPLETED includes a new baseline-external accepted_review_id bound to expected_head_oid with submitted_at no earlier than the trigger.
-  - review_applied requires every finding to have a validated fix/reply disposition, records the reviewed head and post-fix final head, and requests no follow-up review.
+  - terminal_reason=approved requires every scoped review thread to report isResolved=true and a CodeRabbit APPROVED review bound to the exact final head; fixes and dialogue replies request no follow-up review generation.
   - RATE_LIMITED_NO_REVIEW includes exact trigger-bound rate-limit evidence and capacity-query evidence when queried.
 - task: poll
   success_shape: JSON generation evidence plus normalized comment metadata and persisted body paths.
@@ -78,15 +78,16 @@ errors:
   cause: A finding is deferred because it requires a concrete caller-owned decision.
   recovery: Surface the structured per-comment outcome without re-triggering.
 side_effects:
-- Persists generation state and normalized comment bodies under ~/.cache/coderabbit.
+- Persists generation state, normalized comment bodies, ordered per-thread conversation histories, and per-conversation awaiting/pushback/resolved state under ~/.cache/coderabbit.
 - Persists pre-POST in-flight markers and reconciles exact provider command identities before retrying.
 - Uses a PR-scoped non-blocking lock to reject concurrent provider-command invocations.
-- Persists a body-revision-bound local replied disposition for handled outside-diff comments.
-- May post one review trigger, a retry only when no review completed and capacity allows it, one capacity query per query generation, and exact-comment replies.
+- Persists a body-revision-bound local fix/reply disposition for handled outside-diff comments.
+- May post one review trigger, a retry only when no review completed and capacity allows it, one capacity query per query generation, and one read-backed exact-comment reply for every non-deferred finding resolution.
+- Recovers a persisted awaiting/resolved conversation with no reply identity from its durable fixer outcome and posts that reply idempotently before further polling.
 - May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []
 forbidden_direct:
-- Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, or checks.
+- Do not infer completion from aggregate reviewDecision, acknowledgements, summaries, pushes, reply readbacks, body markers, outdated positions, or checks; require GraphQL isResolved=true for each in-diff review thread, a matching body-revision-bound disposition for each outside-diff finding, and exact-current-head CodeRabbit approval.
 - Do not infer capacity from elapsed time or a fair-usage table.
 - Do not compose ad hoc GitHub polling or silently fall back to unrelated top-level replies.
 - Do not request a follow-up review after REVIEW_COMPLETED or bypass persisted single_review_completion.
