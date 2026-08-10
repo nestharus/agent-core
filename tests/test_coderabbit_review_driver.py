@@ -1875,6 +1875,9 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
         second = driver.review_loop(_review_loop_args(tmp_path))
         assert second["completion_reused"] is True
         assert second["terminal_reason"] == "approved"
+        assert second["approval_signal"]["review_id"] == 9
+        assert second["approval_signal"]["commit_id"] == "fixed-head"
+        assert second["all_conversations_resolved"] is True
         assert len(trigger_calls) == 1
         assert len(poll_calls) == poll_count
 
