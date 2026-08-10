@@ -82,7 +82,8 @@ side_effects:
 - Persists pre-POST in-flight markers and reconciles exact provider command identities before retrying.
 - Uses a PR-scoped non-blocking lock to reject concurrent provider-command invocations.
 - Persists a body-revision-bound local fix/reply disposition for handled outside-diff comments.
-- May post one review trigger, a retry only when no review completed and capacity allows it, one capacity query per query generation, and exact-comment replies.
+- May post one review trigger, a retry only when no review completed and capacity allows it, one capacity query per query generation, and one read-backed exact-comment reply for every non-deferred finding resolution.
+- Recovers a persisted awaiting/resolved conversation with no reply identity from its durable fixer outcome and posts that reply idempotently before further polling.
 - May dispatch fixers, commit their changes, and push the verified PR head branch during review-loop.
 must_delegate: []
 forbidden_direct:

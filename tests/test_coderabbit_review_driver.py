@@ -1214,9 +1214,10 @@ def test_conversation_history_and_pushback_advance_independently(
         if record["metadata"].get("thread_parent") is None
     }
     records_by_id = {record["metadata"]["comment_id"]: record for record in records}
-    assert records_by_id[42]["metadata"]["conversation_path"] == records_by_id[44][
-        "metadata"
-    ]["conversation_path"]
+    assert (
+        records_by_id[42]["metadata"]["conversation_path"]
+        == records_by_id[44]["metadata"]["conversation_path"]
+    )
     assert not (tmp_path / "nestharus" / "agent-core" / "pr-198" / "review-9").exists()
     assert len(list(tmp_path.rglob("conversation-*.md"))) == 2
     history = pathlib.Path(roots[42]["metadata"]["conversation_path"]).read_text()
@@ -1578,6 +1579,94 @@ def test_duplicate_review_reply_is_idempotent(monkeypatch, tmp_path) -> None:
     assert result["reply_id"] == 99
 
 
+def test_missing_fixed_reply_is_recovered_once_from_durable_outcome(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    driver.save_state(
+        REPO,
+        198,
+        {
+            "conversation_actions": {
+                "42": {
+                    "root_comment_id": 42,
+                    "thread_id": "thread-42",
+                    "status": "awaiting_coderabbit",
+                    "outcome": "fixed",
+                    "commit_sha": "fixed-head",
+                    "reply_id": None,
+                    "reply_url": None,
+                }
+            }
+        },
+    )
+    iteration_dir = driver.cache_dir(REPO, 198) / "iter-3"
+    iteration_dir.mkdir(parents=True)
+    outcome_path = iteration_dir / "agent-42.prompt.outcome.json"
+    outcome_path.write_text(
+        driver.json.dumps(
+            {
+                "comment_id": 42,
+                "outcome": "fixed",
+                "commit_sha": "fixed-head",
+                "reply_body_file": None,
+                "rationale": "Applied the requested fix.",
+                "files_touched": ["tools/example.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    reply_calls: list[tuple[int, str]] = []
+
+    def fake_post_reply(repo, pr_num, comment_id, body_file):
+        reply_calls.append((comment_id, pathlib.Path(body_file).read_text()))
+        return {
+            "posted": True,
+            "comment_id": comment_id,
+            "reply_id": 99,
+            "reply_url": "https://github.test/replies/99",
+        }
+
+    monkeypatch.setattr(driver, "post_reply", fake_post_reply)
+
+    recovered = driver.recover_missing_conversation_replies(REPO, 198)
+
+    assert len(recovered) == 1
+    assert reply_calls == [
+        (42, "Fixed in `fixed-head`.\n\nApplied the requested fix.\n")
+    ]
+    action = driver.load_state(REPO, 198)["conversation_actions"]["42"]
+    assert action["reply_id"] == 99
+    assert action["reply_url"] == "https://github.test/replies/99"
+    persisted_outcome = driver.json.loads(outcome_path.read_text())
+    assert pathlib.Path(persisted_outcome["reply_body_file"]).is_file()
+
+    assert driver.recover_missing_conversation_replies(REPO, 198) == []
+    assert len(reply_calls) == 1
+
+
+def test_conversation_cannot_wait_without_exact_reply_readback(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path)
+    finding = {
+        "comment_id": 42,
+        "root_comment_id": 42,
+        "thread_id": "thread-42",
+        "kind": "in-diff",
+    }
+
+    with pytest.raises(driver.DriverError, match="without an exact reply readback"):
+        driver.mark_conversation_awaiting(
+            REPO,
+            198,
+            finding,
+            {"outcome": "fixed", "commit_sha": "fixed-head"},
+            None,
+            "fixed-head",
+        )
+
+
 def test_reply_body_identity_normalizes_line_endings() -> None:
     readback = driver.reply_readback(
         {
@@ -1871,7 +1960,7 @@ def test_review_loop_applies_one_review_and_reuses_persisted_completion(
     assert first["generation_result"] == "REVIEW_COMPLETED"
     assert len(trigger_calls) == 1
     assert len(poll_calls) == poll_count
-    assert reply_calls == [44]
+    assert reply_calls == [42, 44]
     if include_caller_decision:
         assert "single_review_completion" not in first
     else:
@@ -1990,6 +2079,7 @@ def test_review_loop_stops_before_dispatching_beyond_remediation_limit(
     }
     poll_calls: list[None] = []
     dispatch_calls: list[None] = []
+    (tmp_path / "reply.md").write_text("Addressed.\n", encoding="utf-8")
 
     monkeypatch.setattr(driver, "MAX_REMEDIATION_PASSES", 1)
     monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
@@ -2060,7 +2150,9 @@ def test_review_loop_stops_before_dispatching_beyond_remediation_limit(
     )
     monkeypatch.setattr(driver, "post_reply", lambda *args: {"posted": True})
     monkeypatch.setattr(driver, "mark_conversation_awaiting", lambda *args: None)
-    monkeypatch.setattr(driver, "mark_out_of_diff_fixed_disposition", lambda *args: None)
+    monkeypatch.setattr(
+        driver, "mark_out_of_diff_fixed_disposition", lambda *args: None
+    )
     monkeypatch.setattr(driver, "active_review_generation", lambda *args: generation)
 
     result = driver.review_loop(_review_loop_args(tmp_path))
@@ -2346,6 +2438,10 @@ def test_dispatch_comment_agent_backfills_missing_fix_commit_sha(
     persisted = driver.json.loads(outcome_path.read_text(encoding="utf-8"))
     assert outcome["commit_sha"] == "agent-commit-sha"
     assert persisted["commit_sha"] == "agent-commit-sha"
+    assert persisted["reply_body_file"] == outcome["reply_body_file"]
+    assert pathlib.Path(outcome["reply_body_file"]).read_text() == (
+        "Fixed in `agent-commit-sha`.\n\nApplied the focused fix.\n"
+    )
 
 
 def test_dispatch_comment_agent_rejects_fix_without_new_commit(

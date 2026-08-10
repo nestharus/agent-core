@@ -46,6 +46,7 @@ ACK_COMPLETION_MARKERS = {
 ACK_ACTION_MARKERS = ("Action performed", "Actions performed")
 FIX_OUTCOMES = {"fixed", "fixed_and_replied"}
 REPLY_OUTCOMES = {"replied", "fixed_and_replied"}
+RESOLUTION_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES
 CALLER_DECISION_OUTCOMES = {"deferred"}
 VALID_OUTCOMES = FIX_OUTCOMES | REPLY_OUTCOMES | CALLER_DECISION_OUTCOMES
 OUTCOME_FIELDS = {
@@ -1237,9 +1238,7 @@ def collect_comment_records(
                 (
                     item
                     for item in reversed(conversation_comments)
-                    if is_bot_login(
-                        (item.get("user") or {}).get("login"), bot_login
-                    )
+                    if is_bot_login((item.get("user") or {}).get("login"), bot_login)
                 ),
                 None,
             )
@@ -1541,6 +1540,10 @@ def mark_conversation_awaiting(
     )
     if finding.get("kind") != "in-diff" or not root_comment_id:
         return {}
+    if not (reply or {}).get("reply_id"):
+        raise DriverError(
+            f"conversation {root_comment_id} cannot await CodeRabbit without an exact reply readback"
+        )
     action = {
         "root_comment_id": root_comment_id,
         "thread_id": finding.get("thread_id"),
@@ -1566,6 +1569,7 @@ def mark_out_of_diff_fixed_disposition(
     pr_num: int,
     finding: dict[str, Any],
     outcome: dict[str, Any],
+    reply: dict[str, Any] | None = None,
 ) -> None:
     if finding.get("kind") != "out-of-diff" or outcome.get("outcome") != "fixed":
         return
@@ -1584,10 +1588,12 @@ def mark_out_of_diff_fixed_disposition(
     state = load_state(repo, pr_num)
     dispositions = state.setdefault("out_of_diff_dispositions", {})
     dispositions[str(comment_id)] = {
-        "status": "fixed",
+        "status": "fixed_and_replied" if reply else "fixed",
         "body_sha256": body_sha256,
         "updated_at": updated_at,
         "commit_sha": outcome["commit_sha"],
+        "reply_id": (reply or {}).get("reply_id"),
+        "reply_url": (reply or {}).get("reply_url"),
         "recorded_at": utc_now(),
     }
     save_state(repo, pr_num, state)
@@ -2549,6 +2555,36 @@ def validate_outcome(raw: Any, comment_id: int) -> dict[str, Any]:
     }
 
 
+def ensure_resolution_reply_body(outcome: dict[str, Any], reply_path: Path) -> str:
+    body_file = outcome.get("reply_body_file")
+    if body_file:
+        if not Path(body_file).is_file():
+            raise DriverError(
+                f"reply body file for comment {outcome['comment_id']} does not exist: {body_file}"
+            )
+        return str(body_file)
+    if outcome.get("outcome") != "fixed":
+        raise DriverError(
+            f"resolution outcome for comment {outcome['comment_id']} is missing a reply body"
+        )
+    commit_sha = outcome.get("commit_sha")
+    if not commit_sha:
+        raise DriverError(
+            f"fixed outcome for comment {outcome['comment_id']} is missing a commit SHA"
+        )
+    reply_path.parent.mkdir(parents=True, exist_ok=True)
+    reply_path.write_text(
+        f"Fixed in `{commit_sha}`.\n\n{outcome['rationale']}\n",
+        encoding="utf-8",
+    )
+    outcome["reply_body_file"] = str(reply_path)
+    return str(reply_path)
+
+
+def semantic_outcome(outcome: dict[str, Any]) -> dict[str, Any]:
+    return {field: outcome.get(field) for field in OUTCOME_FIELDS}
+
+
 def dispatch_comment_agent(
     *,
     comment: dict[str, Any],
@@ -2651,9 +2687,12 @@ def dispatch_comment_agent(
                 f"{outcome['commit_sha']} but worktree HEAD is {head_after}"
             )
         outcome["commit_sha"] = head_after
-        outcome_path.write_text(
-            json.dumps(outcome, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+    if outcome["outcome"] in RESOLUTION_OUTCOMES:
+        ensure_resolution_reply_body(outcome, outcome_path.with_suffix(".reply.md"))
+    outcome_path.write_text(
+        json.dumps(semantic_outcome(outcome), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     outcome.update(
         {
@@ -2841,6 +2880,91 @@ def post_reply(
     readback = reply_readback(posted, issue_body, None)
     mark_out_of_diff_disposition(repo, pr_num, issue_target, readback)
     return reply_result(repo, pr_num, comment_id, "issue-comment", True, readback)
+
+
+def latest_outcome_artifact(repo: Repo, pr_num: int, comment_id: int) -> Path:
+    candidates = list(
+        cache_dir(repo, pr_num).glob(f"iter-*/agent-{comment_id}.prompt.outcome.json")
+    )
+    if not candidates:
+        raise DriverError(
+            f"conversation {comment_id} is missing its durable fixer outcome artifact"
+        )
+
+    def iteration_number(path: Path) -> int:
+        try:
+            return int(path.parent.name.removeprefix("iter-"))
+        except ValueError:
+            return -1
+
+    return max(
+        candidates, key=lambda path: (iteration_number(path), path.stat().st_mtime_ns)
+    )
+
+
+def recover_missing_conversation_replies(
+    repo: Repo, pr_num: int
+) -> list[dict[str, Any]]:
+    state = load_state(repo, pr_num)
+    actions = state.get("conversation_actions", {})
+    if not isinstance(actions, dict):
+        return []
+    pending = [
+        (int(root_comment_id), dict(action))
+        for root_comment_id, action in actions.items()
+        if isinstance(action, dict)
+        and action.get("status") in {"awaiting_coderabbit", "resolved"}
+        and not action.get("reply_id")
+        and action.get("thread_id")
+    ]
+    recovered: list[dict[str, Any]] = []
+    for root_comment_id, action in sorted(pending):
+        outcome_path = latest_outcome_artifact(repo, pr_num, root_comment_id)
+        try:
+            raw = json.loads(outcome_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            raise DriverError(
+                f"could not load durable fixer outcome for conversation {root_comment_id}: {outcome_path}"
+            ) from err
+        outcome = validate_outcome(raw, root_comment_id)
+        if outcome.get("outcome") not in RESOLUTION_OUTCOMES:
+            raise DriverError(
+                f"conversation {root_comment_id} has non-resolution outcome {outcome.get('outcome')!r}"
+            )
+        if outcome.get("outcome") in FIX_OUTCOMES and action.get(
+            "commit_sha"
+        ) != outcome.get("commit_sha"):
+            raise DriverError(
+                f"conversation {root_comment_id} action/outcome commit identity mismatch"
+            )
+        body_file = ensure_resolution_reply_body(
+            outcome, outcome_path.with_suffix(".reply.md")
+        )
+        outcome_path.write_text(
+            json.dumps(semantic_outcome(outcome), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        reply = post_reply(repo, pr_num, root_comment_id, body_file)
+        current_state = load_state(repo, pr_num)
+        current_actions = current_state.setdefault("conversation_actions", {})
+        current_action = current_actions.get(str(root_comment_id))
+        if not isinstance(current_action, dict):
+            raise DriverError(
+                f"conversation {root_comment_id} action disappeared during reply recovery"
+            )
+        current_action["reply_id"] = reply.get("reply_id")
+        current_action["reply_url"] = reply.get("reply_url")
+        current_action["reply_body_file"] = body_file
+        current_action["reply_recovered_at"] = utc_now()
+        save_state(repo, pr_num, current_state)
+        recovered.append(
+            {
+                "root_comment_id": root_comment_id,
+                "outcome_file": str(outcome_path),
+                "reply_result": reply,
+            }
+        )
+    return recovered
 
 
 def wait_for_loop_poll_cadence(
@@ -3190,9 +3314,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             "bot_login": poll_result.get("bot_login"),
             "outcomes": [],
             "reply_results": [],
+            "recovered_reply_results": [],
             "push_result": None,
             "trigger_result": None,
         }
+        iteration["recovered_reply_results"] = recover_missing_conversation_replies(
+            repo, args.pr_num
+        )
 
         if generation_result == "RATE_LIMITED_NO_REVIEW":
             capacity_result = capacity_query(repo, args.pr_num)
@@ -3294,9 +3422,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
 
         replies_by_comment: dict[int, dict[str, Any]] = {}
         for outcome in iteration["outcomes"]:
-            if outcome["outcome"] in REPLY_OUTCOMES:
+            if outcome["outcome"] in RESOLUTION_OUTCOMES:
+                body_file = ensure_resolution_reply_body(
+                    outcome,
+                    iteration_dir / f"agent-{outcome['comment_id']}.reply.md",
+                )
                 reply_result = post_reply(
-                    repo, args.pr_num, outcome["comment_id"], outcome["reply_body_file"]
+                    repo, args.pr_num, outcome["comment_id"], body_file
                 )
                 iteration["reply_results"].append(reply_result)
                 replies_by_comment[int(outcome["comment_id"])] = reply_result
@@ -3318,7 +3450,13 @@ def review_loop(args: argparse.Namespace) -> dict[str, Any]:
             )
             if action:
                 iteration.setdefault("conversation_actions", []).append(action)
-            mark_out_of_diff_fixed_disposition(repo, args.pr_num, finding, outcome)
+            mark_out_of_diff_fixed_disposition(
+                repo,
+                args.pr_num,
+                finding,
+                outcome,
+                replies_by_comment.get(int(outcome["comment_id"])),
+            )
 
         iterations.append(iteration)
         if caller_decision:
@@ -3460,6 +3598,13 @@ def command_reply(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_recover_replies(args: argparse.Namespace) -> int:
+    repo = Repo.parse(args.repo)
+    payload = recover_missing_conversation_replies(repo, args.pr_num)
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -3561,6 +3706,14 @@ def build_parser() -> argparse.ArgumentParser:
     reply.add_argument("comment_id", type=int)
     reply.add_argument("body_file")
     reply.set_defaults(func=command_reply)
+
+    recover_replies = subparsers.add_parser(
+        "recover-replies",
+        help="Post and read back persisted conversation replies missing from GitHub.",
+    )
+    recover_replies.add_argument("repo")
+    recover_replies.add_argument("pr_num", type=int)
+    recover_replies.set_defaults(func=command_recover_replies)
 
     return parser
 

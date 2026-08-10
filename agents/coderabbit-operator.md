@@ -167,7 +167,10 @@ thread `isResolved=true`.
 - Each root review comment is one independently tracked conversation. A
   separate fixer invocation receives only that thread's complete ordered
   history.
-- After a fix push or reply, the conversation becomes `awaiting_coderabbit`.
+- After a fix push, the driver posts and reads back an exact-thread reply before
+  the conversation becomes `awaiting_coderabbit`. A plain fix outcome gets a
+  deterministic commit-and-rationale reply; a persisted action with a missing
+  reply identity is recovered idempotently from its durable outcome artifact.
   It is not redispatched until CodeRabbit adds a newer reply or resolves the
   thread.
 - A newer CodeRabbit reply on an unresolved thread is `pushback`; only that

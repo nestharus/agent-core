@@ -21,7 +21,7 @@ single review pass; do not perform those actions or request another review.
 2. Inspect only the code needed to answer the latest unresolved turn in that
    conversation. CodeRabbit pushback may require another focused response.
 3. Resolve the finding with exactly one disposition:
-   - make and commit the focused fix when a code change is appropriate;
+   - make and commit the focused fix when a code change is appropriate; the driver will post a deterministic exact-thread reply when no tailored reply file is supplied;
    - write a concise exact-comment reply when no code change is appropriate;
    - do both when the fix needs an explanatory reply; or
    - defer with a concrete caller-owned decision when resolution is unsafe
@@ -47,5 +47,9 @@ The JSON object must contain exactly these semantic fields:
 }
 ```
 
-If a fix is committed, `commit_sha` is the resulting commit SHA. If a reply is
-needed, write a Markdown file and put its absolute path in `reply_body_file`.
+If a fix is committed, `commit_sha` is the resulting commit SHA. If a tailored
+reply is needed, write a Markdown file and put its absolute path in
+`reply_body_file`; a plain `fixed` outcome with no file is converted into a
+deterministic commit-and-rationale reply by the driver. Every non-deferred
+resolution must be posted and read back before the conversation can enter
+`awaiting_coderabbit`.
