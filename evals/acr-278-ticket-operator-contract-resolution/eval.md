@@ -71,7 +71,7 @@ The eval must not fire on:
 - Files outside this spec's touched-component set for ACR-278 declared-role verification.
 - A touched file whose `## Declared roles` block matches the contract's expected role set exactly, allowing only ordering tolerance consistent with `~/ai/conventions/code-quality.md` cohesion rules.
 - Explicit contract `true`, or legacy-absent policy with both exact update task and matching mutation side effect, produces one verified write and durable rationale evidence.
-- Authoritative resolved-wrapper `false` produces deterministic local `no_write_policy_disabled` evidence and the process tree proves no estimate-write child ran.
+- Authoritative selected-contract `false` produces deterministic local `no_write_policy_disabled` evidence and the process tree proves no estimate-write child ran.
 - A null inherited estimate preserves `over_2x: unknown`, carries a durable cold-start disposition reference, and supplies refined estimate/rationale plus absolute scope evidence to Phase 4.
 - A previously verified mutation is reused without duplicate write only after exact current issue/field/value readback and matching currentness identities are recorded in session/audit history.
 - Missing, malformed, conflicting, unbound, or caller-overridden policy blocks before Phase 3 ticket action.
