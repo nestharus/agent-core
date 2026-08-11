@@ -1765,7 +1765,7 @@ def test_review_loop_terminates_on_exact_head_approval_with_later_same_head_even
         _review(
             10,
             "COMMENTED",
-            submitted_at="2026-08-11T08:41:41Z",
+            submitted_at="2026-08-11T08:41:42Z",
             commit_id=current_head,
         ),
     ]
@@ -1843,7 +1843,9 @@ def test_review_loop_terminates_on_exact_head_approval_with_later_same_head_even
                 "review loop must terminate after observing the exact-head approval "
                 "and resolved threads"
             )
-        return driver.poll(REPO, 198, current_head), current_head, driver.utc_now_dt()
+        poll_result = driver.poll(REPO, 198, current_head)
+        assert poll_result["aggregate_review_decision"] == "COMMENTED"
+        return poll_result, current_head, driver.utc_now_dt()
 
     monkeypatch.setattr(driver, "poll_current_pr_head", poll_once)
 
