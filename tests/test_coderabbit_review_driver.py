@@ -1742,6 +1742,122 @@ def test_out_of_diff_finding_is_bound_to_current_review_generation() -> None:
     assert not driver.is_actionable_finding_record(record, "head-sha", {}, generation)
 
 
+def test_review_loop_terminates_on_exact_head_approval_with_later_same_head_event(
+    monkeypatch, tmp_path
+) -> None:
+    reviewed_head = "reviewed-head"
+    current_head = "fixed-head"
+    generation = {
+        **_generation(head_oid=reviewed_head),
+        "result": "REVIEW_COMPLETED",
+        "accepted_review_id": 7,
+        "accepted_review_state": "CHANGES_REQUESTED",
+        "accepted_review_commit_id": reviewed_head,
+    }
+    reviews = [
+        _review(7, "CHANGES_REQUESTED", commit_id=reviewed_head),
+        _review(
+            9,
+            "APPROVED",
+            submitted_at="2026-08-11T08:41:41Z",
+            commit_id=current_head,
+        ),
+        _review(
+            10,
+            "COMMENTED",
+            submitted_at="2026-08-11T08:41:42Z",
+            commit_id=current_head,
+        ),
+    ]
+    resolved_comment = {
+        "id": 42,
+        "pull_request_review_id": 7,
+        "body": "Addressed finding.",
+        "position": 1,
+        "path": "tools/example.py",
+        "line": 9,
+        "created_at": "2026-08-11T08:40:00Z",
+        "html_url": "https://github.test/review/42",
+        "user": {"login": BOT_LOGIN},
+    }
+    poll_calls = 0
+
+    monkeypatch.setattr(driver, "CACHE_ROOT", tmp_path / "cache")
+    driver.save_state(REPO, 198, {"active_generation": generation})
+    monkeypatch.setattr(driver, "repo_label_enabled", lambda *args: (True, {}))
+    monkeypatch.setattr(
+        driver,
+        "pr_metadata",
+        lambda *args: {"headRefName": "fix/review", "headRefOid": current_head},
+    )
+    monkeypatch.setattr(driver, "require_worktree_branch", lambda *args: None)
+    monkeypatch.setattr(driver, "git_head", lambda *args: current_head)
+    monkeypatch.setattr(
+        driver,
+        "validated_pr_head_identity",
+        lambda *args, **kwargs: (
+            "fix/review",
+            current_head,
+            driver.utc_now_dt(),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "wait_for_loop_poll_cadence",
+        lambda *args: {
+            "waited_seconds": 0,
+            "last_poll_at": None,
+            "min_interval_seconds": 300,
+        },
+    )
+
+    def fake_paginated(endpoint: str) -> list[dict]:
+        if endpoint.endswith("/reviews"):
+            return reviews
+        if endpoint.endswith("/pulls/198/comments"):
+            return [resolved_comment]
+        return []
+
+    monkeypatch.setattr(driver, "gh_paginated_array", fake_paginated)
+    monkeypatch.setattr(driver, "discover_bot_login", lambda *args, **kwargs: BOT_LOGIN)
+    monkeypatch.setattr(
+        driver,
+        "graphql_review_threads",
+        lambda *args: {
+            42: {
+                "thread_id": "thread-42",
+                "root_comment_id": 42,
+                "comment_ids": [42],
+                "is_resolved": True,
+                "is_outdated": False,
+            }
+        },
+    )
+    monkeypatch.setattr(driver, "recover_missing_conversation_replies", lambda *args: [])
+
+    def poll_once(*args):
+        nonlocal poll_calls
+        poll_calls += 1
+        if poll_calls > 1:
+            pytest.fail(
+                "review loop must terminate after observing the exact-head approval "
+                "and resolved threads"
+            )
+        poll_result = driver.poll(REPO, 198, current_head)
+        assert poll_result["aggregate_review_decision"] == "COMMENTED"
+        return poll_result, current_head, driver.utc_now_dt()
+
+    monkeypatch.setattr(driver, "poll_current_pr_head", poll_once)
+
+    result = driver.review_loop(_review_loop_args(tmp_path))
+
+    assert result["terminal"] is True
+    assert result["terminal_reason"] == "approved"
+    assert result["approval_signal"]["review_id"] == 9
+    assert result["all_conversations_resolved"] is True
+    assert poll_calls == 1
+
+
 @pytest.mark.parametrize(
     ("include_caller_decision", "terminal_reason", "poll_count"),
     [

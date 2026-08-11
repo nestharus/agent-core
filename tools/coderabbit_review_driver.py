@@ -1645,6 +1645,28 @@ def poll(
         if latest_scoped_review
         else None,
     }
+    approval_review = latest_coderabbit_review(
+        [
+            review
+            for review in decision_reviews
+            if head_oid is not None
+            and normalized_review_decision(review) == "APPROVED"
+            and review.get("commit_id") == head_oid
+        ],
+        bot_login,
+    )
+    approval_signal = {
+        "decision": normalized_review_decision(approval_review),
+        "source": "github_review" if approval_review else "none",
+        "author_login": (approval_review.get("user") or {}).get("login")
+        if approval_review
+        else None,
+        "review_id": approval_review.get("id") if approval_review else None,
+        "commit_id": approval_review.get("commit_id") if approval_review else None,
+        "submitted_at": approval_review.get("submitted_at")
+        if approval_review
+        else None,
+    }
     records = collect_comment_records(
         repo, pr_num, reviews, review_comments, issue_comments, thread_status, bot_login
     )
@@ -1815,7 +1837,7 @@ def poll(
         "review_decision": decision,
         "aggregate_review_decision": aggregate_decision,
         "aggregate_decision_signal": aggregate_decision_signal,
-        "approval_signal": aggregate_decision_signal,
+        "approval_signal": approval_signal,
         "current_head_oid": head_oid,
         "terminal": generation.get("result") != "WAITING_FOR_REVIEW",
         "outcome": outcome,
