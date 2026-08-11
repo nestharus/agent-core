@@ -685,7 +685,9 @@ def _runtime_case(
     operator_path.write_text("# linear operator\n")
     contract_path = repo_root / "contracts" / "linear-operator.yaml"
     contract_path.parent.mkdir(parents=True, exist_ok=True)
-    contract_path.write_text("source: linear-operator\n")
+    contract_path.write_text(
+        "source: linear-operator\nestimate_mutation_enabled: false\n"
+    )
     subprocess.run(["git", "init", "-q", str(repo_root)], check=True, env=GIT_ENV)
     subprocess.run(
         [
@@ -747,6 +749,25 @@ def _runtime_case(
     _write_json(verification_path, {"status": "PASS", "estimate": 8})
     initial_manifest.update(
         {
+            "contract_resolution_path": str(
+                scratch_dir / "phase0-contract-resolution.json"
+            ),
+            "contract_resolution_producing_invocation_uuid": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "contract_resolution_sha256": "0" * 64,
+            "estimate_capability_evidence": {
+                "output_task": "update-estimate",
+                "side_effect": "linear-update-estimate",
+            },
+            "estimate_field": "estimate",
+            "estimate_mutation_policy": {
+                "resolution": "legacy_capability",
+                "source": "legacy_capability",
+                "value": None,
+            },
+            "estimate_writeback_disposition": "update_estimate_required",
+            "resolved_defaults_source": {"linear_team_key": "caller"},
             "ticket_snapshot_path": str(ticket_snapshot),
             "ticket_snapshot_sha256": _digest(ticket_snapshot.read_bytes()),
             "ticket_snapshot_producing_invocation_uuid": (
@@ -757,7 +778,43 @@ def _runtime_case(
             "resolved_operator_contract_path": str(contract_path),
             "resolved_contract_path": str(contract_path),
             "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+            "topology_revalidation_path": str(
+                scratch_dir / "phase0-topology-revalidation.json"
+            ),
+            "topology_revalidation_sha256": "5" * 64,
         }
+    )
+    topology_path = Path(initial_manifest["topology_revalidation_path"])
+    _write_json(topology_path, {"schema": "phase0-topology-revalidation-v1"})
+    initial_manifest["topology_revalidation_sha256"] = _digest(
+        topology_path.read_bytes()
+    )
+    resolution_path = Path(initial_manifest["contract_resolution_path"])
+    _write_json(
+        resolution_path,
+        {
+            "estimate_capability_evidence": {
+                "output_task": "update-estimate",
+                "side_effect": "linear-update-estimate",
+            },
+            "estimate_field": "estimate",
+            "estimate_mutation_policy": {
+                "resolution": "legacy_capability",
+                "source": "legacy_capability",
+                "value": None,
+            },
+            "estimate_writeback_disposition": "update_estimate_required",
+            "linear_team_key_source": "caller",
+            "resolved_contract_path": str(contract_path),
+            "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+            "resolved_operator_path": str(operator_path),
+            "resolved_operator_sha256": _digest(operator_path.read_bytes()),
+            "schema": "implementation-phase0-contract-resolution-v1",
+            "ticket_system": "linear",
+        },
+    )
+    initial_manifest["contract_resolution_sha256"] = _digest(
+        resolution_path.read_bytes()
     )
     estimate_path = (
         manifest_path.parent / "risk" / "age-260-phase-3-estimate-writeback.json"
@@ -807,6 +864,7 @@ def _runtime_case(
     }
     operations = [
         "phase0-init",
+        "phase0-reresolve",
         "cold-start-disposition-bind",
         "phase3-bind",
         "phase7-upsert",
@@ -826,7 +884,65 @@ def _runtime_case(
             current_manifest = json.loads(manifest_path.read_text())
             replacement_manifest = copy.deepcopy(current_manifest)
             index_path = active_path
-            if operation == "cold-start-disposition-bind":
+            if operation == "phase0-reresolve":
+                _write_json(
+                    resolution_path,
+                    {
+                        "estimate_capability_evidence": None,
+                        "estimate_field": "estimate",
+                        "estimate_mutation_policy": {
+                            "resolution": "explicit_contract_policy",
+                            "source": str(contract_path),
+                            "value": False,
+                        },
+                        "estimate_writeback_disposition": (
+                            "no_write_policy_disabled"
+                        ),
+                        "linear_team_key_source": "caller",
+                        "resolved_contract_path": str(contract_path),
+                        "resolved_contract_sha256": _digest(
+                            contract_path.read_bytes()
+                        ),
+                        "resolved_operator_path": str(operator_path),
+                        "resolved_operator_sha256": _digest(
+                            operator_path.read_bytes()
+                        ),
+                        "schema": "implementation-phase0-contract-resolution-v1",
+                        "ticket_system": "linear",
+                    },
+                )
+                replacement_manifest.update(
+                    {
+                        "contract_resolution_producing_invocation_uuid": (
+                            "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+                        ),
+                        "contract_resolution_sha256": _digest(
+                            resolution_path.read_bytes()
+                        ),
+                        "estimate_capability_evidence": None,
+                        "estimate_mutation_policy": {
+                            "resolution": "explicit_contract_policy",
+                            "source": str(contract_path),
+                            "value": False,
+                        },
+                        "estimate_writeback_disposition": (
+                            "no_write_policy_disabled"
+                        ),
+                        "ticket_snapshot_producing_invocation_uuid": (
+                            "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                        ),
+                    }
+                )
+                replacement_index = json.loads(active_path.read_text())
+                identity = None
+                artifacts = {
+                    "phase-0-contract-resolution": resolution_path,
+                    "phase-0-ticket-snapshot": ticket_snapshot,
+                    "phase-0-topology-revalidation": topology_path,
+                    "resolved-ticket-contract": contract_path,
+                    "resolved-ticket-operator": operator_path,
+                }
+            elif operation == "cold-start-disposition-bind":
                 replacement_manifest["cold_start_disposition_ref"] = str(cold_start_path)
                 replacement_index = json.loads(active_path.read_text())
                 identity = None
@@ -2138,6 +2254,64 @@ def _pre_pr_readback(case: dict[str, Any], source_manifest: dict[str, Any]) -> d
     }
 
 
+def test_phase0_reresolve_applies_policy_and_passes_closed_readback(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase0-reresolve")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    original_index = case["index_path"].read_bytes()
+
+    MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+    current = json.loads(case["manifest_path"].read_text())
+
+    assert current["estimate_mutation_policy"]["value"] is False
+    assert current["estimate_writeback_disposition"] == "no_write_policy_disabled"
+    assert current["cold_start_disposition_ref"] == source_manifest[
+        "cold_start_disposition_ref"
+    ]
+    assert current["phase_history"] == source_manifest["phase_history"]
+    assert case["index_path"].read_bytes() == original_index
+
+    readback_path = tmp_path / "phase0-reresolve.readback.json"
+    _write_json(readback_path, _pre_pr_readback(case, source_manifest))
+    MIGRATION.validate_pre_pr_readback(readback_path)
+
+
+def test_phase0_reresolve_rejects_missing_new_producer(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase0-reresolve")
+    request = json.loads(case["request_path"].read_text())
+    source = json.loads(case["manifest_path"].read_text())
+    request["replacement_manifest"]["ticket_snapshot_producing_invocation_uuid"] = (
+        source["ticket_snapshot_producing_invocation_uuid"]
+    )
+    _resign_runtime_request(case["request_path"], request)
+
+    with pytest.raises(InputError, match="must include"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+
+def test_phase0_reresolve_rejects_post_phase3_session(tmp_path: Path):
+    case = _runtime_case(tmp_path, "phase0-reresolve")
+    source = json.loads(case["manifest_path"].read_text())
+    source["phase_3_estimate_writeback_ref"] = str(tmp_path / "phase3.json")
+    source["phase_3_estimate_writeback_sha256"] = "d" * 64
+    _write_json(case["manifest_path"], source)
+    request = json.loads(case["request_path"].read_text())
+    request["sources"]["manifest"] = MIGRATION.runtime_source_identity(
+        case["manifest_path"]
+    )
+    request["replacement_manifest"] = copy.deepcopy(source)
+    request["replacement_manifest"].update(
+        {
+            key: value
+            for key, value in case["replacement_manifest"].items()
+            if key in MIGRATION.RUNTIME_ALLOWED_MANIFEST_CHANGES["phase0-reresolve"]
+        }
+    )
+    _resign_runtime_request(case["request_path"], request)
+
+    with pytest.raises(InputError, match="pre-PR, pre-Phase-3"):
+        MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
+
+
 def test_validate_pre_pr_readback_machine_validates_phase3_pass(tmp_path: Path):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
@@ -3218,6 +3392,9 @@ def _resign_runtime_request(path: Path, request: dict[str, Any]) -> None:
         ("cold-start-disposition-bind", "history"),
         ("cold-start-disposition-bind", "index"),
         ("cold-start-disposition-bind", "row-identity"),
+        ("phase0-reresolve", "history"),
+        ("phase0-reresolve", "index"),
+        ("phase0-reresolve", "row-identity"),
         ("phase3-bind", "cold-start"),
         ("phase3-bind", "index"),
         ("phase3-bind", "row-identity"),
@@ -3255,7 +3432,7 @@ def test_pre_pr_bind_operations_reject_mixed_fields_index_changes_and_row_identi
 
 
 @pytest.mark.parametrize(
-    "operation", ["cold-start-disposition-bind", "phase3-bind"]
+    "operation", ["cold-start-disposition-bind", "phase0-reresolve", "phase3-bind"]
 )
 def test_pre_pr_bind_operations_refuse_semantic_replay(
     operation: str, tmp_path: Path
@@ -3283,6 +3460,17 @@ def test_pre_pr_bind_operations_refuse_semantic_replay(
         (
             "cold-start-disposition-bind",
             ["active-index", "cold-start-disposition"],
+        ),
+        (
+            "phase0-reresolve",
+            [
+                "active-index",
+                "phase-0-contract-resolution",
+                "phase-0-ticket-snapshot",
+                "phase-0-topology-revalidation",
+                "resolved-ticket-contract",
+                "resolved-ticket-operator",
+            ],
         ),
         (
             "phase3-bind",
