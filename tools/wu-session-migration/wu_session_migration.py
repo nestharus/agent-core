@@ -34,12 +34,17 @@ RUNTIME_OPERATIONS = {
     "cold-start-disposition-bind",
     "phase3-bind",
     "phase0-init",
+    "phase0-reresolve",
     "phase7-upsert",
     "phase9-update",
     "resumer-update",
     "resumer-close",
 }
-PRE_PR_BIND_OPERATIONS = {"cold-start-disposition-bind", "phase3-bind"}
+PRE_PR_BIND_OPERATIONS = {
+    "cold-start-disposition-bind",
+    "phase0-reresolve",
+    "phase3-bind",
+}
 SUPPORTED_TICKET_SYSTEMS = {"jira", "linear"}
 TRUSTED_COMMAND_TIMEOUT_SECONDS = 60
 EXPECTED_COUNTS = {
@@ -130,6 +135,25 @@ ACTIVE_ROW_KEYS = {
 }
 RUNTIME_ALLOWED_MANIFEST_CHANGES = {
     "cold-start-disposition-bind": {"cold_start_disposition_ref"},
+    "phase0-reresolve": {
+        "contract_resolution_path",
+        "contract_resolution_producing_invocation_uuid",
+        "contract_resolution_sha256",
+        "estimate_capability_evidence",
+        "estimate_field",
+        "estimate_mutation_policy",
+        "estimate_writeback_disposition",
+        "resolved_contract_path",
+        "resolved_contract_sha256",
+        "resolved_operator_contract_path",
+        "resolved_operator_path",
+        "resolved_operator_sha256",
+        "ticket_snapshot_path",
+        "ticket_snapshot_producing_invocation_uuid",
+        "ticket_snapshot_sha256",
+        "topology_revalidation_path",
+        "topology_revalidation_sha256",
+    },
     "phase3-bind": {
         "phase_3_estimate_writeback_ref",
         "phase_3_estimate_writeback_sha256",
@@ -175,6 +199,11 @@ RUNTIME_ALLOWED_MANIFEST_CHANGES = {
         "closed_at",
         "phase_history",
     },
+}
+PHASE0_RERESOLVE_REQUIRED_CHANGES = {
+    "contract_resolution_producing_invocation_uuid",
+    "contract_resolution_sha256",
+    "ticket_snapshot_producing_invocation_uuid",
 }
 
 # Tests replace this hook to inject deterministic failures without weakening production checks.
@@ -561,11 +590,9 @@ def validate_pre_pr_readback(readback_path: Path) -> None:
         for key in set(source_manifest) | set(current_manifest)
         if source_manifest.get(key) != current_manifest.get(key)
     )
-    if (
-        readback.get("changed_keys") != changed_keys
-        or set(changed_keys) != RUNTIME_ALLOWED_MANIFEST_CHANGES[cast(str, operation)]
-    ):
+    if readback.get("changed_keys") != changed_keys:
         raise InputError("pre-PR readback changed keys mismatch")
+    _validate_pre_pr_changed_keys(cast(str, operation), set(changed_keys))
     if operation == "phase3-bind":
         source_history = _validate_pre_pr_history(source_manifest.get("phase_history"))
         current_history = current_manifest.get("phase_history")
@@ -2320,7 +2347,11 @@ def _validate_runtime_artifact_sources(
             }
             if observed != expected:
                 raise ApplyError(f"stale runtime artifact source identity: {path}")
-            if role in {"cold-start-disposition", "phase-3-estimate-writeback"}:
+            if role in {
+                "cold-start-disposition",
+                "phase-0-contract-resolution",
+                "phase-3-estimate-writeback",
+            }:
                 documents[role] = _decode_json(_safe_read_bytes(path), path)
     return records, documents
 
@@ -2506,15 +2537,20 @@ def _validate_pre_pr_bind_projection(
         for key in source_manifest
         if source_manifest[key] != replacement_manifest[key]
     }
-    expected_changes = RUNTIME_ALLOWED_MANIFEST_CHANGES[operation]
-    if changed != expected_changes:
-        raise InputError(
-            f"{operation} must change exactly {sorted(expected_changes)}; got {sorted(changed)}"
-        )
+    _validate_pre_pr_changed_keys(operation, changed)
     records = {record["role"]: record for record in artifact_records}
     scratch_dir = _manifest_scratch_dir(source_manifest, project_planning_root)
     if operation == "cold-start-disposition-bind":
         _validate_cold_start_bind(
+            source_manifest,
+            replacement_manifest,
+            records,
+            artifact_documents,
+            scratch_dir,
+        )
+        return
+    if operation == "phase0-reresolve":
+        _validate_phase0_reresolve(
             source_manifest,
             replacement_manifest,
             records,
@@ -2530,6 +2566,143 @@ def _validate_pre_pr_bind_projection(
         manifest_path,
         scratch_dir,
     )
+
+
+def _validate_pre_pr_changed_keys(operation: str, changed: set[str]) -> None:
+    allowed = RUNTIME_ALLOWED_MANIFEST_CHANGES[operation]
+    if operation == "phase0-reresolve":
+        if not PHASE0_RERESOLVE_REQUIRED_CHANGES <= changed or not changed <= allowed:
+            raise InputError(
+                "phase0-reresolve changes must include "
+                f"{sorted(PHASE0_RERESOLVE_REQUIRED_CHANGES)} and remain within "
+                f"{sorted(allowed)}; got {sorted(changed)}"
+            )
+        return
+    if changed != allowed:
+        raise InputError(
+            f"{operation} must change exactly {sorted(allowed)}; got {sorted(changed)}"
+        )
+
+
+def _validate_phase0_reresolve(
+    source_manifest: Mapping[str, Any],
+    replacement_manifest: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    artifact_documents: Mapping[str, Mapping[str, Any]],
+    scratch_dir: Path,
+) -> None:
+    required_roles = {
+        "phase-0-contract-resolution",
+        "phase-0-ticket-snapshot",
+        "phase-0-topology-revalidation",
+        "resolved-ticket-contract",
+        "resolved-ticket-operator",
+    }
+    if set(records) != required_roles:
+        raise InputError(
+            "phase0-reresolve artifact roles mismatch: "
+            f"expected {sorted(required_roles)}, got {sorted(records)}"
+        )
+    if any(
+        source_manifest.get(key) not in {None, ""}
+        for key in (
+            "draft_pr_url",
+            "draft_pr_number",
+            "draft_pr_head_sha",
+            "pr_open_base_sha",
+            "pre_merge_base_sha",
+            "merge_sha",
+            "phase_3_estimate_writeback_ref",
+            "phase_3_estimate_writeback_sha256",
+        )
+    ):
+        raise InputError("phase0-reresolve requires a pre-PR, pre-Phase-3 session")
+    if replacement_manifest.get("phase_history") != source_manifest.get("phase_history"):
+        raise InputError("phase0-reresolve cannot change phase history")
+    if replacement_manifest.get("cold_start_disposition_ref") != source_manifest.get(
+        "cold_start_disposition_ref"
+    ):
+        raise InputError("phase0-reresolve must preserve cold-start disposition")
+
+    resolution = artifact_documents.get("phase-0-contract-resolution")
+    required_resolution_keys = {
+        "estimate_capability_evidence",
+        "estimate_field",
+        "estimate_mutation_policy",
+        "estimate_writeback_disposition",
+        "linear_team_key_source",
+        "resolved_contract_path",
+        "resolved_contract_sha256",
+        "resolved_operator_path",
+        "resolved_operator_sha256",
+        "schema",
+        "ticket_system",
+    }
+    if (
+        not isinstance(resolution, Mapping)
+        or set(resolution) != required_resolution_keys
+        or resolution.get("schema") != "implementation-phase0-contract-resolution-v1"
+        or resolution.get("ticket_system") != replacement_manifest.get("ticket_system")
+    ):
+        raise InputError("phase0-reresolve contract-resolution artifact is malformed")
+
+    resolution_record = records["phase-0-contract-resolution"]
+    ticket_record = records["phase-0-ticket-snapshot"]
+    topology_record = records["phase-0-topology-revalidation"]
+    contract_record = records["resolved-ticket-contract"]
+    operator_record = records["resolved-ticket-operator"]
+    expected_bindings = {
+        "contract_resolution_path": resolution_record["path"],
+        "contract_resolution_sha256": resolution_record["sha256"],
+        "estimate_capability_evidence": resolution["estimate_capability_evidence"],
+        "estimate_field": resolution["estimate_field"],
+        "estimate_mutation_policy": resolution["estimate_mutation_policy"],
+        "estimate_writeback_disposition": resolution["estimate_writeback_disposition"],
+        "resolved_contract_path": contract_record["path"],
+        "resolved_contract_sha256": contract_record["sha256"],
+        "resolved_operator_contract_path": contract_record["path"],
+        "resolved_operator_path": operator_record["path"],
+        "resolved_operator_sha256": operator_record["sha256"],
+        "ticket_snapshot_path": ticket_record["path"],
+        "ticket_snapshot_sha256": ticket_record["sha256"],
+        "topology_revalidation_path": topology_record["path"],
+        "topology_revalidation_sha256": topology_record["sha256"],
+    }
+    for key, expected in expected_bindings.items():
+        if replacement_manifest.get(key) != expected:
+            raise InputError(f"phase0-reresolve replacement {key} is not artifact-bound")
+    for key in (
+        "resolved_contract_path",
+        "resolved_contract_sha256",
+        "resolved_operator_path",
+        "resolved_operator_sha256",
+    ):
+        if resolution.get(key) != expected_bindings[key]:
+            raise InputError(f"phase0-reresolve resolution {key} mismatch")
+    if replacement_manifest.get("resolved_defaults_source") != {
+        "linear_team_key": resolution["linear_team_key_source"]
+    }:
+        raise InputError("phase0-reresolve Linear defaults source mismatch")
+
+    for key in (
+        "contract_resolution_producing_invocation_uuid",
+        "ticket_snapshot_producing_invocation_uuid",
+    ):
+        value = replacement_manifest.get(key)
+        try:
+            parsed = uuid.UUID(cast(str, value))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise InputError(f"phase0-reresolve {key} must be a UUID") from exc
+        if str(parsed) != value or value == source_manifest.get(key):
+            raise InputError(f"phase0-reresolve {key} must identify a new producer")
+
+    for role in (
+        "phase-0-contract-resolution",
+        "phase-0-ticket-snapshot",
+        "phase-0-topology-revalidation",
+    ):
+        if not _is_below(Path(cast(str, records[role]["path"])), scratch_dir):
+            raise InputError(f"phase0-reresolve {role} must remain below scratch_dir")
 
 
 def _validate_open_pre_pr_manifest(manifest: Mapping[str, Any]) -> None:
