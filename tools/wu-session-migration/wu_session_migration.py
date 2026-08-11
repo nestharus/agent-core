@@ -539,7 +539,11 @@ def apply_runtime_request(
     _apply_runtime_request_locked(request_path, operation)
 
 
-def validate_pre_pr_readback(readback_path: Path) -> None:
+def validate_pre_pr_readback(
+    readback_path: Path,
+    *,
+    expected_manifest: Mapping[str, Any] | None = None,
+) -> None:
     readback = _decode_json(_safe_read_bytes(readback_path), readback_path)
     if set(readback) != PRE_PR_READBACK_KEYS or readback.get("schema") != PRE_PR_READBACK_SCHEMA:
         raise InputError(f"pre-PR readback must use closed schema {PRE_PR_READBACK_SCHEMA}")
@@ -582,7 +586,11 @@ def validate_pre_pr_readback(readback_path: Path) -> None:
         artifact_documents,
     )
 
-    current_manifest = _decode_json(_safe_read_bytes(manifest_path), manifest_path)
+    current_manifest = (
+        dict(expected_manifest)
+        if expected_manifest is not None
+        else _decode_json(_safe_read_bytes(manifest_path), manifest_path)
+    )
     if current_manifest != request["replacement_manifest"]:
         raise ApplyError("pre-PR readback manifest does not match the replacement")
     changed_keys = sorted(
@@ -601,8 +609,19 @@ def validate_pre_pr_readback(readback_path: Path) -> None:
         if len(current_history) != len(source_history) + 1:
             raise InputError("pre-PR readback Phase 3 history is not one exact append")
         _validate_canonical_phase3_history_entry(current_history[-1])
-    if readback.get("manifest_identity") != runtime_source_identity(manifest_path):
-        raise ApplyError("pre-PR readback manifest identity mismatch")
+    if expected_manifest is None:
+        if readback.get("manifest_identity") != runtime_source_identity(manifest_path):
+            raise ApplyError("pre-PR readback manifest identity mismatch")
+    else:
+        manifest_identity = readback.get("manifest_identity")
+        if (
+            not isinstance(manifest_identity, dict)
+            or set(manifest_identity) != SOURCE_IDENTITY_KEYS
+            or manifest_identity.get("exists") is not True
+            or manifest_identity.get("sha256")
+            != _sha256(_json_bytes(current_manifest))
+        ):
+            raise ApplyError("pre-PR readback manifest identity mismatch")
 
     artifact_identities = [
         {**record, **runtime_source_identity(Path(record["path"]))}
@@ -2922,7 +2941,12 @@ def _validate_phase3_bind(
         required_roles.add("cold-start-disposition")
     if disposition == "write_verified":
         required_roles.add("write-verification-evidence")
-    if set(records) != required_roles:
+    reresolve_readback_role = "phase-0-reresolve-readback"
+    actual_roles = set(records)
+    if actual_roles not in (
+        required_roles,
+        required_roles | {reresolve_readback_role},
+    ):
         raise InputError("phase3-bind artifact roles are partial, mixed, or unknown")
     _validate_phase3_artifact_bindings(
         source_manifest, estimate, records, scratch_dir, manifest_path.parent
@@ -3022,7 +3046,9 @@ def _validate_phase3_artifact_bindings(
         or manifest.get("resolved_contract_sha256") != estimate.get("resolved_contract_sha256")
     ):
         raise InputError("phase3-bind estimate does not match manifest contract identity")
-    _validate_phase3_producer_git_identities(manifest, estimate)
+    _validate_phase3_producer_git_identities(
+        manifest, estimate, records, scratch_dir
+    )
     cold_ref = estimate.get("cold_start_disposition_ref")
     if cold_ref is not None:
         cold_record = records["cold-start-disposition"]
@@ -3035,7 +3061,10 @@ def _validate_phase3_artifact_bindings(
 
 
 def _validate_phase3_producer_git_identities(
-    manifest: Mapping[str, Any], estimate: Mapping[str, Any]
+    manifest: Mapping[str, Any],
+    estimate: Mapping[str, Any],
+    records: Mapping[str, Mapping[str, Any]],
+    scratch_dir: Path,
 ) -> None:
     repo_value = manifest.get("repo_root")
     if not isinstance(repo_value, str):
@@ -3083,6 +3112,7 @@ def _validate_phase3_producer_git_identities(
             estimate.get("resolved_contract_sha256"),
         ),
     )
+    mismatched_roles: list[str] = []
     for role, path_value, digest in identities:
         if not isinstance(path_value, str):
             raise InputError(f"phase3-bind {role} historical path is malformed")
@@ -3102,9 +3132,33 @@ def _validate_phase3_producer_git_identities(
         if relative_path == Path(".") or repo_root / relative_path != path:
             raise InputError(f"phase3-bind {role} historical path is noncanonical")
         _require_sha256(digest, f"phase3-bind {role} historical digest")
-        _verify_historical_git_blob(
-            repo_root, commit, relative_path.as_posix(), cast(str, digest), role
+        if not _verify_historical_git_blob(
+            repo_root,
+            commit,
+            relative_path.as_posix(),
+            cast(str, digest),
+            role,
+            allow_digest_mismatch=True,
+        ):
+            mismatched_roles.append(role)
+    if not mismatched_roles:
+        return
+
+    readback_path = scratch_dir / "session-writes" / "phase0-reresolve.readback.json"
+    readback_record = records.get("phase-0-reresolve-readback")
+    if readback_record is None:
+        raise InputError(
+            f"phase3-bind {mismatched_roles[0]} historical blob digest mismatch"
         )
+    if readback_record.get("path") != str(readback_path):
+        raise InputError(
+            "phase3-bind producer identities require an authenticated "
+            "phase0-reresolve readback"
+        )
+    readback = _decode_json(_safe_read_bytes(readback_path), readback_path)
+    if readback.get("operation") != "phase0-reresolve":
+        raise InputError("phase3-bind producer readback operation mismatch")
+    validate_pre_pr_readback(readback_path, expected_manifest=manifest)
 
 
 def _verify_historical_git_blob(
@@ -3113,7 +3167,9 @@ def _verify_historical_git_blob(
     relative_path: str,
     expected_sha256: str,
     role: str,
-) -> None:
+    *,
+    allow_digest_mismatch: bool = False,
+) -> bool:
     tree_output = _run_bytes_command(
         [
             "git",
@@ -3150,7 +3206,10 @@ def _verify_historical_git_blob(
         ["git", "-C", str(repo_root), "cat-file", "blob", blob_oid]
     )
     if _sha256(blob) != expected_sha256:
+        if allow_digest_mismatch:
+            return False
         raise InputError(f"phase3-bind {role} historical blob digest mismatch")
+    return True
 
 
 def _validate_phase3_disposition(
