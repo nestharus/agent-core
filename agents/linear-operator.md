@@ -12,6 +12,7 @@ When `contracts/operators/linear-operator.yaml` is present, dispatchers use that
 
 ```yaml
 schema: operator-contract-v1
+estimate_mutation_enabled: false
 inputs:
   - name: task
     type: enum

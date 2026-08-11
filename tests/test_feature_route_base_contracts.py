@@ -2494,6 +2494,18 @@ def test_operator_contract_sidecar_matches_embedded_contract(name: str):
     assert projected == embedded
 
 
+def test_linear_contract_disables_estimate_mutation_globally():
+    embedded = _operator_contract("linear-operator")
+    sidecar = _load_yaml("contracts/operators/linear-operator.yaml")
+
+    assert embedded["estimate_mutation_enabled"] is False
+    assert sidecar["estimate_mutation_enabled"] is False
+
+    implementation = _read("agents/implementation-pipeline-orchestrator.md")
+    assert "a base-operator value applies to every project" in implementation
+    assert "authoritative selected-contract policy" in implementation
+
+
 @pytest.mark.parametrize("name", WORKFLOW_NAMES)
 def test_workflow_sidecar_and_index_match_frontmatter(name: str):
     embedded = _workflow_dispatch_contract(name)
