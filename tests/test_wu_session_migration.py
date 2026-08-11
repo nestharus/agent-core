@@ -2312,6 +2312,198 @@ def test_phase0_reresolve_rejects_post_phase3_session(tmp_path: Path):
         MIGRATION.apply_runtime_request(case["request_path"], case["operation"])
 
 
+def test_phase0_reresolve_policy_drift_composes_with_phase3_bind_and_readback(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    manifest_path = case["manifest_path"]
+    index_path = case["index_path"]
+    scratch_dir = Path(json.loads(manifest_path.read_text())["scratch_dir"])
+    operator_path = case["artifacts"]["resolved-ticket-operator"]
+    contract_path = case["artifacts"]["resolved-ticket-contract"]
+    resolution_path = scratch_dir / "phase0-contract-resolution.json"
+
+    operator_path.write_text("# linear operator after policy re-resolution\n")
+    contract_path.write_text(
+        "source: linear-operator\nestimate_mutation_enabled: false\n"
+        "# authenticated after branch-out\n"
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(case["repo_root"]),
+            "add",
+            "--",
+            "agents/linear-operator.md",
+            "contracts/linear-operator.yaml",
+        ],
+        check=True,
+        env=GIT_ENV,
+    )
+    _commit_fixture_repo(case["repo_root"], "policy re-resolution")
+
+    resolution = json.loads(resolution_path.read_text())
+    resolution["resolved_operator_sha256"] = _digest(operator_path.read_bytes())
+    resolution["resolved_contract_sha256"] = _digest(contract_path.read_bytes())
+    _write_json(resolution_path, resolution)
+
+    source_manifest = json.loads(manifest_path.read_text())
+    reresolved_manifest = copy.deepcopy(source_manifest)
+    reresolved_manifest.update(
+        {
+            "contract_resolution_producing_invocation_uuid": (
+                "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+            ),
+            "contract_resolution_sha256": _digest(resolution_path.read_bytes()),
+            "resolved_contract_sha256": _digest(contract_path.read_bytes()),
+            "resolved_operator_sha256": _digest(operator_path.read_bytes()),
+            "ticket_snapshot_producing_invocation_uuid": (
+                "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+            ),
+        }
+    )
+    reresolve_artifacts = {
+        "phase-0-contract-resolution": resolution_path,
+        "phase-0-ticket-snapshot": case["artifacts"]["phase-0-ticket-snapshot"],
+        "phase-0-topology-revalidation": (
+            scratch_dir / "phase0-topology-revalidation.json"
+        ),
+        "resolved-ticket-contract": contract_path,
+        "resolved-ticket-operator": operator_path,
+    }
+    reresolve_request = _write_runtime_request(
+        scratch_dir / "session-writes" / "phase0-reresolve.json",
+        "phase0-reresolve",
+        case["planning_root"],
+        manifest_path,
+        index_path,
+        reresolved_manifest,
+        json.loads(index_path.read_text()),
+        None,
+        reresolve_artifacts,
+    )
+    reresolve_case = {
+        "operation": "phase0-reresolve",
+        "request_path": reresolve_request,
+        "manifest_path": manifest_path,
+        "index_path": index_path,
+    }
+    MIGRATION.apply_runtime_request(reresolve_request, "phase0-reresolve")
+    reresolve_readback = (
+        scratch_dir / "session-writes" / "phase0-reresolve.readback.json"
+    )
+    _write_json(reresolve_readback, _pre_pr_readback(reresolve_case, source_manifest))
+    MIGRATION.validate_pre_pr_readback(reresolve_readback)
+
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate = json.loads(estimate_path.read_text())
+    estimate["resolved_operator_sha256"] = _digest(operator_path.read_bytes())
+    estimate["resolved_contract_sha256"] = _digest(contract_path.read_bytes())
+    estimate["currentness"]["resolved_operator_sha256"] = estimate[
+        "resolved_operator_sha256"
+    ]
+    estimate["currentness"]["resolved_contract_sha256"] = estimate[
+        "resolved_contract_sha256"
+    ]
+    _write_json(estimate_path, estimate)
+
+    phase3_source = json.loads(manifest_path.read_text())
+    phase3_replacement = copy.deepcopy(phase3_source)
+    phase3_replacement.update(
+        {
+            "phase_3_estimate_writeback_ref": str(estimate_path),
+            "phase_3_estimate_writeback_sha256": _digest(estimate_path.read_bytes()),
+            "phase_history": phase3_source["phase_history"]
+            + [
+                {
+                    "phase": "3",
+                    "status": "complete",
+                    "ts": "2026-07-19T00:00:00Z",
+                }
+            ],
+        }
+    )
+    phase3_artifacts = dict(case["artifacts"])
+    phase3_artifacts["phase-0-reresolve-readback"] = reresolve_readback
+    phase3_request = _write_runtime_request(
+        scratch_dir / "session-writes" / "phase3-bind.json",
+        "phase3-bind",
+        case["planning_root"],
+        manifest_path,
+        index_path,
+        phase3_replacement,
+        json.loads(index_path.read_text()),
+        None,
+        phase3_artifacts,
+    )
+    phase3_case = {
+        "operation": "phase3-bind",
+        "request_path": phase3_request,
+        "manifest_path": manifest_path,
+        "index_path": index_path,
+    }
+    MIGRATION.apply_runtime_request(phase3_request, "phase3-bind")
+    phase3_readback = scratch_dir / "session-writes" / "phase3-bind.readback.json"
+    _write_json(phase3_readback, _pre_pr_readback(phase3_case, phase3_source))
+    MIGRATION.validate_pre_pr_readback(phase3_readback)
+
+    current = json.loads(manifest_path.read_text())
+    assert current["phase_3_estimate_writeback_ref"] == str(estimate_path)
+    assert current["estimate_writeback_disposition"] == "no_write_policy_disabled"
+    assert json.loads(index_path.read_text())["sessions"] == []
+
+
+def test_phase3_bind_rejects_non_reresolve_readback_for_migrated_producers(
+    tmp_path: Path,
+):
+    case = _runtime_case(tmp_path, "phase3-bind")
+    source_manifest = json.loads(case["manifest_path"].read_text())
+    source_manifest["resolved_operator_sha256"] = "0" * 64
+    _write_json(case["manifest_path"], source_manifest)
+
+    estimate_path = case["artifacts"]["phase-3-estimate-writeback"]
+    estimate = json.loads(estimate_path.read_text())
+    estimate["resolved_operator_sha256"] = "0" * 64
+    estimate["currentness"]["resolved_operator_sha256"] = "0" * 64
+    _write_json(estimate_path, estimate)
+
+    replacement_manifest = copy.deepcopy(source_manifest)
+    replacement_manifest.update(
+        {
+            "phase_3_estimate_writeback_ref": str(estimate_path),
+            "phase_3_estimate_writeback_sha256": _digest(estimate_path.read_bytes()),
+            "phase_history": source_manifest["phase_history"]
+            + [
+                {
+                    "phase": "3",
+                    "status": "complete",
+                    "ts": "2026-07-19T00:00:00Z",
+                }
+            ],
+        }
+    )
+    scratch_dir = Path(source_manifest["scratch_dir"])
+    readback_path = scratch_dir / "session-writes" / "phase0-reresolve.readback.json"
+    _write_json(readback_path, {"operation": "cold-start-disposition-bind"})
+    artifacts = dict(case["artifacts"])
+    artifacts["phase-0-reresolve-readback"] = readback_path
+    request_path = _write_runtime_request(
+        scratch_dir / "session-writes" / "phase3-bind.json",
+        "phase3-bind",
+        case["planning_root"],
+        case["manifest_path"],
+        case["index_path"],
+        replacement_manifest,
+        case["replacement_index"],
+        None,
+        artifacts,
+    )
+
+    with pytest.raises(InputError, match="producer readback operation mismatch"):
+        MIGRATION.apply_runtime_request(request_path, "phase3-bind")
+
+
 def test_validate_pre_pr_readback_machine_validates_phase3_pass(tmp_path: Path):
     case = _runtime_case(tmp_path, "phase3-bind")
     source_manifest = json.loads(case["manifest_path"].read_text())
