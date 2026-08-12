@@ -131,6 +131,7 @@ WU session lifecycle (spawn → run → merge → post-merge wake): `~/ai/conven
 - **Avoid the solution-fixation trap.** An agent that just researched a problem is already biased toward the first solution it noticed.
 - **Zero-risk gate.** Implementation does not begin until every required risk report returns `LOW`.
 - **No cherry-picking risk feedback.** If any risk report returns `MEDIUM` or `HIGH`, revise the proposal and re-run the full risk gate.
+- **Three-attempt implementation review cap.** Each Phase 4, Phase 6, or Phase 8 `apply-gate-set` review loop stops after at most three attempts on the same audit target, or earlier on `PASS`. A non-passing third attempt follows the phase's existing decomposition, repair-handoff, or `NEEDS_INPUT` route; it never dispatches attempt four. Product-strategy, alignment, and roadmap loops remain unbounded by this rule.
 - **Risk drives decomposition.** Do not decompose because something looks complex; decompose when audit or alignment risk exceeds what one agent can reliably handle.
 - **Alignment is directional.** Alignment asks "is this going the right way?" Coverage remains the audit's job.
 - **Research before implementation.** Hookpoint research finds reuse points, collisions, and deletion candidates before code is written.

@@ -839,8 +839,11 @@ If any risk is MEDIUM or HIGH:
 1. Write a revision prompt incorporating the specific findings
 2. Run `gpt-high` to revise
 3. Re-run 3x risk gate on the revision
-4. Repeat until all three are LOW or the audit-history decision loop halts
-   for a blocking condition, explicit user input, or decomposition
+4. Repeat for at most three proposal-risk attempts, stopping earlier when all
+   three are LOW or the audit-history decision loop halts for a blocking
+   condition, explicit user input, or decomposition. If attempt three remains
+   non-LOW, halt and route to decomposition or explicit user input; do not
+   dispatch a fourth attempt.
 
 For each proposal revision/re-risk round, update `audit_history_path` with prior-finding closure/regression counters, new findings, oscillation classification, decompose-trigger status, watch signals, and the current determination. If hard triggers do not decide whether to continue, apply, or decompose, dispatch per-role decision agents under `~/ai/conventions/audit-history.md`.
 
