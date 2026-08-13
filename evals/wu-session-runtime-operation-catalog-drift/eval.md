@@ -407,12 +407,18 @@ opt-in introduced by this specification.
 
 ## Step 6b and Step 6c boundary
 
-Step 6b owns this sole repository specification and the machine-local output
-index that maps `TI-01` through `TI-08`. Step 6c is a fresh inspection-only
-invocation. It consumes the indexed eval identity, path, proposal mappings, and
-orchestrator-owned side-channel evidence, then inspects the complete repository
-state, this specification, current authorities, current claims, and forbidden
-output absence.
+Step 6b owns this sole repository specification and the canonical machine-local
+output index at `${scratch_dir}/phase6/step6b-output-index.md`. The index maps
+each of `TI-01` through `TI-08` to its proposal test-intent source, the emitted
+eval path and identity `wu-session-runtime-operation-catalog-drift:<TI-ID>`, and
+the required evidence application point for that item. Step 6c is a fresh
+inspection-only invocation. It consumes the indexed eval identity, path,
+proposal mappings, required evidence, and orchestrator-owned side-channel
+evidence, then inspects the complete repository state, this specification,
+current authorities, current claims, and forbidden output absence. Step 6c
+must reject a missing TI entry or any mapping whose proposal source, eval path,
+eval identity, or required evidence does not match this specification and the
+approved proposal.
 
 Step 6c does not patch this file, add a repository path, implement a detector,
 invoke the migration executable, or create behavior evidence. A specification
