@@ -478,5 +478,5 @@ ticket actions, or estimate mutation.
 - `agents/implementation-pipeline-orchestrator.md`
 - `workflows/implementation-pipeline.md`
 - `agents/wu-session-resumer.md`
-- `/home/nes/projects/ai/planning/acr-403-operation-catalog-eval/proposals/acr-403-ACR-403.md`
-- `/home/nes/projects/ai/planning/acr-403-operation-catalog-eval/contracts/acr-403-wu-session-runtime-operation-catalog-drift.md`
+- `~/projects/ai/planning/acr-403-operation-catalog-eval/proposals/acr-403-ACR-403.md`
+- `~/projects/ai/planning/acr-403-operation-catalog-eval/contracts/acr-403-wu-session-runtime-operation-catalog-drift.md`
