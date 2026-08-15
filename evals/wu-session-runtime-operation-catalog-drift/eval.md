@@ -58,8 +58,8 @@ This file translates exactly four stable contract surfaces:
 | Contract surface | External owner and translated boundary |
 |---|---|
 | `eval-spec-lifecycle-finding-and-evidence-v1` | `conventions/evals.md` owns eval placement, lifecycle, semantic evidence roles, `trace -> finding | None`, and the six base finding fields. |
-| `wu-session-runtime-write-v1` | `tools/wu-session-migration/wu_session_migration.py:RUNTIME_OPERATIONS` owns revision-local declared membership. The detailed human CLI entered through `tools/wu-session-migration/__main__.py`, `_parser()`, and top-level `main()` supplies parser/main reachability, closed operation/request validation, and successful transaction-path support. |
-| `wu-session-runtime-lifecycle-ownership-v1` | The closed operation/field/enforcement authority matrix below assigns each fact to one exact procedural owner context or executable enforcement context. Applicable implementation-pipeline/resumer workflow and optimized-contract occurrences are mandatory constraints/corroboration, while conditionally admitted feature/refactoring route owners may own only topology selection and normalized child/cohort/root binding. The detailed README is constraint/corroboration, never a competing owner. Writer comparison is limited to the activated implementation-pipeline/resumer child cohort. |
+| `wu-session-runtime-write-v1` | `tools/wu-session-migration/wu_session_migration.py:RUNTIME_OPERATIONS` owns revision-local declared membership. The evaluated same-commit `tools/wu-session-migration/__main__.py`, `_parser()`, top-level `main()`, validation/projection, successful public CLI control flow, and transaction source supply executable operation support. Raw documentation locators supply no executable-identity or reachability fact. |
+| `wu-session-runtime-lifecycle-ownership-v1` | The closed operation/field/enforcement authority matrix below assigns each fact to one exact procedural owner context or executable enforcement context. Applicable implementation-pipeline/resumer workflow and optimized-contract occurrences are mandatory constraints/corroboration. `feature-direct` conditionally admits its existing single feature owner; `feature-routed-refactoring` conditionally admits one compound fact-local binding in which the feature context owns route selection and values dispatched to refactoring while the refactoring context owns receipt/validation, unchanged forwarding, and implementation-child invocation. Neither owns implementation-child progression. The detailed README is constraint/corroboration, never a competing owner. Writer comparison is limited to the activated implementation-pipeline/resumer child cohort. |
 | `operation-catalog-claim-comparison-v1` | This accepted ACR-403 contract owns exact target admission, activation and polarity, completeness and command-domain classification, lossless target occurrence accounting, membership and conditional-wiring comparison, non-fire semantics, and safe document-only repair for one claim. |
 
 Symbols, methods, fields, operations, sections, and evidence families subordinate
@@ -121,13 +121,19 @@ adjacent capability merely because the capability can affect or observe runtime
 state.
 
 The supported execution-caller domain is closed to the implementation-pipeline
-and resumer partitions whose exact sources are named below. A feature-direct or
-feature-routed-refactoring topology is additionally supported only when the
-selected target activates it and the exact same-commit feature or refactoring
-route-owner blob plus applicable optimized sidecar close the route-owner to
-normalized implementation-caller/cohort/root binding. That route owner owns only
-topology selection and authorization; the implementation operator remains the
-sole procedural owner of child progression and operation requests. Other
+and resumer partitions whose exact sources are named below. A `feature-direct`
+topology is additionally supported only when the selected target activates it
+and the exact same-commit feature owner plus applicable optimized sidecar close
+its single-owner binding. A `feature-routed-refactoring` topology is additionally
+supported only when the selected target activates it and one compound same-commit
+binding closes both fact-local contexts: feature route choice and dispatched
+ticket/branch/integration/planning/scratch values, then refactoring receipt,
+`feature_routed`/base/root validation, unchanged forwarding, and
+implementation-child invocation. Feature authority ends at dispatch to
+refactoring; refactoring authority starts at receipt and ends at implementation
+invocation. The implementation operator remains the sole procedural owner of
+child progression, operation selection, request values, guarded continuation,
+and applicable caller facts. Other
 parent-route cohorts and universal writer authority remain
 `unsupported-caller-cohort` or
 `repository-global-writer-claim-out-of-scope`, retain an exact obligation, and
@@ -152,19 +158,19 @@ exact `evaluated_repository_identity` and one admitted
 | Repository identity | One provider-issued `evaluated_repository_identity` with canonical repository object and full commit identity. Every repository-derived source and target record resolves from that identity. |
 | Declaration authority | `authority_path`, `authority_symbol`, readable identity-bound source, and complete extracted `canonical_operations`. Declaration owns membership, not lifecycle order or functional support by itself. |
 | Target-source closure | One identity-bound `enclosing_governing_context_inventory` precedes one deterministic `target_source_domain` derived from either exactly one complete Markdown structural block or exactly one of the two bounded composite forms defined below. Every potential structural governor is included or proved cosmetic/non-semantic before any activation, polarity, completeness, command-domain, sequence, delegation, domain, or scope classification. Every admitted component node, span, byte, and code point closes exactly; the governed catalog/sequence content retains its own distinct span. Before semantic extraction, every bounded target role also closes its independently derived raw-materiality inventory and disposition partition. |
-| Comparison-authority discovery | A closed `comparison_authority_discovery_domain` of complete identity-bound blobs for the bounded runtime roles, the detailed-command role only when its target-grammar/delegation/transition use activates it, implementation/resumer roles only when supported caller-scoped membership or wiring activates them, and exactly one feature/refactoring route-owner role only when the selected topology activates it. Before semantic extraction or query, each complete role blob produces an independently derived raw-materiality inventory from its structural context and versioned syntax; complete per-role AST/Markdown/YAML semantic overlays then account for those raw identities before deterministic semantic queries produce spans. |
+| Comparison-authority discovery | A closed `comparison_authority_discovery_domain` of complete identity-bound blobs for the bounded runtime roles, the detailed-command role only when its target-grammar/delegation/transition use activates it, implementation/resumer roles only when supported caller-scoped membership or wiring activates them, exactly one feature owner role for `feature-direct`, or exactly one feature-selection/dispatch role and one refactoring-receipt/validation/forwarding role for `feature-routed-refactoring`. Before semantic extraction or query, each complete role blob produces an independently derived raw-materiality inventory from its structural context and versioned syntax; complete per-role AST/Markdown/YAML semantic overlays then account for those raw identities before deterministic semantic queries produce spans. |
 | Raw-materiality admission | One conservative `raw_materiality_candidate_inventory`, keyed separately for every bounded target and activated authority role, is derived before semantic extraction from complete admitted structural contexts and trace-declared versioned syntax. Every raw candidate partitions exactly to an admitted semantic fact/candidate, an independently checkable closed-grammar or closed-section exclusion, or an unsupported/ambiguous obligation. Raw identities close through overlays, queries, transition candidates, and dispositions; free-form mapper reasons cannot exclude potentially material text. |
 | Executable operation support | One `operation_support` record per canonical operation, keyed exactly once, covering exact declaration-entry closure, parser/entrypoint and top-level `main()` reachability, closed exact operation/request validation, operation-specific projection or validator, every successful public CLI path, and successful transaction endpoints. Executable transition facts additionally require same-key `enforcement_path_witness` closure. Those facts close repository-global membership without README alignment or caller adoption. Separate caller-applicability records are required only for supported implementation-pipeline/resumer subsets and conditional wiring. |
-| Detailed command evidence | Identity-bound detailed README occurrences only where that source owns an admitted full-command target grammar, resolves an exact delegation, or supplies a material transition constraint/corroboration. Missing or stale detailed prose outside an activated use is non-decisional provenance; a required occurrence may create its own exact obligation but cannot erase an executable membership result. |
+| Detailed command evidence | Identity-bound detailed README occurrences only where that source owns an admitted static full-command target grammar, resolves an exact delegation, or supplies a material transition constraint/corroboration. Its two raw locator spellings are distinct documentation syntax and establish no executable identity or reachability. Missing or stale detailed prose outside an activated use is non-decisional provenance; a required occurrence may create its own exact obligation but cannot erase an executable membership result. |
 | Readback materiality | Before any readback occurrence is admitted, every identity-bound supported caller/progression occurrence that gates continuation on validated readback creates one `readback_materiality_candidate`, keyed by transition, comparison dimension, caller occurrence, and common commit. Exact material/not-material partition closure controls the CLI-only live-readback obligation. |
 | CLI-only live readback | For each material candidate, the top-level `validate-pre-pr-readback` CLI path entered through `__main__.py` and `main()` without `expected_manifest`, under its actual lock and completed recovery antecedents, is the only live-readback authority and must join the same operation support and enforcement-path witness. |
-| Lifecycle authority facts | Typed partial fact occurrences from exact operation-specific caller procedure sections, operation-specific executable validators/projections, the shared transaction implementation, CLI-only live readback where material, conditionally admitted route topology owners, mandatory workflow/optimized-contract constraints, and detailed README constraint/corroboration. Every discovered field assertion joins the closed operation/field/enforcement matrix exactly as owner, constraint, corroboration, or non-decisional; every owned fact requires its exact typed enforcement-path witness, and executable facts additionally require same-support-key closure. |
+| Lifecycle authority facts | Typed partial fact occurrences from exact operation-specific caller procedure sections, operation-specific executable validators/projections, the shared transaction implementation, CLI-only live readback where material, the conditionally admitted feature-direct owner or feature-routed-refactoring compound fact-local owners, mandatory workflow/optimized-contract constraints, and detailed README constraint/corroboration. Every discovered field assertion joins the closed operation/field/enforcement matrix exactly as owner, constraint, corroboration, or non-decisional; every owned fact requires its exact typed enforcement-path witness, and executable facts additionally require same-support-key closure. |
 | Transition assembly | Lossless overlay-candidate-to-fact/disposition n-way assembly records, repeated-operation scope admission, per-dimension field requirements/non-applicability, exact procedural-owner precedence, operation/field/enforcement ownership, constraint/corroboration comparisons, assembly conflicts, at-most-one canonical transition per canonical operation in one activated caller/cohort domain, `canonical_transition_ids`, `applicable_transition_ids`, and independent overlay/query/fact/path/assembly/comparison equalities. |
-| Exact target claim | Structured target identity, enclosing-governor inventory, source domain, exact structural-block or bounded-composite component and role-overlay closure, distinct governed content span, activation and polarity, structured `claim_kind`, exact per-command claimed-domain/subset evidence, `target_scope_identity`, `delegate_resolution`, per-operation and per-transition applicability witnesses, command dispositions, interpreted operations, sequence-member versus non-sequence/corroboration assertions, assertion/group-member keys, and discharge witnesses. |
+| Exact target claim | Structured target identity, enclosing-governor inventory, source domain, exact structural-block or bounded-composite component and role-overlay closure, distinct governed content span, activation and polarity, structured `claim_kind`, exact per-command claimed-domain/subset evidence, static locator-claim scope, `target_scope_identity`, `delegate_resolution`, per-operation and per-transition applicability witnesses, command dispositions, interpreted operations, sequence-member versus non-sequence/corroboration assertions, assertion/group-member keys, and discharge witnesses. |
 | Comparison | Deterministically sorted operation differences and domain contradictions plus aggregate `wiring_transition`, including lifecycle-sequence completeness, repeated-operation scope disposition, canonical transitions, target treatments, unique/group discharge, reciprocal transition-to-sequence-member multiplicity closure for each admitted single edge, reverse assertion/group-member closure, omissions, contradictions, multiplicity drift for duplicate restatements of that edge, unmatched assertions, and indeterminate mappings. |
 | Axis derivation | Independent `operation_membership` and `conditional_wiring` records retain axis-local outcome, evidence/authority state, established-drift or gap severity, drift fields, failure obligations, and suggested action before aggregate severity/authority/action derivation. |
 | Observation provenance | `evidence_paths`; source, trace, prompt, log, report, audit, and final changed-surface paths when available. Optional provenance does not replace authority. |
-| Conflict and availability | Aggregate and per-axis `evidence_state`, per-axis and aggregate `authority_state`, `authority_conflicts`, exact `root_causes`, axis/fact-qualified injective `failure_obligations`, exact forward/reverse root-cause joins, the exact derived `missing_evidence_roles`, and obligations for every unresolved identity, selector, governor, target-domain, raw-materiality admission, claimed-domain, authority overlay/query, declaration closure, executable support/path witness, activated detailed-command use, caller/route applicability, readback materiality, delegation, ownership, repeated-operation scope, assembly, multiplicity, accounting, parser, or adapter fact already represented in the admitted normalized bundle. |
+| Conflict and availability | Aggregate and per-axis `evidence_state`, per-axis and aggregate `authority_state`, `authority_conflicts`, exact `root_causes`, axis/fact-qualified injective `failure_obligations`, exact forward/reverse root-cause joins, the exact derived `missing_evidence_roles`, and obligations for every unresolved identity, selector, governor, target-domain, raw-materiality admission, claimed-domain, static locator-claim scope, authority overlay/query, declaration closure, executable support/path witness, activated detailed-command use, caller/route applicability, readback materiality, delegation, ownership, repeated-operation scope, assembly, multiplicity, accounting, parser, or adapter fact already represented in the admitted normalized bundle. |
 | Non-decisional context | Optional `non_decisional_provenance` and `residual_uncertainty` for adjacent capabilities or actors, or for bounded occurrences already excluded by the independent raw-materiality oracle. These records never independently produce a finding, change a drift outcome, or veto `None`; a potentially material bounded occurrence without an admitted semantic mapping or independently checkable exclusion is instead an obligation. |
 
 The required ticket fields `authority_path`, `authority_symbol`,
@@ -530,7 +536,7 @@ closure:
 | Runtime allowlist and projected manifest/index effect actually checked | Operation-specific validator/projection with an exact enforcement-path witness. | Caller-required complete values constrain only the requested projection they name; README corroborates. |
 | Commit/replacement outcome and cohort-scoped `sole_writer` | Shared transaction implementation with exact request-to-journal-to-replacement-to-success endpoint witness. | Operation-specific validator and caller constrain admitted inputs; neither owns commit merely because it precedes the writer. |
 | Material `readback_authority` and `readback_mode` | Top-level CLI live-readback path with the closed materiality and lock/recovery/enforcement join. | Caller progression constrains why readback is required; README corroborates. |
-| Activated route/cohort/root topology | The conditionally admitted exact feature/refactoring route-owner context and applicable sidecar, with the route-owner applicability witness as its selection/binding enforcement path. | Implementation caller and runtime root validation constrain the normalized binding. Route authority never owns child progression, operation selection inside the child, or request values. |
+| Activated route/cohort/root topology | For `feature-direct`, the conditionally admitted exact feature context and sidecar own route choice and direct implementation dispatch. For `feature-routed-refactoring`, the feature context and sidecar own route choice plus ticket/branch/integration/planning/scratch values through feature-to-refactoring dispatch; the refactoring context and sidecar separately own receipt, `feature_routed`/protected-base/root validation, unchanged forwarding, and implementation-child invocation. The compound route binding joins both fact-local witnesses. | Implementation acceptance constrains the forwarded binding but cannot repair feature selection/dispatch or refactoring receipt/validation/forwarding. Route authority never owns implementation-child progression, operation selection, request values, guarded continuation, or applicable caller facts. |
 
 `source_conditions`, `conditional`, and `effects` are therefore compound records,
 not values assigned to whichever source is closest to the write. For example,
@@ -545,14 +551,17 @@ another fact.
 Every required canonical field and every owned comparison fact names one exact
 `owner_context_identity` and one typed `enforcement_path_witness_id`. Witness
 types are `declaration-dispatch`, `caller-procedural`,
-`runtime-admission-or-projection`, `transaction-commit`, `cli-live-readback`, or
-`route-selection-binding`. A caller-procedural witness retains the exact
+`runtime-admission-or-projection`, `transaction-commit`, `cli-live-readback`,
+`feature-route-selection-dispatch`, or
+`refactoring-receipt-validation-forwarding`. A caller-procedural witness retains the exact
 procedure premise, value construction, operation request, and guarded
 continuation/progression edges; it does not claim Python validation. A runtime or
 transaction witness retains the executable call/control-flow edges it actually
-enforces. A route witness ends at normalized child/cohort/root authorization and
-cannot cross into child progression. Missing or cross-context witnesses are
-`enforcement-path-incomplete`.
+enforces. A feature route witness ends at refactoring dispatch. A refactoring
+route witness begins at that receipt and ends at implementation-child invocation
+after its own validation and unchanged-forwarding facts. Neither may borrow the
+other context's action or cross into implementation-child progression. Missing
+or cross-context witnesses are `enforcement-path-incomplete`.
 
 For `phase9-update`, the implementation procedural owner retains the Phase 8
 reviewed/currentness prerequisites, exact draft/reviewed identities, complete
@@ -618,41 +627,70 @@ implementation-pipeline/resumer execution cohort. When activated, it includes:
   contract applicability query proves that the contract expresses a required
   caller fact for the selected target scope.
 
-Its route-owner subdomain is activated only when the complete selected target
+Its route-binding subdomain is activated only when the complete selected target
 scope and execution-caller evidence name `feature-direct` or
 `feature-routed-refactoring`. It is omitted, not queried, and not required for
 every claim that does not activate one of those topologies. Exactly one of these
-same-commit owner domains is admitted:
+same-commit binding domains is admitted:
 
 - `feature-direct`: complete `agents/feature-orchestrator.md` plus complete
   `contracts/operators/feature-orchestrator.yaml` candidate, with owner context
   `## Route Record Schema`, `### Route dispatch and merge ownership`, and
   `#### Direct implementation route`;
-- `feature-routed-refactoring`: complete
-  `agents/refactoring-orchestrator.md` plus complete
-  `contracts/operators/refactoring-orchestrator.yaml` candidate, with owner
-  context `## Canonical Invocation`, `## Non-Negotiables`, and
-  `## Implementation Child Invocation Contract`. The upstream feature
-  `#### Refactoring route` occurrence may be retained as a constraint on route
-  selection, but it is not a second normalized-child/root owner.
+- `feature-routed-refactoring`: one compound fact-local domain containing both
+  complete `agents/feature-orchestrator.md` and
+  `contracts/operators/feature-orchestrator.yaml` candidates, with feature owner
+  contexts `## Route Record Schema`, `### Route dispatch and merge ownership`,
+  and `#### Refactoring route`, and complete
+  `agents/refactoring-orchestrator.md` and
+  `contracts/operators/refactoring-orchestrator.yaml` candidates, with
+  refactoring owner contexts `## Canonical Invocation`, `## Non-Negotiables`,
+  and `## Implementation Child Invocation Contract`. The feature contexts own
+  selection of `owning_route=refactoring` and the exact
+  ticket/branch/integration/planning/scratch values authorized into the
+  feature-to-refactoring dispatch. The refactoring contexts own receipt,
+  `feature_routed`/protected-base/root validation, unchanged forwarding of those
+  values, and refactoring-to-implementation invocation. Neither context is a
+  constraint standing in for the other context's owned action.
 
-The applicable route sidecar is included or excluded only after its complete
-whole-candidate query closes. Every admitted route-owner blob and sidecar receives
-the same full discovery coverage, complete semantic overlay, query occurrence,
-source-map, and disposition closure as every other authority role. Route-owner
-admission may establish only topology selection/authorization and the exact
-normalized binding to `{implementation-caller, caller/cohort, planning root,
-live runtime root, active-index owner}`. It cannot supply implementation child
-phase order, progression, operation request contents, or readback decisions.
+Every admitted feature, refactoring, implementation, target, and route-sidecar
+occurrence resolves from one common provider repository object and the same full
+commit identity. A mixed, unbound, stale, or unequal occurrence cannot be
+repaired by an equal value from another context.
 
-One `route_owner_binding` must join exactly one owner context to the normalized
-implementation execution caller and target scope. It retains exact route owner,
-route kind, child operator, caller/cohort identity, route planning/scratch roots,
-canonical `R=F/routes`, exact active-index path, owner and sidecar occurrence IDs,
-implementation caller occurrence IDs, and one
-`route_owner_applicability_witness`. The witness proves same-commit target scope,
-route selection, child dispatch, root normalization, and implementation-caller
-acceptance. These equalities close before caller applicability:
+Each applicable route sidecar is included or excluded only after its complete
+whole-candidate query closes. Every admitted route-binding blob and sidecar
+receives the same full discovery coverage, complete semantic overlay, query
+occurrence, source-map, and disposition closure as every other authority role.
+Feature-direct admission may establish only route selection, authorization, and
+direct implementation dispatch. Feature-routed-refactoring admission may
+establish only the fact-local actions assigned above and their exact normalized
+binding to `{implementation-caller, caller/cohort, ticket, branch, integration,
+planning root, scratch root, repository/worktree/runtime roots, active-index
+owner}`. Neither form can supply implementation-child phase order, progression,
+operation selection, request contents, guarded continuation, caller facts, or
+readback decisions.
+
+One aggregate `route_owner_binding` exists per activated topology. Its
+`binding_kind` is exactly `feature-direct-single-owner` or
+`feature-routed-refactoring-compound`. The feature-direct form retains its exact
+feature owner, sidecar, route kind, direct child operator, caller/cohort identity,
+route planning/scratch roots, canonical `R=F/routes`, active-index path,
+implementation caller occurrences, and one applicability witness. The compound
+form instead retains one `feature_route_selection_dispatch_binding` and one
+`refactoring_receipt_validation_forwarding_binding`, their separate owner and
+sidecar occurrence IDs, one `feature_route_selection_dispatch_witness`, one
+`refactoring_receipt_validation_forwarding_witness`, the implementation
+acceptance occurrence, and the exact joined value projection.
+
+For the compound form, the feature projection is exactly
+`{ticket, branch, integration, planning, scratch}`. The refactoring receipt and
+validation records retain that projection plus `feature_routed`, protected/base
+identity, repository root, worktree root, and runtime/root normalization facts.
+The forwarded and implementation-accepted projections retain every value that
+the implementation-child contract accepts. All value identities remain typed;
+none is delimiter-joined or inferred from another value. These injective
+equalities close before caller applicability:
 
 `activated_route_topology_ids == route_owner_binding_topology_ids`
 
@@ -660,22 +698,63 @@ acceptance. These equalities close before caller applicability:
 
 `route_owner_binding_ids == normalized_implementation_caller_cohort_root_binding_ids`
 
-Zero owners, multiple owners, a feature owner used as child-progression owner,
-missing applicable sidecar closure, unequal root/cohort/caller values, or an
-unwitnessed binding is `route-owner-binding-indeterminate`. Other parent routes
+`feature_routed_refactoring_binding_ids == feature_route_selection_dispatch_witness_binding_ids`
+
+`feature_routed_refactoring_binding_ids == refactoring_receipt_validation_forwarding_witness_binding_ids`
+
+`feature_selected_route_kind == feature_dispatched_route_kind == refactoring_received_route_kind`
+
+`refactoring_received_feature_routed == refactoring_validated_feature_routed == true`
+
+`feature_selected_route_value_projection == feature_dispatched_route_value_projection`
+
+`feature_dispatched_route_value_projection == refactoring_received_route_value_projection`
+
+`refactoring_received_route_value_projection == refactoring_validated_route_value_projection`
+
+`refactoring_validated_route_value_projection == refactoring_forwarded_route_value_projection`
+
+`refactoring_forwarded_route_value_projection == implementation_accepted_route_value_projection`
+
+`refactoring_received_validation_input_projection == refactoring_validated_validation_input_projection`
+
+`refactoring_validated_implementation_input_projection == refactoring_forwarded_implementation_input_projection`
+
+`refactoring_forwarded_implementation_input_projection == implementation_accepted_implementation_input_projection`
+
+The route-value equalities are exact typed-key-and-value equalities over each
+applicable field, not counts or projection resemblance. Every stage retains its
+own distinct source occurrence identity in the witness. The refactoring-specific
+`feature_routed`, protected/base, and repository/worktree/planning/scratch/runtime
+root validation facts also require exactly one received and one validated
+occurrence, and every implementation input must remain equal through unchanged
+forwarding and implementation acceptance.
+
+For feature-direct, zero or multiple feature owners remain non-clean. For the
+compound form, zero or multiple feature selection/dispatch contexts, zero or
+multiple refactoring receipt/validation/forwarding contexts, a missing or stale
+dispatch/receipt/forwarding/acceptance occurrence, missing applicable sidecar
+closure on either side, missing validation, any unequal joined value, either
+context borrowing the other's action, or implementation acceptance used to
+repair an upstream absence or contradiction is
+`route-owner-binding-indeterminate`. A feature or refactoring owner used as an
+implementation-child progression, operation, request, continuation, or caller-
+fact owner is likewise non-clean. Every such failure creates the exact
+route-binding/applicability authority obligation and prohibits `None` for the
+dependent topology fact. Other parent routes
 remain `unsupported-caller-cohort`: their caller-scoped fact is out of scope and
 indeterminate with an exact obligation. This conditional expansion never admits
 wake, scheduler, recovery, helper, alternate-namespace, universal-writer, or
 global actor sources.
 
 For repository-global membership with no wiring claim, the execution-caller and
-route-owner subdomains have state `structurally-not-applicable`; none of their
+route-binding subdomains have state `structurally-not-applicable`; none of their
 blobs or optimized contracts is admitted, queried, or required, and their
 availability cannot gate the membership axis. A direct implementation/resumer
-claim likewise omits route-owner blobs. The detailed-command subdomain is
+claim likewise omits route-binding blobs. The detailed-command subdomain is
 structurally non-applicable unless the target grammar or an exact delegation
 activates it. Every core blob and every activated detailed-command, execution
-caller, route owner, or optimized-contract candidate resolves from the common
+caller, route-binding owner, or optimized-contract candidate resolves from the common
 repository identity. An
 activated contract candidate is either included as one complete blob or excluded
 with an identity-bound `authority-proven-contract-inapplicable` query result.
@@ -810,10 +889,15 @@ query inventory enumerates:
   effects, owner/writer, caller, lifecycle-partition, and progression candidate;
 - every caller/progression occurrence needed to close readback materiality
   before any readback occurrence is admitted;
-- when feature-direct or feature-routed-refactoring is activated, every exact
-  route-selection, child-operator, caller/cohort, route-root, runtime-root,
-  active-index-owner, and implementation-caller binding occurrence needed to
-  close the one route-owner applicability witness;
+- when `feature-direct` is activated, every exact feature route-selection,
+  direct-child, caller/cohort, root, active-index-owner, and implementation-
+  acceptance occurrence needed to close its single-owner witness;
+- when `feature-routed-refactoring` is activated, every exact feature route
+  record/selection/dispatch and ticket/branch/integration/planning/scratch
+  occurrence, plus every exact refactoring receipt, `feature_routed`,
+  protected/base/root validation, unchanged-forwarding, implementation-child
+  invocation, and implementation-acceptance occurrence needed to close both
+  fact-local witnesses and their injective equality join;
 - only after materiality closure, every top-level CLI live-readback occurrence
   required by a material transition/dimension candidate; and
 - every optimized-contract caller occurrence admitted by the contract
@@ -870,11 +954,41 @@ For every caller-scoped operation/caller key `k` and required caller role `r`:
 
 `required_caller_query_occurrence_ids[k, r] == completed_caller_applicability_fact_query_occurrence_ids[k, r]`
 
-For every activated route topology key `t` and required route-owner fact `r`:
+For every activated route topology key `t` and required fact-local route-binding
+fact `r`:
 
 `required_route_owner_query_occurrence_ids[t, r] == completed_route_owner_binding_fact_query_occurrence_ids[t, r]`
 
 `activated_route_owner_source_role_keys == completed_route_owner_semantic_overlay_keys`
+
+For every compound feature-routed-refactoring key `t`, the separately activated
+role sets also close exactly:
+
+`cardinality(feature_route_record_owner_occurrence_ids[t]) == 1`
+
+`cardinality(feature_route_selection_owner_occurrence_ids[t]) == 1`
+
+`cardinality(feature_to_refactoring_dispatch_owner_occurrence_ids[t]) == 1`
+
+`cardinality(applicable_feature_sidecar_occurrence_ids[t]) == 1`
+
+`cardinality(refactoring_invocation_receipt_owner_occurrence_ids[t]) == 1`
+
+`cardinality(refactoring_feature_routed_base_root_validation_owner_occurrence_ids[t]) == 1`
+
+`cardinality(refactoring_to_implementation_dispatch_owner_occurrence_ids[t]) == 1`
+
+`cardinality(applicable_refactoring_sidecar_occurrence_ids[t]) == 1`
+
+`cardinality(implementation_route_binding_acceptance_occurrence_ids[t]) == 1`
+
+`activated_feature_route_selection_dispatch_source_role_keys[t] == completed_feature_route_selection_dispatch_semantic_overlay_keys[t]`
+
+`activated_refactoring_receipt_validation_forwarding_source_role_keys[t] == completed_refactoring_receipt_validation_forwarding_semantic_overlay_keys[t]`
+
+`required_feature_route_selection_dispatch_query_occurrence_ids[t] == completed_feature_route_selection_dispatch_fact_query_occurrence_ids[t]`
+
+`required_refactoring_receipt_validation_forwarding_query_occurrence_ids[t] == completed_refactoring_receipt_validation_forwarding_fact_query_occurrence_ids[t]`
 
 No caller-query key exists for repository-global membership. Its per-member
 caller disposition is instead exactly `structurally-not-applicable`. No
@@ -1030,19 +1144,22 @@ fact/path key mismatch, or success endpoint outside the witness is
 `enforcement-path-incomplete`; the occurrence remains non-decisional/
 corroborating or creates an authority gap and prohibits `None`.
 
-`supported` means only that a detailed human command using exactly the raw
-locator `tools/wu-session-migration` or `~/ai/tools/wu-session-migration` enters
-through the same bounded logical entrypoint, `__main__.py`, is parser-exposed,
-reaches top-level `main()`, closes exact operation/request validation, reaches
-its operation-specific projection or handler, and exposes success only after the
-transaction path returns. This is sufficient support for one declared member in
-a repository-global catalog
-comparison even if the detailed README omits or misstates that member. Caller
+`supported` means only that evaluated same-commit repository source independently
+joins the exact declaration entry to parser registration, the `__main__.py` and
+top-level `main()` dispatch/control-flow projection, closed exact
+operation/request validation, the operation-specific projection or handler,
+every successful public CLI control-flow path, and a successful transaction
+endpoint. This is sufficient support for one declared member in a repository-
+global catalog comparison even if the detailed README omits or misstates that
+member. Neither raw locator spelling, its documentation syntax-family mapping,
+nor a README command occurrence contributes an executable-support fact. Caller
 authority is structurally non-applicable to that membership decision and cannot
 turn a supported global member into an evidence gap. This state makes no claim
-that the detailed README or any generic catalog is aligned, and makes no workflow
-adoption, automated-caller, lifecycle placement, global namespace, helper,
-recovery, availability, latency, throughput, scale, or bounded-cost claim.
+that either raw locator resolves to, opens, enters, or is identity-equal to the
+evaluated `__main__.py`; that the detailed README or any generic catalog is
+aligned; or that workflow adoption, an automated caller, lifecycle placement,
+global namespace, helper, recovery, availability, latency, throughput, scale, or
+bounded cost exists.
 
 `detailed_command_evidence` is a separate deterministic map keyed by each
 activated `{target_claim_identity, use_kind, source_occurrence_identity}`. Its
@@ -1150,8 +1267,17 @@ non-runtime commands as aligned and does not fire.
 | `transition-semantics` | The sequence claims complete transition semantics. Every applicable conditional edge must explicitly assert or validly delegate its condition and conditionality. Effects, owner/caller, and cohort-scoped writer are required when the claim expressly includes those semantic dimensions; readback authority/mode are required only where the closed transition/dimension materiality candidate partition requires them. |
 | `not-claimed` | The target makes no complete sequence claim, including membership-only catalogs. Wiring comparison is not applicable. |
 
-Ambiguous activation, polarity, completeness, command domain, lifecycle-sequence
-completeness, or scope is fail-closed. The ambiguous dimension is `null`, exact
+For a target with a recognized full-command parent, `locator_claim_scope` is an
+independent classification. It is `static-documentation-syntax` only when the
+complete admitted envelope uses the raw locator solely as command-form syntax;
+it is `actual-locator-reachability-material` when the claim depends on which
+executable, checkout, file, or entrypoint the locator actually reaches; and it is
+`ambiguous` when those uses cannot be distinguished. The latter two are outside
+the supported claim domain and prohibit `None`; they do not activate environment
+or path-resolution evidence.
+
+Ambiguous activation, polarity, completeness, command domain, locator-claim
+scope, lifecycle-sequence completeness, or scope is fail-closed. The ambiguous dimension is `null`, exact
 admitted-envelope evidence remains present, and neither drift nor `None` is permitted
 until it resolves. Operation tokens or canonical-name matches cannot coerce a
 value.
@@ -1167,9 +1293,11 @@ For caller-scoped membership and all wiring, execution
 `resumer`, or their explicitly combined `implementation-pipeline-resumer`
 cohort. `feature-direct` and `feature-routed-refactoring` are conditional topology
 qualifiers, not replacement execution callers. They are resolvable only through
-the exact route-owner binding and applicability witness above, after which the
-normalized implementation child remains `implementation-pipeline`. All other
-parent routes are unsupported target scopes.
+the exact route binding and applicability witness above. Feature-direct retains
+its single feature owner; feature-routed-refactoring requires both fact-local
+owner contexts and the full feature-selection-to-implementation-acceptance
+equality chain. After either closes, the normalized implementation child remains
+`implementation-pipeline`. All other parent routes are unsupported target scopes.
 
 ### Target scope, delegation, and applicability closure
 
@@ -1181,9 +1309,11 @@ lifecycle comparison has one structured `target_scope_identity` containing:
 - `claim_scope`
 - exact `caller_identity`, `cohort_identity`, and `lifecycle_domain_identity`
   where the claim names them
-- `route_topology_identity`, exact `route_owner_identity`, and
-  `route_owner_binding_id` when and only when feature-direct or
-  feature-routed-refactoring is activated
+- `route_topology_identity`, `route_owner_binding_id`, `binding_kind`, and the
+  exact feature owner identity for feature-direct; or the exact feature-
+  selection/dispatch and refactoring-receipt/validation/forwarding owner
+  identities for feature-routed-refactoring, only when that topology is
+  activated
 - `global_domain_identity` when and only when the claim explicitly covers the
   repository-global supported domain
 - authority-query occurrence IDs establishing each named identity
@@ -1197,8 +1327,11 @@ or selected-cohort identity must resolve at the same repository/commit as the
 target and authority. Occurrence-only and clearly partial claims may terminate
 before activating a canonical comparison domain, but they may not use that
 classification to make a clean statement about excluded canonical members.
-An activated feature topology requires the one exact route-owner binding and
-witness before it can use implementation caller applicability. An
+An activated feature topology requires its one exact aggregate route binding and
+all witnesses before it can use implementation caller applicability. For
+feature-routed-refactoring, that means exactly one owner on each fact-local side
+and the complete injective feature-selected/dispatched, refactoring-received/
+validated/forwarded, implementation-accepted equality chain. An
 `unsupported-caller-cohort` or `route-owner-binding-indeterminate` state may be
 retained as out-of-scope/gap provenance, but an active completeness claim that
 depends on it is indeterminate and cannot use a drift decision or `None`.
@@ -1217,7 +1350,7 @@ For every canonical operation and every canonical transition in each activated
 comparison domain, the trace contains exactly one applicability witness keyed
 structurally by:
 
-`{target_claim_identity, target_scope_identity, comparison_scope_identity, member_identity, caller_identity, cohort_identity, route_topology_identity, route_owner_binding_id, lifecycle_domain_identity}`
+`{target_claim_identity, target_scope_identity, comparison_scope_identity, member_identity, caller_identity, cohort_identity, route_topology_identity, route_owner_binding_id, route_binding_fact_local_witness_ids, lifecycle_domain_identity}`
 
 Each `operation_applicability_witness` or
 `transition_applicability_witness` retains the exact authority query occurrence
@@ -1235,8 +1368,10 @@ membership only; it does not prove workflow adoption or an automated caller.
 For supported `named-domain` or `selected-cohort` membership, the exact
 implementation-pipeline/resumer caller/cohort authority queries are mandatory
 and may prove a member applicable or inapplicable. An activated feature topology
-additionally requires its exact route-owner binding/witness, but that witness
-cannot replace the implementation caller queries. Every transition witness
+additionally requires its exact aggregate route binding and every applicable
+fact-local witness, but those witnesses cannot replace the implementation caller
+queries. Implementation acceptance cannot replace or repair a feature or
+refactoring owner occurrence. Every transition witness
 likewise requires caller and lifecycle
 authority because conditional wiring is caller-scoped even when its containing
 catalog uses global operation membership. Closure requires disjoint exact
@@ -1274,6 +1409,10 @@ claim whose command domain is `runtime-only` or `mixed`:
   authorized support/non-runtime tokens whose per-occurrence claimed-domain
   record contradictorily assigns them to that runtime subset. The latter remain
   typed `domain-contradiction`, not semantically reclassified runtime commands.
+  A full-command operation child enters this set as target syntax only after its
+  full parent, target-domain, command-domain/subset, activated detailed-command
+  grammar, and static locator-claim-scope gates close; canonical membership is
+  then determined independently from same-commit executable source support.
 - `missing_operations = applicable_canonical_operations - catalog_operations`.
 - `extra_operations = catalog_operations - applicable_canonical_operations`.
 - `domain_contradictions` retains every wrong-domain occurrence, its true domain,
@@ -1310,9 +1449,9 @@ parent evidence. Recognition is syntactic and does not consult
 executable support remains `unsupported-operation` and participates as an exact
 extra.
 
-The exact detailed public target-command grammar is available for one complete
+The exact detailed documentation-command grammar is available for one complete
 inline code span or one complete physical line of a fenced command catalog and
-admits exactly these two raw tool-locator productions:
+admits exactly these two distinct static raw tool-locator productions:
 
 `python3 tools/wu-session-migration <exact-runtime-operation> --request <path>`
 
@@ -1327,31 +1466,44 @@ shell expansion, unquoting, path normalization, environment substitution, or
 working-directory inference.
 
 The full raw line/span is one command-parent occurrence with exact child
-occurrences for the entrypoint, raw tool locator, operation token, option, and
-path operand. Every parent and child retains its originating
-`raw_materiality_candidate_identity`. The raw tool-locator child retains its distinct occurrence
-identity and receives exactly one locator-kind disposition:
-`repository-relative-tools-wu-session-migration` for
-`tools/wu-session-migration` or `home-ai-tools-wu-session-migration` for
-`~/ai/tools/wu-session-migration`. An explicit contract rule maps both, and only
-both, to the same bounded logical entrypoint identity
-`wu-session-migration-detailed-cli`; the raw spelling is never replaced or
-discarded. The rule performs no generic path resolution, tilde or shell
-expansion, filesystem inspection, symlink handling, working-directory inference,
-or alias admission.
+occurrences for the interpreter token, raw tool locator, operation token, option,
+and path operand. Every parent and child retains its originating
+`raw_materiality_candidate_identity`. The raw tool-locator child retains its
+distinct occurrence identity and receives exactly one documentation syntax-kind
+disposition: `tools-prefixed-documentation-command-form` for
+`tools/wu-session-migration` or `tilde-ai-prefixed-documentation-command-form` for
+`~/ai/tools/wu-session-migration`. An explicit static contract rule maps both,
+and only both, to the common
+`wu-session-migration-detailed-documentation-command-syntax-family` while
+preserving the distinct raw spelling, kind, and occurrence. This syntax-family
+classification is not executable-entrypoint identity and establishes no path,
+file, checkout, shell, Python-process, or `__main__.py` reachability fact.
 
-For either exact locator, the operation child becomes `runtime-member` only when
-its exact token joins the same completed executable operation support and the
-same activated detailed README command-grammar evidence at the common repository
-commit. Those query occurrence IDs and the raw-locator-to-logical-entrypoint
-mapping are retained in the interpretation record. A syntactically valid
-operation-shaped token absent from canonical executable support is
-`unsupported-operation` and participates as an exact extra. A token with
-completed executable support but missing, stale, or conflicting detailed grammar
-evidence is `indeterminate`, with an exact `detailed-command-evidence`
-obligation; it is never relabeled as an unsupported extra and does not remove the
-member from canonical global membership or suppress another already established
+For either exact static locator form, the operation child joins the target's
+`catalog_operations` syntax inventory after the full five-operand parent,
+target-domain, command-domain/subset, and activated detailed-command grammar
+gates close. This syntax admission is independent from canonical executable
+support. The admitted token is then compared with canonical operations whose
+support was independently established solely from same-commit repository
+source/control flow. A matching supported canonical token is `runtime-member`;
+a syntactically valid operation-shaped token absent from completed canonical
+executable support is `unsupported-operation` and participates as an exact
+extra. Missing, stale, or conflicting activated detailed-command grammar
+evidence makes the target syntax interpretation `indeterminate`, with an exact
+`detailed-command-evidence` obligation; it never changes executable support,
+removes a canonical global member, or suppresses another already established
 missing operation.
+
+Every full-command occurrence also receives `locator_claim_scope` exactly
+`static-documentation-syntax`, `actual-locator-reachability-material`, or
+`ambiguous`. Only `static-documentation-syntax` is supported here. A target claim
+that makes actual raw-locator resolution, executable identity, checkout
+selection, or functional reachability material is
+`actual-locator-reachability-claim-unsupported`; ambiguity is
+`locator-claim-scope-ambiguous`. Either state creates an exact target-command
+scope obligation and prohibits `None` for that broader claim. This eval does not
+request path, filesystem, shell, home, working-directory, environment, or acting-
+checkout evidence to resolve it.
 
 The following full-command neighbors are retained losslessly and fail closed
 rather than being normalized into the production:
@@ -1426,9 +1578,15 @@ Membership comparison requires these exact equalities:
 
 `recognized_full_command_tool_locator_occurrence_ids == bounded_tool_locator_disposition_occurrence_ids`
 
-`bounded_tool_locator_occurrence_ids == logical_wu_session_migration_entrypoint_mapping_occurrence_ids`
+`bounded_tool_locator_occurrence_ids == tools_prefixed_documentation_locator_occurrence_ids + tilde_ai_prefixed_documentation_locator_occurrence_ids`
 
-`runtime_member_full_command_operation_child_ids == executable_member_and_detailed_command_grammar_bound_operation_child_ids`
+`bounded_tool_locator_occurrence_ids == documentation_command_syntax_family_mapping_occurrence_ids`
+
+`recognized_full_command_parent_ids == locator_claim_scope_disposition_parent_ids`
+
+`static_documentation_syntax_full_command_operation_child_ids == syntax_admitted_catalog_operation_child_ids`
+
+`syntax_admitted_catalog_operation_child_ids == independently_interpreted_against_canonical_operation_child_ids`
 
 `runtime_or_unsupported_token_child_ids == raw_catalog_operation_source_candidate_ids`
 
@@ -1440,7 +1598,9 @@ Membership comparison requires these exact equalities:
 
 `domain_contradiction_occurrence_ids == domain_contradictions_source_occurrence_ids`
 
-No canonical-name-seeded recognizer may define or narrow the raw target domain.
+The locator `+` is a disjoint exact occurrence partition; the two kinds never
+normalize into one source identity. No canonical-name-seeded recognizer may
+define or narrow the raw target domain.
 
 For the point-in-time `Exact operations are` target in
 `conventions/wu-session-lifecycle.md`, the seven current shorthand occurrences
@@ -1449,14 +1609,25 @@ map to exact runtime tokens, `missing_operations` contains
 support, activation, classification, and accounting gates. This is a
 specification-level expected mapping, not executed detector evidence.
 
-A complete command catalog that renders the same operations as exact full
-parents using either admitted raw locator produces the same operation set after
-all five child operands, the explicit raw-locator-to-logical-entrypoint mapping,
-and the executable/detailed-command joins for the target-present parents close.
-The two raw locator spellings remain distinct evidence but cannot change the
-operation comparison. Omitting `phase0-reresolve` from either form therefore
-produces the same expected missing member rather than requiring a README
-occurrence for the omitted operation or becoming a command-adapter gap.
+A complete command catalog that renders the same operation tokens as exact full
+parents using either admitted static raw locator form produces the same target
+operation set after all five operands, static documentation syntax-family
+mapping, locator-claim scope, target/command-domain gates, and activated detailed-
+command grammar close. The two raw locator spellings remain distinct syntax
+evidence but contribute no executable identity and cannot change the independent
+canonical-operation comparison. Omitting `phase0-reresolve` from either form
+therefore produces the same expected missing member rather than requiring a
+README occurrence for the omitted operation or becoming a command-adapter gap.
+This expected mapping makes no claim that either locator actually reaches the
+evaluated repository entrypoint.
+
+A clean operation-membership or conditional-wiring result for a full-command-
+shaped target means only that the selected target's admitted operation inventory
+has no named membership or applicable wiring drift. It never decides locator
+resolution, executable identity, checkout selection, command execution, or
+functional reachability. A target that makes any of those locator facts material
+is outside this eval's supported claim domain and cannot return `None` for that
+broader claim.
 
 ## Lossless typed transition assembly
 
@@ -1676,8 +1847,9 @@ A missing fact disposition cannot be hidden by a completed assembly, and an
 applicable query key cannot be hidden by complete source-fact accounting.
 `enumeration_complete` is true only when whole-blob discovery, every authority
 raw-materiality inventory/partition/downstream identity closure, semantic
-overlay, declaration-entry closure, independent query/disposition equality,
-route-owner binding where activated, repeated-operation scope
+overlay, declaration-entry closure, independent query/disposition equality, the
+feature-direct single-owner binding or feature-routed-refactoring compound fact-
+local binding and full value-equality chain where activated, repeated-operation scope
 admission, exact procedural-owner precedence, operation/field/enforcement
 disposition, owner/constraint/corroboration comparison, operation support,
 enforcement-path witness, readback-materiality partition/join, transition fact,
@@ -1726,8 +1898,11 @@ top-level CLI can own material readback only after the exact join in
 supplies a generic caller-owned validation/readback requirement, but it does not establish the
 operation-specific caller-to-top-level-CLI invocation, lock/recovery/readback
 path, result check, and guarded continuation edge required by that join. An
-activated feature/refactoring route owner may add only the witnessed
-route/cohort/root topology binding.
+activated feature-direct owner may add only its witnessed direct route/cohort/
+root topology binding. An activated feature-routed-refactoring topology may add
+only the feature-owned route selection and dispatched values plus the
+refactoring-owned receipt/validation, unchanged forwarding, and implementation-
+child invocation after their exact equality chain closes.
 
 Therefore the supported operation, eligibility, order, projection, transaction,
 and cohort-scoped writer evidence remains decidable, but this example does not
@@ -1927,6 +2102,11 @@ The ticket-required `wiring_transition` is an aggregate record containing:
 - `target_scope_identity`
 - `route_owner_binding`
 - `route_owner_applicability_witness`
+- `feature_route_selection_dispatch_binding`
+- `feature_route_selection_dispatch_witness`
+- `refactoring_receipt_validation_forwarding_binding`
+- `refactoring_receipt_validation_forwarding_witness`
+- `route_value_injective_equality_join`
 - `delegate_resolution`
 - `lifecycle_sequence_completeness`
 - `comparison_authority_discovery_domain`
@@ -1996,7 +2176,8 @@ governor and complete structural-block/composite target closure, per-command
 claimed-domain partition, independent target/authority raw-materiality
 admission, bounded whole-blob authority overlay/discovery,
 declaration-entry and query closure, executable support, activation,
-classification, supported scope/applicability, target accounting, and set
+classification, static locator-claim scope for any full-command target,
+supported scope/applicability, target accounting, and set
 comparison complete. `domain_contradictions` are retained beside their
 wrong-domain token contribution to `extra_operations`. Repository-global
 membership never requires caller adoption; a supported caller-scoped applicable
@@ -2048,9 +2229,11 @@ A future `None` follows one of two closed paths:
   target/authority raw-materiality inventories, partitions, exclusions, and
   downstream identity equalities, whole-blob authority semantic overlays,
   declaration-entry and independent query equalities, aligned
-  per-member executable support, caller authority only for supported
-  caller-scoped membership or wiring, exact route-owner binding only for an
-  activated feature topology, repeated-operation scope admission, exact
+  per-member executable support, static locator-claim scope for every full-
+  command target, caller authority only for supported caller-scoped membership
+  or wiring, the feature-direct single-owner or feature-routed-refactoring
+  compound fact-local binding only for an activated feature topology,
+  repeated-operation scope admission, exact
   procedural-owner precedence, operation/field/enforcement ownership and every
   fact-local constraint/corroboration comparison, same-support-key enforcement witnesses,
   closed readback materiality and CLI enforcement joins where applicable,
@@ -2116,10 +2299,19 @@ The named behavior does not fire when:
   that identity-bound authority proves inapplicable through its exact witness,
   or occurrence-only evidence
   makes no completeness claim. One sampled WU never proves cohort exclusion.
-- A feature-direct or feature-routed-refactoring claim may reach this non-fire
-  only after the exact same-commit route owner, applicable sidecar, normalized
-  implementation-caller/cohort/root binding, route applicability witness, and
-  implementation-owned progression facts all close. Another parent-route or
+- A full-command-shaped target may reach this non-fire only when its locator is
+  classified as static documentation syntax and its clean scope is limited to
+  operation membership and applicable wiring. Actual locator reachability,
+  executable identity, checkout selection, or command execution cannot be
+  certified by this result; making one material is unsupported and prohibits
+  `None` without triggering path or environment evidence.
+- A feature-direct claim may reach this non-fire only after its exact same-
+  commit feature owner, applicable sidecar, direct binding, route applicability
+  witness, and implementation-owned progression facts all close. A feature-
+  routed-refactoring claim additionally requires the exact feature selection/
+  dispatch owner and sidecar, exact refactoring receipt/validation/forwarding
+  owner and sidecar, both witnesses, every injective route-value equality through
+  implementation acceptance, and implementation-owned progression facts. Another parent-route or
   universal writer claim is not converted into this non-fire and remains out of
   scope/indeterminate with an exact obligation.
 - Wake/scheduler observers, generic helpers, alternate namespaces, rollback,
@@ -2146,9 +2338,9 @@ independently established on that axis or the other axis.
 
 | `evidence_state` | Minimum evidence | Permitted decision behavior |
 |---|---|---|
-| `complete` | Common identity, enclosing-governor closure, and one complete structural-block or bounded-composite target domain resolve. Either a classification non-fire closes every fact required for that exact disposition, including independent target raw-materiality admission, per-command claimed-domain, and delegate/scope witnesses where used, or an active-affirmative complete claim closes every governor/component, target/authority raw-materiality inventory/partition/downstream identity equality, target and authority semantic overlay, declaration-entry/query equality, per-member executable support/path inventory, each activated detailed-command use, supported scope-required caller applicability, activated route-owner binding, readback materiality, repeated-operation scope admission, exact procedural-owner precedence, operation/field/enforcement ownership and fact-local constraint/corroboration comparison, same-key enforcement witnesses, applicability partition, dimension matrix, transition fact/assembly, unique/group discharge, reciprocal sequence multiplicity for each admitted single edge, and reverse assertion/group-member closure required by the claimed dimensions. | Emit drift when present or `None` only when every axis is absent/inapplicable and obligation-free. Inapplicable comparison domains are not required merely to make a partial, non-runtime, non-active, or negative classification clean. |
+| `complete` | Common identity, enclosing-governor closure, and one complete structural-block or bounded-composite target domain resolve. Either a classification non-fire closes every fact required for that exact disposition, including independent target raw-materiality admission, per-command claimed-domain, static locator-claim scope where applicable, and delegate/scope witnesses where used, or an active-affirmative complete claim closes every governor/component, target/authority raw-materiality inventory/partition/downstream identity equality, target and authority semantic overlay, declaration-entry/query equality, per-member executable support/path inventory independently from raw locator syntax, each activated detailed-command use, supported scope-required caller applicability, the activated feature-direct single-owner or feature-routed-refactoring compound fact-local binding and value-equality chain, readback materiality, repeated-operation scope admission, exact procedural-owner precedence, operation/field/enforcement ownership and fact-local constraint/corroboration comparison, same-key enforcement witnesses, applicability partition, dimension matrix, transition fact/assembly, unique/group discharge, reciprocal sequence multiplicity for each admitted single edge, and reverse assertion/group-member closure required by the claimed dimensions. | Emit drift when present or `None` only when every axis is absent/inapplicable and obligation-free. Inapplicable comparison domains are not required merely to make a partial, non-runtime, non-active, or negative classification clean. |
 | `degraded` | Every required comparison fact resolves but optional trace, report, audit, final-diff, or non-decisional provenance is unavailable. | A direct mismatch may emit reduced-confidence drift, and an obligation-free non-fire may emit `None`. Optional evidence loss cannot erase resolved comparison facts or create an unsupported repair. |
-| `evidence-gap` | A required source role, governor disposition, raw-materiality candidate/disposition/exclusion/projection, claimed-domain record, authority overlay, declaration entry, support/path fact, activated detailed-command fact, route-owner binding, transition comparison-fact disposition, procedural-owner context, readback materiality candidate, enforcement witness, dimension fact, assembly, target assertion, reciprocal multiplicity closure, reverse assertion/group-member closure, classification, scope/applicability/delegation witness, or parser/adapter failure represented inside the admitted normalized bundle is unavailable or uninterpretable. | Give the unresolved fact `LOW` gap severity with at least one exact axis/fact-qualified `failure_obligation` joined to its root cause. Use axis outcome `indeterminate` only when no mismatch on that axis is independently established; otherwise retain `present`, its established severity and safe repair, plus the separate gap obligation. Preserve independent drift on either axis and derive aggregate severity by the closed rule below. Never repair from an unresolved fact or use `None`. |
+| `evidence-gap` | A required source role, governor disposition, raw-materiality candidate/disposition/exclusion/projection, claimed-domain or locator-claim-scope record, authority overlay, declaration entry, support/path fact, activated detailed-command fact, route-binding owner/sidecar/witness/value-equality fact, transition comparison-fact disposition, procedural-owner context, readback materiality candidate, enforcement witness, dimension fact, assembly, target assertion, reciprocal multiplicity closure, reverse assertion/group-member closure, classification, scope/applicability/delegation witness, or parser/adapter failure represented inside the admitted normalized bundle is unavailable or uninterpretable. | Give the unresolved fact `LOW` gap severity with at least one exact axis/fact-qualified `failure_obligation` joined to its root cause. Use axis outcome `indeterminate` only when no mismatch on that axis is independently established; otherwise retain `present`, its established severity and safe repair, plus the separate gap obligation. Preserve independent drift on either axis and derive aggregate severity by the closed rule below. Never repair from an unresolved fact or use `None`. |
 | `identity-conflict` | Required evidence has mixed, unbound, unverifiable, absent-at-identity, or currentness-mismatched identity. | Emit the structured `LOW` gap finding, preserve every available identity, and stop dependent comparison. Never use `None`. |
 | `selector-invalid` | Target path/anchor is noncanonical, escaping, absent, non-unique, is neither one complete block nor one valid bounded composite, or cannot produce a complete target source domain. | Emit the gap finding with the attempted selector, every resolution, component, and parse/source-map outcome; do not classify, compare, repair, or use `None`. |
 | `target-domain-incomplete` | Any potential-governor inventory/disposition, governor-to-envelope equality, admitted component, component union, governed content span, parse node, byte/code-point source map, role overlay, occurrence, or disposition equality fails; a semantic/ambiguous excluded governor, multiple governors/content blocks, intervening unowned blocks, unbounded context, or required semantics outside the selected envelope exists. | Emit the gap finding with completed governor/component/overlay evidence preserved. Context outside the admitted envelope cannot be borrowed to repair the domain and `None` is prohibited. |
@@ -2156,10 +2348,10 @@ independently established on that axis or the other axis.
 | `activation-polarity-indeterminate` | The complete admitted envelope cannot distinguish active/historical/quoted/proposal/fixture use or affirmative/negative polarity. | Emit the gap finding and preserve every admitted-envelope occurrence. Do not convert ambiguity to active or to a non-fire `None`. |
 | `claim-classification-indeterminate` | Any required completeness, claim-wide or per-command claimed domain/subset, lifecycle-sequence, scope, writer scope, or membership-applicability dimension is ambiguous or conflicting. | Emit the gap finding, preserving independently resolved dimensions and the complete envelope. Do not compare the unresolved fact or use `None`. |
 | `authority-query-incomplete` | A discovery blob, authority semantic overlay, declaration-entry oracle, contract-applicability query, operation/caller query, semantic projection, query disposition, support-key equality, independently discovered transition-candidate equality, or query-to-assembly/comparison equality fails after raw-materiality admission closes. | Emit the structured `LOW` gap finding with all completed raw identities, overlays, query IDs, and facts. A preselected semantic span cannot substitute and `None` is prohibited. |
-| `delegate-scope-indeterminate` | A delegate or target scope/caller/cohort/lifecycle identity is missing, ambiguous, stale, sampled-only, unbound, `unsupported-caller-cohort`, or lacks the exact applicability partition; an activated feature topology lacks exactly one route owner, applicable sidecar closure, normalized implementation-caller/cohort/root binding, or route witness; a repository-global writer assertion is out of scope. | Emit the structured `LOW` gap finding with every candidate and witness. Do not infer exclusions, promote a route owner to child progression, certify a universal writer, or use `None`. |
+| `delegate-scope-indeterminate` | A delegate or target scope/caller/cohort/lifecycle identity is missing, ambiguous, stale, sampled-only, unbound, `unsupported-caller-cohort`, or lacks the exact applicability partition; a full-command target makes actual locator reachability material or ambiguous; an activated feature-direct topology lacks exactly one feature owner/sidecar/binding witness; an activated feature-routed-refactoring topology lacks exactly one feature selection/dispatch owner and one refactoring receipt/validation/forwarding owner, either applicable sidecar, either fact-local witness, any validation or route-value equality, or implementation acceptance; or a repository-global writer assertion is out of scope. | Emit the structured `LOW` gap finding with every candidate and witness. Do not seek locator environment evidence, infer exclusions, let either route context borrow the other's action, use implementation acceptance to repair an upstream defect, promote feature/refactoring authority to implementation-child progression, certify a universal writer, or use `None`. |
 | `transition-scope-unsupported` | Complete authority or target discovery contains two materially distinct sequence edges for the same canonical operation in one activated caller/cohort domain. | Emit `repeated-operation-transition-unsupported` with exact source occurrences before canonical assembly/discharge. Do not create per-edge projections, emit wiring drift, or use `None`; preserve an independently resolved membership axis. |
-| `authority-conflict` | Required declaration, support, successful path, exact procedural-owner precedence, operation/field/enforcement ownership/value, route-owner binding, cohort-scoped `sole_writer`, readback materiality/CLI join, enforcement witness, caller/progression, fact-local constraint/corroboration, matrix, or assembly fact conflicts. | Emit the structured `LOW` gap finding and preserve every source occurrence/conflict. Never vote, default, downgrade, erase, repair from the conflicting fact, or use `None` for the dependent axis; retain any independently established mismatch and its supported repair. |
-| `enforcement-path-incomplete` | Any required owner fact lacks its exact typed owner-context witness, a caller premise/value is not joined through request authorization and guarded progression, a route witness crosses into child progression, a required executable transition fact lacks exact same-support-key closure, a successful public CLI path bypasses its validator/projection/readback/writer fact, or a retained occurrence is dead or not governing. | Keep the occurrence non-decisional/corroborating or emit the exact authority gap. Preserve every procedure/control path and endpoint; do not promote the fact or use `None`. |
+| `authority-conflict` | Required declaration, support, successful path, exact procedural-owner precedence, operation/field/enforcement ownership/value, feature or refactoring fact-local route binding/value, cohort-scoped `sole_writer`, readback materiality/CLI join, enforcement witness, caller/progression, fact-local constraint/corroboration, matrix, or assembly fact conflicts. | Emit the structured `LOW` gap finding and preserve every source occurrence/conflict. Never vote, default, downgrade, erase, repair from the conflicting fact or downstream acceptance, or use `None` for the dependent axis; retain any independently established mismatch and its supported repair. |
+| `enforcement-path-incomplete` | Any required owner fact lacks its exact typed owner-context witness, a caller premise/value is not joined through request authorization and guarded progression, a feature witness crosses refactoring receipt or a refactoring witness borrows feature selection/dispatch or crosses implementation-child invocation into progression, a required executable transition fact lacks exact same-support-key closure, a successful public CLI path bypasses its validator/projection/readback/writer fact, or a retained occurrence is dead or not governing. | Keep the occurrence non-decisional/corroborating or emit the exact authority gap. Preserve every procedure/control path and endpoint; do not promote the fact or use `None`. |
 | `readback-materiality-incomplete` | An applicable caller/progression candidate is missing, uninterpretable, not exactly partitioned material/not-material, or a material candidate lacks the top-level CLI lock/recovery/readback enforcement join. | Emit the exact lifecycle-authority or CLI-live-readback obligation. Query silence cannot establish non-materiality and `None` is prohibited. |
 | `target-discharge-indeterminate` | One assertion is compatible with multiple canonical transitions for different operations without an explicit complete group/alternative construct, sequence/non-sequence role is ambiguous, group membership is incomplete, reciprocal single-edge multiplicity is unresolved, a duplicate governed-sequence assertion is not dispositioned, or assertion/group-member reverse closure fails. Materially distinct repeated edges for one operation must already have stopped at `transition-scope-unsupported`. | Emit the gap finding unless a separate omission, contradiction, or multiplicity drift is already decidable. Mark none silently included, preserve every assertion/member and candidate, and never use `None` for the affected wiring axis. |
 
@@ -2185,6 +2377,7 @@ exactly one of these closed role identifiers:
 - `target-activation-polarity`
 - `target-claim-classification`
 - `target-command-claimed-domain`
+- `target-locator-claim-scope`
 - `comparison-authority-discovery`
 - `raw-materiality-admission`
 - `authority-semantic-overlay`
@@ -2193,6 +2386,8 @@ exactly one of these closed role identifiers:
 - `detailed-command-evidence`
 - `target-scope-delegation-applicability`
 - `route-owner-binding-applicability`
+- `feature-route-selection-dispatch`
+- `refactoring-receipt-validation-forwarding`
 - `writer-authority-scope`
 - `lifecycle-authority-facts`
 - `caller-procedural-owner-precedence`
@@ -2345,6 +2540,8 @@ Cause-specific obligations include, where applicable:
 - `ambiguous-activation`, `ambiguous-polarity`,
   `ambiguous-claim-completeness`, `ambiguous-command-domain`,
   `ambiguous-command-claimed-domain`,
+  `locator-claim-scope-ambiguous`,
+  `actual-locator-reachability-claim-unsupported`,
   `command-claimed-domain-partition-mismatch`,
   `command-subset-identity-unbound`,
   `ambiguous-lifecycle-sequence-completeness`, `ambiguous-scope`, and
@@ -2371,8 +2568,15 @@ Cause-specific obligations include, where applicable:
   `caller-authority-required-for-global-membership`;
 - `delegate-resolution-missing`, `delegate-resolution-ambiguous`,
   `target-scope-unbound`, `target-scope-sampled-only`,
-  `unsupported-caller-cohort`, `route-owner-zero-match`,
-  `route-owner-multi-match`, `route-owner-sidecar-closure-mismatch`,
+  `unsupported-caller-cohort`, `feature-route-owner-zero-match`,
+  `feature-route-owner-multi-match`,
+  `feature-route-sidecar-closure-mismatch`,
+  `feature-route-selection-dispatch-witness-mismatch`,
+  `refactoring-route-owner-zero-match`,
+  `refactoring-route-owner-multi-match`,
+  `refactoring-route-sidecar-closure-mismatch`,
+  `refactoring-receipt-validation-forwarding-witness-mismatch`,
+  `route-value-injective-equality-mismatch`,
   `route-owner-binding-indeterminate`,
   `route-owner-applicability-witness-mismatch`,
   `repository-global-writer-claim-out-of-scope`,
@@ -2394,6 +2598,7 @@ Cause-specific obligations include, where applicable:
 - `target-presentation-accounting-mismatch`,
   `command-occurrence-accounting-mismatch`,
   `full-command-operand-closure-mismatch`,
+  `documentation-command-syntax-family-mapping-mismatch`,
   `malformed-full-target-command`, and
   `catalog-operation-token-ambiguous`;
 - `target-transition-assertion-ambiguous`,
@@ -2490,12 +2695,19 @@ It also contains these comparison extensions:
 - `command_domain`
 - `command_claimed_domain_records`
 - `claimed_command_domain_partition`
+- `locator_claim_scope`
+- `locator_claim_scope_evidence`
 - `domain_contradictions`
 - `lifecycle_sequence_completeness`
 - `claim_scope`
 - `target_scope_identity`
 - `route_owner_binding`
 - `route_owner_applicability_witness`
+- `feature_route_selection_dispatch_binding`
+- `feature_route_selection_dispatch_witness`
+- `refactoring_receipt_validation_forwarding_binding`
+- `refactoring_receipt_validation_forwarding_witness`
+- `route_value_injective_equality_join`
 - `delegate_resolution`
 - `membership_applicability`
 - `applicable_canonical_operations`
@@ -2510,7 +2722,7 @@ It also contains these comparison extensions:
 - `full_command_operand_occurrences`
 - `raw_tool_locator_occurrences`
 - `tool_locator_dispositions`
-- `bounded_logical_entrypoint_mappings`
+- `documentation_command_syntax_family_mappings`
 - `raw_catalog_operation_occurrences`
 - `catalog_operation_interpretations`
 - `comparison_authority_discovery_domain`
@@ -2573,7 +2785,8 @@ finding.
 For resolved drift, `eval_id` is
 `wu-session-runtime-operation-catalog-drift`, `authority_symbol` is
 `RUNTIME_OPERATIONS`, all available collections are deterministic, and exact
-target, activation, comparison-domain, source-fact, route binding when activated,
+target, activation, comparison-domain, source-fact, static locator-claim scope,
+the feature-direct or compound fact-local route binding when activated,
 repeated-operation scope, assembly, target assertion, governor, claimed-domain,
 raw-materiality inventory/partition/downstream identity closure,
 authority-overlay, exact owner precedence/ownership/path/readback-materiality,
@@ -2649,7 +2862,8 @@ and never implies that every axis resolved:
   writer assertion is out of scope and can never establish this `HIGH` case.
 - `LOW`: a distinct evidence, identity, selector, target-domain,
   activation/polarity, classification, scope/delegation/applicability,
-  route-owner binding, raw-materiality admission, authority-overlay/query,
+  static locator-claim scope, fact-local route binding/value equality,
+  raw-materiality admission, authority-overlay/query,
   support/path, readback materiality,
   procedural/enforcement ownership/matrix/assembly, repeated-operation scope,
   target-accounting, discharge, or normalized-bundle parser/adapter gap.
@@ -2736,6 +2950,13 @@ membership by majority, invent a transition field, default an absent target
 field, erase a source occurrence, repair from an indeterminate comparison, or
 claim runtime safety.
 
+For an actual-locator-reachability-material or ambiguous locator claim, suggest
+only narrowing the target to static documentation syntax or delegating the
+functional/path claim to a separately authorized contract. Do not request cwd,
+home, path expansion, filesystem, symlink, shell-resolution, environment, or
+acting-checkout evidence through this eval, and do not imply that operation-
+inventory repair proves locator reachability.
+
 For a required evidence gap, suggest only restoration of the named comparison
 evidence or correction of this document's comparison contract. Do not specify a
 parser/adapter implementation, retry, rerun, reconciliation, external owner, or
@@ -2746,8 +2967,11 @@ raw-materiality inventory/partition/exclusion/downstream identity closure, exact
 command operand and claimed-domain mapping, same-commit supported
 delegate/scope/applicability joins,
 complete authority overlays/declaration entries/queries, executable support and
-successful-path facts, enforcement witnesses, activated detailed-command
-grammar/delegation/transition facts, activated route-owner binding, scope-required
+successful-path facts independently from raw locator syntax, enforcement
+witnesses, activated detailed-command grammar/delegation/transition facts,
+static locator-claim scope, the feature-direct single-owner or feature-routed-
+refactoring compound fact-local binding, both routed-refactoring witnesses and
+the injective route-value equality chain, scope-required
 caller facts, readback materiality and CLI joins, exact procedural-owner
 precedence, operation/field/enforcement ownership and fact-local comparisons,
 repeated-operation scope, dimension matrices, assemblies, reciprocal
@@ -2761,13 +2985,18 @@ transport, or merge work through this finding.
 
 Current consumers are ACR-403 reviewers and maintainers or agents performing
 separate exact-target review of complete-looking generic tool and lifecycle
-claims. The supported operation surface is functional detailed CLI reachability
-under the exact facts above; global membership does not imply caller adoption.
+claims. The supported operation surface is established solely by evaluated same-
+commit repository declaration and executable control-flow facts under the exact
+rules above; the two raw documentation locators contribute no functional
+reachability fact. Global membership does not imply caller adoption.
 Supported execution-caller clean/drift claims are limited to the exact
-implementation-pipeline and resumer partitions. Feature-direct and
-feature-routed-refactoring topology claims are conditionally supported only by
-the exact route-owner/sidecar binding and implementation-child applicability
-closure above; their route owners do not become progression owners. Other parent
+implementation-pipeline and resumer partitions. Feature-direct topology claims
+are conditionally supported only by the exact feature owner/sidecar binding.
+Feature-routed-refactoring topology claims are conditionally supported only by
+the exact feature selection/dispatch owner and refactoring receipt/validation/
+forwarding owner, both sidecars and witnesses, the full route-value equality
+chain, and implementation-child applicability closure above. Neither route
+context becomes an implementation-child progression owner. Other parent
 routes and repository-global writer authority are out of scope/indeterminate.
 Wake/scheduler/recovery/global actor domains are not added to discovery.
 
@@ -2799,10 +3028,12 @@ channel, then inspects:
   plus `Examples only:` conflicting neighbor;
 - active-affirmative gating using only admitted components, without semantic
   borrowing outside the envelope;
-- the exact full public command parent/children for only
+- the exact static documentation-command parent/children for only
   `tools/wu-session-migration` and `~/ai/tools/wu-session-migration`, their
-  distinct raw locator identities/dispositions and common bounded logical
-  entrypoint mapping, and malformed neighbors, while preserving
+  distinct raw locator identities/documentation-syntax dispositions and common
+  documentation-command syntax-family mapping, full five-operand accounting,
+  static locator-claim scope, syntax-only operation-child admission followed by
+  independent canonical-operation comparison, and malformed neighbors, while preserving
   repository-native shorthand, bare tokens, exact per-command
   claimed-domain/subset records, wrong-domain contradictions,
   non-runtime-only validity, and explicitly partitioned mixed-domain handling;
@@ -2815,8 +3046,9 @@ channel, then inspects:
 - the bounded whole-blob `comparison_authority_discovery_domain`, deterministic
   per-role full AST/Markdown/YAML semantic overlays, exact declaration-entry and
   independently discovered transition-candidate closure, per-operation/per-caller
-  queries, conditionally activated exact feature/refactoring route-owner and
-  sidecar overlays/queries, query-derived semantic spans, and every exactly-once
+  queries, the conditionally activated exact feature-direct owner or feature-
+  routed-refactoring feature-selection/dispatch and refactoring-receipt/
+  validation/forwarding owner/sidecar overlays and queries, query-derived semantic spans, and every exactly-once
   overlay/query/disposition equality, without an all-effecting actor claim;
 - per-member declaration, parser/main, request-validation, every successful
   public CLI path, transaction endpoint, operation-specific executable support,
@@ -2826,10 +3058,13 @@ channel, then inspects:
   structurally non-applicable for global membership and mandatory only for
   supported implementation-pipeline/resumer caller-scoped subsets and wiring;
 - exact `target_scope_identity`, same-commit `delegate_resolution`, and complete
-  supported operation/transition applicability witness partitions; exact one-
-  owner route-to-normalized-implementation-caller/cohort/root binding for an
-  activated feature topology; and other parent-route cohorts indeterminate/out
-  of scope;
+  supported operation/transition applicability witness partitions; the exact
+  single feature-owner binding for feature-direct; the compound feature route-
+  selection/dispatch plus refactoring receipt/validation/unchanged-forwarding/
+  implementation-invocation binding for feature-routed-refactoring; every exact
+  injective equality from feature-selected through implementation-accepted
+  ticket/branch/integration/planning/scratch and applicable base/root values; and
+  other parent-route cohorts indeterminate/out of scope;
 - closed caller-progression readback-materiality candidates and exact
   material/not-material partition before CLI occurrence admission, plus the
   top-level CLI lock/recovery/readback enforcement join for every material key;
@@ -2873,16 +3108,26 @@ equality, a missing/incomplete raw-materiality inventory or partition, a
 free-form mapper exclusion, a potentially material harmful neighbor classified
 non-decisional, a raw identity lost between inventory and
 overlay/query/command/transition/disposition, malformed full-command
-normalization, treating either admitted exact locator as a wrong path, admitting
-any third locator or generic locator resolution, a support/non-runtime command
+normalization, treating either admitted exact locator as proof of a correct,
+wrong, resolved, opened, entered, or `__main__.py`-equal executable path,
+returning `None` when actual locator reachability or executable identity is
+material or ambiguous, admitting any third locator or generic locator resolution,
+a support/non-runtime command
 accepted inside an asserted runtime subset, a mixed label without exact
 per-command subset partition, preselected-span authority discovery, incomplete
 authority semantic overlay/declaration-entry/transition-candidate equality,
 incomplete query/support/path/applicability closure, a dead/bypassed validator
 promoted to authority, caller adoption used to gate global membership, an
-activated feature/refactoring topology lacking exactly one route owner, sidecar
-closure, normalized implementation-caller/cohort/root binding, or applicability
-witness, a route owner promoted to child progression/request owner, another
+activated feature-direct topology lacking its exact feature owner/sidecar/
+binding witness, an activated feature-routed-refactoring topology lacking exactly
+one feature selection/dispatch owner, exactly one refactoring receipt/validation/
+forwarding owner, either applicable sidecar or witness, any receipt/validation/
+unchanged-forwarding/implementation-invocation fact, any injective value equality
+through implementation acceptance, or normalized implementation-caller/cohort/
+root binding, either route context borrowing the other's action, implementation
+acceptance repairing a missing/stale/contradictory upstream fact, a feature or
+refactoring owner promoted to implementation-child progression/operation/
+request/continuation/caller-fact owner, another
 parent-route applicability treated as authority-proven, missing caller authority
 for a supported scoped subset or transition,
 stale/ambiguous delegation, sampled scope exclusion, a missing or duplicate
@@ -2934,11 +3179,14 @@ ACR-403 ends at `WRITE`.
   `Examples only:` classification conflict, delegated/scope/applicability,
   global membership without caller adoption, supported implementation-pipeline
   and resumer caller-scoped membership, conditionally activated feature-direct
-  and feature-routed-refactoring route-owner/sidecar/binding cases, partial,
+  single-owner and feature-routed-refactoring compound feature-selection/
+  dispatch plus refactoring-receipt/validation/forwarding owner/sidecar/witness/
+  value-equality cases, partial,
   non-runtime-only, explicitly
   partitioned mixed, support-command-in-runtime-subset domain contradiction,
-  shorthand, bare-token, both exact bounded full-command locators and
-  malformed-neighbor,
+  shorthand, bare-token, both exact bounded static documentation-command locator
+  forms, syntax-only operation-child admission, actual-locator-reachability-
+  material unsupported claims, and malformed-neighbor,
   edge-membership, transition-semantics, per-dimension matrix, typed n-way
   assembly, exact operation-specific procedural-owner precedence,
   operation/field/enforcement compound authority, mandatory workflow/sidecar and
@@ -2991,13 +3239,15 @@ ACR-403 ends at `WRITE`.
   uniqueness, enclosing-governor inventory/dispositions,
   complete-block/bounded-composite component and source-map closure, distinct
   governed content spans, activation/polarity overlays, per-command claimed-domain
-  partitions, shorthand/two-locator-full-command/malformed-neighbor and
-  command-domain grammar, independent target/authority raw-materiality
+  partitions, shorthand/two-locator-static-documentation-command/malformed-
+  neighbor and command-domain grammar, locator-claim scope, independent target/authority raw-materiality
   inventories, exclusions, partitions, and downstream identity closure,
   whole-blob authority semantic overlays/discovery/query and exact
   declaration/transition-candidate closure, supported
   implementation-pipeline/resumer scope/delegate/applicability joins,
-  conditionally activated route-owner binding/applicability joins,
+  the conditionally activated feature-direct single-owner or feature-routed-
+  refactoring compound fact-local binding/applicability joins and injective
+  feature-selection-to-implementation-acceptance value equalities,
   comparison-scope-specific support and successful paths, enforcement witnesses,
   readback-materiality partitions and CLI joins, exact procedural-owner
   precedence, operation/field/enforcement authority/dimension matrix/assembly,
@@ -3040,11 +3290,13 @@ The inherited Step 6b intent is the exact complete-block or permitted
 bounded-composite target envelope after enclosing-governor closure, distinct
 governed content span, per-command claimed-domain partition, independent
 pre-semantic target/authority raw-materiality admission and harmful-neighbor
-handling, the exact two bounded raw tool-locator productions, bounded whole-blob
+handling, the exact two bounded raw tool-locator productions as distinct static
+documentation syntax only, locator-claim scope, bounded whole-blob
 authority semantic overlays and declaration/transition-candidate closure,
 comparison-scope-specific support and enforcement paths, supported
-implementation-pipeline/resumer applicability, conditional exact route-owner
-binding, deterministic procedural-owner precedence and operation/field/
+implementation-pipeline/resumer applicability, the conditional feature-direct
+single-owner or feature-routed-refactoring compound fact-local route binding and
+injective value-equality chain, deterministic procedural-owner precedence and operation/field/
 enforcement ownership, closed readback materiality, repeated-operation scope,
 query/applicability/assembly, reciprocal single-edge multiplicity and reverse
 target-discharge closure, including point-in-time `phase0-reresolve` readback
@@ -3057,7 +3309,9 @@ accept a wrong-domain command, use unbounded context or preselected authority
 spans, promote a dead/bypassed validator, use sampled or unsupported cohort
 exclusion, certify a universal writer, use caller adoption or README alignment as
 a global membership gate, drop or double-count a target assertion, or emit an
-unstructured indeterminate outcome for its direct per-target inspection.
+unstructured indeterminate outcome for its direct per-target inspection. It also
+does not permit a raw locator to establish evaluated executable identity or
+functional reachability.
 
 The external handoff does not copy this eval into ACR-398's diff, execute it,
 establish `None`, replace ACR-398's direct inspection, change runtime membership
@@ -3081,19 +3335,27 @@ ticket actions, estimate mutation, external-action proof, or external
 reconciliation.
 
 It also defines no generic path resolution, shell or tilde expansion, filesystem
-inspection, symlink handling, working-directory inference, arbitrary tool alias,
-or eval-owned recovery disposition, recovery owner, ordered recovery action, or
-terminal condition.
+inspection, home/cwd/environment or acting-checkout evidence, symlink handling,
+working-directory inference, arbitrary tool alias, or eval-owned recovery
+disposition, recovery owner, ordered recovery action, or terminal condition. The
+two raw locator spellings are static documentation syntax only. Neither is
+claimed to resolve to, open, enter, or equal the evaluated `__main__.py`; a claim
+that makes such reachability material is unsupported here and cannot return
+`None`.
 
 It does not audit every runtime capability, namespace, recovery path, scheduler,
 observer, caller, or actor affecting or judging manifest/index state. Its
 lossless authority discovery is bounded to the named complete comparison blobs,
 and its lossless target accounting is bounded to one exact complete structural
 block or one of the two exact composite forms. Whole-blob discovery does not
-expand beyond the conditionally admitted exact feature/refactoring route owner
-and sidecar into wake/scheduler/helper/recovery, universal writer-capability
-discovery, or global actor auditing. A route owner never owns implementation
-child progression or requests. Cohort-scoped `sole_writer` does not certify repository-global
+expand beyond the conditionally admitted exact feature-direct owner or compound
+feature-routed-refactoring feature and refactoring fact-local owners/sidecars into
+wake/scheduler/helper/recovery, merge, universal writer-capability discovery, or
+global actor auditing. Feature authority ends at refactoring dispatch;
+refactoring authority begins at receipt and ends at implementation-child
+invocation. Neither owns implementation-child progression, operation selection,
+request values, guarded continuation, or caller facts, and neither may borrow the
+other context's action. Cohort-scoped `sole_writer` does not certify repository-global
 exclusivity; that would require a separately authorized
 `wu-session-writer-authority` eval. Bounded target parsing includes exact semantic
 governors but does not become adjacent-claim borrowing or repository-wide claim
