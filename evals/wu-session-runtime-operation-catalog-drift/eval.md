@@ -88,7 +88,8 @@ or external action.
 
 The result alternatives for an actual call are exactly a structured `finding` or
 `None`. Every required identity, selector, target-domain, classification,
-authority-query, support, assembly, accounting, applicability, delegation,
+raw-materiality admission, authority-query, support, assembly, accounting,
+applicability, delegation,
 discharge, source, parser, or adapter failure already represented inside the admitted
 normalized bundle makes the dependent fact indeterminate and preserves a
 cause-specific `LOW` gap severity and failure obligation. Its affected axis is
@@ -144,14 +145,15 @@ completed-result equality, and aggregation.
 
 `operation-catalog-drift-trace-v1` is a role-normalized evidence bundle for one
 exact `evaluated_repository_identity` and one admitted
-`target_claim_identity`. It represents these semantic records:
+`target_claim_identity`. It represents these normalized records:
 
 | Evidence role | Required semantic fields and decision use |
 |---|---|
 | Repository identity | One provider-issued `evaluated_repository_identity` with canonical repository object and full commit identity. Every repository-derived source and target record resolves from that identity. |
 | Declaration authority | `authority_path`, `authority_symbol`, readable identity-bound source, and complete extracted `canonical_operations`. Declaration owns membership, not lifecycle order or functional support by itself. |
-| Target-source closure | One identity-bound `enclosing_governing_context_inventory` precedes one deterministic `target_source_domain` derived from either exactly one complete Markdown structural block or exactly one of the two bounded composite forms defined below. Every potential structural governor is included or proved cosmetic/non-semantic before any activation, polarity, completeness, command-domain, sequence, delegation, domain, or scope classification. Every admitted component node, span, byte, and code point and every role overlay closes exactly; the governed catalog/sequence content retains its own distinct span. |
-| Comparison-authority discovery | A closed `comparison_authority_discovery_domain` of complete identity-bound blobs for the bounded runtime roles, the detailed-command role only when its target-grammar/delegation/transition use activates it, implementation/resumer roles only when supported caller-scoped membership or wiring activates them, and exactly one feature/refactoring route-owner role only when the selected topology activates it. Complete per-role AST/Markdown/YAML semantic overlays partition every parsed node and source position before deterministic semantic queries produce spans. |
+| Target-source closure | One identity-bound `enclosing_governing_context_inventory` precedes one deterministic `target_source_domain` derived from either exactly one complete Markdown structural block or exactly one of the two bounded composite forms defined below. Every potential structural governor is included or proved cosmetic/non-semantic before any activation, polarity, completeness, command-domain, sequence, delegation, domain, or scope classification. Every admitted component node, span, byte, and code point closes exactly; the governed catalog/sequence content retains its own distinct span. Before semantic extraction, every bounded target role also closes its independently derived raw-materiality inventory and disposition partition. |
+| Comparison-authority discovery | A closed `comparison_authority_discovery_domain` of complete identity-bound blobs for the bounded runtime roles, the detailed-command role only when its target-grammar/delegation/transition use activates it, implementation/resumer roles only when supported caller-scoped membership or wiring activates them, and exactly one feature/refactoring route-owner role only when the selected topology activates it. Before semantic extraction or query, each complete role blob produces an independently derived raw-materiality inventory from its structural context and versioned syntax; complete per-role AST/Markdown/YAML semantic overlays then account for those raw identities before deterministic semantic queries produce spans. |
+| Raw-materiality admission | One conservative `raw_materiality_candidate_inventory`, keyed separately for every bounded target and activated authority role, is derived before semantic extraction from complete admitted structural contexts and trace-declared versioned syntax. Every raw candidate partitions exactly to an admitted semantic fact/candidate, an independently checkable closed-grammar or closed-section exclusion, or an unsupported/ambiguous obligation. Raw identities close through overlays, queries, transition candidates, and dispositions; free-form mapper reasons cannot exclude potentially material text. |
 | Executable operation support | One `operation_support` record per canonical operation, keyed exactly once, covering exact declaration-entry closure, parser/entrypoint and top-level `main()` reachability, closed exact operation/request validation, operation-specific projection or validator, every successful public CLI path, and successful transaction endpoints. Executable transition facts additionally require same-key `enforcement_path_witness` closure. Those facts close repository-global membership without README alignment or caller adoption. Separate caller-applicability records are required only for supported implementation-pipeline/resumer subsets and conditional wiring. |
 | Detailed command evidence | Identity-bound detailed README occurrences only where that source owns an admitted full-command target grammar, resolves an exact delegation, or supplies a material transition constraint/corroboration. Missing or stale detailed prose outside an activated use is non-decisional provenance; a required occurrence may create its own exact obligation but cannot erase an executable membership result. |
 | Readback materiality | Before any readback occurrence is admitted, every identity-bound supported caller/progression occurrence that gates continuation on validated readback creates one `readback_materiality_candidate`, keyed by transition, comparison dimension, caller occurrence, and common commit. Exact material/not-material partition closure controls the CLI-only live-readback obligation. |
@@ -162,8 +164,8 @@ exact `evaluated_repository_identity` and one admitted
 | Comparison | Deterministically sorted operation differences and domain contradictions plus aggregate `wiring_transition`, including lifecycle-sequence completeness, repeated-operation scope disposition, canonical transitions, target treatments, unique/group discharge, reciprocal transition-to-sequence-member multiplicity closure for each admitted single edge, reverse assertion/group-member closure, omissions, contradictions, multiplicity drift for duplicate restatements of that edge, unmatched assertions, and indeterminate mappings. |
 | Axis derivation | Independent `operation_membership` and `conditional_wiring` records retain axis-local outcome, evidence/authority state, established-drift or gap severity, drift fields, failure obligations, and suggested action before aggregate severity/authority/action derivation. |
 | Observation provenance | `evidence_paths`; source, trace, prompt, log, report, audit, and final changed-surface paths when available. Optional provenance does not replace authority. |
-| Conflict and availability | Aggregate and per-axis `evidence_state`, per-axis and aggregate `authority_state`, `authority_conflicts`, exact `root_causes`, axis/fact-qualified injective `failure_obligations`, exact forward/reverse root-cause joins, the exact derived `missing_evidence_roles`, and obligations for every unresolved identity, selector, governor, target-domain, claimed-domain, authority overlay/query, declaration closure, executable support/path witness, activated detailed-command use, caller/route applicability, readback materiality, delegation, ownership, repeated-operation scope, assembly, multiplicity, accounting, parser, or adapter fact already represented in the admitted normalized bundle. |
-| Non-decisional context | Optional `non_decisional_provenance` and `residual_uncertainty` for adjacent capabilities or actors. These records never independently produce a finding, change a drift outcome, or veto `None`. |
+| Conflict and availability | Aggregate and per-axis `evidence_state`, per-axis and aggregate `authority_state`, `authority_conflicts`, exact `root_causes`, axis/fact-qualified injective `failure_obligations`, exact forward/reverse root-cause joins, the exact derived `missing_evidence_roles`, and obligations for every unresolved identity, selector, governor, target-domain, raw-materiality admission, claimed-domain, authority overlay/query, declaration closure, executable support/path witness, activated detailed-command use, caller/route applicability, readback materiality, delegation, ownership, repeated-operation scope, assembly, multiplicity, accounting, parser, or adapter fact already represented in the admitted normalized bundle. |
+| Non-decisional context | Optional `non_decisional_provenance` and `residual_uncertainty` for adjacent capabilities or actors, or for bounded occurrences already excluded by the independent raw-materiality oracle. These records never independently produce a finding, change a drift outcome, or veto `None`; a potentially material bounded occurrence without an admitted semantic mapping or independently checkable exclusion is instead an obligation. |
 
 The required ticket fields `authority_path`, `authority_symbol`,
 `canonical_operations`, `catalog_path`, `catalog_anchor`, `claim_kind`,
@@ -325,15 +327,79 @@ inapplicable:
 
 Each `+` expression is a disjoint union, every component and source position
 appears exactly once, and component byte/code-point source-map equality closes.
+
+Before semantic field extraction, the mapper derives the target-role part of one
+conservative `raw_materiality_candidate_inventory`. For every role `r` in the
+closed target-role set below, the input is the complete admitted structural
+context, all of its raw leaf-node/source occurrences, the complete governor and
+component relationships, and the trace-declared
+`markdown_structural_grammar_version`. Every raw leaf-node/source occurrence in
+each complete role context enters the inventory before any exclusion; candidate
+production is structural and syntax-versioned and cannot use a semantic overlay,
+query result, canonical operation name, or mapper-authored semantic reason to
+choose its universe.
+
+Each raw target occurrence is therefore a materiality candidate, including an
+occurrence that may later be proved a closed grammar boundary or section
+exclusion. The inventory conservatively records whether its bounded structural
+context and versioned syntax could supply or qualify activation, polarity,
+completeness, command domain, operation/command identity, lifecycle condition or
+order, delegation, authority, ownership/writer, effect, readback, scope, or
+constraint evidence. Each candidate retains one injective
+`raw_materiality_candidate_identity`, exact target-role key, source node and
+byte/code-point ranges, raw text, structural ancestry, syntax-version key, and
+the closed set of comparison-fact families it could affect.
+
+After semantic mapping, every raw target candidate receives exactly one of these
+dispositions:
+
+- `admitted-semantic-fact-or-candidate`, retaining the same raw identity in every
+  resulting overlay and downstream command or transition candidate;
+- `independently-excluded-by-closed-grammar-or-section`, requiring a versioned
+  closed grammar production or closed structural-section rule whose mechanically
+  checkable premises prove the occurrence cannot supply any required comparison
+  fact; or
+- `unsupported-or-ambiguous-obligation`, naming each potentially affected axis
+  and comparison fact.
+
+The target-role closure is exact:
+
+`target_raw_materiality_candidate_ids == target_admitted_semantic_raw_materiality_candidate_ids + target_independently_excluded_raw_materiality_candidate_ids + target_unsupported_or_ambiguous_raw_materiality_candidate_ids`
+
+`target_raw_materiality_candidate_ids == target_raw_materiality_disposition_candidate_ids`
+
+`target_raw_materiality_candidate_ids == target_role_overlay_raw_materiality_candidate_ids`
+
+`target_admitted_semantic_raw_materiality_candidate_ids == target_role_overlay_admitted_raw_materiality_candidate_ids`
+
+`target_command_capable_admitted_raw_materiality_candidate_ids == target_command_candidate_or_explicit_non_command_disposition_raw_materiality_candidate_ids`
+
+`target_transition_capable_admitted_raw_materiality_candidate_ids == target_transition_candidate_or_explicit_non_transition_disposition_raw_materiality_candidate_ids`
+
+Every `+` is a disjoint exact identity partition. An exclusion record must retain
+its closed rule ID/version, all rule premises, exact structural context, and
+source-map proof. A free-form reason, including a mapper-authored
+`non-decisional-provenance` reason, is not an exclusion oracle. Any candidate not
+admitted or independently excluded, any unclosed identity projection, or any
+unsupported/ambiguous candidate creates the exact axis/fact-qualified
+`raw-materiality-admission` obligation and prohibits `None`.
+
+The normative harmful-neighbor expectation is fail-closed: material condition,
+completeness, command, or constraint wording inside a bounded potentially
+semantic context but outside the recognized versioned forms yields
+`unsupported-or-ambiguous-obligation`. It never becomes
+`non-decisional-provenance` and never permits a clean result.
+
 The mapper then builds role-specific lossless overlays for `context`, `heading`,
 `introduction`, `governed-content`, `presentation`, `command`, `transition`,
 `delegation`, `activation`, `polarity`, `completeness`, `domain`, and `scope`.
 Activation, polarity, completeness, delegation, and scope may use only admitted
 component nodes; command and transition assertion interpretation may use only the
-distinct governed content span. Each overlay retains every admitted parse node
-and source position, assigning non-semantic text an explicit
-grammar-boundary/residual or structurally-inapplicable disposition rather than
-omitting it. For every role `r` in that closed set:
+distinct governed content span. Each overlay retains every admitted parse node,
+source position, and applicable raw-materiality identity. It may assign text a
+grammar-boundary/residual or structurally-inapplicable disposition only through
+the matching independently checkable exclusion record rather than by semantic
+mapper judgment. For every role `r` in that closed set:
 
 `target_source_domain_parse_node_ids == target_r_covered_parse_node_ids`
 
@@ -647,9 +713,52 @@ Each `+` expression is a disjoint exact partition. Semantic source spans are
 projections of completed query occurrences and are never an input to discovery.
 A stale list of previously useful spans cannot satisfy this domain.
 
-Before any semantic query, each activated bounded source role builds one
-`authority_semantic_overlay` for every complete included AST, Markdown, or YAML
-blob in that role. For each overlay, every parsed node, byte, and code point is
+Before any authority semantic extraction or query, each activated bounded source
+role derives its authority-role records in the same
+`raw_materiality_candidate_inventory` from the role's complete included blob,
+complete raw parse/structural contexts, and trace-declared AST, Markdown, or YAML
+grammar version. Every raw leaf-node/source occurrence in the complete role blob
+enters the inventory before any exclusion. Its versioned context and possible
+operation, command, completeness, lifecycle condition/order, authority,
+ownership/writer, effect, readback, scope, route binding, progression, or
+constraint fact families are retained conservatively. A later overlay, query,
+known operation name, or semantic mapper reason cannot select or narrow that
+universe.
+
+Each authority raw candidate retains the same identity and evidence fields as a
+target raw candidate plus its activated authority-role key and complete blob
+identity. It receives exactly one
+`admitted-semantic-fact-or-candidate`,
+`independently-excluded-by-closed-grammar-or-section`, or
+`unsupported-or-ambiguous-obligation` disposition under the same independent
+exclusion rules. Authority closure requires:
+
+`authority_raw_materiality_candidate_ids == authority_admitted_semantic_raw_materiality_candidate_ids + authority_independently_excluded_raw_materiality_candidate_ids + authority_unsupported_or_ambiguous_raw_materiality_candidate_ids`
+
+`authority_raw_materiality_candidate_ids == authority_raw_materiality_disposition_candidate_ids`
+
+`authority_raw_materiality_candidate_ids == authority_semantic_overlay_raw_materiality_candidate_ids`
+
+`authority_admitted_semantic_raw_materiality_candidate_ids == authority_semantic_overlay_admitted_raw_materiality_candidate_ids`
+
+`authority_admitted_semantic_raw_materiality_candidate_ids == completed_query_or_explicit_non_query_disposition_raw_materiality_candidate_ids`
+
+`authority_transition_capable_admitted_raw_materiality_candidate_ids == independently_discovered_transition_candidate_or_explicit_non_transition_disposition_raw_materiality_candidate_ids`
+
+Every `+` is a disjoint exact identity partition. Every overlay occurrence,
+query occurrence, transition candidate, and explicit disposition retains its
+originating raw identity; the forward and reverse projections must be equal. A
+closed grammar/section exclusion retains a mechanically checkable versioned rule
+and source-map proof. A comment label, prose rationale, free-form mapper reason,
+query silence, or absence of a recognized form cannot independently exclude a
+candidate. Any potentially material occurrence not admitted or independently
+excluded, or any raw-to-overlay/query/transition/disposition identity mismatch,
+creates an exact `raw-materiality-admission` obligation and prohibits `None`.
+
+Only after this independent partition closes does each activated bounded source
+role build one `authority_semantic_overlay` for every complete included AST,
+Markdown, or YAML blob in that role. For each overlay, every parsed node, byte,
+and code point is
 assigned exactly once to `semantic-candidate`, `grammar-boundary`,
 `comment-or-non-decisional-content`, or `unsupported-or-ambiguous-syntax`:
 
@@ -660,7 +769,10 @@ assigned exactly once to `semantic-candidate`, `grammar-boundary`,
 `authority_role_byte_ids == authority_role_semantic_candidate_byte_ids + authority_role_grammar_boundary_byte_ids + authority_role_comment_or_non_decisional_byte_ids + authority_role_unsupported_or_ambiguous_byte_ids`
 
 Every `+` is a disjoint exact partition, and node-to-byte/code-point source-map
-equality closes. The union of overlay blob/role keys equals the activated
+equality closes. `grammar-boundary` and
+`comment-or-non-decisional-content` require the matching independent raw
+exclusion; otherwise the occurrence is `unsupported-or-ambiguous-syntax`. The
+union of overlay blob/role keys equals the activated
 authority source-role keys. Parsed-domain-to-overlay equality must close before
 the first semantic query. Every unsupported/ambiguous overlay occurrence creates
 an exact `parser-adapter-attribution` or authority-query obligation and prohibits
@@ -707,9 +819,10 @@ query inventory enumerates:
 - every optimized-contract caller occurrence admitted by the contract
   applicability query.
 
-Each query occurrence preserves raw text, source order, parent/container links,
-exact blob/span/content identity, query ID, operation or caller key, and source
-role. It receives exactly one disposition:
+Each query occurrence preserves its originating
+`raw_materiality_candidate_identity`, raw text, source order, parent/container
+links, exact blob/span/content identity, query ID, operation or caller key, and
+source role. It receives exactly one disposition:
 
 - `admitted-support-fact`
 - `admitted-transition-fact`
@@ -719,11 +832,12 @@ role. It receives exactly one disposition:
 - `unsupported-syntax-adapter-obligation`
 
 Unsupported syntax is retained rather than skipped. `non-decisional-provenance`
-requires the exact reason the occurrence supplies no required comparison fact.
-It creates no drift finding and does not prevent `None` after all applicable
-query closure. A conflict or unsupported-syntax obligation blocks only the
-dependent required fact. There is no majority vote, silent occurrence omission,
-or canonical-name-seeded selector.
+requires the exact matching independently checkable raw-materiality exclusion;
+an exact but free-form mapper reason is insufficient. It creates no drift
+finding and does not prevent `None` only after that exclusion and every
+applicable query closure has closed. A conflict or unsupported-syntax obligation
+blocks only the dependent required fact. There is no majority vote, silent
+occurrence omission, or canonical-name-seeded selector.
 
 Independent query closure requires all of these exactly-once equalities:
 
@@ -916,12 +1030,13 @@ fact/path key mismatch, or success endpoint outside the witness is
 `enforcement-path-incomplete`; the occurrence remains non-decisional/
 corroborating or creates an authority gap and prohibits `None`.
 
-`supported` means only that the detailed human command
-`python3 tools/wu-session-migration <operation> --request <path>` enters through
-`__main__.py`, is parser-exposed, reaches top-level `main()`, closes exact
-operation/request validation, reaches its operation-specific projection or
-handler, and exposes success only after the transaction path returns. This is
-sufficient support for one declared member in a repository-global catalog
+`supported` means only that a detailed human command using exactly the raw
+locator `tools/wu-session-migration` or `~/ai/tools/wu-session-migration` enters
+through the same bounded logical entrypoint, `__main__.py`, is parser-exposed,
+reaches top-level `main()`, closes exact operation/request validation, reaches
+its operation-specific projection or handler, and exposes success only after the
+transaction path returns. This is sufficient support for one declared member in
+a repository-global catalog
 comparison even if the detailed README omits or misstates that member. Caller
 authority is structurally non-applicable to that membership decision and cannot
 turn a supported global member into an evidence gap. This state makes no claim
@@ -1195,14 +1310,16 @@ parent evidence. Recognition is syntactic and does not consult
 executable support remains `unsupported-operation` and participates as an exact
 extra.
 
-The exact detailed public target-command production is available for one
-complete inline code span or one complete physical line of a fenced command
-catalog:
+The exact detailed public target-command grammar is available for one complete
+inline code span or one complete physical line of a fenced command catalog and
+admits exactly these two raw tool-locator productions:
 
 `python3 tools/wu-session-migration <exact-runtime-operation> --request <path>`
 
-It has exactly five raw operands separated by one ASCII space. `python3`,
-`tools/wu-session-migration`, and `--request` are exact literals;
+`python3 ~/ai/tools/wu-session-migration <exact-runtime-operation> --request <path>`
+
+Each production has exactly five raw operands separated by one ASCII space.
+`python3`, `--request`, and each shown tool locator are exact literals;
 `<exact-runtime-operation>` uses the shorthand operation-token grammar; and
 `<path>` denotes exactly one non-empty raw operand with no ASCII whitespace,
 shell control operator, comment, or trailing syntax. The mapper performs no
@@ -1210,11 +1327,24 @@ shell expansion, unquoting, path normalization, environment substitution, or
 working-directory inference.
 
 The full raw line/span is one command-parent occurrence with exact child
-occurrences for the entrypoint, tool path, operation token, option, and path
-operand. The operation child becomes `runtime-member` only when its exact token
-joins completed executable operation support and the activated detailed README
-command-grammar occurrence at the common repository commit. Those query
-occurrence IDs are retained in the interpretation record. A syntactically valid
+occurrences for the entrypoint, raw tool locator, operation token, option, and
+path operand. Every parent and child retains its originating
+`raw_materiality_candidate_identity`. The raw tool-locator child retains its distinct occurrence
+identity and receives exactly one locator-kind disposition:
+`repository-relative-tools-wu-session-migration` for
+`tools/wu-session-migration` or `home-ai-tools-wu-session-migration` for
+`~/ai/tools/wu-session-migration`. An explicit contract rule maps both, and only
+both, to the same bounded logical entrypoint identity
+`wu-session-migration-detailed-cli`; the raw spelling is never replaced or
+discarded. The rule performs no generic path resolution, tilde or shell
+expansion, filesystem inspection, symlink handling, working-directory inference,
+or alias admission.
+
+For either exact locator, the operation child becomes `runtime-member` only when
+its exact token joins the same completed executable operation support and the
+same activated detailed README command-grammar evidence at the common repository
+commit. Those query occurrence IDs and the raw-locator-to-logical-entrypoint
+mapping are retained in the interpretation record. A syntactically valid
 operation-shaped token absent from canonical executable support is
 `unsupported-operation` and participates as an exact extra. A token with
 completed executable support but missing, stale, or conflicting detailed grammar
@@ -1227,7 +1357,8 @@ The following full-command neighbors are retained losslessly and fail closed
 rather than being normalized into the production:
 
 - wrong or missing `python3` entrypoint;
-- wrong or missing `tools/wu-session-migration` tool path;
+- a missing tool locator or any locator other than the exact
+  `tools/wu-session-migration` and `~/ai/tools/wu-session-migration` spellings;
 - wrong, missing, duplicated, or repositioned `--request` option;
 - missing or empty request path operand;
 - any extra operand before or after the request operand;
@@ -1293,6 +1424,10 @@ Membership comparison requires these exact equalities:
 
 `full_command_parent_operand_role_keys == completed_full_command_operand_role_keys`
 
+`recognized_full_command_tool_locator_occurrence_ids == bounded_tool_locator_disposition_occurrence_ids`
+
+`bounded_tool_locator_occurrence_ids == logical_wu_session_migration_entrypoint_mapping_occurrence_ids`
+
 `runtime_member_full_command_operation_child_ids == executable_member_and_detailed_command_grammar_bound_operation_child_ids`
 
 `runtime_or_unsupported_token_child_ids == raw_catalog_operation_source_candidate_ids`
@@ -1315,12 +1450,13 @@ support, activation, classification, and accounting gates. This is a
 specification-level expected mapping, not executed detector evidence.
 
 A complete command catalog that renders the same operations as exact full
-`python3 tools/wu-session-migration <exact-runtime-operation> --request <path>`
-parents produces the same operation set after all five child operands and the
-executable/detailed-command joins for the target-present parents close. Omitting
-`phase0-reresolve` from that form therefore produces the same expected missing
-member rather than requiring a README occurrence for the omitted operation or
-becoming a command-adapter gap.
+parents using either admitted raw locator produces the same operation set after
+all five child operands, the explicit raw-locator-to-logical-entrypoint mapping,
+and the executable/detailed-command joins for the target-present parents close.
+The two raw locator spellings remain distinct evidence but cannot change the
+operation comparison. Omitting `phase0-reresolve` from either form therefore
+produces the same expected missing member rather than requiring a README
+occurrence for the omitted operation or becoming a command-adapter gap.
 
 ## Lossless typed transition assembly
 
@@ -1332,6 +1468,7 @@ does not establish a lifecycle edge, and a membership-only claim has
 independently discovered transition-bearing candidate as one typed authority
 fact or explicit disposition. Each admitted fact record preserves:
 
+- `raw_materiality_candidate_identity`
 - `source_occurrence_id`
 - `authority_semantic_candidate_occurrence_id`
 - `authority_query_id` and exact query occurrence identity
@@ -1538,8 +1675,9 @@ Every applicable canonical transition then receives one target comparison:
 A missing fact disposition cannot be hidden by a completed assembly, and an
 applicable query key cannot be hidden by complete source-fact accounting.
 `enumeration_complete` is true only when whole-blob discovery, every authority
-semantic overlay, declaration-entry closure, independent query/disposition
-equality, route-owner binding where activated, repeated-operation scope
+raw-materiality inventory/partition/downstream identity closure, semantic
+overlay, declaration-entry closure, independent query/disposition equality,
+route-owner binding where activated, repeated-operation scope
 admission, exact procedural-owner precedence, operation/field/enforcement
 disposition, owner/constraint/corroboration comparison, operation support,
 enforcement-path witness, readback-materiality partition/join, transition fact,
@@ -1547,15 +1685,15 @@ dimension matrix, assembly,
 scope/applicability witness, and target comparison plus both reverse and
 reciprocal multiplicity closure below close with no required comparison conflict.
 
-For the known recurrence, one assembled transition has:
+For the known recurrence, the supported point-in-time non-readback facts are:
 
 - `operation`: `phase0-reresolve`
 - `source_conditions`: eligible existing open pre-PR, pre-Phase-3 session with
   policy identities requiring re-resolution
 - `predecessor_or_order`: after eligible Phase 0 contract/topology resolution
   and before `phase3-bind`
-- `destination_or_successor`: caller-owned closed pre-PR readback, then later
-  `phase3-bind` composition
+- `destination_or_successor`: later `phase3-bind` composition after the required
+  pre-Phase-3 re-resolution order
 - `conditional`: `true`
 - `owning_caller_or_domain`: normalized implementation-pipeline execution
   partition, plus the exact route topology only when a feature route is activated
@@ -1564,24 +1702,41 @@ For the known recurrence, one assembled transition has:
   tools/wu-session-migration/wu_session_migration.py}`
 - `effects`: manifest-only change, no active row, with cold-start disposition and
   phase history preserved
-- `readback_authority`: live-storage CLI readback authority
-- `readback_mode`: `live-storage-cli`
+- `readback_authority`: unresolved for every comparison dimension in which the
+  closed materiality partition makes live readback material
+- `readback_mode`: unresolved for every such material dimension
+- `completed_cli_live_readback_enforcement_join`: unresolved
+- `required_readback_obligation`:
+  `cli-live-readback-enforcement-join-mismatch` or the exact
+  caller-progression obligation produced by the unresolved occurrence
 
 The executable declaration/dispatch owns operation. The exact
 `agents/implementation-pipeline-orchestrator.md` `### Migration semantics for
 in-flight WUs` ACR-310 paragraph owns caller-authenticated eligibility,
-pre-Phase-3/pre-Phase-7 progression, required fresh Phase 0 values, order, and
-the normalized implementation caller. Every applicable
+required fresh Phase 0 values, the established pre-Phase-3 order, and the
+normalized implementation caller. Every applicable
 `workflows/implementation-pipeline.md` and optimized-contract occurrence is
 retained and compared only as a constraint/corroboration; equal repeated
 restatements do not become owners. The operation-specific validator/projection
 owns the pre-PR admission predicates, required-change/allowlist projection, and
 preservation effects it enforces on every successful path. The shared
 transaction owns commit/replacement outcome and the cohort-scoped writer; the
-top-level CLI owns material readback. An activated feature/refactoring route
-owner may add only the witnessed route/cohort/root topology binding. This
-assembles exactly one current `phase0-reresolve` transition with one owner for
-every caller/order fact, without source erasure or ad hoc overlap.
+top-level CLI can own material readback only after the exact join in
+`Readback materiality closure` closes. The current point-in-time evidence
+supplies a generic caller-owned validation/readback requirement, but it does not establish the
+operation-specific caller-to-top-level-CLI invocation, lock/recovery/readback
+path, result check, and guarded continuation edge required by that join. An
+activated feature/refactoring route owner may add only the witnessed
+route/cohort/root topology binding.
+
+Therefore the supported operation, eligibility, order, projection, transaction,
+and cohort-scoped writer evidence remains decidable, but this example does not
+claim a completed material readback join, a fully assembled readback dimension,
+or `enumeration_complete`. The existing exact
+`cli-live-readback-enforcement-join-mismatch` or caller-progression obligation is
+mandatory wherever readback is material. This does not erase a separately
+decidable edge-membership omission whose dimension matrix makes readback
+structurally not applicable.
 
 ## Target transition accounting and discharge
 
@@ -1590,7 +1745,8 @@ Before canonical matching, the mapper uses the complete `transition` overlay of
 preserves every block/descendant node, list item, operation wording, condition,
 conditionality, predecessor/order, destination, effect, caller, writer,
 readback, delegation, grouped/alternative construct, and residual occurrence
-with exact source identity and span. Every occurrence receives exactly one
+with exact source identity, span, and originating
+`raw_materiality_candidate_identity`. Every occurrence receives exactly one
 disposition: `admitted-target-assertion`, `authorized-non-transition`,
 `non-fire-context`, or `ambiguous/unsupported`.
 
@@ -1774,6 +1930,9 @@ The ticket-required `wiring_transition` is an aggregate record containing:
 - `delegate_resolution`
 - `lifecycle_sequence_completeness`
 - `comparison_authority_discovery_domain`
+- `raw_materiality_candidate_inventory`
+- `raw_materiality_candidate_disposition_index`
+- `raw_materiality_candidate_closure`
 - `authority_semantic_overlays`
 - `comparison_authority_query_inventory`
 - `transition_operation_field_enforcement_authority_matrix`
@@ -1812,7 +1971,10 @@ The ticket-required `wiring_transition` is an aggregate record containing:
 
 For the current `Manifest storage` target, the absence of
 `phase0-reresolve` operation/order yields an omitted edge for an
-edge-membership-complete sequence. If a neighboring transition-semantics-complete
+edge-membership-complete sequence even though the point-in-time material
+readback dimension above is unresolved: this matrix makes readback structurally
+not applicable, and the supported operation plus edge/order evidence decides the
+omission independently. If a neighboring transition-semantics-complete
 sequence names `phase0-reresolve` in the right order but omits its eligibility
 condition or conditionality, its semantic treatment is also omitted rather than
 included. Its edge-membership matrix does not require readback values for
@@ -1831,7 +1993,8 @@ An active-affirmative generic claim with `claim_completeness` `exact` or
 membership presents a complete operation inventory, but one or both of
 `missing_operations` and `extra_operations` is non-empty after identity,
 governor and complete structural-block/composite target closure, per-command
-claimed-domain partition, bounded whole-blob authority overlay/discovery,
+claimed-domain partition, independent target/authority raw-materiality
+admission, bounded whole-blob authority overlay/discovery,
 declaration-entry and query closure, executable support, activation,
 classification, supported scope/applicability, target accounting, and set
 comparison complete. `domain_contradictions` are retained beside their
@@ -1848,7 +2011,8 @@ or maps duplicate governed sequence members to its admitted single transition as
 multiplicity drift, in the dimension it claims complete. A
 transition-semantics-complete conditional
 edge also drifts when condition or conditionality is absent after complete target
-accounting. Indeterminate authority overlay, comparison-fact ownership,
+accounting. Indeterminate raw-materiality admission, authority overlay,
+comparison-fact ownership,
 enforcement path,
 readback materiality, assembly, target interpretation, or discharge is an
 evidence gap, not drift and not `None`.
@@ -1868,8 +2032,10 @@ A future `None` follows one of two closed paths:
 
 - A classification non-fire requires exact identity, complete enclosing-governor
   inventory and governor-to-envelope closure, one complete
-  `target_source_domain`, every component and role-overlay equality, resolved
-  activation and polarity, and every fact needed for that exact disposition.
+  `target_source_domain`, every component equality, complete independent target
+  raw-materiality inventory/partition/downstream identity closure, every
+  role-overlay equality, resolved activation and polarity, and every fact needed
+  for that exact disposition.
   Clearly partial, non-runtime-only, non-active, and negative envelopes do not require
   unrelated operation support or transition assembly after making the canonical
   comparison domain inapplicable. Delegated and scoped-inapplicable paths also
@@ -1878,8 +2044,10 @@ A future `None` follows one of two closed paths:
   bypasses only wiring, not an applicable complete membership comparison.
 - An active complete-claim comparison non-fire additionally requires resolved
   supported scope and applicability, all governor/component/target-overlay
-  equalities, per-command claimed-domain partition, whole-blob authority semantic
-  overlays, declaration-entry and independent query equalities, aligned
+  equalities, per-command claimed-domain partition, complete independent
+  target/authority raw-materiality inventories, partitions, exclusions, and
+  downstream identity equalities, whole-blob authority semantic overlays,
+  declaration-entry and independent query equalities, aligned
   per-member executable support, caller authority only for supported
   caller-scoped membership or wiring, exact route-owner binding only for an
   activated feature topology, repeated-operation scope admission, exact
@@ -1905,7 +2073,9 @@ The named behavior does not fire when:
   complete.
 - A list is clearly partial, illustrative, selected, or example-only and no
   included semantic governor or text inside its complete admitted envelope
-  independently implies completeness.
+  independently implies completeness, after every potentially material raw
+  occurrence is admitted or independently excluded by closed grammar/section
+  evidence.
   This includes an `Examples only:` introductory paragraph plus its immediately
   following governed list only after governor and composite/component closure
   succeeds. A completeness heading governing that neighbor is indeterminate,
@@ -1956,7 +2126,10 @@ The named behavior does not fire when:
   recovery, cleanup, or other latent capabilities exist outside the required
   comparison facts. Their presence is not this eval's unwanted behavior.
 
-Incomplete required comparison evidence is not a non-fire. Optional adjacent
+Incomplete required comparison evidence is not a non-fire. A potentially
+material occurrence in a bounded target or authority context that is neither
+semantically admitted nor independently excluded is not optional adjacent
+provenance. Optional adjacent
 provenance may remain unavailable without preventing `None`; an exact observed
 acting-context conflict blocks only the required comparison fact it directly
 supplies or contradicts.
@@ -1973,15 +2146,16 @@ independently established on that axis or the other axis.
 
 | `evidence_state` | Minimum evidence | Permitted decision behavior |
 |---|---|---|
-| `complete` | Common identity, enclosing-governor closure, and one complete structural-block or bounded-composite target domain resolve. Either a classification non-fire closes every fact required for that exact disposition, including per-command claimed-domain and delegate/scope witnesses where used, or an active-affirmative complete claim closes every governor/component/target overlay, authority semantic overlay, declaration-entry/query equality, per-member executable support/path inventory, each activated detailed-command use, supported scope-required caller applicability, activated route-owner binding, readback materiality, repeated-operation scope admission, exact procedural-owner precedence, operation/field/enforcement ownership and fact-local constraint/corroboration comparison, same-key enforcement witnesses, applicability partition, dimension matrix, transition fact/assembly, unique/group discharge, reciprocal sequence multiplicity for each admitted single edge, and reverse assertion/group-member closure required by the claimed dimensions. | Emit drift when present or `None` only when every axis is absent/inapplicable and obligation-free. Inapplicable comparison domains are not required merely to make a partial, non-runtime, non-active, or negative classification clean. |
+| `complete` | Common identity, enclosing-governor closure, and one complete structural-block or bounded-composite target domain resolve. Either a classification non-fire closes every fact required for that exact disposition, including independent target raw-materiality admission, per-command claimed-domain, and delegate/scope witnesses where used, or an active-affirmative complete claim closes every governor/component, target/authority raw-materiality inventory/partition/downstream identity equality, target and authority semantic overlay, declaration-entry/query equality, per-member executable support/path inventory, each activated detailed-command use, supported scope-required caller applicability, activated route-owner binding, readback materiality, repeated-operation scope admission, exact procedural-owner precedence, operation/field/enforcement ownership and fact-local constraint/corroboration comparison, same-key enforcement witnesses, applicability partition, dimension matrix, transition fact/assembly, unique/group discharge, reciprocal sequence multiplicity for each admitted single edge, and reverse assertion/group-member closure required by the claimed dimensions. | Emit drift when present or `None` only when every axis is absent/inapplicable and obligation-free. Inapplicable comparison domains are not required merely to make a partial, non-runtime, non-active, or negative classification clean. |
 | `degraded` | Every required comparison fact resolves but optional trace, report, audit, final-diff, or non-decisional provenance is unavailable. | A direct mismatch may emit reduced-confidence drift, and an obligation-free non-fire may emit `None`. Optional evidence loss cannot erase resolved comparison facts or create an unsupported repair. |
-| `evidence-gap` | A required source role, governor disposition, claimed-domain record, authority overlay, declaration entry, support/path fact, activated detailed-command fact, route-owner binding, transition comparison-fact disposition, procedural-owner context, materiality candidate, enforcement witness, dimension fact, assembly, target assertion, reciprocal multiplicity closure, reverse assertion/group-member closure, classification, scope/applicability/delegation witness, or parser/adapter failure represented inside the admitted normalized bundle is unavailable or uninterpretable. | Give the unresolved fact `LOW` gap severity with at least one exact axis/fact-qualified `failure_obligation` joined to its root cause. Use axis outcome `indeterminate` only when no mismatch on that axis is independently established; otherwise retain `present`, its established severity and safe repair, plus the separate gap obligation. Preserve independent drift on either axis and derive aggregate severity by the closed rule below. Never repair from an unresolved fact or use `None`. |
+| `evidence-gap` | A required source role, governor disposition, raw-materiality candidate/disposition/exclusion/projection, claimed-domain record, authority overlay, declaration entry, support/path fact, activated detailed-command fact, route-owner binding, transition comparison-fact disposition, procedural-owner context, readback materiality candidate, enforcement witness, dimension fact, assembly, target assertion, reciprocal multiplicity closure, reverse assertion/group-member closure, classification, scope/applicability/delegation witness, or parser/adapter failure represented inside the admitted normalized bundle is unavailable or uninterpretable. | Give the unresolved fact `LOW` gap severity with at least one exact axis/fact-qualified `failure_obligation` joined to its root cause. Use axis outcome `indeterminate` only when no mismatch on that axis is independently established; otherwise retain `present`, its established severity and safe repair, plus the separate gap obligation. Preserve independent drift on either axis and derive aggregate severity by the closed rule below. Never repair from an unresolved fact or use `None`. |
 | `identity-conflict` | Required evidence has mixed, unbound, unverifiable, absent-at-identity, or currentness-mismatched identity. | Emit the structured `LOW` gap finding, preserve every available identity, and stop dependent comparison. Never use `None`. |
 | `selector-invalid` | Target path/anchor is noncanonical, escaping, absent, non-unique, is neither one complete block nor one valid bounded composite, or cannot produce a complete target source domain. | Emit the gap finding with the attempted selector, every resolution, component, and parse/source-map outcome; do not classify, compare, repair, or use `None`. |
 | `target-domain-incomplete` | Any potential-governor inventory/disposition, governor-to-envelope equality, admitted component, component union, governed content span, parse node, byte/code-point source map, role overlay, occurrence, or disposition equality fails; a semantic/ambiguous excluded governor, multiple governors/content blocks, intervening unowned blocks, unbounded context, or required semantics outside the selected envelope exists. | Emit the gap finding with completed governor/component/overlay evidence preserved. Context outside the admitted envelope cannot be borrowed to repair the domain and `None` is prohibited. |
+| `raw-materiality-admission-incomplete` | Any bounded target or activated authority role lacks a complete conservative pre-semantic candidate inventory; a candidate is not exactly partitioned; a claimed exclusion lacks an independently checkable closed grammar/section rule; a free-form reason performs exclusion; an unsupported/ambiguous candidate remains; or raw identities do not close through overlays, queries, transition/command candidates, and dispositions. | Emit the exact axis/fact-qualified `raw-materiality-admission` obligation with every raw occurrence and completed partition/projection retained. Potentially material text cannot become non-decisional by mapper choice, and `None` is prohibited. |
 | `activation-polarity-indeterminate` | The complete admitted envelope cannot distinguish active/historical/quoted/proposal/fixture use or affirmative/negative polarity. | Emit the gap finding and preserve every admitted-envelope occurrence. Do not convert ambiguity to active or to a non-fire `None`. |
 | `claim-classification-indeterminate` | Any required completeness, claim-wide or per-command claimed domain/subset, lifecycle-sequence, scope, writer scope, or membership-applicability dimension is ambiguous or conflicting. | Emit the gap finding, preserving independently resolved dimensions and the complete envelope. Do not compare the unresolved fact or use `None`. |
-| `authority-query-incomplete` | A discovery blob, authority semantic overlay, declaration-entry oracle, contract-applicability query, operation/caller query, semantic projection, query disposition, support-key equality, independently discovered transition-candidate equality, or query-to-assembly/comparison equality fails. | Emit the structured `LOW` gap finding with all completed overlays/query IDs/facts. A preselected semantic span cannot substitute and `None` is prohibited. |
+| `authority-query-incomplete` | A discovery blob, authority semantic overlay, declaration-entry oracle, contract-applicability query, operation/caller query, semantic projection, query disposition, support-key equality, independently discovered transition-candidate equality, or query-to-assembly/comparison equality fails after raw-materiality admission closes. | Emit the structured `LOW` gap finding with all completed raw identities, overlays, query IDs, and facts. A preselected semantic span cannot substitute and `None` is prohibited. |
 | `delegate-scope-indeterminate` | A delegate or target scope/caller/cohort/lifecycle identity is missing, ambiguous, stale, sampled-only, unbound, `unsupported-caller-cohort`, or lacks the exact applicability partition; an activated feature topology lacks exactly one route owner, applicable sidecar closure, normalized implementation-caller/cohort/root binding, or route witness; a repository-global writer assertion is out of scope. | Emit the structured `LOW` gap finding with every candidate and witness. Do not infer exclusions, promote a route owner to child progression, certify a universal writer, or use `None`. |
 | `transition-scope-unsupported` | Complete authority or target discovery contains two materially distinct sequence edges for the same canonical operation in one activated caller/cohort domain. | Emit `repeated-operation-transition-unsupported` with exact source occurrences before canonical assembly/discharge. Do not create per-edge projections, emit wiring drift, or use `None`; preserve an independently resolved membership axis. |
 | `authority-conflict` | Required declaration, support, successful path, exact procedural-owner precedence, operation/field/enforcement ownership/value, route-owner binding, cohort-scoped `sole_writer`, readback materiality/CLI join, enforcement witness, caller/progression, fact-local constraint/corroboration, matrix, or assembly fact conflicts. | Emit the structured `LOW` gap finding and preserve every source occurrence/conflict. Never vote, default, downgrade, erase, repair from the conflicting fact, or use `None` for the dependent axis; retain any independently established mismatch and its supported repair. |
@@ -2012,6 +2186,7 @@ exactly one of these closed role identifiers:
 - `target-claim-classification`
 - `target-command-claimed-domain`
 - `comparison-authority-discovery`
+- `raw-materiality-admission`
 - `authority-semantic-overlay`
 - `executable-operation-support`
 - `enforcement-path-witness`
@@ -2055,11 +2230,11 @@ Every `failure_obligations` record contains:
   original occurrence
 - `affected_axis`
 - `required_comparison_fact`
-- `recovery_disposition`: `retry`, `repair`, `reconcile`, `escalate`, or
-  `terminate`, advisory at `WRITE`
-- `recovery_owner`, advisory at `WRITE`
-- `ordered_next_actions`
-- `terminal_condition`, proposed rather than proved at `WRITE`
+
+These are the complete eval-owned obligation fields. A failure obligation
+preserves the exact cause, source role and occurrence, affected axis, blocked
+fact, and identity joins; it contains no recovery disposition, recovery owner,
+ordered recovery actions, or terminal condition.
 
 One root cause may produce multiple obligations for different axes or required
 comparison facts without collision. Every obligation identifies exactly one
@@ -2124,10 +2299,9 @@ The producer must establish sequence equality, not merely set resemblance:
 
 A `null`, missing, unknown, stale, duplicate, unsorted, omitted, or extra role
 makes the conceptual result nonconforming. Original occurrence, exact error and
-cause remain authoritative in `root_causes`; affected axis/fact, recovery
-disposition, owner, next actions, and proposed closure remain authoritative in
-`failure_obligations`. The summary cannot close, replace, deduplicate, or
-authorize either level.
+cause remain authoritative in `root_causes`; affected axis/fact and their exact
+root/source identity joins remain authoritative in `failure_obligations`. The
+summary cannot close, replace, deduplicate, or authorize either level.
 
 For a pure drift finding, `root_causes`, `failure_obligations`, `failure_cause`,
 all causal indexes, all axis/fact obligation projections, and
@@ -2139,18 +2313,18 @@ blocked fact does not erase an independently completed mismatch on the same axis
 and one blocked axis does not erase a completed independent axis.
 
 Every gap finding carries all available repository, target, scope, delegate,
-governor, authority-overlay/query, support/path, applicability, materiality,
-route binding, ownership matrix, repeated-operation scope, assembly,
+governor, raw-materiality admission, authority-overlay/query, support/path,
+applicability, readback materiality, route binding, ownership matrix,
+repeated-operation scope, assembly,
 target-accounting, root-cause/obligation joins, and independent-axis outcomes. A
 value is `null` only when genuinely
 unavailable, not merely unfinished. At least one exact cause-preserving
 `root_cause` and one exact axis/fact-qualified `failure_obligation` are mandatory.
 
-At `WRITE`, routes and terminal conditions are descriptive only. A fresh result
-does not close a prior obligation, and no retry, document repair,
-reconciliation, escalation, lifecycle transition, or runtime action is
-authorized. Later rollout work must bind acting authority, authorization, and
-durable comparison-obligation closure evidence before enforcing any action.
+At `WRITE`, failure obligations authorize no action. Any retry, runner
+reconciliation, external owner, or terminal state belongs to a separately
+authorized rollout contract. A fresh result does not close a prior obligation,
+and this eval neither assigns that rollout policy nor proves durable closure.
 
 Cause-specific obligations include, where applicable:
 
@@ -2176,6 +2350,11 @@ Cause-specific obligations include, where applicable:
   `ambiguous-lifecycle-sequence-completeness`, `ambiguous-scope`, and
   `ambiguous-membership-applicability`;
 - `comparison-authority-discovery-coverage-mismatch`,
+  `raw-materiality-candidate-inventory-mismatch`,
+  `raw-materiality-candidate-partition-mismatch`,
+  `raw-materiality-independent-exclusion-invalid`,
+  `raw-materiality-downstream-identity-mismatch`,
+  `raw-materiality-potential-fact-unadmitted`,
   `authority-semantic-overlay-key-mismatch`,
   `authority-semantic-overlay-partition-mismatch`,
   `authority-semantic-overlay-source-map-mismatch`,
@@ -2298,6 +2477,9 @@ It also contains these comparison extensions:
 - `target_source_domain`
 - `target_source_component_inventory`
 - `target_source_role_overlays`
+- `raw_materiality_candidate_inventory`
+- `raw_materiality_candidate_disposition_index`
+- `raw_materiality_candidate_closure`
 - `target_context_source_span`
 - `target_claim_content_source_span`
 - `target_context_occurrence_inventory`
@@ -2326,6 +2508,9 @@ It also contains these comparison extensions:
 - `command_occurrence_dispositions`
 - `full_command_parent_occurrences`
 - `full_command_operand_occurrences`
+- `raw_tool_locator_occurrences`
+- `tool_locator_dispositions`
+- `bounded_logical_entrypoint_mappings`
 - `raw_catalog_operation_occurrences`
 - `catalog_operation_interpretations`
 - `comparison_authority_discovery_domain`
@@ -2390,7 +2575,8 @@ For resolved drift, `eval_id` is
 `RUNTIME_OPERATIONS`, all available collections are deterministic, and exact
 target, activation, comparison-domain, source-fact, route binding when activated,
 repeated-operation scope, assembly, target assertion, governor, claimed-domain,
-authority-overlay, exact owner precedence/ownership/path/materiality,
+raw-materiality inventory/partition/downstream identity closure,
+authority-overlay, exact owner precedence/ownership/path/readback-materiality,
 root-cause/obligation joins, reverse-closure, reciprocal multiplicity, and
 discharge records remain present.
 
@@ -2463,7 +2649,8 @@ and never implies that every axis resolved:
   writer assertion is out of scope and can never establish this `HIGH` case.
 - `LOW`: a distinct evidence, identity, selector, target-domain,
   activation/polarity, classification, scope/delegation/applicability,
-  route-owner binding, authority-overlay/query, support/path, materiality,
+  route-owner binding, raw-materiality admission, authority-overlay/query,
+  support/path, readback materiality,
   procedural/enforcement ownership/matrix/assembly, repeated-operation scope,
   target-accounting, discharge, or normalized-bundle parser/adapter gap.
 
@@ -2471,6 +2658,7 @@ Aggregate `authority_state` follows the closed precedence defined above while
 retaining both axis-local states. Aggregate `evidence_state` is the
 first axis-local state present in this closed precedence:
 `identity-conflict`, `selector-invalid`, `target-domain-incomplete`,
+`raw-materiality-admission-incomplete`,
 `activation-polarity-indeterminate`, `claim-classification-indeterminate`,
 `authority-query-incomplete`, `delegate-scope-indeterminate`,
 `transition-scope-unsupported`, `authority-conflict`, `enforcement-path-incomplete`,
@@ -2486,10 +2674,12 @@ The finding-level `suggested_action` is a deterministic aggregate with separate
 axis-labelled `established_drift_repairs` and `unresolved_axis_obligations`.
 `established_drift_repairs` contains only the non-null `axis_suggested_action`
 from axes whose outcome is `present`. `unresolved_axis_obligations` retains every
-obligation and evidence-restoration action from either axis whenever an
+obligation and named comparison-evidence restoration from either axis whenever an
 obligation exists, including a separate gap that coexists with established drift
 on that axis. It never turns aggregate severity into repair authority for an
-unresolved fact or axis.
+unresolved fact or axis. The complete finding-level action domain is document
+repair or restoration of the exact named comparison evidence. It does not assign
+retry, runner reconciliation, an external owner, or terminal state.
 
 For established membership drift, direct the target owner to include the exact
 applicable supported operation tokens and remove exact unsupported-operation
@@ -2503,7 +2693,7 @@ own explicitly partitioned domain.
 
 If detailed README evidence is independently missing, stale, or conflicting,
 retain that exact activated-use obligation and its separate evidence-restoration
-action alongside the generic target repair. Do not demote the executable
+suggestion alongside the generic target repair. Do not demote the executable
 membership mismatch, make README repair a prerequisite for reporting it, or
 imply that repairing either document makes every other generic claim clean.
 
@@ -2529,15 +2719,14 @@ canonical transition identity or relabel a governed duplicate merely to obtain
 `None`.
 
 For `repeated-operation-transition-unsupported`, retain the exact scope
-obligation and route the materially distinct repeated-edge claim to separately
-authorized eval expansion, or narrow/delegate the target so it no longer claims
-this eval can decide those edges. Do not emit a document drift repair from the
-unsupported wiring comparison.
+obligation and narrow/delegate the target document so it no longer claims this
+eval can decide those edges. Do not emit a different document drift repair from
+the unsupported wiring comparison.
 
 For a repository-global/universal writer assertion, do not certify, contradict,
 or repair the assertion from this bounded cohort. Narrow it explicitly to the
-implementation-pipeline/resumer cohort or route universal certification to a
-separately authorized `wu-session-writer-authority` eval.
+implementation-pipeline/resumer cohort or delegate the unsupported universal
+claim without asserting that this eval certified it.
 
 Every document action preserves runtime behavior, exact
 `RUNTIME_OPERATIONS`, closed request validation, applicable caller eligibility,
@@ -2547,12 +2736,15 @@ membership by majority, invent a transition field, default an absent target
 field, erase a source occurrence, repair from an indeterminate comparison, or
 claim runtime safety.
 
-For a required evidence gap, restore or reconcile the named comparison fact or
-repair the future normalized-bundle parser/adapter/spec before rerunning. This
-includes restoring a
+For a required evidence gap, suggest only restoration of the named comparison
+evidence or correction of this document's comparison contract. Do not specify a
+parser/adapter implementation, retry, rerun, reconciliation, external owner, or
+terminal condition. Named evidence restoration may include a
 complete structural-block/composite target envelope, component/source-map and
-governed-content-span and enclosing-governor closure, exact command operand and
-claimed-domain mapping, same-commit supported delegate/scope/applicability joins,
+governed-content-span and enclosing-governor closure, complete independent
+raw-materiality inventory/partition/exclusion/downstream identity closure, exact
+command operand and claimed-domain mapping, same-commit supported
+delegate/scope/applicability joins,
 complete authority overlays/declaration entries/queries, executable support and
 successful-path facts, enforcement witnesses, activated detailed-command
 grammar/delegation/transition facts, activated route-owner binding, scope-required
@@ -2607,10 +2799,19 @@ channel, then inspects:
   plus `Examples only:` conflicting neighbor;
 - active-affirmative gating using only admitted components, without semantic
   borrowing outside the envelope;
-- the exact full public command parent/children and malformed neighbors, while
-  preserving repository-native shorthand, bare tokens, exact per-command
+- the exact full public command parent/children for only
+  `tools/wu-session-migration` and `~/ai/tools/wu-session-migration`, their
+  distinct raw locator identities/dispositions and common bounded logical
+  entrypoint mapping, and malformed neighbors, while preserving
+  repository-native shorthand, bare tokens, exact per-command
   claimed-domain/subset records, wrong-domain contradictions,
   non-runtime-only validity, and explicitly partitioned mixed-domain handling;
+- the independent conservative `raw_materiality_candidate_inventory` derived
+  before semantic extraction for every bounded target and activated authority
+  role, exact admitted/excluded/unsupported partition, mechanically checkable
+  closed grammar/section exclusions, and raw-identity equality through overlays,
+  queries, command/transition candidates, and dispositions, including the
+  harmful-neighbor expectation;
 - the bounded whole-blob `comparison_authority_discovery_domain`, deterministic
   per-role full AST/Markdown/YAML semantic overlays, exact declaration-entry and
   independently discovered transition-candidate closure, per-operation/per-caller
@@ -2632,6 +2833,10 @@ channel, then inspects:
 - closed caller-progression readback-materiality candidates and exact
   material/not-material partition before CLI occurrence admission, plus the
   top-level CLI lock/recovery/readback enforcement join for every material key;
+  the point-in-time `phase0-reresolve` example keeps its supported non-readback
+  facts but leaves material readback and its completed join unresolved, while an
+  edge-membership omission remains separately decidable when readback is
+  structurally not applicable;
 - typed partial transition facts; the exact operation-to-procedural-owner
   precedence index; mandatory workflow/optimized-contract secondary occurrence
   comparisons; the closed operation/field/enforcement compound-authority matrix;
@@ -2654,7 +2859,9 @@ channel, then inspects:
   non-empty forward/reverse and axis/fact joins, exact joined-role
   `missing_evidence_roles` equality, exact structured `finding | None` for an
   admitted normalized input, and the explicit pre-input and post-result external
-  runner boundaries; and
+  runner boundaries, failure obligations without recovery-routing fields, and
+  finding-level suggested actions limited to document repair or named
+  comparison-evidence restoration; and
 - the external ACR-398 prerequisite wording and anti-scope.
 
 Step 6c must reject a noncanonical/multiply resolving or partial-block target, an
@@ -2662,7 +2869,12 @@ unclosed semantic/ambiguous governor, a complete-heading plus `Examples only:`
 neighbor classified partial/clean, a composite with multiple
 governors/content blocks, intervening unowned blocks, or unbounded context,
 semantic borrowing outside admitted components, incomplete component or role-overlay
-equality, malformed full-command normalization, a support/non-runtime command
+equality, a missing/incomplete raw-materiality inventory or partition, a
+free-form mapper exclusion, a potentially material harmful neighbor classified
+non-decisional, a raw identity lost between inventory and
+overlay/query/command/transition/disposition, malformed full-command
+normalization, treating either admitted exact locator as a wrong path, admitting
+any third locator or generic locator resolution, a support/non-runtime command
 accepted inside an asserted runtime subset, a mixed label without exact
 per-command subset partition, preselected-span authority discovery, incomplete
 authority semantic overlay/declaration-entry/transition-candidate equality,
@@ -2680,8 +2892,11 @@ mapper-selected owner downgrading, README/workflow/sidecar transition prose
 promoted to owner, a secondary assertion not compared with its exact owner fact,
 an unclassified constraint/corroboration conflict, invented readback
 non-applicability, an
-unclosed readback materiality candidate or CLI enforcement join, missing or
-multiply owned required canonical fields, repository-global `sole_writer` clean
+unclosed readback materiality candidate or CLI enforcement join, a completed
+point-in-time `phase0-reresolve` material readback join inferred from generic
+caller prose, loss of its independently decidable edge-membership omission,
+missing or multiply owned required canonical fields, repository-global
+`sole_writer` clean
 certification or `HIGH` drift, a one-source-complete transition requirement,
 unevidenced field borrowing/defaults, source erasure, unrestricted projected
 compatibility, absent required conditional semantics classified as included,
@@ -2695,6 +2910,9 @@ null/unknown/stale/duplicate/unsorted/missing/extra
 dependent-fact source occurrence, empty/unequal root-cause forward/reverse or
 axis/fact projection, any eval-owned pre-input or delivery/fallback/terminal
 transport state, a claim that this eval reported a call that never occurred, an
+eval-owned recovery disposition/owner/ordered action/terminal condition, a
+suggested action outside document repair or named comparison-evidence
+restoration, an
 unstructured indeterminate result, latent adjacent
 capability obligations used to prevent `None`, or any eval-owned
 merge-verification claim.
@@ -2719,7 +2937,8 @@ ACR-403 ends at `WRITE`.
   and feature-routed-refactoring route-owner/sidecar/binding cases, partial,
   non-runtime-only, explicitly
   partitioned mixed, support-command-in-runtime-subset domain contradiction,
-  shorthand, bare-token, exact full-command and malformed-neighbor,
+  shorthand, bare-token, both exact bounded full-command locators and
+  malformed-neighbor,
   edge-membership, transition-semantics, per-dimension matrix, typed n-way
   assembly, exact operation-specific procedural-owner precedence,
   operation/field/enforcement compound authority, mandatory workflow/sidecar and
@@ -2732,13 +2951,15 @@ ACR-403 ends at `WRITE`.
   target, activated detailed-command gaps, two-level root-cause/obligation
   collision and exact forward/reverse/axis/fact/missing-role projection failures,
   identity, selector, whole-blob authority semantic-overlay,
-  declaration-entry, independently discovered transition-candidate, and
-  structured gap cases; prove every target and authority
+  independent pre-semantic raw-materiality admission including harmful
+  neighbors, declaration-entry, independently discovered transition-candidate,
+  and structured gap cases; prove every target and authority raw identity and
   overlay/query/occurrence equality; distinguish a governing
   validator/projection from dead or bypassed neighbors with same-support-key
   enforcement witnesses; close material/not-material caller-progression
-  candidates before demonstrating CLI-only live readback; exercise exact
-  cohort-scoped `sole_writer` plus repository-global writer out-of-scope handling;
+  candidates before demonstrating CLI-only live readback, without treating the
+  point-in-time `phase0-reresolve` example as a completed material join; exercise
+  exact cohort-scoped `sole_writer` plus repository-global writer out-of-scope handling;
   validate conceptual result construction only from admitted normalized inputs;
   observe advisory results; and review false positives and evidence drift.
 
@@ -2770,8 +2991,10 @@ ACR-403 ends at `WRITE`.
   uniqueness, enclosing-governor inventory/dispositions,
   complete-block/bounded-composite component and source-map closure, distinct
   governed content spans, activation/polarity overlays, per-command claimed-domain
-  partitions, shorthand/full-command/malformed-neighbor and command-domain
-  grammar, whole-blob authority semantic overlays/discovery/query and exact
+  partitions, shorthand/two-locator-full-command/malformed-neighbor and
+  command-domain grammar, independent target/authority raw-materiality
+  inventories, exclusions, partitions, and downstream identity closure,
+  whole-blob authority semantic overlays/discovery/query and exact
   declaration/transition-candidate closure, supported
   implementation-pipeline/resumer scope/delegate/applicability joins,
   conditionally activated route-owner binding/applicability joins,
@@ -2815,15 +3038,19 @@ proof produced by this eval.
 
 The inherited Step 6b intent is the exact complete-block or permitted
 bounded-composite target envelope after enclosing-governor closure, distinct
-governed content span, per-command claimed-domain partition, bounded whole-blob
+governed content span, per-command claimed-domain partition, independent
+pre-semantic target/authority raw-materiality admission and harmful-neighbor
+handling, the exact two bounded raw tool-locator productions, bounded whole-blob
 authority semantic overlays and declaration/transition-candidate closure,
 comparison-scope-specific support and enforcement paths, supported
 implementation-pipeline/resumer applicability, conditional exact route-owner
 binding, deterministic procedural-owner precedence and operation/field/
 enforcement ownership, closed readback materiality, repeated-operation scope,
 query/applicability/assembly, reciprocal single-edge multiplicity and reverse
-target-discharge closure, per-axis aggregation, two-level cause-preserving
-obligations with exact missing-role derivation through result construction, and
+target-discharge closure, including point-in-time `phase0-reresolve` readback
+uncertainty without loss of independently decidable edge membership, per-axis
+aggregation, two-level cause-preserving obligations without recovery routing and
+with exact missing-role derivation through result construction, and
 the external invocation/result anti-scope defined here. It does not permit
 ACR-398 to substitute a selected target fragment, exclude a semantic governor,
 accept a wrong-domain command, use unbounded context or preselected authority
@@ -2852,6 +3079,11 @@ execution, global locking, availability or cost claims, protected-state
 mechanisms or writes, ACR-398 edits, merge verification, consumption records,
 ticket actions, estimate mutation, external-action proof, or external
 reconciliation.
+
+It also defines no generic path resolution, shell or tilde expansion, filesystem
+inspection, symlink handling, working-directory inference, arbitrary tool alias,
+or eval-owned recovery disposition, recovery owner, ordered recovery action, or
+terminal condition.
 
 It does not audit every runtime capability, namespace, recovery path, scheduler,
 observer, caller, or actor affecting or judging manifest/index state. Its
