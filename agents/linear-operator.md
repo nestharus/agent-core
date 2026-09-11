@@ -1,5 +1,5 @@
 ---
-description: 'Read/comment/create/transition Linear issues via the ported Linear client at ~/ai/clients/linear/. Auth via $LINEAR_API_KEY env var.'
+description: 'Read/write Linear issues and narrowly create/read projects or assign issue projects via the shared client. Auth via $LINEAR_API_KEY.'
 model: gpt-luna-high
 output_format: ''
 ---
@@ -120,6 +120,26 @@ inputs:
     required: false
     default_source: wrapper:<name> | caller | prompt
     description: "linear project id"
+  - name: project_name
+    type: string
+    required: false
+    default_source: caller
+    description: Exact project name for create-project; never an identity token.
+  - name: project_description
+    type: string
+    required: false
+    default_source: caller
+    description: Optional caller-owned project description; omission sends no description.
+  - name: project_creation_id
+    type: string
+    required: false
+    default_source: caller
+    description: Caller-retained fresh UUID v4 for one create-project attempt; never an idempotency guarantee.
+  - name: linear_team_id
+    type: string
+    required: false
+    default_source: caller
+    description: Exact resolved team UUID required for create-project.
 defaults:
   []
 secrets:
@@ -161,6 +181,15 @@ outputs:
   - task: upsert-comment
     success_shape: "Task-specific stdout or durable artifact paths named by the procedure."
     wrote_lines: []
+  - task: get-project
+    success_shape: Exact UUID project readback including name, archive status and complete team membership.
+    wrote_lines: []
+  - task: create-project
+    success_shape: One acknowledged creation plus independent exact identity/team/name readback; candidates block for caller selection. Failure retains creation UUID, acknowledgement and readback progress.
+    wrote_lines: []
+  - task: assign-issue-project
+    success_shape: ProjectId-only patch acknowledgement or initial match, plus separate exact issue UUID/project readback. Failure retains per-issue progress; no rollback.
+    wrote_lines: []
 errors:
   - class: BLOCKED
     cause: "Required inputs are missing, unreadable, contradictory, or unsafe for the selected task."
@@ -175,6 +204,8 @@ side_effects:
   - linear-update-estimate
   - linear-label-create
   - linear-label-apply
+  - linear-project-create
+  - linear-issue-project-assign
 must_delegate:
   - linear-writes
 may_direct:
@@ -186,6 +217,8 @@ forbidden_direct:
 You read, comment on, create, and transition Linear issues using the ported Linear GraphQL client at `~/ai/clients/linear/`. Auth uses the `$LINEAR_API_KEY` environment variable. Linear descriptions and comments are markdown natively, so unlike `jira-operator` there is no ADF translation step.
 
 ## Use When
+
+- A caller authorizes project creation, exact project readback, or project-only issue assignment (not generic Linear administration).
 
 - The user references a Linear issue key (e.g., `AGE-34`) and wants info posted/read.
 - A PR / initiative needs cross-linked from a Linear issue.
@@ -203,11 +236,11 @@ You read, comment on, create, and transition Linear issues using the ported Line
 
 These execution instructions apply to you in the current invocation, including when a selected project wrapper inherits this procedure: you are already its terminal executor, and reading the base procedure does not make you a caller requiring another dispatch.
 
-The task mapping is closed: `read` uses `get-issue`; `comment` uses `create-comment`; `create` uses `search-issues` followed by at most one `create-issue`; `update-estimate` first applies the selected-contract admission in Procedure: Update Estimate, then uses `update-issue` and the documented comment path only when admitted; `transition` uses `transition-issue` (and `get-issue` only for explicitly required readback); `search` uses `search-issues`; `list-issues` uses `list-issues`; `list-projects` uses `list-projects`; `list-labels` uses `list-labels`; `create-label` uses `create-label`; `apply-labels` uses `apply-labels`; and `upsert-comment` uses `upsert-comment`. Return success only after the admitted direct operation and required readback are terminal.
+The task mapping is closed: `read` uses `get-issue`; `comment` uses `create-comment`; `create` uses `search-issues` followed by at most one `create-issue`; `update-estimate` first applies the selected-contract admission in Procedure: Update Estimate, then uses `update-issue` and the documented comment path only when admitted; `transition` uses `transition-issue` (and `get-issue` only for explicitly required readback); `search` uses `search-issues`; `list-issues` uses `list-issues`; `list-projects` uses `list-projects`; `get-project` uses `get-project`; `create-project` uses `list-teams`, `create-project`, and `get-project` for candidate/unknown-outcome reconciliation only; `assign-issue-project` uses `assign-issue-project`; `list-labels` uses `list-labels`; `create-label` uses `create-label`; `apply-labels` uses `apply-labels`; and `upsert-comment` uses `upsert-comment`. Return success only after the admitted direct operation and required readback are terminal.
 
 ## Required Inputs
 
-- `task`: one of `read`, `comment`, `create`, `update-estimate`, `transition`, `search`, `list-issues`, `list-projects`, `list-labels`, `create-label`, `apply-labels`, `upsert-comment`; `task=read` is the Phase 0 bootstrap read path and `task=upsert-comment` is the idempotent comment path.
+- `task`: one of `read`, `comment`, `create`, `update-estimate`, `transition`, `search`, `list-issues`, `list-projects`, `get-project`, `create-project`, `assign-issue-project`, `list-labels`, `create-label`, `apply-labels`, `upsert-comment`; `task=read` is the Phase 0 bootstrap read path and `task=upsert-comment` is the idempotent comment path.
 - `task=update-estimate`: backend-neutral estimate refinement write-back. Inputs: `issue_key`, `estimate`, `inherited_story_point_estimate`, `estimate_source`, `estimate_delta_rationale`, and `estimate_delta_flag`. Execute the numeric update and its durable Markdown note through Procedure: Update Estimate's mandatory admission helper, which guards the existing update/comment CLI operations. The note contains inherited estimate, refined estimate, source, and delta rationale. This task must not transition workflow status/state.
 - `issue_key`: e.g., `AGE-34` or `${linear_team_key}-34` (required for known-issue-key `read`/`comment`, `transition`, and `apply-labels`).
 - `target_status` (for `transition`): destination state name for the routine manager-owned path. The closed routine set is exactly `Todo`, `In Progress`, and `Done`, sourced from `clients.linear.client.ROUTINE_MANAGER_OWNED_STATES`; out-of-set values are out-of-contract and the operator returns `BLOCKED`.
@@ -613,3 +646,81 @@ Known-key read/comment examples in this operator use issue keys such as `AGE-34`
 | Idempotent comment | Not natively (the operator searches first) | `upsert-comment` matches by leading title |
 
 The Linear operator is intentionally narrower than `jira-operator`. Capabilities like rich-tableau ADF rendering, table cells, and layered marks are not needed because Linear renders Markdown directly.
+
+
+## Procedure: Projects and Project-only Assignment
+
+Supported tasks: `get-project`, `create-project`, `assign-issue-project`.
+Use only the CLI commands below; no raw GraphQL/API write fallback. These are
+single-project/single-issue operations, not an atomic batch or a generic admin API.
+
+### Exact read and reuse
+
+`get-project` requires `linear_project_id` as an exact UUID (not name, URL or slug).
+Run `get-project <UUID>` and report the returned ID, name, description, archive
+status and teams. Names are candidate attributes, never unique identities.
+To reuse a candidate, independently read its exact UUID and compare the requested
+name, actual requested team membership, active status, and caller-supplied description
+when present. One compatible candidate may be reused only within caller authority;
+multiple candidates, archived/wrong-team matches, or conflicting descriptions require
+caller selection. Do not silently pick the first or create a duplicate instead.
+
+### Create
+
+Requires `project_name`, `linear_team_id` (exact resolved team UUID) and
+`project_creation_id` (fresh UUID v4 retained durably **before** dispatch).
+Resolve a requested team key via `list-teams`; ambiguity or incomplete evidence blocks.
+Optional `project_description` is caller-owned; do not invent substantive content.
+Do not confuse short description with Markdown project content (not supported here).
+
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli create-project \
+  --name "$PROJECT_NAME" --team-id "$TEAM_UUID" --project-id "$CREATION_UUID"
+```
+
+Add `--description "$PROJECT_DESCRIPTION"` only when supplied. The command reads
+all visible projects including archived projects before attempting creation. Malformed
+or incomplete inventory blocks, as do exact-name or creation-ID candidates, whose
+identities are returned for exact read/selection. Visible inventory cannot prove global
+absence or prevent another actor racing creation. No uniqueness/idempotency guarantee.
+
+The command sends literal `name`, `teamIds`, caller `id`, and optional `description`.
+It attempts creation at most once and independently reads the exact returned identity,
+team/name (and supplied description) before success. Preserve its complete JSON output:
+`data.projectId` is the retained requested identity, `data.mutation` distinguishes
+`not_attempted`, `unknown`, and `acknowledged`; `data.readback` is separate. A malformed
+identity echo after acknowledgement retains that acknowledgement and `returnedProjectId`.
+An acknowledgement is not successful readback.
+
+On timeout, malformed/missing acknowledgement, or readback error/mismatch: report
+BLOCKED with all known identities and progress. **Never rerun create-project blindly,
+including with a replacement UUID.** Read the retained UUID (and a differing returned
+UUID if present) with `get-project`; an absent/unreadable result is not permission to
+retry. Reconcile with the root, including unresolved concurrent/hidden candidates.
+This rule applies across resumed invocations; the client has no persistent retry ledger.
+
+### Assign one issue
+
+Requires `issue_key` (exact issue key or UUID) and `linear_project_id` (exact UUID).
+
+```bash
+PYTHONPATH=$HOME/ai python3 -m clients.linear.cli assign-issue-project \
+  "$ISSUE_KEY" --project-id "$PROJECT_UUID"
+```
+
+The command reads the destination and issue, checks active destination membership in
+the owning issue team, resolves the issue UUID, and calls existing issueUpdate with
+**only** `projectId`. It never resubmits title, description, labels, estimate, state,
+parent, or other snapshots. It independently reads that same issue UUID and compares
+its project ID. `mutation=already_matching` means no write was needed; it still reads
+again. `mutation=acknowledged` is distinct from `readback=matched`. A mismatch/error
+retains progress and is BLOCKED, not successful completion and not permission to retry.
+
+For a caller-authorized set, process each issue separately and retain each result;
+stop on an unresolved failure and report completed, failed/unknown, and unattempted
+issues alongside any created project UUID. No automatic rollback or unrelated-field
+restoration: it could overwrite concurrent work. A project-only patch proves what the
+client submitted, not preservation of every relation, server automation behavior, or
+durable final state. Report remote reads as point-in-time observations.
+
+Static contract/CLI tests check wiring and deterministic behavior, not agent efficacy.

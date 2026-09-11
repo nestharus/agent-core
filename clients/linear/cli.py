@@ -528,6 +528,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Directory to write plan files (e.g., .tmp/plans/NES-24)",
     )
 
+    project_read_parser = subparsers.add_parser("get-project", help="Read one exact project UUID")
+    project_read_parser.add_argument("project_id")
+    project_create_parser = subparsers.add_parser("create-project", help="One guarded creation attempt; retain UUID before dispatch, never blindly replay")
+    project_create_parser.add_argument("--name", required=True)
+    project_create_parser.add_argument("--team-id", required=True)
+    project_create_parser.add_argument("--project-id", required=True, help="Caller-retained new UUID v4, not an idempotency guarantee")
+    project_create_parser.add_argument("--description")
+    project_assign_parser = subparsers.add_parser("assign-issue-project", help="Project-only patch followed by independent issue readback")
+    project_assign_parser.add_argument("issue_id")
+    project_assign_parser.add_argument("--project-id", required=True)
+
     # list-projects command
     list_projects_parser = subparsers.add_parser("list-projects", help="List projects")
     list_projects_parser.add_argument(
@@ -806,6 +817,19 @@ def main(argv: list[str] | None = None) -> None:
                 description_file=args.description_file,
                 estimate=args.estimate,
             )
+        elif args.command == "get-project":
+            print(json.dumps({"ok": True, "data": LinearClient().get_project(args.project_id)}, indent=2))
+        elif args.command in ("create-project", "assign-issue-project"):
+            from .project_operations import create_project, assign_issue_project
+
+            client = LinearClient()
+            if args.command == "create-project":
+                result = create_project(client, args.name, args.team_id, args.project_id, args.description)
+            else:
+                result = assign_issue_project(client, args.issue_id, args.project_id)
+            print(json.dumps(result, indent=2))
+            if not result["ok"]:
+                sys.exit(1)
         elif args.command == "transition-issue":
             transition_issue(
                 issue_id=args.issue_id,

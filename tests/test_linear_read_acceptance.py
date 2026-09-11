@@ -57,11 +57,11 @@ def readback(monkeypatch, record_property):
         calls.append({"operation": query.strip().split("{")[0], "variables": variables})
         assert request.full_url == "https://api.linear.app/graphql"
         assert not query.lstrip().startswith("mutation"), "Readback attempted a mutation"
-        if "teams(first: 100" in query:
+        if "teams(first: 100" in query and "projects(" not in query:
             response = {"data": {"teams": {"nodes": [{"id": TEAM, "key": "ACR"}],
                                           "pageInfo": {"hasNextPage": False}}}}
         elif "projects(" in query:
-            response = {"data": {"projects": {"nodes": [{"id": PROJECT, "slugId": "selected"}],
+            response = {"data": {"projects": {"nodes": [{"id": PROJECT, "slugId": "selected", "name": "Selected", "description": None, "archivedAt": None, "teams": {"nodes": [{"id": TEAM}], "pageInfo": {"hasNextPage": False}}}],
                                              "pageInfo": {"hasNextPage": False}}}}
         elif "query SearchIssues(" in query:
             response = {"data": {"issues": {"nodes": [_issue()]}}}

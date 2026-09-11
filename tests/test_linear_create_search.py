@@ -46,12 +46,12 @@ def local_reconcile(monkeypatch, record_property):
                 "first": 100, "includeArchived": True,
             }
             response = search_response
-        elif "teams(first: 100" in query:
+        elif "teams(first: 100" in query and "projects(" not in query:
             response = {"data": {"teams": {"nodes": [{"id": TEAM_ID, "key": "ACR", "name": "Fixture"}],
                                           "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
         elif "projects(" in query:
             assert variables["teamId"] == TEAM_ID
-            response = {"data": {"projects": {"nodes": [{"id": PROJECT_ID, "slugId": "selected", "name": "Selected"}],
+            response = {"data": {"projects": {"nodes": [{"id": PROJECT_ID, "slugId": "selected", "name": "Selected", "description": None, "archivedAt": None, "teams": {"nodes": [{"id": TEAM_ID}], "pageInfo": {"hasNextPage": False}}}],
                                              "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
         elif "issue(id: $issueId)" in query:
             assert variables == {"issueId": ISSUE_ID}
