@@ -1252,7 +1252,10 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
         while True:
             variables: dict[str, Any] = {
                 "includeArchived": include_archived,
-                "first": 100,
+                # Keep outer pages small: nesting teams(first: 100) under
+                # 100 projects exceeds Linear's query complexity budget.
+                # One was live-verified; cursor traversal still reads all pages.
+                "first": 1,
             }
             if resolved_team_id is not None:
                 variables["teamId"] = resolved_team_id

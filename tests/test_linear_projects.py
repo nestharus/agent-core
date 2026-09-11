@@ -419,3 +419,87 @@ def test_transport_does_not_hide_programming_errors(monkeypatch, error):
     with pytest.raises(type(error), match='programming error'):
         create_project(client, NAME, TEAM, PROJECT)
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize('team_id', [None, TEAM])
+@pytest.mark.parametrize('include_archived', [False, True])
+def test_inventory_small_pages_preserve_variants_archive_and_later_candidates(
+    monkeypatch, team_id, include_archived,
+):
+    first = project()
+    first.update(id=OTHER, name='Different project')
+    later = project()
+    if include_archived:
+        later['archivedAt'] = '2026-01-01'
+    client, calls = transport(monkeypatch, [
+        page([first], next_page=True, cursor='page-2'),
+        page([later], next_page=True, cursor='page-3'),
+        page(),
+    ])
+    inventory = client.list_projects(team_id=team_id, include_archived=include_archived)
+    assert [p['id'] for p in inventory] == [OTHER, PROJECT]
+    assert inventory[1]['name'] == NAME
+    assert inventory[1]['archivedAt'] == later['archivedAt']
+    assert inventory[1]['teams'] == later['teams']['nodes']
+    expected = {'first': 1, 'includeArchived': include_archived}
+    if team_id is not None:
+        expected['teamId'] = TEAM
+    assert [call['variables'] for call in calls] == [
+        expected, {**expected, 'after': 'page-2'}, {**expected, 'after': 'page-3'}]
+    for call in calls:
+        query = call['query']
+        assert ('accessibleTeams:' in query) == (team_id is not None)
+        assert 'teams(first: 100)' in query
+        assert 'pageInfo { hasNextPage endCursor }' in query
+        assert 'first: $first' in query
+        assert 'includeArchived: $includeArchived' in query
+        assert 'after: $after' in query
+        assert 'mutation' not in query
+
+
+@pytest.mark.parametrize('team_id', [None, TEAM])
+@pytest.mark.parametrize('cursors', [[None], [''], [42], ['a', 'a'], ['a', 'b', 'a']])
+def test_small_page_cursor_errors_both_inventory_variants(monkeypatch, team_id, cursors):
+    client, calls = transport(monkeypatch, [page(next_page=True, cursor=c) for c in cursors])
+    with pytest.raises(LinearClientError) as error:
+        client.list_projects(team_id=team_id, include_archived=True)
+    assert error.value.code == 'PAGINATION_ERROR'
+    assert len(calls) == len(cursors)
+    assert all(call['variables']['first'] == 1 for call in calls)
+
+
+@pytest.mark.parametrize('team_id', [None, TEAM])
+def test_small_pages_reject_later_incomplete_team_membership(monkeypatch, team_id):
+    later = project()
+    later['teams']['pageInfo']['hasNextPage'] = True
+    client, calls = transport(monkeypatch, [
+        page(next_page=True, cursor='later'), page([later])])
+    with pytest.raises(LinearClientError) as error:
+        client.list_projects(team_id=team_id, include_archived=True)
+    assert error.value.code == 'INVALID_RESPONSE'
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('match', ['name', 'id'])
+@pytest.mark.parametrize('archived', [False, True])
+def test_one_project_pages_later_candidate_blocks_creation(monkeypatch, match, archived):
+    first = project()
+    first.update(id=OTHER, name='Different project')
+    later = project()
+    if match == 'name':
+        later['id'] = ISSUE
+    else:
+        later['name'] = 'Different name with retained ID'
+    if archived:
+        later['archivedAt'] = '2026-01-01'
+    client, calls = transport(monkeypatch, [
+        page([first], next_page=True, cursor='later'), page([later])])
+    result = create_project(client, NAME, TEAM, PROJECT)
+    assert result['error']['code'] == 'PROJECT_CANDIDATES'
+    assert result['data']['mutation'] == 'not_attempted'
+    assert result['data']['readback'] == 'not_attempted'
+    assert [p['id'] for p in result['data']['candidates']] == [later['id']]
+    assert [call['variables'] for call in calls] == [
+        {'first': 1, 'includeArchived': True},
+        {'first': 1, 'includeArchived': True, 'after': 'later'}]
+    assert all('mutation' not in call['query'] for call in calls)
