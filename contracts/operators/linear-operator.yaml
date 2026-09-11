@@ -1,7 +1,7 @@
 schema: operator-contract-v1
 source: agents/linear-operator.md
 model: gpt-luna-high
-description: Read/comment/create/transition Linear issues via the ported Linear client at ~/ai/clients/linear/. Auth via $LINEAR_API_KEY env var.
+description: Read/write Linear issues and narrowly create/read projects or assign issue projects via the shared client. Auth via $LINEAR_API_KEY.
 estimate_mutation_enabled: false
 inputs:
 - name: task
@@ -111,6 +111,26 @@ inputs:
   required: false
   default_source: wrapper:<name> | caller | prompt
   description: linear project id
+- name: project_name
+  type: string
+  required: false
+  default_source: caller
+  description: Exact project name for create-project; never an identity token.
+- name: project_description
+  type: string
+  required: false
+  default_source: caller
+  description: Optional caller-owned project description; omission sends no description.
+- name: project_creation_id
+  type: string
+  required: false
+  default_source: caller
+  description: Caller-retained fresh UUID v4 for one create-project attempt; never an idempotency guarantee.
+- name: linear_team_id
+  type: string
+  required: false
+  default_source: caller
+  description: Exact resolved team UUID required for create-project.
 defaults: []
 secrets:
 - LINEAR_API_KEY
@@ -154,6 +174,15 @@ outputs:
 - task: upsert-comment
   success_shape: Task-specific stdout or durable artifact paths named by the procedure.
   wrote_lines: []
+- task: get-project
+  success_shape: Exact UUID project readback including name, archive status and complete team membership.
+  wrote_lines: []
+- task: create-project
+  success_shape: One acknowledged creation plus independent exact identity/team/name readback; candidates block for caller selection. Failure retains creation UUID, acknowledgement and readback progress.
+  wrote_lines: []
+- task: assign-issue-project
+  success_shape: ProjectId-only patch acknowledgement or initial match, plus separate exact issue UUID/project readback. Failure retains per-issue progress; no rollback.
+  wrote_lines: []
 errors:
 - class: BLOCKED
   cause: Required inputs are missing, unreadable, contradictory, or unsafe for the selected task.
@@ -168,6 +197,8 @@ side_effects:
 - linear-update-estimate
 - linear-label-create
 - linear-label-apply
+- linear-project-create
+- linear-issue-project-assign
 must_delegate:
 - linear-writes
 may_direct:

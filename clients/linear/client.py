@@ -6,6 +6,7 @@ GraphQL queries over urllib. It is the single low-level Linear GraphQL client.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -102,6 +103,14 @@ class LinearClientError(Exception):
         self.code = code
         self.message = message
         super().__init__(f"{code}: {message}")
+
+
+class ProjectCreationIdentityError(LinearClientError):
+    """Creation was acknowledged, but its returned identity could not be verified."""
+
+    def __init__(self, returned_id: Any) -> None:
+        super().__init__("INVALID_RESPONSE", "Project creation acknowledged but exact project identity missing/mismatched")
+        self.returned_id = returned_id
 
 
 def _successful_mutation(
@@ -299,6 +308,15 @@ class LinearClient:
             raise LinearClientError(
                 "API_ERROR",
                 f"Linear API request timed out after {timeout} seconds",
+            ) from e
+
+        except (http.client.HTTPException, OSError) as e:
+            # urllib can expose protocol/socket failures during response.read(),
+            # after a mutation may have reached the server. Normalize only
+            # transport exceptions; callers retain progress without retrying.
+            raise LinearClientError(
+                "API_ERROR",
+                f"Linear API transport failed: {e}",
             ) from e
 
         try:
@@ -1033,6 +1051,76 @@ mutation CommentCreate($input: CommentCreateInput!) {
             "user": user_info,
         }
 
+    @staticmethod
+    def _validated_project(project: Any) -> dict[str, Any]:
+        """Reject incomplete identity/membership; a truncated team list is not proof."""
+        if not isinstance(project, dict) or any(
+            not isinstance(project.get(key), str) or not project[key].strip()
+            for key in ("id", "name")
+        ):
+            raise LinearClientError("INVALID_RESPONSE", "Missing project identity/name")
+        if not UUID_RE.fullmatch(project["id"]):
+            raise LinearClientError("INVALID_RESPONSE", "Malformed project UUID")
+        if "archivedAt" not in project or "description" not in project:
+            raise LinearClientError("INVALID_RESPONSE", "Missing project archive/description fields")
+        if any(project[key] is not None and not isinstance(project[key], str) for key in ("archivedAt", "description")):
+            raise LinearClientError("INVALID_RESPONSE", "Malformed project archive/description fields")
+        teams = project.get("teams")
+        if not isinstance(teams, dict) or not isinstance(teams.get("nodes"), list):
+            raise LinearClientError("INVALID_RESPONSE", "Missing project teams")
+        page = teams.get("pageInfo")
+        if not isinstance(page, dict) or page.get("hasNextPage") is not False:
+            raise LinearClientError("INVALID_RESPONSE", "Incomplete project team membership")
+        if not teams["nodes"] or any(
+            not isinstance(team, dict) or not isinstance(team.get("id"), str) or not UUID_RE.fullmatch(team["id"])
+            for team in teams["nodes"]
+        ):
+            raise LinearClientError("INVALID_RESPONSE", "Malformed project team identities")
+        return {**project, "teams": teams["nodes"]}
+
+    def get_project(self, project_id: str) -> dict[str, Any]:
+        """Independently read one exact project UUID, never a name."""
+        if not UUID_RE.fullmatch(project_id):
+            raise LinearClientError("INVALID_INPUT", "get-project requires an exact UUID")
+        result = self._run_graphql("""
+query ProjectRead($id: String!) {
+  project(id: $id) {
+    id name description url archivedAt
+    teams(first: 100) { nodes { id key name } pageInfo { hasNextPage endCursor } }
+  }
+}
+""", {"id": project_id})
+        data = result.get("data")
+        project = self._validated_project(data.get("project") if isinstance(data, dict) else None)
+        if project["id"] != project_id:
+            raise LinearClientError("INVALID_RESPONSE", "Project readback identity mismatch")
+        return project
+
+    def create_project(self, name: str, team_id: str, project_id: str, description: str | None = None) -> dict[str, Any]:
+        """One creation attempt with caller-retained UUID v4; not an idempotent retry API.
+
+        Returns acknowledgement only. Use get_project for independent readback.
+        """
+        from uuid import UUID
+
+        if not name.strip() or not UUID_RE.fullmatch(team_id) or not UUID_RE.fullmatch(project_id):
+            raise LinearClientError("INVALID_INPUT", "Project creation requires name, team UUID and project UUID v4")
+        if UUID(project_id).version != 4:
+            raise LinearClientError("INVALID_INPUT", "Project creation ID must be UUID v4")
+        inputs: dict[str, Any] = {"id": project_id, "name": name, "teamIds": [team_id]}
+        if description is not None:
+            inputs["description"] = description
+        result = self._run_graphql("""
+mutation ProjectCreate($input: ProjectCreateInput!) {
+  projectCreate(input: $input) { success project { id } }
+}
+""", {"input": inputs})
+        payload = _successful_mutation(result, "projectCreate", "Project creation rejected")
+        echo = payload.get("project")
+        if not isinstance(echo, dict) or echo.get("id") != project_id:
+            raise ProjectCreationIdentityError(echo.get("id") if isinstance(echo, dict) else None)
+        return {"id": echo["id"], "acknowledged": True}
+
     def list_projects(
         self, team_id: str | None = None, include_archived: bool = False
     ) -> list[dict[str, Any]]:
@@ -1074,6 +1162,7 @@ mutation CommentCreate($input: CommentCreateInput!) {
 
         all_projects: list[dict[str, Any]] = []
         cursor: str | None = None
+        seen_cursors: set[str] = set()
 
         query_with_team_filter = """
 query($includeArchived: Boolean!, $teamId: ID!, $first: Int!, $after: String) {
@@ -1105,7 +1194,8 @@ query($includeArchived: Boolean!, $teamId: ID!, $first: Int!, $after: String) {
         name
         email
       }
-      teams {
+      teams(first: 100) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           name
@@ -1141,7 +1231,8 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
         name
         email
       }
-      teams {
+      teams(first: 100) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           name
@@ -1169,23 +1260,21 @@ query($includeArchived: Boolean!, $first: Int!, $after: String) {
                 variables["after"] = cursor
 
             result = self._run_graphql(query, variables)
-            projects_data = result.get("data", {}).get("projects", {})
-            nodes = projects_data.get("nodes", [])
-            # Flatten teams.nodes to teams for cleaner API
-            for node in nodes:
-                if "teams" in node and isinstance(node["teams"], dict):
-                    node["teams"] = node["teams"].get("nodes", [])
-            all_projects.extend(nodes)
-
-            page_info = projects_data.get("pageInfo", {})
-            next_cursor = page_info.get("endCursor")
-            if not page_info.get("hasNextPage"):
+            data = result.get("data")
+            projects_data = data.get("projects") if isinstance(data, dict) else None
+            if not isinstance(projects_data, dict) or not isinstance(projects_data.get("nodes"), list):
+                raise LinearClientError("INVALID_RESPONSE", "Missing project inventory nodes")
+            for node in projects_data["nodes"]:
+                all_projects.append(self._validated_project(node))
+            page_info = projects_data.get("pageInfo")
+            if not isinstance(page_info, dict) or type(page_info.get("hasNextPage")) is not bool:
+                raise LinearClientError("INVALID_RESPONSE", "Missing project inventory pageInfo")
+            if not page_info["hasNextPage"]:
                 break
-            if not next_cursor or next_cursor == cursor:
-                raise LinearClientError(
-                    "PAGINATION_ERROR",
-                    "Pagination did not advance: missing or repeated endCursor",
-                )
+            next_cursor = page_info.get("endCursor")
+            if not isinstance(next_cursor, str) or not next_cursor.strip() or next_cursor in seen_cursors:
+                raise LinearClientError("PAGINATION_ERROR", "Missing or repeated project cursor")
+            seen_cursors.add(next_cursor)
             cursor = next_cursor
 
         return all_projects

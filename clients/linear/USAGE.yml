@@ -52,3 +52,11 @@ linear_client_usage:
     - "Use slugId or UUID for project tokens; project names and URLs are not accepted identifiers."
     - "Team-owned labels win over workspace labels with the same name; duplicate labels in the same tier are ambiguous."
     - "Search and list issue label filters use resolved label IDs, not raw label names."
+
+  project_operations:
+    get_project: "get-project <exact-project-UUID>"
+    create_project: 'create-project --name "Exact name" --team-id <team-UUID> --project-id <caller-retained-fresh-UUID-v4> [--description "Caller text"]'
+    assign_issue_project: "assign-issue-project <issue-key-or-UUID> --project-id <exact-project-UUID>"
+    creation: "Retain UUID before dispatch. Complete visible inventory including archived projects is checked; name or ID candidates block for exact read/caller selection. One mutation attempt; independent project identity/team/name/optional-description readback. No global uniqueness guarantee."
+    failure: "ok:false exits 1 and retains data.projectId, mutation and readback progress. An acknowledged malformed identity echo also retains returnedProjectId. Unknown outcome or readback failure never authorizes create replay; get-project the retained identity and reconcile with root. No persistent retry ledger."
+    assignment: "Only projectId is patched using resolved issue UUID after destination team validation. Acknowledgement or already_matching is separate from independent readback=matched. Multi-issue moves are not atomic; retain each result and report unattempted issues. No rollback or unrelated-field restoration."
