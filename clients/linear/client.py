@@ -6,6 +6,7 @@ GraphQL queries over urllib. It is the single low-level Linear GraphQL client.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -307,6 +308,15 @@ class LinearClient:
             raise LinearClientError(
                 "API_ERROR",
                 f"Linear API request timed out after {timeout} seconds",
+            ) from e
+
+        except (http.client.HTTPException, OSError) as e:
+            # urllib can expose protocol/socket failures during response.read(),
+            # after a mutation may have reached the server. Normalize only
+            # transport exceptions; callers retain progress without retrying.
+            raise LinearClientError(
+                "API_ERROR",
+                f"Linear API transport failed: {e}",
             ) from e
 
         try:

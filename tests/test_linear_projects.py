@@ -1,5 +1,6 @@
 """Mock transport/CLI evidence only; does not establish live API or agent efficacy."""
 import copy
+import http.client
 import io
 import json
 from pathlib import Path
@@ -38,6 +39,8 @@ def transport(monkeypatch, responses):
         response = next(responses)
         if isinstance(response, Exception):
             raise response
+        if isinstance(response, io.BytesIO):
+            return response
         return io.BytesIO(json.dumps(response).encode())
 
     monkeypatch.setattr('urllib.request.urlopen', urlopen)
@@ -343,3 +346,76 @@ def test_creation_requires_uuid_v4_before_any_transport(monkeypatch, project_id)
     result = create_project(client, NAME, TEAM, project_id)
     assert not result['ok']
     assert not calls
+
+
+class InterruptedBody(io.BytesIO):
+    """Fail on response.read(), not on opening the request."""
+
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def read(self, *args, **kwargs):
+        raise self.error
+
+
+def remote_issue_response(project_id):
+    value = issue(project_id)
+    value['project']['teams'] = {'nodes': [{'id': TEAM}]}
+    value['labels'] = {'nodes': value['labels']}
+    return {'data': {'issue': value}}
+
+
+@pytest.mark.parametrize('operation', ['create', 'assignment'])
+@pytest.mark.parametrize('stage', ['mutation', 'readback'])
+@pytest.mark.parametrize('error', [http.client.IncompleteRead(b'{"data":', 100),
+    http.client.RemoteDisconnected('connection closed'), ConnectionResetError('reset')])
+def test_cli_interrupted_body_retains_progress(monkeypatch, capsys, operation, stage, error):
+    monkeypatch.setenv('LINEAR_API_KEY', 'mock-key')
+    broken = InterruptedBody(error)
+    if operation == 'create':
+        responses = [page(), broken] if stage == 'mutation' else [page(), created(), broken]
+        args = ['create-project', '--name', NAME, '--team-id', TEAM, '--project-id', PROJECT]
+        mutation_index = 1
+    else:
+        responses = [read(), remote_issue_response(OTHER), broken]
+        if stage == 'readback':
+            responses = [read(), remote_issue_response(OTHER),
+                {'data': {'issueUpdate': {'success': True, 'issue': None}}}, broken]
+        args = ['assign-issue-project', 'AGE-353', '--project-id', PROJECT]
+        mutation_index = 2
+    _, calls = transport(monkeypatch, responses)
+    with pytest.raises(SystemExit) as exit:
+        cli.main(args)
+    assert exit.value.code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result['ok'] is False
+    assert result['error']['code'] == 'API_ERROR'
+    progress = result['data']
+    assert progress['projectId'] == PROJECT
+    assert progress['mutation'] == ('unknown' if stage == 'mutation' else 'acknowledged')
+    assert progress['readback'] == ('not_attempted' if stage == 'mutation' else 'unverified')
+    assert len(calls) == len(responses)  # No retry, follow-on read after unknown, or rollback.
+    if operation == 'create':
+        assert progress['teamId'] == TEAM
+        assert progress['name'] == NAME
+        assert calls[mutation_index]['variables'] == {
+            'input': {'id': PROJECT, 'name': NAME, 'teamIds': [TEAM]}}
+        if stage == 'readback':
+            assert calls[-1]['variables'] == {'id': PROJECT}
+    else:
+        assert progress['requestedIssue'] == 'AGE-353'
+        assert progress['issueId'] == ISSUE
+        assert progress['initialProjectId'] == OTHER
+        assert calls[1]['variables'] == {'issueId': 'AGE-353'}
+        assert calls[mutation_index]['variables'] == {'id': ISSUE, 'input': {'projectId': PROJECT}}
+        if stage == 'readback':
+            assert calls[-1]['variables'] == {'issueId': ISSUE}
+
+
+@pytest.mark.parametrize('error', [TypeError('programming error'), ValueError('programming error')])
+def test_transport_does_not_hide_programming_errors(monkeypatch, error):
+    client, calls = transport(monkeypatch, [page(), InterruptedBody(error)])
+    with pytest.raises(type(error), match='programming error'):
+        create_project(client, NAME, TEAM, PROJECT)
+    assert len(calls) == 2
