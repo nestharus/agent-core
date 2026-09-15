@@ -28,7 +28,10 @@ def recoverable_plan(tmp_path, mode='ordinary', contract=True):
 def fault(boundary, command, run, source):
     result = subprocess.run([sys.executable, str(DRIVER), boundary, command, str(run), str(source)],
                             capture_output=True, text=True)
-    assert result.returncode == 90, (result.stdout, result.stderr)
+    if command == 'ask':
+        assert result.returncode == 1 and 'collection owner lost (exit 90)' in result.stderr, (result.stdout, result.stderr)
+    else:
+        assert result.returncode == 90, (result.stdout, result.stderr)
 
 
 def effect_count(run):
@@ -279,3 +282,16 @@ def test_redelivery_while_original_worker_remains_in_flight(tmp_path):
             connection.sendall(b'R')
             connection.close()
             process.communicate(timeout=15)
+
+
+def test_malformed_exchange_object_has_structured_diagnostic(setup):
+    # Existing consequence-probes/malformed_exchange.py is the red signal.
+    run, request = setup
+    agent(run, 'ask', request)
+    with sqlite3.connect(run / 'state.sqlite3') as db:
+        db.execute("UPDATE agent_exchanges SET body='[]'")
+    for command in ('show', 'collect'):
+        error = agent(run, command, code=5)
+        assert error['outcome'] == 'not_confirmed'
+        assert 'malformed durable exchange: expected object' in error['error']
+    assert len(launches(run.parent)) == 1

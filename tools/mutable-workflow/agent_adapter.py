@@ -3,11 +3,13 @@
 Declared roles: orchestration, validator, mapper, formatter, accessor.
 """
 from contextlib import closing
+from functools import partial
 import json
 from pathlib import Path
 import uuid
 
 import capture_receipt
+import collection_owner
 import agent_store as store
 import runner_transport as transport
 from runtime import connect, exclusive, require
@@ -209,8 +211,10 @@ def collect_owned(directory, db, exchange, secrets):
 def execute(directory, command, request=None, key=None):
     if command == 'show':
         return show(directory, key)
-    with exclusive(directory, 'agent-collector.lock'):
-        return execute_owned(directory, command, request, key)
+    if command == 'owner':
+        return collection_owner.inspect(directory)
+    return collection_owner.run(directory, command,
+        partial(execute_owned, directory, command, request, key))
 
 
 def execute_owned(directory, command, request, key):

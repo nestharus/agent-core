@@ -264,6 +264,11 @@ def test_collector_loss_cannot_apply_unique_prefix_on_trace_success(setup, contr
     run, request = setup
     original = call(run, 'inspect')
     process, listener, conn = start_held(run, request, contrary_suffix=contrary_suffix)
+    # The collector is now a separate finite owner. Kill that actual owner too
+    # to retain the original loss-of-capture evidence/control.
+    reference = json.loads((run / 'agent-owner.json').read_text())
+    owner = json.loads((run / 'agent-owners' / reference['id'] / 'started.json').read_text())
+    os.kill(owner['pid'], 9)
     process.kill()
     stdout, stderr = finish_held(process, listener, conn)
     assert process.returncode < 0

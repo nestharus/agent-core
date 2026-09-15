@@ -32,8 +32,9 @@ def validate_history(db, state):
         'SELECT id,body FROM attempts ORDER BY id')]
     check([identity for identity, _ in rows] == list(range(1, len(state['attempts']) + 1)),
           'missing or extra attempt rows')
+    index = attempt_events(events)
     for identity, attempt in rows:
-        validate_attempt(state, identity, attempt, events)
+        validate_attempt(state, identity, attempt, index)
     active = state['active_attempt']
     check(active is None or (type(active) is int and 1 <= active <= len(rows)), 'active attempt missing')
     if active is not None:
@@ -55,6 +56,21 @@ def validate_graph(state):
     check(state['status'] != 'running' or state['active_attempt'] is not None, 'running without active attempt')
 
 
+def attempt_events(events):
+    index = {}
+    for _, event in events:
+        index_attempt_event(index, event)
+    return index
+
+
+def index_attempt_event(index, event):
+    if event['kind'] not in ('attempt_started', 'attempt_returned'):
+        return
+    identity = event['detail'].get('attempt_id')
+    check(type(identity) is int, 'attempt event identity')
+    index.setdefault((event['kind'], identity), []).append(event)
+
+
 def validate_attempt(state, identity, attempt, events):
     summary = state['attempts'][identity - 1]
     request = attempt['request']
@@ -65,11 +81,9 @@ def validate_attempt(state, identity, attempt, events):
           'attempt summary identity')
     check(summary['outcome'] == attempt['outcome'], 'attempt summary outcome')
     check(type(request['basis_cursor']) is int and 0 < request['basis_cursor'] < state['cursor'], 'attempt basis')
-    admissions = [event for _, event in events if event['kind'] == 'attempt_started'
-                  and event['detail'].get('attempt_id') == identity]
+    admissions = events.get(('attempt_started', identity), [])
     check(len(admissions) == 1 and admissions[0]['cursor'] == request['basis_cursor'] + 1, 'attempt admission')
-    returns = [event for _, event in events if event['kind'] == 'attempt_returned'
-               and event['detail'].get('attempt_id') == identity]
+    returns = events.get(('attempt_returned', identity), [])
     check(len(returns) == (0 if attempt['output'] is None else 1), 'attempt return evidence')
     validate_output(attempt)
     if returns:

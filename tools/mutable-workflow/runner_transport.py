@@ -37,7 +37,7 @@ def validate_config(config):
 
 
 def invoke(config, arguments, log, secrets):
-    # Called only by the workflow controller. Tests substitute an executable here,
+    # Called by the finite workflow collection owner. Tests substitute an executable here,
     # not a made-up acceptance result. Never use shell=True or discard a failed stream.
     with log.open('xb', buffering=0) as sink:
         code = capture_process(config, arguments, sink, secrets)

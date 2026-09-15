@@ -447,3 +447,22 @@ selected. Run it alongside the three existing suites and secret-capture suite.
 Storage remains version 2 with additive optional recovery/evidence fields; no
 old results are migrated or retroactively qualified. Older runtimes are not
 qualified to exercise these new contracts.
+
+
+### Collection ownership and retained limitations (ACR-539)
+
+The optional agent adapter now gives each ask/collect a finite POSIX owner that
+survives its CLI controller's death through capture and collection; see
+[the actual ownership/reconciliation contract](agent-adapter.md#persistence-collection-and-outcomes).
+This is not automatic replay, retroactive salvage, or provider completion based
+on a receipt/PID. Owner loss can still leave submission/effects unresolved.
+Graph storage version 2 does not imply agent-history compatibility: old agent
+history remains intentionally unsupported even when graph inspection succeeds.
+Worker same-attempt redelivery retains historical orphan evidence, so attempt
+cancellation is unavailable during it; abort stops graph scheduling, not all
+live deliveries. No delivery-cancellation system is introduced.
+
+Durable-history validation indexes attempt admission/return events once per load,
+rather than scanning all events twice per attempt. It still reads the complete
+history and validates all exchanges where selected; no capacity/latency or
+universal corruption-detection guarantee follows.

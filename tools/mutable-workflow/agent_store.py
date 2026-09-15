@@ -46,6 +46,7 @@ def exchange_snapshot(db):
 
 
 def validate_exchange(key, exchange, state):
+    require(isinstance(exchange, dict), 'malformed durable exchange: expected object; restore intact storage')
     require(exchange.get('capture_protocol') == 'local-receipt-v1', 'unsupported exchange capture protocol')
     require(exchange['key'] == key == exchange['request']['key'], 'exchange key mismatch')
     require(exchange['context']['current']['run_id'] == state['run_id']
