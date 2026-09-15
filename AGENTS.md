@@ -476,6 +476,7 @@ These are discoverability links, not default dispatch authority. The first three
 - Legacy feature development (heterogeneous ticket routes and feature-branch integration): [`~/ai/workflows/feature-development.md`](workflows/feature-development.md)
 - Legacy implementation pipeline (through Phase 9): [`~/ai/workflows/implementation-pipeline.md`](workflows/implementation-pipeline.md)
 - Legacy refactoring (contract-bounded slices over an explicit integration branch): [`~/ai/workflows/refactoring.md`](workflows/refactoring.md)
+- Optional script-first mutable review (explicit adapter selection; no default migration): [`~/ai/workflows/mutable-review.md`](workflows/mutable-review.md)
 - RCA workflow (full reproduction-first root-cause analysis with four-agent split, verify-or-return, and incident-to-close downstream lifecycle): [`~/ai/workflows/rca.md`](workflows/rca.md)
 - Regression investigation (post-incident codebase-risk archaeology): [`~/ai/workflows/regression-investigation.md`](workflows/regression-investigation.md)
 - Prototype RCA workflow (light two-agent root-cause/fix loop for one failed prototype trigger): [`~/ai/workflows/rca-prototype.md`](workflows/rca-prototype.md)
