@@ -14,6 +14,8 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 
 ## Current tools
 
+- `mutable-workflow/` — local sequential execution with durable progress, explicit worker outcomes and caller-authorized recovery insertion. **Status: first runnable local slice; see `mutable-workflow/README.md` for contracts and recovery limits.**
+
 - `scheduler/` — generic scheduled-task primitive. Bind a schedule (cron-style, interval, one-shot) to a script invocation, an agent dispatch, or a workflow run. **Status: skeleton only; see `scheduler/README.md`.**
 - `pr-batch-poller/` — status-only single-call GitHub PR query for N PRs. A scheduler-triggered or manual `wu-session-wake` root invokes it, joins rows to sessions, and dispatches one exact joined row to each `wu-session-resumer`; the poller never wakes sessions itself. **Status: implemented; see `pr-batch-poller/README.md`.**
 - `wu-session-migration/` — reviewed-inventory cutover plus the strict persisted-session writer. It captures hash-bound provider/git evidence and exposes closed-schema `phase0-init`, `cold-start-disposition-bind`, `phase3-bind`, `phase7-upsert`, `phase9-update`, `resumer-update`, and `resumer-close` operations for direct project-planning and normalized feature `F/routes` owners through one exclusive-lock, held-parent, durable-journal, interruption-recoverable transaction primitive while preserving historical `sessions.index.json`; the pre-PR bind operations treat the exact owner index as a read-only guard and create no row. **Status: implemented; see `wu-session-migration/README.md`.**
