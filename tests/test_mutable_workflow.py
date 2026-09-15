@@ -118,8 +118,9 @@ def test_nonzero_retains_raw_failure_evidence(tmp_path):
     call(run, 'start', '--file', plan_file(tmp_path, ['nonzero']), code=1)
     output = call(run, 'output', '--attempt', 1)['output']
     assert output['returncode'] == 7
-    assert b'failure stderr' in base64.b64decode(output['stderr_b64'])
-    assert b'success' in base64.b64decode(output['stdout_b64'])
+    assert base64.b64decode(output['stderr_b64']) == b'failure stderr\n'
+    assert base64.b64decode(output['stdout_b64']) == (
+        b'{"outcome": "success", "detail": "untrustworthy process claim"}\n')
     assert output['result']['outcome'] == 'failure'
 
 
