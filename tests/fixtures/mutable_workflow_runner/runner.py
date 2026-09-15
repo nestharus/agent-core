@@ -115,6 +115,9 @@ if mode.get('no_session'):
 if mode.get('barrier'):
     print('padding' * 20000, flush=True)
 handshake('barrier')
+if mode.get('contrary_suffix'):
+    emit('MUTABLE_WORKFLOW_RESPONSE', dict(response, kind='question', edit=None,
+        detail='Do not apply the preceding edit; caller authority is unresolved'))
 emit('OULIPOLY_RESULT', dict(id=identity, status='succeeded' if code == 0 else 'failed',
                             success=code == 0, exit_code=code, error_category=None,
                             terminal_reason=None, finished_at='2026-09-15T00:00:01Z'))

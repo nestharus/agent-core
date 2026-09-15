@@ -147,11 +147,17 @@ MUTABLE_WORKFLOW_RESPONSE={"exchange_id":"prompt exchange UUID","run_id":"workfl
 Kinds are `observation`, `question`, `edit`. `detail` is nonempty text; `edit` is
 null except for an exact existing `cli.py amend` object. A substantive response
 is the agent's assertion, not an independently verified judgment. A response is
-usable only with source-bound runner trace completion: succeeded, success true,
+usable only after complete local capture and source-bound runner trace completion: succeeded, success true,
 integer physical exit zero, a finished timestamp, and no stale-running projection.
 A recorded nonzero runner exit prevents application even if other evidence claims
-success. After collector loss, null local exit remains null; durable trace can
-establish completion without inventing a local wait result or complete stream.
+success. Local capture is established by the stored zero return code: transport
+returns only after reading EOF, publishing the redaction carry tail and waiting
+for the process; submission persists that result before response collection.
+After collector loss, null local exit remains null. Durable trace can establish
+upstream completion, but cannot establish complete local capture. Even a unique
+bound response in retained bytes remains evidence only: a missing suffix could
+contain another response that would prevent application. No response kind is
+settled from that prefix, and no graph edit is applied.
 
 For edits, both the response and amendment must retain the original run/cursor.
 `apply_edits: true` admits application through **the existing `surgery.amend`**,
@@ -181,7 +187,10 @@ sink or polling loop. Normal return records the actual process exit, then one
 exact trace observation and response/application. Each `collect` call makes at
 most one trace observation and **never dispatches/resumes a model**. It is the
 explicit caller-owned continuation after delay or collector loss; no daemon
-silently takes ownership. Calling it on a returned or known-not-submitted record is an idempotent read.
+silently takes ownership. Delayed trace completion can settle an already fully
+captured exchange. Loss before the capture result is persisted instead stays
+pending even on successful trace; repeated collection observes evidence but
+cannot reconstruct missing bytes or authorize a replacement submission. Calling it on a returned or known-not-submitted record is an idempotent read.
 
 Returned JSON distinguishes `state`, `continuity`, `target`, established `session`,
 `acceptance`, local `returncode`, `terminal_result`, durable `completion_basis`,
@@ -208,7 +217,13 @@ same exchange-state exits. Abrupt signals may have only the OS exit.
 Known limits remain explicit: loss before a recoverable invocation marker cannot
 be settled by trace-by-ID; no unconditional resubmission or caller-manufactured
 completion is provided. A missing/malformed/truncated response cannot be rebuilt
-from a mailbox receipt or unrelated artifact. Unknown acceptance, including
+from a mailbox receipt or unrelated artifact. The selected trace/CLI contract
+exposes no complete substantive-output retrieval basis after local capture loss;
+upstream delivery success is not an acknowledgement of this collector's retained
+bytes. Settling that case requires an independently supported complete-output
+recovery contract or a separately authorized durable collector design, neither
+implemented nor assumed here. Even loss after EOF but before recording the exit
+remains conservatively pending. Unknown acceptance, including
 providers whose validated external acceptance is not exposed in the selected
 trace field, remains a caller-owned gap. Different migrated session identities
 are not attested as same-session by this adapter. Terminal provider failures are

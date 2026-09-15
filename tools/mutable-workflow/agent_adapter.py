@@ -132,8 +132,8 @@ def interpret_trace(exchange, root, data):
     require(transport.trace_completed(root), 'provider not confirmed completed; retain partials and collect later')
     require(exchange['target'] is None or exchange['session'] == exchange['target'],
             'attempted resume not accepted into target; no fresh replay')
-    # Trace is the durable completion source after collector loss. A terminal
-    # marker or process exit alone is never workflow completion.
+    # Trace establishes upstream completion, not complete local response capture.
+    # Neither is workflow completion.
     exchange['completion_basis'] = 'runner_trace'
     exchange['continuity'] = 'same_session' if exchange['target'] else exchange['continuity']
 
@@ -187,6 +187,11 @@ def collect_owned(directory, db, exchange, secrets):
         require(exchange['invocation'] is not None, 'no invocation identity; unknown submission, caller must reconcile')
         root = read_trace(directory, exchange, secrets)
         interpret_trace(exchange, root, data)
+        # invoke returns only after capture EOF (including the redaction tail)
+        # and wait; submit persists that result before collection. Trace success
+        # cannot recover this evidence if the collector died before that commit.
+        require(exchange['returncode'] == 0,
+                'complete local capture unconfirmed; retained prefix is evidence only, caller must reconcile')
         exchange['response'] = read_response(exchange, data)
         settle_response(directory, db, exchange)
         exchange['state'] = 'returned'

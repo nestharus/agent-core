@@ -211,7 +211,7 @@ def test_invalid_contract_stops_before_provider(setup):
     assert not (run.parent / 'runner-calls.jsonl').exists()
 
 
-def start_held(run, request):
+def start_held(run, request, **values):
     # Keep Unix socket path short without placing artifacts outside planning.
     path = run.parent / 'request-held.json'
     path.write_text(json.dumps(request))
@@ -220,7 +220,7 @@ def start_held(run, request):
     listener.bind(address)
     listener.listen(1)
     listener.settimeout(10)
-    mode(run.parent, kind='edit', barrier=address)
+    mode(run.parent, kind='edit', barrier=address, **values)
     process = subprocess.Popen([sys.executable, str(AGENT), 'ask', str(run), '--file', str(path)],
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     conn, _ = listener.accept()
@@ -259,24 +259,49 @@ def test_late_graph_edit_is_rejected_without_rebasing_and_new_question_can_resum
     assert agent(run, 'ask', dict(request, key='rebase'))['continuity'] == 'same_session'
 
 
-def test_collector_death_retains_partial_stream_then_collects_once_without_launch(setup):
+@pytest.mark.parametrize('contrary_suffix', [False, True])
+def test_collector_loss_cannot_apply_unique_prefix_on_trace_success(setup, contrary_suffix):
     run, request = setup
-    process, listener, conn = start_held(run, request)
+    original = call(run, 'inspect')
+    process, listener, conn = start_held(run, request, contrary_suffix=contrary_suffix)
     process.kill()
     stdout, stderr = finish_held(process, listener, conn)
     assert process.returncode < 0
     pending = agent(run, 'show', code=4)
     assert pending['state'] == 'pending' and pending['returncode'] is None
-    assert b'MUTABLE_WORKFLOW_RESPONSE=' in Path(pending['log']).read_bytes()
-    assert b'OULIPOLY_INVOCATION=' in Path(pending['log']).read_bytes()
-    assert len(launches(run.parent)) == 1
+    retained = Path(pending['log']).read_bytes()
+    assert retained.count(b'MUTABLE_WORKFLOW_RESPONSE=') == 1
+    assert b'OULIPOLY_INVOCATION=' in retained
+    assert b'Do not apply' not in retained
+    # Synthetic upstream success is deliberately insufficient: this fixture is
+    # not a reproduction of the real runner's spooled delivery state machine.
     mode(run.parent)
-    done = agent(run, 'collect')
-    assert done['application'] == 'applied'
-    assert done['returncode'] is None and done['terminal_result'] is None
-    assert done['completion_basis'] == 'runner_trace'
-    assert agent(run, 'collect') == done
-    assert len(call(run, 'inspect')['current']['edits']) == 1
+    for _ in range(2):
+        partial = agent(run, 'collect', code=4)
+        assert partial['application'] == 'not_applied' and partial['response'] is None
+        assert partial['returncode'] is None and partial['terminal_result'] is None
+        assert partial['completion_basis'] == 'runner_trace'
+        assert partial['trace']['invocation']['success'] is True
+        assert partial['returned_artifacts']
+        assert 'complete local capture unconfirmed' in partial['error']
+        assert Path(partial['log']).read_bytes() == retained
+    assert agent(run, 'ask', request, code=4) == partial
+    agent(run, 'ask', dict(request, key='no-replay'), code=5)
+    assert call(run, 'inspect') == original
+    assert len(launches(run.parent)) == 1
+
+
+def test_complete_capture_with_contrary_suffix_rejects_both_responses(setup):
+    run, request = setup
+    original = call(run, 'inspect')
+    mode(run.parent, kind='edit', contrary_suffix=True)
+    partial = agent(run, 'ask', request, code=4)
+    assert partial['returncode'] == 0 and partial['terminal_result']['success'] is True
+    assert Path(partial['log']).read_bytes().count(b'MUTABLE_WORKFLOW_RESPONSE=') == 2
+    assert 'missing or multiple bound agent responses' in partial['error']
+    assert partial['application'] == 'not_applied'
+    assert call(run, 'inspect') == original
+    agent(run, 'collect', code=4)
     assert len(launches(run.parent)) == 1
 
 
