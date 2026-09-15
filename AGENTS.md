@@ -421,26 +421,26 @@ Source-of-truth repository: <https://github.com/nestharus/ai>.
 
 ## How to Invoke
 
-Use the shared wrapper conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
+Use the shared dispatch conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
 
 Default shapes:
 
 - Defined agent: `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` — no `-m`; the agent file's `model:` frontmatter drives model selection.
 - Ad-hoc / undefined agent: `agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>` — `-m` is required because there is no agent file to read frontmatter from.
 
-Never combine `-m <model>` with `-a <agent.md>`: `-m` shadows the frontmatter and silently defeats any model rebalancing.
+Never invoke bare `agents` (interactive UI). Never combine `-m <model>` with `-a <agent.md>`: `-m` shadows the frontmatter and silently defeats any model rebalancing.
 
-For long-running or parallel child dispatch, [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md) is also the canonical dispatch/wait rule: use one Bash-background tool invocation per child, not shell `&`, bundled wrapper scripts, shell `wait`, PID waits, or trace-polling loops.
+For ordinary long-running or parallel child delegation, [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md) is also the canonical dispatch/wait rule: use one Bash-background tool invocation per child, not shell `&`, bundled wrapper scripts, shell `wait`, PID waits, or trace-polling loops.
 
 ### WAIT POLICY
 
 Root agents never manually poll live workloads or jobs with repeated status, list, trace, or sleep calls. Use native background completion notifications when available. When only polling exists, launch exactly one bounded background waiter for the already-running job and rely on that waiter's completion notification. The waiter stops on terminal success, failure, cancellation, or timeout; it only observes the job and must not dispatch agents, wrap or launch an `agents` invocation, or create duplicate ownership. After notification, one terminal status or readback is allowed solely to verify the outcome.
 
-The dispatch-shape prohibition below remains absolute: a waiter may observe an already-running job but may never wrap or launch an agent invocation.
+A waiter may observe an already-running job but may never wrap or launch an agent invocation. A purpose-built workflow runtime acting as the actual dispatcher is a controller, not a waiter; its launch, collection and continuation responsibilities follow the runtime boundary in `~/ai/workflows/agents-cli.md`. This does not permit root agents to replace native completion delivery with custom polling.
 
 ### AGENT DISPATCH SHAPE
 
-`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. A child dispatch stays as one parent-visible bash invocation:
+`~/ai/workflows/agents-cli.md` is the canonical positive-shape source. Ordinary agent delegation stays as one parent-visible bash invocation:
 
 ```bash
 # Defined agent (no -m; frontmatter drives model):
@@ -450,9 +450,9 @@ agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 agents -m <model> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log-path>
 ```
 
-Do not wrap `agents` calls in Python heredocs, shell scripts, or any composition that puts other commands between the parent shell and the `agents` invocation. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; capture the full stream with `2>&1 | tee <log-path>` and parse the completed log afterward. Do not combine N independent dispatches into a single shell script; each dispatch is its own bash invocation, and ticket or setup commands run separately before or after it.
+For ordinary delegation, do not wrap `agents` calls in Python heredocs, shell scripts, SDKs, subprocess calls, or other composition between the parent shell and `agents`. A purpose-built workflow runtime may itself launch, collect and resume agents as the actual dispatcher under [the canonical runtime boundary](workflows/agents-cli.md#purpose-built-workflow-runtime-dispatch). This is not permission to hide ordinary delegation in an ad-hoc wrapper; it neither expands caller effects/authority nor overrides higher-priority session instructions. Do not pipe live `agents` stdout through truncating filters such as `| head -N` or `| awk 'NR<=N'`; use complete secret-aware capture under the canonical workflow (direct `tee` or declared-secret sink; runtime-native capture at its boundary) and parse the completed log afterward. For ordinary delegation, do not combine N independent dispatches into a single shell script; each dispatch is its own bash invocation, and ticket or setup commands run separately before or after it.
 
-Wrong shapes:
+Wrong ordinary-delegation shapes:
 
 ```bash
 # Wrong: -m combined with -a shadows the agent's frontmatter model.
@@ -465,7 +465,7 @@ EOF
 agents -a ~/ai/agents/some-orchestrator.md -p /repo -f /tmp/prompt.md | head -3"
 ```
 
-Use [`/home/nes/projects/agent-runner/README.md`](/home/nes/projects/agent-runner/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.
+Use [`/home/nes/projects/agent-runner/trunk/README.md`](/home/nes/projects/agent-runner/trunk/README.md) as the authoritative CLI reference for flags, named-agent resolution, config, and alternate invocation forms.
 
 All branch work runs in an isolated git worktree. Central-checkout branch-tracking includes authorized clean, fast-forward-only deployment synchronization of its configured default branch, not feature work; dirty or divergent states stop without repair. See [`~/ai/conventions/worktree-isolation.md`](conventions/worktree-isolation.md).
 

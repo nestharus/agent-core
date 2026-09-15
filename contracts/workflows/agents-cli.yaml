@@ -1,12 +1,12 @@
 schema: workflow-dispatch-contract-v1
 source: workflows/agents-cli.md
 workflow_id: agents-cli
-orchestrator: root orchestrator or workflow operator invoking agents CLI
+orchestrator: root orchestrator, workflow operator, or purpose-built workflow runtime invoking agents CLI
 inputs:
 - model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch
 - sub-agent delegation, question-handling, or parallel-writer context
 expectations:
-- standardizes agents CLI invocation and tee-based log capture for pipeline work
+- standardizes direct delegation and runtime-owned agents CLI dispatch with complete secret-aware capture
 - keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports
 - routes delegated user questions through the root-owned question artifact convention
 - requires branch work and authored tracked-file mutation to run from git worktrees; central branch-tracking permits only the guarded default-branch synchronization in conventions/worktree-isolation.md

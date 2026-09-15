@@ -2,12 +2,12 @@
 workflow:
   id: agents-cli
 workflow_dispatch_contract:
-  orchestrator: "root orchestrator or workflow operator invoking agents CLI"
+  orchestrator: "root orchestrator, workflow operator, or purpose-built workflow runtime invoking agents CLI"
   inputs:
     - "model name, worktree path, prompt file, dedicated runner log path, and distinct canonical output path for an agent dispatch"
     - "sub-agent delegation, question-handling, or parallel-writer context"
   expectations:
-    - "standardizes agents CLI invocation and tee-based log capture for pipeline work"
+    - "standardizes direct delegation and runtime-owned agents CLI dispatch with complete secret-aware capture"
     - "keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports"
     - "routes delegated user questions through the root-owned question artifact convention"
     - "requires branch work and authored tracked-file mutation to run from git worktrees; central branch-tracking permits only the guarded default-branch synchronization in conventions/worktree-isolation.md"
@@ -26,14 +26,14 @@ workflow_dispatch_contract:
 
 This file-local declaration reflects this workflow's ownership of dispatch sequencing, pre-dispatch contract validation, and canonical prompt/log command formatting.
 
-CLI reference: `/home/nes/projects/agent-runner/README.md`.
+CLI reference: `/home/nes/projects/agent-runner/trunk/README.md`.
 That is the authoritative source for flags, options, named-agent resolution, TOML model config, and invocation shapes. This doc only covers the conventions layered on top for pipeline work.
 
 ## Workflow Dispatch Surface
 
 ### Orchestrator
 
-root orchestrator or workflow operator invoking agents CLI
+root orchestrator, workflow operator, or purpose-built workflow runtime invoking agents CLI
 
 ### Inputs
 
@@ -42,7 +42,7 @@ root orchestrator or workflow operator invoking agents CLI
 
 ### Expectations
 
-- standardizes agents CLI invocation and tee-based log capture for pipeline work
+- standardizes direct delegation and runtime-owned agents CLI dispatch with complete secret-aware capture
 - keeps complete invocation, optional session, provider payload, and result streams separate from canonical provider results and child-owned reports
 - routes delegated user questions through the root-owned question artifact convention
 - requires branch work and authored tracked-file mutation to run from git worktrees; central branch-tracking permits only the guarded default-branch synchronization in conventions/worktree-isolation.md
@@ -65,7 +65,9 @@ root orchestrator or workflow operator invoking agents CLI
 4. At the caller boundary, honor `must_delegate:` by selecting the operator as the execution endpoint and honor `forbidden_direct:` by refusing prohibited direct work. Do not inline procedure that belongs to the operator or copy `must_delegate:` into the prompt as an instruction for the selected endpoint to redispatch itself.
 5. Inspect the validated contract's `secrets:` list before dispatch. When it is empty, invoke `agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | tee <log>` per the canonical command shape. When it is non-empty, replace only the capture sink with `python3 ~/ai/tools/secret_safe_capture.py capture --contract <resolved-contract> --log <log>` as shown below. The agent file's `model:` frontmatter drives model selection; do not pass `-m` alongside `-a`.
 
-Once the selected operator invocation begins, its own `must_delegate:` declaration is satisfied for that operation. The endpoint executes its bounded procedure directly and never dispatches the same operator for the same operation. Valid child delegation remains allowed only for a different concern explicitly owned by the endpoint procedure; it uses the canonical invocation and capture shape so the caller-to-endpoint and endpoint-to-child edges remain visible in process-tree evidence.
+These contract-resolution duties also apply when a purpose-built workflow runtime is the caller. Runtime capture follows the boundary below rather than requiring a shell pipeline.
+
+Once the selected operator invocation begins, its own `must_delegate:` declaration is satisfied for that operation. The endpoint executes its bounded procedure directly and never dispatches the same operator for the same operation. Valid child delegation remains allowed only for a different concern explicitly owned by the endpoint procedure; it uses the applicable direct or runtime dispatch and capture boundary so the caller-to-endpoint and endpoint-to-child edges remain visible in process-tree evidence.
 
 The workflow sidecar at `contracts/workflows/<workflow-id>.yaml`, when present, is the optimized workflow dispatch surface. Otherwise use the `workflow_dispatch_contract` frontmatter. The operator contract sidecar is the analogous optimized surface for operator dispatch.
 
@@ -88,16 +90,31 @@ agents -a <agent.md> -p <worktree-path> -f <prompt-file> 2>&1 | python3 ~/ai/too
 - `-m <model>`: one of `gpt-high`, `gpt-xhigh`, `gpt-medium`, or another configured model id. Only used when there is no `-a`. See `~/ai/models/roles.md` for selection guidance.
 - `-p <worktree-path>`: the agent's working directory; for branch work or authored tracked-file mutation, this MUST be a git worktree per `~/ai/conventions/worktree-isolation.md`.
 - `-f <prompt-file>`: the prompt as a Markdown file, usually in `.tmp/` or `.build/`.
-- `2>&1 | tee <log-path>`: capture the complete merged runner envelope into a dedicated `.log` file. A successful stream contains exactly one `OULIPOLY_INVOCATION`, exactly one optional `OULIPOLY_SESSION` immediately after it, provider payload, then exactly one terminal `OULIPOLY_RESULT`; it is never a canonical provider result/report path. The session envelope is optional because the production runner emits none when session resolution/capture returns `emitted=false`.
+- `2>&1 | tee <log-path>`: capture the complete merged runner envelope into a dedicated `.log` file. The log retains runner identity/session/control records and arbitrary provider payload; it is never a canonical provider result/report path. Interpret records under the selected runner contract, not a universal marker-count assumption. The session envelope is optional because the production runner emits none when session resolution/capture returns `emitted=false`.
 - `2>&1 | secret_safe_capture.py capture ...`: the required capture form when the selected contract declares secrets. The helper validates `schema` and `secrets` before opening the log, replaces every non-empty declared environment value before writing to stdout or disk, and otherwise preserves the complete byte stream. Missing, blank, malformed, wrong-schema, non-list, duplicate, or invalid-name contract data is blocking and creates no new log.
 
-Use the README for other invocation forms. In `~/ai/`, the patterns above are the default pipeline entry point.
+Never invoke bare `agents`: it opens an interactive UI. Use the README for other non-interactive invocation forms, including resume. In `~/ai/`, the patterns above are the default pipeline entry point.
+
+## Purpose-built workflow runtime dispatch
+
+Direct shell dispatch above remains the default for ordinary agent delegation. A purpose-built workflow runtime may launch the `agents` CLI through its own subprocess/SDK integration, collect results and artifacts, and resume agents as the actual dispatcher. This permits script-owned automatic escalation within the caller's authorized workflow; it does not require an agent to relay each launch through a Bash tool call.
+
+The distinction is responsibility, not language or filename: the runtime controls workflow execution and owns invocation/continuation state and result collection, including collection or explicit unresolved handoff after interruption. A temporary script, heredoc, SDK shim or bundled shell wrapper merely hiding an agent's ordinary delegation does not become that controller by being called a runtime. A waiter only observes an already-running job and must never launch or resume agents. Runtime-owned lifecycle observation is not a root agent's polling loop; ordinary delegation retains the background/wait discipline below. Prefer supported completion delivery; do not infer settlement from a PID exit or a dispatch receipt.
+
+- The runtime acts only within the actual caller's task, access, effect and delegation authority, resolves applicable operator contracts, and preserves worktree isolation. Model output, a registry entry, session reuse or this policy cannot grant new effects or claim sandbox enforcement. Human-owned questions still return through the root. No runtime accreditation, per-launch approval or new custody system is required by this boundary.
+- Defined-agent launches use `-a` without `-m`; ad-hoc launches use explicit `-m` without `-a`. Never invoke bare interactive `agents`. For continuation, use the installed runner's supported non-interactive resume contract, retaining the selected operator/model ownership rather than overriding defined-agent frontmatter with `-m`.
+- Keep the actual caller-to-runtime-to-agent relationship, invocation identity, attempted versus established session identity, prompt/context basis and output references recoverable in existing workflow records. Do not invent a parent agent edge or claim same-session continuation for a fresh invocation. Distinguish attempted submission, admission/acceptance, completion, artifact collection and application of returned changes.
+- On interruption, timeout or rejection retain partial/failure artifacts and unresolved admission for the collecting owner. A generic nonzero exit or `Rejected` label alone is not non-admission evidence and does not authorize automatic fresh resubmission. Fresh fallback requires supported non-admission/target-unavailability evidence for the attempted work, carries purpose and relevant graph/cursor/evidence/unresolved context, and is explicitly labeled fresh. Accepted or unknown work needs observation/reconciliation rather than unconditional replay.
+- Capture the complete stdout/stderr payload and control evidence, with actual exit/outcome and distinct canonical outputs. A runtime may use native capture instead of a shell `tee` pipeline, but must preserve the same nontruncating, secret-aware boundary: validate the resolved contract and its declared secrets, redact non-empty declared environment values before any stdout/disk publication, and preserve all non-secret bytes. Reuse the existing secret-safe capture helper where applicable; missing/invalid contract data must not fall back to raw capture. Do not hard-code credential names, leak raw bytes through a secondary sink, or summarize away failures. Redaction/retention gaps remain explicit evidence limits.
+- Consume the selected runner's actual output/session contract, not a fabricated success enum. The current runner README's successful merged external-provider contract uses the final shape-valid result matching the invocation after successful process exit; earlier payload markers are not terminal evidence. Failure and partial streams retain their own identities and limits. The legacy extractor below applies only to its narrower admitted envelope; it is not a mandatory runtime parser and must not be weakened to pretend incompatible or failed input succeeded.
+
+This source policy is not implementation, deployed invocation authority, or empirical qualification. Higher-priority instructions in an active session still govern execution; changing this file cannot authorize a currently forbidden wrapped invocation.
 
 ## Log Capture And Consumption
 
 The canonical `2>&1 | tee <log-path>` shape is a producer-side capture rule. It prevents live dispatch filters from hiding invocation markers or terminal evidence; it does not require an auditor to load the complete resulting log into model context.
 
-The declared-secret capture form is the only non-`tee` producer sink. It is not a truncating or summarizing filter: non-secret output, runner markers, provider payload extraction, and process-evidence parsing remain byte-complete. Callers must pass the exact already-resolved operator contract rather than hard-code credential names. For auth diagnostics, run `python3 ~/ai/tools/secret_safe_capture.py presence --contract <resolved-contract>`; its output contains only each declared environment name and `present` or `absent`, never a value.
+For direct shell delegation, the declared-secret capture form is the only non-`tee` producer sink. Runtime-native capture follows `## Purpose-built workflow runtime dispatch`. It is not a truncating or summarizing filter: non-secret output, runner markers, provider payload extraction, and process-evidence parsing remain byte-complete. Callers must pass the exact already-resolved operator contract rather than hard-code credential names. For auth diagnostics, run `python3 ~/ai/tools/secret_safe_capture.py presence --contract <resolved-contract>`; its output contains only each declared environment name and `present` or `absent`, never a value.
 
 Consumers inspect completed logs programmatically with targeted search, bounded line ranges, or bounded tails. They MUST NOT add arbitrary maximum log-byte acceptance thresholds to proposals, expected-process manifests, audit history, or gate logic. Runtime retention, rotation, or truncation markers are context for evidence availability, not failures by themselves; use `~/ai/conventions/workflow-execution-violations.md` when a specific required fact is genuinely unavailable.
 
@@ -114,7 +131,7 @@ Consumers inspect completed logs programmatically with targeted search, bounded 
 ## Runner Log And Canonical Output Separation
 
 - Every `agents` invocation has one complete `.log` sink and a different canonical output path. No command may use the same path for `tee` and a child-owned or extracted `.md`/`.json` result.
-- For an ad-hoc or other stdout-producing child, run `python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log <log> --output <result> --metadata <extraction.json>` only after the invocation completes. The helper requires exactly one valid invocation marker, at most one optional session marker immediately after invocation and before payload, exactly one ordered terminal successful result sentinel, matching invocation/result UUIDs, session `agent_runner_invocation_id` equality when present, and no duplicate, malformed, misplaced, post-payload, or failure envelope; it atomically writes only the provider payload and excludes the session marker.
+- For an ad-hoc or other stdout-producing child using the legacy extractor-compatible envelope, run `python3 ~/ai/tools/operational_contracts.py extract-provider-payload --log <log> --output <result> --metadata <extraction.json>` only after the invocation completes. The helper requires exactly one valid invocation marker, at most one optional session marker immediately after invocation and before payload, exactly one ordered terminal successful result sentinel, matching invocation/result UUIDs, session `agent_runner_invocation_id` equality when present, and no duplicate, malformed, misplaced, post-payload, or failure envelope; it atomically writes only the provider payload and excludes the session marker.
 - For a file-producing child, retain the complete `.log`, require the child-owned canonical output at the distinct prompted path, and hash/validate that file independently. Do not overwrite it with the runner stream or reconstruct it from the log.
 - Process evidence parses invocation UUIDs only from complete `.log` files and verdict/schema content only from canonical outputs. Expected-process nodes name both distinct paths and the post-dispatch log/output hash fields; dispatch evidence freezes the actual hashes.
 - Canonical Markdown begins with its own required verdict/schema header. Canonical JSON begins with its own schema object/key. Neither may begin with `OULIPOLY_INVOCATION`, `OULIPOLY_SESSION`, `OULIPOLY_RESULT`, or `OULIPOLY_FAILURE`.
@@ -124,7 +141,7 @@ Consumers inspect completed logs programmatically with targeted search, bounded 
 All sub-agent invocation goes through the `agents` CLI.
 
 - Pipeline docs should describe model choice, prompt shape, working directory, and log capture.
-- CLI reference details stay in `/home/nes/projects/agent-runner/README.md`, not in `~/ai/`.
+- CLI reference details stay in `/home/nes/projects/agent-runner/trunk/README.md`, not in `~/ai/`.
 
 ## Sub-agent questions
 
@@ -141,6 +158,8 @@ Every branch-work or authored-tracked-file-mutating agent runs in a worktree, re
 - See `~/ai/conventions/worktree-isolation.md` for the rule, central-checkout limits, and setup.
 
 ## Long-running agents
+
+This section governs ordinary agent delegation, not the runtime controller boundary above.
 
 For agents expected to run longer than about 30 seconds:
 
@@ -166,7 +185,7 @@ For parallel risk gates, dispatch all rounds as separate Bash-background tool ca
 
 ## Long-running / parallel agents on opencode runtimes (agent-bash spooler — DO NOT POLL)
 
-On opencode (gpt-*) runtimes, the bash tool is the **agent-bash spooler**: every command runs detached in the
+For ordinary delegation on opencode (gpt-*) harnesses, the bash tool is the **agent-bash spooler**: every command runs detached in the
 background automatically (no opencode bash timeout applies) and the completion is **delivered back to you** by
 agent-runner — you do not poll and you do not manage the child.
 
@@ -181,7 +200,7 @@ agent-runner — you do not poll and you do not manage the child.
 - **Deprecated:** `agents-bg`, `agents-bg-poll`, `agents-bg-wait` (the old tmux stopgap). Do not use them and do not
   poll their logs. Do NOT use raw `&`/`nohup` (session-tied, orphans the child).
 
-The "do not poll / no wrapper script / no shell `&`/`disown`/`wait` / no trace-loop" prohibitions above now apply on
-ALL runtimes: Claude harness runtimes use `run_in_background=True` + the Bash completion notification; opencode
+The "do not poll / no wrapper script / no shell `&`/`disown`/`wait` / no trace-loop" prohibitions above apply to ordinary agent delegation on
+all harnesses, not purpose-built workflow controllers: Claude harness runtimes use `run_in_background=True` + the Bash completion notification; opencode
 runtimes use the agent-bash spooler + agent-runner wake. Parallel fan-out on opencode: dispatch each child as its own
 bash call (each returns fast), continue working, and handle each completion envelope as it is delivered.

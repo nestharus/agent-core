@@ -243,6 +243,8 @@ Summaries are allowed only as derived aids. They must cite source graph node IDs
 
 ## Resume-by-Session-ID Path
 
+The dispatch and secret-aware capture boundary in `~/ai/workflows/agents-cli.md` applies to resume and fresh fallback as well as initial launch. A purpose-built runtime may own continuation for the root without assuming the root's human-decision authority. The shapes below illustrate ad-hoc continuation; defined-agent continuation must retain operator/model ownership under the supported runner contract, without combining `-a` and `-m`.
+
 Before using session resume, feature-detect a non-interactive answer-payload path:
 
 ```bash
@@ -268,7 +270,7 @@ Do not treat `agents repl <model> --resume <session-id>` as sufficient for root 
 
 ## Session-Files Fallback
 
-When feature detection fails, dispatch a fresh agent:
+When feature detection establishes that non-interactive resume is unsupported before submission, dispatch a fresh agent. Failed or ambiguous feature detection is not proof of non-admission for an already-attempted resume: preserve that attempt for observation/reconciliation. A generic rejection, timeout or nonzero exit must not trigger unconditional fresh resubmission. Label a fallback as fresh, never same-session reuse:
 
 ```bash
 agents -m <model> -p <worktree-path> -f <fallback-prompt.md>
