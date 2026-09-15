@@ -7827,10 +7827,11 @@ def test_runner_envelope_extraction_writes_only_canonical_provider_payload(
     assert extraction["session"]["agent_runner_invocation_id"] == _RUNNER_UUID
 
 
-def test_agents_cli_declares_production_runner_order_and_optional_session_contract():
+def test_agents_cli_scopes_legacy_extractor_order_and_optional_session_contract():
     separation = _section(
         "workflows/agents-cli.md", "## Runner Log And Canonical Output Separation"
     )
+    assert "using the legacy extractor-compatible envelope" in separation
     invocation = separation.index("exactly one valid invocation marker")
     session = separation.index("at most one optional session marker")
     result = separation.index("exactly one ordered terminal successful result sentinel")
@@ -7846,6 +7847,38 @@ def test_agents_cli_declares_production_runner_order_and_optional_session_contra
     assert (
         "production runner emits none when session resolution/capture returns `emitted=false`"
         in _read("workflows/agents-cli.md")
+    )
+
+
+def test_agents_cli_distinguishes_runtime_controller_from_direct_delegation():
+    # Documentation coherence only: no agent invocation or runtime qualification.
+    runtime = _section(
+        "workflows/agents-cli.md", "## Purpose-built workflow runtime dispatch"
+    )
+    for value in (
+        "default for ordinary agent delegation",
+        "through its own subprocess/SDK integration",
+        "A waiter only observes an already-running job",
+        "actual caller's task, access, effect and delegation authority",
+        "Defined-agent launches use `-a` without `-m`",
+        "ad-hoc launches use explicit `-m` without `-a`",
+        "Never invoke bare interactive `agents`",
+        "generic nonzero exit or `Rejected` label alone is not non-admission evidence",
+        "redact non-empty declared environment values before any stdout/disk publication",
+        "final shape-valid result matching the invocation after successful process exit",
+        "Higher-priority instructions in an active session still govern execution",
+    ):
+        assert value in runtime
+    routing = _read("AGENTS.md")
+    assert "Ordinary agent delegation stays as one parent-visible bash invocation" in routing
+    assert "workflows/agents-cli.md#purpose-built-workflow-runtime-dispatch" in routing
+    assert "waiter may observe an already-running job but may never wrap or launch" in routing
+    assert "all harnesses, not purpose-built workflow controllers" in _read("workflows/agents-cli.md")
+    assert "runtime dispatch consumes its selected runner contract" in _read(
+        "conventions/workflow-execution-violations.md"
+    )
+    assert "must not trigger unconditional fresh resubmission" in _read(
+        "conventions/agent-questions-and-session-graph.md"
     )
 
 
