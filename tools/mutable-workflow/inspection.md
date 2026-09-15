@@ -214,23 +214,34 @@ changed, stale, gapped or foreign publication errors. No worker registry,
 execution/decision authority or graph state changes. The filesystem's admitted
 trusted writer, not `owner` text, authorizes publication.
 
-**Deployment/composition gap:** the currently deployed CRW `corrected-cohort`
-adapter does not call this seam. Its `Adapter.save` atomically writes independent
-`review.json`; cycles and role conversations are different provider runs, and
-its public `inspect` is full/locked. Therefore this shared provider alone does
-not yet supply joined live CRW accounting/next-work history. Do not advertise
-that outcome as complete. CRW owns the separate change: durably sequence compact
-policy publications with original source references at its `save` boundaries,
-retain an outbox/replay basis for crash-safe exact publication (no reconstructed
-lost revisions), and expose the actual cycle/role run roster for vector reads.
-Publications must preserve historical-first blockers versus declared departure,
-assignment/material/child/attempt/receipt relations, qualification/activation,
-original authority and questions, and the **actual selected policy**. It must
-not call `perspective-lives-v1` the manual domain-pass contract. A publisher's
-source commit and a provider publication are not a cross-repository atomic
-transaction: source lag/pending publication must be visible and replayed under
-CRW ownership. No private CRW table parser or competing retirement engine lives
-here. Existing unknown saved-request reconciliation remains unavailable.
+**Deployed composition:** CRW's optional `corrected-cohort` controller now uses
+this public seam and exposes joined private `summary`, original source `record`,
+and separately authorized `replay-publications`. The
+[CRW-owned inspection contract](https://github.com/nestharus/code-review-workflows/blob/main/risk-axis-reviewers/workflows/corrected-cohort/inspection.md)
+owns its durable source revisions, exact publication outbox/replay, cycle/role/child
+run roster, source-bound cursor handling and sampled next-work account. This is
+the separately selected `perspective-lives-v1` controller, not the manual
+domain-pass contract or a change to manual/standalone defaults.
+
+CRW source commit, shared publication and acknowledgement remain independent;
+joined reads are not a globally atomic transaction. Pending publication and
+sampled lag remain visible under CRW ownership. Original locked/full `inspect`
+and source/provider drilldown remain available. Joined inspection preserves
+historical-recovery blockers versus declared departure, original authority and
+questions, assignment/material/child/attempt/receipt relations, and the actual
+selected policy; shared execution status is not CRW qualification or activation.
+No private CRW table parser or competing retirement engine lives here.
+
+This composition retains the whole-private-run reader boundary and requires
+intact indexed CRW history and initialized compatible provider sources; older
+regular-file CRW histories are explicitly refused by the new summary/replay/source
+mutation surfaces, not silently migrated. Transport is synchronous with no SLA,
+publication failures can leave private diagnostics and a growing retained backlog,
+and roster changes require the CRW contract's explicit cursor rebaseline. These
+capabilities grant no new runtime authority, live-provider qualification, empirical
+reviewer efficacy, consumer delivery or default adoption. Existing unknown
+saved-request reconciliation remains unavailable; publication replay does not
+repair unknown keys.
 
 ## Verification
 
