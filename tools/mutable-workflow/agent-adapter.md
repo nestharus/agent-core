@@ -392,3 +392,12 @@ interior rows or tail rows are therefore useful errors rather than an empty new
 conversation. Sequence/key/context checks bind projections. Loss of both tables
 and every independent reference cannot be detected by this bounded scheme; no
 universal corruption detector or repair is claimed.
+
+## Separate present inspection
+
+[Private inspection](inspection.md) adds immutable persisted exchange revisions,
+compact payload-omitting summaries, and explicit present log/session diagnostics.
+`show` and returned `collect` remain historical evidence reads; present damage
+never silently rewrites their result. Summary is not a full audit or public
+redaction boundary. Session lookup is opt-in and requires actual query authority;
+no transcript or external artifact store is automatically read.

@@ -3,6 +3,7 @@
 Declared roles: orchestration, accessor, mapper, validator.
 """
 import json
+import inspection_store
 from pathlib import Path
 import sys
 from contextlib import closing
@@ -67,6 +68,7 @@ def put(db, exchange, commit=True):
                'ON CONFLICT(key) DO UPDATE SET body=excluded.body',
                (exchange['key'], json.dumps(exchange, ensure_ascii=True)))
     db.execute('UPDATE agent_history SET count=(SELECT count(*) FROM agent_exchanges) WHERE id=1')
+    inspection_store.exchange(db, exchange)
     if commit:
         db.commit()
 

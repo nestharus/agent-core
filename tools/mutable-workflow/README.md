@@ -466,3 +466,14 @@ Durable-history validation indexes attempt admission/return events once per load
 rather than scanning all events twice per attempt. It still reads the complete
 history and validates all exchanges where selected; no capacity/latency or
 universal corruption-detection guarantee follows.
+
+## Compact inspection and source-bound cursors
+
+Use [the private inspection entry and contracts](inspection.md) for paged,
+source-bound graph/exchange changes, compact current/blocked work, node/replacement
+and authority drilldown, and explicit present evidence/session checks. The
+existing graph-only `inspect --since` remains a full logical-audit surface, not
+an all-source cursor. New run writes include transactional inspection projections;
+existing unindexed runs require explicit authorized indexing for the compact view.
+CRW policy publication/roster integration remains a separately owned seam, not an
+already deployed joined-policy capability.
