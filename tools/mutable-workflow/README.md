@@ -1,8 +1,10 @@
 # Mutable workflow: local revisable execution
 
 One concern: execute and durably revise caller-supplied work. Python 3.10+
-standard library, SQLite and POSIX `flock`; no daemon, scheduler, resident agent,
-provider integration or domain-policy owner. This ACR-537 slice expands ACR-536's
+standard library, SQLite and POSIX `flock`; no daemon, scheduler, resident agent, or
+domain-policy owner in the base engine. The optional [runner judgment adapter](agent-adapter.md)
+adds on-demand provider dispatch/collection without changing this engine contract.
+This ACR-537 base slice expands ACR-536's
 sequential executor into live graph surgery. The representation remains an ordered
 sequence plus a movable execution position: arbitrary new nodes, replacement
 ranges and jumps are allowed, not a whitelist of original edges. Execution remains
@@ -300,7 +302,8 @@ fresh CLI continuation after durable steps/edits, executor death after admission
 live edits/late returns, competing edits and completion/edit races using controlled
 local subprocesses. Not qualified: power-loss directory creation, disk full/
 corruption repair, lost-collector output salvage, arbitrary descendant termination,
-provider sessions or irreversible effects. Initialization failure leaves an
+provider sessions in this base engine, or irreversible effects. The optional
+adapter has its own fake-provider verification and collection limits. Initialization failure leaves an
 unusable directory and explicit error, never automatic overwrite.
 
 Workers must terminate with bounded output. Capture, JSON state and cumulative
@@ -313,8 +316,8 @@ claims. No daemon auto-recovers an owner; the caller owns `resume` and reconcili
 remain outside the engine. Scheduler, workflow_index, WU migration and legacy
 operational-contract transport are not runtime dependencies. Runner CLI Usage/
 Inspecting a Run at `/home/nes/projects/agent-runner/trunk/README.md` owns a distinct
-provider/session protocol; this tool selects neither that seam nor the historical
-legacy result extractor. Fake results establish no installed-provider compatibility
+provider/session protocol; the optional adapter selects that seam, not the historical
+legacy result extractor. The base engine itself has no provider dependency. Fake results establish no installed-provider compatibility
 or reviewer efficacy. No deployed workflow/operator or CRW adapter is selected.
 
 Implementation: `runtime.py` owns persistence/admission/collection/settlement;
