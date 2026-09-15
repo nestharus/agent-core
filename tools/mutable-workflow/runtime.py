@@ -13,6 +13,7 @@ import uuid
 from contextlib import contextmanager
 
 import consistency
+import inspection_store
 
 
 class ContractError(ValueError):
@@ -108,6 +109,7 @@ def initialize(directory, plan):
         CREATE TABLE events (cursor INTEGER PRIMARY KEY, body TEXT NOT NULL);
         CREATE TABLE attempts (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
     ''')
+    inspection_store.create(db)
     state = dict(plan, run_id=str(uuid.uuid4()), status='ready', position=0,
                  cursor=0, attempts=[], edits=[], version=2, policy=None, active_attempt=None,
                  node_ids=[], nodes={})
@@ -155,6 +157,7 @@ def save(db, state, kind, detail, attempt=None, updated=()):
         db.execute('INSERT INTO events VALUES (?, ?)', (state['cursor'], json.dumps(event)))
         store_attempt(db, attempt)
         store_updates(db, updated)
+        inspection_store.graph(db, state, kind, detail)
 
 
 def store_updates(db, updated):
@@ -166,6 +169,7 @@ def store_attempt(db, attempt):
     if attempt is not None:
         db.execute('INSERT OR REPLACE INTO attempts VALUES (?, ?)',
                    (attempt['id'], json.dumps(attempt)))
+        inspection_store.attempt(db, attempt)
 
 
 def read_attempt(db, attempt_id):
