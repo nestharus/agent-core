@@ -475,5 +475,8 @@ and authority drilldown, and explicit present evidence/session checks. The
 existing graph-only `inspect --since` remains a full logical-audit surface, not
 an all-source cursor. New run writes include transactional inspection projections;
 existing unindexed runs require explicit authorized indexing for the compact view.
-CRW policy publication/roster integration remains a separately owned seam, not an
-already deployed joined-policy capability.
+CRW's deployed optional `perspective-lives-v1` controller now composes this seam
+with its own publication history, roster and joined private inspection; see the
+[composition boundary](inspection.md#consumer-publication-seam-crw-remains-separately-owned)
+and the linked CRW-owned contract. This does not change manual/standalone defaults
+or establish live-provider qualification or consumer delivery.
