@@ -163,6 +163,18 @@ when its on-disk receipt is now missing; both facts stay visible. Matching a loc
 capture is not producer truth or present semantic efficacy. Reads can race later
 changes and are not a custody/locking service.
 
+Receipt status is sampled independently even when the log is missing, inaccessible,
+nonregular or restricted; the adjacent receipt has its own run-boundary check.
+Nonregular receipts report `unsupported_file_type` without reading their contents.
+Receipt admission is limited to 4096 bytes (the producer's four-field JSON is
+small); larger receipts report `oversized`, not corruption or historical failure.
+The reader checks the opened descriptor and reads at most 4097 bytes, including a
+one-byte overflow probe, so growth after the size sample cannot cause an unbounded
+read. POSIX nonblocking receipt open avoids waiting for a FIFO writer. Malformed
+or excessively nested JSON returns a diagnostic without copying its payload.
+These are bounded local receipt reads, not a wall-clock guarantee for filesystem
+I/O or the whole evidence command (which still validates retained history).
+
 Paths resolving outside the run, including symlinks, return `restricted` without
 reading their bytes. This accidental-boundary guard is not hostile same-user
 race-proof sandboxing. No returned artifact path/store address is automatically

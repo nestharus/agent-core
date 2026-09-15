@@ -4,12 +4,16 @@ Declared roles: orchestration, accessor, mapper, validator.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import stat as file_stat
 
 from agent_adapter import show
 import runner_transport as transport
+
+
+RECEIPT_MAX_BYTES = 4096
 
 
 def evidence(directory, key, verify=False, check_session=False):
@@ -33,34 +37,69 @@ def allowed(root, path):
 
 
 def log_status(root, path, verify, retained=None):
-    if not allowed(root, path):
-        return dict(path=str(path), availability='restricted', reason='outside private run boundary')
+    receipt_state, receipt = receipt_status(root, path)
+    if retained and receipt and retained != receipt:
+        receipt_state = 'mismatch_with_historical_receipt'
+    value = log_sample(root, path, verify, retained or receipt)
+    return dict(value, receipt=receipt_state)
+
+
+def log_sample(root, path, verify, expected):
     try:
-        return inspect_log(root, path, verify, retained)
+        return bounded_log_sample(root, path, verify, expected)
     except FileNotFoundError:
         return dict(path=str(path), availability='missing')
     except PermissionError:
         return dict(path=str(path), availability='inaccessible')
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
         return dict(path=str(path), availability='unresolved', reason='unreadable or malformed evidence')
+
+
+def bounded_log_sample(root, path, verify, expected):
+    if not allowed(root, path):
+        return dict(path=str(path), availability='restricted', reason='outside private run boundary')
+    return inspect_log(path, verify, expected)
 
 
 def receipt_status(root, path):
     receipt = path.with_suffix(path.suffix + '.capture.json')
-    if not allowed(root, receipt):
-        return 'restricted', None
     try:
-        return read_receipt(receipt)
+        return bounded_receipt(root, receipt)
     except FileNotFoundError:
         return 'missing', None
     except PermissionError:
         return 'inaccessible', None
-    except (ValueError, OSError):
+    except (ValueError, OSError, RuntimeError):
         return 'malformed_or_unreadable', None
 
 
-def read_receipt(path):
-    value = json.loads(path.read_text())
+def bounded_receipt(root, path):
+    if not allowed(root, path):
+        return 'restricted', None
+    if not file_stat.S_ISREG(path.stat().st_mode):
+        return 'unsupported_file_type', None
+    # Nonblocking open also covers replacement by a FIFO after the stat sample.
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        return read_receipt(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def read_receipt(descriptor):
+    sample = os.fstat(descriptor)
+    if not file_stat.S_ISREG(sample.st_mode):
+        return 'unsupported_file_type', None
+    if sample.st_size > RECEIPT_MAX_BYTES:
+        return 'oversized', None
+    raw = os.read(descriptor, RECEIPT_MAX_BYTES + 1)
+    if len(raw) > RECEIPT_MAX_BYTES:
+        return 'oversized', None
+    return parse_receipt(raw)
+
+
+def parse_receipt(raw):
+    value = json.loads(raw.decode('utf-8'))
     if not isinstance(value, dict) or set(value) != {'version', 'bytes', 'sha256', 'returncode'}:
         return 'malformed', None
     if (type(value['version']) is not int or value['version'] != 1 or type(value['bytes']) is not int
@@ -70,16 +109,12 @@ def read_receipt(path):
     return 'available', value
 
 
-def inspect_log(root, path, verify, retained):
+def inspect_log(path, verify, expected):
     stat = path.stat()
     if not file_stat.S_ISREG(stat.st_mode):
         return dict(path=str(path), availability='unsupported_file_type')
     probe_read_access(path)
-    receipt_state, receipt = receipt_status(root, path)
-    expected = retained or receipt
-    value = dict(path=str(path), bytes=stat.st_size, receipt=receipt_state, availability='available_unverified')
-    if retained and receipt and retained != receipt:
-        value['receipt'] = 'mismatch_with_historical_receipt'
+    value = dict(path=str(path), bytes=stat.st_size, availability='available_unverified')
     if expected and stat.st_size != expected['bytes']:
         value['availability'] = 'truncated' if stat.st_size < expected['bytes'] else 'size_mismatch'
         return value
