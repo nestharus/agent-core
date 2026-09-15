@@ -163,23 +163,49 @@ Attempt drilldown exposes `cancellation` separately from `outcome`:
 - `not_requested`: no cancellation intent; supersession/removal/abort alone leaves this unchanged.
 - `requested`: committed intent, not termination evidence. The live collector
   checks requests while waiting for its subprocess (50ms communicate timeout).
-- `confirmed`: collector sent SIGTERM using its live process handle and observed
-  that direct worker exit with returncode `-15`. Interpreted outcome is `cancelled`.
-  This confirms **direct process termination only**, not descendants or undone effects.
+- `confirmed`: the kernel accepted the collector's SIGTERM submission and the
+  collector subsequently observed direct-worker exit `-15`. This confirms the
+  **termination observation**, not that this request caused it. A competing
+  SIGTERM sender cannot be distinguished from wait status alone. The attempt's
+  scheduling outcome is `cancelled`; `output.result` retains the original worker
+  classification (`failure` for nonzero exit), with unmodified bytes/returncode.
 - `unavailable`: result already settled, collector recovery established loss of its
-  live handle, signal delivery failed because the process was gone, or the return
-  did not establish requested SIGTERM termination. Natural completion may race
-  cancellation; its substantive result is still retained and can advance an
-  otherwise-current assignment. “Unavailable” does not mean execution failed.
+  live handle, the collector observed exit before submission, submission reported
+  process disappearance, or collection did not observe SIGTERM termination after
+  an accepted submission. Natural completion can race cancellation; its original
+  result is retained and can advance an otherwise-current assignment.
+  “Unavailable” does not mean execution failed or that no signal was submitted.
 
-The amendment event records request intent; `cancellation_signal_sent` records
-the signal action; `attempt_returned` records final cancellation classification.
-A signal-sent event alone is not confirmation. If the executor disappears after
-sending a signal, recovery cannot infer termination. There is no PID-based kill
-on resume and no force-kill escalation. A worker ignoring SIGTERM remains pending
-until it returns; the bounded-worker envelope still applies. A cancelled current
-attempt stops at `cancelled` until explicit new intent. Cancelling a superseded
-attempt does not cancel replacement work.
+The amendment event records request intent. `cancellation_signal_submitted`
+records normal return from the actual POSIX `kill(pid, SIGTERM)` syscall, **not
+signal delivery, handler execution, or causal responsibility for exit**.
+`attempt_returned` records final cancellation classification. The collector polls
+before submission: an already-observed exit makes cancellation unavailable and
+emits no submission event. If exit races between that poll and the syscall, the
+kernel can accept a signal for an unreaped exited child; this still only records
+submission. In particular, independent SIGTERM in that interval can produce
+`confirmed`/`cancelled` with the same evidence as collector-induced termination.
+Consumers needing sender attribution must treat it as unknown, not infer it from
+those labels. Original worker classification remains independently inspectable.
+
+Submission uses only the live direct child's PID under sole collector ownership
+of wait/reaping; an unreaped child retains its PID. The supported CLI has no
+concurrent child reaper and requires normal SIGCHLD disposition (not inherited
+SIG_IGN/automatic reaping or an embedding application's custom reaper). Launch
+rejects a non-default SIGCHLD disposition before starting a worker; the admitted
+attempt remains explicitly uncollected for normal recovery/reconciliation. A cached
+PID is never signalled on resume. No descendant cancellation is promised.
+A submission event alone is not confirmation. If the executor disappears after
+submission, recovery cannot infer termination. There is no force-kill escalation.
+A worker ignoring SIGTERM remains pending until it returns; the bounded-worker
+envelope still applies. A cancelled current attempt stops until explicit new
+intent. Cancelling a superseded attempt does not cancel replacement work.
+
+Earlier version-2 candidate records named `cancellation_signal_sent` overstated
+normal `Popen.terminate()` return, which can be a no-op. They are retained as
+historical records, not upgraded to submission/delivery evidence; earlier
+`confirmed` results retain that evidence limitation. New collection uses the
+submission event and does not rewrite earlier results/events.
 
 After executor loss, `resume` under newly acquired executor ownership records
 uncollected attempts as `orphaned: true`, with missing output and unknown effects;
@@ -221,7 +247,9 @@ history. Short-lock contention errors are recoverable by inspection/rebasing.
 `output` returns exact request, observed outcome, output, cancellation and orphan
 status; collected results also include `credited` (whether this return owned
 current settlement, not semantic verification). Output has `returncode`, lossless
-`stdout_b64`, `stderr_b64` and interpreted `result`. Null output means **not
+`stdout_b64`, `stderr_b64` and original worker `result` classification.
+Cancellation scheduling is represented by attempt `outcome`, not by rewriting
+that worker classification. Null output means **not
 collected**, never empty successful evidence. Unknown attempts and missing/corrupt
 storage error. This private view can expose worker inputs and printed credentials;
 no transcript discovery, redaction or hostile-local tamper protection is claimed.
@@ -237,7 +265,7 @@ Mutations print current JSON and use these exit codes:
 | 4 | `ambiguous`: missing substantive result or collector-loss uncertainty |
 | 5 | command/storage/contract error; JSON stderr `outcome: not_confirmed` |
 | 6 | `aborted`: scheduling stopped by amendment |
-| 7 | `cancelled`: current direct worker terminated by requested cancellation |
+| 7 | `cancelled`: accepted cancellation submission plus observed direct-worker SIGTERM exit; cause unknown |
 
 After code 5 inspect durable state: it does not assert that no work ran. Abrupt
 signals may instead yield OS signal exit without JSON. Successful `inspect` and

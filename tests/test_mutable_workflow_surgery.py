@@ -233,7 +233,9 @@ def test_cancel_request_confirmation_and_no_automatic_retry(tmp_path):
         call(run, 'resume', code=7)
         assert len(effects(run)) == 1
         kinds = [event['kind'] for event in call(run, 'inspect')['events']]
-        assert 'amended' in kinds and 'cancellation_signal_sent' in kinds
+        assert 'amended' in kinds and 'cancellation_signal_submitted' in kinds
+        assert attempt['output']['result'] == {
+            'outcome': 'failure', 'detail': 'worker process exit -15; inspect raw output'}
 
 
 def test_cancel_unavailable_after_return_and_atomic_invalid_cancel_composition(tmp_path):
@@ -395,6 +397,9 @@ def test_requested_cancellation_can_return_naturally_without_confirmation(tmp_pa
         assert returned['outcome'] == 'success' and returned['credited'] is True
         assert returned['request'] == requested['request']
         assert len(effects(run)) == 1
+        kinds = [event['kind'] for event in call(run, 'inspect')['events']]
+        assert kinds.count('cancellation_signal_submitted') == 1
+        assert 'cancellation_signal_sent' not in kinds
 
 
 def test_signal_without_collector_return_is_not_confirmation(tmp_path):
@@ -437,3 +442,149 @@ def test_unfavorable_late_return_is_evidence_not_replacement_settlement(tmp_path
         call(run, 'resume')
         assert call(run, 'output', '--attempt', 1) == late
         assert [r['step']['id'] for r in effects(run)] == ['original', 'replacement', 'tail']
+
+
+@pytest.fixture
+def cancellation_runtime(monkeypatch):
+    import importlib
+    monkeypatch.syspath_prepend(str(CLI.parent))
+    return importlib.import_module('runtime')
+
+
+class CancellationOrdering:
+    """Hold a real child across a real timeout; inject exit at an exact boundary."""
+
+    def __init__(self, runtime, server, timing, termination):
+        import os
+        self.runtime = runtime
+        self.server = server
+        self.timing = timing
+        self.termination = termination
+        self.tick = runtime.communicate_tick
+        self.kill = os.kill
+        self.connection = None
+        self.timeouts = 0
+        self.submissions = 0
+
+    def communicate(self, process, payload=None):
+        output = self.tick(process, payload)
+        if payload is None:
+            return output
+        assert output is None  # The actual communicate call timed out, not a fake return.
+        self.timeouts += 1
+        self.connection, _ = self.server.accept()
+        self.connection.settimeout(15)
+        assert self.connection.recv(1024) == b'effect-written\n'
+        if self.timing == 'before_attempt':
+            self.finish_child(process.pid)
+        return output
+
+    def finish_child(self, pid):
+        import os
+        import signal
+        if self.termination == 'natural':
+            self.connection.sendall(b'R')
+        else:
+            self.kill(pid, signal.SIGTERM)  # Independent test actor, not cancellation.
+        # Observe exit without reaping: the runtime still owns this exact child PID.
+        info = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT)
+        assert info.si_status == (0 if self.termination == 'natural' else signal.SIGTERM)
+
+    def submit(self, pid, sig):
+        self.submissions += 1
+        if self.timing == 'during_submission':
+            self.finish_child(pid)
+        return self.kill(pid, sig)
+
+
+@contextmanager
+def cancellation_race_process(tmp_path, runtime, timing, termination, monkeypatch):
+    import os
+    server = socket.socket()
+    server.bind(('127.0.0.1', 0))
+    server.listen()
+    server.settimeout(15)
+    run = tmp_path / 'race-run'
+    argv = [sys.executable, str(FIXTURES / 'controlled_worker.py')]
+    runtime.initialize(run, dict(purpose='independent cancellation evidence control',
+                       workers={'local': argv}, steps=[step('original',
+                       {'port': server.getsockname()[1]})]))
+    db = runtime.connect(run)
+    attempt = runtime.begin_attempt(db, runtime.load(db))
+    # Admit real cancellation and replacement through the owning amendment contract.
+    import surgery
+    surgery.amend(db, json.loads(edit_file(tmp_path, runtime.load(db), [
+        dict(op='replace', start='original', count=1, steps=[step('replacement')]),
+        dict(op='cancel', attempt=1)]).read_text()))
+    ordering = CancellationOrdering(runtime, server, timing, termination)
+    monkeypatch.setattr(runtime, 'communicate_tick', ordering.communicate)
+    monkeypatch.setattr(os, 'kill', ordering.submit)
+    process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, cwd=run)
+    try:
+        yield run, db, attempt, process, ordering
+    finally:
+        monkeypatch.setattr(os, 'kill', ordering.kill)
+        close_worker(process, ordering.connection, server)
+        db.close()
+
+
+@pytest.mark.parametrize('termination', ['natural', 'independent_sigterm'])
+@pytest.mark.parametrize('timing', ['before_attempt', 'during_submission'])
+def test_cancellation_exit_ordering_evidence(tmp_path, monkeypatch, cancellation_runtime,
+                                             timing, termination):
+    runtime = cancellation_runtime
+    with cancellation_race_process(tmp_path, runtime, timing, termination, monkeypatch) as fixture:
+        check_cancellation_exit_ordering(runtime, timing, termination, *fixture)
+
+
+def check_cancellation_exit_ordering(runtime, timing, termination, run, db, admitted, process, ordering):
+    output, submitted = runtime.collect_process(db, run, admitted, process)
+    original_result = dict(output['result'])
+    runtime.finish_attempt(db, runtime.load(db), runtime.read_attempt(db, 1), output, submitted)
+    returned = runtime.read_attempt(db, 1)
+    assert ordering.timeouts == 1
+    events = runtime.inspection(db, 0)['events']
+    kinds = [event['kind'] for event in events]
+    print(json.dumps(dict(timing=timing, termination=termination, submitted=submitted,
+                          submissions=ordering.submissions, kinds=kinds, returned=returned)))
+    assert returned['request'] == admitted['request'] and returned['credited'] is False
+    assert returned['output']['result'] == original_result  # Never replace worker evidence.
+    assert returned['output']['returncode'] == (0 if termination == 'natural' else -15)
+    expected = (b'{"outcome": "success", "detail": "controlled local effect returned"}\n'
+                if termination == 'natural' else b'')
+    assert base64.b64decode(returned['output']['stdout_b64']) == expected
+    assert base64.b64decode(returned['output']['stderr_b64']) == b''
+    assert effects(run) == [admitted['request']]
+    assert runtime.load(db)['steps'][0]['id'] == 'replacement'
+    if timing == 'before_attempt':
+        assert not submitted and ordering.submissions == 0
+        assert returned['cancellation'] == 'unavailable'
+        assert returned['outcome'] == ('success' if termination == 'natural' else 'failure')
+        assert 'cancellation_signal_submitted' not in kinds
+    else:
+        assert submitted and ordering.submissions == 1
+        assert 'cancellation_signal_submitted' in kinds
+        # Kernel acceptance plus -15 establishes termination, NOT which sender caused it.
+        expected_cancel = 'confirmed' if termination == 'independent_sigterm' else 'unavailable'
+        assert returned['cancellation'] == expected_cancel
+        assert returned['output']['result'] == original_result
+    assert 'cancellation_signal_sent' not in kinds
+
+
+def ignore_child_exit():
+    import signal
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+
+
+def test_cancellation_rejects_automatic_child_reaping_before_worker_launch(tmp_path):
+    run, _ = ready(tmp_path, ['ordinary'])
+    result = subprocess.run([sys.executable, str(CLI), 'resume', str(run)],
+                            capture_output=True, preexec_fn=ignore_child_exit)
+    assert result.returncode == 5
+    assert 'default SIGCHLD disposition' in json.loads(result.stderr)['error']
+    assert not (run / 'calls.jsonl').exists()
+    attempt = call(run, 'output', '--attempt', 1)
+    assert attempt['output'] is None
+    assert 'cancellation_signal_submitted' not in [
+        event['kind'] for event in call(run, 'inspect')['events']]

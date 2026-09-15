@@ -5,6 +5,7 @@ Declared roles: orchestration, validator, parser, mapper, accessor, formatter, p
 import base64
 import fcntl
 import json
+import os
 import signal
 import sqlite3
 import subprocess
@@ -197,8 +198,8 @@ def captured(returncode, stdout, stderr):
                 stderr_b64=base64.b64encode(stderr).decode(), result=classify(returncode, stdout))
 
 
-def signal_cancellation(db, directory, attempt_id, process, sent):
-    if sent:
+def signal_cancellation(db, directory, attempt_id, process, submitted):
+    if submitted:
         return True
     with exclusive(directory, blocking=True):
         return cancel_if_requested(db, attempt_id, process)
@@ -211,16 +212,27 @@ def cancel_if_requested(db, attempt_id, process):
     return send_cancel(db, attempt, process)
 
 
+def submit_cancel(process):
+    # Sole collector owns wait/reaping. Do not signal a PID after poll has reaped it.
+    if process.poll() is not None:
+        return False
+    try:
+        # Unlike Popen.terminate(), normal return establishes syscall acceptance.
+        # The unreaped child retains its PID; exit can still race this submission.
+        os.kill(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 def send_cancel(db, attempt, process):
     state = load(db)
-    try:
-        process.terminate()
-    except ProcessLookupError:
+    submitted = submit_cancel(process)
+    kind = 'cancellation_signal_submitted' if submitted else 'cancellation_unavailable'
+    if not submitted:
         attempt['cancellation'] = 'unavailable'
-        save(db, state, 'cancellation_unavailable', {'attempt_id': attempt['id']}, attempt)
-        return False
-    save(db, state, 'cancellation_signal_sent', {'attempt_id': attempt['id']}, attempt)
-    return True
+    save(db, state, kind, {'attempt_id': attempt['id']}, attempt)
+    return submitted
 
 
 def communicate_tick(process, payload=None):
@@ -233,14 +245,16 @@ def communicate_tick(process, payload=None):
 
 def collect_process(db, directory, attempt, process):
     output = communicate_tick(process, json.dumps(attempt['request']).encode())
-    sent = False
+    submitted = False
     while output is None:
-        sent = signal_cancellation(db, directory, attempt['id'], process, sent)
+        submitted = signal_cancellation(db, directory, attempt['id'], process, submitted)
         output = communicate_tick(process)
-    return output, sent
+    return output, submitted
 
 
 def invoke(db, argv, attempt, directory):
+    require(signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL,
+            'direct-worker collection requires default SIGCHLD disposition')
     try:
         process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, cwd=directory)
@@ -262,20 +276,19 @@ def advance(state):
     state['status'] = 'success' if state['position'] == len(state['steps']) else 'ready'
 
 
-def settle_cancellation(attempt, output, sent):
+def settle_cancellation(attempt, output, submitted):
     if attempt['cancellation'] != 'requested':
         return
-    confirmed = sent and output['returncode'] == -signal.SIGTERM
+    confirmed = submitted and output['returncode'] == -signal.SIGTERM
     attempt['cancellation'] = 'confirmed' if confirmed else 'unavailable'
-    if confirmed:
-        output['result'] = dict(outcome='cancelled',
-                                detail='direct worker exited by requested SIGTERM; effects not undone')
 
 
-def finish_attempt(db, state, attempt, output, sent):
+def finish_attempt(db, state, attempt, output, submitted):
     require(attempt['output'] is None, 'attempt already settled')
-    settle_cancellation(attempt, output, sent)
-    outcome = output['result']['outcome']
+    settle_cancellation(attempt, output, submitted)
+    # Scheduling classification is separate from the original worker result.
+    outcome = ('cancelled' if attempt['cancellation'] == 'confirmed'
+               else output['result']['outcome'])
     credited = state['active_attempt'] == attempt['id']
     attempt.update(outcome=outcome, output=output, credited=credited)
     state['attempts'][attempt['id'] - 1]['outcome'] = outcome
@@ -307,9 +320,9 @@ def run_step(db, directory):
     if admission is None:
         return False
     attempt, argv = admission
-    output, sent = invoke(db, argv, attempt, directory)
+    output, submitted = invoke(db, argv, attempt, directory)
     with exclusive(directory, blocking=True):
-        finish_attempt(db, load(db), read_attempt(db, attempt['id']), output, sent)
+        finish_attempt(db, load(db), read_attempt(db, attempt['id']), output, submitted)
     return True
 
 
