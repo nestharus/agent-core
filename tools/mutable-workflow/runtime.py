@@ -78,7 +78,9 @@ def acquire_lock(lock):
 
 
 def connect(directory):
-    db = sqlite3.connect(f"file:{directory / 'state.sqlite3'}?mode=rw", uri=True)
+    # Encode the literal filename before adding SQLite options; never create on reconnect.
+    uri = (directory / 'state.sqlite3').absolute().as_uri()
+    db = sqlite3.connect(f"{uri}?mode=rw", uri=True)
     db.execute('PRAGMA synchronous=FULL')
     return db
 

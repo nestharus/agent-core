@@ -206,3 +206,70 @@ def test_start_never_overwrites_and_resume_uses_persisted_plan(tmp_path):
     path.unlink()
     assert call(run, 'resume')['status'] == 'success'
     assert calls(run) == ['step-0']
+
+
+@pytest.mark.parametrize('name', ['run%20x', 'run?x', 'run#x'])
+def test_literal_run_path_lifecycle(tmp_path, name):
+    run = tmp_path / name
+    failed = call(run, 'start', '--file', plan_file(tmp_path, ['failure']), code=1)
+    before = call(run, 'inspect')
+    assert before['current'] == failed
+    output = call(run, 'output', '--attempt', 1)
+    assert output['request']['run_id'] == failed['run_id']
+    assert output['outcome'] == 'failure'
+    call(run, 'judge', '--file', response(tmp_path, failed), code=3)
+    ready = call(run, 'inspect')
+    with (run / 'writer.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert 'busy' in call(run, 'resume', code=5)['error']
+        assert call(run, 'inspect') == ready
+    done = call(run, 'resume')
+    assert done['run_id'] == failed['run_id']
+    assert done['status'] == 'success'
+    assert calls(run) == ['step-0', 'inserted']
+    assert call(run, 'output', '--attempt', 1) == output
+    since = call(run, 'inspect', '--since', before['cursor'])
+    assert [event['kind'] for event in since['events']] == [
+        'recovery_inserted', 'attempt_started', 'attempt_returned']
+    assert since['current'] == done
+    assert call(run, 'resume') == done
+    assert calls(run) == ['step-0', 'inserted']
+
+
+def test_literal_run_path_does_not_execute_percent_decoded_sibling(tmp_path):
+    sibling = tmp_path / 'run x'
+    plan = plan_file(tmp_path, ['ordinary'])
+    call(sibling, 'start', '--file', plan, '--max-steps', 0, code=3)
+    before = call(sibling, 'inspect')
+    run = tmp_path / 'run%20x'
+    own = call(run, 'start', '--file', plan)
+    # The other run's durable history and work must remain untouched.
+    assert call(sibling, 'inspect') == before
+    assert not (sibling / 'calls.jsonl').exists()
+    assert own['run_id'] != before['current']['run_id']
+    assert own['status'] == 'success'
+    assert call(run, 'inspect')['current'] == own
+    assert call(run, 'output', '--attempt', 1)['request']['run_id'] == own['run_id']
+    assert calls(run) == ['step-0']
+    with (sibling / 'writer.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert call(run, 'resume') == own
+    assert call(sibling, 'resume')['run_id'] == before['current']['run_id']
+    assert calls(sibling) == ['step-0']
+    assert call(run, 'inspect')['current'] == own
+
+
+@pytest.mark.parametrize('name', ['run%20x', 'run?x', 'run#x'])
+def test_literal_run_path_missing_database_is_not_created_or_aliased(tmp_path, name):
+    sibling = tmp_path / 'run x'
+    call(sibling, 'start', '--file', plan_file(tmp_path, ['ordinary']),
+         '--max-steps', 0, code=3)
+    before = call(sibling, 'inspect')
+    run = tmp_path / name
+    run.mkdir()
+    assert call(run, 'inspect', code=5)['outcome'] == 'not_confirmed'
+    assert call(run, 'resume', code=5)['outcome'] == 'not_confirmed'
+    assert not (run / 'state.sqlite3').exists()
+    assert not (run / 'calls.jsonl').exists()
+    assert not (tmp_path / 'run').exists()
+    assert call(sibling, 'inspect') == before
