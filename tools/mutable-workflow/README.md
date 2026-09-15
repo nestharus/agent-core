@@ -1,30 +1,34 @@
-# Mutable workflow: local sequential execution
+# Mutable workflow: local revisable execution
 
-One concern: execute and durably amend a caller-supplied sequence. This is the
-ACR-536 first working slice, not a general graph engine or a workflow-policy
-owner. Python 3.10+ standard library, SQLite and POSIX `flock`; no dependencies,
-daemon, scheduler, resident agent or network service. Invoke from any directory:
+One concern: execute and durably revise caller-supplied work. Python 3.10+
+standard library, SQLite and POSIX `flock`; no daemon, scheduler, resident agent,
+provider integration or domain-policy owner. This ACR-537 slice expands ACR-536's
+sequential executor into live graph surgery. The representation remains an ordered
+sequence plus a movable execution position: arbitrary new nodes, replacement
+ranges and jumps are allowed, not a whitelist of original edges. Execution remains
+one local subprocess at a time; edits are admitted **during** that subprocess.
 
 ```sh
 python /path/to/ai/tools/mutable-workflow/cli.py start /absolute/new-run --file plan.json
 python /path/to/ai/tools/mutable-workflow/cli.py inspect /absolute/new-run --since 0
 python /path/to/ai/tools/mutable-workflow/cli.py output /absolute/new-run --attempt 1
-python /path/to/ai/tools/mutable-workflow/cli.py judge /absolute/new-run --file response.json
+python /path/to/ai/tools/mutable-workflow/cli.py amend /absolute/new-run --file edit.json
 python /path/to/ai/tools/mutable-workflow/cli.py resume /absolute/new-run
 ```
 
-Use a caller-owned planning/scratch directory outside the checkout for run data.
-`start` requires a nonexistent run directory and immediately executes until a
-stop. `resume` continues only ready work. Either accepts `--max-steps N` to return
-at a durable boundary after at most N additional attempts; zero initializes or
-inspects continuation without executing. `judge` commits an edit **without**
-executing it: a later `resume` is a supported restart point.
+Run data belongs in caller-owned planning/scratch outside the checkout. `start`
+requires a nonexistent directory and executes until a stop. `resume` executes
+only ready work. `--max-steps N` limits additional attempts at durable boundaries;
+zero initializes/reconnects without dispatching. `amend` commits intent without
+starting another executor. A live executor may subsequently execute that intent
+once its current worker has returned and if its step limit allows. Otherwise a
+later `resume` is the continuation owner. Inspection is not liveness evidence.
 
 ## Public contracts (owned here)
 
 ### Plan and effect grants
 
-`plan.json` is exactly:
+`plan.json` has exactly:
 
 ```json
 {
@@ -34,177 +38,298 @@ executing it: a later `resume` is a supported restart point.
 }
 ```
 
-Purpose, worker names, argv entries and step IDs are nonempty strings. Executable
-paths are absolute; other argv entries are literal (no shell expansion). Workers
-and steps are nonempty. Step IDs are unique. Each step has exactly `id`, `worker`,
-`input`; input is JSON data, not interpreted by the engine. All worker commands
-are explicitly supplied by the caller; an editor may reference these workers
-but cannot change the command registry. The registry is not the original graph:
-a newly named, originally undeclared step with new input really can execute.
+Purpose, worker names, argv entries and IDs are nonempty text. Executable paths
+are absolute; argv is literal, without shell expansion. Workers and initial
+steps are nonempty. Each step has exactly `id`, `worker`, `input`; input is JSON
+data. Current step IDs are unique. Editors may introduce arbitrary new steps and
+inputs referencing these workers, but **cannot amend the registry or purpose**.
+A replacement can reuse a removed step's display ID; its internal node identity
+is always new. All original node definitions remain archived.
 
-**Trust boundary:** one trusted local principal, private run directory, trusted
-worker programs. Filesystem permissions, not the `actor` label, control access.
-The caller grants execution of the registry programs with their inherited process
-environment/credentials and any admitted input. Programs must enforce any narrower
-input/effect restrictions themselves. This is NOT a sandbox or an authorization
-service. An editor's input must never be treated as new credentials or effect
-permission. The CLI does not invoke agents or interpret CRW policy. Do not use
-this slice for irreversible/external effects or untrusted workers/editors.
+**Trust/effect boundary:** one trusted local principal, private run directory,
+trusted worker programs. Filesystem permissions, not `actor`, control access.
+The caller grants the registered programs with their inherited environment,
+credentials and admitted inputs. Programs must enforce narrower input/effect
+restrictions themselves. Unchanged argv does not imply unchanged effects from
+arbitrary input. This is not a sandbox or authentication/authorization service.
+Policy text, graph edits and repetition intent grant no new credentials, merge
+rights or authority over another consumer's obligations. Do not select this local
+slice for irreversible/external effects or untrusted workers/editors.
 
 ### Worker request and result
 
-The engine invokes the selected argv directly, with run directory as cwd, one
-JSON object on stdin, and captured stdout/stderr. Request fields:
+Selected argv receives one JSON object on stdin, cwd = run directory:
 
-- `run_id`: generated UUID; `purpose`: caller intent.
-- `step`: exact admitted step; `attempt_id`: run-local integer output reference.
-- `edits`: accepted edits and their reasons (empty on ordinary trajectory).
+- `run_id`, `purpose`, exact `step`, run-local integer `attempt_id`.
+- `node_id`: run-local string identifying this node incarnation, not its display ID.
+- `basis_cursor`: pre-admission event cursor; `policy`: selected JSON policy (initially null).
+- `edits`: full accepted amendments/recovery insertions at admission.
 
-The entire stdout must be one JSON object with exactly:
+The request is persisted before dispatch and never reconstructed from a later
+graph. The entire stdout must be exactly one JSON object with these fields:
 
 ```json
 {"outcome": "success", "detail": "What actually happened"}
 ```
 
-`outcome` is `success`, `failure`, or `judgment`; detail is nonempty text.
-Zero exit **and** an admissible result are required for substantive classification.
-A zero exit with missing/malformed result becomes `ambiguous`, never success.
-Nonzero exit becomes `failure`, even if stdout claims success; raw bytes remain
-available. Launch errors become failure with error detail. Failure means this
-attempt did not establish success, not that it caused no effects. A valid result
-is a trusted worker assertion, not an independent verification of its truth.
+Outcome is `success`, `failure`, or `judgment`; detail is nonempty text. Zero exit
+plus an admissible result is required. Missing/malformed zero-exit output becomes
+`ambiguous`; nonzero exit becomes `failure` even if stdout claims success. Launch
+failure has null returncode and explicit detail. Raw stdout/stderr bytes remain
+available independently of interpretation. A valid result is a trusted worker
+assertion, not an independently verified truth. Failure/cancellation/ambiguity
+does not mean no effects happened.
 
-### Judgment handoff and insertion
+### Atomic graph and policy amendments
 
-`failure` and `judgment` halt with the blocked position unchanged. The caller
-hands `inspect`'s current view plus the blocked attempt's `output` response to an
-external judgment actor. No provider integration is implied. A script-based fake
-actor is exercised in `tests/fixtures/mutable_workflow/judge.py`; it reads actual
-failure detail and raw output before producing recovery intent.
-
-The authorized editor returns exactly:
+`edit.json` has exactly:
 
 ```json
 {
-  "run_id": "UUID from current view",
-  "cursor": 5,
-  "blocked_step": "first",
+  "run_id": "UUID from inspect",
+  "cursor": 3,
   "actor": "local-editor",
-  "reason": "Failure evidence and why this recovery permits continuation",
-  "insert": [{"id": "new-recovery", "worker": "local", "input": "new work"}]
+  "reason": "Why the revised outcome is appropriate",
+  "effects": "Why continuing/repeating is safe within the existing worker grant",
+  "operations": [
+    {"op": "replace", "start": "first", "count": 1,
+     "steps": [{"id": "replacement", "worker": "local", "input": "new work"}]},
+    {"op": "insert", "before": null,
+     "steps": [{"id": "followup", "worker": "local", "input": "followup work"}]},
+    {"op": "policy", "value": {"basis": "amended-policy"}},
+    {"op": "goto", "step": "replacement"}
+  ]
 }
 ```
 
-Run ID, integer cursor and blocked step must match current state. Actor and reason
-are nonempty strings; actor is an audit label, not authenticated identity. Insert
-is a nonempty list of validated steps whose IDs are new across the entire current
-sequence. Unknown fields, workers, duplicate IDs, stale/foreign/replayed responses
-and edits outside failure/judgment boundaries are rejected before mutation.
+Run ID and integer cursor must match the current committed view; actor, reason,
+effects are nonempty audit text. `effects` is the editor's explicit reconciliation
+basis, **not an engine assessment that repetition is safe**. The editor must
+inspect relevant original outputs/missing evidence and respect actual authority.
+For unresolved irreversible effects, stop and return to the effect owner rather
+than assert a safe retry. This engine promises neither exactly-once effects nor
+compensation. No permanent policy-skip permission system is imposed.
 
-Acceptance means **the editor authorizes continuing via this inserted recovery**
-instead of retrying the blocked step. Inserted work goes immediately after the
-blocked step and before the original remaining sequence. Failed/judgment attempts
-are never rewritten as successful. An edit retains its context and reason in
-history. Engine success means the *revised* sequence reached its end; it does not
-mean the original sequence succeeded or the editor's reasoning was correct.
-No retry, delete, goto, parallel graph surgery, cancellation, policy accounting,
-provider-session continuation or automatic ambiguity reconciliation is exposed.
+Operations are interpreted in order against the emerging graph, then all state,
+edit history, event and cancellation updates commit atomically. Invalid fields,
+references, ranges, duplicate current IDs, ungranted workers and stale contexts
+error without committing any prefix. A second editor must inspect and rebase its
+intent after a stale/busy rejection; do not blindly replay a stale cursor.
 
-### Caller outcomes and inspection
+Each operation has **exactly** the listed fields:
 
-Mutations print current state JSON on stdout, with exit codes:
+| Operation | Fields besides `op` | Meaning |
+|---|---|---|
+| `insert` | `before`: current step ID or null; `steps`: nonempty step list | Insert before anchor or append at null. |
+| `replace` | `start`: current step ID; `count`: positive integer; `steps`: step list (may be empty) | Replace any contiguous X-node range with arbitrary new nodes. Empty replacement removes the range. |
+| `remove` | `steps`: nonempty unique list of current IDs | Remove those nodes from current membership, retaining archived definitions and all attempts. |
+| `skip` | `steps`: nonempty list of current IDs | Keep nodes visible with `skipped` scheduling disposition; execution walks past them without completion credit. |
+| `goto`, `return`, `retry` | `step`: current scheduled ID | Set the next position to that node. All three express explicit new execution intent; there is no hidden return stack. |
+| `abort` | none | Stop future scheduling with workflow status `aborted`; does not cancel the worker or undo effects. |
+| `policy` | `value`: arbitrary JSON | Replace the current declared policy basis, retaining previous bases in requests/events. This is not CRW policy accounting. |
+| `cancel` | `attempt`: positive integer | Request cancellation of that exact attempt, separately from graph membership. |
 
-| Code | State / meaning |
+**Position semantics:** edits before/after the current target preserve that
+target, including a running assignment. Thus inserting *before* the current
+node does not rewind to the insertion; compose with `goto` when that is intended.
+Replacing/removing the current target selects the first replacement or following
+node; skipping it walks to the next scheduled node. Appending after exhaustion
+selects the first appended node. Other structural edits to an exhausted graph
+preserve exhaustion; compose with a jump to run newly inserted/replaced past work.
+Completed nodes remain scheduled graph members;
+`goto` to one executes a new attempt and then proceeds forward, including further
+previously executed nodes. Jumps do not claim bypassed nodes completed. Skipped
+nodes cannot be jump targets; replace them to create new scheduled work. An empty
+future can finish without any new attempts—this is not proof old work completed.
+
+`abort` remains stopped across structural/policy edits. Only an explicit jump
+reopens it. Abort in a composition is evaluated in order; a subsequent explicit
+jump can therefore reopen it in the same atomic amendment.
+
+**In-flight association:** one `active_attempt` owns current advancement credit.
+Replacing/removing/skipping its target, any jump, abort, or a policy amendment
+revokes that ownership. Policy amendment conservatively schedules a new attempt
+under the new basis; even unchanged work is not silently credited across bases.
+The original subprocess continues unless separately cancelled. Its collector
+still persists the original request, full output and classification with
+`credited: false`; it cannot finish replacement work or advance the new position.
+Future insertion/removal that preserves the running target preserves its credit.
+Past credited results are never retrospectively recertified under amended policy.
+
+### Cancellation and collector loss
+
+Attempt drilldown exposes `cancellation` separately from `outcome`:
+
+- `not_requested`: no cancellation intent; supersession/removal/abort alone leaves this unchanged.
+- `requested`: committed intent, not termination evidence. The live collector
+  checks requests while waiting for its subprocess (50ms communicate timeout).
+- `confirmed`: the kernel accepted the collector's SIGTERM submission and the
+  collector subsequently observed direct-worker exit `-15`. This confirms the
+  **termination observation**, not that this request caused it. A competing
+  SIGTERM sender cannot be distinguished from wait status alone. The attempt's
+  scheduling outcome is `cancelled`; `output.result` retains the original worker
+  classification (`failure` for nonzero exit), with unmodified bytes/returncode.
+- `unavailable`: result already settled, collector recovery established loss of its
+  live handle, the collector observed exit before submission, submission reported
+  process disappearance, or collection did not observe SIGTERM termination after
+  an accepted submission. Natural completion can race cancellation; its original
+  result is retained and can advance an otherwise-current assignment.
+  “Unavailable” does not mean execution failed or that no signal was submitted.
+
+The amendment event records request intent. `cancellation_signal_submitted`
+records normal return from the actual POSIX `kill(pid, SIGTERM)` syscall, **not
+signal delivery, handler execution, or causal responsibility for exit**.
+`attempt_returned` records final cancellation classification. The collector polls
+before submission: an already-observed exit makes cancellation unavailable and
+emits no submission event. If exit races between that poll and the syscall, the
+kernel can accept a signal for an unreaped exited child; this still only records
+submission. In particular, independent SIGTERM in that interval can produce
+`confirmed`/`cancelled` with the same evidence as collector-induced termination.
+Consumers needing sender attribution must treat it as unknown, not infer it from
+those labels. Original worker classification remains independently inspectable.
+
+Submission uses only the live direct child's PID under sole collector ownership
+of wait/reaping; an unreaped child retains its PID. The supported CLI has no
+concurrent child reaper and requires normal SIGCHLD disposition (not inherited
+SIG_IGN/automatic reaping or an embedding application's custom reaper). Launch
+rejects a non-default SIGCHLD disposition before starting a worker; the admitted
+attempt remains explicitly uncollected for normal recovery/reconciliation. A cached
+PID is never signalled on resume. No descendant cancellation is promised.
+A submission event alone is not confirmation. If the executor disappears after
+submission, recovery cannot infer termination. There is no force-kill escalation.
+A worker ignoring SIGTERM remains pending until it returns; the bounded-worker
+envelope still applies. A cancelled current attempt stops until explicit new
+intent. Cancelling a superseded attempt does not cancel replacement work.
+
+Earlier version-2 candidate records named `cancellation_signal_sent` overstated
+normal `Popen.terminate()` return, which can be a no-op. They are retained as
+historical records, not upgraded to submission/delivery evidence; earlier
+`confirmed` results retain that evidence limitation. New collection uses the
+submission event and does not rewrite earlier results/events.
+
+After executor loss, `resume` under newly acquired executor ownership records
+uncollected attempts as `orphaned: true`, with missing output and unknown effects;
+pending cancellation becomes unavailable. Ready/running workflows become
+ambiguous even when that worker was superseded. No automatic replay occurs.
+The editor can then record reconciled new intent via `amend`; old missing results
+stay missing. This slice does not salvage output after collector death, resume a
+provider session, or accept externally submitted results. Live-collector late
+returns across edits are supported and tested; arbitrary crash salvage is not.
+
+### Existing failure-informed recovery entry
+
+`judge --file response.json` remains the first slice's narrower, useful operation.
+The response has exactly `run_id`, `cursor`, `blocked_step`, `actor`, `reason`,
+`insert` (nonempty new steps). It is admitted only at current failure/judgment
+boundaries and inserts recovery **after** the blocked step, continuing there
+instead of retrying it. The old failed/judgment result remains unchanged. The
+external fake judgment fixture reads actual failure output and chooses new work;
+no semantic agent is selected. `amend` supplies the broader operations at all
+states, including explicit effect-reconciled intent after ambiguity.
+
+### Inspection and caller outcomes
+
+`inspect` returns `{current, events, cursor}` in one read transaction. Current
+includes original purpose/registry, current steps/position, node ID sequence and
+archived `nodes` (`step`, scheduling `disposition`), policy, workflow status,
+active attempt, run/version/cursor, attempt summaries and edits. Node scheduling
+disposition (`scheduled`, `removed`, `skipped`) is **not historical execution
+outcome**; summary/drilldown and amendment events explain actual execution and
+abort/jump decisions. Summary `id` references `output --attempt ID` and includes
+step display ID, node incarnation and observed outcome.
+
+Events have `cursor`, `kind`, `detail`. `--since` returns strictly later committed
+events through the returned cursor. Cursors are monotonic, run-scoped and retained
+across supported restarts; negative/future cursors error. No pruning/reset exists.
+Rejected edits are returned to their callers, not silently recorded as accepted
+history. Short-lock contention errors are recoverable by inspection/rebasing.
+
+`output` returns exact request, observed outcome, output, cancellation and orphan
+status; collected results also include `credited` (whether this return owned
+current settlement, not semantic verification). Output has `returncode`, lossless
+`stdout_b64`, `stderr_b64` and original worker `result` classification.
+Cancellation scheduling is represented by attempt `outcome`, not by rewriting
+that worker classification. Null output means **not
+collected**, never empty successful evidence. Unknown attempts and missing/corrupt
+storage error. This private view can expose worker inputs and printed credentials;
+no transcript discovery, redaction or hostile-local tamper protection is claimed.
+
+Mutations print current JSON and use these exit codes:
+
+| Code | Meaning |
 |---|---|
-| 0 | `success`: revised sequence completed with explicit worker successes |
-| 1 | `failure`: blocked failed attempt, evidence available |
-| 2 | `judgment`: unresolved explicit worker judgment need |
-| 3 | `ready`: durable work remains (including newly accepted edit) |
-| 4 | `ambiguous`: no safe automatic continuation |
+| 0 | `success`: revised traversal exhausted, not original obligations certified |
+| 1 | `failure`: blocked failed attempt |
+| 2 | `judgment`: unresolved worker judgment need |
+| 3 | `ready` or `running`: work remains / original collector owns execution |
+| 4 | `ambiguous`: missing substantive result or collector-loss uncertainty |
 | 5 | command/storage/contract error; JSON stderr `outcome: not_confirmed` |
+| 6 | `aborted`: scheduling stopped by amendment |
+| 7 | `cancelled`: accepted cancellation submission plus observed direct-worker SIGTERM exit; cause unknown |
 
-After code 5 inspect durable state; it is not a claim that no prior work ran.
-An abrupt executor signal may instead yield the OS signal exit without JSON.
-`inspect` and `output` exit 0 on successful **read**, regardless of workflow outcome;
-callers must read the returned state, not infer workflow success from read exit.
+After code 5 inspect durable state: it does not assert that no work ran. Abrupt
+signals may instead yield OS signal exit without JSON. Successful `inspect` and
+`output` exit 0 regardless of workflow outcome; read the state, not that exit.
 
-`inspect` returns `{current, events, cursor}` from one SQLite read transaction.
-Current includes purpose, registry, current steps, zero-based position, status,
-run ID, cursor, historical attempt summaries (`id`, `step_id`, `outcome`) and
-accepted edits. Summaries reference `output --attempt ID`. Events contain
-`cursor`, `kind`, `detail`; cursors increase by one per committed change. `--since`
-returns events strictly after that cursor through the returned current cursor.
-Cursors are scoped to the returned run ID, survive supported restarts, and must
-not be transferred between runs. Negative/future cursors error. No pruning/reset
-exists. Current state is progress, not a health/liveness assertion.
+## Durability, versions and operating envelope
 
-`output` returns the exact persisted attempt request, outcome and output. Output
-contains `returncode` (null on launch failure), `stdout_b64`, `stderr_b64` (lossless
-bytes) and interpreted `result`. An interrupted running attempt may have null
-output: output was **not collected**, not empty successful evidence. Unknown
-attempts and missing/corrupt storage error rather than returning empty history.
-Inspection can expose worker inputs, outputs and credentials accidentally printed
-by workers; keep run data private. No transcript discovery or redaction is claimed.
+SQLite state/events/attempts commit together with `synchronous=FULL`. A
+nonblocking `executor.lock` covers each driver invocation; a second executor
+errors, not mistakes a live owner for an interrupted one. A separate short
+`writer.lock` covers admission, amendment and result settlement. Settlement reloads
+current state and the **original attempt by ID** under this lock; no whole-executor
+snapshot overwrites edits. Edits use nonblocking acquisition; internal settlement
+waits for short writers so contention does not discard a returned result. All
+writers must use the CLI. Never move/delete a live run or manually edit its DB.
 
-## Durability and operating envelope
+Completion-first changes the cursor, rejecting the stale edit. Edit-first retains
+both the amendment and the eventual result, with settlement based on surviving
+ownership. Result plus advancement commit once together. Competing editors cannot
+both commit the same cursor. There is no claimed arbitrary-external-effect
+exactly-once guarantee behind these bookkeeping properties.
 
-A single SQLite file holds state, events and attempt output, committed together
-with `synchronous=FULL`. A separate nonblocking advisory writer lock covers a
-whole executor or edit invocation; a competing mutation errors, while inspection
-can read committed progress. All writers must use this entry. Never move/delete
-a live run directory or manually edit its database. Local filesystem only; no
-NFS, multi-host, hostile same-user access or distributed durability claims.
+New runs use **storage version 2**. There is no automatic migration of version-1
+runs: state-based commands reject them explicitly without relabeling historical
+results. Use the original ACR-536 runtime to inspect/continue those runs; do not
+reinitialize over them. The first slice's successful execution/recovery/path
+behaviors remain tested for new runs. This is intentional storage evolution,
+not a claim that old run data was migrated or that old tests exercised new races.
 
-An attempt-start record commits **before** dispatch. A result, advancement and
-its event commit together. Restart after a committed result or edit does not
-rerun completed work. Restart discovering `running` records `ambiguous` and
-refuses further execution/editing: the worker may still be running, may have
-produced effects or may have returned before result commit. Its original running
-attempt and missing output remain honest history. There is no automatic retry,
-no exactly-once effect promise and no claim that a lost worker was terminated.
-Caller/root must reconcile outside this slice; making a new run is new authority,
-not a retry recommendation.
+Local filesystem only; no NFS, multi-host or hostile same-user claims. Tested:
+fresh CLI continuation after durable steps/edits, executor death after admission,
+live edits/late returns, competing edits and completion/edit races using controlled
+local subprocesses. Not qualified: power-loss directory creation, disk full/
+corruption repair, lost-collector output salvage, arbitrary descendant termination,
+provider sessions or irreversible effects. Initialization failure leaves an
+unusable directory and explicit error, never automatic overwrite.
 
-Supported tested interruption points: CLI process exit after durable step or
-edit, and executor SIGKILL after attempt admission (conservative ambiguity).
-Power-loss durability of new directory creation, disk corruption/full recovery,
-arbitrary in-flight output salvage, child termination and irreversible effects
-are not qualified. Initialization failure leaves an unusable directory and an
-explicit error; inspect before operator cleanup, never silently overwrite it.
-Workers must terminate and produce bounded output; capture and JSON state/history
-are in memory, without production quotas, timeouts or streaming. This is a small
-local slice, not a long-running service/headroom claim.
+Workers must terminate with bounded output. Capture, JSON state and cumulative
+history are in memory, without production quotas, streaming or measured capacity
+claims. No daemon auto-recovers an owner; the caller owns `resume` and reconciliation.
 
-## Discovery and ownership
+## Discovery and verification
 
-`VALUES.md` and `tools/README.md` place generic mechanics here; caller procedural
-compositions stay outside the engine. The scheduler is a skeleton, workflow_index
-is metadata, and wu-session-migration's durable writer owns WU-specific artifacts;
-none is a runtime dependency. SQLite avoids importing that unrelated journal model.
+`VALUES.md` and `tools/README.md` place generic mechanics here. Domain compositions
+remain outside the engine. Scheduler, workflow_index, WU migration and legacy
+operational-contract transport are not runtime dependencies. Runner CLI Usage/
+Inspecting a Run at `/home/nes/projects/agent-runner/trunk/README.md` owns a distinct
+provider/session protocol; this tool selects neither that seam nor the historical
+legacy result extractor. Fake results establish no installed-provider compatibility
+or reviewer efficacy. No deployed workflow/operator or CRW adapter is selected.
 
-Runner discovery resolved the old `/home/nes/projects/agent-runner/README.md` pointer
-to `/home/nes/projects/agent-runner/trunk/README.md`: CLI Usage and Inspecting a Run
-own headless invocation, artifact returns and invocation/result transport.
-Its successful spooled capture uses the final matching result record after process
-success, permitting marker-shaped provider payload. AI's existing legacy
-`operational_contracts.py` successful-stream extractor has a narrower contract.
-This tool uses **neither** seam: its subprocess JSON contract above is local and
-independent. Fake results do not demonstrate installed runner compatibility,
-real agent invocation, provider session recovery or reviewer efficacy.
-
-## Verification / used by
-
-Current consumer: `tests/test_mutable_workflow.py`, with local fake worker and
-judgment fixtures. No deployed workflow/operator consumer is selected.
+Implementation: `runtime.py` owns persistence/admission/collection/settlement;
+`surgery.py` owns atomic future-intent operations; `cli.py` owns command/exit mapping.
+Downstream owners discover current contracts here rather than a copied ticket schema.
 
 ```sh
-python -m pytest -q tests/test_mutable_workflow.py
+python -m pytest -q tests/test_mutable_workflow.py tests/test_mutable_workflow_surgery.py
 ```
 
-The entry-path tests exercise ordinary no-judgment execution; failure-informed
-unplanned insertion; edit and completed-work restart; current, cursor and raw
-output readback; invalid/replayed edits; missing/malformed/nonzero worker results;
-and executor death with preserved prior evidence and no automatic replay.
-Later CRW perspective lifecycle remains policy-adapter work, not generic engine
-logic. No agent-design prompt, empirical agent evaluation or legacy orchestrator
-is introduced here.
+Pytest is a test-only dependency. The first suite preserves the working slice and
+strengthens the nonzero-output oracle to full expected bytes. The surgery suite
+uses local fake effects and socket handshakes—not sleep-based admission guesses—to
+exercise all edit families, same-display-ID replacement identity, explicit
+reentry, policy bases, retained raw binary bytes, live supersession, cancellation,
+collector loss, atomic invalid compositions and stale/racing writers. These are
+bounded deterministic mechanism controls, not semantic-agent trials or universal
+safety/efficacy proof.

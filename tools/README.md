@@ -14,7 +14,7 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 
 ## Current tools
 
-- `mutable-workflow/` — local sequential execution with durable progress, explicit worker outcomes and caller-authorized recovery insertion. **Status: first runnable local slice; see `mutable-workflow/README.md` for contracts and recovery limits.**
+- `mutable-workflow/` — local sequential execution with live graph/policy surgery, attempt-bound late results and explicit cancellation. **Status: runnable local fake-worker slice; see `mutable-workflow/README.md` for versioned contracts, effect bounds and recovery limits.**
 
 - `scheduler/` — generic scheduled-task primitive. Bind a schedule (cron-style, interval, one-shot) to a script invocation, an agent dispatch, or a workflow run. **Status: skeleton only; see `scheduler/README.md`.**
 - `pr-batch-poller/` — status-only single-call GitHub PR query for N PRs. A scheduler-triggered or manual `wu-session-wake` root invokes it, joins rows to sessions, and dispatches one exact joined row to each `wu-session-resumer`; the poller never wakes sessions itself. **Status: implemented; see `pr-batch-poller/README.md`.**

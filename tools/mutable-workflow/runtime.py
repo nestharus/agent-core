@@ -1,10 +1,12 @@
 """Local sequential mutable execution. Public contracts live in README.md.
 
-Declared roles: orchestration, validator, parser, mapper, accessor, formatter.
+Declared roles: orchestration, validator, parser, mapper, accessor, formatter, predicate.
 """
 import base64
 import fcntl
 import json
+import os
+import signal
 import sqlite3
 import subprocess
 import uuid
@@ -64,17 +66,17 @@ def validate_plan(plan):
 
 
 @contextmanager
-def exclusive(directory):
-    with (directory / 'writer.lock').open('a') as lock:
-        acquire_lock(lock)
+def exclusive(directory, name="writer.lock", blocking=False):
+    with (directory / name).open("a") as lock:
+        acquire_lock(lock, blocking)
         yield
 
 
-def acquire_lock(lock):
+def acquire_lock(lock, blocking=False):
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(lock, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
     except BlockingIOError as exc:
-        raise ContractError('executor busy; no concurrent mutation admitted') from exc
+        raise ContractError('writer or executor busy; inspect and retry/rebase intent') from exc
 
 
 def connect(directory):
@@ -96,23 +98,39 @@ def initialize(directory, plan):
         CREATE TABLE attempts (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
     ''')
     state = dict(plan, run_id=str(uuid.uuid4()), status='ready', position=0,
-                 cursor=0, attempts=[], edits=[])
+                 cursor=0, attempts=[], edits=[], version=2, policy=None, active_attempt=None,
+                 node_ids=[], nodes={})
+    state['node_ids'] = [add_node(state, step) for step in state['steps']]
     save(db, state, 'started', {'purpose': plan['purpose']})
     db.close()
+
+
+def add_node(state, step):
+    key = str(len(state["nodes"]) + 1)
+    state["nodes"][key] = dict(step=step, disposition="scheduled")
+    return key
 
 
 def load(db):
     row = db.execute('SELECT body FROM state WHERE id=1').fetchone()
     require(row is not None, 'initialization incomplete; no execution admitted')
-    return json.loads(row[0])
+    state = json.loads(row[0])
+    require(state.get("version") == 2, "unsupported run version; use original runtime for v1 runs")
+    return state
 
 
-def save(db, state, kind, detail, attempt=None):
+def save(db, state, kind, detail, attempt=None, updated=()):
     state['cursor'] += 1
     event = dict(cursor=state['cursor'], kind=kind, detail=detail)
     with db:
         db.execute('INSERT OR REPLACE INTO state VALUES (1, ?)', (json.dumps(state),))
         db.execute('INSERT INTO events VALUES (?, ?)', (state['cursor'], json.dumps(event)))
+        store_attempt(db, attempt)
+        store_updates(db, updated)
+
+
+def store_updates(db, updated):
+    for attempt in updated:
         store_attempt(db, attempt)
 
 
@@ -140,16 +158,20 @@ def inspection(db, since):
 
 def request_for(state, step, attempt_id):
     return dict(run_id=state['run_id'], purpose=state['purpose'], step=step,
-                attempt_id=attempt_id, edits=state['edits'])
+                attempt_id=attempt_id, edits=state['edits'], policy=state['policy'],
+                node_id=state['node_ids'][state['position']], basis_cursor=state['cursor'])
 
 
 def begin_attempt(db, state):
     step = state['steps'][state['position']]
     attempt_id = len(state['attempts']) + 1
     attempt = dict(id=attempt_id, request=request_for(state, step, attempt_id),
-                   outcome='running', output=None)
+                   outcome='running', output=None, cancellation='not_requested',
+                   orphaned=False)
     state['status'] = 'running'
-    state['attempts'].append(dict(id=attempt_id, step_id=step['id'], outcome='running'))
+    state['active_attempt'] = attempt_id
+    state['attempts'].append(dict(id=attempt_id, step_id=step['id'],
+                                  node_id=attempt['request']['node_id'], outcome='running'))
     save(db, state, 'attempt_started', {'attempt_id': attempt_id}, attempt)
     return attempt
 
@@ -171,52 +193,171 @@ def classify(returncode, stdout):
         return dict(outcome='ambiguous', detail=f'no admissible substantive result: {exc}')
 
 
-def invoke(argv, request, directory):
+def captured(returncode, stdout, stderr):
+    return dict(returncode=returncode, stdout_b64=base64.b64encode(stdout).decode(),
+                stderr_b64=base64.b64encode(stderr).decode(), result=classify(returncode, stdout))
+
+
+def signal_cancellation(db, directory, attempt_id, process, submitted):
+    if submitted:
+        return True
+    with exclusive(directory, blocking=True):
+        return cancel_if_requested(db, attempt_id, process)
+
+
+def cancel_if_requested(db, attempt_id, process):
+    attempt = read_attempt(db, attempt_id)
+    if attempt['cancellation'] != 'requested':
+        return False
+    return send_cancel(db, attempt, process)
+
+
+def submit_cancel(process):
+    # Sole collector owns wait/reaping. Do not signal a PID after poll has reaped it.
+    if process.poll() is not None:
+        return False
     try:
-        result = subprocess.run(argv, input=json.dumps(request).encode(), capture_output=True,
-                                cwd=directory, check=False)
-        return dict(returncode=result.returncode, stdout_b64=base64.b64encode(result.stdout).decode(),
-                    stderr_b64=base64.b64encode(result.stderr).decode(),
-                    result=classify(result.returncode, result.stdout))
+        # Unlike Popen.terminate(), normal return establishes syscall acceptance.
+        # The unreaped child retains its PID; exit can still race this submission.
+        os.kill(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def send_cancel(db, attempt, process):
+    state = load(db)
+    submitted = submit_cancel(process)
+    kind = 'cancellation_signal_submitted' if submitted else 'cancellation_unavailable'
+    if not submitted:
+        attempt['cancellation'] = 'unavailable'
+    save(db, state, kind, {'attempt_id': attempt['id']}, attempt)
+    return submitted
+
+
+def communicate_tick(process, payload=None):
+    try:
+        stdout, stderr = process.communicate(input=payload, timeout=0.05)
+        return captured(process.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def collect_process(db, directory, attempt, process):
+    output = communicate_tick(process, json.dumps(attempt['request']).encode())
+    submitted = False
+    while output is None:
+        submitted = signal_cancellation(db, directory, attempt['id'], process, submitted)
+        output = communicate_tick(process)
+    return output, submitted
+
+
+def invoke(db, argv, attempt, directory):
+    require(signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL,
+            'direct-worker collection requires default SIGCHLD disposition')
+    try:
+        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, cwd=directory)
     except OSError as exc:
         return dict(returncode=None, stdout_b64='', stderr_b64='',
-                    result=dict(outcome='failure', detail=f'worker launch failed: {exc}'))
+                    result=dict(outcome='failure', detail=f'worker launch failed: {exc}')), False
+    with process:
+        return collect_process(db, directory, attempt, process)
 
 
-def finish_attempt(db, state, attempt, output):
-    outcome = output['result']['outcome']
-    attempt.update(outcome=outcome, output=output)
-    state['attempts'][-1]['outcome'] = outcome
+def skipped_target(state):
+    return (state['position'] < len(state['steps']) and
+            state['nodes'][state['node_ids'][state['position']]]['disposition'] != 'scheduled')
+
+
+def advance(state):
+    while skipped_target(state):
+        state['position'] += 1
+    state['status'] = 'success' if state['position'] == len(state['steps']) else 'ready'
+
+
+def settle_cancellation(attempt, output, submitted):
+    if attempt['cancellation'] != 'requested':
+        return
+    confirmed = submitted and output['returncode'] == -signal.SIGTERM
+    attempt['cancellation'] = 'confirmed' if confirmed else 'unavailable'
+
+
+def finish_attempt(db, state, attempt, output, submitted):
+    require(attempt['output'] is None, 'attempt already settled')
+    settle_cancellation(attempt, output, submitted)
+    # Scheduling classification is separate from the original worker result.
+    outcome = ('cancelled' if attempt['cancellation'] == 'confirmed'
+               else output['result']['outcome'])
+    credited = state['active_attempt'] == attempt['id']
+    attempt.update(outcome=outcome, output=output, credited=credited)
+    state['attempts'][attempt['id'] - 1]['outcome'] = outcome
+    if credited:
+        settle_current(state, outcome)
+    save(db, state, 'attempt_returned', dict(attempt_id=attempt['id'], outcome=outcome,
+         credited=credited, cancellation=attempt['cancellation']), attempt)
+
+
+def settle_current(state, outcome):
+    state['active_attempt'] = None
     state['status'] = outcome
     if outcome == 'success':
         state['position'] += 1
-        state['status'] = 'success' if state['position'] == len(state['steps']) else 'ready'
-    save(db, state, 'attempt_returned', {'attempt_id': attempt['id'], 'outcome': outcome}, attempt)
+        advance(state)
 
 
-def run_step(db, state, directory):
+def admit_ready(db):
+    state = load(db)
+    if state['status'] != 'ready':
+        return None
     attempt = begin_attempt(db, state)
-    argv = state['workers'][attempt['request']['step']['worker']]
-    output = invoke(argv, attempt['request'], directory)
-    finish_attempt(db, state, attempt, output)
+    return attempt, state['workers'][attempt['request']['step']['worker']]
 
 
-def recover_interruption(db, state):
-    if state['status'] != 'running':
+def run_step(db, directory):
+    with exclusive(directory, blocking=True):
+        admission = admit_ready(db)
+    if admission is None:
+        return False
+    attempt, argv = admission
+    output, submitted = invoke(db, argv, attempt, directory)
+    with exclusive(directory, blocking=True):
+        finish_attempt(db, load(db), read_attempt(db, attempt['id']), output, submitted)
+    return True
+
+
+def recover_attempt(db, state, summary):
+    attempt = read_attempt(db, summary['id'])
+    if attempt['outcome'] != 'running' or attempt['orphaned']:
         return
-    state['status'] = 'ambiguous'
-    save(db, state, 'interrupted', {'attempt_id': state['attempts'][-1]['id'],
-         'detail': 'execution may have occurred; automatic replay and edits prohibited'})
+    attempt['orphaned'] = True
+    if attempt['cancellation'] == 'requested':
+        attempt['cancellation'] = 'unavailable'
+    if state['status'] in ('ready', 'running'):
+        state['status'] = 'ambiguous'
+    save(db, state, 'interrupted', dict(attempt_id=attempt['id'],
+         detail='collector lost; execution/effects unknown; no automatic replay'), attempt)
 
 
 def drive(db, directory, max_steps):
+    # Executor ownership is distinct from short edit/settlement exclusion.
+    with exclusive(directory, 'executor.lock'):
+        return drive_owned(db, directory, max_steps)
+
+
+def recover_interruption(db):
     state = load(db)
-    recover_interruption(db, state)
+    for summary in state['attempts']:
+        recover_attempt(db, state, summary)
+
+
+def drive_owned(db, directory, max_steps):
+    with exclusive(directory):
+        recover_interruption(db)
     count = 0
-    while state['status'] == 'ready' and (max_steps is None or count < max_steps):
-        run_step(db, state, directory)
+    while (max_steps is None or count < max_steps) and run_step(db, directory):
         count += 1
-    return state
+    return load(db)
 
 
 def validate_edit(edit, state):
@@ -236,6 +377,8 @@ def apply_edit(db, edit):
     state['edits'].append(edit)
     position = state['position'] + 1
     state['steps'][position:position] = edit['insert']
+    keys = [add_node(state, step) for step in edit['insert']]
+    state['node_ids'][position:position] = keys
     state['position'] = position
     state['status'] = 'ready'
     save(db, state, 'recovery_inserted', edit)
