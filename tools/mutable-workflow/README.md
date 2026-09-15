@@ -30,7 +30,8 @@ later `resume` is the continuation owner. Inspection is not liveness evidence.
 
 ### Plan and effect grants
 
-`plan.json` has exactly:
+`plan.json` has these required fields (and optionally the `recovery` registry
+defined in the ACR-539 section below):
 
 ```json
 {
@@ -213,9 +214,11 @@ After executor loss, `resume` under newly acquired executor ownership records
 uncollected attempts as `orphaned: true`, with missing output and unknown effects;
 pending cancellation becomes unavailable. Ready/running workflows become
 ambiguous even when that worker was superseded. No automatic replay occurs.
-The editor can then record reconciled new intent via `amend`; old missing results
-stay missing. This slice does not salvage output after collector death, resume a
-provider session, or accept externally submitted results. Live-collector late
+The editor can then record reconciled new intent via `amend`; that does not fill
+old missing results. Worker-backed recovery, when separately admitted below,
+can collect a later result while retaining the earlier interruption evidence. The base collector does not salvage arbitrary output after collector death or
+accept externally submitted results. The optional worker-backed recovery below
+can redeliver an exact request under its effect-owner contract. Live-collector late
 returns across edits are supported and tested; arbitrary crash salvage is not.
 
 ### Existing failure-informed recovery entry
@@ -336,3 +339,130 @@ reentry, policy bases, retained raw binary bytes, live supersession, cancellatio
 collector loss, atomic invalid compositions and stale/racing writers. These are
 bounded deterministic mechanism controls, not semantic-agent trials or universal
 safety/efficacy proof.
+
+## ACR-539: bounded recovery and durable diagnostics
+
+Existing `amend` retry/return/goto remain **new execution intent**, not safe
+redelivery. An optional immutable plan field selects a separately implemented
+worker contract (never infer this capability from `effects` text):
+
+```json
+"recovery": {"local": "deduplicated-attempt-v1"}
+```
+
+Only opt in after the actual registered program implements the contract below.
+A lying or changed worker cannot be made safe by this declaration. Existing
+plans omit the field and have **no worker-backed redelivery capability**.
+
+```sh
+python tools/mutable-workflow/cli.py recover /absolute/run --attempt 1
+python tools/mutable-workflow/cli.py recover /absolute/run --attempt 1 --redeliver
+```
+
+`recover` takes sole executor ownership, records collector loss where applicable,
+and asks the registered worker for a read-only recovery observation. It returns
+`{current, attempt, next_action}` with the ordinary **current graph status** exit
+code. Without `--redeliver` it never repeats the work. Without a selected worker
+contract it errors usefully: inspect the original request/output and reconcile
+with the effect owner before expressing new intent. The original worker may
+still be in flight; executor ownership is not worker termination evidence.
+
+### `deduplicated-attempt-v1` — effect-owner obligations
+
+Normal delivery keeps the exact original worker request, including
+`run_id`/`attempt_id`. That pair is the effect identity. The program must:
+
+- Bind that identity to the **entire exact request**, rejecting changed payloads.
+- Serialize concurrent original/repeated deliveries and durably deduplicate its
+  effect, retaining the original result for replay. Commit an effect together
+  with its replayable result, or have an equivalent effect-owned guarantee.
+- Make its recovery query read-only and safe while an original worker may still
+  be running. Return `unknown` whenever its actual guarantee cannot be upheld.
+  A local journal appended before an arbitrary remote effect is **not** enough.
+
+The query is one stdin JSON object to the same registered argv:
+
+```json
+{"protocol":"deduplicated-attempt-v1","operation":"recovery_query","request":{"...":"entire original request"}}
+```
+
+The whole stdout must be exactly one object with `protocol`, `run_id`, integer
+`attempt_id`, `disposition` (`retry_safe` or `unknown`), and nonempty `detail`.
+Protocol and identities must match. Only zero process exit plus an admissible
+`retry_safe` assertion permits the explicitly requested redelivery. Missing,
+malformed, foreign, nonzero or unknown replies do not. Query raw output and its
+interpretation are retained in `worker_recovery_observed` events and attempt
+`recovery_observations`; they are worker assertions, not independent proof.
+
+Redelivery durably records `attempt_redelivered` before dispatch, uses the
+**unchanged original request and attempt identity**, and settles through the
+ordinary result/advancement transaction. It does not create a new graph attempt,
+rewrite a prior collected failure, or recertify superseded work. The original
+`interrupted` event and `orphaned: true` remain; a subsequently recovered output
+is not evidence that the earlier collector captured it. A settled attempt is an
+idempotent read. Internal duplicate identical result receipts do not advance
+again; conflicting receipts are rejected without replacing original evidence.
+There is no public arbitrary-result-injection endpoint.
+
+Pending cancellation becomes unavailable on loss as before. Recovery does not
+signal a cached PID, establish exit, or erase earlier submission evidence.
+Explicit redelivery authorizes another delivery under the worker guarantee, not
+an assertion that cancellation completed. `unknown` requires effect-owner
+reconciliation; ordinary amendments retain the caller's explicit new intent,
+not an engine-generated safety verdict.
+
+The fake `recoverable_worker.py` demonstrates the guarantee **only for its atomic
+SQLite insertion plus stored result**. Its two deliveries can create one effect;
+a new attempt intentionally creates a different effect. It does not establish
+exactly-once effects for arbitrary programs or external services.
+
+### Consistency and interruption evidence
+
+State-based commands, including `output` and agent operations, now examine a
+consistent read snapshot for contiguous event/attempt identities, matching
+admission/return events, attempt summaries/archive references, active target,
+position/exhaustion and basic collected-output shape. Missing or inconsistent
+information errors rather than resetting a run to success. These are bounded
+logical diagnostics, not complete corruption detection, hostile-tamper
+protection, repair, power-loss qualification or an authenticated event journal.
+Missing both an artifact and every independent reference to it can remain
+undetectable. Exchange sequence/key/context checks are similarly bounded.
+
+The historical missing-event probe (events 1,3 with cursor 3) previously resumed
+as success. New tests inject that same loss and require useful failure from
+resume/inspect/output. The historical writer-contention failure remains a
+failure: an effect-written socket notification never guaranteed writer
+availability. Collection now avoids acquiring the writer lock when no
+cancellation is requested, rechecking under the lock when it is requested.
+Other writer contention still returns a real busy rejection; a deterministic
+control holds that lock, checks rejection/no prefix, releases it, reinspects the
+unchanged basis and successfully retries the edit while the worker is held.
+
+`tests/test_mutable_workflow_recovery.py` adds process faults before/after
+initialization, admission, dispatch, fake effect, result receipt, return commit
+(including inside its transaction), amendment and agent application. Tests use
+actual call seams and fake executables, not production fault flags or live
+agents. The existing cancellation/session/contrary-prefix controls remain
+selected. Run it alongside the three existing suites and secret-capture suite.
+Storage remains version 2 with additive optional recovery/evidence fields; no
+old results are migrated or retroactively qualified. Older runtimes are not
+qualified to exercise these new contracts.
+
+
+### Collection ownership and retained limitations (ACR-539)
+
+The optional agent adapter now gives each ask/collect a finite POSIX owner that
+survives its CLI controller's death through capture and collection; see
+[the actual ownership/reconciliation contract](agent-adapter.md#persistence-collection-and-outcomes).
+This is not automatic replay, retroactive salvage, or provider completion based
+on a receipt/PID. Owner loss can still leave submission/effects unresolved.
+Graph storage version 2 does not imply agent-history compatibility: old agent
+history remains intentionally unsupported even when graph inspection succeeds.
+Worker same-attempt redelivery retains historical orphan evidence, so attempt
+cancellation is unavailable during it; abort stops graph scheduling, not all
+live deliveries. No delivery-cancellation system is introduced.
+
+Durable-history validation indexes attempt admission/return events once per load,
+rather than scanning all events twice per attempt. It still reads the complete
+history and validates all exchanges where selected; no capacity/latency or
+universal corruption-detection guarantee follows.

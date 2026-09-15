@@ -18,12 +18,13 @@ provider session, external effect or live efficacy trial.
 ## Entry and caller-owned authority
 
 Use an existing version-2 run in private planning storage. Python 3.10+, POSIX
-locks and PyYAML (used by the shared secret-capture helper) are required.
+fork/setsid/flock and PyYAML (used by the shared secret-capture helper) are required.
 
 ```text
 python tools/mutable-workflow/agent_cli.py ask /absolute/run --file request.json
 python tools/mutable-workflow/agent_cli.py show /absolute/run --key judgment-1
 python tools/mutable-workflow/agent_cli.py collect /absolute/run --key judgment-1
+python tools/mutable-workflow/agent_cli.py owner /absolute/run
 ```
 
 `ask` accepts exactly this request shape (paths below are placeholders, not
@@ -153,7 +154,8 @@ A recorded nonzero runner exit prevents application even if other evidence claim
 success. Local capture is established by the stored zero return code: transport
 returns only after reading EOF, publishing the redaction carry tail and waiting
 for the process; submission persists that result before response collection.
-After collector loss, null local exit remains null. Durable trace can establish
+After collector loss, null local exit remains null unless the ACR-539 complete
+local capture receipt below was actually published and validates. Durable trace can establish
 upstream completion, but cannot establish complete local capture. Even a unique
 bound response in retained bytes remains evidence only: a missing suffix could
 contain another response that would prevent application. No response kind is
@@ -171,34 +173,80 @@ new steps. A model response alone grants neither decision nor mutation authority
 
 ## Persistence, collection and outcomes
 
-An additive `agent_exchanges` table lives in the existing run DB; graph storage
+Additive `agent_exchanges` and version-1 `agent_history` tables live in the existing run DB; graph storage
 version 2 and worker-attempt contracts do not change. Agent exchanges have their
 own ordered keys; they do not manufacture graph events or increment the graph
 cursor. `cli.py inspect/output` remains graph/worker evidence; `agent_cli.py show`
 returns the separate agent exchange and source paths. Existing version-1 rejection
-and original historical engine results are not migrated or relabeled.
+and original historical engine results are not migrated or relabeled. An existing
+pre-ACR-539 exchange table without the recovery history marker is rejected as
+unsupported, not bootstrapped over possibly missing exchanges; use its original
+runtime for inspection/continuation. Graph version 2 is **not** an agent-history compatibility indicator: graph inspect can succeed while agent show/collect/ask reject old history. No automatic agent-history migration is supplied.
 
 A dedicated collector lock excludes concurrent dispatch/collection for the run,
-not live graph edits or `show`. Submission intent commits **before** process
-creation. `ask` owns synchronous native collection while alive; it streams merged
-stdout/stderr into a unique private log through the existing secret-safe capture
-helper before publication. There is no shell wrapper, truncation, secondary raw
-sink or polling loop. Normal return records the actual process exit, then one
-exact trace observation and response/application. Each `collect` call makes at
-most one trace observation and **never dispatches/resumes a model**. It is the
-explicit caller-owned continuation after delay or collector loss; no daemon
-silently takes ownership. Delayed trace completion can settle an already fully
-captured exchange. Loss before the capture result is persisted instead stays
-pending even on successful trace; repeated collection observes evidence but
-cannot reconstruct missing bytes or authorize a replacement submission. Calling it on a returned or known-not-submitted record is an idempotent read.
+not live graph edits or `show`. Each `ask` or `collect` starts one finite local
+**collection owner**, under the purpose-built runtime's existing authority.
+The synchronous CLI controller waits for that owner, but is not its capture
+lifetime. `collection_owner.py` takes the lock before forking, with no DB
+connection or provider process yet open. The owner inherits the same flock open
+file description, creates a separate POSIX session, disconnects controller
+standard streams, and owns the existing operation through lookup, submission,
+EOF/redaction/exit/receipt capture, trace observation, and joint application commit.
+Closing the controller's lock descriptor on death does not unlock the owner's
+remaining descriptor. Runner subprocesses do not inherit that descriptor.
+Separate sessions do not provide host-restart, owner-kill, cgroup/job-tree-kill
+or machine-failure survival; whole-workload termination may still kill both.
+The owner exits after this single operation; it never schedules, restarts,
+replays, or automatically drives workers. This is not a general daemon or a
+replacement for provider supervision. Use this entry as a single-threaded CLI,
+not a fork-from-multithreaded-host API.
+
+Submission intent still commits **before** runner process creation. Merged bytes
+flow only through the existing declared-secret sink. No raw second sink or
+truncating output relay is added. Controller death before/during/after capture
+no longer itself abandons the owner's stream, carry tail, receipt or collection.
+Controller death does **not** revoke already granted operation/edit authority;
+the owner can still apply an originally authorized edit against its original
+basis. Ordinary graph surgery remains concurrent and can make that edit stale.
+
+`owner RUN` is a read-only ownership diagnostic (exit 0 for a successful
+observation, **not execution completion**). It samples lock availability and
+returns the latest owner record path, intent, started/result-file presence and
+reconciliation guidance. Busy is an observation of a lock holder, not a PID
+liveness or provider-effect claim. During a concurrent start its latest pointer
+and lock sample may describe different instants. `agent-owner.json` points to
+one unique directory under `agent-owners/`; older directories are retained.
+`intent.json` records version/id/command, not unvalidated caller payload;
+`started.json` records diagnostic PID/session, never signaling authority;
+`result.json` atomically retains either the operation's result or a structured
+error. Its presence is not a receipt or successful response. Temporary files
+are never consumed. Full result records contain private exchange context just
+like the DB: retain the entire run privately. They add storage per command.
+A replacement controller uses `show` and explicit `collect`, not old PIDs or
+owner-result presence to establish response completeness.
+
+If the **owner** dies, a waiting controller reports structured exit5 uncertainty
+including its observed owner exit. If both die, lock-free `owner` observation
+plus explicit `collect KEY` exposes retained exchange/receipt evidence. Lock
+acquisition never proves that the original runner stopped. A new collection
+owner makes at most one trace observation and **never dispatches/resumes a
+model**. Published complete receipts can recover local exit; prepared records
+can be classified not-submitted under sole ownership. Pending-without-receipt
+or without invocation identity remains unresolved, blocks new keys, and never
+licenses prefix application or replacement submission. If death preceded the
+fork and exchange creation, collect reports unknown key; a subsequent explicit
+ask is new admission, not automatic retry of an uncertain provider dispatch.
+Returned/not-submitted exchanges remain idempotent reads.
 
 Returned JSON distinguishes `state`, `continuity`, `target`, established `session`,
 `acceptance`, local `returncode`, `terminal_result`, durable `completion_basis`,
 raw-log path, trace-observation paths, returned artifact refs, substantive
 `response`, and `application`. States:
 
-- `prepared`: local context retained, no durable submission intent yet. Interrupted
-  preparation is conservative unresolved work, not permission for implicit replay.
+- `prepared`: local context retained, no durable submission intent yet. Under
+  collector ownership `collect` now records this interruption as `not_submitted`:
+  the owner always commits pending intent before runner process creation. It does
+  not dispatch; a new explicit key may continue.
 - `not_submitted`: a live pre-submission failure was observed; error/lookup remains
   visible. A new key can retry explicit caller intent without losing the last
   established session or its since-cursor basis.
@@ -209,7 +257,7 @@ raw-log path, trace-observation paths, returned artifact refs, substantive
   `no_edit`, `question_to_caller`, `applied`, or `rejected`. This is **not workflow
   completion**, review safety, question resolution, or merge authority.
 
-CLI exit 0 means `returned` (including questions and rejected edits); exit 4 means
+For ask/collect/show, CLI exit 0 means `returned` (including questions and rejected edits); exit 4 means
 another retained state. Exit 5 is a command/contract/storage error with JSON
 `not_confirmed`; inspect durable state, do not infer no effects. `show` uses these
 same exchange-state exits. Abrupt signals may have only the OS exit.
@@ -220,10 +268,11 @@ completion is provided. A missing/malformed/truncated response cannot be rebuilt
 from a mailbox receipt or unrelated artifact. The selected trace/CLI contract
 exposes no complete substantive-output retrieval basis after local capture loss;
 upstream delivery success is not an acknowledgement of this collector's retained
-bytes. Settling that case requires an independently supported complete-output
-recovery contract or a separately authorized durable collector design, neither
-implemented nor assumed here. Even loss after EOF but before recording the exit
-remains conservatively pending. Unknown acceptance, including
+bytes. Retroactively settling already-lost bytes requires an independently supported
+complete-output recovery contract, not supplied here. The finite owner preserves
+future ordinary delivery across controller loss; it does not survive its own
+loss or recover historical unreceipted bytes. Owner loss after EOF but before publishing either local completion record remains
+conservatively pending; the receipt below closes only the subsequent DB-record gap. Unknown acceptance, including
 providers whose validated external acceptance is not exposed in the selected
 trace field, remains a caller-owned gap. Different migrated session identities
 are not attested as same-session by this adapter. Terminal provider failures are
@@ -238,7 +287,7 @@ bytes. Caller context containing known literal secrets is rejected rather than
 silently changing its authority/graph meaning. This is not universal secret
 recognition (encoded/derived values, undeclared secrets and pre-existing worker
 artifacts retain their original limits). Log redaction may make identity/JSON
-unusable; that remains a collection gap, never a bypass to raw capture. Collector
+unusable; that remains a collection gap, never a bypass to raw capture. Collection-owner
 loss can lose a redaction carry-buffer tail or bytes still in transit; retained
 bytes are partial evidence, not reconstructed full output.
 
@@ -260,5 +309,86 @@ collector death without sleep-based admission guesses. These are mechanism
 controls, not provider/model efficacy, live runner invocation or sandbox proof.
 
 ```text
-python -m pytest -q tests/test_mutable_workflow.py tests/test_mutable_workflow_surgery.py tests/test_mutable_workflow_runner.py
+python -m pytest -q tests/test_mutable_workflow.py tests/test_mutable_workflow_surgery.py tests/test_mutable_workflow_runner.py tests/test_mutable_workflow_recovery.py tests/test_mutable_workflow_owner.py tests/test_secret_safe_capture.py
 ```
+
+
+## ACR-539 complete local capture receipt and owner-loss boundary
+
+For new exchanges `capture_protocol: local-receipt-v1` selects a receipt at
+`runner.log.capture.json`. Transport first drains EOF through the existing
+secret-redacting sink, publishes the carry tail, waits for process exit, closes
+and syncs the log, then atomically publishes the receipt before returning to
+`submit`. The receipt has exactly `version: 1`, `bytes`, `sha256`, and integer
+`returncode`, describing the **entire retained redacted merged log**, not raw
+secret bytes or upstream spool delivery. Temporary receipt files are never used
+as completion evidence.
+
+If the collection owner dies after that publication but before storing its exit in
+the exchange, `collect` validates the complete log against the receipt and can
+recover that local exit. A mismatch, malformed receipt or conflicting stored
+exit is not success. New exchanges require this receipt as well as zero exit
+and existing exact-root trace/session/response checks before application.
+Missing receipt plus successful trace still retains trace/artifact evidence but
+cannot settle a prefix. Records without the supported `capture_protocol` are rejected, not upgraded
+from their older recorded-EOF semantics; use the original runtime to inspect
+those historical runs. No receipts or history markers are invented for them. Returned records remain idempotent historical reads, not ongoing audits
+of artifact presence.
+
+The receipt is a local trusted-collector assertion, not authentication against a
+hostile same-user writer, universal storage integrity, or a power-loss guarantee.
+Its digest does not establish provider truth, acceptance, output authorship or
+model efficacy. Secret redaction can still render a response unusable. Separate
+trace observations also get receipts because they use the same capture owner;
+those receipts never substitute for the dispatch log's receipt.
+
+The existing method still handles a lost provider session through pre-submission
+`session locate` / explicit fresh fallback **after a returned exchange**. The
+new fake control recovers a receipt-backed edit and then exercises that route;
+it does not conflate capture recovery and session existence.
+
+### Concrete capability boundary returned to the caller/root
+
+There is still no safe implemented recovery for **owner** death during capture, between
+EOF/wait and receipt publication, or after pending intent but before a retained
+invocation identity. Neither a caller-supplied success statement, generic
+Rejected/exit status, transcript location, nor a retained prefix authorizes
+replay or response application. The pending exchange remains owned by its named
+caller; there is no automatic new-key bypass.
+
+Current runner source does retain sealed per-invocation output in
+`crates/oulipoly-runtime/src/executor/output_spool.rs::persist_for_invocation`,
+with metadata owned by `crates/oulipoly-state/src/db/invocation_artifacts.rs`.
+But the selected public `trace --json` DTO in
+`crates/oulipoly-runtime/src/trace/mod.rs` supplies no complete-output retrieval
+descriptor; `session locate` returns session metadata, not this exchange's full
+merged response universe. This adapter does not infer a private path, read real
+private invocation payloads, or invent a provider endpoint.
+
+The selected outcome is future durable ownership independent of the CLI
+controller, not retroactive salvage or a provider output-fetch invention.
+The actual runner also supports caller-stable `--submission-token` for an
+existing **resume target** (usage CLI and `run/resume/execution.rs`). Its
+mailbox submitted-input row establishes admission/target/payload identity, not
+complete response or task completion. There is no corresponding established
+fresh-launch token association. This adapter does not adopt tokenized resume:
+its surviving owner consumes ordinary supported delivery; owner loss remains
+explicit rather than claiming a token can recover the complete stream. Existing
+untokenized pending exchanges are never retroactively associated or resubmitted.
+
+Attempt-oriented cancellation during worker same-attempt redelivery remains
+**unavailable** because the historical orphan fact is retained. Killing only a
+new delivery would not establish termination of an unknown original worker.
+Graph abort can stop scheduling without terminating either delivery. The finite
+agent owner likewise adds no delivery-cancellation or cached-PID signaling
+system: controller termination is not owner cancellation, and owner termination
+is not proof all work stopped. Bounded workers/providers and explicit uncertainty
+remain admission premises, not newly measured production guarantees.
+
+
+`agent_history` records the version and exchange count in the same transaction
+as each exchange insert/update (including applied edits). Missing tables, marker,
+interior rows or tail rows are therefore useful errors rather than an empty new
+conversation. Sequence/key/context checks bind projections. Loss of both tables
+and every independent reference cannot be detected by this bounded scheme; no
+universal corruption detector or repair is claimed.

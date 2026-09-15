@@ -3,10 +3,13 @@
 Declared roles: orchestration, validator, mapper, formatter, accessor.
 """
 from contextlib import closing
+from functools import partial
 import json
 from pathlib import Path
 import uuid
 
+import capture_receipt
+import collection_owner
 import agent_store as store
 import runner_transport as transport
 from runtime import connect, exclusive, require
@@ -50,7 +53,7 @@ def prepare(directory, db, request, history, secrets):
                     context=store.context(directory, history), state='prepared',
                     target=None, continuity='fresh', observations=[], response=None,
                     application='not_applied', session=None, returncode=None,
-                    invocation=None, collector=request['config']['authority']['owner'])
+                    invocation=None, capture_protocol='local-receipt-v1', collector=request['config']['authority']['owner'])
     transport.require_secret_free(exchange, secrets)
     log_path(directory, exchange, 'prompt.json').parent.mkdir(parents=True, mode=0o700)
     store.put(db, exchange)
@@ -180,17 +183,18 @@ def apply_atomic(directory, db, exchange, edit):
 def collect_owned(directory, db, exchange, secrets):
     if exchange['state'] in ('returned', 'not_submitted'):
         return exchange
+    if exchange['state'] == 'prepared':
+        return retain_error(db, exchange, ValueError('interrupted before submission intent; new key permitted'))
     path = Path(exchange.get('log', log_path(directory, exchange, 'runner.log')))
     data = path.read_bytes() if path.exists() else b''
     exchange['invocation'] = transport.invocation_id(data)
     try:
+        recover_capture(exchange, path, data)
         require(exchange['invocation'] is not None, 'no invocation identity; unknown submission, caller must reconcile')
         root = read_trace(directory, exchange, secrets)
         interpret_trace(exchange, root, data)
-        # invoke returns only after capture EOF (including the redaction tail)
-        # and wait; submit persists that result before collection. Trace success
-        # cannot recover this evidence if the collector died before that commit.
-        require(exchange['returncode'] == 0,
+        # A validated local receipt is distinct from upstream trace success.
+        require(exchange['returncode'] == 0 and exchange.get('capture_receipt') is not None,
                 'complete local capture unconfirmed; retained prefix is evidence only, caller must reconcile')
         exchange['response'] = read_response(exchange, data)
         settle_response(directory, db, exchange)
@@ -207,8 +211,10 @@ def collect_owned(directory, db, exchange, secrets):
 def execute(directory, command, request=None, key=None):
     if command == 'show':
         return show(directory, key)
-    with exclusive(directory, 'agent-collector.lock'):
-        return execute_owned(directory, command, request, key)
+    if command == 'owner':
+        return collection_owner.inspect(directory)
+    return collection_owner.run(directory, command,
+        partial(execute_owned, directory, command, request, key))
 
 
 def execute_owned(directory, command, request, key):
@@ -253,3 +259,13 @@ def show(directory, key):
         exchange = store.find(db, key)
     require(exchange is not None, 'unknown exchange key')
     return exchange
+
+
+def recover_capture(exchange, path, data):
+    receipt = capture_receipt.read(path, data)
+    if receipt is not None:
+        require(exchange['returncode'] in (None, receipt['returncode']), 'capture exit disagreement')
+        exchange['returncode'] = receipt['returncode']
+        exchange['capture_receipt'] = receipt
+    if receipt is None:
+        exchange.pop('capture_receipt', None)

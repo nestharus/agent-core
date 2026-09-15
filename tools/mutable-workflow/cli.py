@@ -10,6 +10,7 @@ import sys
 from runtime import (ContractError, apply_edit, connect, drive, exclusive,
                      initialize, inspection, read_attempt)
 from surgery import amend
+from recovery import recover
 
 
 EXIT = {'success': 0, 'failure': 1, 'judgment': 2, 'ready': 3, 'running': 3,
@@ -18,18 +19,19 @@ EXIT = {'success': 0, 'failure': 1, 'judgment': 2, 'ready': 3, 'running': 3,
 
 def arguments():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('start', 'resume', 'inspect', 'output', 'judge', 'amend'))
+    parser.add_argument('command', choices=('start', 'resume', 'inspect', 'output', 'judge', 'amend', 'recover'))
     parser.add_argument('run_dir', type=Path)
     parser.add_argument('--file', type=Path, help='plan for start, edit for judge/amend')
     parser.add_argument('--max-steps', type=int, help='stop at a durable step boundary (0 allowed)')
     parser.add_argument('--since', type=int, default=0)
     parser.add_argument('--attempt', type=int)
+    parser.add_argument('--redeliver', action='store_true', help='recover: request worker-contract-backed redelivery')
     args = parser.parse_args()
     if args.max_steps is not None and args.max_steps < 0:
         parser.error('--max-steps must be nonnegative')
     if args.command in ('start', 'judge', 'amend') and args.file is None:
         parser.error('--file required')
-    if args.command == 'output' and args.attempt is None:
+    if args.command in ('output', 'recover') and args.attempt is None:
         parser.error('--attempt required')
     args.run_dir = args.run_dir.resolve()
     return args
@@ -42,6 +44,7 @@ def read_only(args):
 
 def read_view(db, args):
     if args.command == 'output':
+        inspection(db, 0)
         return read_attempt(db, args.attempt)
     return inspection(db, args.since)
 
@@ -58,6 +61,8 @@ def mutate_connected(args):
 
 
 def change(db, args):
+    if args.command == 'recover':
+        return recover(db, args.run_dir, args.attempt, args.redeliver)
     if args.command in ('judge', 'amend'):
         return edit_locked(db, args)
     return drive(db, args.run_dir, args.max_steps)
@@ -73,7 +78,7 @@ def execute(args):
     if args.command in ('inspect', 'output'):
         return read_only(args), 0
     state = mutate(args)
-    return state, EXIT[state['status']]
+    return state, EXIT[state.get('current', state)['status']]
 
 
 def main():
@@ -81,7 +86,7 @@ def main():
         value, code = execute(arguments())
         print(json.dumps(value, ensure_ascii=True))
         return code
-    except (ContractError, OSError, ValueError, TypeError, sqlite3.Error) as exc:
+    except (ContractError, OSError, ValueError, TypeError, KeyError, sqlite3.Error) as exc:
         print(json.dumps({'error': str(exc), 'outcome': 'not_confirmed'}), file=sys.stderr)
         return 5
 

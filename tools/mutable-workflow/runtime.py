@@ -12,6 +12,8 @@ import subprocess
 import uuid
 from contextlib import contextmanager
 
+import consistency
+
 
 class ContractError(ValueError):
     """Rejected input; no work is authorized by rejection."""
@@ -56,13 +58,22 @@ def validate_worker(name, argv):
 
 
 def validate_plan(plan):
-    fields(plan, ('purpose', 'workers', 'steps'))
+    require(isinstance(plan, dict) and set(plan) in (
+        {'purpose', 'workers', 'steps'}, {'purpose', 'workers', 'steps', 'recovery'}), 'invalid plan fields')
+    validate_recovery(plan.get('recovery', {}), plan.get('workers', {}))
     text(plan['purpose'])
     require(isinstance(plan['workers'], dict) and bool(plan['workers']), 'workers required')
     for name, argv in plan['workers'].items():
         validate_worker(name, argv)
     validate_steps(plan['steps'], plan['workers'])
     return plan
+
+
+def validate_recovery(contracts, workers):
+    require(isinstance(contracts, dict), 'recovery registry required')
+    for worker, contract in contracts.items():
+        require(worker in workers and contract == 'deduplicated-attempt-v1',
+                'unknown worker recovery protocol')
 
 
 @contextmanager
@@ -112,10 +123,27 @@ def add_node(state, step):
 
 
 def load(db):
+    owned = not db.in_transaction
+    if owned:
+        db.execute('BEGIN')
+    try:
+        return load_snapshot(db)
+    finally:
+        end_read(db, owned)
+
+
+def end_read(db, owned):
+    if owned:
+        db.rollback()
+
+
+def load_snapshot(db):
     row = db.execute('SELECT body FROM state WHERE id=1').fetchone()
     require(row is not None, 'initialization incomplete; no execution admitted')
     state = json.loads(row[0])
+    require(isinstance(state, dict), 'invalid durable state object; restore intact storage')
     require(state.get("version") == 2, "unsupported run version; use original runtime for v1 runs")
+    consistency.validate(db, state)
     return state
 
 
@@ -201,6 +229,8 @@ def captured(returncode, stdout, stderr):
 def signal_cancellation(db, directory, attempt_id, process, submitted):
     if submitted:
         return True
+    if read_attempt(db, attempt_id)['cancellation'] != 'requested':
+        return False
     with exclusive(directory, blocking=True):
         return cancel_if_requested(db, attempt_id, process)
 
@@ -284,13 +314,17 @@ def settle_cancellation(attempt, output, submitted):
 
 
 def finish_attempt(db, state, attempt, output, submitted):
-    require(attempt['output'] is None, 'attempt already settled')
+    if attempt['output'] is not None:
+        require(attempt['output'] == output and 'signal_submitted' in attempt
+                and attempt['signal_submitted'] == submitted,
+                'conflicting duplicate result; original retained')
+        return
     settle_cancellation(attempt, output, submitted)
     # Scheduling classification is separate from the original worker result.
     outcome = ('cancelled' if attempt['cancellation'] == 'confirmed'
                else output['result']['outcome'])
     credited = state['active_attempt'] == attempt['id']
-    attempt.update(outcome=outcome, output=output, credited=credited)
+    attempt.update(outcome=outcome, output=output, credited=credited, signal_submitted=submitted)
     state['attempts'][attempt['id'] - 1]['outcome'] = outcome
     if credited:
         settle_current(state, outcome)

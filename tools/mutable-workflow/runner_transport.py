@@ -10,6 +10,8 @@ import subprocess
 import sys
 import uuid
 
+import capture_receipt
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from secret_safe_capture import capture_stream, declared_secret_values, load_secret_names
 from runtime import require, text, validate_worker
@@ -35,10 +37,12 @@ def validate_config(config):
 
 
 def invoke(config, arguments, log, secrets):
-    # Called only by the workflow controller. Tests substitute an executable here,
+    # Called by the finite workflow collection owner. Tests substitute an executable here,
     # not a made-up acceptance result. Never use shell=True or discard a failed stream.
     with log.open('xb', buffering=0) as sink:
-        return capture_process(config, arguments, sink, secrets)
+        code = capture_process(config, arguments, sink, secrets)
+    capture_receipt.publish(log, code)
+    return code
 
 
 def capture_process(config, arguments, sink, secrets):
