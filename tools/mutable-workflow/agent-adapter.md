@@ -81,10 +81,15 @@ text transports access/effect/delegation bounds; it cannot prevent an untrusted
 model/tool from using inherited credentials. Do not select this entry where those
 limits require enforcement not already supplied by the environment. The adapter
 never launches model-requested arbitrary argv, fetches model-selected artifact
-paths, changes the worker registry/purpose, or grants external effects. An agent
-may propose investigation by inserting caller-registered workers through the
-existing amendment surface. The caller's next ordinary `cli.py resume` executes
-those workers; judgment does not automatically drive or repeat local work.
+paths, changes the worker registry/purpose, or grants external effects. Only when
+`authority.apply_edits` is true and the supplied delegation/effect/assignment bounds
+permit it may an agent propose investigation by inserting caller-registered
+workers through the existing amendment surface. Registration alone is not delegation
+authority. With edits disabled, composed instructions permit only question/observation
+responses and preserve the caller-supplied inquiry route, named root/collector and
+recovery-only scope; they do not invite worker insertion or graph edits. Delegation
+is caller-owned text, not a boolean or a provider-parsed role policy. The caller's
+next ordinary `cli.py resume` executes those workers; judgment does not automatically drive or repeat local work.
 
 ## Provider contracts actually consumed
 
@@ -138,8 +143,9 @@ attempt summaries, actual caller bounds and continuity label. Full old contexts
 are not recursively embedded. It supplies executable `inspect` / `output` argv
 for deeper evidence on demand; no private provider transcript is copied.
 
-The response contract is owned in `agent_adapter.py::RESPONSE_CONTRACT`. The
-agent emits exactly one bound line:
+The response contract is owned in `agent_adapter.py::response_contract` (shared
+envelope plus authority-conditioned instructions). The agent emits exactly one
+bound line:
 
 ```text
 MUTABLE_WORKFLOW_RESPONSE={"exchange_id":"prompt exchange UUID","run_id":"workflow UUID","basis_cursor":3,"kind":"question","detail":"What authority applies to the proposed effect?","edit":null}

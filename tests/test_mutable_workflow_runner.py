@@ -82,8 +82,10 @@ def test_fresh_then_accepted_same_session_with_current_changes(setup):
     assert '-a' not in launches(run.parent)[1]
 
 
-def test_unavailable_preflight_fresh_fallback_carries_question_and_history(setup):
+@pytest.mark.parametrize('apply_edits', [False, True])
+def test_unavailable_preflight_fresh_fallback_carries_question_and_history(setup, apply_edits):
     run, request = setup
+    request['config']['authority']['apply_edits'] = apply_edits
     mode(run.parent, kind='question')
     first = agent(run, 'ask', request)
     assert first['application'] == 'question_to_caller'
@@ -96,6 +98,8 @@ def test_unavailable_preflight_fresh_fallback_carries_question_and_history(setup
     assert second['fallback_basis']['returncode'] == 10
     assert second['target'] is None
     prompt = json.loads((run.parent / 'last-prompt.json').read_text())
+    assert prompt['request'] == request
+    assert f'authority.apply_edits is {str(apply_edits).lower()}' in prompt['instructions']
     assert prompt['request']['answer'] == request['answer']
     assert prompt['context']['prior_exchanges'][0]['response']['kind'] == 'question'
     assert prompt['context']['current']['purpose'] == 'Exercise local fake work'
@@ -414,3 +418,42 @@ def test_missing_reported_identity_is_explicit_fresh_not_recovery(setup):
     assert second['fallback_basis']['prior_exchange'] == 'one'
     assert second['target'] is None
     assert len(launches(run.parent)) == 2
+
+
+@pytest.mark.parametrize('apply_edits', [False, True])
+@pytest.mark.parametrize('delegation', [
+    'Propose registered investigation workers only.',
+    'No delegation. Factual questions return to named-root; recovery only.',
+])
+def test_composed_prompt_respects_edit_and_caller_inquiry_authority(setup, apply_edits, delegation):
+    run, request = setup
+    authority = request['config']['authority']
+    authority.update(owner='named-root', delegation=delegation, apply_edits=apply_edits)
+    request['question'] = json.dumps(dict(
+        root='named-root', question_destination='named-root',
+        return_destination='analytical-collector; root named-root',
+        scope='Use the supplied inquiry route; no new work during recovery.',
+        inquiry_route='Return missing evidence to the analytical collector for root assignment.'))
+    original = call(run, 'inspect')
+    agent(run, 'ask', request)
+    prompt = json.loads((run.parent / 'last-prompt.json').read_text())
+    assert prompt['request'] == request
+    instructions = prompt['instructions']
+    assert "Follow the supplied request's inquiry route, role scope and return destinations" in instructions
+    assert 'including any recovery-only restrictions' in instructions
+    assert 'named owner in request.config.authority' in instructions
+    assert 'request.config.authority.delegation' in instructions
+    assert 'Do not launch additional agents or workers yourself' in instructions
+    assert 'Propose bounded investigation by inserting registered workers' not in instructions
+    assert call(run, 'inspect') == original
+    if apply_edits:
+        assert 'kind may be edit, question or observation' in instructions
+        assert 'existing cli.py amend JSON with its original run/cursor' in instructions
+        assert 'If those bounds permit registered-worker investigation' in instructions
+        assert 'Registration alone is not delegation authority' in instructions
+        assert 'kind must be question or observation' not in instructions
+        return
+    assert 'kind must be question or observation, with edit=null' in instructions
+    assert 'Do not propose graph edits or registered-worker insertion' in instructions
+    assert 'you may propose' not in instructions
+    assert 'existing cli.py amend JSON' not in instructions
