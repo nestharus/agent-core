@@ -18,17 +18,40 @@ from surgery import amend
 
 RESPONSE_CONTRACT = '''Return exactly one line MUTABLE_WORKFLOW_RESPONSE=<JSON object> on stdout.
 Object fields: exchange_id, run_id, basis_cursor, kind, detail, edit.
-kind is edit, question, or observation. detail is nonempty text. edit is null unless
-kind=edit, when it is the existing cli.py amend JSON, with its original run/cursor.
-Questions return to the named caller, not to a user or invented authority.
-You may inspect current/since events and attempt evidence at the supplied paths.
-Propose bounded investigation by inserting registered workers through an edit;
-the caller's next ordinary drive executes them under the existing worker grant.
+detail is nonempty text. For kind=question or kind=observation, edit is null.
+Follow the supplied request's inquiry route, role scope and return destinations,
+including any recovery-only restrictions. Questions needing caller authority return
+to the named owner in request.config.authority, not a user or invented authority;
+preserve any supplied named root and analytical collector destinations.
+You may inspect current/since events and attempt evidence at the supplied paths
+only within request.config.authority.access and the assigned scope.
+Delegation is bounded by request.config.authority.delegation and the supplied
+assignment; neither this response format nor an edit grant expands those bounds.
 Do not launch additional agents or workers yourself. Do not mutate the graph directly.
 Do not expand access/effects/delegation, credentials, registry or purpose. Tool access
 is trusted-local, not sandbox enforcement. Keep secrets out of responses and files.
+'''
+
+EDIT_RESPONSE_CONTRACT = '''authority.apply_edits is true: kind may be edit, question or observation.
+For kind=edit, edit is the existing cli.py amend JSON with its original run/cursor.
+Propose an edit only within the supplied access, effects, delegation and assignment
+bounds. If those bounds permit registered-worker investigation, you may propose
+inserting those workers through an edit; the caller's next ordinary drive executes
+them under the existing worker grant. Registration alone is not delegation authority.
 An edit is future intent, never retrospective completion credit or verified truth.
 '''
+
+READ_ONLY_RESPONSE_CONTRACT = '''authority.apply_edits is false: kind must be question or observation, with edit=null.
+Do not propose graph edits or registered-worker insertion through this adapter.
+Use only the caller-supplied permitted inquiry route; if it is absent, insufficient
+or unclear, return the question or missing authority to the named caller. Do not
+replace that route with an edit or infer permission to delegate.
+'''
+
+
+def response_contract(authority):
+    edits = EDIT_RESPONSE_CONTRACT if authority['apply_edits'] else READ_ONLY_RESPONSE_CONTRACT
+    return RESPONSE_CONTRACT + edits
 
 
 def log_path(directory, exchange, name):
@@ -36,7 +59,8 @@ def log_path(directory, exchange, name):
 
 
 def persist_prompt(directory, exchange, secrets):
-    payload = dict(instructions=RESPONSE_CONTRACT, exchange_id=exchange['id'],
+    payload = dict(instructions=response_contract(exchange['request']['config']['authority']),
+                   exchange_id=exchange['id'],
                    request=exchange['request'], context=exchange['context'],
                    continuity=exchange['continuity'], target_session=exchange['target'])
     raw = json.dumps(payload, ensure_ascii=True).encode()
