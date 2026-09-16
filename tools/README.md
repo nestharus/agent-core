@@ -24,6 +24,8 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 - `operational_contracts.py` — fail-closed executable validation for workflow authorization contracts. **Status: implemented; see `operational-contracts/README.md`.**
 - `secret_safe_capture.py` — streams complete child output to stdout and a durable log while redacting values named by the selected operator contract's `secrets` list before either write; malformed contracts fail before log creation, and `presence` emits names with present/absent state only.
 
+Optional consumer composition: [mutable review](../workflows/mutable-review.md) selects an explicitly supplied public adapter; it does not change engine or review defaults.
+
 ## Composition pattern
 
 The motivating example for these components is post-merge wake of WU sessions:

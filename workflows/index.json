@@ -398,6 +398,29 @@
         ]
       }
     },
+    "mutable-review": {
+      "path": "workflows/mutable-review.md",
+      "workflow": {
+        "id": "mutable-review"
+      },
+      "workflow_dispatch_contract": {
+        "expectations": [
+          "read back delivered provider and linked adapter sources before explicit selection",
+          "preserve adapter-owned execution, inspection, recovery and disposition semantics"
+        ],
+        "inputs": [
+          "absolute trusted adapter CLI and its current command/configuration contract",
+          "actual purpose, why, actors, environment, access, decision authority, owner/collector and private run destination"
+        ],
+        "non_goals": [
+          "no default migration, semantic policy copy, engine, live efficacy claim or merge authority"
+        ],
+        "orchestrator": "explicitly selected public adapter CLI via workflows/mutable-review.py",
+        "outputs": [
+          "private adapter/provider run records, original evidence and execution disposition"
+        ]
+      }
+    },
     "pr-review": {
       "path": "workflows/pr-review.md",
       "workflow": {
