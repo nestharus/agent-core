@@ -214,3 +214,81 @@ def test_source_selection_links_the_executable_owner_not_manual_membership():
     assert 'runtime-compatibility' in instructions
     # These are source-coherence checks, not assertions that deployment occurred.
     assert 'does **not** assert the candidate is deployed' in method
+
+
+@pytest.mark.parametrize('fault', [{}, {'acceptance': None}, {'acceptance': 'unconfirmed'},
+    {'acceptance': 'rejected'}, {'foreign_session': True}, {'foreign_response': True}],
+    ids=['accepted', 'null-acceptance', 'unconfirmed', 'rejected', 'foreign-target', 'foreign-binding'])
+def test_combined_default_fresh_pin_answer_and_bound_return(configured, fault):
+    """Root integration decision: selection + pin + CI01, never live custody proof."""
+    import hashlib
+
+    config, root = configured
+    config = dict(new_config(config), fresh_provider_pin='codex5')
+    run = root / 'combined'
+    started = default_call(run, 'start', '--file', write(root / 'combined.json', config))
+    assert started['policy']['config'] == dict(config, selection='perspective-lives-v1',
+        reactivation_policy='after-act-domain-v1', allow_activation=True)
+    write(root / 'mode.json', dict(question_once='purpose'))
+    question = default_call(run, 'drive', code=4)
+    original = Path(question['return']).read_bytes()
+    first = rows(root)[0]
+    assert first['args'][-2:] == ['--pin-provider', 'codex5']
+    assert question['status'] == 'question'
+    assert default_call(run, 'drive', code=4)['status'] == 'question'
+    assert len(rows(root)) == 1
+    negative = dict(status='evidence', evidence='fixture: anonymous denied; no bypass found',
+                    basis='Examined fixture anonymous row only; not a live security claim')
+    write(root / 'mode.json', dict(entries={'purpose/premise': negative}, next='no_act', **fault))
+    result = default_call(run, 'drive', '--answer', 'Read the bounded fixture only', code=4 if fault else 0)
+    second = rows(root)[1]
+    assert second['args'] == ['resume', '--session-id', first['session'], '-m', 'gpt-xhigh',
+                             '-p', str(root), '-f', second['args'][-1]]
+    assert second['session'] == first['session']
+    assert second['answer'] == 'Read the bounded fixture only'
+    assert second['prior_exchanges'][0]['response']['detail'] == question['question']
+    assert Path(question['return']).read_bytes() == original
+    state = default_call(run, 'inspect')
+    cycle = state['policy']['cycles'][0]
+    job = cycle['jobs']['purpose']
+    if fault:
+        assert result['status'] == 'pending'
+        assert not cycle['qualified'] and not job.get('accepted')
+        pending = Path(job['pending']).read_bytes()
+        assert default_call(run, 'drive', code=4)['status'] == 'pending'
+        assert Path(job['pending']).read_bytes() == pending
+        assert len(rows(root)) == 2  # collection, never fresh replay of ambiguous work
+        assert all(p['current'] == 2 for d in state['policy']['lives'].values()
+                   for p in d['perspectives'].values())
+    else:
+        assert result['status'] == 'qualified' and result['decision']['next'] == 'no_act'
+        returned = json.loads(Path(job['accepted']['source']).read_text())
+        assert returned['state'] == 'returned' and returned['application'] == 'no_edit'
+        assert returned['target'] == returned['session'] == first['session']
+        assert returned['continuity'] == 'same_session'
+        response = returned['response']
+        assert response['exchange_id'] == returned['id']
+        assert response['run_id'] == returned['context']['current']['run_id']
+        assert response['basis_cursor'] == returned['context']['cursor']
+        data = Path(returned['log']).read_bytes()
+        assert returned['capture_receipt'] == dict(version=1, bytes=len(data),
+            sha256=hashlib.sha256(data).hexdigest(), returncode=0)
+        assert b'OULIPOLY_RESULT=' in data and b'MUTABLE_WORKFLOW_RESPONSE=' in data
+        product = json.loads(response['detail'])
+        assert product['assignment'] == job['assignment']['id']
+        assert product['entries']['premise'] == negative
+        for row in rows(root):
+            if row['args'][0] != 'resume':
+                assert row['args'][-2:] == ['--pin-provider', 'codex5']
+            if row['assignment']['role'] in ('frame', 'decide'):
+                assert row['question']['inputs']['evidence']['purpose/premise'] == dict(
+                    evidence=negative['evidence'], basis=negative['basis'], assignment=product['assignment'])
+        assert state['consumer_completion'] == 'not established; root owns verification and disposition'
+    for path in (run / 'requests').glob('*.json'):
+        request = json.loads(path.read_text())
+        assert request['config']['fresh_provider_pin'] == 'codex5'
+        assert request['config']['authority']['apply_edits'] is False
+        assert 'Meaningful healthy, negative or no-finding observations' in request['question']
+    diagnostics = [json.loads(line) for line in (root / 'runner-argv.jsonl').read_text().splitlines()
+                   if json.loads(line)[0] in ('session', 'trace')]
+    assert diagnostics and all('--pin-provider' not in args for args in diagnostics)
