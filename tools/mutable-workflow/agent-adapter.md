@@ -61,6 +61,24 @@ with an absolute executable, permitting an injected fake executable in tests.
 There is no shell expansion. `project` must be an isolated worktree for authored
 tracked changes; this adapter checks existence, not Git isolation or authorization.
 
+Optional `config.fresh_provider_pin` is a nonempty provider account name (for
+example `"codex5"`), with no whitespace/control characters or leading `-`.
+Omit the field for existing unpinned behavior; null/empty values are invalid.
+The adapter passes `--pin-provider NAME` only on fresh dispatch, including an
+already-admitted fresh fallback. It never adds it to original-session resume,
+locate, trace or present diagnostics. Do not inject pin flags into the shared
+`runner` prefix: they are rejected. The runner owns account existence/eligibility;
+a runner rejection does not authorize replay. This selection neither resolves
+nor replaces the opaque `model` alias or any saved runner selections.
+
+Like the rest of config, the field is persisted verbatim and immutable within a
+conversation: adding, removing or changing it on an existing run is rejected.
+It is not authority to rotate unknown work, reset history, or bypass pending
+admission. Callers select it explicitly at new-conversation admission; no default
+pin, installed-config mutation or cross-repository caller wiring is supplied.
+The CLI owner is `src-tauri/src/usage/cli.rs` in the runner checkout: top-level
+arguments conflict with subcommands and `--pin-provider` is fresh-only.
+
 This entry selects **ad-hoc model invocation only**: explicit `-m` on fresh and
 resume. It neither resolves model aliases nor accepts `agent_file`. Current runner
 `dispatch.rs::validate_top_level_resume_cli` rejects `-a` on resume; silently
@@ -315,7 +333,7 @@ collector death without sleep-based admission guesses. These are mechanism
 controls, not provider/model efficacy, live runner invocation or sandbox proof.
 
 ```text
-python -m pytest -q tests/test_mutable_workflow.py tests/test_mutable_workflow_surgery.py tests/test_mutable_workflow_runner.py tests/test_mutable_workflow_recovery.py tests/test_mutable_workflow_owner.py tests/test_secret_safe_capture.py
+python -m pytest -q tests/test_mutable_workflow.py tests/test_mutable_workflow_surgery.py tests/test_mutable_workflow_runner.py tests/test_mutable_workflow_pin.py tests/test_mutable_workflow_recovery.py tests/test_mutable_workflow_owner.py tests/test_secret_safe_capture.py
 ```
 
 
