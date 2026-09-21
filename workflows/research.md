@@ -132,6 +132,61 @@ In parallel fanout, delegated researchers may ask only for scope corrections tha
 
 For parallel-fanout research, after Phase 2 returns and before Phase 3 synthesis, run `process-tree-auditor` on the fanout subtree. The expected process lists each researcher question, prompt, log, and raw finding artifact. A blocking process violation prevents synthesis from consuming incomplete fanout.
 
+### Exact-output readback and process admission
+
+When an assignment names one exact output path, its verification read set
+defaults to that path alone. Read the named result path directly. Do not list or
+enumerate its parent, inspect neighboring entries, discover a marker, or use a
+directory read, wildcard, `grep`, glob, recursive traversal, or content search
+to locate or verify the result. The presence of sibling planning artifacts,
+nested repositories, or adjacent private material does not change this rule.
+Authority to write the result or read the research sources does not imply
+authority to widen post-write verification.
+
+A wider verification read set is permitted only when the assignment expressly
+authorizes it before dispatch and identifies both the allowed paths or patterns
+and the allowed operation classes. Do not infer wider authority from a broad
+planning root, a familiar filename, or a need to find a completion marker.
+
+The parent consumer performs process admission before using a returned research
+terminal:
+
+1. Validate the completed runner trace or an equivalent bounded activity record
+   for the assignment. The evidence must cover the completed activity through
+   the terminal and be sufficient to identify the read targets and operation
+   classes; the report's apparent correctness is not activity evidence.
+2. Compare every observed verification read with the assignment's authorized
+   read set and operation classes.
+3. Record semantic completion and process/access compliance independently. Use
+   `semantic_status: COMPLETE | INCONCLUSIVE` for the research result and
+   `process_status: COMPLIANT | BLOCKED` for the activity boundary. A plausible
+   or independently corroborated semantic conclusion does not make a process
+   violation compliant.
+4. Admit the research terminal for synthesis or decision use only when the
+   activity evidence is complete and `process_status` is `COMPLIANT`.
+
+Apply these closed process dispositions:
+
+| Observed verification activity | Process disposition |
+| --- | --- |
+| Direct read of only the exact named output path | `COMPLIANT`, subject to complete bounded activity evidence |
+| Directory read, wildcard, marker lookup, `grep`, glob, recursive traversal, or content search within an expressly authorized wider read set and operation class | `COMPLIANT`, subject to complete bounded activity evidence |
+| Any directory read, wildcard, marker lookup, `grep`, glob, recursive traversal, or content search outside the express assignment authority | `BLOCKED:RESEARCH_READ_SET_VIOLATION` |
+| Missing or incomplete runner trace or equivalent bounded activity record | `BLOCKED:RESEARCH_ACTIVITY_EVIDENCE_MISSING` |
+
+For `BLOCKED:RESEARCH_READ_SET_VIOLATION`, exclude all content returned by the
+unapproved widening and every conclusion dependent on it from semantic evidence,
+even when that content appears plausible. Do not admit the terminal or
+retroactively validate a contaminated artifact by re-reading only the exact path.
+
+Violation reports are metadata-safe. They may retain the assignment identifier,
+the declared read-set reference, the bounded activity-record reference, the
+operation class, the process disposition, and counts. They must not reproduce
+discovered paths or filenames, matched content or snippets, private values, or
+raw search output. Keep any separately authorized underlying trace at its
+existing evidence location rather than copying sensitive material into the
+report.
+
 ### Phase 3 - Synthesis
 
 The coordinator, or the single researcher in single-agent mode, integrates the
@@ -179,6 +234,9 @@ Any delegated question at this phase must be limited to accept, reframe, or foll
   wrong, fix the bad research output and re-synthesize from source findings.
 - **Use audit history for repeated review loops.** When research synthesis is revised and re-reviewed across rounds, follow `~/ai/conventions/audit-history.md` so prior findings, watch signals, and determinations remain visible.
 - **Question handling.** Use `~/ai/conventions/agent-questions-and-session-graph.md` for delegated scope, reframe, inconclusive-synthesis, and follow-up questions. Sub-agents must not ask the user to replace required research or model-owned synthesis.
+- **Exact-output admission.** Apply the exact-output readback and process-admission
+  rules before any single-agent result or parallel-fanout finding becomes
+  synthesis or decision evidence.
 
 ## Design Research Specialization
 
