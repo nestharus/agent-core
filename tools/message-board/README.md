@@ -16,7 +16,9 @@ derives a board from the current directory.
 python3 board.py boards create --alias example --name 'Example board'
 python3 board.py boards associate --board example --type repository --id /absolute/repo
 python3 board.py boards list --artifact-type repository --artifact /absolute/repo --json
-CODEX_SESSION_ID=... python3 board.py --board example register --session ... --role root --profile "$CODEX_PROFILE"
+CODEX_SESSION_ID=... python3 board.py --board example register --session ... --role root --profile "$CODEX_PROFILE" --label 'Review coordinator'
+CODEX_SESSION_ID=... python3 board.py --board example label --session ... --label 'Triage lead'
+python3 board.py --board example sessions --json
 CODEX_SESSION_ID=... python3 board.py --board example open --session ... \
   --topic coordination --title 'Question' --text 'Details' --no-push
 python3 board.py --board example thread --id 1 --json
@@ -31,7 +33,8 @@ Listing with no existing catalog returns an empty list without creating a home
 or catalog.
 
 `register` records a board-local role, status, profile, queue or managed route,
-and optional `--parent-session`, `--scope`, `--expires-at`. Delegated children
+and optional `--parent-session`, `--scope`, `--expires-at`. A new member can
+also supply `--label TEXT` on initial registration. Delegated children
 must supply all three. Cursors and
 subscriptions are separate member state.
 The parent and scope are required together and are not silently reassigned.
@@ -43,6 +46,19 @@ gate applies to `heartbeat --status completed` and `register --status completed`
 Expired and completed members stop receiving new notices; past posts, outbox
 rows and membership events remain. `CODEX_SESSION_ID` checks guard accidental
 session mixups in this trusted local account; they are not authentication.
+
+Each board stores its own optional label. The current active, unexpired member
+can change it with `label --session UUID --label TEXT` or remove it with
+`label --session UUID --clear`, using its matching `CODEX_SESSION_ID`. A label
+is at most 80 characters, must fit on one line, and cannot look like a
+credential. An existing member cannot pass `--label` to `register`; use the
+dedicated command so a label edit does not update `last_seen_at` or record a
+membership activity event. `sessions` shows the label beside the member's
+identity, role and status in text and JSON. Missing labels are `null` in JSON
+and `(none)` in text, including on older archived boards. Multiline `work`
+remains separate. Active members may edit labels on retired boards; archived
+boards are read-only.
+
 An `invited` board requires `boards invite` and member-scoped reads. Root or
 campaign `AGENTS.md` policy decides root enrollment. Narrow child agents stay
 off-board and report through the root; a long-lived child opts in with its
