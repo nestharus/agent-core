@@ -1,0 +1,782 @@
+"""Focused integration checks; all SQLite files live in a temporary directory."""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import shlex
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+from contextlib import redirect_stdout
+from types import SimpleNamespace
+import unittest
+from unittest import mock
+
+import board_store
+import board as board_cli
+import catalog
+import queue_transport
+
+
+CLI = Path(__file__).with_name("board.py")
+A = "11111111-1111-4111-8111-111111111111"
+B = "22222222-2222-4222-8222-222222222222"
+C = "33333333-3333-4333-8333-333333333333"
+D = "44444444-4444-4444-8444-444444444444"
+
+
+class BoardCoreTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "board home"
+
+    def run_board(self, *args, actor=None, ok=True):
+        env = os.environ.copy()
+        env.pop("CODEX_SESSION_ID", None)
+        if actor:
+            env["CODEX_SESSION_ID"] = actor
+        proc = subprocess.run([sys.executable, str(CLI), "--home", str(self.home), *map(str, args)],
+                              text=True, capture_output=True, env=env, timeout=20)
+        if ok:
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        else:
+            self.assertEqual(proc.returncode, 2, (proc.stdout, proc.stderr))
+            self.assertNotIn("Traceback", proc.stderr)
+        return proc
+
+    def obj(self, *args, actor=None):
+        return json.loads(self.run_board(*args, "--json", actor=actor).stdout)
+
+    def run_in_process(self, *args, actor=A):
+        with mock.patch.dict(os.environ, {"CODEX_SESSION_ID": actor}), redirect_stdout(io.StringIO()):
+            return board_cli.main(["--home", str(self.home), *map(str, args)])
+
+    def test_list_missing_catalog_has_no_side_effects(self):
+        self.assertEqual(self.obj("boards", "list"), [])
+        self.assertFalse(self.home.exists())
+        self.home.mkdir()
+        self.assertEqual(self.obj("boards", "list", "--artifact-type", "repository",
+                                  "--artifact", "/abs/repo"), [])
+        self.assertEqual(list(self.home.iterdir()), [])
+        entry = self.create("listed")
+        self.assertEqual([row["board_id"] for row in self.obj("boards", "list")],
+                         [entry["board_id"]])
+
+    def create(self, alias, *, temporary=True, invited=False):
+        args = ["boards", "create", "--alias", alias, "--name", alias.title()]
+        if temporary:
+            args.append("--temporary-test")
+        if invited:
+            args += ["--membership", "invited"]
+        return self.obj(*args)
+
+    def join(self, board, session, *, role="root", route="queue", extra=()):
+        return self.run_board("--board", board, "register", "--session", session,
+                              "--role", role, "--route", route, *extra, actor=session)
+
+    def open(self, board, author=A, *, title="Question"):
+        return self.run_board("--board", board, "open", "--session", author,
+                              "--topic", "work", "--title", title, "--text", "Body",
+                              "--no-push", actor=author)
+
+    def legacy_file(self, name):
+        path = Path(self.temp.name) / name
+        with board_store.database(str(path)):
+            pass
+        with sqlite3.connect(path) as db:
+            db.execute("DROP TABLE notification_attempts")
+            db.execute("ALTER TABLE notification_outbox DROP COLUMN route")
+            db.execute("ALTER TABLE sessions DROP COLUMN route")
+            db.execute("PRAGMA user_version=3")
+        return path
+
+    def schema3_source(self, name):
+        """Build the pre-route column layout for a portable copied-board fixture."""
+        path = Path(self.temp.name) / name
+        with sqlite3.connect(path) as conn:
+            conn.executescript("""
+                CREATE TABLE sessions (
+                    session TEXT PRIMARY KEY, campaign TEXT NOT NULL, role TEXT NOT NULL,
+                    profile TEXT, status TEXT NOT NULL, work TEXT, registered_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL, ack_seq INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE posts (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT NOT NULL,
+                    recipient TEXT, topic TEXT NOT NULL, kind TEXT NOT NULL,
+                    text TEXT NOT NULL, ref TEXT, reply_to INTEGER, created_at TEXT NOT NULL);
+                CREATE TABLE threads (
+                    thread_id INTEGER PRIMARY KEY, title TEXT NOT NULL, topic TEXT NOT NULL,
+                    opener TEXT NOT NULL, created_at TEXT NOT NULL);
+                CREATE TABLE thread_posts (post_seq INTEGER PRIMARY KEY, thread_id INTEGER NOT NULL);
+                CREATE TABLE subscriptions (
+                    thread_id INTEGER NOT NULL, session TEXT NOT NULL, subscribed_at TEXT NOT NULL,
+                    PRIMARY KEY(thread_id, session));
+                CREATE TABLE attachments (
+                    post_seq INTEGER NOT NULL, position INTEGER NOT NULL, reference TEXT NOT NULL,
+                    PRIMARY KEY(post_seq, position));
+                CREATE TABLE notification_outbox (
+                    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient TEXT NOT NULL, thread_id INTEGER NOT NULL, post_seq INTEGER NOT NULL,
+                    event TEXT NOT NULL, title TEXT NOT NULL, sender TEXT NOT NULL,
+                    created_at TEXT NOT NULL, delivery_state TEXT NOT NULL DEFAULT 'pending',
+                    queue_message_id TEXT, state_changed_at TEXT, attempted_at TEXT,
+                    queued_at TEXT, acknowledged_at TEXT, claim_token TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0, UNIQUE(recipient, post_seq));
+                PRAGMA user_version=3;
+            """)
+        return path
+
+    def test_many_to_many_links_and_alias_never_reassigned(self):
+        one = self.create("one")
+        two = self.create("two")
+        self.assertNotEqual(one["board_id"], two["board_id"])
+        for board in (one, two):
+            self.run_board("boards", "associate", "--board", board["alias"], "--type",
+                           "repository", "--id", "/repo/common")
+        self.run_board("boards", "associate", "--board", "one", "--type",
+                       "repository", "--id", "/repo/second")
+        rows = self.obj("boards", "list", "--artifact-type", "repository",
+                        "--artifact", "/repo/common")
+        self.assertEqual({row["board_id"] for row in rows}, {one["board_id"], two["board_id"]})
+        self.assertEqual(len(self.obj("boards", "show", "--board", "one")["artifacts"]), 2)
+        self.run_board("boards", "disassociate", "--board", "two", "--type",
+                       "repository", "--id", "/repo/common")
+        self.assertEqual(len(self.obj("boards", "list", "--artifact-type", "repository",
+                                      "--artifact", "/repo/common")), 1)
+        self.run_board("boards", "retire", "--board", "one")
+        self.run_board("boards", "archive", "--board", "one")
+        self.run_board("boards", "purge", "--board", "one", "--confirm-id",
+                       one["board_id"], "--irreversible")
+        tombstone = self.obj("boards", "show", "--board", one["board_id"])
+        self.assertEqual(tombstone["state"], "tombstoned")
+        self.assertFalse(tombstone["detail_available"])
+        self.run_board("boards", "create", "--alias", "one", "--name", "Replacement", ok=False)
+        self.run_board("--board", "one", "read", ok=False)
+
+    def test_memberships_routes_cursors_subscriptions_and_expiry_are_board_local(self):
+        one = self.create("member-one")
+        two = self.create("member-two")
+        for board in (one, two):
+            self.join(board["board_id"], A)
+        self.join(one["board_id"], B, role="reviewer", route="managed",
+                  extra=("--parent-session", A, "--scope", "review artifacts",
+                         "--expires-at", "2030-01-01T00:00:00Z"))
+        self.run_board("--board", one["board_id"], "register", "--session", B,
+                       "--role", "reviewer", actor=B)
+        updated = self.obj("--board", one["board_id"], "sessions")[1]
+        self.assertEqual((updated["route"], updated["parent_session"], updated["expires_at"]),
+                         ("managed", A, "2030-01-01T00:00:00.000000Z"))
+        self.join(two["board_id"], B, role="scribe", route="queue")
+        self.open(one["board_id"])
+        self.open(two["board_id"])
+        d1 = self.obj("--board", one["board_id"], "deliveries")
+        d2 = self.obj("--board", two["board_id"], "deliveries")
+        self.assertEqual((d1[0]["post_seq"], d2[0]["post_seq"]), (1, 1))
+        self.assertEqual((d1[0]["route"], d1[0]["delivery_state"]), ("managed", "managed_pending"))
+        self.assertEqual((d2[0]["route"], d2[0]["delivery_state"]), ("queue", "pending"))
+        self.assertEqual(d1[0]["board_id"], one["board_id"])
+        self.run_board("--board", one["board_id"], "ack", "--session", B, "--through", 1, actor=B)
+        self.assertEqual(self.obj("--board", one["board_id"], "sessions")[1]["ack_seq"], 1)
+        self.assertEqual(self.obj("--board", two["board_id"], "sessions")[1]["ack_seq"], 0)
+        self.run_board("--board", one["board_id"], "subscribe", "--session", B,
+                       "--thread", 1, actor=B)
+        with sqlite3.connect(one["db_path"]) as first, sqlite3.connect(two["db_path"]) as second:
+            self.assertEqual(first.execute("SELECT COUNT(*) FROM subscriptions WHERE session=?", (B,))
+                             .fetchone()[0], 1)
+            self.assertEqual(second.execute("SELECT COUNT(*) FROM subscriptions WHERE session=?", (B,))
+                             .fetchone()[0], 0)
+        self.assertEqual(self.obj("--board", one["board_id"], "notifications", "--session", B)[0]
+                         ["board_id"], one["board_id"])
+        with sqlite3.connect(one["db_path"]) as conn:
+            conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (B,))
+        self.open(one["board_id"], title="After expiry")
+        self.assertEqual(len(self.obj("--board", one["board_id"], "deliveries")), 1)
+        self.run_board("--board", one["board_id"], "watch", "--session", B,
+                       "--timeout", 1, actor=B, ok=False)
+        self.run_board("boards", "dispose-notices", "--board", one["board_id"],
+                       "--notice-id", 1, "--reason", "Expired member; retain pending delivery")
+        self.run_board("--board", one["board_id"], "leave", "--session", B, actor=B)
+        self.assertEqual(self.obj("--board", one["board_id"], "sessions")[1]["status"], "completed")
+        events = self.obj("--board", one["board_id"], "membership-events", "--session", B)
+        self.assertEqual([item["event"] for item in events], ["register", "register", "leave"])
+        self.assertEqual(events[0]["parent_session"], A)
+        self.assertEqual(self.obj("--board", two["board_id"], "sessions")[1]["status"], "active")
+        with sqlite3.connect(two["db_path"]) as conn:
+            conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (B,))
+        with board_store.database(two["db_path"]) as conn:
+            self.assertIsNone(board_store.claim_next(conn, attempted_ids=set(), post_seq=None,
+                              thread_id=None, recipient=None, profile=".codex", actor=A))
+            self.assertEqual(conn.execute("SELECT attempt_count FROM notification_outbox").fetchone()[0], 0)
+        self.run_board("--board", one["board_id"], "register", "--session", B,
+                       "--role", "retry", actor=B, ok=False)
+        self.run_board("--board", one["board_id"], "heartbeat", "--session", B,
+                       "--status", "paused", actor=B, ok=False)
+
+    def test_board_qualified_notice_reads_through_shared_reader(self):
+        entry = self.create("pointer")
+        self.join(entry["board_id"], A)
+        self.open(entry["board_id"], title="Owner question")
+        notice = queue_transport.render_new_thread(1, "Owner question", 1,
+                      board_id=entry["board_id"], board_home=self.home)
+        self.assertIn("board ID: " + entry["board_id"], notice)
+        self.assertNotIn("rfq_swarm.py", notice)
+        read = next(line.removeprefix("Read: ") for line in notice.splitlines()
+                    if line.startswith("Read: "))
+        proc = subprocess.run(shlex.split(read) + ["--json"], text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)[0]["board_id"], entry["board_id"])
+        self.run_board("thread", "--id", 1, ok=False)
+
+    def test_queue_acceptance_attempt_and_recipient_ack_remain_distinct(self):
+        entry = self.create("delivery")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        self.open(board)
+        sent = []
+
+        def sender(recipient, profile, notice):
+            sent.append((recipient, profile, notice))
+            return queue_transport.EnqueueResult("queued", B, 0, "Queued message", reason="queue_accepted")
+
+        with board_store.database(entry["db_path"]) as conn:
+            processed = board_store.dispatch_notices(
+                conn, profile=".codex", actor=A, limit=5, board_id=board,
+                board_home=str(self.home), sender=sender)
+        self.assertEqual(processed, [(1, 1)])
+        self.assertEqual(len(sent), 1)
+        self.assertIn("board ID: " + board, sent[0][2])
+        delivery = self.obj("--board", board, "deliveries")[0]
+        self.assertEqual((delivery["route"], delivery["delivery_state"]), ("queue", "queued"))
+        self.assertIsNone(delivery["acknowledged_at"])
+        attempts = self.obj("--board", board, "attempts", "--notification", 1)
+        self.assertEqual((attempts[0]["board_id"], attempts[0]["result"]), (board, "queued"))
+        self.run_board("--board", board, "ack-notice", "--session", B,
+                       "--notification", 1, actor=B)
+        self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"],
+                         "acknowledged")
+
+    def test_queue_profile_uses_current_account_and_exact_allowed_path(self):
+        account = Path(self.temp.name) / "account"
+        foreign = Path(self.temp.name) / "foreign"
+        profile = account / ".codex2"
+        profile.mkdir(parents=True)
+        foreign.mkdir()
+        (account / ".codex3").symlink_to(profile, target_is_directory=True)
+        sent = []
+
+        def runner(argv, env, timeout, capture_bytes):
+            sent.append((argv, env["CODEX_HOME"]))
+            return queue_transport.CommandOutcome(0, f"Queued message {B}")
+
+        with mock.patch.object(queue_transport.pwd, "getpwuid",
+                               return_value=SimpleNamespace(pw_dir=str(account))), \
+             mock.patch.dict(os.environ, {"HOME": str(foreign),
+                                       "CODEX_HOME": str(profile)}):
+            self.assertEqual(board_store.sender_profile(None), ".codex2")
+            result = queue_transport.queue_notice(A, ".codex2", "Board notice", runner=runner)
+            self.assertEqual((result.status, result.queue_message_id), ("queued", B))
+            self.assertEqual(sent[0][1], str(profile))
+            self.assertEqual(sent[0][0][:4], ["codex", "queue", "--thread", A])
+            with mock.patch.dict(os.environ, {"CODEX_HOME": str(foreign / ".codex2")}):
+                with self.assertRaisesRegex(board_store.UserError, "exact allowed"):
+                    board_store.sender_profile(None)
+            with self.assertRaisesRegex(ValueError, "does not exist"):
+                queue_transport.queue_notice(A, ".codex3", "Board notice", runner=runner)
+            with self.assertRaisesRegex(ValueError, "allowed local"):
+                queue_transport.queue_notice(A, ".codex6", "Board notice", runner=runner)
+        self.assertEqual(len(sent), 1)
+
+    def test_lifecycle_snapshot_owner_hold_and_purge_guards(self):
+        entry = self.create("lifecycle")
+        board = entry["board_id"]
+        self.join(board, A, extra=("--owner", "--expires-at", "2030-01-01T00:00:00Z"))
+        self.open(board)
+        with sqlite3.connect(entry["db_path"]) as conn:
+            conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (A,))
+        self.run_board("boards", "archive", "--board", board, ok=False)
+        self.run_board("boards", "retire", "--board", board)
+        self.open_failure = self.run_board("--board", board, "post", "--session", A,
+                                           "--topic", "x", "--kind", "status", "--text", "x",
+                                           actor=A, ok=False)
+        self.assertIn("retired board", self.open_failure.stderr)
+        self.run_board("boards", "archive", "--board", board, ok=False)
+        self.run_board("--board", board, "leave", "--session", A, actor=A)
+        self.run_board("boards", "archive", "--board", board)
+        archived = self.obj("boards", "show", "--board", board)
+        snapshot = Path(archived["snapshot_path"])
+        self.assertTrue(snapshot.is_file())
+        self.assertEqual(hashlib.sha256(snapshot.read_bytes()).hexdigest(), archived["snapshot_sha256"])
+        with sqlite3.connect(entry["db_path"]) as conn:
+            conn.execute("INSERT INTO posts(author,topic,kind,text,created_at) "
+                         "VALUES (?,'x','status','Uncataloged later write','2030-01-01T00:00:00Z')", (A,))
+        self.assertEqual(len(self.obj("--board", board, "read")), 1)
+        self.run_board("--board", board, "ack", "--session", A, "--through", 1,
+                       actor=A, ok=False)
+        self.run_board("--board", board, "watch", "--session", A, "--timeout", 1,
+                       actor=A, ok=False)
+        self.run_board("--board", board, "dispatch", "--acting-session", A,
+                       actor=A, ok=False)
+        self.run_board("boards", "purge", "--board", board, "--confirm-id", B,
+                       "--irreversible", ok=False)
+        self.run_board("boards", "hold", "--board", board, "--enabled", "yes")
+        self.run_board("boards", "purge", "--board", board, "--confirm-id", board,
+                       "--irreversible", ok=False)
+        self.run_board("boards", "hold", "--board", board, "--enabled", "no")
+        self.run_board("boards", "purge", "--board", board, "--confirm-id", board,
+                       "--irreversible")
+        self.assertFalse(snapshot.exists())
+        self.assertFalse(Path(entry["db_path"]).exists())
+
+    def test_invited_policy_and_non_test_purge_prohibition(self):
+        entry = self.create("invited", temporary=False, invited=True)
+        board = entry["board_id"]
+        self.run_board("--board", board, "register", "--session", A, "--role", "root",
+                       actor=A, ok=False)
+        self.run_board("boards", "invite", "--board", board, "--session", A)
+        self.join(board, A)
+        self.open(board)
+        self.run_board("--board", board, "read", ok=False)
+        scoped = self.obj("--board", board, "read", actor=A)
+        self.assertEqual(scoped[0]["board_id"], board)
+        self.run_board("boards", "retire", "--board", board)
+        self.run_board("boards", "archive", "--board", board)
+        self.run_board("boards", "purge", "--board", board, "--confirm-id", board,
+                       "--irreversible", ok=False)
+
+    def test_board_route_policy_rejects_forbidden_member_route(self):
+        entry = self.obj("boards", "create", "--alias", "queue-only", "--name", "Queue only",
+                         "--routes", "queue")
+        self.run_board("--board", entry["board_id"], "register", "--session", A,
+                       "--role", "root", "--route", "managed", actor=A, ok=False)
+        self.join(entry["board_id"], A)
+
+    def test_existing_shared_home_is_rejected_without_changing_permissions(self):
+        shared = Path(self.temp.name) / "shared"
+        shared.mkdir(mode=0o755)
+        shared.chmod(0o755)
+        before = shared.stat().st_mode & 0o777
+        proc = subprocess.run([sys.executable, str(CLI), "--home", str(shared),
+                               "boards", "list"], text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("board home must be private", proc.stderr)
+        self.assertEqual(shared.stat().st_mode & 0o777, before)
+
+    def test_default_storage_uses_xdg_data_home(self):
+        xdg = Path(self.temp.name) / "xdg"
+        env = os.environ.copy()
+        env.pop("MESSAGE_BOARD_HOME", None)
+        env["XDG_DATA_HOME"] = str(xdg)
+        proc = subprocess.run([sys.executable, str(CLI), "boards", "create", "--alias",
+                               "xdg-board", "--name", "XDG board", "--json"],
+                              text=True, capture_output=True, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        entry = json.loads(proc.stdout)
+        self.assertTrue(Path(entry["db_path"]).is_relative_to(xdg / "message-board"))
+        self.assertTrue(Path(entry["db_path"]).is_file())
+
+    def test_legacy_registration_is_read_only_then_explicit_migration_preserves_rows(self):
+        path = Path(self.temp.name) / "legacy.sqlite3"
+        with board_store.database(str(path)) as conn:
+            conn.execute("INSERT INTO sessions(session,campaign,role,status,registered_at,last_seen_at) "
+                         "VALUES (?,'rfq','owner','active','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z')", (A,))
+            conn.execute("INSERT INTO sessions(session,campaign,role,status,registered_at,last_seen_at) "
+                         "VALUES (?,'rfq','reviewer','active','2025-01-01T00:00:00Z','2025-01-01T00:00:00Z')", (B,))
+            conn.execute("INSERT INTO posts(seq,author,topic,kind,text,created_at) "
+                         "VALUES (7,?,'migration','question','Historical body','2025-01-01T00:00:00Z')", (A,))
+            conn.execute("INSERT INTO threads(thread_id,title,topic,opener,created_at) "
+                         "VALUES (7,'Historical title','migration',?,'2025-01-01T00:00:00Z')", (A,))
+            conn.execute("INSERT INTO thread_posts(post_seq,thread_id) VALUES(7,7)")
+            conn.execute("INSERT INTO notification_outbox(notification_id,recipient,thread_id,post_seq,event,title,"
+                         "sender,created_at,delivery_state,state_changed_at,attempt_count) "
+                         "VALUES (9,?,7,7,'open','Historical title',?,'2025-01-01T00:00:00Z',"
+                         "'ambiguous','2025-01-01T00:00:00Z',1)", (B, A))
+        with sqlite3.connect(path) as conn:
+            conn.execute("DROP TABLE notification_attempts")
+            conn.execute("ALTER TABLE notification_outbox DROP COLUMN route")
+            conn.execute("ALTER TABLE sessions DROP COLUMN route")
+            conn.execute("PRAGMA user_version=3")
+        before = hashlib.sha256(path.read_bytes()).hexdigest()
+        sidecars_before = {file.name for file in path.parent.glob(path.name + "*")}
+        entry = self.obj("boards", "register-path", "--alias", "rfq-copy", "--name", "RFQ Copy",
+                         "--db", path)
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), before)
+        self.assertEqual({file.name for file in path.parent.glob(path.name + "*")}, sidecars_before)
+        self.assertEqual(self.obj("boards", "show", "--board", "rfq-copy")["db_path"], str(path))
+        self.run_board("--board", "rfq-copy", "thread", "--id", 7, ok=False)
+        backup = Path(self.temp.name) / "before.sqlite3"
+        self.run_board("boards", "migrate", "--board", "rfq-copy", "--backup", backup)
+        with sqlite3.connect(path) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(conn.execute("SELECT board_id FROM board_meta").fetchone()[0], entry["board_id"])
+            self.assertEqual(conn.execute("SELECT route,delivery_state FROM notification_outbox "
+                                          "WHERE notification_id=9").fetchone(), ("queue", "ambiguous"))
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM notification_attempts").fetchone()[0], 0)
+        with sqlite3.connect(backup) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        posts = self.obj("--board", "rfq-copy", "thread", "--id", 7)
+        self.assertEqual((posts[0]["seq"], posts[0]["text"]), (7, "Historical body"))
+        self.assertEqual(self.obj("--board", "rfq-copy", "notifications", "--session", B)[0]
+                         ["notification_id"], 9)
+        notice = queue_transport.render_new_thread(7, "Historical title", 9,
+                      board_id=entry["board_id"], board_home=self.home)
+        read = next(line.removeprefix("Read: ") for line in notice.splitlines()
+                    if line.startswith("Read: "))
+        proc = subprocess.run(shlex.split(read) + ["--json"], text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)[0]["seq"], 7)
+
+    def test_managed_only_migrated_board_blocks_queue_cli_before_claim_or_post(self):
+        source = self.schema3_source("historical-source.sqlite3")
+        path = Path(self.temp.name) / "historical-copy.sqlite3"
+        with sqlite3.connect(source) as conn:
+            for session, status in ((A, "active"), (B, "active"), (C, "paused")):
+                conn.execute("INSERT INTO sessions(session,campaign,role,status,registered_at,last_seen_at) "
+                             "VALUES (?,'rfq','root',?,'2025-01-01T00:00:00Z','2025-01-01T00:00:00Z')",
+                             (session, status))
+            conn.execute("INSERT INTO posts(seq,author,topic,kind,text,created_at) "
+                         "VALUES (7,?,'rfq','question','Historical body','2025-01-01T00:00:00Z')", (A,))
+            conn.execute("INSERT INTO threads(thread_id,title,topic,opener,created_at) "
+                         "VALUES (7,'Historical title','rfq',?,'2025-01-01T00:00:00Z')", (A,))
+            conn.execute("INSERT INTO thread_posts(post_seq,thread_id) VALUES (7,7)")
+            conn.execute("INSERT INTO subscriptions(thread_id,session,subscribed_at) "
+                         "VALUES (7,?,'2025-01-01T00:00:00Z')", (B,))
+            for notice_id, recipient, state in ((3, B, "pending"), (5, C, "ambiguous")):
+                conn.execute("INSERT INTO notification_outbox "
+                             "(notification_id,recipient,thread_id,post_seq,event,title,sender,"
+                             "created_at,delivery_state,state_changed_at,attempt_count) "
+                             "VALUES (?,?,7,7,'open','Historical title',?,"
+                             "'2025-01-01T00:00:00Z',?,'2025-01-01T00:00:00Z',0)",
+                             (notice_id, recipient, A, state))
+        shutil.copy2(source, path)
+        self.assertEqual(hashlib.sha256(source.read_bytes()).digest(),
+                         hashlib.sha256(path.read_bytes()).digest())
+        with sqlite3.connect(path) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual([row[1] for row in conn.execute("PRAGMA table_info(sessions)")],
+                             ["session", "campaign", "role", "profile", "status", "work",
+                              "registered_at", "last_seen_at", "ack_seq"])
+            self.assertEqual(len(list(conn.execute("PRAGMA table_info(notification_outbox)"))), 16)
+        entry = self.obj("boards", "register-path", "--alias", "historical-copy",
+                         "--name", "Historical copy", "--db", path, "--routes", "managed")
+        backup = Path(self.temp.name) / "historical-backup.sqlite3"
+        self.run_board("boards", "migrate", "--board", entry["board_id"], "--backup", backup)
+        self.assertEqual(self.obj("boards", "show", "--board", entry["board_id"])
+                         ["allowed_routes"], "managed")
+        with sqlite3.connect(path) as conn:
+            self.assertEqual(conn.execute("SELECT status,route FROM sessions ORDER BY session").fetchall(),
+                             [("active", "queue"), ("active", "queue"), ("paused", "queue")])
+            original = conn.execute("SELECT notification_id,route,delivery_state,attempt_count "
+                                    "FROM notification_outbox ORDER BY notification_id").fetchall()
+            self.assertEqual(original, [(3, "queue", "pending", 0),
+                                        (5, "queue", "ambiguous", 0)])
+        sent = []
+        def sender(*args):
+            sent.append(args)
+            return queue_transport.EnqueueResult("queued", "fake-id", 0, "Queued message")
+
+        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender), \
+             mock.patch.object(board_store, "sender_profile") as profile:
+            for command in (("dispatch", "--acting-session", A),
+                            ("open", "--session", A, "--topic", "rfq", "--title", "New",
+                             "--text", "Body"),
+                            ("reply", "--session", A, "--thread", "7", "--text", "Reply")):
+                with self.subTest(command=command[0]), self.assertRaisesRegex(
+                        catalog.CatalogError, "queue delivery is forbidden by board policy"):
+                    self.run_in_process("--board", entry["board_id"], *command)
+            profile.assert_not_called()
+            self.assertEqual(sent, [])
+            with sqlite3.connect(path) as conn:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0], 1)
+                self.assertEqual(conn.execute("SELECT notification_id,route,delivery_state,attempt_count "
+                                              "FROM notification_outbox ORDER BY notification_id").fetchall(),
+                                 original)
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM notification_attempts")
+                                 .fetchone()[0], 0)
+
+            # No-push commits the ordinary route-specific outbox. Historical queue
+            # rows remain pending; a newly enrolled managed owner can still poll.
+            self.join(entry["board_id"], D, route="managed")
+            self.assertEqual(self.run_in_process("--board", entry["board_id"], "open",
+                                                 "--session", A, "--topic", "rfq",
+                                                 "--title", "Managed work", "--text", "Body",
+                                                 "--no-push"), 0)
+            self.assertEqual(self.run_in_process("--board", entry["board_id"], "reply",
+                                                 "--session", A, "--thread", 7, "--text", "Reply",
+                                                 "--cc", D, "--no-push"), 0)
+            self.assertEqual(self.run_in_process("--board", entry["board_id"], "recover",
+                                                 "--acting-session", A), 0)
+            self.assertEqual(sent, [])
+            profile.assert_not_called()
+        with sqlite3.connect(path) as conn:
+            self.assertEqual(conn.execute("SELECT notification_id,route,delivery_state,attempt_count "
+                                          "FROM notification_outbox WHERE notification_id IN (3,5) "
+                                          "ORDER BY notification_id").fetchall(), original)
+            self.assertEqual(conn.execute("SELECT route,delivery_state FROM notification_outbox "
+                                          "WHERE post_seq IN (8,9) ORDER BY post_seq,recipient").fetchall(),
+                             [("queue", "pending"), ("managed", "managed_pending"),
+                              ("queue", "pending"), ("managed", "managed_pending")])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM notification_attempts").fetchone()[0], 0)
+
+    def test_queue_allowed_board_keeps_dispatch_and_inline_delivery(self):
+        entry = self.create("queue-allowed")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        sent = []
+        def sender(*args):
+            sent.append(args)
+            return queue_transport.EnqueueResult("queued", "fake-id", 0, "Queued message")
+
+        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender), \
+             mock.patch.object(board_store, "sender_profile", return_value=".codex"):
+            self.assertEqual(self.run_in_process("--board", board, "open", "--session", A,
+                                                 "--topic", "work", "--title", "Deferred",
+                                                 "--text", "Body", "--to", B, "--no-push"), 0)
+            self.assertEqual(sent, [])
+            self.assertEqual(self.run_in_process("--board", board, "dispatch",
+                                                 "--acting-session", A), 0)
+            self.assertEqual(self.run_in_process("--board", board, "open", "--session", A,
+                                                 "--topic", "work", "--title", "Immediate",
+                                                 "--text", "Body", "--to", B), 0)
+            self.assertEqual(self.run_in_process("--board", board, "reply", "--session", A,
+                                                 "--thread", 2, "--text", "Reply"), 0)
+        self.assertEqual([call[0] for call in sent], [B, B, B])
+        self.assertEqual([row["delivery_state"] for row in self.obj("--board", board,
+                                                                       "deliveries")],
+                         ["queued", "queued", "queued"])
+
+    def test_notice_disposition_gates_retire_and_archive_without_acknowledgment(self):
+        entry = self.create("notice-retire")
+        self.join(entry["board_id"], A)
+        self.join(entry["board_id"], B)
+        self.open(entry["board_id"])
+        rejected = self.run_board("boards", "retire", "--board", entry["board_id"], ok=False)
+        self.assertIn("unresolved notices", rejected.stderr)
+        self.run_board("boards", "dispose-notices", "--board", entry["board_id"],
+                       "--notice-id", 99, "--reason", "wrong", ok=False)
+        self.run_board("boards", "dispose-notices", "--board", entry["board_id"],
+                       "--notice-id", 1, "--reason", "Recipient unreachable; owner retains follow-up")
+        self.run_board("boards", "retire", "--board", entry["board_id"])
+        self.run_board("boards", "archive", "--board", entry["board_id"])
+        archived = self.obj("boards", "show", "--board", entry["board_id"])
+        with sqlite3.connect(self.home / "catalog.sqlite3") as db:
+            disposition = db.execute("SELECT notification_id,delivery_state,reason FROM notice_dispositions")
+            self.assertEqual(disposition.fetchone(), (1, "pending", "Recipient unreachable; owner retains follow-up"))
+            self.assertIn('"count": 1', db.execute("SELECT detail FROM changes WHERE event='notices_disposed'").fetchone()[0])
+        with sqlite3.connect(archived["snapshot_path"]) as db:
+            self.assertEqual(db.execute("SELECT delivery_state FROM notification_outbox").fetchone()[0], "pending")
+
+    def test_membership_departure_requires_exact_notice_settlement(self):
+        for route in ("queue", "managed"):
+            with self.subTest(route=route):
+                entry = self.create(f"departure-{route}")
+                board = entry["board_id"]
+                self.join(board, A)
+                self.join(board, B, route=route)
+                self.open(board)
+                self.open(board, title="Second notice")
+                with sqlite3.connect(entry["db_path"]) as db:
+                    states = [row[0] for row in db.execute(
+                        "SELECT delivery_state FROM notification_outbox ORDER BY notification_id")]
+                self.assertEqual(states, ["pending" if route == "queue" else "managed_pending"] * 2)
+                for command in (("leave", "--session", B),
+                                ("heartbeat", "--session", B, "--status", "completed"),
+                                ("register", "--session", B, "--role", "root", "--status", "completed")):
+                    rejected = self.run_board("--board", board, *command, actor=B, ok=False)
+                    self.assertIn("unresolved incoming notices", rejected.stderr)
+                self.run_board("boards", "dispose-notices", "--board", board,
+                               "--notice-id", 1, "--reason", "Recipient departure; explicit owner follow-up")
+                rejected = self.run_board("--board", board, "leave", "--session", B,
+                                          actor=B, ok=False)
+                self.assertIn("[2]", rejected.stderr)
+                self.run_board("boards", "dispose-notices", "--board", board,
+                               "--notice-id", 2, "--reason", "Recipient departure; second notice follow-up")
+                self.run_board("--board", board, "leave", "--session", B, actor=B)
+                with sqlite3.connect(entry["db_path"]) as db:
+                    self.assertEqual([row[0] for row in db.execute(
+                        "SELECT delivery_state FROM notification_outbox ORDER BY notification_id")],
+                        states)
+
+    def test_archived_read_verifies_hash_and_purge_resume_after_partial_delete(self):
+        entry = self.create("purge-recover")
+        board = entry["board_id"]
+        self.run_board("boards", "retire", "--board", board)
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("DROP TABLE scope_transfers")  # archived pre-transfer schema
+        self.run_board("boards", "archive", "--board", board)
+        self.assertEqual(self.obj("--board", board, "scope-transfers"), [])
+        archived = self.obj("boards", "show", "--board", board)
+        snapshot = Path(archived["snapshot_path"])
+        with snapshot.open("ab") as handle:
+            handle.write(b"tamper")
+        self.assertIn("hash mismatch", self.run_board("--board", board, "read", ok=False).stderr)
+        # Simulate interruption after durable purge_started and the first unlink.
+        with catalog.catalog(self.home) as db, catalog.transaction(db):
+            db.execute("UPDATE boards SET state='purging' WHERE board_id=?", (board,))
+        Path(entry["db_path"]).unlink()
+        self.run_board("boards", "hold", "--board", board, "--enabled", "yes", ok=False)
+        self.run_board("boards", "purge", "--board", board, "--confirm-id", board,
+                       "--irreversible")
+        self.assertEqual(self.obj("boards", "show", "--board", board)["state"], "tombstoned")
+        self.assertFalse(snapshot.exists())
+
+    def test_registration_rejects_bound_uuid_and_hardlink_and_stages_legacy(self):
+        entry = self.create("bound")
+        self.run_board("boards", "register-path", "--alias", "wrong-id", "--name", "Wrong",
+                       "--db", entry["db_path"], ok=False)
+        alias = Path(self.temp.name) / "hardlink.sqlite3"
+        os.link(entry["db_path"], alias)
+        self.run_board("boards", "register-path", "--alias", "hardlink", "--name", "Hardlink",
+                       "--db", alias, "--id", entry["board_id"], ok=False)
+        legacy = self.legacy_file("legacy-pending.sqlite3")
+        pending = self.obj("boards", "register-path", "--alias", "pending", "--name", "Pending",
+                           "--db", legacy)
+        self.assertEqual(pending["state"], "pending_migration")
+        self.run_board("--board", "pending", "read", ok=False)
+        backup = Path(self.temp.name) / "pending-backup.sqlite3"
+        self.run_board("boards", "migrate", "--board", "pending", "--backup", backup)
+        migrated = self.obj("boards", "show", "--board", "pending")
+        self.assertEqual(migrated["state"], "active")
+        self.assertEqual(migrated["migration_backup"], str(backup))
+
+    def test_staged_migration_resume_and_rollback(self):
+        legacy = self.legacy_file("staged.sqlite3")
+        entry = self.obj("boards", "register-path", "--alias", "staged", "--name", "Staged",
+                         "--db", legacy)
+        backup = Path(self.temp.name) / "stage-backup.sqlite3"
+        # Simulate interruption immediately after catalog staging.
+        digest, _ = board_cli._snapshot(str(legacy), backup)
+        with catalog.catalog(self.home) as db, catalog.transaction(db):
+            db.execute("UPDATE boards SET state='migrating',migration_backup=?,migration_sha256=? "
+                       "WHERE board_id=?", (str(backup), digest, entry["board_id"]))
+        self.run_board("--board", "staged", "read", ok=False)
+        self.run_board("boards", "migrate", "--board", "staged", "--resume")
+        self.assertEqual(self.obj("boards", "show", "--board", "staged")["state"], "active")
+        with catalog.catalog(self.home) as db, catalog.transaction(db):
+            db.execute("UPDATE boards SET state='migrating' WHERE board_id=?", (entry["board_id"],))
+        self.run_board("boards", "migrate-rollback", "--board", "staged")
+        self.assertEqual(self.obj("boards", "show", "--board", "staged")["state"], "pending_migration")
+        with sqlite3.connect(legacy) as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 3)
+
+    def test_single_watch_releases_lifecycle_lock_during_wait(self):
+        entry = self.create("watch-retire")
+        self.join(entry["board_id"], A)
+        env = os.environ.copy()
+        env["CODEX_SESSION_ID"] = A
+        watcher = subprocess.Popen([sys.executable, str(CLI), "--home", str(self.home),
+                                    "--board", entry["board_id"], "watch", "--session", A,
+                                    "--timeout", "4"], env=env, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+        try:
+            time.sleep(0.3)
+            started = time.monotonic()
+            self.run_board("boards", "retire", "--board", entry["board_id"])
+            self.assertLess(time.monotonic() - started, 2)
+            _, stderr = watcher.communicate(timeout=5)
+            self.assertEqual(watcher.returncode, 2, stderr)
+        finally:
+            if watcher.poll() is None:
+                watcher.kill()
+                watcher.communicate()
+
+    def test_child_scope_requires_expiry_and_parent_settlement(self):
+        entry = self.create("child-scope")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.run_board("--board", board, "register", "--session", B, "--role", "child",
+                       "--parent-session", A, "--scope", "review", actor=B, ok=False)
+        self.join(board, B, role="child", extra=("--parent-session", A, "--scope", "review",
+                                                  "--expires-at", "2030-01-01T00:00:00Z"))
+        self.run_board("--board", board, "leave", "--session", A, actor=A, ok=False)
+        self.run_board("--board", board, "heartbeat", "--session", B,
+                       "--status", "paused", actor=B)
+        self.run_board("--board", board, "leave", "--session", A, actor=A, ok=False)
+        self.run_board("--board", board, "scope-transfer", "--session", B, "--child", A,
+                       "--reason", "Invalid child claim", actor=B, ok=False)
+        self.run_board("--board", board, "scope-transfer", "--session", A, "--child", B,
+                       "--reason", "Independent campaign owner accepts this membership", actor=A)
+        transfers = self.obj("--board", board, "scope-transfers", "--session", B)
+        self.assertEqual((transfers[0]["parent_session"], transfers[0]["scope"]), (A, "review"))
+        self.run_board("--board", board, "leave", "--session", A, actor=A)
+        with sqlite3.connect(entry["db_path"]) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM scope_transfers").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT role,parent_session,scope FROM sessions WHERE session=?",
+                                        (B,)).fetchone(), ("root", None, None))
+        self.run_board("--board", board, "heartbeat", "--session", B,
+                       "--status", "active", actor=B)
+
+    def test_child_cannot_reactivate_after_parent_departure(self):
+        entry = self.create("child-expiry")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B, role="child", extra=("--parent-session", A, "--scope", "task",
+                                                  "--expires-at", "2030-01-01T00:00:00Z"))
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE sessions SET status='paused', expires_at='2000-01-01T00:00:00Z' "
+                       "WHERE session=?", (B,))
+        self.run_board("--board", board, "leave", "--session", A, actor=A)
+        self.run_board("--board", board, "heartbeat", "--session", B,
+                       "--status", "active", actor=B, ok=False)
+        self.run_board("--board", board, "register", "--session", B, "--role", "child",
+                       "--expires-at", "2030-01-01T00:00:00Z", actor=B, ok=False)
+
+    def test_lifecycle_lock_serializes_catalog_writes_and_rechecks_state(self):
+        cases = [
+            ("invite", ["--session", B], "retired", "only active"),
+            ("associate", ["--type", "campaign", "--id", "late"], "archived", "only active or retired"),
+            ("hold", ["--enabled", "yes"], "purging", "cannot change holds"),
+        ]
+        for index, (action, extra, next_state, error) in enumerate(cases):
+            entry = self.create(f"lock-{index}")
+            env = os.environ.copy()
+            env.pop("CODEX_SESSION_ID", None)
+            with catalog.lifecycle_lock(entry, self.home, exclusive=True):
+                proc = subprocess.Popen([sys.executable, str(CLI), "--home", str(self.home),
+                                         "boards", action, "--board", entry["board_id"], *extra],
+                                        env=env, text=True, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+                time.sleep(0.15)
+                self.assertIsNone(proc.poll(), action)
+                with catalog.catalog(self.home) as db, catalog.transaction(db):
+                    db.execute("UPDATE boards SET state=? WHERE board_id=?",
+                               (next_state, entry["board_id"]))
+            _, stderr = proc.communicate(timeout=5)
+            self.assertEqual(proc.returncode, 2, stderr)
+            self.assertIn(error, stderr)
+
+    def test_existing_catalog_schema_upgrades_without_losing_links(self):
+        entry = self.create("old-catalog")
+        self.run_board("boards", "associate", "--board", entry["board_id"],
+                       "--type", "campaign", "--id", "retain")
+        # Recreate the prior restrictive state CHECK with its existing columns.
+        with sqlite3.connect(self.home / "catalog.sqlite3") as db:
+            db.execute("PRAGMA foreign_keys=OFF")
+            db.execute("CREATE TABLE boards_old AS SELECT * FROM boards")
+            db.execute("DROP TABLE boards")
+            db.execute("""CREATE TABLE boards (
+                board_id TEXT PRIMARY KEY, alias TEXT UNIQUE, display_name TEXT,
+                state TEXT CHECK(state IN ('active','retired','archived','tombstoned')),
+                db_path TEXT UNIQUE, temporary_test INTEGER, purge_allowed INTEGER,
+                retention_hold INTEGER, membership_policy TEXT, allowed_routes TEXT,
+                created_at TEXT, changed_at TEXT, snapshot_path TEXT,
+                snapshot_sha256 TEXT, purged_at TEXT)""")
+            db.execute("""INSERT INTO boards SELECT board_id,alias,display_name,state,db_path,
+                temporary_test,purge_allowed,retention_hold,membership_policy,allowed_routes,
+                created_at,changed_at,snapshot_path,snapshot_sha256,purged_at FROM boards_old""")
+            db.execute("DROP TABLE boards_old")
+        upgraded = self.obj("boards", "show", "--board", entry["board_id"])
+        self.assertEqual(upgraded["artifacts"][0]["identifier"], "retain")
+        self.assertIn("migration_backup", upgraded)
+
+
+if __name__ == "__main__":
+    unittest.main()
