@@ -15,7 +15,7 @@ Prepare a nonempty prompt file containing the child's task, authority, exact wor
   --id child-name
 ```
 
-`--profile` accepts only `.codex`, `.codex2`, `.codex3`, or `.codex4`; these are session stores, **not a concurrency cap**. `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. The launcher uses `gpt-6-sol` at `xhigh`, reads configured MCP server names from the selected profile, passes a disable flag for each, and verifies the effective `codex mcp list` reports all disabled. It refuses the launch if that check fails. The `.codex` docs server receives a disable flag only when configured; this avoids the installed CLI error for the other three profiles. If Codex gains servers through an unrecognized configuration source, the preflight refuses unexpected rows.
+`--profile` accepts only `.codex`, `.codex2`, `.codex3`, or `.codex4`; these are session stores, **not a concurrency cap**. `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. The launcher uses `gpt-6-sol` at `xhigh`, discovers MCP server names from the effective `codex mcp list --json`, passes a disable flag for each, and verifies a second effective list reports exactly those servers disabled. It always supplies the URL and disable flag for `openaiDeveloperDocs`, because `codex exec` can inject that server even when `codex mcp list` omits it. It refuses the launch if discovery, parsing, or preflight fails, or if a new server appears in the second list.
 
 The launcher reserves `runs-dir/id.unique-suffix/` with private permissions and writes `prompt.md` (read-only snapshot), `log.txt` (live output), `final.md` (Codex `-o` output), and `state.txt` (start details and appended exit result). Paths are unique for each attempt and are never reused. A nonzero `log_capture_exit` in state flags an incomplete log while preserving the exact Codex exit code. Keep the runs directory outside a source diff when it is only machine-local evidence. Record task-specific base, owner, and expected handoff in the parent state or child prompt; the launcher records the exact canonical cwd and Git HEAD at start.
 
@@ -25,7 +25,7 @@ Do not send the command to shell background or use `&`, `nohup`, shell `wait`, P
 
 ## Dry run and validation
 
-Add `--dry-run` to validate local arguments and show the chosen profile/cwd without making directories, writing files, calling Codex, or running MCP preflight. It cannot certify that a live launch will pass MCP preflight. Run `python3 -m unittest discover -s tools/direct-codex-child -p 'test_*.py'` from `~/ai` for isolated fake-CLI tests; they do not start a real child.
+Add `--dry-run` to validate local arguments and show the chosen profile/cwd without making directories, writing files, calling Codex, or running MCP preflight. It cannot certify that a live launch will pass MCP preflight. Add `--preflight-only` to run effective MCP discovery and the exact disable-flag check without creating an attempt or starting a child. Run `python3 -m unittest discover -s tools/direct-codex-child -p 'test_*.py'` from `~/ai` for isolated fake-CLI tests; they do not start a real child.
 
 ## Limits and consumers
 

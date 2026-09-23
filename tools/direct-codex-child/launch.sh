@@ -6,18 +6,20 @@ umask 077
 usage() {
   cat <<'EOF'
 Usage: launch.sh --profile .codex[2|3|4] --cwd /absolute/workspace \
-  --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name [--dry-run]
+  --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name \
+  [--dry-run | --preflight-only]
 
 The launcher reserves one unique attempt directory and runs one Codex child in
 the foreground. Launch it in a native persistent terminal, record that terminal's
 handle in state.txt, and await its real exit. --dry-run validates local inputs
 without creating files or invoking Codex; it does not certify MCP state.
+--preflight-only checks effective MCP state without creating an attempt or child.
 EOF
 }
 
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
-profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false
+profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
 while (($#)); do
   case "$1" in
     --profile|--cwd|--prompt|--runs-dir|--id)
@@ -31,10 +33,12 @@ while (($#)); do
       esac
       shift 2 ;;
     --dry-run) [[ $dry_run == false ]] || die 'duplicate --dry-run'; dry_run=true; shift ;;
+    --preflight-only) [[ $preflight_only == false ]] || die 'duplicate --preflight-only'; preflight_only=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
+[[ $dry_run == false || $preflight_only == false ]] || die 'choose either --dry-run or --preflight-only'
 
 case "$profile" in .codex|.codex2|.codex3|.codex4) ;; *) die 'profile must be .codex, .codex2, .codex3, or .codex4' ;; esac
 [[ $child_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'id must use letters, digits, dot, underscore, or hyphen'
@@ -57,47 +61,69 @@ if [[ $dry_run == true ]]; then
 fi
 
 command -v codex >/dev/null 2>&1 || die 'codex is not installed'
-command -v python3 >/dev/null 2>&1 || die 'python3 is required to read configured MCP server names'
-server_names=$(python3 - "$profile_home/config.toml" <<'PY'
+command -v python3 >/dev/null 2>&1 || die 'python3 is required to inspect effective MCP servers'
+parse_mcp_json() {
+  python3 -c '
+import json
 import re
 import sys
-import tomllib
 
-with open(sys.argv[1], 'rb') as config_file:
-    config = tomllib.load(config_file)
-servers = config.get('mcp_servers', {})
-if not isinstance(servers, dict):
-    raise SystemExit('mcp_servers must be a table')
-for name in sorted(servers):
-    if not re.fullmatch(r'[A-Za-z0-9_-]+', name):
-        raise SystemExit(f'unsupported MCP server name: {name!r}')
-    print(name)
-PY
-) || die 'cannot read MCP server configuration'
+try:
+    servers = json.load(sys.stdin)
+    if not isinstance(servers, list):
+        raise ValueError("expected an MCP server list")
+    rows = {}
+    for server in servers:
+        if not isinstance(server, dict):
+            raise ValueError("invalid MCP server entry")
+        name, enabled = server.get("name"), server.get("enabled")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise ValueError("unsupported MCP server name")
+        if type(enabled) is not bool or name in rows:
+            raise ValueError("invalid or duplicate MCP server status")
+        rows[name] = enabled
+    for name in sorted(rows):
+        print(f"{name}\t{int(rows[name])}")
+except (ValueError, TypeError, json.JSONDecodeError) as error:
+    print(f"invalid effective MCP list: {error}", file=sys.stderr)
+    sys.exit(1)
+'
+}
+
+discovery_report=$(CODEX_HOME="$profile_home" codex -c 'mcp_servers={}' mcp list --json 2>/dev/null) \
+  || die 'MCP discovery failed; Codex child was not started'
+server_rows=$(printf '%s\n' "$discovery_report" | parse_mcp_json) \
+  || die 'cannot parse effective MCP server discovery'
 
 mcp_flags=(-c 'mcp_servers={}')
-if [[ -n $server_names ]]; then
-  while IFS= read -r server; do
+expected_rows=''
+server_count=0
+if [[ -n $server_rows ]]; then
+  while IFS= read -r row; do
+    server=${row%%$'\t'*}
+    if [[ $server == openaiDeveloperDocs ]]; then
+      continue
+    fi
     mcp_flags+=(-c "mcp_servers.$server.enabled=false")
-  done <<< "$server_names"
+    expected_rows+="$server"$'\t0\n'
+    ((server_count+=1))
+  done <<< "$server_rows"
 fi
-mcp_report=$(CODEX_HOME="$profile_home" codex "${mcp_flags[@]}" mcp list 2>&1) || die 'MCP preflight failed; Codex child was not started'
-if [[ -n $server_names ]]; then
-  printf '%s\n' "$mcp_report" | awk -v expected="$server_names" '
-    BEGIN { count=split(expected, names, "\n"); for (i=1; i<=count; i++) wanted[names[i]]=1 }
-    NF==0 || $1=="Name" { next }
-    { if (!($1 in wanted) || seen[$1]++) bad=1
-      status=0
-      for (i=2; i<=NF; i++) if ($i=="disabled" || $i=="enabled") {
-        status++
-        if ($i!="disabled") bad=1
-      }
-      if (status!=1) bad=1
-      found++ }
-    END { if (bad || found!=count) exit 1 }
-  ' || die 'MCP preflight did not confirm every configured server disabled'
-else
-  [[ $mcp_report == *'No MCP servers configured'* ]] || die 'MCP preflight reported an unexpected server'
+mcp_flags+=(-c 'mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"' \
+            -c 'mcp_servers.openaiDeveloperDocs.enabled=false')
+expected_rows+='openaiDeveloperDocs'$'\t0\n'
+((server_count+=1))
+expected_rows=$(printf '%s' "$expected_rows" | LC_ALL=C sort)
+mcp_report=$(CODEX_HOME="$profile_home" codex "${mcp_flags[@]}" mcp list --json 2>/dev/null) \
+  || die 'MCP preflight failed; Codex child was not started'
+verified_rows=$(printf '%s\n' "$mcp_report" | parse_mcp_json) \
+  || die 'cannot parse effective MCP preflight'
+[[ $verified_rows == "$expected_rows" ]] \
+  || die 'MCP preflight did not confirm every effective server disabled'
+if [[ $preflight_only == true ]]; then
+  printf 'MCP_PREFLIGHT=all effective servers disabled profile=%s count=%s\n' \
+    "$profile" "$server_count"
+  exit 0
 fi
 
 mkdir -p -- "$runs_dir" || die "cannot create runs-dir: $runs_dir"
@@ -121,7 +147,7 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
 } > "$state_path" || die 'cannot write state'
 
 printf 'DIRECT_CODEX_ATTEMPT=%s\nDIRECT_CODEX_STATE=%s\n' "$attempt" "$state_path"
-printf 'MCP_PREFLIGHT=all configured servers disabled\n'
+printf 'MCP_PREFLIGHT=all effective servers disabled\n'
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
 CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
   -m gpt-6-sol -c 'model_reasoning_effort="xhigh"' "${mcp_flags[@]}" \

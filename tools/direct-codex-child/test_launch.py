@@ -20,18 +20,27 @@ args = sys.argv[1:]
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"args": args, "home": os.environ["CODEX_HOME"],
                             "cwd": os.getcwd()}) + "\n")
-if args[-2:] == ["mcp", "list"]:
+if args[-3:] == ["mcp", "list", "--json"]:
     with open(Path(os.environ["CODEX_HOME"]) / "config.toml", "rb") as config_file:
         servers = tomllib.load(config_file).get("mcp_servers", {})
-    if not servers:
-        print("No MCP servers configured.")
-    else:
-        print("Name Status")
-        for name in servers:
-            status = "disabled" if f"mcp_servers.{name}.enabled=false" in args else "enabled"
-            if name == os.environ.get("FAKE_FORCE_ENABLED"):
-                status = "enabled"
-            print(name, status)
+    names = list(servers)
+    injected = os.environ.get("FAKE_INJECT_SERVER")
+    if injected:
+        names.append(injected)
+    if ("mcp_servers.openaiDeveloperDocs.url=\"https://developers.openai.com/mcp\"" in args
+            and "openaiDeveloperDocs" not in names):
+        names.append("openaiDeveloperDocs")
+    if os.environ.get("FAKE_PREFLIGHT_EXTRA") and any(
+        arg.endswith(".enabled=false") for arg in args
+    ):
+        names.append(os.environ["FAKE_PREFLIGHT_EXTRA"])
+    rows = []
+    for name in names:
+        enabled = f"mcp_servers.{name}.enabled=false" not in args
+        if name == os.environ.get("FAKE_FORCE_ENABLED"):
+            enabled = True
+        rows.append({"name": name, "enabled": enabled})
+    print(json.dumps(rows))
     sys.exit(0)
 if args[0] != "exec":
     sys.exit(91)
@@ -130,33 +139,66 @@ class LauncherTest(unittest.TestCase):
             self.assertIn("log_capture_exit=0", (attempt / "state.txt").read_text())
         self.assertIn("DIRECT_CODEX_FINAL_BEGIN=", first.stdout)
         calls = self.calls_readback()
-        self.assertEqual(len(calls), 4)
-        self.assertEqual([call["args"][-2:] for call in calls[::2]], [["mcp", "list"]] * 2)
+        self.assertEqual(len(calls), 6)
+        self.assertEqual([call["args"][-3:] for call in calls if call["args"][0] != "exec"],
+                         [["mcp", "list", "--json"]] * 4)
         for call in calls:
-            self.assertIn("mcp_servers.firecrawl.enabled=false", call["args"])
-            self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
             self.assertEqual(call["home"], str(self.home / ".codex"))
+            if call["args"][0] == "exec" or "mcp_servers.firecrawl.enabled=false" in call["args"]:
+                self.assertIn("mcp_servers.firecrawl.enabled=false", call["args"])
+                self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
         self.assertEqual([call["cwd"] for call in calls if call["args"][0] == "exec"],
                          [str(self.cwd)] * 2)
 
-    def test_other_profile_omits_unconfigured_docs_flag_and_propagates_exit(self):
+    def test_other_profile_propagates_exit(self):
         env = self.env.copy()
         env["FAKE_EXIT"] = "7"
         result = self.run_launcher(".codex2", env=env)
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertIn("DIRECT_CODEX_EXIT=7", result.stdout)
         self.assertIn("codex_exit=7", next(self.runs.iterdir()).joinpath("state.txt").read_text())
-        for call in self.calls_readback():
-            self.assertNotIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+        for call in self.calls_readback()[1:]:
+            self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+            self.assertIn('mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"', call["args"])
 
     def test_additional_configured_server_is_disabled(self):
         with (self.home / ".codex4" / "config.toml").open("a", encoding="utf-8") as config_file:
             config_file.write("[mcp_servers.extraServer]\nenabled = true\n")
         result = self.run_launcher(".codex4")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for call in self.calls_readback():
+        for call in self.calls_readback()[1:]:
             self.assertIn("mcp_servers.extraServer.enabled=false", call["args"])
-            self.assertNotIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+            self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+
+    def test_effective_server_absent_from_profile_config_is_disabled(self):
+        env = self.env.copy()
+        env["FAKE_INJECT_SERVER"] = "openaiDeveloperDocs"
+        result = self.run_launcher(".codex2", env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls_readback()
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("mcp_servers.openaiDeveloperDocs.enabled=false", calls[0]["args"])
+        for call in calls[1:]:
+            self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+            self.assertIn('mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"', call["args"])
+
+    def test_preflight_only_checks_effective_state_without_attempt(self):
+        env = self.env.copy()
+        env["FAKE_INJECT_SERVER"] = "openaiDeveloperDocs"
+        result = self.run_launcher(".codex2", "--preflight-only", env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("count=2", result.stdout)
+        self.assertFalse(self.runs.exists())
+        self.assertEqual(len(self.calls_readback()), 2)
+
+    def test_unexpected_server_in_preflight_refuses_exec(self):
+        env = self.env.copy()
+        env["FAKE_PREFLIGHT_EXTRA"] = "surprise"
+        result = self.run_launcher(env=env)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("MCP preflight", result.stderr)
+        self.assertFalse(self.runs.exists())
+        self.assertEqual(len(self.calls_readback()), 2)
 
     def test_enabled_mcp_refuses_exec_and_creates_no_attempt(self):
         env = self.env.copy()
@@ -165,7 +207,7 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("MCP preflight", result.stderr)
         self.assertFalse(self.runs.exists())
-        self.assertEqual(len(self.calls_readback()), 1)
+        self.assertEqual(len(self.calls_readback()), 2)
 
 
 if __name__ == "__main__":
