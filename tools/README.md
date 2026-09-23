@@ -14,6 +14,8 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 
 ## Current tools
 
+- `direct-codex-child/` — temporary one-child foreground Codex launcher for the agent-runner outage, with exact profile selection, MCP disable preflight, private attempt artifacts, native-terminal collection, and a dry run. See [`direct-codex-child/README.md`](direct-codex-child/README.md).
+
 - `mutable-workflow/` — local sequential execution with live graph/policy surgery, attempt-bound late results and explicit cancellation, plus an optional on-demand runner judgment adapter. **Status: local engine and fake-provider-tested adapter; see `mutable-workflow/README.md` and `mutable-workflow/agent-adapter.md` for contracts, effect bounds and recovery limits. No live-provider qualification.**
 
 - `scheduler/` — generic scheduled-task primitive. Bind a schedule (cron-style, interval, one-shot) to a script invocation, an agent dispatch, or a workflow run. **Status: skeleton only; see `scheduler/README.md`.**

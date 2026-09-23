@@ -8,6 +8,16 @@ Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-r
 
 Dispatch terminology: in RCA and bug workflows, "reproduce" means create a deterministic failure signal only when the input is symptom-only. When a failing test command, node ID, CI log, red-phase report, or structured failure already exists, that signal is the reproduction; carry it forward and run the same failing signal with the candidate fix instead of dispatching redundant reproduction work.
 
+## Temporary direct Codex dispatch during agent-runner outage
+
+For **new child launches while `agents` / `agent-runner` is unavailable**, use the direct plain-Bash launcher in [`tools/direct-codex-child/`](tools/direct-codex-child/README.md). This temporary transport rule takes precedence over the `agents` CLI launch and wait shapes in this file, `workflows/agents-cli.md`, and older project wrappers. It does not change the Mandatory General Landable-Change Lifecycle, task authority, review duties, worktree ownership, or project-specific product and release rules. Do not restart an in-flight child solely to apply it.
+
+Select exactly one session profile: `$HOME/.codex`, `$HOME/.codex2`, `$HOME/.codex3`, or `$HOME/.codex4`. Every new Codex child uses `gpt-6-sol` at `xhigh` during this outage, even where an older dispatch entry names a different model, and has **all configured MCP servers disabled**, including `firecrawl` and the `.codex` profile's `openaiDeveloperDocs`. The installed CLI merges `-c 'mcp_servers={}'` with existing server tables; that setting alone does not disable servers. The launcher discovers the selected profile's configured servers, passes individual disable flags, and requires `codex mcp list` with those exact flags to report every server disabled before execution. The four profiles are session stores, **not a four-child concurrency cap**; concurrent children need distinct attempts, terminal handles, and worktrees where writing is involved.
+
+Each attempt has a unique prompt snapshot, complete log, tool-written final, and append-only state path. Launch one child per native persistent foreground terminal invocation, record its returned terminal handle in that attempt's state, and await that same handle to a real exit status before reading the final and log. At most one outstanding native wait per child. Do not use shell `&`, `nohup`, shell `wait`, PID/file polling, repeated status or tail loops, or scrollback as completion evidence. Independent parent work may continue while a native terminal session runs. A queued message to an in-flight child is not a handoff until acknowledged.
+
+New descendants inherit this shared dispatch contract through this file and their project's `AGENTS.md` routing. Give each child its task, authority, exact workspace, and an instruction to read the applicable `AGENTS.md` files; **the full outage contract does not need to be pasted into every child prompt**. If a project does not route its children to this file, establish that link or give the child a direct pointer before relying on inheritance. The [launcher README](tools/direct-codex-child/README.md) gives the one-command interface, native-terminal collection procedure, and limits.
+
 ## Mandatory General Landable-Change Lifecycle
 
 This section overrides the generic workflow-routing convention and the legacy catalog links below for any general task that produces a landable change to code or to a behavior-authoritative artifact; either is a `protected change` below. An artifact is behavior-authoritative by causal capability, not extension: configuration, agent instructions or prompts, workflow or routing definitions, migrations, deployment artifacts, and similar sources qualify when they can alter implementation, review, correction, merge, deployment, or runtime behavior. Ordinary prose or documentation that cannot alter behavior is not a protected change merely because it is text. This lifecycle applies regardless of ticket count and includes features, bug fixes, behavioral changes, and behavior-preserving refactors. Trigger-specific discovery or operational workflows may still run when their own cues apply, but any resulting protected change enters this lifecycle.
@@ -420,6 +430,8 @@ Ecosystem-wide infrastructure (scheduler, PR-batch poller, ticket integration cl
 Source-of-truth repository: <https://github.com/nestharus/ai>.
 
 ## How to Invoke
+
+During the agent-runner outage, the [temporary direct Codex dispatch rule](#temporary-direct-codex-dispatch-during-agent-runner-outage) overrides the `agents` launch and wait instructions below for new children.
 
 Use the shared dispatch conventions in [`~/ai/workflows/agents-cli.md`](workflows/agents-cli.md).
 
