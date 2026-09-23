@@ -79,6 +79,8 @@ class BoardCoreTests(unittest.TestCase):
         return self.obj(*args)
 
     def join(self, board, session, *, role="root", route="queue", extra=()):
+        if route == "queue" and "--profile" not in extra:
+            extra = (*extra, "--profile", ".codex")
         return self.run_board("--board", board, "register", "--session", session,
                               "--role", role, "--route", route, *extra, actor=session)
 
@@ -212,7 +214,7 @@ class BoardCoreTests(unittest.TestCase):
             conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (B,))
         with board_store.database(two["db_path"]) as conn:
             self.assertIsNone(board_store.claim_next(conn, attempted_ids=set(), post_seq=None,
-                              thread_id=None, recipient=None, profile=".codex", actor=A))
+                              thread_id=None, recipient=None, actor=A))
             self.assertEqual(conn.execute("SELECT attempt_count FROM notification_outbox").fetchone()[0], 0)
         self.run_board("--board", one["board_id"], "register", "--session", B,
                        "--role", "retry", actor=B, ok=False)
@@ -248,7 +250,7 @@ class BoardCoreTests(unittest.TestCase):
 
         with board_store.database(entry["db_path"]) as conn:
             processed = board_store.dispatch_notices(
-                conn, profile=".codex", actor=A, limit=5, board_id=board,
+                conn, actor=A, limit=5, board_id=board,
                 board_home=str(self.home), sender=sender)
         self.assertEqual(processed, [(1, 1)])
         self.assertEqual(len(sent), 1)
@@ -262,6 +264,294 @@ class BoardCoreTests(unittest.TestCase):
                        "--notification", 1, actor=B)
         self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"],
                          "acknowledged")
+
+    def test_ack_and_profile_change_wait_for_fake_sender_to_settle(self):
+        entry = self.create("inflight-profile")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        self.open(board)
+
+        def sender(recipient, profile, notice):
+            self.assertEqual((recipient, profile), (B, ".codex"))
+            self.assertIn("board ID: " + board, notice)
+            ack = self.run_board("--board", board, "ack-notice", "--session", B,
+                                 "--notification", 1, actor=B, ok=False)
+            self.assertIn("retry ack-notice after the attempt settles", ack.stderr)
+            change = self.run_board("--board", board, "register", "--session", B,
+                                    "--role", "root", "--profile", ".codex2",
+                                    "--profile-change-reason", "Correct home",
+                                    actor=B, ok=False)
+            self.assertIn("settle in-flight queue attempts", change.stderr)
+            with sqlite3.connect(entry["db_path"]) as db:
+                state = db.execute("SELECT delivery_state,claim_token,acknowledged_at "
+                                   "FROM notification_outbox WHERE notification_id=1").fetchone()
+                self.assertEqual(state[0], "sending")
+                self.assertIsNotNone(state[1])
+                self.assertIsNone(state[2])
+                self.assertEqual(db.execute("SELECT profile FROM sessions WHERE session=?", (B,))
+                                 .fetchone()[0], ".codex")
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM profile_changes").fetchone()[0], 0)
+            return queue_transport.EnqueueResult("queued", D, 0, "Queued message",
+                                                 reason="queue_accepted")
+
+        with board_store.database(entry["db_path"]) as conn:
+            self.assertEqual(board_store.dispatch_notices(
+                conn, actor=A, limit=1, board_id=board, board_home=str(self.home),
+                sender=sender), [(1, 1)])
+        delivery = self.obj("--board", board, "deliveries")[0]
+        self.assertEqual((delivery["delivery_state"], delivery["queue_message_id"]),
+                         ("queued", D))
+        self.assertIsNone(delivery["acknowledged_at"])
+        self.assertEqual(self.obj("--board", board, "attempts", "--notification", 1)[0]
+                         ["result"], "queued")
+        self.run_board("--board", board, "ack-notice", "--session", B,
+                       "--notification", 1, actor=B)
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       "--profile", ".codex2", "--profile-change-reason", "Correct home",
+                       actor=B)
+        self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"],
+                         "acknowledged")
+        self.assertEqual(self.obj("--board", board, "profile-changes")[0]["old_profile"],
+                         ".codex")
+
+    def test_interrupted_sending_claim_can_recover_then_be_acknowledged(self):
+        entry = self.create("interrupted-ack")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        self.open(board)
+        with board_store.database(entry["db_path"]) as conn:
+            claim = board_store.claim_next(conn, attempted_ids=set(), post_seq=None,
+                                           thread_id=None, recipient=None, actor=A)
+            self.assertIsNotNone(claim)
+        self.run_board("--board", board, "ack-notice", "--session", B,
+                       "--notification", 1, actor=B, ok=False)
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE notification_outbox SET attempted_at=? WHERE notification_id=1",
+                       ("2000-01-01T00:00:00.000000Z",))
+        self.run_board("--board", board, "recover", "--acting-session", A,
+                       "--older-than", 120, actor=A)
+        self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"],
+                         "ambiguous")
+        self.run_board("--board", board, "ack-notice", "--session", B,
+                       "--notification", 1, actor=B)
+        self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"],
+                         "acknowledged")
+        self.assertEqual(self.obj("--board", board, "attempts", "--notification", 1)[0]
+                         ["result"], "ambiguous")
+
+    def test_late_recovered_sender_receipt_survives_ack_and_profile_change(self):
+        entry = self.create("recovered-late-receipt")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        self.open(board)
+
+        def sender(recipient, profile, notice):
+            self.assertEqual((recipient, profile), (B, ".codex"))
+            self.assertIn("board ID: " + board, notice)
+            with sqlite3.connect(entry["db_path"]) as db:
+                db.execute("UPDATE notification_outbox SET attempted_at=? "
+                           "WHERE notification_id=1 AND delivery_state='sending'",
+                           ("2000-01-01T00:00:00.000000Z",))
+            self.run_board("--board", board, "recover", "--acting-session", A,
+                           "--older-than", 120, actor=A)
+            recovered = self.obj("--board", board, "attempts", "--notification", 1)[0]
+            self.assertEqual((recovered["result"], recovered["profile"],
+                              recovered["recovered_by"]), ("ambiguous", ".codex", A))
+            self.run_board("--board", board, "ack-notice", "--session", B,
+                           "--notification", 1, actor=B)
+            self.run_board("--board", board, "register", "--session", B,
+                           "--role", "root", "--profile", ".codex2",
+                           "--profile-change-reason", "Correct recipient home", actor=B)
+            delivery = self.obj("--board", board, "deliveries")[0]
+            self.assertEqual(delivery["delivery_state"], "acknowledged")
+            self.assertIsNone(delivery["queue_message_id"])
+            self.assertIsNone(delivery["queued_at"])
+            self.assertIsNotNone(delivery["acknowledged_at"])
+            with sqlite3.connect(entry["db_path"]) as db:
+                self.assertIsNone(db.execute("SELECT claim_token FROM notification_outbox "
+                                             "WHERE notification_id=1").fetchone()[0])
+            return queue_transport.EnqueueResult("queued", D, 0, "Queued message",
+                                                 reason="queue_accepted")
+
+        with board_store.database(entry["db_path"]) as conn:
+            self.assertEqual(board_store.dispatch_notices(
+                conn, actor=A, limit=1, board_id=board, board_home=str(self.home),
+                sender=sender), [(1, 1)])
+        delivery = self.obj("--board", board, "deliveries")[0]
+        self.assertEqual((delivery["delivery_state"], delivery["queue_message_id"]),
+                         ("acknowledged", D))
+        self.assertIsNotNone(delivery["queued_at"])
+        self.assertIsNotNone(delivery["acknowledged_at"])
+        self.assertLessEqual(delivery["acknowledged_at"], delivery["queued_at"])
+        self.assertEqual(delivery["state_changed_at"], delivery["acknowledged_at"])
+        self.assertEqual(delivery["attempt_count"], 1)
+        attempt = self.obj("--board", board, "attempts", "--notification", 1)[0]
+        self.assertEqual((attempt["attempt_number"], attempt["profile"], attempt["result"],
+                          attempt["reason"], attempt["recovered_by"]),
+                         (1, ".codex", "queued", "queue_accepted", A))
+        self.assertIsNotNone(attempt["recovered_at"])
+        self.assertEqual(self.obj("--board", board, "profile-changes", "--session", B)[0]
+                         ["new_profile"], ".codex2")
+
+    def test_recipient_profile_overrides_actor_home_and_mixed_fanout(self):
+        entry = self.create("mixed-profiles")
+        board = entry["board_id"]
+        self.join(board, A, extra=("--profile", ".codex5"))
+        self.join(board, B, extra=("--profile", ".codex"))
+        self.join(board, C, extra=("--profile", ".codex2"))
+        self.open(board)
+        sent = []
+
+        def sender(recipient, profile, notice):
+            sent.append((recipient, profile))
+            return queue_transport.EnqueueResult("queued", D, 0, "Queued message",
+                                                 reason="queue_accepted")
+
+        with board_store.database(entry["db_path"]) as conn, \
+             mock.patch.dict(os.environ, {"CODEX_HOME": str(queue_transport.profile_root() / ".codex5")}):
+            board_store.dispatch_notices(conn, actor=A, limit=5, board_id=board,
+                                         board_home=str(self.home), sender=sender)
+        self.assertEqual(sent, [(B, ".codex"), (C, ".codex2")])
+        self.assertEqual([self.obj("--board", board, "attempts", "--notification", item)[0]["profile"]
+                          for item in (1, 2)], [".codex", ".codex2"])
+        self.assertEqual([item["delivery_state"] for item in self.obj("--board", board,
+                                                                         "deliveries")],
+                         ["queued", "queued"])
+
+    def test_missing_recipient_profile_fails_before_claim_and_inline_content(self):
+        entry = self.create("missing-profile")
+        board = entry["board_id"]
+        self.join(board, A, extra=("--profile", ".codex5"))
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       actor=B, ok=False)
+        self.join(board, B)
+        self.run_board("--board", board, "open", "--session", A, "--topic", "work",
+                       "--title", "Question", "--text", "Body", "--to", B, "--no-push",
+                       actor=A)
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE sessions SET profile=NULL WHERE session=?", (B,))
+        sent = []
+        with board_store.database(entry["db_path"]) as conn:
+            with self.assertRaisesRegex(board_store.UserError, "no registered profile"):
+                board_store.dispatch_notices(conn, actor=A, limit=5, board_id=board,
+                                             board_home=str(self.home), sender=lambda *x: sent.append(x))
+        self.assertEqual(sent, [])
+        with sqlite3.connect(entry["db_path"]) as db:
+            self.assertEqual(db.execute("SELECT delivery_state,attempt_count FROM notification_outbox")
+                             .fetchone(), ("pending", 0))
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM notification_attempts").fetchone()[0], 0)
+        for command in (("open", "--session", A, "--topic", "work", "--title", "Again",
+                         "--text", "Body", "--to", B),
+                        ("reply", "--session", A, "--thread", 1, "--text", "Again")):
+            with self.subTest(command=command[0]):
+                failed = self.run_board("--board", board, *command, actor=A, ok=False)
+                self.assertIn("no registered profile", failed.stderr)
+        with sqlite3.connect(entry["db_path"]) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM posts").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM notification_outbox").fetchone()[0], 1)
+            db.execute("UPDATE sessions SET profile='.codex6' WHERE session=?", (B,))
+        with board_store.database(entry["db_path"]) as conn:
+            with self.assertRaisesRegex(board_store.UserError, "invalid or unavailable"):
+                board_store.dispatch_notices(conn, actor=A, limit=5, board_id=board,
+                                             board_home=str(self.home), sender=lambda *x: sent.append(x))
+        self.assertEqual(sent, [])
+        with sqlite3.connect(entry["db_path"]) as db:
+            self.assertEqual(db.execute("SELECT delivery_state,attempt_count FROM notification_outbox")
+                             .fetchone(), ("pending", 0))
+            db.execute("UPDATE sessions SET profile=NULL WHERE session=?", (B,))
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       "--profile", ".codex", "--profile-change-reason", "Correct legacy profile",
+                       actor=B)
+        changes = self.obj("--board", board, "profile-changes", "--session", B)
+        self.assertEqual([(x["old_profile"], x["new_profile"], x["reason"]) for x in changes],
+                         [(None, ".codex", "Correct legacy profile")])
+
+    def test_invalid_profile_blocks_unfiltered_claim_but_not_targeted_recipient(self):
+        entry = self.create("targeted-profile")
+        board = entry["board_id"]
+        for session in (A, B, C):
+            self.join(board, session)
+        self.open(board)
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE sessions SET profile='.codex6' WHERE session=?", (B,))
+        sent = []
+
+        def sender(recipient, profile, _notice):
+            sent.append((recipient, profile))
+            return queue_transport.EnqueueResult("queued", D, 0, "Queued message")
+
+        with board_store.database(entry["db_path"]) as conn:
+            with self.assertRaisesRegex(board_store.UserError, "invalid or unavailable"):
+                board_store.dispatch_notices(conn, actor=A, limit=2, board_id=board,
+                                             board_home=str(self.home), sender=sender)
+            self.assertEqual(board_store.dispatch_notices(
+                conn, actor=A, limit=2, board_id=board, board_home=str(self.home),
+                recipient=C, sender=sender), [(1, 1)])
+        self.assertEqual(sent, [(C, ".codex")])
+        self.assertEqual([(item["recipient"], item["delivery_state"])
+                          for item in self.obj("--board", board, "deliveries")],
+                         [(B, "pending"), (C, "queued")])
+
+    def test_profile_change_needs_reason_and_retains_attempt_profiles(self):
+        entry = self.create("profile-change")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B)
+        self.open(board)
+        with board_store.database(entry["db_path"]) as conn:
+            board_store.dispatch_notices(
+                conn, actor=A, limit=1, board_id=board, board_home=str(self.home),
+                sender=lambda *_: queue_transport.EnqueueResult("failed", None, 1, "no rollout",
+                                                                reason="queue_rejected"))
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       "--profile", ".codex2", actor=B, ok=False)
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       "--profile", ".codex2", "--profile-change-reason", "Session moved",
+                       actor=B)
+        with board_store.database(entry["db_path"]) as conn:
+            board_store.dispatch_notices(
+                conn, actor=A, limit=1, board_id=board, board_home=str(self.home),
+                sender=lambda *_: queue_transport.EnqueueResult("queued", D, 0, "Queued message"))
+        self.assertEqual([x["profile"] for x in self.obj("--board", board, "attempts",
+                                                        "--notification", 1)],
+                         [".codex", ".codex2"])
+        self.assertEqual(self.obj("--board", board, "profile-changes")[0]["reason"],
+                         "Session moved")
+
+        self.run_board("--board", board, "open", "--session", A, "--topic", "work",
+                       "--title", "Second", "--text", "Body", "--to", B, "--no-push",
+                       actor=A)
+        with board_store.database(entry["db_path"]) as conn:
+            board_store.dispatch_notices(
+                conn, actor=A, limit=1, board_id=board, board_home=str(self.home), post_seq=2,
+                sender=lambda *_: queue_transport.EnqueueResult("ambiguous", None, 1,
+                                                                 "uncertain response"))
+        self.run_board("--board", board, "register", "--session", B, "--role", "root",
+                       "--profile", ".codex5", "--profile-change-reason", "New home",
+                       actor=B)
+        sent = []
+        with board_store.database(entry["db_path"]) as conn:
+            board_store.dispatch_notices(conn, actor=A, limit=1, board_id=board,
+                                         board_home=str(self.home), post_seq=2,
+                                         sender=lambda *x: sent.append(x))
+        self.assertEqual(sent, [])
+        self.assertEqual(self.obj("--board", board, "deliveries", "--post", 2)[0]
+                         ["delivery_state"], "ambiguous")
+        self.assertEqual(len(self.obj("--board", board, "attempts", "--notification", 2)), 1)
+
+    def test_definite_no_rollout_and_uncertain_queue_results_stay_distinct(self):
+        no_rollout = queue_transport.queue_notice(
+            B, ".codex", "Notice", runner=lambda *_: queue_transport.CommandOutcome(
+                1, "unable to enqueue message: no rollout found for thread id"))
+        uncertain = queue_transport.queue_notice(
+            B, ".codex", "Notice", runner=lambda *_: queue_transport.CommandOutcome(
+                1, "transport failed after request"))
+        self.assertEqual((no_rollout.status, no_rollout.reason), ("failed", "queue_rejected"))
+        self.assertEqual((uncertain.status, uncertain.reason),
+                         ("ambiguous", "unrecognized_queue_response"))
 
     def test_queue_profile_uses_current_account_and_exact_allowed_path(self):
         account = Path(self.temp.name) / "account"
@@ -280,14 +570,10 @@ class BoardCoreTests(unittest.TestCase):
                                return_value=SimpleNamespace(pw_dir=str(account))), \
              mock.patch.dict(os.environ, {"HOME": str(foreign),
                                        "CODEX_HOME": str(profile)}):
-            self.assertEqual(board_store.sender_profile(None), ".codex2")
             result = queue_transport.queue_notice(A, ".codex2", "Board notice", runner=runner)
             self.assertEqual((result.status, result.queue_message_id), ("queued", B))
             self.assertEqual(sent[0][1], str(profile))
             self.assertEqual(sent[0][0][:4], ["codex", "queue", "--thread", A])
-            with mock.patch.dict(os.environ, {"CODEX_HOME": str(foreign / ".codex2")}):
-                with self.assertRaisesRegex(board_store.UserError, "exact allowed"):
-                    board_store.sender_profile(None)
             with self.assertRaisesRegex(ValueError, "does not exist"):
                 queue_transport.queue_notice(A, ".codex3", "Board notice", runner=runner)
             with self.assertRaisesRegex(ValueError, "allowed local"):
@@ -419,6 +705,9 @@ class BoardCoreTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT route,delivery_state FROM notification_outbox "
                                           "WHERE notification_id=9").fetchone(), ("queue", "ambiguous"))
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM notification_attempts").fetchone()[0], 0)
+            self.assertIsNone(conn.execute("SELECT profile FROM sessions WHERE session=?", (B,))
+                              .fetchone()[0])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM profile_changes").fetchone()[0], 0)
         with sqlite3.connect(backup) as conn:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
         posts = self.obj("--board", "rfq-copy", "thread", "--id", 7)
@@ -482,8 +771,7 @@ class BoardCoreTests(unittest.TestCase):
             sent.append(args)
             return queue_transport.EnqueueResult("queued", "fake-id", 0, "Queued message")
 
-        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender), \
-             mock.patch.object(board_store, "sender_profile") as profile:
+        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender):
             for command in (("dispatch", "--acting-session", A),
                             ("open", "--session", A, "--topic", "rfq", "--title", "New",
                              "--text", "Body"),
@@ -491,7 +779,6 @@ class BoardCoreTests(unittest.TestCase):
                 with self.subTest(command=command[0]), self.assertRaisesRegex(
                         catalog.CatalogError, "queue delivery is forbidden by board policy"):
                     self.run_in_process("--board", entry["board_id"], *command)
-            profile.assert_not_called()
             self.assertEqual(sent, [])
             with sqlite3.connect(path) as conn:
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0], 1)
@@ -514,7 +801,6 @@ class BoardCoreTests(unittest.TestCase):
             self.assertEqual(self.run_in_process("--board", entry["board_id"], "recover",
                                                  "--acting-session", A), 0)
             self.assertEqual(sent, [])
-            profile.assert_not_called()
         with sqlite3.connect(path) as conn:
             self.assertEqual(conn.execute("SELECT notification_id,route,delivery_state,attempt_count "
                                           "FROM notification_outbox WHERE notification_id IN (3,5) "
@@ -535,8 +821,7 @@ class BoardCoreTests(unittest.TestCase):
             sent.append(args)
             return queue_transport.EnqueueResult("queued", "fake-id", 0, "Queued message")
 
-        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender), \
-             mock.patch.object(board_store, "sender_profile", return_value=".codex"):
+        with mock.patch.object(queue_transport, "queue_notice", side_effect=sender):
             self.assertEqual(self.run_in_process("--board", board, "open", "--session", A,
                                                  "--topic", "work", "--title", "Deferred",
                                                  "--text", "Body", "--to", B, "--no-push"), 0)

@@ -32,9 +32,9 @@ class WaitAnyTests(unittest.TestCase):
         self.two = self.board("second")
         for board in (self.one, self.two):
             self.cli("--board", board["board_id"], "register", "--session", SESSION,
-                     "--role", "watcher", actor=SESSION)
+                     "--role", "watcher", "--profile", ".codex", actor=SESSION)
             self.cli("--board", board["board_id"], "register", "--session", AUTHOR,
-                     "--role", "writer", actor=AUTHOR)
+                     "--role", "writer", "--profile", ".codex", actor=AUTHOR)
 
     def cli(self, *args, actor=None, expected=0):
         env = os.environ.copy()

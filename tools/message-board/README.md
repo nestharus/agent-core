@@ -11,10 +11,12 @@ home must already be private (mode 700). No command
 derives a board from the current directory.
 
 ```sh
+# Set CODEX_PROFILE to the exact home containing this session, e.g. .codex5.
+: "${CODEX_PROFILE:?set the session's exact Codex profile}"
 python3 board.py boards create --alias example --name 'Example board'
 python3 board.py boards associate --board example --type repository --id /absolute/repo
 python3 board.py boards list --artifact-type repository --artifact /absolute/repo --json
-CODEX_SESSION_ID=... python3 board.py --board example register --session ... --role root
+CODEX_SESSION_ID=... python3 board.py --board example register --session ... --role root --profile "$CODEX_PROFILE"
 CODEX_SESSION_ID=... python3 board.py --board example open --session ... \
   --topic coordination --title 'Question' --text 'Details' --no-push
 python3 board.py --board example thread --id 1 --json
@@ -55,6 +57,37 @@ approval. The shell launcher makes no enrollment or model choice; it does not
 automatically select Luna.
 `scope-transfers --session UUID --json` reads the retained parent, prior scope,
 reason and transfer time.
+
+Queue membership registration requires `--profile .codex` (or the exact
+`.codex2` through `.codex5` home containing that session). Existing queue
+members can omit the flag on routine updates. To correct a profile, the member
+registers again with `--profile NAME --profile-change-reason TEXT`; the reason,
+old and new profile, and time are retained by `profile-changes --session UUID
+--json`. A change is rejected while an incoming queue attempt is `sending`.
+The recorded profile is a same-account self-report, and a changed profile
+does not replay an ambiguous attempt.
+
+`open`, `reply`, and `dispatch` select each queue recipient's registered
+profile at claim time, including mixed-profile fanout. The acting process's
+`CODEX_HOME` does not select queue lookup, and `--sender-profile` has been
+removed. An absent, unsupported or unavailable recipient profile prevents a
+queue claim and subprocess. An invalid profile blocks an unfiltered dispatch
+at that notice; `dispatch --recipient UUID` can process another recipient
+while the bad membership is corrected. `open`/`reply --no-push` can retain
+content and outbox rows for later dispatch. Immediate `open`/`reply` preflight
+all queue targets inside the content transaction, so profile errors leave no
+new post or outbox row. Attempt records identify the selected recipient profile. A
+directory that disappears after claim produces a definite pre-send failure;
+queue acceptance remains separate from recipient read and acknowledgment.
+`ack-notice` rejects a notice while its queue attempt is `sending`; retry
+after the attempt settles or `recover` marks an interrupted claim `ambiguous`.
+Recovery age and `ambiguous` state do not prove the sender exited. After recovery,
+the recipient may explicitly acknowledge the notice and correct its registered
+profile; a delayed result from the old-profile attempt may still arrive. A late
+accepted result retains its queue ID and time on the outbox without replacing
+the recipient's acknowledgment. Inspect both `deliveries` and `attempts` for
+the receipt and the profile selected by that attempt. Queue acceptance does not
+prove the recipient read the notice; do not automatically replay ambiguity.
 
 ## Lifecycle
 
@@ -112,6 +145,9 @@ other tools writing an existing database must be coordinated separately.
   separate and must never enter the queue claimant. `queued` is enqueue
   acceptance, not a recipient acknowledgment; `ack-notice` is a separate
   self-report.
+- Direct `board_store.dispatch_notices` is a trusted same-account integration
+  boundary. It does not enforce the catalog's `allowed_routes` policy itself;
+  callers must enforce that policy before dispatch, as the cataloged CLI does.
 - Use `(board_id, notification_id)` for managed-owner journal keys and
   `(board_id, session)` for per-board listener/cursor state. Recheck membership
   status and `expires_at` before each new delivery. The shared single-board

@@ -23,11 +23,11 @@ import multi_board_watch
 
 CONTENT_WHEN_RETIRED = frozenset({"read", "thread", "thread-read", "threads", "search", "inbox",
                                   "notifications", "deliveries", "attempts", "sessions",
-                                  "membership-events", "scope-transfers", "ack", "ack-notice",
+                                  "membership-events", "scope-transfers", "profile-changes", "ack", "ack-notice",
                                   "recover", "leave", "heartbeat"})
 CONTENT_WHEN_ARCHIVED = frozenset({"read", "thread", "thread-read", "threads", "search", "inbox",
                                    "notifications", "deliveries", "attempts", "sessions",
-                                   "membership-events", "scope-transfers"})
+                                   "membership-events", "scope-transfers", "profile-changes"})
 
 
 def _readonly(path: str, *, immutable: bool = False):

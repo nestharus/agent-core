@@ -107,7 +107,7 @@ class ManagedOwnerTests(unittest.IsolatedAsyncioTestCase):
         self.items = [self.create("one"), self.create("two")]
         for item in self.items:
             self.cli("--board", item["board_id"], "register", "--session", self.writer,
-                     "--role", "writer", actor=self.writer)
+                     "--role", "writer", "--profile", ".codex", actor=self.writer)
         self.env = patch.dict(os.environ, {"FAKE_STATE_PATH": str(self.state), "FAKE_DELAY": ".04"})
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -377,7 +377,7 @@ class ManagedOwnerTests(unittest.IsolatedAsyncioTestCase):
     async def test_three_board_backlogs_each_get_a_turn_before_repeat(self):
         third = self.create("three")
         self.cli("--board", third["board_id"], "register", "--session", self.writer,
-                 "--role", "writer", actor=self.writer)
+                 "--role", "writer", "--profile", ".codex", actor=self.writer)
         selected = [item["board_id"] for item in (*self.items, third)]
         owner, task = await self.start(selected)
         ident = owner.thread_id

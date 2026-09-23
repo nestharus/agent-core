@@ -358,6 +358,12 @@ def database(path_text: str, *, readonly: bool = False):
                 parent_session TEXT NOT NULL, scope TEXT NOT NULL,
                 reason TEXT NOT NULL, transferred_at TEXT NOT NULL
             )""")
+            conn.execute("""CREATE TABLE IF NOT EXISTS profile_changes (
+                change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session TEXT NOT NULL REFERENCES sessions(session) ON DELETE RESTRICT,
+                old_profile TEXT, new_profile TEXT NOT NULL,
+                reason TEXT NOT NULL, changed_at TEXT NOT NULL
+            )""")
         except BaseException:
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
@@ -427,6 +433,16 @@ def require_session(conn: sqlite3.Connection, session: str) -> None:
         raise UserError("session is not registered")
 
 
+def require_recipient_profile(profile: str | None) -> str:
+    if profile is None:
+        raise UserError("queue recipient has no registered profile; update its membership first")
+    try:
+        queue_transport._profile_home(profile)
+    except queue_transport.ProfileError:
+        raise UserError("queue recipient profile is invalid or unavailable; update its membership first") from None
+    return profile
+
+
 def require_settled_children(conn: sqlite3.Connection, session: str) -> None:
     child = conn.execute("SELECT session FROM sessions WHERE parent_session=? AND status IN ('active','paused') "
                          "AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
@@ -451,19 +467,32 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
     profile = bounded(args.profile, "profile", 64, optional=True)
     if profile is not None and profile not in queue_transport.PROFILE_NAMES:
         raise UserError("profile must be an exact allowed Codex profile name")
+    reason = bounded(args.profile_change_reason, "profile-change-reason", 2000, optional=True)
     work_text = bounded(args.work, "work", 2000, optional=True, multiline=True)
     supplied_scope = bounded(args.scope, "scope", 1000, optional=True)
     supplied_parent = session_uuid(args.parent_session) if args.parent_session else None
     if bool(supplied_parent) != bool(supplied_scope):
         raise UserError("parent-session and scope must be supplied together")
     with write(conn):
-        prior = conn.execute("SELECT status,parent_session,scope,expires_at,route,campaign "
+        prior = conn.execute("SELECT status,parent_session,scope,expires_at,route,campaign,profile "
                              "FROM sessions WHERE session=?",
                              (session,)).fetchone()
         status = args.status or (prior["status"] if prior else "active")
         campaign = bounded(args.campaign or (prior["campaign"] if prior else "general"),
                            "campaign", 128)
         route = args.route or (prior["route"] if prior else "queue")
+        selected_profile = profile if profile is not None else (prior["profile"] if prior else None)
+        if route == "queue" and selected_profile is None:
+            raise UserError("queue membership requires --profile with the session's exact Codex home")
+        changed_profile = prior is not None and profile is not None and profile != prior["profile"]
+        if changed_profile and reason is None:
+            raise UserError("changing a registered profile requires --profile-change-reason")
+        if reason is not None and not changed_profile:
+            raise UserError("--profile-change-reason requires an actual profile change")
+        if changed_profile and conn.execute(
+            "SELECT 1 FROM notification_outbox WHERE recipient=? AND delivery_state='sending' LIMIT 1",
+            (session,)).fetchone():
+            raise UserError("settle in-flight queue attempts before changing profile")
         if prior and prior["status"] == "active" and prior["route"] == "managed" and route != "managed":
             raise UserError("active managed route cannot be downgraded to queue")
         parent = supplied_parent if supplied_parent is not None else (
@@ -499,6 +528,9 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
         """, (session, campaign, role, profile, status, work_text, now, now,
               route, parent, scope, expiry, int(args.owner)))
         record_membership(conn, session, "register")
+        if changed_profile:
+            conn.execute("INSERT INTO profile_changes(session,old_profile,new_profile,reason,changed_at) "
+                         "VALUES(?,?,?,?,?)", (session, prior["profile"], profile, reason, now))
     return {"session": session, "status": status}
 
 
@@ -632,14 +664,18 @@ def thread_info(conn: sqlite3.Connection, thread_id: int, session: str | None = 
 
 
 def notify(conn: sqlite3.Connection, recipients: set[str], thread_id: int, post_seq: int,
-           event: str, title: str, sender: str) -> None:
+           event: str, title: str, sender: str, *, push: bool = False) -> None:
     now = utc_now()
     targets = sorted(recipients - {sender})
     if not targets:
         return
-    routed = conn.execute("SELECT session,route FROM sessions WHERE status='active' "
+    routed = list(conn.execute("SELECT session,route,profile FROM sessions WHERE status='active' "
                           "AND (expires_at IS NULL OR expires_at>?) AND session IN (" +
-                          ",".join("?" for _ in targets) + ") ORDER BY session", (now, *targets))
+                          ",".join("?" for _ in targets) + ") ORDER BY session", (now, *targets)))
+    if push:
+        for member in routed:
+            if member["route"] == "queue":
+                require_recipient_profile(member["profile"])
     conn.executemany("""
         INSERT OR IGNORE INTO notification_outbox
           (recipient,thread_id,post_seq,event,title,sender,created_at,state_changed_at,
@@ -647,28 +683,7 @@ def notify(conn: sqlite3.Connection, recipients: set[str], thread_id: int, post_
         VALUES(?,?,?,?,?,?,?,?,?,?)
     """, ((recipient, thread_id, post_seq, event, title, sender, now, now,
            route, "managed_pending" if route == "managed" else "pending")
-          for recipient, route in routed))
-
-
-def sender_profile(explicit: str | None) -> str:
-    """Use an exact allowed sender home; never infer one from the recipient."""
-    if explicit is None:
-        home = os.environ.get("CODEX_HOME")
-        if not home:
-            raise UserError("set CODEX_HOME or --sender-profile before pushing")
-        path = Path(home).expanduser()
-        root = queue_transport.profile_root()
-        profiles = [name for name in queue_transport.PROFILE_NAMES
-                    if path == root / name]
-        if len(profiles) != 1:
-            raise UserError("CODEX_HOME must be an exact allowed sender profile path")
-        explicit = profiles[0]
-    if explicit not in queue_transport.PROFILE_NAMES:
-        raise UserError("sender profile must be an allowed Codex profile name")
-    path = queue_transport.profile_root() / explicit
-    if not path.is_dir() or path.is_symlink():
-        raise UserError("sender profile directory does not exist or is a symlink")
-    return explicit
+          for recipient, route, _ in routed))
 
 
 def open_thread(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
@@ -707,7 +722,7 @@ def open_thread(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
             targets = {recipient}
             conn.execute("INSERT OR IGNORE INTO subscriptions(thread_id,session,subscribed_at) VALUES(?,?,?)",
                          (thread_id, recipient, now))
-        notify(conn, targets, thread_id, thread_id, "open", title, author)
+        notify(conn, targets, thread_id, thread_id, "open", title, author, push=not args.no_push)
     active_listener.signal_post(conn, thread_id)
     return thread_id
 
@@ -741,7 +756,8 @@ def reply_thread(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
         add_attachments(conn, seq, attachments)
         targets = {row[0] for row in conn.execute(
             "SELECT session FROM subscriptions WHERE thread_id=?", (args.thread,))}
-        notify(conn, targets | cc, args.thread, seq, "reply", thread["title"], author)
+        notify(conn, targets | cc, args.thread, seq, "reply", thread["title"], author,
+               push=not args.no_push)
     active_listener.signal_post(conn, seq)
     return seq
 
@@ -802,7 +818,7 @@ def delivery_counts(conn: sqlite3.Connection, post_seq: int) -> dict[str, int]:
 
 def claim_next(conn: sqlite3.Connection, *, attempted_ids: set[int], post_seq: int | None,
                thread_id: int | None, recipient: str | None,
-               profile: str, actor: str) -> dict | None:
+               actor: str) -> dict | None:
     """One short transaction claims one row; the network call happens afterward."""
     with write(conn):
         clauses = ["route='queue'", "delivery_state IN ('pending','failed')"]
@@ -816,7 +832,8 @@ def claim_next(conn: sqlite3.Connection, *, attempted_ids: set[int], post_seq: i
                 clauses.append(f"{column}=?")
                 values.append(value)
         row = conn.execute("SELECT notification_id, recipient, thread_id, post_seq, event, "
-                           "title, attempt_count FROM notification_outbox WHERE " + " AND ".join(clauses) +
+                           "title, attempt_count, (SELECT profile FROM sessions WHERE "
+                           "session=recipient) AS profile FROM notification_outbox WHERE " + " AND ".join(clauses) +
                            " AND recipient IN (SELECT session FROM sessions WHERE status='active' "
                            "AND (expires_at IS NULL OR expires_at>?))" +
                            " ORDER BY CASE delivery_state WHEN 'pending' THEN 0 ELSE 1 END, "
@@ -824,6 +841,7 @@ def claim_next(conn: sqlite3.Connection, *, attempted_ids: set[int], post_seq: i
                            "notification_id LIMIT 1", (*values, utc_now())).fetchone()
         if row is None:
             return None
+        profile = require_recipient_profile(row["profile"])
         token = str(uuid.uuid4())
         now = utc_now()
         conn.execute("UPDATE notification_outbox SET delivery_state='sending', "
@@ -852,19 +870,32 @@ def finish_claim(conn: sqlite3.Connection, claim: dict,
                       "timeout": "sender_timeout", "ambiguous": "sender_uncertain_result"}.get(
                           result.status if result else None, "sender_exception")
     with write(conn):
-        conn.execute("UPDATE notification_outbox SET delivery_state=?, queue_message_id=?, "
-                     "queued_at=?, state_changed_at=?, claim_token=NULL "
-                     "WHERE notification_id=? AND claim_token=? "
-                     "AND delivery_state IN ('sending','ambiguous')",
-                     (state, result.queue_message_id if result else None,
-                      now if state == "queued" else None, now,
-                      claim["notification_id"], claim["claim_token"]))
+        settled = conn.execute("UPDATE notification_outbox SET delivery_state=?, queue_message_id=?, "
+                               "queued_at=?, state_changed_at=?, claim_token=NULL "
+                               "WHERE notification_id=? AND claim_token=? "
+                               "AND delivery_state IN ('sending','ambiguous')",
+                               (state, result.queue_message_id if result else None,
+                                now if state == "queued" else None, now,
+                                claim["notification_id"], claim["claim_token"]))
+        if settled.rowcount == 0 and state == "queued":
+            # A recipient may acknowledge a recovered ambiguous claim before its
+            # original sender returns. Keep that self-report while retaining the
+            # accepted receipt only when this is still the same recovered attempt.
+            conn.execute("UPDATE notification_outbox SET queue_message_id=?, queued_at=? "
+                         "WHERE notification_id=? AND delivery_state='acknowledged' "
+                         "AND attempt_count=? AND queued_at IS NULL AND EXISTS ("
+                         "SELECT 1 FROM notification_attempts WHERE notification_id=? "
+                         "AND attempt_number=? AND profile=? AND result='ambiguous' "
+                         "AND recovered_at IS NOT NULL)",
+                         (result.queue_message_id, now, claim["notification_id"],
+                          claim["attempt_number"], claim["notification_id"],
+                          claim["attempt_number"], claim["profile"]))
         conn.execute("UPDATE notification_attempts SET result=?, reason=?, finished_at=? "
                      "WHERE notification_id=? AND attempt_number=?",
                      (state, reason, now, claim["notification_id"], claim["attempt_number"]))
 
 
-def dispatch_notices(conn: sqlite3.Connection, *, profile: str, actor: str, limit: int,
+def dispatch_notices(conn: sqlite3.Connection, *, actor: str, limit: int,
                      board_id: str, board_home: str,
                      post_seq: int | None = None, thread_id: int | None = None,
                      recipient: str | None = None,
@@ -875,7 +906,7 @@ def dispatch_notices(conn: sqlite3.Connection, *, profile: str, actor: str, limi
     while len(processed) < limit:
         claim = claim_next(conn, attempted_ids=attempted_ids, post_seq=post_seq,
                            thread_id=thread_id, recipient=recipient,
-                           profile=profile, actor=actor)
+                           actor=actor)
         if claim is None:
             break
         # A definite failure is retryable on a later dispatch, not twice here.
@@ -898,7 +929,11 @@ def dispatch_notices(conn: sqlite3.Connection, *, profile: str, actor: str, limi
             reason = "local_pre_send_failure"
         else:
             try:
-                result = sender(claim["recipient"], profile, notice)
+                result = sender(claim["recipient"], claim["profile"], notice)
+            except queue_transport.ProfileError:
+                # A profile directory disappeared after the transactional preflight.
+                result = queue_transport.EnqueueResult("failed", None, None, "")
+                reason = "profile_preflight_failed"
             except Exception:
                 # Once entered, a sender may have reached codex queue.
                 result = None
@@ -912,10 +947,13 @@ def ack_notice(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
     session = acting_session(args.session)
     with write(conn):
         require_session(conn, session)
-        row = conn.execute("SELECT recipient, thread_id FROM notification_outbox "
+        row = conn.execute("SELECT recipient, thread_id, delivery_state FROM notification_outbox "
                            "WHERE notification_id=?", (args.notification,)).fetchone()
         if row is None or row["recipient"] != session:
             raise UserError("notification does not belong to this session")
+        if row["delivery_state"] == "sending":
+            raise UserError("notification is sending; retry ack-notice after the attempt settles "
+                            "or an interrupted claim is recovered")
         now = utc_now()
         conn.execute("UPDATE notification_outbox SET delivery_state='acknowledged', "
                      "acknowledged_at=COALESCE(acknowledged_at, ?), state_changed_at=?, "
@@ -1126,7 +1164,8 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--session", required=True)
     c.add_argument("--campaign")
     c.add_argument("--role", required=True)
-    c.add_argument("--profile")
+    c.add_argument("--profile", help="exact local Codex profile containing this queue session")
+    c.add_argument("--profile-change-reason", help="reason for changing this session's recorded profile")
     c.add_argument("--status", choices=STATUSES)
     c.add_argument("--work")
     c.add_argument("--route", choices=("queue", "managed"))
@@ -1163,6 +1202,12 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--session")
     c.add_argument("--json", action="store_true")
 
+    c = command("profile-changes", "read explicit profile changes for queue memberships")
+    c.add_argument("--session")
+    c.add_argument("--after", type=nonnegative, default=0, metavar="ID")
+    c.add_argument("--limit", type=positive, default=DEFAULT_LIMIT, metavar="N")
+    c.add_argument("--json", action="store_true")
+
     c = command("post", "append a flat board post (no push; use open/reply for new cross-slice questions)")
     c.description = ("Append a flat board post. This does not push a notice; "
                      "use open/reply for new cross-slice questions.")
@@ -1185,7 +1230,6 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--ref")
     c.add_argument("--attach", action="append", metavar="PATH_OR_URL")
     c.add_argument("--no-push", action="store_true", help="commit outbox only (offline/tests)")
-    c.add_argument("--sender-profile", help="exact allowed Codex sender profile name")
 
     c = command("reply", "reply in a thread and notify subscribers/CCs")
     c.add_argument("--session", required=True)
@@ -1197,11 +1241,9 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--reply-to", type=positive, metavar="SEQ")
     c.add_argument("--cc", action="append", default=[], metavar="SESSION")
     c.add_argument("--no-push", action="store_true", help="commit outbox only (offline/tests)")
-    c.add_argument("--sender-profile", help="exact allowed Codex sender profile name")
 
     c = command("dispatch", "send bounded pending/failed outbox notices")
     c.add_argument("--acting-session", required=True, metavar="UUID")
-    c.add_argument("--sender-profile", help="exact allowed Codex sender profile name")
     c.add_argument("--thread", type=positive, metavar="ID")
     c.add_argument("--post", type=positive, metavar="SEQ")
     c.add_argument("--recipient", metavar="SESSION")
@@ -1296,9 +1338,6 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
         acting_session(args.session)
     if args.command in ("dispatch", "recover"):
         args.acting_session = acting_session(args.acting_session)
-    profile = None
-    if args.command in ("open", "reply") and not args.no_push or args.command == "dispatch":
-        profile = sender_profile(args.sender_profile)
     with database(db_path, readonly=readonly) as conn:
         if not readonly:
             bind_board(conn, board_id)
@@ -1359,6 +1398,23 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
                     print(f"{board_id} scope-transfer=#{item['transfer_id']} "
                           f"session={item['session']} parent={item['parent_session']} "
                           f"scope={item['scope']} reason={item['reason']}")
+        elif args.command == "profile-changes":
+            query = "SELECT * FROM profile_changes WHERE change_id>?"
+            values = [args.after]
+            if args.session:
+                query += " AND session=?"
+                values.append(session_uuid(args.session))
+            exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                  "AND name='profile_changes'").fetchone()
+            result = ([{"board_id": board_id, **dict(row)} for row in conn.execute(
+                query + " ORDER BY change_id LIMIT ?", (*values, args.limit))] if exists else [])
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            else:
+                for item in result:
+                    print(f"{board_id} profile-change=#{item['change_id']} session={item['session']} "
+                          f"{item['old_profile'] or '-'}->{item['new_profile']} "
+                          f"reason={item['reason']}")
         elif args.command == "post":
             print(post(conn, args))
             print("message-board: warning: flat post does not push; use open/reply for new "
@@ -1367,7 +1423,7 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
             thread_id = open_thread(conn, args)
             print(thread_id, flush=True)
             if not args.no_push:
-                dispatch_notices(conn, profile=profile, actor=session_uuid(args.session),
+                dispatch_notices(conn, actor=session_uuid(args.session),
                                  board_id=board_id, board_home=board_home,
                                  limit=INLINE_FANOUT_LIMIT, post_seq=thread_id)
             complete = print_delivery_report(conn, thread_id, thread_id, board_id)
@@ -1378,7 +1434,7 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
             thread_id = args.thread
             print(post_seq, flush=True)
             if not args.no_push:
-                dispatch_notices(conn, profile=profile, actor=session_uuid(args.session),
+                dispatch_notices(conn, actor=session_uuid(args.session),
                                  board_id=board_id, board_home=board_home,
                                  limit=INLINE_FANOUT_LIMIT, post_seq=post_seq)
             complete = print_delivery_report(conn, thread_id, post_seq, board_id)
@@ -1389,7 +1445,7 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
             recipient = session_uuid(args.recipient) if args.recipient else None
             if recipient:
                 require_session(conn, recipient)
-            processed = dispatch_notices(conn, profile=profile, actor=args.acting_session,
+            processed = dispatch_notices(conn, actor=args.acting_session,
                                          board_id=board_id, board_home=board_home,
                                          limit=args.limit,
                                          post_seq=args.post, thread_id=args.thread,

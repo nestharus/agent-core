@@ -4,7 +4,7 @@ The board owner first commits a per-recipient outbox row, then can call::
 
     notice = render_new_thread(row["thread_id"], row["title"], row["notification_id"],
                                board_id=board_id, board_home=board_home)
-    result = queue_notice(row["recipient"], sender_profile, notice)
+    result = queue_notice(row["recipient"], recipient_profile, notice)
 
 Use ``render_reply`` for a reply row. Persist the structured status and queue
 message ID on that outbox row; handle timeout/ambiguous states without blind
@@ -74,6 +74,10 @@ class LaunchError(Exception):
     """The queue subprocess could not start; no request was sent."""
 
 
+class ProfileError(ValueError):
+    """The selected recipient home cannot be used before launching queue."""
+
+
 def _uuid(value: str, label: str) -> str:
     if not isinstance(value, str) or _UUID_TEXT.fullmatch(value) is None:
         raise ValueError(f"{label} must be a canonical UUID")
@@ -87,10 +91,10 @@ def profile_root() -> Path:
 
 def _profile_home(profile: str) -> Path:
     if not isinstance(profile, str) or profile not in PROFILE_NAMES:
-        raise ValueError("profile must be an allowed local Codex profile name")
+        raise ProfileError("profile must be an allowed local Codex profile name")
     path = profile_root() / profile
     if not path.is_dir() or path.is_symlink():
-        raise ValueError("allowed local Codex profile directory does not exist")
+        raise ProfileError("allowed local Codex profile directory does not exist")
     return path
 
 
@@ -182,8 +186,8 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
                  runner: Runner = run_bounded) -> EnqueueResult:
     """Queue a short notice to an existing UUID through an allowed local profile.
 
-    ``profile`` is an explicit sender profile, never inferred from the target
-    thread or defaulted to ``.codex5``. Only trusted integration code should
+    ``profile`` is the recipient's exact registered profile, supplied by the
+    board claim rather than inferred from the target UUID. Only trusted integration code should
     supply the optional runner; board data cannot choose an executable.
     """
 

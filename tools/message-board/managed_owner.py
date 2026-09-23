@@ -763,7 +763,8 @@ class ManagedOwner:
                     if conn.execute("SELECT 1 FROM sessions WHERE session=?", (self.thread_id,)).fetchone() is None:
                         args = argparse.Namespace(session=self.thread_id, role=self.role,
                             profile=self.profile, campaign=self.campaign, status="active", work=None,
-                            route="managed", parent_session=None, scope=None, expires_at=None, owner=True)
+                            route="managed", parent_session=None, scope=None, expires_at=None, owner=True,
+                            profile_change_reason=None)
                         previous = os.environ.get("CODEX_SESSION_ID")
                         os.environ["CODEX_SESSION_ID"] = self.thread_id
                         try:
