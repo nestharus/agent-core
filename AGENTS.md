@@ -6,6 +6,12 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+Shared local boards are optional coordination spaces governed by the
+[message-board policy and adoption guide](tools/message-board/POLICY.md). A
+project or campaign root `AGENTS.md` may select a board by UUID using the guide's
+template; a repository link or this reference does not enroll any session.
+Existing RFQ roots and TUI sessions have no automatic board membership.
+
 Dispatch terminology: in RCA and bug workflows, "reproduce" means create a deterministic failure signal only when the input is symptom-only. When a failing test command, node ID, CI log, red-phase report, or structured failure already exists, that signal is the reproduction; carry it forward and run the same failing signal with the candidate fix instead of dispatching redundant reproduction work.
 
 ## Temporary direct Codex dispatch during agent-runner outage
