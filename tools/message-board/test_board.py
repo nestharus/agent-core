@@ -62,7 +62,7 @@ class BoardCoreTests(unittest.TestCase):
     def test_list_missing_catalog_has_no_side_effects(self):
         self.assertEqual(self.obj("boards", "list"), [])
         self.assertFalse(self.home.exists())
-        self.home.mkdir()
+        self.home.mkdir(mode=0o700)
         self.assertEqual(self.obj("boards", "list", "--artifact-type", "repository",
                                   "--artifact", "/abs/repo"), [])
         self.assertEqual(list(self.home.iterdir()), [])
