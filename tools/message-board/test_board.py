@@ -84,6 +84,128 @@ class BoardCoreTests(unittest.TestCase):
         return self.run_board("--board", board, "register", "--session", session,
                               "--role", role, "--route", route, *extra, actor=session)
 
+    def test_labels_are_board_local_and_do_not_claim_activity(self):
+        one = self.create("labels-one")
+        two = self.create("labels-two")
+        first, second = one["board_id"], two["board_id"]
+        self.join(first, A, extra=("--label", "Review coordinator", "--work", "Long\nwork"))
+        self.join(second, A, extra=("--label", "Writer"))
+        with sqlite3.connect(one["db_path"]) as db:
+            before = db.execute("SELECT last_seen_at FROM sessions WHERE session=?", (A,)).fetchone()[0]
+            events = db.execute("SELECT COUNT(*) FROM membership_events WHERE session=?", (A,)).fetchone()[0]
+        self.run_board("--board", first, "label", "--session", A, "--label", "Triage lead", actor=A)
+        row = self.obj("--board", first, "sessions")[0]
+        self.assertEqual((row["label"], row["work"], row["last_seen_at"]),
+                         ("Triage lead", "Long\nwork", before))
+        display = self.run_board("--board", first, "sessions").stdout
+        self.assertIn(f"{A} active", display)
+        self.assertIn("role=root label=Triage lead", display)
+        self.assertIn("  work: Long\n        work", display)
+        self.assertEqual(self.obj("--board", second, "sessions")[0]["label"], "Writer")
+        self.run_board("--board", first, "register", "--session", A, "--role", "root",
+                       "--label", "Wrong path", actor=A, ok=False)
+        self.assertEqual(self.obj("--board", first, "sessions")[0]["label"], "Triage lead")
+        self.run_board("--board", first, "label", "--session", A, "--clear", actor=A)
+        self.assertIsNone(self.obj("--board", first, "sessions")[0]["label"])
+        self.assertIn("label=(none)", self.run_board("--board", first, "sessions").stdout)
+        self.assertEqual(self.obj("--board", second, "sessions")[0]["label"], "Writer")
+        with sqlite3.connect(one["db_path"]) as db:
+            self.assertEqual(db.execute("SELECT last_seen_at FROM sessions WHERE session=?", (A,))
+                             .fetchone()[0], before)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM membership_events WHERE session=?", (A,))
+                             .fetchone()[0], events)
+
+    def test_label_permissions_validation_and_retired_board(self):
+        entry = self.create("label-state")
+        board = entry["board_id"]
+        self.join(board, A, extra=("--label", "Original A"))
+        self.join(board, B, extra=("--label", "Original B"))
+        self.join(board, D, extra=("--label", "Original D"))
+
+        def rejected_without_persisted_change(*args, actor):
+            with sqlite3.connect(entry["db_path"]) as db:
+                before = (db.execute("SELECT * FROM sessions ORDER BY session").fetchall(),
+                          db.execute("SELECT * FROM membership_events ORDER BY event_id").fetchall())
+            self.run_board("--board", board, "label", *args, actor=actor, ok=False)
+            with sqlite3.connect(entry["db_path"]) as db:
+                after = (db.execute("SELECT * FROM sessions ORDER BY session").fetchall(),
+                         db.execute("SELECT * FROM membership_events ORDER BY event_id").fetchall())
+            self.assertEqual(after, before)
+
+        for value in (" ", "x" * 81, "Two\nlines", "Two\u2028lines", "api_key=secret123"):
+            rejected_without_persisted_change("--session", A, "--label", value, actor=A)
+        rejected_without_persisted_change("--session", A, "--clear", actor=B)
+        rejected_without_persisted_change("--session", C, "--label", "Unknown", actor=C)
+        self.run_board("--board", board, "heartbeat", "--session", B, "--status", "paused", actor=B)
+        rejected_without_persisted_change("--session", B, "--label", "Paused", actor=B)
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00Z' WHERE session=?", (D,))
+        rejected_without_persisted_change("--session", D, "--clear", actor=D)
+        self.run_board("boards", "retire", "--board", board)
+        self.run_board("--board", board, "label", "--session", A, "--label", "Wind-down",
+                       actor=A)
+        self.assertEqual(self.obj("--board", board, "sessions")[0]["label"], "Wind-down")
+        self.run_board("--board", board, "leave", "--session", A, actor=A)
+        self.run_board("--board", board, "label", "--session", A, "--clear", actor=A, ok=False)
+        self.run_board("boards", "archive", "--board", board)
+        self.run_board("--board", board, "label", "--session", A, "--clear", actor=A, ok=False)
+        self.assertEqual(self.obj("--board", board, "sessions")[0]["label"], "Wind-down")
+
+    def test_old_schema4_active_repair_and_archived_label_read(self):
+        active = self.create("old-active-label")
+        self.join(active["board_id"], A)
+        with sqlite3.connect(active["db_path"]) as db:
+            db.execute("ALTER TABLE sessions DROP COLUMN label")
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.join(active["board_id"], B, extra=("--label", "New member"))
+        self.assertEqual({row["session"]: row["label"] for row in
+                          self.obj("--board", active["board_id"], "sessions")},
+                         {A: None, B: "New member"})
+        archived = self.create("old-archive-label")
+        self.join(archived["board_id"], A)
+        with sqlite3.connect(archived["db_path"]) as db:
+            db.execute("ALTER TABLE sessions DROP COLUMN label")
+        self.run_board("boards", "retire", "--board", archived["board_id"])
+        self.run_board("boards", "archive", "--board", archived["board_id"])
+        snapshot = self.obj("boards", "show", "--board", archived["board_id"])["snapshot_path"]
+        self.assertIsNone(self.obj("--board", archived["board_id"], "sessions")[0]["label"])
+        self.assertIn("label=(none)", self.run_board("--board", archived["board_id"], "sessions").stdout)
+        with sqlite3.connect(snapshot) as db:
+            self.assertNotIn("label", {row[1] for row in db.execute("PRAGMA table_info(sessions)")})
+
+    def test_old_schema4_opener_rechecks_after_raw_registration_repairs_label(self):
+        entry = self.create("old-label-first-touch")
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("ALTER TABLE sessions DROP COLUMN label")
+        owner = sqlite3.connect(entry["db_path"], isolation_level=None)
+        self.addCleanup(owner.close)
+        owner.row_factory = sqlite3.Row
+        owner.execute("PRAGMA foreign_keys=ON")
+        owner_args = SimpleNamespace(session=B, role="root", profile=".codex",
+                                     profile_change_reason=None, work=None, campaign="general",
+                                     status="active", route="managed", parent_session=None,
+                                     scope=None, expires_at=None, owner=True,
+                                     disposed_notice_ids=set())
+        original_check = board_store.has_label_column
+        interleaved = False
+
+        def check_with_raw_registration(conn):
+            nonlocal interleaved
+            present = original_check(conn)
+            if not interleaved and not present:
+                interleaved = True
+                with mock.patch.dict(os.environ, {"CODEX_SESSION_ID": B}):
+                    board_store.register(owner, owner_args)
+            return present
+
+        with mock.patch.object(board_store, "has_label_column", side_effect=check_with_raw_registration):
+            with board_store.database(entry["db_path"]) as opener:
+                self.assertTrue(board_store.has_label_column(opener))
+                self.assertEqual(tuple(opener.execute(
+                    "SELECT label,route,owner FROM sessions WHERE session=?", (B,)).fetchone()),
+                    (None, "managed", 1))
+        self.assertTrue(interleaved)
+
     def open(self, board, author=A, *, title="Question"):
         return self.run_board("--board", board, "open", "--session", author,
                               "--topic", "work", "--title", title, "--text", "Body",

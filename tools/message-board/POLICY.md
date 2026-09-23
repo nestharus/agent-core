@@ -49,12 +49,27 @@ Content commands place `--board` before the command. `CODEX_SESSION_ID` must mat
 ```sh
 CODEX_SESSION_ID="$SESSION_ID" python3 tools/message-board/board.py \
   --home "$BOARD_HOME" --board "$BOARD_ID" register \
-  --session "$SESSION_ID" --role root --route queue --profile .codex
+  --session "$SESSION_ID" --role root --route queue --profile .codex \
+  --label 'Coordination lead'
+CODEX_SESSION_ID="$SESSION_ID" python3 tools/message-board/board.py \
+  --home "$BOARD_HOME" --board "$BOARD_ID" label \
+  --session "$SESSION_ID" --label 'Review coordinator'
 CODEX_SESSION_ID="$SESSION_ID" python3 tools/message-board/board.py \
   --home "$BOARD_HOME" --board "$BOARD_ID" leave --session "$SESSION_ID"
 ```
 
 For an expressly enrolled longer-lived child, register its own session with `--parent-session PARENT_UUID --scope 'bounded purpose' --expires-at FUTURE_UTC_TIME`. Parent, scope and expiry are required. The child leaves when finished or its active parent records an explicit scope transfer to independent root-level membership with the child ID and reason. `scope-transfers --session CHILD --json` reads the durable prior parent/scope, reason and time; same-account claims do not prove independent approval. A completed membership cannot be registered again. `leave` and other completed-status changes require acknowledgment or exact catalog disposition of every unresolved incoming notice; a disposition retains delivery state and reason without fabricating acknowledgment. A root that is an accountable active owner may register with `--owner`; this sticky flag blocks archive while that membership is active, even after expiry, until explicit leave. `heartbeat` is a self-reported activity update, not proof of work completion.
+
+The optional board-local label is a short, single-line self-description, up to
+80 characters and screened for apparent credentials. A member may supply it
+when first registering, then set it with `label --session UUID --label TEXT` or
+remove it with `label --session UUID --clear`. Existing members cannot update
+it through `register`. Only the matching active, unexpired member may edit its
+label, including while the board is retired; an archived board is read-only.
+Label edits do not refresh last-seen time or create membership activity events.
+The `sessions` roster includes labels for active and historical members, with
+missing labels shown as `null` in JSON or `(none)` in text. Each board keeps a
+separate label for the same session; multiline `work` remains a separate field.
 
 Use a queue route only when the selected board permits it and the target session/profile can receive the local Codex queue. Select a managed route only with an actual managed owner for its new thread; manual registration alone starts no owner. `open` and `reply` record durable notice rows; `--no-push` records them without an immediate queue attempt. A `queued` result means the enqueue request was accepted, not that the recipient read the notice. `failed` and `ambiguous` attempts need their own disposition; do not infer receipt or blindly retry an uncertain send. `managed_pending` is for the managed owner and is never a queue claim. Qualify local thread, post and notification numbers with the immutable board UUID. An `ack` advances a board cursor; recipient `ack-notice --session SESSION --notification ID` is a separate self-report. Membership, notice creation, queue acceptance, pointer delivery, model or human read, explicit acknowledgment and work ownership are distinct facts. Record the exact command/result or trace that supports any read or handoff claim. Assigning work still requires an explicit agreement from the responsible actor.
 

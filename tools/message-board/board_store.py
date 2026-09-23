@@ -24,6 +24,7 @@ SCHEMA_VERSION = 4
 KINDS = ("blocker", "decision", "handoff", "finding", "status", "question", "proposal")
 STATUSES = ("active", "paused", "completed")
 DEFAULT_STALE_AFTER = 300
+MAX_LABEL_LENGTH = 80
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
 INLINE_FANOUT_LIMIT = 32
@@ -33,7 +34,7 @@ DELIVERY_STATES = ("pending", "sending", "queued", "acknowledged", "failed", "am
 SAFE_TRANSPORT_REASONS = frozenset({"queue_accepted", "queue_rejected", "sender_timeout",
                                     "unrecognized_queue_response", "runner_launch_failed",
                                     "sender_exception"})
-SESSION_MUTATIONS = frozenset({"register", "heartbeat", "leave", "post", "open", "reply",
+SESSION_MUTATIONS = frozenset({"register", "label", "heartbeat", "leave", "post", "open", "reply",
                                "subscribe", "unsubscribe", "ack", "ack-notice", "watch",
                                "scope-transfer"})
 SECRET_PATTERNS = (
@@ -94,6 +95,34 @@ def bounded(value: str | None, label: str, maximum: int, *, optional: bool = Fal
     if scrub(value) != value:
         raise UserError(f"{label} looks like a credential; do not put secrets on the board")
     return value
+
+
+def checked_label(value: str | None) -> str | None:
+    label = bounded(value, "label", MAX_LABEL_LENGTH, optional=True)
+    if label is not None and label.splitlines() != [label]:
+        raise UserError("label must be a single line")
+    return label
+
+
+def has_label_column(conn: sqlite3.Connection) -> bool:
+    return "label" in {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+
+
+def ensure_label_column(conn: sqlite3.Connection) -> None:
+    """Repair writable schema-4 boards, including raw managed-owner connections."""
+    if conn.in_transaction:
+        # Raw registration already holds BEGIN IMMEDIATE, so its check and ALTER
+        # are serialized with ordinary openers on the same SQLite database.
+        if not has_label_column(conn):
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN label TEXT CHECK(label IS NULL OR "
+                         f"length(label) BETWEEN 1 AND {MAX_LABEL_LENGTH})")
+    elif not has_label_column(conn):
+        # A raw registration can repair the table after this fast check. Acquire
+        # the write lock before deciding whether the ALTER is still needed.
+        with write(conn):
+            if not has_label_column(conn):
+                conn.execute(f"ALTER TABLE sessions ADD COLUMN label TEXT CHECK(label IS NULL OR "
+                             f"length(label) BETWEEN 1 AND {MAX_LABEL_LENGTH})")
 
 
 def nonnegative(value: str) -> int:
@@ -167,6 +196,7 @@ def database(path_text: str, *, readonly: bool = False):
                         profile TEXT CHECK(profile IS NULL OR length(profile) BETWEEN 1 AND 64),
                         status TEXT NOT NULL CHECK(status IN ('active','paused','completed')),
                         work TEXT CHECK(work IS NULL OR length(work) BETWEEN 1 AND 2000),
+                        label TEXT CHECK(label IS NULL OR length(label) BETWEEN 1 AND 80),
                         registered_at TEXT NOT NULL,
                         last_seen_at TEXT NOT NULL,
                         ack_seq INTEGER NOT NULL DEFAULT 0 CHECK(ack_seq >= 0)
@@ -344,6 +374,7 @@ def database(path_text: str, *, readonly: bool = False):
             ):
                 if name not in columns:
                     conn.execute(f"ALTER TABLE sessions ADD COLUMN {name} {definition}")
+            ensure_label_column(conn)
             conn.execute("""CREATE TABLE IF NOT EXISTS membership_events (
                 event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session TEXT NOT NULL REFERENCES sessions(session) ON DELETE RESTRICT,
@@ -469,6 +500,7 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
         raise UserError("profile must be an exact allowed Codex profile name")
     reason = bounded(args.profile_change_reason, "profile-change-reason", 2000, optional=True)
     work_text = bounded(args.work, "work", 2000, optional=True, multiline=True)
+    label = checked_label(getattr(args, "label", None))
     supplied_scope = bounded(args.scope, "scope", 1000, optional=True)
     supplied_parent = session_uuid(args.parent_session) if args.parent_session else None
     if bool(supplied_parent) != bool(supplied_scope):
@@ -477,6 +509,8 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
         prior = conn.execute("SELECT status,parent_session,scope,expires_at,route,campaign,profile "
                              "FROM sessions WHERE session=?",
                              (session,)).fetchone()
+        if prior is not None and label is not None:
+            raise UserError("--label is only available on initial registration; use label to edit")
         status = args.status or (prior["status"] if prior else "active")
         campaign = bounded(args.campaign or (prior["campaign"] if prior else "general"),
                            "campaign", 128)
@@ -513,10 +547,11 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
             require_settled_children(conn, session)
             require_settled_notices(conn, session, args.disposed_notice_ids)
         now = utc_now()
+        ensure_label_column(conn)
         conn.execute("""
-            INSERT INTO sessions(session,campaign,role,profile,status,work,registered_at,last_seen_at,
+            INSERT INTO sessions(session,campaign,role,profile,status,work,label,registered_at,last_seen_at,
                                  route,parent_session,scope,expires_at,owner)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(session) DO UPDATE SET
               campaign=excluded.campaign, role=excluded.role,
               profile=COALESCE(excluded.profile, sessions.profile),
@@ -525,13 +560,22 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
               scope=excluded.scope, expires_at=excluded.expires_at,
               owner=max(sessions.owner, excluded.owner),
               last_seen_at=max(sessions.last_seen_at, excluded.last_seen_at)
-        """, (session, campaign, role, profile, status, work_text, now, now,
+        """, (session, campaign, role, profile, status, work_text, label, now, now,
               route, parent, scope, expiry, int(args.owner)))
         record_membership(conn, session, "register")
         if changed_profile:
             conn.execute("INSERT INTO profile_changes(session,old_profile,new_profile,reason,changed_at) "
                          "VALUES(?,?,?,?,?)", (session, prior["profile"], profile, reason, now))
     return {"session": session, "status": status}
+
+
+def set_label(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
+    session = acting_session(args.session)
+    label = None if args.clear else checked_label(args.label)
+    with write(conn):
+        require_active_session(conn, session)
+        conn.execute("UPDATE sessions SET label=? WHERE session=?", (label, session))
+    return {"session": session, "label": label}
 
 
 def heartbeat(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
@@ -594,6 +638,7 @@ def sessions(conn: sqlite3.Connection, args: argparse.Namespace) -> list[dict]:
     result = []
     for row in conn.execute("SELECT * FROM sessions ORDER BY campaign, session"):
         item = dict(row)
+        item.setdefault("label", None)  # Archived schema-4 snapshots may predate labels.
         seen = datetime.fromisoformat(item["last_seen_at"].replace("Z", "+00:00"))
         item["stale"] = (now - seen).total_seconds() > args.stale_after
         result.append(safe_record(item))
@@ -1168,11 +1213,18 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--profile-change-reason", help="reason for changing this session's recorded profile")
     c.add_argument("--status", choices=STATUSES)
     c.add_argument("--work")
+    c.add_argument("--label", help="initial single-line board-local label (up to 80 characters)")
     c.add_argument("--route", choices=("queue", "managed"))
     c.add_argument("--parent-session")
     c.add_argument("--scope")
     c.add_argument("--expires-at")
     c.add_argument("--owner", action="store_true", help="mark an active owner for purge protection")
+
+    c = command("label", "set or clear your board-local member label without activity update")
+    c.add_argument("--session", required=True)
+    label_action = c.add_mutually_exclusive_group(required=True)
+    label_action.add_argument("--label", help="single-line label (up to 80 characters)")
+    label_action.add_argument("--clear", action="store_true", help="remove the label")
 
     c = command("heartbeat", "refresh last-seen and optionally update work/status")
     c.add_argument("--session", required=True)
@@ -1344,6 +1396,9 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
         if args.command == "register":
             result = register(conn, args)
             print(f"registered {result['session']} ({result['status']})")
+        elif args.command == "label":
+            result = set_label(conn, args)
+            print(f"label {'cleared' if result['label'] is None else 'set'} for {result['session']}")
         elif args.command == "heartbeat":
             result = heartbeat(conn, args)
             print(f"heartbeat {result['session']} ({result['status']}) {result['last_seen_at']}")
@@ -1363,7 +1418,9 @@ def main(argv: list[str], *, db_path: str, board_id: str, board_home: str,
                 for item in result:
                     stale = " stale" if item["stale"] else ""
                     print(f"{item['session']} {item['status']}{stale} last-seen={item['last_seen_at']} "
-                          f"campaign={item['campaign']} role={item['role']} ack={item['ack_seq']}")
+                          f"campaign={item['campaign']} role={item['role']} "
+                          f"label={item['label'] if item['label'] is not None else '(none)'} "
+                          f"ack={item['ack_seq']}")
                     if item["work"]:
                         for index, line in enumerate(item["work"].splitlines()):
                             print(f"  {'work: ' if index == 0 else '      '}{line}")

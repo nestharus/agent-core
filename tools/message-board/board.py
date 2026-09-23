@@ -24,7 +24,7 @@ import multi_board_watch
 CONTENT_WHEN_RETIRED = frozenset({"read", "thread", "thread-read", "threads", "search", "inbox",
                                   "notifications", "deliveries", "attempts", "sessions",
                                   "membership-events", "scope-transfers", "profile-changes", "ack", "ack-notice",
-                                  "recover", "leave", "heartbeat"})
+                                  "recover", "leave", "heartbeat", "label"})
 CONTENT_WHEN_ARCHIVED = frozenset({"read", "thread", "thread-read", "threads", "search", "inbox",
                                    "notifications", "deliveries", "attempts", "sessions",
                                    "membership-events", "scope-transfers", "profile-changes"})

@@ -210,6 +210,22 @@ class ManagedOwnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute("SELECT value FROM meta WHERE key='last_app_server_exit_code'").fetchone()[0],
                              "-15")
 
+    async def test_raw_managed_registration_repairs_old_schema4_label_column(self):
+        item = self.items[0]
+        with self.conn(item) as db:
+            db.execute("ALTER TABLE sessions DROP COLUMN label")
+        owner, task = await self.start([item["board_id"]])
+        await self.wait_for(lambda: self._owner_registered(item, owner.thread_id))
+        with self.conn(item) as db:
+            self.assertIn("label", {row[1] for row in db.execute("PRAGMA table_info(sessions)")})
+            self.assertEqual(db.execute("SELECT label,route,owner FROM sessions WHERE session=?",
+                                        (owner.thread_id,)).fetchone(), (None, "managed", 1))
+        await self.stop(owner, task)
+
+    def _owner_registered(self, item, session):
+        with self.conn(item) as db:
+            return db.execute("SELECT 1 FROM sessions WHERE session=?", (session,)).fetchone() is not None
+
     async def test_active_deferral_idle_wake_and_human_fairness(self):
         with patch.dict(os.environ, {"FAKE_DELAY": ".8"}):
             owner, task = await self.start()
