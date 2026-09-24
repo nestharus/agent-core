@@ -447,9 +447,9 @@ def expires(value: str | None) -> str | None:
 
 
 def require_active_session(conn: sqlite3.Connection, session: str) -> None:
-    row = conn.execute("SELECT status,expires_at FROM sessions WHERE session=?", (session,)).fetchone()
-    if row is None or row["status"] != "active" or (row["expires_at"] and row["expires_at"] <= utc_now()):
-        raise UserError("session is not an active, unexpired board member")
+    row = conn.execute("SELECT status FROM sessions WHERE session=?", (session,)).fetchone()
+    if row is None or row["status"] != "active":
+        raise UserError("session is not an active board member")
 
 
 def record_membership(conn: sqlite3.Connection, session: str, event: str) -> None:
@@ -476,10 +476,9 @@ def require_recipient_profile(profile: str | None) -> str:
 
 def require_settled_children(conn: sqlite3.Connection, session: str) -> None:
     child = conn.execute("SELECT session FROM sessions WHERE parent_session=? AND status IN ('active','paused') "
-                         "AND (expires_at IS NULL OR expires_at>?) LIMIT 1",
-                         (session, utc_now())).fetchone()
+                         "LIMIT 1", (session,)).fetchone()
     if child:
-        raise UserError("unexpired delegated child must leave or transfer scope before parent leaves")
+        raise UserError("delegated child must leave or transfer scope before parent leaves")
 
 
 def require_settled_notices(conn: sqlite3.Connection, session: str,
@@ -532,10 +531,9 @@ def register(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
         parent = supplied_parent if supplied_parent is not None else (
             prior["parent_session"] if prior else None)
         scope = supplied_scope if supplied_scope is not None else (prior["scope"] if prior else None)
-        expiry = expires(args.expires_at) if args.expires_at else (prior["expires_at"] if prior else None)
-        if parent and not expiry:
-            raise UserError("delegated child membership requires expires-at")
-        if expiry and expiry <= utc_now() and status != "completed":
+        supplied_expiry = expires(args.expires_at) if args.expires_at is not None else None
+        expiry = supplied_expiry if supplied_expiry is not None else (prior["expires_at"] if prior else None)
+        if supplied_expiry and supplied_expiry <= utc_now():
             raise UserError("expires-at must be in the future")
         if prior and prior["status"] == "completed":
             raise UserError("retired membership cannot be registered again")
@@ -583,14 +581,12 @@ def heartbeat(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
     work_text = bounded(args.work, "work", 2000, optional=True, multiline=True)
     with write(conn):
         require_session(conn, session)
-        row = conn.execute("SELECT status,expires_at FROM sessions WHERE session=?", (session,)).fetchone()
+        row = conn.execute("SELECT status FROM sessions WHERE session=?", (session,)).fetchone()
         if row["status"] == "completed" and args.status not in (None, "completed"):
             raise UserError("retired membership cannot be reactivated")
         if args.status == "completed":
             require_settled_children(conn, session)
             require_settled_notices(conn, session, args.disposed_notice_ids)
-        if args.status == "active" and row["expires_at"] and row["expires_at"] <= utc_now():
-            raise UserError("expired membership cannot be reactivated without a new expiry")
         now = utc_now()
         conn.execute("""
             UPDATE sessions SET last_seen_at=max(last_seen_at, ?),
@@ -620,12 +616,10 @@ def scope_transfer(conn: sqlite3.Connection, args: argparse.Namespace) -> dict:
     reason = bounded(args.reason, "reason", 2000)
     with write(conn):
         require_active_session(conn, parent)
-        row = conn.execute("SELECT parent_session,scope,status,expires_at FROM sessions WHERE session=?",
+        row = conn.execute("SELECT parent_session,scope,status FROM sessions WHERE session=?",
                            (session,)).fetchone()
         if row is None or row["status"] not in ("active", "paused") or row["parent_session"] != parent:
             raise UserError("scope transfer requires this active parent and its delegated child")
-        if row["expires_at"] and row["expires_at"] <= utc_now():
-            raise UserError("expired child cannot transfer scope")
         conn.execute("INSERT INTO scope_transfers(session,parent_session,scope,reason,transferred_at) "
                      "VALUES(?,?,?,?,?)", (session, parent, row["scope"], reason, utc_now()))
         conn.execute("UPDATE sessions SET parent_session=NULL,scope=NULL,role='root' WHERE session=?",
@@ -715,8 +709,8 @@ def notify(conn: sqlite3.Connection, recipients: set[str], thread_id: int, post_
     if not targets:
         return
     routed = list(conn.execute("SELECT session,route,profile FROM sessions WHERE status='active' "
-                          "AND (expires_at IS NULL OR expires_at>?) AND session IN (" +
-                          ",".join("?" for _ in targets) + ") ORDER BY session", (now, *targets)))
+                          "AND session IN (" + ",".join("?" for _ in targets) +
+                          ") ORDER BY session", targets))
     if push:
         for member in routed:
             if member["route"] == "queue":
@@ -761,8 +755,7 @@ def open_thread(conn: sqlite3.Connection, args: argparse.Namespace) -> int:
                      (thread_id, author, now))
         if recipient is None:
             targets = {row[0] for row in conn.execute(
-                "SELECT session FROM sessions WHERE status='active' "
-                "AND (expires_at IS NULL OR expires_at>?)", (now,))}
+                "SELECT session FROM sessions WHERE status='active'")}
         else:
             targets = {recipient}
             conn.execute("INSERT OR IGNORE INTO subscriptions(thread_id,session,subscribed_at) VALUES(?,?,?)",
@@ -879,11 +872,10 @@ def claim_next(conn: sqlite3.Connection, *, attempted_ids: set[int], post_seq: i
         row = conn.execute("SELECT notification_id, recipient, thread_id, post_seq, event, "
                            "title, attempt_count, (SELECT profile FROM sessions WHERE "
                            "session=recipient) AS profile FROM notification_outbox WHERE " + " AND ".join(clauses) +
-                           " AND recipient IN (SELECT session FROM sessions WHERE status='active' "
-                           "AND (expires_at IS NULL OR expires_at>?))" +
+                           " AND recipient IN (SELECT session FROM sessions WHERE status='active')" +
                            " ORDER BY CASE delivery_state WHEN 'pending' THEN 0 ELSE 1 END, "
                            "attempt_count, "
-                           "notification_id LIMIT 1", (*values, utc_now())).fetchone()
+                           "notification_id LIMIT 1", values).fetchone()
         if row is None:
             return None
         profile = require_recipient_profile(row["profile"])

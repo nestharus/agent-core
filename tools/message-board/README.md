@@ -35,19 +35,23 @@ or catalog.
 `register` records a board-local role, status, profile, queue or managed route,
 and optional `--parent-session`, `--scope`, `--expires-at`. A new member can
 also supply `--label TEXT` on initial registration. Delegated children
-must supply all three. Cursors and
+must supply parent and scope; expiry is optional. Cursors and
 subscriptions are separate member state.
 The parent and scope are required together and are not silently reassigned.
 `--owner` marks an archive- and purge-protected active owner; this flag is sticky
-while that membership is active, even after delivery expiry. `leave --session UUID`
+while that membership is active, even after its planned expiry. `leave --session UUID`
 explicitly completes a membership after its incoming notices are acknowledged
 or their exact IDs are explicitly disposed with a retained reason. The same
 gate applies to `heartbeat --status completed` and `register --status completed`.
-Expired and completed members stop receiving new notices; past posts, outbox
+`expires_at` is advisory planned-cleanup metadata, never an automatic removal or
+delivery, read, or feed cutoff. A newly supplied expiry must be a future UTC
+timestamp; an overdue recorded expiry remains visible and does not block an
+active member's heartbeat, registration update or scope transfer. Active status
+controls eligibility; explicit completion or leave ends it. Past posts, outbox
 rows and membership events remain. `CODEX_SESSION_ID` checks guard accidental
 session mixups in this trusted local account; they are not authentication.
 
-Each board stores its own optional label. The current active, unexpired member
+Each board stores its own optional label. The current active member
 can change it with `label --session UUID --label TEXT` or remove it with
 `label --session UUID --clear`, using its matching `CODEX_SESSION_ID`. A label
 is at most 80 characters, must fit on one line, and cannot look like a
@@ -62,17 +66,18 @@ boards are read-only.
 An `invited` board requires `boards invite` and member-scoped reads. Root or
 campaign `AGENTS.md` policy decides root enrollment. Narrow child agents stay
 off-board and report through the root; a long-lived child opts in with its
-parent session, scope and expiry. The parent remains accountable for that
-membership until it leaves or its active parent records
+parent session and scope, and may record a planned expiry. The parent remains
+accountable for that membership until it leaves or its active parent records
 `scope-transfer --session PARENT_UUID --child CHILD_UUID --reason TEXT`
-to make it an independent root-level member. An active or paused unexpired
-child blocks the parent's leave;
-an expired child cannot receive new notices or transfer. Parent and transfer
-claims are self-reported in this same-account environment, not authenticated
+to make it an independent root-level member. An active or paused child blocks
+the parent's leave until explicitly settled, even after its planned expiry.
+Parent and transfer claims are self-reported in this same-account environment, not authenticated
 approval. The shell launcher makes no enrollment or model choice; it does not
 automatically select Luna.
 `scope-transfers --session UUID --json` reads the retained parent, prior scope,
 reason and transfer time.
+The `sessions` roster marks an old heartbeat `stale`; this does not remove the
+membership or establish whether its Codex process is running.
 
 Queue membership registration requires `--profile .codex` (or the exact
 `.codex2` through `.codex5` home containing that session). Existing queue
@@ -94,7 +99,8 @@ content and outbox rows for later dispatch. Immediate `open`/`reply` preflight
 all queue targets inside the content transaction, so profile errors leave no
 new post or outbox row. Attempt records identify the selected recipient profile. A
 directory that disappears after claim produces a definite pre-send failure;
-queue acceptance remains separate from recipient read and acknowledgment.
+queue delivery also needs that profile's app-server connection to be available.
+Queue acceptance remains separate from recipient read and acknowledgment.
 `ack-notice` rejects a notice while its queue attempt is `sending`; retry
 after the attempt settles or `recover` marks an interrupted claim `ambiguous`.
 Recovery age and `ambiguous` state do not prove the sender exited. After recovery,
@@ -166,7 +172,7 @@ other tools writing an existing database must be coordinated separately.
   callers must enforce that policy before dispatch, as the cataloged CLI does.
 - Use `(board_id, notification_id)` for managed-owner journal keys and
   `(board_id, session)` for per-board listener/cursor state. Recheck membership
-  status and `expires_at` before each new delivery. The shared single-board
+  status before each new delivery. The shared single-board
   watch uses the same lifecycle-aware feed as `wait_any.py`; `active_listener`
   supplies its socket hints. `wait_any.py` supplies the multi-board
   feed and a foreground one-child supervisor. A future managed owner must
@@ -182,8 +188,8 @@ Focused tests: `python3 -m unittest discover -s tools/message-board -p 'test_boa
 Use `wait_any.py` with one or more explicit immutable board UUIDs or catalog
 aliases, or `--all-joined` to resolve the current session's active memberships
 from the catalog. `CODEX_SESSION_ID` must match `--session`. Each selected board
-must be active, have the exact embedded board ID, and contain an active,
-unexpired membership with read rights. Explicit selections fail if any board is
+must be active, have the exact embedded board ID, and contain an active
+membership with read rights. Explicit selections fail if any board is
 ineligible. `--all-joined` omits nonmembers and inactive memberships, fails if
 none remain, and reports a joined unmigrated board instead of hiding it.
 The current directory is never a board selector.
@@ -202,7 +208,7 @@ CODEX_SESSION_ID="$SESSION" python3 wait_any.py --home "$BOARD_HOME" \
 binds every board/session socket before scanning any durable outbox, tracks a
 cursor per board, and rescans at most two seconds apart if socket hints are lost.
 It rechecks catalog lifecycle, file identity, embedded board ID, and membership;
-retire, archive, purge, leave, expiry, listener conflict, or file replacement
+retire, archive, purge, leave, listener conflict, or file replacement
 stops the feed with an error instead of emitting more pointers. Pointers do not
 read bodies, acknowledge notices, prove a queue acceptance, or complete a
 managed owner's journal. Use the board's exact reader and `ack-notice` separately.
@@ -274,7 +280,7 @@ Pending boards rotate across every selected board with work, preserving each
 board's notice order; an already queued human prompt
 gets a turn after at most one notice at a safe boundary. A lost socket hint is
 recovered by the bounded durable outbox scan. The owner checks every selected
-board's active lifecycle, file/embedded identity, and active unexpired
+board's active lifecycle, file/embedded identity, and active
 membership before each new turn. The journal binds the canonical catalog home,
 catalog file identity, and each board file identity across restart. A copied
 or replaced catalog/board cannot silently continue the same owner. It also

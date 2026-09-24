@@ -41,8 +41,12 @@ BOARD_SCRIPT = Path(__file__).with_name("board.py")
 
 _UUID_TEXT = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z")
 _QUEUED_LINE = re.compile(r"(?im)^\s*Queued message\b[^\r\n]*$")
-_REJECTED_LINE = re.compile(r"(?im)^\s*unable to enqueue message\b[^\r\n]*$")
 _UUID_IN_LINE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![0-9a-fA-F])")
+_EMBEDDED_DAEMON_ERROR = (
+    "Error: cannot queue through an embedded app server while a local app-server "
+    "daemon is running; remove configuration overrides or use --remote"
+)
+_LEGACY_NO_ROLLOUT_ERROR = "unable to enqueue message: no rollout found for thread id"
 
 
 @dataclass(frozen=True)
@@ -181,14 +185,40 @@ def run_bounded(argv: Sequence[str], env: Mapping[str, str],
     )
 
 
+def _known_pre_send_failure(output: str, thread_uuid: str, home: Path) -> bool:
+    """Recognize only complete CLI errors known to precede a queue send."""
+
+    detail = output.rstrip("\r\n")
+    socket_error = (
+        "Error: failed to connect to remote app server at "
+        f"unix://{home}/app-server-control/app-server-control.sock: "
+        "No such file or directory (os error 2)"
+    )
+    wrapped_socket_error = socket_error.replace(
+        "Error: failed to connect to remote app server at ",
+        "Error: failed to connect to remote app server: "
+        "failed to connect to remote app server at ",
+        1,
+    )
+    no_rollout = re.fullmatch(
+        r"Error: failed to queue session message: no rollout found for thread id "
+        + re.escape(thread_uuid) + r"(?: \(code -32603\))?", detail
+    )
+    return (detail in {_EMBEDDED_DAEMON_ERROR, socket_error, wrapped_socket_error,
+                       _LEGACY_NO_ROLLOUT_ERROR}
+            or no_rollout is not None)
+
+
 def queue_notice(thread_uuid: str, profile: str, notice: str, *,
                  timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
                  runner: Runner = run_bounded) -> EnqueueResult:
     """Queue a short notice to an existing UUID through an allowed local profile.
 
     ``profile`` is the recipient's exact registered profile, supplied by the
-    board claim rather than inferred from the target UUID. Only trusted integration code should
-    supply the optional runner; board data cannot choose an executable.
+    board claim rather than inferred from the target UUID. The queue command
+    uses that existing session's profile and daemon settings. Only trusted
+    integration code should supply the optional runner; board data cannot
+    choose an executable.
     """
 
     thread_uuid = _uuid(thread_uuid, "thread_uuid")
@@ -197,9 +227,7 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
     if not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= MAX_TIMEOUT_SECONDS:
         raise ValueError("timeout_seconds must be between 0 and 60 seconds")
 
-    argv = [CODEX_COMMAND, "queue", "--thread", thread_uuid, "--message", notice,
-            "-m", "gpt-6-sol", "-c", 'model_reasoning_effort="xhigh"',
-            "-c", "mcp_servers={}"]
+    argv = [CODEX_COMMAND, "queue", "--thread", thread_uuid, "--message", notice]
     env = os.environ.copy()
     env["CODEX_HOME"] = str(home)
     try:
@@ -219,9 +247,12 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
 
     if outcome.timed_out:
         status = "timeout"
+    elif outcome.output_truncated:
+        status = "ambiguous"
     elif outcome.returncode == 0 and match:
         status = "queued"
-    elif outcome.returncode != 0 and _REJECTED_LINE.search(outcome.output) and not match:
+    elif (outcome.returncode is not None and outcome.returncode != 0 and not match
+          and _known_pre_send_failure(outcome.output, thread_uuid, home)):
         status = "failed"
     else:
         status = "ambiguous"

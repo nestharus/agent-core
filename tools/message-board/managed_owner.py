@@ -394,11 +394,10 @@ class ManagedOwner:
                     raise OwnerError(f"selected board {ident} file identity changed")
                 board_store.bind_board(conn, ident)
                 if self.thread_id and require_member:
-                    membership = conn.execute("SELECT status,expires_at FROM sessions WHERE session=?",
+                    membership = conn.execute("SELECT status FROM sessions WHERE session=?",
                                               (self.thread_id,)).fetchone()
-                    if membership is not None and (membership["status"] != "active" or
-                            (membership["expires_at"] and membership["expires_at"] <= board_store.utc_now())):
-                        raise SelectionInactive(f"selected board {ident} membership is inactive or expired")
+                    if membership is not None and membership["status"] != "active":
+                        raise SelectionInactive(f"selected board {ident} membership is inactive")
                     board_store.require_active_session(conn, self.thread_id)
                     member = conn.execute("SELECT route,profile,owner FROM sessions WHERE session=?",
                                           (self.thread_id,)).fetchone()
@@ -809,7 +808,7 @@ class ManagedOwner:
             for item in self.boards:
                 self._check_board(item, require_member=False)
         else:
-            self._check_boards()  # active, unexpired membership before each new turn
+            self._check_boards()  # active membership before each new turn
         if row["notice_id"] is not None and self.db.execute(
             "SELECT state FROM notices WHERE board_id=? AND id=?",
             (row["board_id"], row["notice_id"])).fetchone()[0] == "recipient_acknowledged":
