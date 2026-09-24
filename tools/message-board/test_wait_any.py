@@ -113,16 +113,16 @@ class WaitAnyTests(unittest.TestCase):
         self.assertIsInstance(result[0], list, result[0])
         self.assertEqual(result[0][0]["board_id"], self.one["board_id"])
 
-    def test_expiry_leave_retire_archive_and_conflict(self):
+    def test_leave_retire_archive_and_conflict(self):
         with self.feed("first", "second") as feed:
             with self.assertRaisesRegex(multi_board_watch.WatchError, "listener conflict"):
                 with self.feed("first"):
                     pass
             self.cli("--board", self.one["board_id"], "leave", "--session", SESSION,
                      actor=SESSION)
-            with self.assertRaisesRegex(multi_board_watch.WatchError, "active, unexpired"):
+            with self.assertRaisesRegex(multi_board_watch.WatchError, "active board member"):
                 feed.scan()
-        with self.assertRaisesRegex(multi_board_watch.WatchError, "active unexpired"):
+        with self.assertRaisesRegex(multi_board_watch.WatchError, "active member"):
             with self.feed("first"):
                 pass
         # Retired boards cannot produce a fresh wake, including from old outbox rows.
@@ -162,13 +162,29 @@ class WaitAnyTests(unittest.TestCase):
             with self.feed(all_joined=True):
                 pass
 
-    def test_expired_membership_and_binding(self):
+    def test_advisory_expiry_does_not_stop_cross_board_feed(self):
         with sqlite3.connect(self.one["db_path"]) as db:
             db.execute("UPDATE sessions SET expires_at=? WHERE session=?",
                        ("2000-01-01T00:00:00.000000Z", SESSION))
-        with self.assertRaisesRegex(multi_board_watch.WatchError, "active unexpired"):
-            with self.feed("first"):
-                pass
+        with sqlite3.connect(self.two["db_path"]) as db:
+            db.execute("UPDATE sessions SET expires_at=? WHERE session=?",
+                       ("2000-01-01T00:00:00.000000Z", SESSION))
+        with self.feed("first", "second") as feed:
+            self.notice(self.one)
+            self.notice(self.two)
+            self.assertEqual({row["board_id"] for row in feed.wait(1)},
+                             {self.one["board_id"], self.two["board_id"]})
+        with self.feed(all_joined=True) as feed:
+            self.assertEqual({board["entry"]["board_id"] for board in feed.boards},
+                             {self.one["board_id"], self.two["board_id"]})
+        for board in (self.one, self.two):
+            self.assertEqual(len(json.loads(self.cli("--board", board["board_id"], "read",
+                                                 "--session", SESSION, "--json").stdout)), 1)
+            with sqlite3.connect(board["db_path"]) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM membership_events WHERE session=?",
+                                            (SESSION,)).fetchone()[0], 1)
+
+    def test_board_binding_still_checked(self):
         with sqlite3.connect(self.two["db_path"]) as db:
             db.execute("UPDATE board_meta SET board_id=?", (self.one["board_id"],))
         with self.assertRaisesRegex(multi_board_watch.WatchError, "ID binding"):

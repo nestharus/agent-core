@@ -390,6 +390,28 @@ class ManagedOwnerTests(unittest.IsolatedAsyncioTestCase):
                                  self.items[0]["board_id"]])
         await self.stop(owner2, task2)
 
+    async def test_managed_owner_continues_across_boards_after_advisory_expiry(self):
+        owner, task = await self.start()
+        ident = owner.thread_id
+        await self.wait_for(lambda: all(self._owner_registered(item, ident) for item in self.items))
+        for item in self.items:
+            with self.conn(item) as db:
+                db.execute("UPDATE sessions SET expires_at=? WHERE session=?",
+                           ("2000-01-01T00:00:00.000000Z", ident))
+            self.post(item, ident)
+        await self.wait_for(lambda: len([row for row in self.turns() if row[1] == "notice"
+                                         and row[2] == "completed"]) == 2)
+        self.assertFalse(task.done())
+        self.assertEqual({row[0] for row in self.notices()},
+                         {item["board_id"] for item in self.items})
+        for item in self.items:
+            with self.conn(item) as db:
+                self.assertEqual(db.execute("SELECT expires_at FROM sessions WHERE session=?",
+                                            (ident,)).fetchone()[0], "2000-01-01T00:00:00.000000Z")
+                self.assertEqual(db.execute("SELECT COUNT(*) FROM membership_events WHERE session=?",
+                                            (ident,)).fetchone()[0], 1)
+        await self.stop(owner, task)
+
     async def test_three_board_backlogs_each_get_a_turn_before_repeat(self):
         third = self.create("three")
         self.cli("--board", third["board_id"], "register", "--session", self.writer,

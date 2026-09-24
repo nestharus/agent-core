@@ -9,7 +9,6 @@ import socket
 import sqlite3
 import sys
 import time
-from datetime import datetime, timezone
 
 
 class ListenerError(Exception):
@@ -58,10 +57,9 @@ def _pending(conn: sqlite3.Connection, session: str, limit: int) -> list[dict]:
         SELECT notification_id, thread_id, post_seq, event, title
         FROM notification_outbox
         WHERE recipient=? AND delivery_state!='acknowledged'
-          AND recipient IN (SELECT session FROM sessions WHERE status='active'
-              AND (expires_at IS NULL OR expires_at>?))
+          AND recipient IN (SELECT session FROM sessions WHERE status='active')
         ORDER BY notification_id LIMIT ?
-    """, (session, datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z"), limit)).fetchall()
+    """, (session, limit)).fetchall()
     return [dict(row) for row in rows]
 
 

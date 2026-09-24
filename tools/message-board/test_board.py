@@ -140,7 +140,8 @@ class BoardCoreTests(unittest.TestCase):
         rejected_without_persisted_change("--session", B, "--label", "Paused", actor=B)
         with sqlite3.connect(entry["db_path"]) as db:
             db.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00Z' WHERE session=?", (D,))
-        rejected_without_persisted_change("--session", D, "--clear", actor=D)
+        self.run_board("--board", board, "label", "--session", D, "--clear", actor=D)
+        self.assertIsNone(self.obj("--board", board, "sessions")[2]["label"])
         self.run_board("boards", "retire", "--board", board)
         self.run_board("--board", board, "label", "--session", A, "--label", "Wind-down",
                        actor=A)
@@ -284,7 +285,7 @@ class BoardCoreTests(unittest.TestCase):
         self.run_board("boards", "create", "--alias", "one", "--name", "Replacement", ok=False)
         self.run_board("--board", "one", "read", ok=False)
 
-    def test_memberships_routes_cursors_subscriptions_and_expiry_are_board_local(self):
+    def test_memberships_routes_cursors_subscriptions_and_advisory_expiry_are_board_local(self):
         one = self.create("member-one")
         two = self.create("member-two")
         for board in (one, two):
@@ -321,11 +322,12 @@ class BoardCoreTests(unittest.TestCase):
         with sqlite3.connect(one["db_path"]) as conn:
             conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (B,))
         self.open(one["board_id"], title="After expiry")
-        self.assertEqual(len(self.obj("--board", one["board_id"], "deliveries")), 1)
-        self.run_board("--board", one["board_id"], "watch", "--session", B,
-                       "--timeout", 1, actor=B, ok=False)
+        self.assertEqual(len(self.obj("--board", one["board_id"], "deliveries")), 2)
+        self.assertEqual(len(self.obj("--board", one["board_id"], "watch", "--session", B,
+                                      "--timeout", 1, actor=B)), 2)
         self.run_board("boards", "dispose-notices", "--board", one["board_id"],
-                       "--notice-id", 1, "--reason", "Expired member; retain pending delivery")
+                       "--notice-id", 1, "--notice-id", 2,
+                       "--reason", "Member departure; retain pending delivery")
         self.run_board("--board", one["board_id"], "leave", "--session", B, actor=B)
         self.assertEqual(self.obj("--board", one["board_id"], "sessions")[1]["status"], "completed")
         events = self.obj("--board", one["board_id"], "membership-events", "--session", B)
@@ -334,14 +336,51 @@ class BoardCoreTests(unittest.TestCase):
         self.assertEqual(self.obj("--board", two["board_id"], "sessions")[1]["status"], "active")
         with sqlite3.connect(two["db_path"]) as conn:
             conn.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' WHERE session=?", (B,))
-        with board_store.database(two["db_path"]) as conn:
-            self.assertIsNone(board_store.claim_next(conn, attempted_ids=set(), post_seq=None,
-                              thread_id=None, recipient=None, actor=A))
-            self.assertEqual(conn.execute("SELECT attempt_count FROM notification_outbox").fetchone()[0], 0)
+        with mock.patch.object(queue_transport, "_profile_home", return_value=Path(self.temp.name)):
+            with board_store.database(two["db_path"]) as conn:
+                claim = board_store.claim_next(conn, attempted_ids=set(), post_seq=None,
+                                              thread_id=None, recipient=None, actor=A)
+                self.assertEqual(claim["recipient"], B)
+                self.assertEqual(conn.execute("SELECT attempt_count FROM notification_outbox").fetchone()[0], 1)
         self.run_board("--board", one["board_id"], "register", "--session", B,
                        "--role", "retry", actor=B, ok=False)
         self.run_board("--board", one["board_id"], "heartbeat", "--session", B,
                        "--status", "paused", actor=B, ok=False)
+
+    def test_overdue_active_member_receives_direct_notice_without_reregistration(self):
+        entry = self.create("overdue-directed")
+        board = entry["board_id"]
+        self.join(board, A)
+        self.join(board, B, extra=("--expires-at", "2030-01-01T00:00:00Z"))
+        with sqlite3.connect(entry["db_path"]) as db:
+            db.execute("UPDATE sessions SET expires_at='2000-01-01T00:00:00.000000Z' "
+                       "WHERE session=?", (B,))
+        self.run_board("--board", board, "open", "--session", A, "--topic", "work",
+                       "--title", "Directed", "--text", "Please review", "--to", B,
+                       "--no-push", actor=A)
+        rows = self.obj("--board", board, "deliveries", "--recipient", B)
+        self.assertEqual([(row["recipient"], row["delivery_state"]) for row in rows],
+                         [(B, "pending")])
+        self.assertEqual(self.obj("--board", board, "read", "--session", B)[0]["text"],
+                         "Please review")
+        self.assertEqual(self.obj("--board", board, "watch", "--session", B,
+                                  "--timeout", 1, actor=B)[0]["notification_id"], 1)
+        sent = []
+
+        def sender(session, profile, notice):
+            sent.append((session, profile, notice))
+            return queue_transport.EnqueueResult("queued", C, None, "Queued message")
+        with mock.patch.object(queue_transport, "_profile_home", return_value=Path(self.temp.name)):
+            with board_store.database(entry["db_path"]) as conn:
+                processed = board_store.dispatch_notices(conn, actor=A, limit=1,
+                    board_id=board, board_home=str(self.home), sender=sender)
+        self.assertEqual(processed, [(1, 1)])
+        self.assertEqual((sent[0][0], sent[0][1]), (B, ".codex"))
+        self.assertEqual(self.obj("--board", board, "deliveries")[0]["delivery_state"], "queued")
+        self.assertEqual(self.obj("--board", board, "sessions")[1]["expires_at"],
+                         "2000-01-01T00:00:00.000000Z")
+        self.assertEqual([row["event"] for row in self.obj("--board", board,
+                         "membership-events", "--session", B)], ["register"])
 
     def test_board_qualified_notice_reads_through_shared_reader(self):
         entry = self.create("pointer")
@@ -664,16 +703,74 @@ class BoardCoreTests(unittest.TestCase):
                          ["delivery_state"], "ambiguous")
         self.assertEqual(len(self.obj("--board", board, "attempts", "--notification", 2)), 1)
 
-    def test_definite_no_rollout_and_uncertain_queue_results_stay_distinct(self):
-        no_rollout = queue_transport.queue_notice(
-            B, ".codex", "Notice", runner=lambda *_: queue_transport.CommandOutcome(
-                1, "unable to enqueue message: no rollout found for thread id"))
-        uncertain = queue_transport.queue_notice(
-            B, ".codex", "Notice", runner=lambda *_: queue_transport.CommandOutcome(
-                1, "transport failed after request"))
-        self.assertEqual((no_rollout.status, no_rollout.reason), ("failed", "queue_rejected"))
-        self.assertEqual((uncertain.status, uncertain.reason),
-                         ("ambiguous", "unrecognized_queue_response"))
+    def test_queue_known_pre_send_errors_require_complete_nonzero_output(self):
+        account = Path(self.temp.name) / "account"
+        profile = account / ".codex"
+        profile.mkdir(parents=True)
+        socket_error = (
+            "Error: failed to connect to remote app server at "
+            f"unix://{profile}/app-server-control/app-server-control.sock: "
+            "No such file or directory (os error 2)"
+        )
+        wrapped_socket_error = socket_error.replace(
+            "Error: failed to connect to remote app server at ",
+            "Error: failed to connect to remote app server: "
+            "failed to connect to remote app server at ",
+            1,
+        )
+        config_error = (
+            "Error: cannot queue through an embedded app server while a local app-server "
+            "daemon is running; remove configuration overrides or use --remote"
+        )
+        no_rollout = (f"Error: failed to queue session message: "
+                      f"no rollout found for thread id {B} (code -32603)")
+        cases = [
+            ("daemon conflict", queue_transport.CommandOutcome(1, config_error), "failed"),
+            ("missing selected socket", queue_transport.CommandOutcome(1, socket_error), "failed"),
+            ("wrapped missing selected socket", queue_transport.CommandOutcome(
+                1, wrapped_socket_error), "failed"),
+            ("current no rollout", queue_transport.CommandOutcome(1, no_rollout), "failed"),
+            ("no rollout without code", queue_transport.CommandOutcome(
+                1, no_rollout.removesuffix(" (code -32603)")), "failed"),
+            ("legacy no rollout", queue_transport.CommandOutcome(
+                1, "unable to enqueue message: no rollout found for thread id"), "failed"),
+            ("unknown nonzero", queue_transport.CommandOutcome(
+                1, "transport failed after request"), "ambiguous"),
+            ("unrelated socket", queue_transport.CommandOutcome(
+                1, socket_error.replace(str(profile), str(account / ".codex2"))), "ambiguous"),
+            ("other rejection", queue_transport.CommandOutcome(
+                1, "unable to enqueue message: unknown reason"), "ambiguous"),
+            ("other thread", queue_transport.CommandOutcome(
+                1, no_rollout.replace(B, C)), "ambiguous"),
+            ("other code", queue_transport.CommandOutcome(
+                1, no_rollout.replace("-32603", "-32000")), "ambiguous"),
+            ("post-send detail", queue_transport.CommandOutcome(
+                1, no_rollout.replace("no rollout found", "sent before no rollout found")),
+                "ambiguous"),
+            ("extra output", queue_transport.CommandOutcome(
+                1, config_error + "\nother error"), "ambiguous"),
+            ("post-send output", queue_transport.CommandOutcome(
+                1, f"Queued message {D}\n{config_error}"), "ambiguous"),
+            ("zero exit", queue_transport.CommandOutcome(0, no_rollout), "ambiguous"),
+            ("unknown exit", queue_transport.CommandOutcome(None, no_rollout), "ambiguous"),
+            ("truncation", queue_transport.CommandOutcome(
+                1, config_error, output_truncated=True), "ambiguous"),
+            ("truncated success", queue_transport.CommandOutcome(
+                0, f"Queued message {D}", output_truncated=True), "ambiguous"),
+            ("timeout", queue_transport.CommandOutcome(
+                None, no_rollout, timed_out=True), "timeout"),
+        ]
+        with mock.patch.object(queue_transport.pwd, "getpwuid",
+                               return_value=SimpleNamespace(pw_dir=str(account))):
+            for label, outcome, expected in cases:
+                with self.subTest(label=label):
+                    result = queue_transport.queue_notice(
+                        B, ".codex", "Notice", runner=lambda *_: outcome)
+                    self.assertEqual(result.status, expected)
+                    self.assertEqual(result.reason, {
+                        "failed": "queue_rejected", "ambiguous": "unrecognized_queue_response",
+                        "timeout": "sender_timeout",
+                    }[expected])
 
     def test_queue_profile_uses_current_account_and_exact_allowed_path(self):
         account = Path(self.temp.name) / "account"
@@ -691,11 +788,12 @@ class BoardCoreTests(unittest.TestCase):
         with mock.patch.object(queue_transport.pwd, "getpwuid",
                                return_value=SimpleNamespace(pw_dir=str(account))), \
              mock.patch.dict(os.environ, {"HOME": str(foreign),
-                                       "CODEX_HOME": str(profile)}):
+                                       "CODEX_HOME": str(foreign / ".codex5")}):
             result = queue_transport.queue_notice(A, ".codex2", "Board notice", runner=runner)
             self.assertEqual((result.status, result.queue_message_id), ("queued", B))
             self.assertEqual(sent[0][1], str(profile))
-            self.assertEqual(sent[0][0][:4], ["codex", "queue", "--thread", A])
+            self.assertEqual(sent[0][0], ["codex", "queue", "--thread", A,
+                                          "--message", "Board notice"])
             with self.assertRaisesRegex(ValueError, "does not exist"):
                 queue_transport.queue_notice(A, ".codex3", "Board notice", runner=runner)
             with self.assertRaisesRegex(ValueError, "allowed local"):
@@ -1095,14 +1193,12 @@ class BoardCoreTests(unittest.TestCase):
                 watcher.kill()
                 watcher.communicate()
 
-    def test_child_scope_requires_expiry_and_parent_settlement(self):
+    def test_child_scope_allows_optional_expiry_and_requires_parent_settlement(self):
         entry = self.create("child-scope")
         board = entry["board_id"]
         self.join(board, A)
-        self.run_board("--board", board, "register", "--session", B, "--role", "child",
-                       "--parent-session", A, "--scope", "review", actor=B, ok=False)
-        self.join(board, B, role="child", extra=("--parent-session", A, "--scope", "review",
-                                                  "--expires-at", "2030-01-01T00:00:00Z"))
+        self.join(board, B, role="child", extra=("--parent-session", A, "--scope", "review"))
+        self.assertIsNone(self.obj("--board", board, "sessions")[1]["expires_at"])
         self.run_board("--board", board, "leave", "--session", A, actor=A, ok=False)
         self.run_board("--board", board, "heartbeat", "--session", B,
                        "--status", "paused", actor=B)
@@ -1121,7 +1217,7 @@ class BoardCoreTests(unittest.TestCase):
         self.run_board("--board", board, "heartbeat", "--session", B,
                        "--status", "active", actor=B)
 
-    def test_child_cannot_reactivate_after_parent_departure(self):
+    def test_overdue_child_still_blocks_parent_leave_and_can_transfer_scope(self):
         entry = self.create("child-expiry")
         board = entry["board_id"]
         self.join(board, A)
@@ -1130,11 +1226,29 @@ class BoardCoreTests(unittest.TestCase):
         with sqlite3.connect(entry["db_path"]) as db:
             db.execute("UPDATE sessions SET status='paused', expires_at='2000-01-01T00:00:00Z' "
                        "WHERE session=?", (B,))
-        self.run_board("--board", board, "leave", "--session", A, actor=A)
+        self.assertIn("delegated child", self.run_board("--board", board, "leave", "--session", A,
+                                                        actor=A, ok=False).stderr)
         self.run_board("--board", board, "heartbeat", "--session", B,
-                       "--status", "active", actor=B, ok=False)
+                       "--status", "active", actor=B)
         self.run_board("--board", board, "register", "--session", B, "--role", "child",
-                       "--expires-at", "2030-01-01T00:00:00Z", actor=B, ok=False)
+                       actor=B)
+        self.assertEqual(self.obj("--board", board, "sessions")[1]["expires_at"],
+                         "2000-01-01T00:00:00Z")
+        self.run_board("--board", board, "scope-transfer", "--session", A, "--child", B,
+                       "--reason", "Independent work continues", actor=A)
+        self.run_board("--board", board, "leave", "--session", A, actor=A)
+
+    def test_new_expiry_requires_future_utc_even_for_child(self):
+        entry = self.create("expiry-validation")
+        board = entry["board_id"]
+        self.join(board, A)
+        for value in ("2000-01-01T00:00:00Z", "2030-01-01T00:00:00", "invalid"):
+            with self.subTest(value=value):
+                self.run_board("--board", board, "register", "--session", B,
+                               "--role", "child", "--profile", ".codex",
+                               "--parent-session", A, "--scope", "review",
+                               "--expires-at", value, actor=B, ok=False)
+        self.assertEqual(len(self.obj("--board", board, "sessions")), 1)
 
     def test_lifecycle_lock_serializes_catalog_writes_and_rechecks_state(self):
         cases = [

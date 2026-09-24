@@ -80,18 +80,13 @@ class BoardFeed:
             # session. Membership is a raw legacy table, so check it before
             # demanding schema-4 or binding metadata from that board.
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version == 3:
-                member = conn.execute("SELECT status FROM sessions WHERE session=?",
-                                      (self.session,)).fetchone()
-            else:
-                member = conn.execute("SELECT status,expires_at FROM sessions WHERE session=?",
-                                      (self.session,)).fetchone()
-            if member is None or member["status"] != "active" or (version != 3 and
-                    member["expires_at"] and member["expires_at"] <= board_store.utc_now()):
+            member = conn.execute("SELECT status FROM sessions WHERE session=?",
+                                  (self.session,)).fetchone()
+            if member is None or member["status"] != "active":
                 if optional_member:
                     conn.close()
                     return None
-                raise WatchError(f"session is not an active unexpired member of {entry['board_id']}")
+                raise WatchError(f"session is not an active member of {entry['board_id']}")
             if version != board_store.SCHEMA_VERSION:
                 raise WatchError(f"board {entry['board_id']} requires migration")
             rows = conn.execute("SELECT board_id FROM board_meta").fetchall()
