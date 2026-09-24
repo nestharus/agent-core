@@ -1,10 +1,10 @@
 # Rebase Verification Convention
 
-When a branch is rebased onto a new base (typical case: an in-flight WU's branch is rebased onto an updated `main` after some other PR merged), the rebase by itself is a silent operation as far as the test suite is concerned. The branch may compile and look like the same diff but its **runtime behavior** can have shifted because the surrounding code changed. This convention defines the verification gate that every rebase must clear before the branch is considered re-aligned with `main`.
+When a branch is rebased onto a new base, the rebase by itself is a silent operation as far as the test suite is concerned. The branch may compile and look like the same diff but its **runtime behavior** can have shifted because the surrounding code changed. This four-check gate applies when the legacy implementation pipeline is explicitly selected, another workflow expressly requires the gate (including [apply-gate-set currentness](apply-gate-set-currentness.md) for its rebase row), or a project expressly adopts it. Selection requires the applicable inputs, including the Phase 2.5 and 6a/6b artifacts, and actual results from all four checks; absent inputs, a missing producer, or missing results leave the gate uncleared. Within a selected route, every rebase must clear the gate before the branch is considered re-aligned with its target. Default direct-ad-hoc protected-change delivery follows the [governing lifecycle](../AGENTS.md#mandatory-general-landable-change-lifecycle) and project-specific verification obligations, including qualification of the exact candidate against its current merge target; a rebase alone does not select this four-check gate.
 
 ## Trigger
 
-Any of the following events triggers the rebase-verification gate:
+Within the selected route, any of the following events triggers the rebase-verification gate:
 
 - `git rebase main` (or `git rebase origin/main`) on a WU branch.
 - `git pull --rebase` on a WU branch.
@@ -47,17 +47,17 @@ Implementation: `~/ai/agents/rebase-drift-checker.md` is the `gpt-high` operator
 
 ## Outcomes
 
-- **All four clear:** the rebase is verified. The orchestrator advances.
-- **Any check fails:** the orchestrator HALTs the WU. Disposition is one of:
+- **All four clear:** the rebase clears this selected gate. The caller may advance subject to its other requirements.
+- **Any check fails or lacks required inputs or results:** the selected gate is not cleared. The legacy implementation pipeline HALTs the WU and chooses one of:
   - `repair on branch` — the WU agent reapplies the contract to the post-rebase tree (typically: re-run Phase 6b and Phase 6c against the new base to re-derive tests / fix broken product code).
   - `rewind` — drop the rebase, return to the pre-rebase commit, abandon the rebase attempt. Useful when the merged-from-main change made the WU's premise wrong.
   - `re-enter Phase 2.5` — the merged change invalidates the WU's problem map. Restart from problem-map.
 
-The disposition is recorded in `${planning_dir}/audit-history.md` and, when it changes the WU's outcome, in `${worktree_path}/DECISIONS.md`.
+The legacy pipeline records the disposition in `${planning_dir}/audit-history.md` and, when it changes the WU's outcome, in `${worktree_path}/DECISIONS.md`. Other selected callers use their declared disposition and record routes; this convention does not infer clearance from a missing producer or result.
 
 ## Anti-pattern
 
-Treating the rebase as "git plumbing" and not running any of the four checks. A rebase is a code change as much as any line edit; it shifts the surrounding context without showing in the diff. The test suite passing pre-rebase says nothing about its passing post-rebase. The cost of the verification is bounded; the cost of skipping it is hidden bugs that surface days later.
+Within a selected route, treating the rebase as "git plumbing" and skipping any required check. A rebase is a code change as much as any line edit; it shifts the surrounding context without showing in the diff. The test suite passing pre-rebase says nothing about its passing post-rebase. The cost of skipping required verification is hidden bugs that surface days later.
 
 ## Wiring Status
 
