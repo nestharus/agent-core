@@ -6,6 +6,8 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+For agents starting cold during the runner outage, start with the dispatcher's [Observe, Frame, Decide and Act binding](tools/direct-child/README.md#observe-frame-decide-and-act). It links the seat contracts and return loop; its [resolution section](tools/direct-child/README.md#resolution) gives the current model defaults, and the [launcher README](tools/direct-codex-child/README.md) gives launch and collection. Read these with the protected-change lifecycle below and the project's own authority bounds.
+
 Shared local boards are optional coordination spaces governed by the
 [message-board policy and adoption guide](tools/message-board/POLICY.md). A
 project or campaign root `AGENTS.md` may select a board by UUID using the guide's
@@ -24,7 +26,7 @@ Codex profiles rotate atomically over `$HOME/.codex`, `$HOME/.codex3` and `$HOME
 
 Each attempt has a unique prompt snapshot, a complete log, a tool-written final, an append-only state path, and a route record. Launch one child per native persistent foreground terminal invocation, record its returned terminal handle in that attempt's state, and await that same handle to a real exit status before reading the final and log. At most one outstanding native wait per child. Do not use shell `&`, `nohup`, shell `wait`, PID/file polling, repeated status or tail loops, or scrollback as completion evidence. Independent parent work may continue while a native terminal session runs. A queued message to an in-flight child is not a handoff until acknowledged.
 
-New descendants inherit this shared dispatch contract through this file and their project's `AGENTS.md` routing. Give each child its task, authority, exact workspace, and an instruction to read the applicable `AGENTS.md` files; **the full outage contract does not need to be pasted into every child prompt**. If a project does not route its children to this file, establish that link or give the child a direct pointer before relying on inheritance. Apply the dispatcher's [existing method binding before briefing corrective Act](tools/direct-child/README.md#before-briefing-corrective-act). The [dispatcher README](tools/direct-child/README.md) and [launcher README](tools/direct-codex-child/README.md) give the one-command interface, resolution order, native-terminal collection procedure, and limits.
+New descendants inherit this shared dispatch contract through this file and their project's `AGENTS.md` routing. Give each child its task, authority, exact workspace, and an instruction to read the applicable `AGENTS.md` files; **the full outage contract does not need to be pasted into every child prompt**. If a project does not route its children to this file, establish that link or give the child a direct pointer before relying on inheritance. Apply the dispatcher's [full Observe, Frame, Decide and Act binding](tools/direct-child/README.md#observe-frame-decide-and-act). The [dispatcher README](tools/direct-child/README.md) and [launcher README](tools/direct-codex-child/README.md) give the one-command interface, resolution order, native-terminal collection procedure, and limits.
 
 ## Mandatory General Landable-Change Lifecycle
 
