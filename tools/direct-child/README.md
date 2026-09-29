@@ -27,6 +27,10 @@ The brief receives its independent cold check before dispatch. That check's lite
 
 Keep the actual observation → Frame → Decision → brief → cold check → Frame → Act trail, with any reopened Decision and subsequent consequence returns. Flags, native route records, producer verification and revised prose do not establish framing, admission or efficacy; the witness is the actual return under the existing [guarantee chain](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/core/KERNEL.md#the-guarantee-chain). This binds the full loop within the [shared selected method and delivery lifecycle](../../AGENTS.md#selected-reasoning-and-change-support); it adds no runtime enforcement or replacement review procedure.
 
+### Current campaign selection
+
+For the `context-routing-20260929` minimal prose/entry closure, the [actual Decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/development-return-decider-return.md) selects **no per-prompt cold check**, accepting its cost tradeoff and remaining debts for fast closure. This campaign selection takes precedence over the per-brief cold-check requirement and trail above; it does not replace independent consequence Observe → Frame → Decide after making. The [actual Frame](/home/nes/projects/agent-runner/planning/context-routing-20260929/development-return-frame-return.md) diagnoses the earlier observer → Act bypass as root treating small local defects as exempt and carrying its own interpretation into dispatch. The Decision accepts that diagnosis without establishing cold-agent compliance. Full Core adoption, efficacy and `.claude5` / `.codex2`–`.codex5` import loading remain debt; the wider inherited observation obligations remain explicit gaps, not completed work. This bounded selection changes neither Core nor other campaigns' obligations.
+
 ## Resolution
 
 The first rule that applies decides the route:
@@ -58,9 +62,9 @@ Current bindings:
 
 | Route | Provider | Model and effort | Profile |
 |---|---|---|---|
-| `default` | Codex | `gpt-6.1-sol`, `high` | round-robin over `.codex`, `.codex3`, `.codex4` |
-| `refine` | Codex | `gpt-6.1-sol`, `high` | round-robin over `.codex`, `.codex3`, `.codex4` |
-| `explore` | Codex | `gpt-6-luna`, `max` | round-robin over `.codex`, `.codex3`, `.codex4` |
+| `default` | Codex | `gpt-6.1-sol`, `high` | round-robin over `.codex2`, `.codex3`, `.codex4`, `.codex5` |
+| `refine` | Codex | `gpt-6.1-sol`, `high` | round-robin over `.codex2`, `.codex3`, `.codex4`, `.codex5` |
+| `explore` | Codex | `gpt-6-luna`, `max` | round-robin over `.codex2`, `.codex3`, `.codex4`, `.codex5` |
 | `direction` | Claude | `claude-opus-5-5`, `medium` | `claude5` wrapper only |
 
 **Moving `refine` to Sonnet** later is one edit: set its binding in `routes.toml` to `claude` / `claude-sonnet-5-5` / `high`.
@@ -73,7 +77,7 @@ Current bindings:
 - Configured Codex profiles must be `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`; unsupported names are refused before dry-run or allocation.
 - Allocation happens before the MCP preflight, so a refused preflight still uses its turn.
 - Rotation spreads starts across accounts. It does not prevent concurrent calls on one account, and it knows nothing about rate limits.
-- To pick a profile yourself, pass `--profile` with `--override-reason`. Explicit profiles never advance the counter. `.codex2` and `.codex5` are manual-only.
+- To pick a profile yourself, pass `--profile` with `--override-reason`. Explicit profiles never advance the counter. `.codex` is manual-only; the automatic pool is `.codex2`, `.codex3`, `.codex4`, `.codex5`.
 - Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`.
 
 ## Example
