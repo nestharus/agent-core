@@ -1,6 +1,6 @@
 # Direct Codex child launcher (temporary outage transport)
 
-This tool starts **one** child in the foreground while `agents` / `agent-runner` is down. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage). It does not select tasks, authorize effects, allocate worktrees, or replace the mandatory review and delivery lifecycle.
+New contextual launches should normally use [`../direct-child/dispatch.py`](../direct-child/README.md). It resolves provider, model, effort, and profile from the seat and class, then delegates Codex routes to this launcher. This tool starts **one** child in the foreground while `agents` / `agent-runner` is down. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage). It does not select tasks, authorize effects, allocate worktrees, or replace the mandatory review and delivery lifecycle.
 
 ## One command per child
 
@@ -8,14 +8,14 @@ Prepare a nonempty prompt file containing the child's task, authority, exact wor
 
 ```bash
 /home/nes/ai/tools/direct-codex-child/launch.sh \
-  --profile .codex3 \
+  --profile .codex5 \
   --cwd /absolute/path/to/exact/worktree \
   --prompt /absolute/path/to/child-prompt.md \
   --runs-dir /absolute/path/to/durable/runs \
   --id child-name
 ```
 
-`--profile` accepts only `.codex`, `.codex2`, `.codex3`, or `.codex4`; these are session stores, **not a concurrency cap**. `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. The launcher uses `gpt-6-sol` at `xhigh`, discovers MCP server names from the effective `codex mcp list --json`, passes a disable flag for each, and verifies a second effective list reports exactly those servers disabled. It always supplies the URL and disable flag for `openaiDeveloperDocs`, because `codex exec` can inject that server even when `codex mcp list` omits it. It refuses the launch if discovery, parsing, or preflight fails, or if a new server appears in the second list.
+`--profile` accepts only `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`; these are session stores, **not a concurrency cap**. `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. Without `--model`/`--effort` the launcher uses `gpt-6.1-sol` at `high`. Give both flags to pass a native model id and effort literally, for example `--model gpt-6-luna --effort max`. `--route-json` is the dispatcher's resolution record; it is stored as `route.json` and referenced from state. The launcher discovers MCP server names from the effective `codex mcp list --json`, passes a disable flag for each, and verifies a second effective list reports exactly those servers disabled. It always supplies the URL and disable flag for `openaiDeveloperDocs`, because `codex exec` can inject that server even when `codex mcp list` omits it. It refuses the launch if discovery, parsing, or preflight fails, or if a new server appears in the second list.
 
 The launcher reserves `runs-dir/id.unique-suffix/` with private permissions and writes `prompt.md` (read-only snapshot), `log.txt` (live output), `final.md` (Codex `-o` output), and `state.txt` (start details and appended exit result). Paths are unique for each attempt and are never reused. A nonzero `log_capture_exit` in state flags an incomplete log while preserving the exact Codex exit code. Keep the runs directory outside a source diff when it is only machine-local evidence. Record task-specific base, owner, and expected handoff in the parent state or child prompt; the launcher records the exact canonical cwd and Git HEAD at start.
 

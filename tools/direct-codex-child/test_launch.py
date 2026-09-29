@@ -45,8 +45,8 @@ if args[-3:] == ["mcp", "list", "--json"]:
 if args[0] != "exec":
     sys.exit(91)
 assert "--dangerously-bypass-approvals-and-sandbox" in args
-assert args[args.index("-m") + 1] == "gpt-6-sol"
-assert 'model_reasoning_effort="xhigh"' in args
+assert args[args.index("-m") + 1] == os.environ.get("EXPECTED_MODEL", "gpt-6.1-sol")
+assert f'model_reasoning_effort="{os.environ.get("EXPECTED_EFFORT", "high")}"' in args
 assert args[args.index("-C") + 1] == os.environ["EXPECTED_CWD"]
 assert args[-1] == "-"
 prompt = sys.stdin.read()
@@ -79,6 +79,7 @@ class LauncherTest(unittest.TestCase):
             ".codex2": ("firecrawl",),
             ".codex3": ("firecrawl",),
             ".codex4": ("firecrawl",),
+            ".codex5": ("firecrawl",),
         }.items():
             directory = self.home / profile
             directory.mkdir()
@@ -111,7 +112,7 @@ class LauncherTest(unittest.TestCase):
         self.assertFalse(self.calls.exists())
 
     def test_rejects_bad_arguments_before_any_effect(self):
-        for profile, extra in ((".codex5", ()), (".codex", ("--unknown",)),
+        for profile, extra in ((".codex6", ()), (".codex", ("--unknown",)),
                                (".codex", ("--id", "duplicate"))):
             with self.subTest(profile=profile, extra=extra):
                 result = self.run_launcher(profile, *extra)
@@ -160,6 +161,37 @@ class LauncherTest(unittest.TestCase):
         for call in self.calls_readback()[1:]:
             self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
             self.assertIn('mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"', call["args"])
+
+    def test_codex5_profile_launches_with_mcp_disabled(self):
+        result = self.run_launcher(".codex5")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("DIRECT_CODEX_EXIT=0", result.stdout)
+        calls = self.calls_readback()
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(call["home"] == str(self.home / ".codex5") for call in calls))
+        for call in calls[1:]:
+            self.assertIn("mcp_servers.firecrawl.enabled=false", call["args"])
+            self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
+
+    def test_explicit_model_effort_and_route_record(self):
+        env = self.env.copy()
+        env.update({"EXPECTED_MODEL": "gpt-6-luna", "EXPECTED_EFFORT": "max"})
+        result = self.run_launcher(".codex3", "--model", "gpt-6-luna", "--effort", "max",
+                                   "--route-json", '{"rule": "seat:scout"}', env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        attempt = next(self.runs.iterdir())
+        state = (attempt / "state.txt").read_text()
+        self.assertIn("model=gpt-6-luna\neffort=max\n", state)
+        self.assertEqual((attempt / "route.json").read_text(), '{"rule": "seat:scout"}\n')
+        self.assertIn("mcp_servers.firecrawl.enabled=false", self.calls_readback()[-1]["args"])
+
+    def test_model_without_effort_is_refused(self):
+        for extra in (("--model", "gpt-6-luna"), ("--effort", "max"),
+                      ("--model", "bad model", "--effort", "high")):
+            with self.subTest(extra=extra):
+                result = self.run_launcher(".codex", *extra)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(self.calls.exists())
 
     def test_additional_configured_server_is_disabled(self):
         with (self.home / ".codex4" / "config.toml").open("a", encoding="utf-8") as config_file:

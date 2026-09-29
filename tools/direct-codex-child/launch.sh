@@ -5,24 +5,28 @@ umask 077
 
 usage() {
   cat <<'EOF'
-Usage: launch.sh --profile .codex[2|3|4] --cwd /absolute/workspace \
+Usage: launch.sh --profile .codex[2|3|4|5] --cwd /absolute/workspace \
   --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name \
-  [--dry-run | --preflight-only]
+  [--model native-model --effort native-effort] [--dry-run | --preflight-only]
 
 The launcher reserves one unique attempt directory and runs one Codex child in
 the foreground. Launch it in a native persistent terminal, record that terminal's
 handle in state.txt, and await its real exit. --dry-run validates local inputs
 without creating files or invoking Codex; it does not certify MCP state.
 --preflight-only checks effective MCP state without creating an attempt or child.
+Without --model/--effort the child uses gpt-6.1-sol at high. Both values are
+passed literally to Codex. --route-json is the contextual dispatcher's
+single-line resolution record, stored as route.json in the attempt.
 EOF
 }
 
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
+model='' effort='' route_json=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
@@ -30,6 +34,9 @@ while (($#)); do
         --prompt) [[ -z $prompt ]] || die 'duplicate --prompt'; prompt=$2 ;;
         --runs-dir) [[ -z $runs_dir ]] || die 'duplicate --runs-dir'; runs_dir=$2 ;;
         --id) [[ -z $child_id ]] || die 'duplicate --id'; child_id=$2 ;;
+        --model) [[ -z $model ]] || die 'duplicate --model'; model=$2 ;;
+        --effort) [[ -z $effort ]] || die 'duplicate --effort'; effort=$2 ;;
+        --route-json) [[ -z $route_json ]] || die 'duplicate --route-json'; route_json=$2 ;;
       esac
       shift 2 ;;
     --dry-run) [[ $dry_run == false ]] || die 'duplicate --dry-run'; dry_run=true; shift ;;
@@ -40,7 +47,14 @@ while (($#)); do
 done
 [[ $dry_run == false || $preflight_only == false ]] || die 'choose either --dry-run or --preflight-only'
 
-case "$profile" in .codex|.codex2|.codex3|.codex4) ;; *) die 'profile must be .codex, .codex2, .codex3, or .codex4' ;; esac
+case "$profile" in .codex|.codex2|.codex3|.codex4|.codex5) ;; *) die 'profile must be .codex, .codex2, .codex3, .codex4, or .codex5' ;; esac
+[[ -n $model || -z $effort ]] && [[ -z $model || -n $effort ]] \
+  || die 'give --model and --effort together, or neither for gpt-6.1-sol/high'
+model=${model:-gpt-6.1-sol}
+effort=${effort:-high}
+[[ $model =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'model must be a native model id'
+[[ $effort =~ ^[a-z]+$ ]] || die 'effort must be a lowercase native effort'
+[[ $route_json != *$'\n'* ]] || die 'route-json must be a single line'
 [[ $child_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'id must use letters, digits, dot, underscore, or hyphen'
 for value in "$cwd" "$prompt" "$runs_dir"; do
   [[ $value == /* && $value != *$'\n'* ]] || die 'cwd, prompt, and runs-dir must be absolute paths without newlines'
@@ -54,8 +68,8 @@ profile_home="$HOME/$profile"
 [[ -d $profile_home ]] || die "missing profile: $profile_home"
 
 if [[ $dry_run == true ]]; then
-  printf 'DRY RUN: profile=%s model=gpt-6-sol effort=xhigh cwd=%s prompt=%s runs-dir=%s id=%s\n' \
-    "$profile" "$cwd" "$prompt" "$runs_dir" "$child_id"
+  printf 'DRY RUN: profile=%s model=%s effort=%s cwd=%s prompt=%s runs-dir=%s id=%s\n' \
+    "$profile" "$model" "$effort" "$cwd" "$prompt" "$runs_dir" "$child_id"
   printf 'DRY RUN: no artifacts created; Codex and MCP preflight not invoked\n'
   exit 0
 fi
@@ -137,10 +151,14 @@ cp -- "$prompt" "$prompt_snapshot" || die 'cannot snapshot prompt'
 chmod 400 -- "$prompt_snapshot" || die 'cannot protect prompt snapshot'
 : > "$log_path" || die 'cannot create log'
 : > "$final_path" || die 'cannot reserve final'
+if [[ -n $route_json ]]; then
+  printf '%s\n' "$route_json" > "$attempt/route.json" || die 'cannot write route record'
+fi
 git_head=$(git -C "$cwd" rev-parse HEAD 2>/dev/null || printf 'unavailable')
 git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavailable')
 {
-  printf 'child_id=%s\nprofile=%s\nmodel=gpt-6-sol\neffort=xhigh\n' "$child_id" "$profile"
+  printf 'child_id=%s\nprofile=%s\nmodel=%s\neffort=%s\n' "$child_id" "$profile" "$model" "$effort"
+  [[ -z $route_json ]] || printf 'route_record=%s\n' "$attempt/route.json"
   printf 'cwd=%s\ngit_branch=%s\ngit_head_at_start=%s\n' "$cwd" "$git_branch" "$git_head"
   printf 'prompt=%s\nlog=%s\nfinal=%s\n' "$prompt_snapshot" "$log_path" "$final_path"
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -150,7 +168,7 @@ printf 'DIRECT_CODEX_ATTEMPT=%s\nDIRECT_CODEX_STATE=%s\n' "$attempt" "$state_pat
 printf 'MCP_PREFLIGHT=all effective servers disabled\n'
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
 CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
-  -m gpt-6-sol -c 'model_reasoning_effort="xhigh"' "${mcp_flags[@]}" \
+  -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" \
   -C "$cwd" --color never -o "$final_path" - < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
 pipeline_status=("${PIPESTATUS[@]}")
 codex_rc=${pipeline_status[0]}
