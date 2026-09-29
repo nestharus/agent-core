@@ -202,7 +202,7 @@ class DispatchTest(unittest.TestCase):
             for add_to_pool in (False, True):
                 text = base.replace('manual_profiles = [".codex",', f'manual_profiles = ["{profile}", ".codex",', 1)
                 if add_to_pool:
-                    text = text.replace('pool = [".codex",', f'pool = ["{profile}", ".codex",', 1)
+                    text = text.replace('pool = [".codex2",', f'pool = ["{profile}", ".codex2",', 1)
                 config = self.write_config(text)
                 for extra in ((), ("--dry-run",)):
                     with self.subTest(profile=profile, pool=add_to_pool, extra=extra):
@@ -299,7 +299,7 @@ class DispatchTest(unittest.TestCase):
                                        .replace('#new-foundation = "direction"\n', ''),
             "unknown basis": base.replace('[classes.unknown]\nrequires_basis = false',
                                           '[classes.unknown]\nrequires_basis = true'),
-            "pool outside manual": base.replace('pool = [".codex", ".codex3", ".codex4"]',
+            "pool outside manual": base.replace('pool = [".codex2", ".codex3", ".codex4", ".codex5"]',
                                                 'pool = [".codex", ".codex7"]'),
             "bad provider": base.replace('[routes.explore]\nprovider = "codex"',
                                          '[routes.explore]\nprovider = "gemini"'),
@@ -317,6 +317,8 @@ class DispatchTest(unittest.TestCase):
     # -------------------------------------------------------------- rotation
 
     def test_concurrent_rotation_is_atomic_and_fair_across_sol_and_luna(self):
+        self.state_dir.mkdir(parents=True)
+        (self.state_dir / "codex.counter").write_text("7\n", encoding="utf-8")
         seats = [("--seat", "scout")] * 6 + [()] * 6
         with ThreadPoolExecutor(max_workers=12) as pool:
             results = list(pool.map(lambda extra: self.dispatch(*extra), seats))
@@ -325,23 +327,33 @@ class DispatchTest(unittest.TestCase):
         records = [json.loads((attempt / "route.json").read_text())
                    for attempt in self.runs.iterdir()]
         self.assertEqual(sorted(r["profile_source"] for r in records),
-                         sorted(f"rotation:{n}" for n in range(12)))
-        for profile in (".codex", ".codex3", ".codex4"):
-            self.assertEqual(sum(r["profile"] == profile for r in records), 4, profile)
+                         sorted(f"rotation:{n}" for n in range(7, 19)))
+        expected_pool = (".codex2", ".codex3", ".codex4", ".codex5")
+        self.assertEqual({r["profile"] for r in records}, set(expected_pool))
+        for profile in expected_pool:
+            self.assertEqual(sum(r["profile"] == profile for r in records), 3, profile)
         self.assertEqual({r["model"] for r in records}, {"gpt-6.1-sol", "gpt-6-luna"})
         for record in records:
-            expected = {".codex": 0, ".codex3": 1, ".codex4": 2}[record["profile"]]
-            self.assertEqual(int(record["profile_source"].split(":")[1]) % 3, expected)
-        self.assertEqual((self.state_dir / "codex.counter").read_text(), "12\n")
+            turn = int(record["profile_source"].split(":")[1])
+            self.assertEqual(record["profile"], expected_pool[turn % 4])
+        self.assertEqual((self.state_dir / "codex.counter").read_text(), "19\n")
         exec_homes = sorted(call["home"] for call in self.calls_readback() if call["args"][0] == "exec")
         self.assertEqual(exec_homes, sorted(str(self.home / r["profile"]) for r in records))
 
         dry = self.resolved()
         self.assertEqual((dry["profile"], dry["profile_source"]),
-                         (".codex", "rotation-preview:12 (not reserved)"))
-        explicit = self.dispatch("--profile", ".codex5", "--override-reason", "manual history")
+                         (".codex5", "rotation-preview:19 (not reserved)"))
+        explicit_preview = self.resolved("--profile", ".codex",
+                                         "--override-reason", "manual history")
+        self.assertEqual((explicit_preview["profile"], explicit_preview["profile_source"]),
+                         (".codex", "explicit"))
+        previous = set(self.runs.iterdir())
+        explicit = self.dispatch("--profile", ".codex", "--override-reason", "manual history")
         self.assertEqual(explicit.returncode, 0, explicit.stderr)
-        self.assertEqual((self.state_dir / "codex.counter").read_text(), "12\n")
+        attempt = (set(self.runs.iterdir()) - previous).pop()
+        record = json.loads((attempt / "route.json").read_text())
+        self.assertEqual((record["profile"], record["profile_source"]), (".codex", "explicit"))
+        self.assertEqual((self.state_dir / "codex.counter").read_text(), "19\n")
         self.assertEqual(len(list(self.runs.iterdir())), 13)
 
     # ----------------------------------------------------------------- codex
@@ -354,9 +366,9 @@ class DispatchTest(unittest.TestCase):
         record = json.loads((attempt / "route.json").read_text())
         self.assertEqual((record["seat"], record["class"], record["basis"], record["rule"],
                           record["profile"]),
-                         ("maker", "correction", "F2", "seat-class:maker/correction", ".codex"))
+                         ("maker", "correction", "F2", "seat-class:maker/correction", ".codex2"))
         state = (attempt / "state.txt").read_text()
-        self.assertIn("profile=.codex\nmodel=gpt-6.1-sol\neffort=high\n", state)
+        self.assertIn("profile=.codex2\nmodel=gpt-6.1-sol\neffort=high\n", state)
         self.assertIn(f"cwd={self.cwd}\n", state)
         calls = self.calls_readback()
         self.assertEqual(len(calls), 3)
