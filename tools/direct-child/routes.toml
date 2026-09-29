@@ -71,6 +71,14 @@ route = "explore"
 [seats.explorer]
 route = "explore"
 
+[seats.observer]
+route = "refine"
+
+[seats.investigator.by_class]
+new-foundation = "direction"
+correction = "refine"
+unknown = "direction"
+
 [seats.maker.by_class]
 new-foundation = "direction"
 correction = "refine"

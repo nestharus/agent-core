@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import tempfile
+import sys
 import unittest
 
 
@@ -32,7 +33,7 @@ Path(args[args.index("-o") + 1]).write_text("final: " + prompt, encoding="utf-8"
 print("live: " + prompt.strip())
 '''
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
-import json, os, sys
+import json, os, signal, sys
 args = sys.argv[1:]
 prompt = sys.stdin.read()
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
@@ -43,12 +44,67 @@ print(json.dumps({"type": "system", "subtype": "init", "mcp_servers": []}))
 print("not json noise")
 print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash"}]}}))
 print("claude warning", file=sys.stderr)
-if mode == "success":
-    print(json.dumps({"type": "result", "is_error": False, "result": "done: " + prompt}))
+if os.environ.get("FAKE_CLAUDE_LARGE_STREAM"):
+    print("drain evidence " * 20000)
+if "FAKE_CLAUDE_EVENTS" in os.environ:
+    for event in json.loads(os.environ["FAKE_CLAUDE_EVENTS"]):
+        print(json.dumps(event))
+elif mode in ("success", "signal"):
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done: " + prompt}))
 elif mode == "error":
-    print(json.dumps({"type": "result", "is_error": True, "result": "API refused"}))
+    print(json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": True, "result": "API refused"}))
 elif mode == "exit5":
     sys.exit(5)
+if mode == "signal":
+    sys.stdout.flush()
+    os.kill(os.getpid(), signal.SIGTERM)
+sys.exit(int(os.environ.get("FAKE_CLAUDE_EXIT", "0")))
+'''
+
+# Faults affect the dispatcher only; the fake CLI runs in a separate interpreter.
+FAULT_WRAPPER = r'''
+import builtins, errno, os, runpy, sys
+from pathlib import Path
+faults = os.environ["CUSTODY_FAULT"].split(",")
+write_text, read_text, path_open, native_print = Path.write_text, Path.read_text, Path.open, builtins.print
+def failing_write(path, *args, **kwargs):
+    if path.name == "final.md" and "final-write" in faults:
+        raise OSError(errno.ENOSPC, "injected final write: no space left")
+    return write_text(path, *args, **kwargs)
+def failing_read(path, *args, **kwargs):
+    if path.name == "final.md" and "final-read" in faults:
+        raise OSError(errno.EIO, "injected final read failure")
+    return read_text(path, *args, **kwargs)
+class BrokenLog:
+    def __init__(self, handle):
+        self.handle = handle
+    def __enter__(self):
+        self.handle.__enter__()
+        return self
+    def __exit__(self, *args):
+        return self.handle.__exit__(*args)
+    def write(self, data):
+        raise OSError(errno.ENOSPC, "injected live log failure")
+state_appends = 0
+def failing_open(path, mode="r", *args, **kwargs):
+    global state_appends
+    if path.name == "state.txt" and mode == "a":
+        state_appends += 1
+        if state_appends == 2 and "state-completion" in faults:
+            raise OSError(errno.ENOSPC, "injected completion state failure")
+    if path.name == "log.txt" and mode == "ab" and "log-write" in faults:
+        return BrokenLog(path_open(path, mode, *args, **kwargs))
+    if path.name == "state.txt" and mode == "a" and "state-append" in faults:
+        raise OSError(errno.ENOSPC, "injected state append: no space left")
+    return path_open(path, mode, *args, **kwargs)
+def failing_print(*args, **kwargs):
+    if args and args[0] == "done: Do the bounded task.\n" and "final-output" in faults:
+        raise UnicodeEncodeError("ascii", args[0], 0, 1, "injected final output encoding failure")
+    return native_print(*args, **kwargs)
+Path.write_text, Path.read_text, Path.open = failing_write, failing_read, failing_open
+builtins.print = failing_print
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
 '''
 RUN_ARGS = ("--runs-dir", "--id")
 
@@ -79,10 +135,13 @@ class DispatchTest(unittest.TestCase):
                                  "PATH": os.pathsep.join((str(self.bin), "/usr/bin", "/bin"))}
 
     def dispatch(self, *extra, env=None):
+        selected_env = env or self.env
+        command = ([sys.executable, "-c", FAULT_WRAPPER, str(DISPATCH)]
+                   if "CUSTODY_FAULT" in selected_env else [str(DISPATCH)])
         return subprocess.run(
-            [str(DISPATCH), "--cwd", str(self.cwd), "--prompt", str(self.prompt),
+            [*command, "--cwd", str(self.cwd), "--prompt", str(self.prompt),
              "--runs-dir", str(self.runs), "--id", "child", *extra],
-            env=env or self.env, capture_output=True, text=True, check=False)
+            env=selected_env, capture_output=True, text=True, check=False)
 
     def resolved(self, *extra):
         result = self.dispatch("--dry-run", *extra)
@@ -124,6 +183,33 @@ class DispatchTest(unittest.TestCase):
                                  (route, provider, model, effort, rule))
                 self.assertEqual(record["pass"], "corrective")
         self.assert_no_effects()
+
+    def test_observer_and_investigator_bindings(self):
+        for klass, route in (("new-foundation", "direction"), ("unknown", "direction"),
+                             ("correction", "refine")):
+            extra = ("--class", klass) + (("--basis", "decision.md") if klass != "unknown" else ())
+            observer = self.resolved("--seat", "observer", *extra)
+            investigator = self.resolved("--seat", "investigator", *extra)
+            self.assertEqual((observer["route"], observer["rule"]), ("refine", "seat:observer"))
+            self.assertEqual((investigator["route"], investigator["rule"]),
+                             (route, f"seat-class:investigator/{klass}"))
+        self.assertEqual(self.resolved("--seat", "investigator")["route"], "direction")
+        self.assert_no_effects()
+
+    def test_unsupported_configured_profile_refused_before_dry_run_or_allocation(self):
+        base = CONFIG.read_text(encoding="utf-8")
+        for profile in (".codex1", ".codex6", ".codex99"):
+            for add_to_pool in (False, True):
+                text = base.replace('manual_profiles = [".codex",', f'manual_profiles = ["{profile}", ".codex",', 1)
+                if add_to_pool:
+                    text = text.replace('pool = [".codex",', f'pool = ["{profile}", ".codex",', 1)
+                config = self.write_config(text)
+                for extra in ((), ("--dry-run",)):
+                    with self.subTest(profile=profile, pool=add_to_pool, extra=extra):
+                        result = self.dispatch("--config", config, *extra)
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertIn("codex profiles", result.stderr)
+                        self.assert_no_effects()
 
     def test_seat_class_legacy_and_explicit_precedence(self):
         framer = self.resolved("--seat", "framer", "--class", "correction", "--basis", "b")
@@ -293,9 +379,11 @@ class DispatchTest(unittest.TestCase):
 
     # ---------------------------------------------------------------- claude
 
-    def claude_attempt(self, mode):
-        result = self.dispatch("--seat", "framer", env=self.env | {"FAKE_CLAUDE_MODE": mode})
-        attempt = next(self.runs.iterdir())
+    def claude_attempt(self, mode, **environment):
+        previous = set(self.runs.iterdir()) if self.runs.exists() else set()
+        result = self.dispatch("--seat", "framer",
+                               env=self.env | {"FAKE_CLAUDE_MODE": mode} | environment)
+        attempt = (set(self.runs.iterdir()) - previous).pop()
         state = dict(line.split("=", 1) for line in
                      (attempt / "state.txt").read_text().splitlines())
         return result, attempt, state
@@ -347,6 +435,113 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(result.returncode, 5)
         self.assertEqual((state["claude_exit"], state["dispatcher_exit"]), ("5", "5"))
         self.assertIn("not json noise", (attempt / "log.txt").read_text())
+
+    def test_claude_signal_exit_uses_shell_status_and_retains_raw_wait(self):
+        result, attempt, state = self.claude_attempt("signal")
+        self.assertEqual(result.returncode, 143, result.stderr)
+        self.assertEqual((state["claude_exit"], state["dispatcher_exit"]), ("-15", "143"))
+        self.assertIn("CLAUDE_EXIT=-15", result.stdout)
+        self.assertIn('"subtype": "success"', (attempt / "log.txt").read_text())
+        self.assertNotIn("DIRECT_CHILD_FINAL_BEGIN=", result.stdout)
+
+    def test_claude_malformed_or_duplicate_results_never_certify_success(self):
+        good = {"type": "result", "subtype": "success", "is_error": False, "result": "available text"}
+        candidates = [
+            {k: v for k, v in good.items() if k != "is_error"},
+            good | {"is_error": None}, good | {"is_error": 0},
+            good | {"is_error": "false"}, good | {"is_error": []},
+            {k: v for k, v in good.items() if k != "subtype"},
+            good | {"subtype": "error_during_execution"},
+            good | {"result": None}, good | {"result": 7}, good | {"result": "  "},
+        ]
+        streams = [[event] for event in candidates] + [
+            [good, good],
+            [good | {"is_error": True, "result": "refused"}, good],
+            [good, good | {"is_error": True, "result": "refused"}],
+        ]
+        for events in streams:
+            with self.subTest(events=events):
+                result, attempt, state = self.claude_attempt(
+                    "success", FAKE_CLAUDE_EVENTS=json.dumps(events))
+                self.assertEqual(result.returncode, 4, result.stderr)
+                self.assertEqual(state["claude_exit"], "0")
+                self.assertEqual(state["semantic_is_error"], "unknown")
+                self.assertIn(state["final_status"], ("missing", "invalid-result"))
+                self.assertNotIn("DIRECT_CHILD_FINAL_BEGIN=", result.stdout)
+                self.assertIn(json.dumps(events[0]), (attempt / "log.txt").read_text())
+                if any(event.get("result") == "available text" for event in events):
+                    self.assertIn("available text", (attempt / "final.md").read_text())
+
+    def test_claude_final_custody_faults_preserve_native_exit_and_raw_stream(self):
+        for fault in ("final-write", "final-read", "final-output"):
+            for mode, native_exit, terminal_exit in (("success", "0", 4),
+                                                     ("success", "5", 5),
+                                                     ("signal", "-15", 143)):
+                with self.subTest(fault=fault, native_exit=native_exit):
+                    result, attempt, state = self.claude_attempt(
+                        mode, CUSTODY_FAULT=fault,
+                        FAKE_CLAUDE_EXIT="5" if native_exit == "5" else "0")
+                    self.assertEqual(result.returncode, terminal_exit, result.stderr)
+                    self.assertEqual(state["claude_exit"], native_exit)
+                    self.assertEqual(state["dispatcher_exit"], str(terminal_exit))
+                    self.assertEqual(state["final_status"], "capture-error")
+                    self.assertEqual(state["custody_status"], "incomplete")
+                    self.assertIn("final_capture_error", state)
+                    self.assertIn("final_capture_error", result.stderr)
+                    self.assertIn(f"CLAUDE_EXIT={native_exit}", result.stdout)
+                    self.assertIn('"type": "result"', result.stdout)
+                    self.assertIn('"type": "result"', (attempt / "log.txt").read_text())
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_claude_unencodable_final_is_incomplete_after_native_wait(self):
+        event = {"type": "result", "subtype": "success", "is_error": False, "result": "\ud800"}
+        result, attempt, state = self.claude_attempt("success", FAKE_CLAUDE_EVENTS=json.dumps([event]))
+        self.assertEqual(result.returncode, 4, result.stderr)
+        self.assertEqual(state["claude_exit"], "0")
+        self.assertEqual(state["final_status"], "capture-error")
+        self.assertIn("final_capture_error", state)
+        self.assertIn("\\ud800", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_claude_unwritable_state_reports_available_terminal_metadata(self):
+        for fault in ("state-append", "state-append,final-write"):
+            for native_exit in ("0", "5"):
+                with self.subTest(fault=fault, native_exit=native_exit):
+                    result, attempt, state = self.claude_attempt(
+                        "success", CUSTODY_FAULT=fault, FAKE_CLAUDE_EXIT=native_exit)
+                    expected = 5 if native_exit == "5" else (4 if "final-write" in fault else 1)
+                    self.assertEqual(result.returncode, expected, result.stderr)
+                    self.assertNotIn("claude_exit", state)
+                    self.assertIn(f"CLAUDE_EXIT={native_exit}", result.stdout)
+                    self.assertIn("CUSTODY_STATUS=incomplete", result.stdout)
+                    self.assertIn("state_capture_error", result.stderr)
+                    self.assertIn('"type": "result"', result.stdout)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_claude_log_failure_keeps_draining_to_result_and_reaps_native_process(self):
+        result, attempt, state = self.claude_attempt(
+            "success", CUSTODY_FAULT="log-write", FAKE_CLAUDE_LARGE_STREAM="1")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual((state["claude_exit"], state["result_event_count"]), ("0", "1"))
+        self.assertEqual((state["log_capture_exit"], state["custody_status"]), ("1", "incomplete"))
+        self.assertIn("drain evidence " * 1000, result.stdout)
+        self.assertIn('"subtype": "success"', result.stdout)
+        self.assertEqual((attempt / "final.md").read_text(), "done: Do the bounded task.\n")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_claude_completion_state_failure_retains_earlier_wait_metadata(self):
+        for native_exit in ("0", "5"):
+            with self.subTest(native_exit=native_exit):
+                result, attempt, state = self.claude_attempt(
+                    "success", CUSTODY_FAULT="state-completion", FAKE_CLAUDE_EXIT=native_exit)
+                self.assertEqual(result.returncode, 1 if native_exit == "0" else 5, result.stderr)
+                self.assertEqual(state["claude_exit"], native_exit)
+                self.assertNotIn("dispatcher_exit", state)
+                self.assertIn(f"CLAUDE_EXIT={native_exit}", result.stdout)
+                self.assertIn("CUSTODY_STATUS=incomplete", result.stdout)
+                self.assertIn("state_capture_error", result.stderr)
+                self.assertIn('"type": "result"', (attempt / "log.txt").read_text())
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_missing_claude_wrapper_refuses_before_attempt(self):
         (self.bin / "claude5").unlink()

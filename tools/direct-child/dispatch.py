@@ -112,9 +112,9 @@ def validate_config(config):
         manual = _strings(provider.get("manual_profiles"), f"providers.{name}.manual_profiles")
         if not set(pool) <= set(manual):
             raise Refusal(f"config: providers.{name}.pool must be within manual_profiles")
-        if name == "codex" and not all(p == ".codex" or re.fullmatch(r"\.codex[0-9]+", p)
-                                       for p in manual):
-            raise Refusal("config: codex profiles must be .codex or .codexN")
+        if name == "codex" and not set(manual) <= {".codex", ".codex2", ".codex3",
+                                                ".codex4", ".codex5"}:
+            raise Refusal("config: codex profiles must be .codex through .codex5 (excluding .codex1)")
         _strings(provider.get("efforts"), f"providers.{name}.efforts")
     routes = _table(config, "routes")
     for name, route in routes.items():
@@ -327,8 +327,8 @@ def run_claude(args, record, command):
                   "expected_status=native terminal exit plus claude_exit entry\n")
     print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
 
-    result_event, log_error, native_rc, launch_error = None, None, None, None
-    stdout = sys.stdout.buffer
+    events, log_error, native_rc, launch_error = [], None, None, None
+    process = None
     try:
         with paths["prompt.md"].open("rb") as stdin, paths["stderr.txt"].open("wb") as err, \
                 paths["log.txt"].open("ab") as log:
@@ -336,66 +336,141 @@ def run_claude(args, record, command):
                                        stderr=err, cwd=args.cwd)
             for line in process.stdout:
                 if log_error is None:
-                    try:
-                        log.write(line)
-                        log.flush()
-                    except OSError as error:
-                        log_error = str(error)
-                try:
-                    stdout.write(line)
-                    stdout.flush()
-                except OSError:
-                    pass
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(event, dict) and event.get("type") == "result":
-                    result_event = event
+                    log_error = capture_line(log, line)
+                capture_line(sys.stdout.buffer, line)
+                event = parse_result(line)
+                if event is not None:
+                    events.append(event)
             native_rc = process.wait()
     except OSError as error:
-        launch_error = str(error)
-    finally:
-        text = result_event.get("result") if result_event else None
-        if isinstance(text, str) and text:
-            paths["final.md"].write_text(text, encoding="utf-8")
-            final_status = "present"
-        else:
-            final_status = "missing"
-        semantic_error = bool(result_event.get("is_error")) if result_event else None
         if native_rc is None:
-            exit_code = 1
-        elif native_rc != 0:
-            exit_code = native_rc
-        elif result_event is None or final_status == "missing":
-            exit_code = 4
-        elif semantic_error:
-            exit_code = 3
+            launch_error = str(error)
         else:
-            exit_code = 0
-        with state.open("a", encoding="utf-8") as out:
-            out.write(f"claude_exit={'none' if native_rc is None else native_rc}\n"
-                      f"log_capture_exit={0 if log_error is None else 1}\n"
-                      + (f"log_capture_error={log_error}\n" if log_error else "")
-                      + (f"launch_error={launch_error}\n" if launch_error else "")
-                      + f"result_event={'present' if result_event else 'missing'}\n"
-                      f"semantic_is_error={'unknown' if semantic_error is None else str(semantic_error).lower()}\n"
-                      f"final_status={final_status}\ndispatcher_exit={exit_code}\n"
-                      f"end_utc={utc_now()}\n")
-    if launch_error:
-        print(f"direct-child: Claude launch failed: {launch_error}", file=sys.stderr)
-    if log_error:
-        print(f"direct-child: log capture failed ({log_error}); log may be incomplete",
-              file=sys.stderr)
-    print(f"DIRECT_CHILD_EXIT={exit_code} CLAUDE_EXIT={native_rc} "
-          f"SEMANTIC_IS_ERROR={str(semantic_error).lower()}")
-    if final_status == "present":
-        print(f"DIRECT_CHILD_FINAL_BEGIN={paths['final.md']}")
-        print(paths["final.md"].read_text(encoding="utf-8"))
-        print("DIRECT_CHILD_FINAL_END")
-    else:
-        print(f"DIRECT_CHILD_FINAL_MISSING_OR_EMPTY={paths['final.md']}")
+            log_error = str(error)
+    finally:
+        # Even a capture failure must not leave an already launched child unreaped.
+        if process is not None:
+            if native_rc is None:
+                native_rc = process.wait()
+            process.stdout.close()
+
+    # Preserve the observed wait status before touching final custody. If state
+    # storage also fails, terminal metadata remains available; it is not durable.
+    state_error = append_state(state, f"claude_exit={'none' if native_rc is None else native_rc}\n")
+    result_valid, semantic_error, result_error = result_semantics(events)
+    text = "\n".join(event["result"] for event in events
+                     if isinstance(event.get("result"), str) and event["result"].strip())
+    final_status, final_error = capture_final(paths["final.md"], text, result_valid and native_rc == 0)
+    custody_error = log_error or state_error or final_error or launch_error
+    exit_code = claude_exit_code(native_rc, semantic_error, result_valid,
+                                 final_status, custody_error)
+    completion = (f"log_capture_exit={0 if log_error is None else 1}\n"
+                  + (f"log_capture_error={log_error}\n" if log_error else "")
+                  + (f"launch_error={launch_error}\n" if launch_error else "")
+                  + (f"state_capture_error={state_error}\n" if state_error else "")
+                  + f"result_event={'present' if events else 'missing'}\n"
+                  f"result_event_count={len(events)}\n"
+                  f"semantic_is_error={'unknown' if semantic_error is None else str(semantic_error).lower()}\n"
+                  + (f"result_error={result_error}\n" if result_error else "")
+                  + f"final_status={final_status}\n"
+                  + (f"final_capture_error={final_error}\n" if final_error else "")
+                  + f"custody_status={'incomplete' if custody_error else 'complete'}\n"
+                  f"dispatcher_exit={exit_code}\nend_utc={utc_now()}\n")
+    completion_error = append_state(state, completion)
+    state_error = state_error or completion_error
+    if completion_error:
+        exit_code = claude_exit_code(native_rc, semantic_error, result_valid,
+                                     final_status, completion_error)
+    for name, error in (("launch_error", launch_error), ("log_capture_error", log_error),
+                        ("final_capture_error", final_error), ("state_capture_error", state_error)):
+        if error:
+            report_claude(f"direct-child: incomplete custody: {name}={error}", sys.stderr)
+    report_claude(f"DIRECT_CHILD_EXIT={exit_code} CLAUDE_EXIT={native_rc} "
+                  f"SEMANTIC_IS_ERROR={'unknown' if semantic_error is None else str(semantic_error).lower()} "
+                  f"FINAL_STATUS={final_status} "
+                  f"CUSTODY_STATUS={'incomplete' if custody_error or state_error else 'complete'}")
+    if final_status == "missing":
+        report_claude(f"DIRECT_CHILD_FINAL_MISSING_OR_EMPTY={paths['final.md']}")
     return exit_code
+
+
+def capture_line(handle, line):
+    try:
+        handle.write(line)
+        handle.flush()
+    except OSError as error:
+        return str(error)
+    return None
+
+
+def parse_result(line):
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return None
+    return event if isinstance(event, dict) and event.get("type") == "result" else None
+
+
+def result_semantics(events):
+    """Only one affirmative native result can establish successful semantics."""
+    if len(events) != 1:
+        return False, None, "missing result" if not events else "multiple result events"
+    event = events[0]
+    if type(event.get("is_error")) is not bool:
+        return False, None, "is_error must be a boolean"
+    if event["is_error"]:
+        return False, True, "result reports an error"
+    if event.get("subtype") != "success":
+        return False, None, "result subtype is not success"
+    if not isinstance(event.get("result"), str) or not event["result"].strip():
+        return False, None, "result text is missing or empty"
+    return True, False, None
+
+
+def append_state(state, text):
+    try:
+        with state.open("a", encoding="utf-8") as out:
+            out.write(text)
+    except (OSError, UnicodeError) as error:
+        return str(error)
+    return None
+
+
+def report_claude(text, stream=None):
+    try:
+        print(text, file=stream or sys.stdout, flush=True)
+    except (OSError, UnicodeError) as error:
+        return str(error)
+    return None
+
+
+def capture_final(path, text, result_valid):
+    if not text:
+        return "missing", None
+    try:
+        path.write_text(text, encoding="utf-8")
+        captured = path.read_text(encoding="utf-8")
+        if captured != text:
+            return "capture-error", "final readback differs from result text"
+    except (OSError, UnicodeError) as error:
+        return "capture-error", str(error)
+    status = "present" if result_valid else "invalid-result"
+    label = "FINAL" if result_valid else "RESULT_TEXT"
+    error = (report_claude(f"DIRECT_CHILD_{label}_BEGIN={path}")
+             or report_claude(captured) or report_claude(f"DIRECT_CHILD_{label}_END"))
+    return ("capture-error", error) if error else (status, None)
+
+
+def claude_exit_code(native_rc, semantic_error, result_valid, final_status, custody_error):
+    if native_rc is None:
+        return 1
+    if native_rc != 0:
+        return 128 - native_rc if native_rc < 0 else native_rc
+    if semantic_error is True:
+        return 3
+    if not result_valid or final_status != "present":
+        return 4
+    return 1 if custody_error else 0
 
 
 def check_paths(args):

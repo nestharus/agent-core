@@ -12,7 +12,8 @@ The first rule that applies decides the route:
 2. **Seat with a fixed route.**
    - `framer` and `decider` use `direction`, whatever their class.
    - `scout` and `explorer` use `explore`.
-3. **Seat with a per-class route.** `maker` and `method-steward` use:
+   - `observer` uses `refine`.
+3. **Seat with a per-class route.** `maker`, `method-steward`, and `investigator` use:
    - `direction` for `new-foundation`;
    - `refine` for `correction`;
    - `direction` for `unknown`. Missing evidence must not certify routine correction.
@@ -46,7 +47,8 @@ Current bindings:
 ## Profiles
 
 - Sol and Luna share one Codex counter. Each real launch takes the next profile under an exclusive `flock`, so allocation is atomic and cycles evenly. The counter lives at `~/.local/state/direct-child/codex.counter`.
-- Allocation happens before the MCP preflight, so a refused launch still uses its turn.
+- Configured Codex profiles must be `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`; unsupported names are refused before dry-run or allocation.
+- Allocation happens before the MCP preflight, so a refused preflight still uses its turn.
 - Rotation spreads starts across accounts. It does not prevent concurrent calls on one account, and it knows nothing about rate limits.
 - To pick a profile yourself, pass `--profile` with `--override-reason`. Explicit profiles never advance the counter. `.codex2` and `.codex5` are manual-only.
 - Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`.
@@ -96,15 +98,16 @@ The attempt directory holds:
 - `prompt.md`, read-only;
 - `log.txt`, every stream event, written live;
 - `stderr.txt`;
-- `final.md`, the `result` text from the actual result event;
+- `final.md`, available result text (invalid or ambiguous results remain diagnostic text);
 - `route.json`;
-- `state.txt`, which records the native command, `claude_exit`, `result_event`, `semantic_is_error`, `final_status`, `log_capture_exit` (plus the error on failure), and `dispatcher_exit`.
+- `state.txt`, which records the native command, raw `claude_exit`, result count and semantics, final/custody status, capture errors, and `dispatcher_exit`. The awaited native status is appended before final capture. Available raw stdout continues to the terminal even when log storage fails.
 
 Claude exit codes:
 
-- A nonzero native exit is returned as-is.
-- If the native exit is 0, the result is **3** when the result event reports `is_error`, and **4** when the result event or its text is missing.
-- A missing final stays missing and is never read as success.
+- A nonzero native exit is propagated; a signal wait status `-SIG` becomes terminal status `128+SIG`, with the raw status retained.
+- Success requires native exit 0, exactly one result event, boolean `is_error=false`, subtype `success`, and nonempty text with usable final capture. Missing, malformed, or multiple results remain unknown/failure; available text is preserved without a valid-final marker.
+- Native exit 0 returns **3** for an unambiguous boolean error, **4** for missing/invalid results or failed final capture, and **1** for other incomplete custody.
+- Final write/read/output or encoding errors report `final_capture_error` and `final_status=capture-error`. State errors report `state_capture_error` to the terminal. Failed storage cannot guarantee durable metadata: available terminal metadata preserves the observed native status, while custody is explicitly incomplete.
 
 **Every attempt** has a `route.json` recording:
 
