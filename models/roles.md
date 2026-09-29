@@ -13,7 +13,7 @@ Do not restate the matrix there.
 
 ## Precedence during the agent-runner outage
 
-For direct launches, context decides the model. Use the [contextual direct dispatcher](../tools/direct-child/README.md). Its [`routes.toml`](../tools/direct-child/routes.toml) resolves a route from the seat, the evidenced class, or an explicit override. For those launches, this supersedes the matrix below and operator frontmatter, until Runner and `agents` adopt provider-neutral routes. Inside `agents`, frontmatter still selects the model.
+For direct launches, context decides the model. Use the [contextual direct dispatcher](../tools/direct-child/README.md), applying its [existing method binding before briefing corrective Act](../tools/direct-child/README.md#before-briefing-corrective-act). Its [`routes.toml`](../tools/direct-child/routes.toml) resolves a route from the seat, the evidenced class, or an explicit override. For those launches, this supersedes the matrix below and operator frontmatter, until Runner and `agents` adopt provider-neutral routes. Inside `agents`, frontmatter still selects the model.
 
 - An alias such as `gpt-xhigh` passed explicitly keeps its literal effort.
 - Do not rewrite existing `gpt-xhigh` or `gpt-high` assignments wholesale.

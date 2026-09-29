@@ -4,6 +4,14 @@
 
 It does not decide seat authority or context boundaries, and it does not check that a class claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
 
+## Before briefing corrective Act
+
+At this consumer dispatch point, root applies the existing [separation of contexts](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/agents/README.md#separation-of-contexts) and [return routing](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/agents/README.md#the-loop): negative returns and returns bearing beyond their question go through actual independent Frame, then authorized Decide, before becoming corrective Act targets. Root's own source observations enter that Frame as evidence; root does not orient from its own looks to set class or scope. [Finding integration](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/core/DISCOVERY.md#integrating-a-finding) and [ownership](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/core/KERNEL.md#ownership) remain with their existing seats.
+
+Every corrective Act brief cites the actual Frame return integrating the observations it acts on and the current authorized Decision, carrying target, why and freedom in means. Each class, scope and direction item traces to that Frame or recorded Decide, never solely to root's own look. A located-correction class selects the model; it supplies neither readiness nor permission to skip Frame. Flags, native route records and root-authored notes do not establish actual framing; its witness is the return under the existing [guarantee chain](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/core/KERNEL.md#the-guarantee-chain).
+
+This binds the existing method at briefing within the [shared selected method and delivery lifecycle](../../AGENTS.md#selected-reasoning-and-change-support); it adds no runtime enforcement or replacement review procedure.
+
 ## Resolution
 
 The first rule that applies decides the route:
@@ -65,7 +73,7 @@ Current bindings:
 Other forms:
 
 - `--seat scout` for a Luna explorer.
-- `--seat maker --class correction --basis /abs/review.md#F3` for a Sol refinement.
+- `--seat maker --class correction --basis /abs/frame-return.md#F3` for a Sol refinement under the cited Frame and current Decision in its brief.
 - `--model gpt-xhigh --override-reason 'CRW contract names gpt-xhigh'` for a literal alias.
 
 Add `--dry-run` to print:
