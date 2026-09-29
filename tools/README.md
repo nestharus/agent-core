@@ -14,6 +14,7 @@ Per `~/ai/VALUES.md` § Small specialized tools form an ecosystem, this director
 
 ## Current tools
 
+- `direct-child/` — temporary contextual direct dispatcher: resolves provider/model/effort/profile from seat and evidenced class via one route config, rotates the Codex pool atomically, and runs one foreground Codex (through `direct-codex-child`) or `claude5` child with recorded resolution. See [`direct-child/README.md`](direct-child/README.md).
 - `direct-codex-child/` — temporary one-child foreground Codex launcher for the agent-runner outage, with exact profile selection, MCP disable preflight, private attempt artifacts, native-terminal collection, and a dry run. See [`direct-codex-child/README.md`](direct-codex-child/README.md).
 
 - `mutable-workflow/` — local sequential execution with live graph/policy surgery, attempt-bound late results and explicit cancellation, plus an optional on-demand runner judgment adapter. **Status: local engine and fake-provider-tested adapter; see `mutable-workflow/README.md` and `mutable-workflow/agent-adapter.md` for contracts, effect bounds and recovery limits. No live-provider qualification.**

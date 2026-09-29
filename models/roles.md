@@ -11,6 +11,14 @@ Do not restate the matrix there.
 - **`gpt-medium`** is the fast automation route for bounded, structured operator loops.
 - Legacy provider-specific model ids are deprecated for shared routing. Do not add new provider-specific assignments to operational docs; update the operator frontmatter and this matrix instead.
 
+## Precedence during the agent-runner outage
+
+For direct launches, context decides the model. Use the [contextual direct dispatcher](../tools/direct-child/README.md). Its [`routes.toml`](../tools/direct-child/routes.toml) resolves a route from the seat, the evidenced class, or an explicit override. For those launches, this supersedes the matrix below and operator frontmatter, until Runner and `agents` adopt provider-neutral routes. Inside `agents`, frontmatter still selects the model.
+
+- An alias such as `gpt-xhigh` passed explicitly keeps its literal effort.
+- Do not rewrite existing `gpt-xhigh` or `gpt-high` assignments wholesale.
+- The CRW exception below is a separate contract and is not migrated.
+
 ## Code Review Workflows observation roles
 
 For CRW ordinary observation, its current authoritative semantic contract is the narrower exception to the generic matrix and research split below: every reviewer, investigative coordinator, cross-examiner and definition reviewer requests opaque `gpt-xhigh`. Do not lower the route for an easy invocation or use a ticket-operation alias for review. Do not resolve or attest provider/model/effort settings. This does not change ticket/operational worker routes or make legacy review gates the default shared delivery workflow.
