@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contextual direct dispatcher: resolve a route from seat and class, then run
+"""Contextual direct dispatcher: resolve a route from seat, class and kind, then run
 one native Codex or Claude child in the foreground. See README.md."""
 
 import argparse
@@ -49,7 +49,7 @@ def parse_args(argv):
         description="Resolve a contextual route and run one foreground native child.")
     for flag in ("--cwd", "--prompt", "--runs-dir", "--id"):
         parser.add_argument(flag, action=Once, required=True)
-    for flag in ("--seat", "--class", "--basis", "--pass", "--route", "--model",
+    for flag in ("--seat", "--class", "--basis", "--kind", "--pass", "--route", "--model",
                  "--provider", "--effort", "--profile", "--override-reason", "--config"):
         parser.add_argument(flag, action=Once)
     parser.add_argument("--dry-run", action="store_true")
@@ -142,6 +142,21 @@ def validate_config(config):
                 raise Refusal(f"config: seats.{name}.by_class must cover exactly the classes")
             if not all(route in routes for route in by_class.values()):
                 raise Refusal(f"config: seats.{name}.by_class names an unconfigured route")
+    kinds = config.get("kinds", {})
+    if not isinstance(kinds, dict):
+        raise Refusal("config: [kinds] must be a table")
+    for name, entry in kinds.items():
+        if not isinstance(entry, dict) or not NAME.fullmatch(name):
+            raise Refusal(f"config: kinds.{name} must be a named table")
+        if set(entry) - {"route", "seats"} or ("route" in entry) != ("seats" in entry):
+            raise Refusal(f"config: kinds.{name} takes route and seats together, or neither")
+        if "route" in entry:
+            if entry["route"] not in routes:
+                raise Refusal(f"config: kinds.{name}.route is not a configured route")
+            if (not isinstance(entry["seats"], list)
+                    or not all(seat in config["seats"] for seat in entry["seats"])
+                    or len(set(entry["seats"])) != len(entry["seats"])):
+                raise Refusal(f"config: kinds.{name}.seats must list distinct configured seats")
     if _table(config, "legacy").get("route") not in routes:
         raise Refusal("config: legacy.route is not a configured route")
 
@@ -149,8 +164,10 @@ def validate_config(config):
 # ------------------------------------------------------------ resolution
 
 def resolve(config, args):
-    """Explicit route/model, else seat, else class, else legacy default."""
+    """Explicit route/model, else routed kind, else seat, else class, else legacy
+    default. A routed kind refuses any result other than its own route's binding."""
     classes, seats, routes = config["classes"], config["seats"], config["routes"]
+    kinds = config.get("kinds", {})
     klass = getattr(args, "class")
     if klass is None and args.basis is not None:
         raise Refusal("--basis needs --class")
@@ -164,6 +181,12 @@ def resolve(config, args):
         raise Refusal(f"unknown seat {args.seat!r}; configured: {', '.join(seats)}")
     if args.pass_ is not None and args.pass_ not in PASSES[:2]:
         raise Refusal("--pass must be generative or corrective")
+    if args.kind is not None and args.kind not in kinds:
+        raise Refusal(f"unknown kind {args.kind!r}; configured: {', '.join(kinds) or 'none'}")
+    kind_route = kinds.get(args.kind, {}).get("route")
+    if kind_route is not None and args.seat is not None and args.seat not in kinds[args.kind]["seats"]:
+        raise Refusal(f"--kind {args.kind} does not route seat {args.seat!r}; it routes "
+                      f"{', '.join(kinds[args.kind]['seats'])} and launches with no seat")
 
     overrides = [flag for flag, value in (("--route", args.route), ("--model", args.model),
                                           ("--provider", args.provider), ("--effort", args.effort),
@@ -184,6 +207,9 @@ def resolve(config, args):
         route_name, rule = args.route, "explicit-route"
     elif args.model is not None:
         rule = "explicit-model"
+    elif kind_route is not None:
+        route_name = kind_route
+        rule = f"seat-kind:{args.seat}/{args.kind}" if args.seat else f"kind:{args.kind}"
     elif args.seat is not None and "route" in seats[args.seat]:
         route_name, rule = seats[args.seat]["route"], f"seat:{args.seat}"
     elif args.seat is not None:
@@ -214,11 +240,20 @@ def resolve(config, args):
         raise Refusal(f"effort {effort!r} is not a configured {provider} effort")
     if args.profile is not None and args.profile not in config["providers"][provider]["manual_profiles"]:
         raise Refusal(f"profile {args.profile!r} is not a {provider} profile")
+    if kind_route is not None:
+        want = routes[kind_route]
+        if (provider, binding["model"], effort) != (want["provider"], want["model"], want["effort"]):
+            raise Refusal(f"--kind {args.kind} requires {want['provider']} / {want['model']} / "
+                          f"{want['effort']} (route {kind_route}); {', '.join(overrides)} resolves to "
+                          f"{provider} / {binding['model']} / {effort}. Change routes.toml, "
+                          "not the launch")
 
     return {
         "schema": "direct-child-route/1",
         "seat": args.seat, "class": klass, "class_source": class_source,
         "basis": args.basis, "pass": args.pass_ or "unspecified",
+        "kind": args.kind or "unstated",
+        "kind_source": "supplied" if args.kind is not None else "not supplied",
         "rule": rule, "route": route_name, "model_alias": model_alias,
         "provider": provider, "model": binding["model"], "effort": effort,
         "overrides": overrides, "override_reason": args.override_reason,
@@ -316,7 +351,8 @@ def run_claude(args, record, command):
     with state.open("w", encoding="utf-8") as out:
         out.write(f"child_id={args.id}\nprovider=claude\nprofile={record['profile']}\n"
                   f"model={record['model']}\neffort={record['effort']}\n"
-                  f"seat={record['seat']}\nclass={record['class']}\nrule={record['rule']}\n"
+                  f"seat={record['seat']}\nclass={record['class']}\nkind={record['kind']}\n"
+                  f"rule={record['rule']}\n"
                   f"route_record={paths['route.json']}\ncwd={args.cwd}\n"
                   f"git_branch={git('branch', '--show-current')}\n"
                   f"git_head_at_start={git('rev-parse', 'HEAD')}\n"

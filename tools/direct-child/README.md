@@ -1,8 +1,8 @@
 # Contextual direct dispatcher (temporary outage transport)
 
-`dispatch.py` picks a route for **one** child from its run context, then runs a native Codex or Claude session in the foreground. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
+`dispatch.py` picks a route for **one** child from its run context, then runs a native Codex or Claude session in the foreground. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
 
-It does not decide seat authority or context boundaries, and it does not check that a class claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
+It does not decide seat authority or context boundaries, and it does not check that a class or kind claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
 
 ## Observe, Frame, Decide and Act
 
@@ -35,20 +35,21 @@ For the `context-routing-20260929` minimal prose/entry closure, the [actual Deci
 
 The first rule that applies decides the route:
 
-1. **Explicit override.** `--route NAME`, or `--model ALIAS|NATIVE_ID`, wins. A native ID also needs `--provider` and `--effort`. `--effort` may override the effort of any resolved route. Every override, including `--profile`, requires `--override-reason`, and the reason is recorded.
-2. **Seat with a fixed route.**
+1. **Explicit override.** `--route NAME`, or `--model ALIAS|NATIVE_ID`, wins. A native ID also needs `--provider` and `--effort`. `--effort` may override the effort of any resolved route. Every override, including `--profile`, requires `--override-reason`, and the reason is recorded. Under `--kind creative`, an override that resolves to anything but `claude-opus-5-5` at `high` is refused (see [Kind](#kind)).
+2. **Creative kind.** `--kind creative` on `maker`, `investigator` or `method-steward`, or with no seat, uses `create`, whatever the class.
+3. **Seat with a fixed route.**
    - `framer` and `decider` use `direction`, whatever their class.
    - `scout` and `explorer` use `explore`.
    - `observer` uses `refine`.
-3. **Seat with a per-class route.** `maker`, `method-steward`, and `investigator` use:
+4. **Seat with a per-class route.** `maker`, `method-steward`, and `investigator` use:
    - `direction` for `new-foundation`;
    - `refine` for `correction`;
    - `direction` for `unknown`. Missing evidence must not certify routine correction.
-4. **Class alone.**
+5. **Class alone.**
    - `new-foundation` uses `direction`.
    - `correction` uses `refine`.
    - `unknown` uses `default`.
-5. **Plain legacy invocation** (no seat, no class) uses `default`, and records the class as `unknown`.
+6. **Plain legacy invocation** (no seat, no class) uses `default`, and records the class as `unknown`.
 
 Rules for class:
 
@@ -66,10 +67,31 @@ Current bindings:
 | `refine` | Codex | `gpt-6.1-sol`, `high` | round-robin over `.codex2`, `.codex3`, `.codex4`, `.codex5` |
 | `explore` | Codex | `gpt-6-luna`, `max` | round-robin over `.codex2`, `.codex3`, `.codex4`, `.codex5` |
 | `direction` | Claude | `claude-opus-5-5`, `medium` | `claude5` wrapper only |
+| `create` | Claude | `claude-opus-5-5`, `high` | `claude5` wrapper only |
 
 **Moving `refine` to Sonnet** later is one edit: set its binding in `routes.toml` to `claude` / `claude-sonnet-5-5` / `high`.
 
 **Model aliases.** `gpt` resolves to Sol 6.1 at `high`. `gpt-medium`, `gpt-high`, and `gpt-xhigh` keep their literal effort. The provider-neutral default is the `default` route, not the Codex `gpt` alias.
+
+### Kind
+
+The person's standing rule for Acts, including corrections: **if the result is non-text OR the work is artistic, declare `--kind creative` and use Opus 5.5 at high effort through `claude5`; work that is SCIENTIFIC AND TEXTUAL may stay on Sol.** Scientific charts and plots are creative under the non-text rule. A text file extension does not make artistic writing, UI rendering, CSS or SVG work technical; UI state and logic corrections and technical documentation are technical.
+
+Their reason is that Sol does not create or act as well as Opus in creative domains. That is the person's preference and our basis, not a measured result, and routing establishes nothing about quality. The two kind boundaries are:
+
+- **Creative:** anything artistic, or whose result is not text. UI/UX and visual design; the code that defines how a UI looks and renders (layout, styling, markup appearance, rendering code); SVG and other graphics; sound design; artistic writing. Code and text are creative when what they make is the look, the sound or the art.
+- **Technical:** work that is both scientific and textual, where correctness is the judgement. Math, science, engineering, code correctness, technical writing, and UI state management, data and logic.
+
+Not all writing is creative and not all UI work is technical: a UI state bug or a technical document correction is technical, and prose written as art is creative.
+
+The caller owns the claim, as it owns class. The dispatcher never infers kind from prompt text or file extension.
+
+- Pass `--kind creative` for **any** Act that includes creative work. No evidence basis is required. Omitting it for creative work violates the person's rule. The dispatcher does not catch the omission: an undeclared launch still resolves by seat and class and may launch Sol.
+- **Mixed work** (a creative part and a technical part) is declared creative, and the whole Act goes to Opus 5.5 high in one context. Where the parts separate cleanly, the caller may instead launch a technical Act and a separate creative Act. Splitting is optional, never required.
+- `--kind technical` is recorded and routes exactly as a launch with no kind.
+- With no `--kind`, the route is exactly today's, and the record says `kind: "unstated"`, not technical.
+- `--kind creative` routes the Act seats `maker`, `investigator` and `method-steward`, and launches with no seat, to `create`. On `framer`, `decider`, `observer`, `scout` and `explorer` it is **refused**: those seats look rather than make, and keep their routes.
+- An override under `--kind creative` that resolves to any other provider, model or effort is **refused**, whatever the reason. Overrides that keep `claude` / `claude-opus-5-5` / `high` (for example `--profile claude5` or `--effort high`) stay allowed with their reason. To change where creative work goes, change `[kinds.creative]` or `routes.create` in `routes.toml`.
 
 ## Profiles
 
@@ -93,6 +115,7 @@ Other forms:
 
 - `--seat scout` for a Luna explorer.
 - `--seat maker --class correction --basis /abs/frame-return.md#F3` for a Sol refinement under the cited Frame and current Decision in its brief.
+- `--seat maker --class correction --basis /abs/frame-return.md#F4 --kind creative` for a correction to a UI's look, which goes to Opus 5.5 high.
 - `--model gpt-xhigh --override-reason 'CRW contract names gpt-xhigh'` for a literal alias.
 
 Add `--dry-run` to print:
@@ -140,6 +163,7 @@ Claude exit codes:
 
 - the config path and its sha256;
 - seat, class, class source, basis, and pass;
+- kind and kind source (`unstated` / `not supplied` when no kind was given);
 - the rule that fired and the route or alias;
 - provider, model, and effort;
 - overrides and their reason;
@@ -150,7 +174,7 @@ Launch through a native persistent terminal, and record the terminal handle in t
 ## Limits
 
 - **No health checks or recovery.** There is no health check, provider fallback, queue, scheduler, or Claude rotation. There is also no check that a native CLI version supports a flag. The Claude `--effort` values were read from the installed `claude --help`.
-- **Routing is not validation.** Deterministic routing tests do not show that a class was right or that a model was effective. Records exist for a later benchmark.
+- **Routing is not validation.** Deterministic routing tests do not show that a class or kind was right or that a model was effective. Records exist for a later benchmark.
 - **Not yet in Runner.** This is not Runner or `agents` integration. Frontmatter still selects models inside `agents`.
 - **CRW is unchanged.** Its opaque `gpt-xhigh` contract stays as it is; see [`models/roles.md`](../../models/roles.md).
 - **Outcome is the caller's to judge.** Process custody proves that the process completed. It does not prove the task was done.

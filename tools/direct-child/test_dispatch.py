@@ -196,6 +196,111 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(self.resolved("--seat", "investigator")["route"], "direction")
         self.assert_no_effects()
 
+    def test_creative_kind_takes_opus_high_for_every_class_act_seat_and_seatless(self):
+        classes = (("--class", "new-foundation", "--basis", "decision.md#1"),
+                   ("--class", "correction", "--basis", "frame.md#F2"),
+                   ("--class", "unknown"), ())
+        for seat in ("maker", "investigator", "method-steward", None):
+            for klass in classes:
+                seat_args = ("--seat", seat) if seat else ()
+                with self.subTest(seat=seat, klass=klass):
+                    record = self.resolved(*seat_args, *klass, "--kind", "creative")
+                    self.assertEqual((record["route"], record["provider"], record["model"],
+                                      record["effort"], record["profile"]),
+                                     ("create", "claude", "claude-opus-5-5", "high", "claude5"))
+                    self.assertEqual((record["kind"], record["kind_source"], record["rule"]),
+                                     ("creative", "supplied",
+                                      f"seat-kind:{seat}/creative" if seat else "kind:creative"))
+                    self.assertEqual(record["overrides"], [])
+        self.assert_no_effects()
+
+    def test_technical_and_unstated_kind_keep_current_bindings(self):
+        cases = [(), ("--seat", "framer"), ("--seat", "decider"), ("--seat", "observer"),
+                 ("--seat", "scout"), ("--seat", "explorer"), ("--class", "unknown"),
+                 ("--class", "correction", "--basis", "b"), ("--class", "new-foundation", "--basis", "b")]
+        for seat in ("maker", "investigator", "method-steward"):
+            cases += [("--seat", seat), ("--seat", seat, "--class", "correction", "--basis", "b"),
+                      ("--seat", seat, "--class", "new-foundation", "--basis", "b")]
+        fields = ("rule", "route", "provider", "model", "effort", "class", "class_source")
+        for extra in cases:
+            with self.subTest(extra=extra):
+                unstated = self.resolved(*extra)
+                technical = self.resolved(*extra, "--kind", "technical")
+                self.assertEqual([unstated[f] for f in fields], [technical[f] for f in fields])
+                self.assertEqual((unstated["kind"], unstated["kind_source"]), ("unstated", "not supplied"))
+                self.assertEqual((technical["kind"], technical["kind_source"]), ("technical", "supplied"))
+        self.assertEqual(self.resolved("--seat", "maker", "--class", "correction", "--basis", "b",
+                                       "--kind", "technical")["model"], "gpt-6.1-sol")
+        self.assert_no_effects()
+
+    def test_creative_kind_refused_on_look_seats(self):
+        for seat in ("framer", "decider", "observer", "scout", "explorer"):
+            with self.subTest(seat=seat):
+                result = self.dispatch("--dry-run", "--seat", seat, "--kind", "creative")
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(f"does not route seat '{seat}'", result.stderr)
+                self.assertNotIn("DRY RUN", result.stdout)
+        self.assert_no_effects()
+
+    def test_creative_kind_refuses_overrides_that_leave_opus_high(self):
+        reason = ("--override-reason", "caller wants something else")
+        for extra in (("--route", "refine"), ("--route", "direction"), ("--route", "default"),
+                      ("--model", "gpt-xhigh"), ("--model", "gpt"),
+                      ("--model", "claude-sonnet-5-5", "--provider", "claude", "--effort", "high"),
+                      ("--model", "claude-opus-5-5", "--provider", "claude", "--effort", "xhigh"),
+                      ("--model", "gpt-6.1-sol", "--provider", "codex", "--effort", "high"),
+                      ("--effort", "medium"), ("--effort", "max"),
+                      ("--profile", ".codex2")):
+            for seat in (("--seat", "maker"), ()):
+                with self.subTest(extra=extra, seat=seat):
+                    for dry in (("--dry-run",), ()):
+                        result = self.dispatch(*dry, *seat, "--kind", "creative", *extra, *reason)
+                        self.assertEqual(result.returncode, 2, result.stdout)
+                        self.assertNotIn("DRY RUN", result.stdout)
+                        if extra[0] != "--profile":
+                            self.assertIn("--kind creative requires claude / claude-opus-5-5 / high",
+                                          result.stderr)
+        self.assert_no_effects()
+        for extra in (("--route", "create"), ("--effort", "high"), ("--profile", "claude5"),
+                      ("--model", "claude-opus-5-5", "--provider", "claude", "--effort", "high"),
+                      ("--route", "direction", "--effort", "high")):
+            with self.subTest(kept=extra):
+                record = self.resolved("--seat", "maker", "--kind", "creative", *extra, *reason)
+                self.assertEqual((record["provider"], record["model"], record["effort"],
+                                  record["kind"], record["override_reason"]),
+                                 ("claude", "claude-opus-5-5", "high", "creative", reason[1]))
+
+    def test_legacy_aliases_and_crw_gpt_xhigh_unchanged_without_creative(self):
+        reason = ("--override-reason", "CRW contract names gpt-xhigh")
+        for kind in ((), ("--kind", "technical")):
+            with self.subTest(kind=kind):
+                record = self.resolved("--model", "gpt-xhigh", *kind, *reason)
+                self.assertEqual((record["provider"], record["model"], record["effort"],
+                                  record["model_alias"], record["rule"]),
+                                 ("codex", "gpt-6.1-sol", "xhigh", "gpt-xhigh", "explicit-model"))
+        self.assert_no_effects()
+
+    def test_unknown_kind_and_malformed_kind_config_refused(self):
+        result = self.dispatch("--kind", "artistic")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unknown kind 'artistic'", result.stderr)
+        result = self.dispatch("--kind", "creative", "--kind", "technical")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("duplicate --kind", result.stderr)
+        base = CONFIG.read_text(encoding="utf-8")
+        for name, text in {
+                "unknown route": base.replace('route = "create"\nseats', 'route = "nowhere"\nseats'),
+                "unknown seat": base.replace('seats = ["maker",', 'seats = ["painter", "maker",'),
+                "route without seats": base.replace('\nseats = ["maker", "investigator", "method-steward"]', ''),
+                "unexpected key": base.replace('[kinds.technical]\n', '[kinds.technical]\nroute_hint = "x"\n'),
+        }.items():
+            with self.subTest(name=name):
+                self.assertNotEqual(text, base)
+                result = self.dispatch("--config", self.write_config(text), "--dry-run")
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn("config: kinds.", result.stderr)
+        self.assert_no_effects()
+
     def test_unsupported_configured_profile_refused_before_dry_run_or_allocation(self):
         base = CONFIG.read_text(encoding="utf-8")
         for profile in (".codex1", ".codex6", ".codex99"):
@@ -425,6 +530,31 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(json.loads((attempt / "route.json").read_text())["model"], "claude-opus-5-5")
         self.assertIn("DIRECT_CHILD_FINAL_BEGIN=", result.stdout)
         self.assertEqual(oct((attempt / "prompt.md").stat().st_mode & 0o777), "0o400")
+
+    def test_creative_launch_carries_effort_high_to_claude5_and_records_kind(self):
+        for extra in (("--seat", "maker", "--class", "correction", "--basis", "frame.md#F1"), ()):
+            with self.subTest(extra=extra):
+                previous = set(self.runs.iterdir()) if self.runs.exists() else set()
+                result = self.dispatch(*extra, "--kind", "creative")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                attempt = (set(self.runs.iterdir()) - previous).pop()
+                call = self.calls_readback()[-1]
+                self.assertEqual(call["tool"], "claude5")
+                self.assertEqual(call["args"][:5], ["-p", "--model", "claude-opus-5-5", "--effort", "high"])
+                record = json.loads((attempt / "route.json").read_text())
+                self.assertEqual((record["kind"], record["kind_source"], record["route"], record["effort"]),
+                                 ("creative", "supplied", "create", "high"))
+                state = (attempt / "state.txt").read_text()
+                self.assertIn("model=claude-opus-5-5\neffort=high\n", state)
+                self.assertIn("kind=creative\n", state)
+        self.assertFalse(self.state_dir.exists())
+
+    def test_technical_codex_route_json_records_unstated_kind(self):
+        result = self.dispatch("--seat", "observer")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = json.loads((next(self.runs.iterdir()) / "route.json").read_text())
+        self.assertEqual((record["kind"], record["kind_source"], record["model"], record["effort"]),
+                         ("unstated", "not supplied", "gpt-6.1-sol", "high"))
 
     def test_claude_semantic_error_with_zero_exit_is_not_success(self):
         result, attempt, state = self.claude_attempt("error")
