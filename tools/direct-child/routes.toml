@@ -44,6 +44,11 @@ provider = "codex"
 model = "gpt-6-luna"
 effort = "max"
 
+[routes.create]
+provider = "claude"
+model = "claude-opus-5-5"
+effort = "high"
+
 # Classes are supplied by the caller. requires_basis rejects a class claim
 # without an evidence reference. The route applies when no seat rule decides.
 [classes.new-foundation]
@@ -88,6 +93,18 @@ unknown = "direction"
 new-foundation = "direction"
 correction = "refine"
 unknown = "direction"
+
+# Kinds are the caller's claim about the work (see README.md, Kind), never
+# inferred from prompt text or file extension. A kind with a route takes that
+# route for its listed seats and for launches with no seat, whatever the
+# class; an override that resolves anywhere else is refused, and so is the
+# kind on any other seat. A kind without a route is recorded only. Changing
+# where creative work goes is an edit here, not a per-launch override.
+[kinds.creative]
+route = "create"
+seats = ["maker", "investigator", "method-steward"]
+
+[kinds.technical]
 
 # A plain invocation with no seat and no class.
 [legacy]
