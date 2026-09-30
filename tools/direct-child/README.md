@@ -75,9 +75,9 @@ Current bindings:
 
 ### Kind
 
-The person's standing rule: **creative work goes to Opus 5.5 at high effort, and Sol does not do it.** Their reason is that Sol does not create or act as well as Opus in those domains. That is the person's preference and our basis, not a measured result, and routing establishes nothing about quality.
+The person's standing rule for Acts, including corrections: **if the result is non-text OR the work is artistic, declare `--kind creative` and use Opus 5.5 at high effort through `claude5`; work that is SCIENTIFIC AND TEXTUAL may stay on Sol.** Scientific charts and plots are creative under the non-text rule. A text file extension does not make artistic writing, UI rendering, CSS or SVG work technical; UI state and logic corrections and technical documentation are technical.
 
-What decides the kind is the judgement the output needs, not its format or file extension:
+Their reason is that Sol does not create or act as well as Opus in creative domains. That is the person's preference and our basis, not a measured result, and routing establishes nothing about quality. The two kind boundaries are:
 
 - **Creative:** anything artistic, or whose result is not text. UI/UX and visual design; the code that defines how a UI looks and renders (layout, styling, markup appearance, rendering code); SVG and other graphics; sound design; artistic writing. Code and text are creative when what they make is the look, the sound or the art.
 - **Technical:** work that is both scientific and textual, where correctness is the judgement. Math, science, engineering, code correctness, technical writing, and UI state management, data and logic.
@@ -86,7 +86,7 @@ Not all writing is creative and not all UI work is technical: a UI state bug or 
 
 The caller owns the claim, as it owns class. The dispatcher never infers kind from prompt text or file extension.
 
-- Pass `--kind creative` for **any** Act that includes creative work. No evidence basis is required. Omitting it for creative work is a caller error, not a route to Sol.
+- Pass `--kind creative` for **any** Act that includes creative work. No evidence basis is required. Omitting it for creative work violates the person's rule. The dispatcher does not catch the omission: an undeclared launch still resolves by seat and class and may launch Sol.
 - **Mixed work** (a creative part and a technical part) is declared creative, and the whole Act goes to Opus 5.5 high in one context. Where the parts separate cleanly, the caller may instead launch a technical Act and a separate creative Act. Splitting is optional, never required.
 - `--kind technical` is recorded and routes exactly as a launch with no kind.
 - With no `--kind`, the route is exactly today's, and the record says `kind: "unstated"`, not technical.
