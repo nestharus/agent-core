@@ -48,6 +48,9 @@ if args[-2:] == ["features", "list"]:
     disabling = any(arg.startswith("features.") and arg.endswith("=false") for arg in args)
     if os.environ.get("FAKE_FEATURES_FAIL") or (disabling and os.environ.get("FAKE_READBACK_FAIL")):
         sys.exit(1)
+    if disabling and "FAKE_READBACK_TEXT" in os.environ:
+        print(os.environ["FAKE_READBACK_TEXT"])
+        sys.exit(0)
     for item in filter(None, os.environ.get("FAKE_FEATURES", DEFAULT_FEATURES).split(",")):
         name, stage, state = item.split(":")
         if f"features.{name}=false" in args and name != os.environ.get("FAKE_STUCK"):
@@ -269,23 +272,27 @@ class LauncherTest(unittest.TestCase):
     def state(self):
         return next(self.runs.iterdir()).joinpath("state.txt").read_text()
 
-    def test_listed_delegation_features_are_withheld_and_recorded(self):
+    def test_feature_readback_does_not_claim_model_facing_absence(self):
         result = self.run_launcher(".codex3")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("DELEGATION_CAPABILITY=withheld", result.stdout)
+        self.assertIn("DELEGATION_CAPABILITY=not-established", result.stdout)
         args = self.exec_args()
         for name in ("multi_agent", "multi_agent_v2", "agent_message_board", "collaboration_modes"):
             self.assertIn(f"features.{name}=false", args)
         self.assertNotIn("features.goals=false", args)
         self.assertNotIn("--disable", args)
         state = self.state()
-        self.assertIn("delegation_capability=withheld\n", state)
+        self.assertIn("delegation_capability=not-established\n", state)
+        self.assertIn("delegation_feature_readback=all-listed-false\n", state)
+        self.assertIn("model-facing delegation capability not established", state)
+        self.assertIn("delegation_features_listed=", state)
+        self.assertIn("delegation_restriction_args=-c features.", state)
         self.assertIn("delegation_features=agent_message_board=false,collaboration_modes=false,"
                       "multi_agent=false,multi_agent_v2=false\n", state)
         self.assertIn("delegation_scope=", state)
         self.assertIn("log_collab_lines=0\n", state)
 
-    def test_renamed_delegation_feature_is_withheld_without_a_version_check(self):
+    def test_renamed_feature_restriction_is_requested_without_a_version_check(self):
         env = self.env.copy()
         env["FAKE_FEATURES"] = "multi_agent_v3:stable:true,subagents:experimental:true,goals:stable:true"
         result = self.run_launcher(env=env)
@@ -294,7 +301,8 @@ class LauncherTest(unittest.TestCase):
         self.assertIn("features.multi_agent_v3=false", args)
         self.assertIn("features.subagents=false", args)
         self.assertNotIn("features.multi_agent=false", args)
-        self.assertIn("delegation_capability=withheld\n", self.state())
+        self.assertIn("delegation_capability=not-established\n", self.state())
+        self.assertIn("delegation_feature_readback=all-listed-false\n", self.state())
 
     def test_unestablished_capability_still_launches_once_and_says_so(self):
         cases = (
@@ -302,7 +310,7 @@ class LauncherTest(unittest.TestCase):
             ("FAKE_READBACK_FAIL", "1",
              "feature readback with disable flags failed; flags not passed", False),
             ("FAKE_STUCK", "multi_agent",
-             "listed delegation feature still enabled after disable", True),
+             "feature readback incomplete or still enabled; model-facing delegation capability not established", True),
             ("FAKE_FEATURES", "goals:stable:true", "no delegation-like feature listed", False),
         )
         for number, (variable, value, note, flags_passed) in enumerate(cases):
@@ -319,6 +327,19 @@ class LauncherTest(unittest.TestCase):
                 self.assertIn(f"delegation_capability_note={note}\n", state)
                 passed = any(arg.startswith("features.") for arg in self.exec_args())
                 self.assertEqual(passed, flags_passed)
+
+    def test_partial_or_duplicate_readback_does_not_claim_complete_metadata(self):
+        for number, readback in enumerate((
+                "multi_agent stable false",
+                "multi_agent stable true\nmulti_agent stable false")):
+            with self.subTest(readback=readback):
+                self.runs = self.root / f"partial{number}"
+                self.calls.unlink(missing_ok=True)
+                result = self.run_launcher(env=self.env | {"FAKE_READBACK_TEXT": readback})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.exec_args()
+                self.assertIn("delegation_capability=not-established\n", self.state())
+                self.assertNotIn("delegation_feature_readback=all-listed-false", self.state())
 
     def test_collab_lines_in_log_are_counted(self):
         env = self.env.copy()

@@ -140,11 +140,11 @@ if [[ $preflight_only == true ]]; then
   exit 0
 fi
 
-# Withhold built-in delegation from the child. Metadata only, before any task
+# Request restriction of delegation-like features. Metadata only, before any task
 # starts, and upgrade-tolerant: never a version check or a refusal. Only names
 # the installed CLI lists are disabled, through -c (`--disable` rejects unknown
-# names); when withholding cannot be confirmed the child still launches and
-# state.txt records the capability as not established.
+# names); feature metadata cannot establish model-facing tool absence. The child
+# still launches with capability recorded as not established.
 delegation_like='multi_agent|agent_message|collab|subagent'
 delegation_rows() {
   CODEX_HOME="$profile_home" codex "$@" features list 2>/dev/null | python3 -c '
@@ -154,7 +154,11 @@ import sys
 rows = {}
 for line in sys.stdin:
     fields = line.split()
+    if fields and re.search(sys.argv[1], fields[0]) and (len(fields) < 3 or fields[-1] not in ("true", "false")):
+        sys.exit(1)
     if len(fields) >= 3 and fields[-1] in ("true", "false") and re.fullmatch(r"[a-z0-9_]+", fields[0]):
+        if fields[0] in rows:
+            sys.exit(1)
         rows[fields[0]] = fields[-1]
 if not rows:
     sys.exit(1)
@@ -164,16 +168,20 @@ for name in sorted(rows):
 ' "$delegation_like"
 }
 delegation_flags=() delegation_status=not-established delegation_note='' delegation_readback=''
+delegation_feature_readback=unknown
 listed=$(delegation_rows); listed_rc=$?
 if ((listed_rc == 0)) && [[ -n $listed ]]; then
   while IFS=$'\t' read -r feature _; do
     delegation_flags+=(-c "features.$feature=false")
   done <<< "$listed"
   if delegation_readback=$(delegation_rows "${delegation_flags[@]}") && [[ -n $delegation_readback ]]; then
-    if [[ $delegation_readback != *$'\ttrue'* ]]; then
-      delegation_status=withheld
+    expected_readback=$(printf '%s\n' "$listed" | sed 's/\ttrue$/\tfalse/')
+    if [[ $delegation_readback == "$expected_readback" ]]; then
+      delegation_feature_readback=all-listed-false
+      delegation_note='listed features read back false; model-facing delegation capability not established'
     else
-      delegation_note='listed delegation feature still enabled after disable'
+      delegation_feature_readback=incomplete-or-enabled
+      delegation_note='feature readback incomplete or still enabled; model-facing delegation capability not established'
     fi
   else
     delegation_flags=() delegation_readback=''
@@ -208,6 +216,9 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   printf 'prompt=%s\nlog=%s\nfinal=%s\n' "$prompt_snapshot" "$log_path" "$final_path"
   printf 'delegation_capability=%s\n' "$delegation_status"
   [[ -z $delegation_note ]] || printf 'delegation_capability_note=%s\n' "$delegation_note"
+  printf 'delegation_feature_readback=%s\n' "$delegation_feature_readback"
+  [[ -z $listed ]] || printf 'delegation_features_listed=%s\n' "$(printf '%s' "$listed" | tr '\t\n' '=,')"
+  printf 'delegation_restriction_args=%s\n' "${delegation_flags[*]}"
   [[ -z $delegation_readback ]] || printf 'delegation_features=%s\n' "$(printf '%s' "$delegation_readback" | tr '\t\n' '=,')"
   printf 'delegation_scope=built-in features listed by the installed CLI; shell-launched processes, hooks, plugins and skills not covered\n'
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"

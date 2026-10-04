@@ -29,11 +29,11 @@ Keep the actual observation → Frame → Decision → brief → cold check → 
 
 ### Briefing the receiving seat
 
-The invocation that receives a seat brief performs that seat itself. Write the brief to the receiver in the second person: "You are the Maker receiving this invocation; execute it yourself." Name ROOT as the campaign caller outside this session, so the receiver never takes ROOT's seat. A model, effort or seat label in the brief is launch provenance, not a request to create a session with that configuration. A bound such as "no children" binds the receiver and every layer that acts for it, not only a described seat.
+The invocation that receives a seat brief is assigned to perform that seat itself. Write the brief to the receiver in the second person: "You are the Maker receiving this invocation; execute it yourself." Name ROOT as the campaign caller outside this session to make that authority boundary explicit. This convention aims at correct recognition; it does not guarantee it. A model, effort or seat label in the brief is launch provenance, not a request to create a session with that configuration. A bound such as "no children" binds the receiver and every layer that acts for it, not only a described seat.
 
-This answers an [actual failure](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/direct-seat-correction-root-decision.md): a native Codex session given a third-person, model-labelled seat brief took the ROOT seat and spawned the described seat as a child. The transport now withholds known built-in delegation at launch (see [Execution and records](#execution-and-records)), but a seat with a shell can still start `codex`, `claude` or this dispatcher itself. Only the brief reaches that layer, and nothing technically prevents it.
+This addresses an [actual failure](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/direct-seat-correction-root-decision.md) (machine-local evidence): a native Codex session given a third-person, model-labelled seat brief took the ROOT seat and spawned the described seat as a child. The transport requests restrictions on known built-in delegation (see [Execution and records](#execution-and-records)). A completed Codex observation still received collaboration schemas despite all five matched features reading back false; the cause is unexamined. A seat with a shell can also start `codex`, `claude` or this dispatcher itself. Only the brief reaches that layer, and nothing technically prevents it.
 
-A return counts as single-seat only from its own attempt record, not from the brief, flags or the seat's self-report.
+ROOT assesses single-seat provenance by joining the receiver's account to its completed attempt record and actual call evidence, preserving capture limits. The brief, requested flags, metadata and self-report alone do not attest sole execution.
 
 ### Current campaign selection
 
@@ -142,9 +142,11 @@ A dry run writes no files, advances no counter, launches nothing, and does not c
 - the preflight refusal;
 - the attempt files `prompt.md`, `log.txt`, `final.md`, and `state.txt`;
 - `DIRECT_CODEX_*` markers, with Codex's own exit as the process exit;
-- withholding of built-in delegation features, recorded as `delegation_capability` in state (see the [launcher README](../direct-codex-child/README.md#built-in-delegation)).
+- requested restrictions and feature readback, separate from `delegation_capability=not-established` (see the [launcher README](../direct-codex-child/README.md#built-in-delegation)).
 
-**Claude routes** run this command once in the worktree, with the prompt on stdin:
+**Claude routes** first run `claude5 --disallowedTools Agent,Task,Workflow --help` with no prompt in an attempt-private HOME/XDG/CODEX_HOME/CLAUDE_CONFIG_DIR. This metadata call has a ten-second timeout. Rejection, unavailable help or an undocumented flag omits the denial arguments before the sole task invocation; selection, command, exit and available help output are retained. It checks no version and never replays a possibly started task.
+
+When help accepts those arguments and documents the flag, the sole task command is:
 
 ```bash
 claude5 -p --model M --effort E --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
@@ -152,7 +154,7 @@ claude5 -p --model M --effort E --strict-mcp-config --mcp-config '{"mcpServers":
   --disallowedTools Agent,Task,Workflow --output-format stream-json --verbose
 ```
 
-`--disallowedTools` withholds the built-in Agent tool (`Task` is its older name) and Workflow. The installed `claude --help` documents the flag but not tool names; the names come from a Claude Code session's own tool list. Other coordination tools such as SendMessage, RemoteTrigger and CronCreate are not withheld.
+`--disallowedTools` requests denial of Agent, Task and Workflow; those names come from observed session tool lists. The current changed Frame command was accepted, and its init omitted all three names. That evidence does not prove support in future task parsers: help may accept arguments without validating tool names as a task would. A subsequent native task rejection is propagated without replay. Other existing flags retain their compatibility limits. Other coordination tools such as SendMessage, RemoteTrigger and CronCreate are outside this restriction.
 
 The attempt directory holds:
 
@@ -161,7 +163,8 @@ The attempt directory holds:
 - `stderr.txt`;
 - `final.md`, available result text (invalid or ambiguous results remain diagnostic text);
 - `route.json`;
-- `state.txt`, which records the native command, `withheld_tools`, raw `claude_exit`, result count and semantics, delegation provenance, final/custody status, capture errors, and `dispatcher_exit`. The awaited native status is appended before final capture. Available raw stdout continues to the terminal even when log storage fails.
+- `restriction-metadata/`, the private help context and available stdout/stderr;
+- `state.txt`, which records the actual native command, `requested_disallowed_tools` (empty if omitted), restriction selection and help evidence, raw `claude_exit`, result count and semantics, delegation provenance, final/custody status, capture errors, and `dispatcher_exit`. The awaited native status is appended before final capture. Available raw stdout continues to the terminal even when log storage fails.
 
 Claude exit codes:
 
@@ -182,19 +185,20 @@ Claude exit codes:
 
 **Delegation provenance** in `state.txt` is a record, never a launch gate or a reason to rerun:
 
-- `delegation_capability=withheld` means the provider's own metadata showed the known built-in delegation off. For Claude this is the session's `init` tool list without any withheld tool. For Codex it is a `features list` readback with every listed delegation feature false.
-- `delegation_capability=not-established` comes with a `delegation_capability_note` explaining why. The child still ran with whatever the installed CLI offered.
-- Detection leads: `delegation_tool_uses` (Claude tool uses of withheld tools) and `log_collab_lines` (Codex `collab:` lines in the human log, where Wait is rendered but spawn is not).
+- `delegation_capability=not-established` qualifies capability absence separately from restriction requests and metadata, with a `delegation_capability_note`. Older `withheld` records describe metadata only and cannot be read as actual model-facing absence.
+- Codex records the listed features, requested settings, parsed readback and `delegation_feature_readback`. Complete false metadata does not establish absent schemas.
+- Claude retains every recorded init `tools` value in `delegation_init_tools`, including missing or malformed values. `delegation_init_status` distinguishes known names offered, not listed in valid consistent nonempty lists, unknown metadata, and emitted uses contradicting init omission. These are stream observations, not a complete tool-surface certificate.
+- Detection leads: `delegation_tool_uses` counts emitted Claude tool-use blocks naming Agent/Task/Workflow, not completed work or distinct children. `log_collab_lines` counts literal line-start `collab:` text, where Codex renders Wait but not spawn. Quoted command output can cause false positives, and absent markers do not establish absent delegation. Neither counter is a child count.
 - `delegation_scope` states what was not covered: shell-launched processes, hooks, plugins and skills.
 
-Neither value certifies that a seat ran alone. Read the attempt's log for that.
+These fields do not certify that a seat ran alone. ROOT joins actual attempt evidence and retains what its capture cannot establish.
 
 Launch through a native persistent terminal, and record the terminal handle in the emitted `DIRECT_CHILD_STATE` or `DIRECT_CODEX_STATE`. Await that handle until it exits. Each seat is a fresh session, with no resume and no background runs. Collection works as in the [launcher README](../direct-codex-child/README.md).
 
 ## Limits
 
 - **No health checks or recovery.** There is no health check, provider fallback, queue, scheduler, or Claude rotation. A launch is never replayed automatically once the native task may have started.
-- **No version guard.** Neither tool checks or pins a native CLI version. Delegation withholding adapts to what the installed CLI lists and records anything it cannot establish instead of refusing. The Claude `--effort` values and `--disallowedTools` flag were read from the installed `claude --help`.
+- **No version guard.** Neither tool checks or pins a native CLI version. Codex restriction requests use listed features; Claude denial arguments use pre-task private help metadata. Unavailable restriction metadata proceeds with qualified provenance. This is bounded compatibility selection, not universal upgrade support or removal of a product provider guard elsewhere.
 - **Routing is not validation.** Deterministic routing tests do not show that a class or kind was right or that a model was effective. Records exist for a later benchmark.
 - **Not yet in Runner.** This is not Runner or `agents` integration. Frontmatter still selects models inside `agents`.
 - **CRW is unchanged.** Its opaque `gpt-xhigh` contract stays as it is; see [`models/roles.md`](../../models/roles.md).

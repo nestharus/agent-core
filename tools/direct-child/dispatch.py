@@ -22,8 +22,8 @@ DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
 CLAUDE_EMPTY_MCP = '{"mcpServers":{}}'
 CLAUDE_SETTINGS = '{"autoMemoryEnabled":false}'
-# Built-in delegation withheld from every Claude child: Agent and its older name
-# Task, and Workflow. Only the session's own init event shows what was offered.
+# Known names to request denial of. Help, init metadata and emitted calls are
+# separate evidence; none certifies that the session executed without mediation.
 CLAUDE_WITHHELD_TOOLS = ("Agent", "Task", "Workflow")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 PROFILE = re.compile(r"\.?[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -330,6 +330,43 @@ def claude_command(record, wrapper):
             "--output-format", "stream-json", "--verbose"]
 
 
+def select_claude_restriction(command, attempt, cwd):
+    """Metadata only, before the sole task. Unknown support omits the restriction."""
+    metadata = attempt / "restriction-metadata"
+    env = os.environ.copy()
+    help_command = [command[0], "--disallowedTools", ",".join(CLAUDE_WITHHELD_TOOLS), "--help"]
+    supported, rc = False, "unavailable"
+    try:
+        metadata.mkdir(mode=0o700)
+        for variable, directory in (("HOME", "home"), ("XDG_CONFIG_HOME", "config"),
+                                    ("XDG_DATA_HOME", "data"), ("XDG_CACHE_HOME", "cache"),
+                                    ("XDG_STATE_HOME", "state"), ("CODEX_HOME", "codex"),
+                                    ("CLAUDE_CONFIG_DIR", "claude"), ("TMPDIR", "tmp")):
+            path = metadata / directory
+            path.mkdir(mode=0o700)
+            env[variable] = str(path)
+        result = subprocess.run(help_command, stdin=subprocess.DEVNULL, capture_output=True,
+                                cwd=cwd, env=env, timeout=10, check=False)
+        rc = str(result.returncode)
+        (metadata / "stdout.txt").write_bytes(result.stdout)
+        (metadata / "stderr.txt").write_bytes(result.stderr)
+        supported = result.returncode == 0 and re.search(
+            rb"(?m)^\s*--disallowedTools(?:\s|,)", result.stdout) is not None
+        note = ("denial arguments accepted by help and flag documented; task support unproven"
+                if supported else "denial help rejected or flag undocumented; restriction omitted")
+    except (OSError, subprocess.TimeoutExpired) as error:
+        note = f"denial help unavailable ({type(error).__name__}); restriction omitted"
+    if not supported:
+        command = command.copy()
+        index = command.index("--disallowedTools")
+        del command[index:index + 2]
+    evidence = (f"restriction_help_command={shlex.join(help_command)}\n"
+                f"restriction_help_exit={rc}\nrestriction_metadata={metadata}\n"
+                f"restriction_selection={'requested' if supported else 'omitted'}\n"
+                f"restriction_selection_note={note}\n")
+    return command, evidence
+
+
 def run_claude(args, record, command):
     """Foreground Claude attempt; exit is native unless the result is absent or an error."""
     runs_dir = Path(args.runs_dir)
@@ -345,6 +382,7 @@ def run_claude(args, record, command):
     for name in ("log.txt", "stderr.txt", "final.md"):
         paths[name].touch()
     paths["route.json"].write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    command, restriction_evidence = select_claude_restriction(command, attempt, args.cwd)
 
     def git(*git_args):
         result = subprocess.run(["git", "-C", args.cwd, *git_args], capture_output=True,
@@ -363,13 +401,14 @@ def run_claude(args, record, command):
                   f"native_command={shlex.join(command)}\n"
                   f"prompt={paths['prompt.md']}\nlog={paths['log.txt']}\n"
                   f"stderr={paths['stderr.txt']}\nfinal={paths['final.md']}\n"
-                  f"withheld_tools={','.join(CLAUDE_WITHHELD_TOOLS)}\n"
+                  f"requested_disallowed_tools={','.join(CLAUDE_WITHHELD_TOOLS) if '--disallowedTools' in command else ''}\n"
+                  f"{restriction_evidence}"
                   f"start_utc={utc_now()}\n"
                   "expected_status=native terminal exit plus claude_exit entry\n")
     print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
 
     events, log_error, native_rc, launch_error = [], None, None, None
-    delegation = {"offered": None, "uses": 0}
+    delegation = {"init_tools": [], "uses": 0}
     process = None
     try:
         with paths["prompt.md"].open("rb") as stdin, paths["stderr.txt"].open("wb") as err, \
@@ -457,11 +496,9 @@ def parse_event(line):
 
 
 def note_delegation(event, delegation):
-    """Withheld tools the init event offered, and tool uses of them by this session."""
+    """Retain init metadata and emitted known-name tool-use blocks, not child counts."""
     if event.get("type") == "system" and event.get("subtype") == "init":
-        tools = event.get("tools")
-        if isinstance(tools, list) and delegation["offered"] is None:
-            delegation["offered"] = sorted(set(CLAUDE_WITHHELD_TOOLS) & set(map(str, tools)))
+        delegation["init_tools"].append(event.get("tools"))
     message = event.get("message") if event.get("type") == "assistant" else None
     content = message.get("content") if isinstance(message, dict) else None
     for block in content if isinstance(content, list) else ():
@@ -471,18 +508,29 @@ def note_delegation(event, delegation):
 
 
 def delegation_state(delegation):
-    """Provenance only: withheld needs the session's own tool list; never a launch gate."""
-    offered = delegation["offered"]
-    if offered is None:
-        status, note = "not-established", "no init tool list in stream"
-    elif offered:
-        status, note = "not-established", "init offered " + ",".join(offered)
+    """Describe metadata narrowly; never certify capability absence or gate a task."""
+    lists = delegation["init_tools"]
+    valid = bool(lists) and all(isinstance(tools, list) and tools
+                               and all(isinstance(name, str) and name for name in tools)
+                               for tools in lists)
+    offered = sorted({name for tools in lists if isinstance(tools, list)
+                      for name in tools if isinstance(name, str)} & set(CLAUDE_WITHHELD_TOOLS))
+    if offered:
+        init_status, note = "offered", "init offered " + ",".join(offered)
+    elif not valid:
+        init_status, note = "unknown", "init tool metadata missing, empty or malformed"
+    elif any(set(tools) != set(lists[0]) for tools in lists[1:]):
+        init_status, note = "unknown", "conflicting init tool lists"
+    elif delegation["uses"]:
+        init_status, note = "contradicted", "known-name tool uses emitted despite init omission"
     else:
-        status, note = "withheld", None
-    return (f"delegation_capability={status}\n"
-            + (f"delegation_capability_note={note}\n" if note else "")
-            + f"delegation_tool_uses={delegation['uses']}\n"
-            "delegation_scope=built-in Agent/Task family and Workflow; shell-launched "
+        init_status, note = "not-listed", "known names absent from recorded init lists; capability absence unproven"
+    return ("delegation_capability=not-established\n"
+            f"delegation_capability_note={note}\n"
+            f"delegation_init_status={init_status}\n"
+            f"delegation_init_tools={json.dumps(lists, separators=(',', ':'))}\n"
+            f"delegation_tool_uses={delegation['uses']}\n"
+            "delegation_scope=known Agent,Task,Workflow names; other coordination tools, shell-launched "
             "processes, hooks, plugins and skills not covered\n")
 
 
@@ -586,6 +634,8 @@ def main(argv):
                        else codex_command(args, record, profile))
             print("DRY RUN: " + json.dumps(record, sort_keys=True))
             print("DRY RUN: would run: " + shlex.join(command))
+            if provider == "claude":
+                print("DRY RUN: denial arguments are conditional on pre-task private help metadata")
             print("DRY RUN: no files written, rotation not advanced, no model launched")
             return 0
         if args.profile is not None:
