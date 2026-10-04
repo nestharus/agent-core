@@ -27,6 +27,14 @@ The brief receives its independent cold check before dispatch. That check's lite
 
 Keep the actual observation → Frame → Decision → brief → cold check → Frame → Act trail, with any reopened Decision and subsequent consequence returns. Flags, native route records, producer verification and revised prose do not establish framing, admission or efficacy; the witness is the actual return under the existing [guarantee chain](/mnt/c/Users/xteam/OneDrive/Documents/projects/oulipoly/core/KERNEL.md#the-guarantee-chain). This binds the full loop within the [shared selected method and delivery lifecycle](../../AGENTS.md#selected-reasoning-and-change-support); it adds no runtime enforcement or replacement review procedure.
 
+### Briefing the receiving seat
+
+The invocation that receives a seat brief performs that seat itself. Write the brief to the receiver in the second person: "You are the Maker receiving this invocation; execute it yourself." Name ROOT as the campaign caller outside this session, so the receiver never takes ROOT's seat. A model, effort or seat label in the brief is launch provenance, not a request to create a session with that configuration. A bound such as "no children" binds the receiver and every layer that acts for it, not only a described seat.
+
+This answers an [actual failure](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/direct-seat-correction-root-decision.md): a native Codex session given a third-person, model-labelled seat brief took the ROOT seat and spawned the described seat as a child. The transport now withholds known built-in delegation at launch (see [Execution and records](#execution-and-records)), but a seat with a shell can still start `codex`, `claude` or this dispatcher itself. Only the brief reaches that layer, and nothing technically prevents it.
+
+A return counts as single-seat only from its own attempt record, not from the brief, flags or the seat's self-report.
+
 ### Current campaign selection
 
 For the `context-routing-20260929` minimal prose/entry closure, the [actual Decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/development-return-decider-return.md) selects **no per-prompt cold check**, accepting its cost tradeoff and remaining debts for fast closure. This campaign selection takes precedence over the per-brief cold-check requirement and trail above; it does not replace independent consequence Observe → Frame → Decide after making. The [actual Frame](/home/nes/projects/agent-runner/planning/context-routing-20260929/development-return-frame-return.md) diagnoses the earlier observer → Act bypass as root treating small local defects as exempt and carrying its own interpretation into dispatch. The Decision accepts that diagnosis without establishing cold-agent compliance. Full Core adoption, efficacy and `.claude5` / `.codex2`–`.codex5` import loading remain debt; the wider inherited observation obligations remain explicit gaps, not completed work. This bounded selection changes neither Core nor other campaigns' obligations.
@@ -133,15 +141,18 @@ A dry run writes no files, advances no counter, launches nothing, and does not c
 - effective MCP discovery, per-server disable flags, and the injected docs-server disable;
 - the preflight refusal;
 - the attempt files `prompt.md`, `log.txt`, `final.md`, and `state.txt`;
-- `DIRECT_CODEX_*` markers, with Codex's own exit as the process exit.
+- `DIRECT_CODEX_*` markers, with Codex's own exit as the process exit;
+- withholding of built-in delegation features, recorded as `delegation_capability` in state (see the [launcher README](../direct-codex-child/README.md#built-in-delegation)).
 
 **Claude routes** run this command once in the worktree, with the prompt on stdin:
 
 ```bash
 claude5 -p --model M --effort E --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
   --settings '{"autoMemoryEnabled":false}' --no-session-persistence \
-  --output-format stream-json --verbose
+  --disallowedTools Agent,Task,Workflow --output-format stream-json --verbose
 ```
+
+`--disallowedTools` withholds the built-in Agent tool (`Task` is its older name) and Workflow. The installed `claude --help` documents the flag but not tool names; the names come from a Claude Code session's own tool list. Other coordination tools such as SendMessage, RemoteTrigger and CronCreate are not withheld.
 
 The attempt directory holds:
 
@@ -150,7 +161,7 @@ The attempt directory holds:
 - `stderr.txt`;
 - `final.md`, available result text (invalid or ambiguous results remain diagnostic text);
 - `route.json`;
-- `state.txt`, which records the native command, raw `claude_exit`, result count and semantics, final/custody status, capture errors, and `dispatcher_exit`. The awaited native status is appended before final capture. Available raw stdout continues to the terminal even when log storage fails.
+- `state.txt`, which records the native command, `withheld_tools`, raw `claude_exit`, result count and semantics, delegation provenance, final/custody status, capture errors, and `dispatcher_exit`. The awaited native status is appended before final capture. Available raw stdout continues to the terminal even when log storage fails.
 
 Claude exit codes:
 
@@ -169,11 +180,21 @@ Claude exit codes:
 - overrides and their reason;
 - profile and profile source.
 
+**Delegation provenance** in `state.txt` is a record, never a launch gate or a reason to rerun:
+
+- `delegation_capability=withheld` means the provider's own metadata showed the known built-in delegation off. For Claude this is the session's `init` tool list without any withheld tool. For Codex it is a `features list` readback with every listed delegation feature false.
+- `delegation_capability=not-established` comes with a `delegation_capability_note` explaining why. The child still ran with whatever the installed CLI offered.
+- Detection leads: `delegation_tool_uses` (Claude tool uses of withheld tools) and `log_collab_lines` (Codex `collab:` lines in the human log, where Wait is rendered but spawn is not).
+- `delegation_scope` states what was not covered: shell-launched processes, hooks, plugins and skills.
+
+Neither value certifies that a seat ran alone. Read the attempt's log for that.
+
 Launch through a native persistent terminal, and record the terminal handle in the emitted `DIRECT_CHILD_STATE` or `DIRECT_CODEX_STATE`. Await that handle until it exits. Each seat is a fresh session, with no resume and no background runs. Collection works as in the [launcher README](../direct-codex-child/README.md).
 
 ## Limits
 
-- **No health checks or recovery.** There is no health check, provider fallback, queue, scheduler, or Claude rotation. There is also no check that a native CLI version supports a flag. The Claude `--effort` values were read from the installed `claude --help`.
+- **No health checks or recovery.** There is no health check, provider fallback, queue, scheduler, or Claude rotation. A launch is never replayed automatically once the native task may have started.
+- **No version guard.** Neither tool checks or pins a native CLI version. Delegation withholding adapts to what the installed CLI lists and records anything it cannot establish instead of refusing. The Claude `--effort` values and `--disallowedTools` flag were read from the installed `claude --help`.
 - **Routing is not validation.** Deterministic routing tests do not show that a class or kind was right or that a model was effective. Records exist for a later benchmark.
 - **Not yet in Runner.** This is not Runner or `agents` integration. Frontmatter still selects models inside `agents`.
 - **CRW is unchanged.** Its opaque `gpt-xhigh` contract stays as it is; see [`models/roles.md`](../../models/roles.md).

@@ -22,6 +22,9 @@ DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
 CLAUDE_EMPTY_MCP = '{"mcpServers":{}}'
 CLAUDE_SETTINGS = '{"autoMemoryEnabled":false}'
+# Built-in delegation withheld from every Claude child: Agent and its older name
+# Task, and Workflow. Only the session's own init event shows what was offered.
+CLAUDE_WITHHELD_TOOLS = ("Agent", "Task", "Workflow")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 PROFILE = re.compile(r"\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 PROVIDERS = ("codex", "claude")
@@ -323,6 +326,7 @@ def claude_command(record, wrapper):
     return [wrapper, "-p", "--model", record["model"], "--effort", record["effort"],
             "--strict-mcp-config", "--mcp-config", CLAUDE_EMPTY_MCP,
             "--settings", CLAUDE_SETTINGS, "--no-session-persistence",
+            "--disallowedTools", ",".join(CLAUDE_WITHHELD_TOOLS),
             "--output-format", "stream-json", "--verbose"]
 
 
@@ -359,11 +363,13 @@ def run_claude(args, record, command):
                   f"native_command={shlex.join(command)}\n"
                   f"prompt={paths['prompt.md']}\nlog={paths['log.txt']}\n"
                   f"stderr={paths['stderr.txt']}\nfinal={paths['final.md']}\n"
+                  f"withheld_tools={','.join(CLAUDE_WITHHELD_TOOLS)}\n"
                   f"start_utc={utc_now()}\n"
                   "expected_status=native terminal exit plus claude_exit entry\n")
     print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
 
     events, log_error, native_rc, launch_error = [], None, None, None
+    delegation = {"offered": None, "uses": 0}
     process = None
     try:
         with paths["prompt.md"].open("rb") as stdin, paths["stderr.txt"].open("wb") as err, \
@@ -374,9 +380,11 @@ def run_claude(args, record, command):
                 if log_error is None:
                     log_error = capture_line(log, line)
                 capture_line(sys.stdout.buffer, line)
-                event = parse_result(line)
+                event = parse_event(line)
                 if event is not None:
-                    events.append(event)
+                    note_delegation(event, delegation)
+                    if event.get("type") == "result":
+                        events.append(event)
             native_rc = process.wait()
     except OSError as error:
         if native_rc is None:
@@ -408,6 +416,7 @@ def run_claude(args, record, command):
                   f"result_event_count={len(events)}\n"
                   f"semantic_is_error={'unknown' if semantic_error is None else str(semantic_error).lower()}\n"
                   + (f"result_error={result_error}\n" if result_error else "")
+                  + delegation_state(delegation)
                   + f"final_status={final_status}\n"
                   + (f"final_capture_error={final_error}\n" if final_error else "")
                   + f"custody_status={'incomplete' if custody_error else 'complete'}\n"
@@ -439,12 +448,42 @@ def capture_line(handle, line):
     return None
 
 
-def parse_result(line):
+def parse_event(line):
     try:
         event = json.loads(line)
     except ValueError:
         return None
-    return event if isinstance(event, dict) and event.get("type") == "result" else None
+    return event if isinstance(event, dict) else None
+
+
+def note_delegation(event, delegation):
+    """Withheld tools the init event offered, and tool uses of them by this session."""
+    if event.get("type") == "system" and event.get("subtype") == "init":
+        tools = event.get("tools")
+        if isinstance(tools, list) and delegation["offered"] is None:
+            delegation["offered"] = sorted(set(CLAUDE_WITHHELD_TOOLS) & set(map(str, tools)))
+    message = event.get("message") if event.get("type") == "assistant" else None
+    content = message.get("content") if isinstance(message, dict) else None
+    for block in content if isinstance(content, list) else ():
+        if (isinstance(block, dict) and block.get("type") == "tool_use"
+                and block.get("name") in CLAUDE_WITHHELD_TOOLS):
+            delegation["uses"] += 1
+
+
+def delegation_state(delegation):
+    """Provenance only: withheld needs the session's own tool list; never a launch gate."""
+    offered = delegation["offered"]
+    if offered is None:
+        status, note = "not-established", "no init tool list in stream"
+    elif offered:
+        status, note = "not-established", "init offered " + ",".join(offered)
+    else:
+        status, note = "withheld", None
+    return (f"delegation_capability={status}\n"
+            + (f"delegation_capability_note={note}\n" if note else "")
+            + f"delegation_tool_uses={delegation['uses']}\n"
+            "delegation_scope=built-in Agent/Task family and Workflow; shell-launched "
+            "processes, hooks, plugins and skills not covered\n")
 
 
 def result_semantics(events):

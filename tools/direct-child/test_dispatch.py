@@ -28,6 +28,10 @@ if args[-3:] == ["mcp", "list", "--json"]:
     print(json.dumps([{"name": name, "enabled": f"mcp_servers.{name}.enabled=false" not in args
                        or name == os.environ.get("FAKE_FORCE_ENABLED")} for name in names]))
     sys.exit(0)
+if args[-2:] == ["features", "list"]:
+    state = "false" if "features.multi_agent=false" in args else "true"
+    print(f"goals    stable    true\nmulti_agent    stable    {state}")
+    sys.exit(0)
 prompt = sys.stdin.read()
 Path(args[args.index("-o") + 1]).write_text("final: " + prompt, encoding="utf-8")
 print("live: " + prompt.strip())
@@ -40,9 +44,14 @@ with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"tool": os.path.basename(sys.argv[0]), "args": args,
                             "cwd": os.getcwd(), "prompt": prompt}) + "\n")
 mode = os.environ.get("FAKE_CLAUDE_MODE", "success")
-print(json.dumps({"type": "system", "subtype": "init", "mcp_servers": []}))
+init = {"type": "system", "subtype": "init", "mcp_servers": []}
+if "FAKE_CLAUDE_TOOLS" in os.environ:
+    init["tools"] = os.environ["FAKE_CLAUDE_TOOLS"].split(",")
+print(json.dumps(init))
 print("not json noise")
-print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash"}]}}))
+for name in ["Bash"] + os.environ.get("FAKE_CLAUDE_TOOL_USES", "").split(","):
+    if name:
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name}]}}))
 print("claude warning", file=sys.stderr)
 if os.environ.get("FAKE_CLAUDE_LARGE_STREAM"):
     print("drain evidence " * 20000)
@@ -475,9 +484,11 @@ class DispatchTest(unittest.TestCase):
         state = (attempt / "state.txt").read_text()
         self.assertIn("profile=.codex2\nmodel=gpt-6.1-sol\neffort=high\n", state)
         self.assertIn(f"cwd={self.cwd}\n", state)
+        self.assertIn("delegation_capability=withheld\n", state)
         calls = self.calls_readback()
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 5)
         exec_args = calls[-1]["args"]
+        self.assertIn("features.multi_agent=false", exec_args)
         self.assertEqual(exec_args[exec_args.index("-m") + 1], "gpt-6.1-sol")
         self.assertIn('model_reasoning_effort="high"', exec_args)
         self.assertEqual(exec_args[exec_args.index("-C") + 1], str(self.cwd))
@@ -514,6 +525,7 @@ class DispatchTest(unittest.TestCase):
                                         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                                         "--settings", '{"autoMemoryEnabled":false}',
                                         "--no-session-persistence",
+                                        "--disallowedTools", "Agent,Task,Workflow",
                                         "--output-format", "stream-json", "--verbose"])
         self.assertEqual((call["cwd"], call["prompt"]), (str(self.cwd), "Do the bounded task.\n"))
         self.assertEqual((attempt / "final.md").read_text(), "done: Do the bounded task.\n")
@@ -530,6 +542,23 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(json.loads((attempt / "route.json").read_text())["model"], "claude-opus-5-5")
         self.assertIn("DIRECT_CHILD_FINAL_BEGIN=", result.stdout)
         self.assertEqual(oct((attempt / "prompt.md").stat().st_mode & 0o777), "0o400")
+
+    def test_claude_delegation_provenance_comes_from_the_session_record(self):
+        cases = (
+            ({"FAKE_CLAUDE_TOOLS": "Bash,Read,Edit"}, "withheld", None, "0"),
+            ({}, "not-established", "no init tool list in stream", "0"),
+            ({"FAKE_CLAUDE_TOOLS": "Bash,Agent,Workflow", "FAKE_CLAUDE_TOOL_USES": "Agent,Agent"},
+             "not-established", "init offered Agent,Workflow", "2"),
+        )
+        for environment, status, note, uses in cases:
+            with self.subTest(environment=environment):
+                result, attempt, state = self.claude_attempt("success", **environment)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(state["withheld_tools"], "Agent,Task,Workflow")
+                self.assertEqual(state["delegation_capability"], status)
+                self.assertEqual(state.get("delegation_capability_note"), note)
+                self.assertEqual(state["delegation_tool_uses"], uses)
+                self.assertIn("shell-launched processes", state["delegation_scope"])
 
     def test_creative_launch_carries_effort_high_to_claude5_and_records_kind(self):
         for extra in (("--seat", "maker", "--class", "correction", "--basis", "frame.md#F1"), ()):

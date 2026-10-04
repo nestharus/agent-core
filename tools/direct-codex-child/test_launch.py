@@ -16,6 +16,8 @@ from pathlib import Path
 import sys
 import tomllib
 
+DEFAULT_FEATURES = ("agent_message_board:under development:false,collaboration_modes:removed:true,"
+                    "goals:stable:true,multi_agent:stable:true,multi_agent_v2:stable:false")
 args = sys.argv[1:]
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"args": args, "home": os.environ["CODEX_HOME"],
@@ -42,6 +44,16 @@ if args[-3:] == ["mcp", "list", "--json"]:
         rows.append({"name": name, "enabled": enabled})
     print(json.dumps(rows))
     sys.exit(0)
+if args[-2:] == ["features", "list"]:
+    disabling = any(arg.startswith("features.") and arg.endswith("=false") for arg in args)
+    if os.environ.get("FAKE_FEATURES_FAIL") or (disabling and os.environ.get("FAKE_READBACK_FAIL")):
+        sys.exit(1)
+    for item in filter(None, os.environ.get("FAKE_FEATURES", DEFAULT_FEATURES).split(",")):
+        name, stage, state = item.split(":")
+        if f"features.{name}=false" in args and name != os.environ.get("FAKE_STUCK"):
+            state = "false"
+        print(f"{name:<40} {stage:<18} {state}")
+    sys.exit(0)
 if args[0] != "exec":
     sys.exit(91)
 assert "--dangerously-bypass-approvals-and-sandbox" in args
@@ -52,6 +64,8 @@ assert args[-1] == "-"
 prompt = sys.stdin.read()
 Path(args[args.index("-o") + 1]).write_text("final: " + prompt, encoding="utf-8")
 print("live: " + prompt.strip())
+for _ in range(int(os.environ.get("FAKE_COLLAB", "0"))):
+    print("collab: Wait")
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 '''
 
@@ -104,6 +118,14 @@ class LauncherTest(unittest.TestCase):
     def calls_readback(self):
         return [json.loads(line) for line in self.calls.read_text(encoding="utf-8").splitlines()]
 
+    def mcp_and_exec_calls(self):
+        return [call for call in self.calls_readback() if call["args"][-2:] != ["features", "list"]]
+
+    def exec_args(self):
+        execs = [call["args"] for call in self.calls_readback() if call["args"][0] == "exec"]
+        self.assertEqual(len(execs), 1)
+        return execs[0]
+
     def test_dry_run_is_no_op(self):
         result = self.run_launcher(".codex", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -139,7 +161,8 @@ class LauncherTest(unittest.TestCase):
             self.assertIn("codex_exit=0", (attempt / "state.txt").read_text())
             self.assertIn("log_capture_exit=0", (attempt / "state.txt").read_text())
         self.assertIn("DIRECT_CODEX_FINAL_BEGIN=", first.stdout)
-        calls = self.calls_readback()
+        self.assertEqual(len(self.calls_readback()), 10)
+        calls = self.mcp_and_exec_calls()
         self.assertEqual(len(calls), 6)
         self.assertEqual([call["args"][-3:] for call in calls if call["args"][0] != "exec"],
                          [["mcp", "list", "--json"]] * 4)
@@ -158,17 +181,19 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertIn("DIRECT_CODEX_EXIT=7", result.stdout)
         self.assertIn("codex_exit=7", next(self.runs.iterdir()).joinpath("state.txt").read_text())
-        for call in self.calls_readback()[1:]:
+        for call in self.mcp_and_exec_calls()[1:]:
             self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
             self.assertIn('mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"', call["args"])
+        self.exec_args()  # a failed task is never replayed
 
     def test_codex5_profile_launches_with_mcp_disabled(self):
         result = self.run_launcher(".codex5")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("DIRECT_CODEX_EXIT=0", result.stdout)
-        calls = self.calls_readback()
+        self.assertTrue(all(call["home"] == str(self.home / ".codex5")
+                            for call in self.calls_readback()))
+        calls = self.mcp_and_exec_calls()
         self.assertEqual(len(calls), 3)
-        self.assertTrue(all(call["home"] == str(self.home / ".codex5") for call in calls))
         for call in calls[1:]:
             self.assertIn("mcp_servers.firecrawl.enabled=false", call["args"])
             self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
@@ -198,7 +223,7 @@ class LauncherTest(unittest.TestCase):
             config_file.write("[mcp_servers.extraServer]\nenabled = true\n")
         result = self.run_launcher(".codex4")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for call in self.calls_readback()[1:]:
+        for call in self.mcp_and_exec_calls()[1:]:
             self.assertIn("mcp_servers.extraServer.enabled=false", call["args"])
             self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
 
@@ -207,7 +232,7 @@ class LauncherTest(unittest.TestCase):
         env["FAKE_INJECT_SERVER"] = "openaiDeveloperDocs"
         result = self.run_launcher(".codex2", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        calls = self.calls_readback()
+        calls = self.mcp_and_exec_calls()
         self.assertEqual(len(calls), 3)
         self.assertNotIn("mcp_servers.openaiDeveloperDocs.enabled=false", calls[0]["args"])
         for call in calls[1:]:
@@ -240,6 +265,67 @@ class LauncherTest(unittest.TestCase):
         self.assertIn("MCP preflight", result.stderr)
         self.assertFalse(self.runs.exists())
         self.assertEqual(len(self.calls_readback()), 2)
+
+    def state(self):
+        return next(self.runs.iterdir()).joinpath("state.txt").read_text()
+
+    def test_listed_delegation_features_are_withheld_and_recorded(self):
+        result = self.run_launcher(".codex3")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("DELEGATION_CAPABILITY=withheld", result.stdout)
+        args = self.exec_args()
+        for name in ("multi_agent", "multi_agent_v2", "agent_message_board", "collaboration_modes"):
+            self.assertIn(f"features.{name}=false", args)
+        self.assertNotIn("features.goals=false", args)
+        self.assertNotIn("--disable", args)
+        state = self.state()
+        self.assertIn("delegation_capability=withheld\n", state)
+        self.assertIn("delegation_features=agent_message_board=false,collaboration_modes=false,"
+                      "multi_agent=false,multi_agent_v2=false\n", state)
+        self.assertIn("delegation_scope=", state)
+        self.assertIn("log_collab_lines=0\n", state)
+
+    def test_renamed_delegation_feature_is_withheld_without_a_version_check(self):
+        env = self.env.copy()
+        env["FAKE_FEATURES"] = "multi_agent_v3:stable:true,subagents:experimental:true,goals:stable:true"
+        result = self.run_launcher(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.exec_args()
+        self.assertIn("features.multi_agent_v3=false", args)
+        self.assertIn("features.subagents=false", args)
+        self.assertNotIn("features.multi_agent=false", args)
+        self.assertIn("delegation_capability=withheld\n", self.state())
+
+    def test_unestablished_capability_still_launches_once_and_says_so(self):
+        cases = (
+            ("FAKE_FEATURES_FAIL", "1", "feature listing unavailable or unparsed", False),
+            ("FAKE_READBACK_FAIL", "1",
+             "feature readback with disable flags failed; flags not passed", False),
+            ("FAKE_STUCK", "multi_agent",
+             "listed delegation feature still enabled after disable", True),
+            ("FAKE_FEATURES", "goals:stable:true", "no delegation-like feature listed", False),
+        )
+        for number, (variable, value, note, flags_passed) in enumerate(cases):
+            with self.subTest(variable=variable):
+                self.runs = self.root / f"runs{number}"
+                self.calls.unlink(missing_ok=True)
+                env = self.env.copy()
+                env[variable] = value
+                result = self.run_launcher(env=env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("DELEGATION_CAPABILITY=not-established", result.stdout)
+                state = self.state()
+                self.assertIn("delegation_capability=not-established\n", state)
+                self.assertIn(f"delegation_capability_note={note}\n", state)
+                passed = any(arg.startswith("features.") for arg in self.exec_args())
+                self.assertEqual(passed, flags_passed)
+
+    def test_collab_lines_in_log_are_counted(self):
+        env = self.env.copy()
+        env["FAKE_COLLAB"] = "2"
+        result = self.run_launcher(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("log_collab_lines=2\n", self.state())
 
 
 if __name__ == "__main__":
