@@ -14,7 +14,9 @@ manual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]
 efforts = ["minimal", "low", "medium", "high", "xhigh", "max"]
 
 [providers.claude]
-# Fixed wrapper (sets CLAUDE_CONFIG_DIR=~/.claude5) for direct runs; native
+# The original store. Direct runs use the claude5 wrapper (it sets
+# CLAUDE_CONFIG_DIR=~/.claude5); native runs do not run the wrapper: the
+# site route names .claude5 and Claude Code uses its own login there. Native
 # Claude bindings name this store and require a one-store pool. No rotation.
 pool = ["claude5"]
 manual_profiles = ["claude5"]
@@ -36,18 +38,34 @@ wait_s = 120
 default = "native"
 
 [native]
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-8c48c7eecb69-add1b251a984/bin/oulipoly-native-call"
+# Exact versioned pin (Runner 59fb7cf2, agent-bash add1b251); no shim or
+# stable alias. It exists only after ROOT installs that package.
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-59fb7cf2dd17-add1b251a984/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
+# Upper bound checked before any allocation, lease, credential preparation or
+# write: the pinned caller refuses above 7200. The site's max_deadline_s may
+# be lower; the front door then refuses (caller 4). Declared, not read back.
+max_deadline_s = 7200
 # The access token must still cover deadline + 2 x site grace + front-door
 # collection + site margin, plus slack for the time until admission. These
-# mirror the root-owned site config; the front door's own check decides.
+# are declarations intended to match the shipped site config; they are not
+# read from it, and the front door's own check decides.
 site_grace_s = 30
 site_collection_s = 2
 site_margin_s = 300
 slack_s = 300
 # Bound on one official renewal (codex app-server, account/read refreshToken).
 renew_timeout_s = 60
+
+# Declared site child routes (the site's child_routes) and child_limits.
+# A launch opts in only explicitly (--native-child-route), and only to a route
+# its binding's children list declares; limits may only be lowered. The site
+# decides what it actually offers and admits; nothing here is read from it.
+[native.children]
+routes = ["luna-max"]
+max_starts = 4
+max_concurrent = 2
 
 # Requester-side declaration of site routes installed in the root-owned site
 # config. A request names the site route only; the site fixes model and effort
@@ -62,6 +80,7 @@ provider = "codex"
 model = "gpt-6.1-sol"
 effort = "high"
 site_route = "sol-high"
+children = ["luna-max"]
 
 [[native.bindings]]
 provider = "claude"
@@ -69,6 +88,7 @@ model = "claude-opus-5-5"
 effort = "medium"
 profile = "claude5"
 site_route = "opus-medium"
+children = ["luna-max"]
 
 [[native.bindings]]
 provider = "claude"
@@ -76,6 +96,7 @@ model = "claude-opus-5-5"
 effort = "high"
 profile = "claude5"
 site_route = "opus-high"
+children = ["luna-max"]
 
 # Routes: provider-neutral names bound to native model and effort.
 [routes.default]
