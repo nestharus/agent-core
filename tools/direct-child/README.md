@@ -1,6 +1,6 @@
 # Contextual direct dispatcher (temporary outage transport)
 
-`dispatch.py` picks a route for **one** child from its run context, then runs a Codex or Claude session in the foreground, through the installed Linux native ACP v2 caller for exactly mapped Codex bindings by default, otherwise directly through the CLI ([Transport](#transport)). It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
+`dispatch.py` picks a route for **one** child from its run context, then runs a Codex or Claude session in the foreground, through the installed Linux native ACP v2 caller for exactly mapped bindings (Sol 6.1 high, and Opus 5.5 medium or high on the original `claude5` store) by default, otherwise directly through the CLI ([Transport](#transport)). It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
 
 It does not decide seat authority or context boundaries, and it does not check that a class or kind claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
 
@@ -105,18 +105,31 @@ The caller owns the claim, as it owns class. The dispatcher never infers kind fr
 
 Transport is chosen after the route and before anything starts. It never changes provider, model, effort, alias, kind, seat, class or profile.
 
-- **Default `native`** (`[transport] default` in `routes.toml`). Exactly `codex` / `gpt-6.1-sol` / `high` maps to the existing site route `sol-high`, recorded as `default-native`. A native request names a **site route** only; the root-owned site config fixes model and effort. `[[native.bindings]]` is the requester's declaration, not backend model/effort attestation.
-- **Unmapped bindings run direct by rule**, recorded as `default-native-unmapped-direct`: Luna, literal `gpt-xhigh`, other Sol efforts, and every Claude route, including creative. Codex direct runs through [`launch.sh`](../direct-codex-child/README.md), and Claude through `claude5`. This is a pre-launch selection, never a fallback after a native attempt.
-- **`--transport direct`** explicitly selects the CLI, recorded with `transport_source: "explicit"` and `transport_rule: "explicit-direct"`. It preserves the resolved provider, model, effort and profile. This transport choice needs no `--override-reason`; route/model/effort/profile overrides still require one.
-- **`--transport native`** explicitly selects the installed native caller (`[native] caller`, currently the retained `103741ae` package), recorded as `explicit-native`. Any binding without a declared native site route is refused before effects (exit 2).
-- **No automatic fallback or replay.** Native preparation refusals and caller failures return their status. A later direct launch requires a new explicit caller choice.
-- `--native-deadline SECONDS` overrides `[native] deadline_s` (7200, the front door's deadline and kill bound).
+- **Default `native`** (`[transport] default` in `routes.toml`). Exactly these resolved bindings map, recorded as `default-native`:
 
-Transport is **mixed**: native covers Codex Sol high only, and Claude stays direct. Native Claude, other site routes, registered children and Act-owned Luna remain pending. ROOT's [activation decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u19-native-default-root-decision.md) follows one [installed conditional-renewal witness](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u18-installed-renewal-root-observation.md) on `.codex2`: local expiry metadata advanced to 863999 s remaining, covering the default 7862 s need, and the helper's EOF exit 0 and empty original group were collected. That one sample supports keeping 7200 s on the expiry axis; it does not establish token validity, writer attribution, issuer rotation count, other profiles, task fit or future site/CLI compatibility. Source, fake controls and actual native task evidence are distinct.
+  | Resolved binding | Site route | Typical contexts | Credential |
+  |---|---|---|---|
+  | `codex` / `gpt-6.1-sol` / `high`, any pool profile | `sol-high` | Observers, corrections, plain launches | access-only snapshot from the rotated profile ([below](#native-credentials-and-renewal)) |
+  | `claude` / `claude-opus-5-5` / `medium`, store `claude5` | `opus-medium` | Framer, Decider, new-foundation and unknown-class Acts | none |
+  | `claude` / `claude-opus-5-5` / `high`, store `claude5` | `opus-high` | creative Acts | none |
+
+  A native request names a **site route** only; the root-owned site config fixes model, effort and, for Claude, the store (`config_dir` `.claude5`). `[[native.bindings]]` is the requester's declaration, not backend model/effort attestation. For Claude the store is part of the binding: only the original `claude5` store maps, the Claude pool must hold that one store, and another store (configured or `--profile`) is a different binding, never silently replaced by the site's.
+- **Unmapped bindings run direct by rule**, recorded as `default-native-unmapped-direct`: Luna, literal `gpt-xhigh`, other Sol efforts, other Claude models or efforts, and any other Claude store. Codex direct runs through [`launch.sh`](../direct-codex-child/README.md), and Claude through `claude5`. This is a pre-launch selection, never a fallback after a native attempt.
+- **Context chooses the model; transport follows.** Seat, class and kind resolve provider, model and effort first ([Resolution](#resolution)); transport never changes them. The creative rule refuses moves off Opus 5.5 high on either transport.
+- **`--transport direct`** explicitly selects the CLI, recorded with `transport_source: "explicit"` and `transport_rule: "explicit-direct"`. It preserves the resolved provider, model, effort and profile. This transport choice needs no `--override-reason`; route/model/effort/profile overrides still require one. It is the escape when native is unsuitable for a launch.
+- **`--transport native`** explicitly selects the installed native caller (`[native] caller`, the versioned `8c48c7eecb69` package path), recorded as `explicit-native`. Any binding without a declared native site route is refused before effects (exit 2).
+- **No automatic fallback or replay.** Native preparation refusals and caller failures return their status. A later direct launch requires a new explicit caller choice.
+- `--native-deadline SECONDS` overrides `[native] deadline_s` (7200, the front door's deadline and kill bound) for a launch that runs native. A zero or negative value is refused on every transport, and the flag is refused (exit 2, before effects) when the launch resolves direct, by rule or by explicit choice: direct launches have no deadline, and the dispatcher selects no direct timeout.
+
+The caller path is an exact versioned pin. A package reinstall under a new id breaks it until `routes.toml` is updated in the same window; there is no stable caller resolution or shim.
+
+Transport is **mixed**: native covers the three bindings above; Luna, other site routes, registered children and Act-owned Luna remain pending. Native Claude has one useful Opus-medium Frame witness, called straight through the installed caller (caller 0, `answered`, front door 87, normal close collected 0.578 s after close was queued); it did not exercise this dispatcher's mapping, and Opus high has no native witness. The first ordinary mapped launches after merge are those witnesses. Known Claude receiver limits stay open: the receiver can exit before its descendants drain, so close can take until the deadline; a long silent thinking phase may hit the 120 s ACK bound and end without an answer; `answered` does not establish the model, a denial or the task. ROOT's [activation decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u19-native-default-root-decision.md) follows one [installed conditional-renewal witness](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u18-installed-renewal-root-observation.md) on `.codex2`: local expiry metadata advanced to 863999 s remaining, covering the default 7862 s need, and the helper's EOF exit 0 and empty original group were collected. That one sample supports keeping 7200 s on the expiry axis; it does not establish token validity, writer attribution, issuer rotation count, other profiles, task fit or future site/CLI compatibility. Source, fake controls and actual native task evidence are distinct.
 
 ### Native credentials and renewal
 
-The native path sends an access token only, and the front door refuses a token that will not outlast the run. So under the [profile lease](#profiles), before the call:
+**Native Claude does none of this.** Its site route sets `"credential": "none"` and fixes the store; Claude Code inside the run uses its own login in `~/.claude5`, which pays and refreshes there, and its transcripts land there. The dispatcher takes no profile lease, reads no store or token, renews nothing and passes no credential option. Its state records `credential=none` and `profile_lease=none`. Concurrent direct and native use of `.claude5` is unexamined.
+
+For **native Codex**, the path sends an access token only, and the front door refuses a token that will not outlast the run. So under the [profile lease](#profiles), before the call:
 
 1. Read the profile's `auth.json` (the caller's own regular file, no symlink) for the access token's JWT `exp`. A profile with no file-store ChatGPT access token is refused (exit 70).
 2. The token must cover `need = deadline + 2 × site_grace_s + site_collection_s + site_margin_s + slack_s` (7862 s by default). The site terms are declarations, not root-config readback; the front door's own check decides. Actual lifetime, site binding and admission delay remain conditional. A shorter lifetime can renew and refuse on every new attempt.
@@ -143,7 +156,7 @@ Nothing prints or records token text, account fields, JSON-RPC error messages or
 - The lease does **not** cover writers we do not launch: interactive Codex, editors, desktop apps, other machines or copies of a profile. A refresh there can still rotate the grant and race ours. Keeping a profile single-writer is an ownership choice for the person and ROOT, not a guarantee of this tool.
 - It also does not cover external per-profile daemons. Their presence was historically reported, not freshly attested; the previously cited `HANDOFF_ENV` source does not establish direct-exec daemon handoff. Lease identity assumes trusted user-owned profile directories and an unchanged regular lease inode. Existing modes/type/owner are not revalidated; Bash check/open replacement, FIFO blocking, symlinked ancestry and replaced inodes remain conditional limits. Waits are application bounds, not kernel/filesystem guarantees.
 - To pick a profile yourself, pass `--profile` with `--override-reason`. Explicit profiles never advance the counter. `.codex` is manual-only; the automatic pool is `.codex2`, `.codex3`, `.codex4`, `.codex5`.
-- Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`.
+- Direct Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`. Native Claude names the same store through its site route and does not use the wrapper. Rotation and the lease above apply to Codex profiles only.
 
 ## Example
 
@@ -161,12 +174,12 @@ Other forms:
 - `--seat maker --class correction --basis /abs/frame-return.md#F4 --kind creative` for a correction to a UI's look, which goes to Opus 5.5 high.
 - `--model gpt-xhigh --override-reason 'CRW contract names gpt-xhigh'` for a literal alias.
 
-- Sol high launches use the installed native caller by default; `--transport direct` records an explicit CLI choice, and `--transport native` records an explicit native choice ([Transport](#transport)).
+- Sol high and Opus 5.5 medium/high (`claude5`) launches use the installed native caller by default; `--transport direct` records an explicit CLI choice, and `--transport native` records an explicit native choice ([Transport](#transport)).
 
 Add `--dry-run` to print:
 
 - the resolution record, including transport;
-- the exact quoted native command (for native, the caller command with `<attempt>` placeholders and the freshness the token must cover);
+- the exact quoted native command (for native, the caller command with `<attempt>` placeholders; for Codex also the freshness the token must cover, for Claude a note that no credential is used);
 - the next pool profile, marked "not reserved".
 
 A dry run writes no files, advances no counter, takes no lease, reads no credential, launches nothing, and does not check whether the Claude wrapper is installed.
@@ -210,22 +223,24 @@ Claude exit codes:
 - Native exit 0 returns **3** for an unambiguous boolean error, **4** for missing/invalid results or failed final capture, and **1** for other incomplete custody.
 - Final write/read/output or encoding errors report `final_capture_error` and `final_status=capture-error`. State errors report `state_capture_error` to the terminal. Failed storage cannot guarantee durable metadata: available terminal metadata preserves the observed native status, while custody is explicitly incomplete.
 
-**Native attempts** (exactly mapped Codex, by default or explicit choice) run the caller in the foreground after the credential step above. Their records are created 0600 in a 0700 attempt directory:
+**Native attempts** (exactly mapped bindings, by default or explicit choice) run the caller in the foreground, for Codex after the credential step above, for Claude directly. Their records are created 0600 in a 0700 attempt directory:
 
 - `prompt.md`, read-only, and the request's prompt file;
 - `route.json`;
-- `renewal.json`, the freshness and renewal classes;
+- `renewal.json`, the freshness and renewal classes (Codex only);
 - `native/`, the caller's own output: `request.public.json` (credential reduced to provider and expiry), `events.jsonl`, `caller.jsonl`, `stderr.log`, `result.json` and `final.md`;
 - `final.md`, the caller's answer text, read back and printed between `DIRECT_CHILD_FINAL_BEGIN`/`END` markers only when the caller answered;
-- `state.txt`, which records the lease (`lease_status`, `lease_waited_s`, `lease_released_utc`), `renewal`, `issuer_contact`, `profile_written`, remaining seconds, the exact `native_command`, `native_caller_exit`, the caller's `native_class` and `front_door_exit`, answer presence, Bash counts, `credential_snapshot_removed`, `final_status`, `custody_status` and `dispatcher_exit`.
+- `state.txt`, which records, for Codex, the lease (`lease_status`, `lease_waited_s`, `lease_released_utc`), `renewal`, `issuer_contact`, `profile_written`, remaining seconds and `credential_snapshot_removed`, and for Claude `credential=none` and `profile_lease=none`; then the exact `native_command`, `native_caller_exit`, the caller's `native_class`, `front_door_exit` with `front_door_exit_meaning`, answer presence, Bash counts, `final_status`, `custody_status` and `dispatcher_exit`.
 
-This is a **qualified native record**: answer text, turn and owner events, and Bash argv. There are no Bash output bodies or reasoning, so it is not a complete log. Arbitrary task output in `native/` may still contain secrets; the caller has no redactor. Native constructs a Bash-only tool configuration, but a trusted shell can still start processes, CLIs and this dispatcher, so `delegation_capability=not-established` here too.
+**Three statuses, kept apart.** `native_caller_exit` and `native_class` are the caller's classification of the call (below). `front_door_exit` is the native entry's status as relayed by the front door, or the front door's own 90–94. They answer different questions: for example the Claude witness above had caller 0 / `answered` with front door **87**, which in the [Runner entry source](/home/nes/projects/agent-runner/trunk/src-tauri/src/commands/native_root.rs) is the owner's `closed` class: the caller's close after the linked turn end was followed through and the host ended by a kill. It is the expected end of a call the caller closes, not a fault and not evidence that anything was processed; 0 means every harness end was observed with nothing owed. The caller treats 0 and 87 alike. `front_door_exit_meaning` quotes the documented meaning, or says `undocumented status` / `not observed`.
+
+This is a **qualified native record**: answer text, turn and owner events, and Bash argv. There are no Bash output bodies or reasoning, so it is not a complete log. Arbitrary task output in `native/` may still contain secrets; the caller has no redactor. Sol's native tool configuration is Bash-only. Claude's trusted-task configuration, used uniformly for every Claude seat, also offers built-in Read, Write and Edit: their effects are the harness's own and their bodies are not in the record, and Claude Code's managed settings still apply. On both, a trusted shell can still start processes, CLIs and this dispatcher (nested dispatch is bounded only by the brief), so `delegation_capability=not-established` here too.
 
 Native exit codes:
 
 - **2**: input/selection/setup refusal; unmapped native and input checks precede launch, but allocation or partial attempt setup may already have written state;
-- **75**: profile lease not acquired within the bound, or the lease file was unusable; no task;
-- **70**: no admissible fresh access token (unavailable, not renewed, insufficient, helper failure or unconfirmed helper stop); no native task;
+- **75** (Codex): profile lease not acquired within the bound, or the lease file was unusable; no task;
+- **70** (Codex): no admissible fresh access token (unavailable, not renewed, insufficient, helper failure or unconfirmed helper stop); no native task;
 - otherwise the caller's own code: 0 answered, 1 no answer, 3 local refusal, 4 front-door refusal, 5 cancelled, 6 incomplete, 7 cleanup failed, 8 launch failed, 9 ended otherwise; **6** also when the caller answered but its final could not be kept; `128+N` for a signal.
 
 Answered (0) means linked text and collected transport, not that the task was done. Catchable SIGINT, SIGTERM and SIGHUP are recorded throughout preparation, snapshot creation, caller launch and collection. Preparation cancellation cleans the helper/snapshot and starts no task; once a caller exists cancellation is forwarded, including a signal received during Popen, and collection continues within its bound. Snapshot removal is in a finally spanning the attempt. Cancellation returns `128+N`, with caller exit retained when started. The installed caller handles INT/TERM; HUP may terminate it without graceful native cancel. This is dispatcher cleanup, not native/kernel cancel certification; SIGKILL can leave private access-only residue. A native attempt is never replayed, never sent direct afterwards, and its pre-launch refusals are new decisions for the caller, not retries.
@@ -241,7 +256,7 @@ Some initial/prelaunch state writes can fail or discard append errors; final cus
 - provider, model, and effort;
 - overrides and their reason;
 - profile and profile source;
-- transport, its source and rule, the site route and native caller (or null), and the native deadline. `site_binding_source` notes that the binding is our declaration: the root-owned site config fixes the actual model and effort and is not read.
+- transport, its source and rule, the site route and native caller (or null), and the native deadline. Native records add `native_credential` (`codex-access-snapshot` or `none`) and `site_binding_source`, which notes that the binding is our declaration: the root-owned site config fixes the actual model, effort and any Claude store and is not read.
 
 **Delegation provenance** in `state.txt` is a record, never a launch gate or a reason to rerun:
 
@@ -265,7 +280,7 @@ Launch through a native persistent terminal, and record the terminal handle in t
 - **CRW is unchanged.** Its opaque `gpt-xhigh` contract stays as it is; see [`models/roles.md`](../../models/roles.md).
 - **Outcome is the caller's to judge.** Process custody proves that the process completed. It does not prove the task was done.
 
-Tests use fake CLIs, a fake stdio app-server and a fake native caller. They never launch a model, read a real profile or contact an issuer:
+Tests use fake CLIs, a fake stdio app-server and a fake native caller (the CLI tests replace the configured caller with a failing stand-in). They never launch a model, read a real profile or Claude store, or contact an issuer:
 
 ```bash
 python3 -m unittest discover -s tools/direct-child -p 'test_*.py'

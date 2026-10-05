@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import signal
 import stat
 import subprocess
@@ -23,6 +24,8 @@ CONFIG = HERE / "routes.toml"
 LEASE = ".oulipoly-direct-child.lease"
 # deadline 7200 + 2 x 30 + 2 + 300 + 300
 NEED = 7862
+# A second Claude store the dispatcher accepts, which no native binding names.
+TWO_STORES = ('manual_profiles = ["claude5"]', 'manual_profiles = ["claude5", "claude6"]')
 SECRETS = ("SECRET-REFRESH", "person@example.com", "SECRET-STDERR", "SECRET-ID-TOKEN")
 
 LEASE_PROBE = r'''
@@ -168,9 +171,11 @@ import fcntl, json, os, sys
 ''' + LEASE_PROBE + r'''
 args = sys.argv[1:]
 value = lambda flag: args[args.index(flag) + 1]
-credential = os.path.join(value("--credential-codex-profile"), "auth.json")
-snapshot = json.load(open(credential))
-mode_bits = oct(os.stat(credential).st_mode & 0o777)
+snapshot = mode_bits = None
+if "--credential-codex-profile" in args:
+    credential = os.path.join(value("--credential-codex-profile"), "auth.json")
+    snapshot = json.load(open(credential))
+    mode_bits = oct(os.stat(credential).st_mode & 0o777)
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"tool": "native-call", "args": args, "snapshot": snapshot,
                             "snapshot_mode": mode_bits, **lease_probe(os.environ["PROBE_HOME"])}) + "\n")
@@ -179,14 +184,17 @@ out = value("--out")
 os.mkdir(out, 0o700)
 if mode == "partial":
     sys.exit(6)
+classes = {"answered": ("answered", 0, 0), "refused": ("front-door-refused", 90, 4),
+           "no-answer": ("no-answer", 0, 1)}
+native_class, front_door, code = classes[mode]
 answered = mode == "answered"
-json.dump({"class": "answered" if answered else "front-door-refused",
-           "front_door_exit": 0 if answered else 90,
+json.dump({"class": native_class,
+           "front_door_exit": int(os.environ.get("FAKE_FRONT_DOOR", front_door)),
            "answer": {"present": answered}, "counts": {"bash_accepted": 2, "bash_ended": 2},
            "processing_completion": "not-observed"}, open(os.path.join(out, "result.json"), "w"))
 if answered:
     open(os.path.join(out, "final.md"), "w").write("final: " + open(value("--prompt-file")).read())
-sys.exit(0 if answered else 4)
+sys.exit(code)
 '''
 
 
@@ -231,9 +239,12 @@ class NativeTest(unittest.TestCase):
         path.write_text(json.dumps(auth), encoding="utf-8")
         path.chmod(0o600)
 
-    def write_config(self, **replace):
+    def write_config(self, raw=(), **replace):
         text = CONFIG.read_text(encoding="utf-8")
         text = re.sub(r'(?m)^caller = ".*"$', f'caller = "{self.bin / "native-call"}"', text)
+        for old, new in raw:
+            self.assertEqual(text.count(old), 1, old)
+            text = text.replace(old, new)
         for key, value in replace.items():
             text, count = re.subn(rf'(?m)^{key} = .*$', f"{key} = {value}", text)
             self.assertEqual(count, 1, key)
@@ -328,29 +339,36 @@ class NativeTest(unittest.TestCase):
                          (self.home / ".local").exists())
 
     def test_explicit_native_without_a_declared_site_route_is_refused_before_effects(self):
+        config = self.write_config(raw=[TWO_STORES])
         for extra in (("--seat", "scout"),
-                      ("--seat", "framer"),
-                      ("--seat", "maker", "--kind", "creative"),
                       ("--model", "gpt-xhigh", "--override-reason", "CRW opaque alias"),
-                      ("--effort", "medium", "--override-reason", "cheaper")):
+                      ("--effort", "medium", "--override-reason", "cheaper"),
+                      ("--seat", "framer", "--effort", "low", "--override-reason", "cheaper"),
+                      ("--seat", "decider", "--model", "claude-sonnet-5-5", "--provider", "claude",
+                       "--effort", "high", "--override-reason", "other model"),
+                      ("--seat", "framer", "--profile", "claude6", "--override-reason", "other store")):
             with self.subTest(extra=extra):
-                result = self.dispatch("--transport", "native", *extra)
+                result = self.dispatch("--transport", "native", *extra, config=config)
                 self.assertEqual(result.returncode, 2, result.stdout)
                 self.assertIn("no native site route", result.stderr)
         # A direct-default configuration still requires native transport for a deadline.
         result = self.dispatch("--native-deadline", "60", config=self.write_config(default='"direct"'))
         self.assertEqual(result.returncode, 2)
+        self.assertIn("applies only to a native launch", result.stderr)
         self.assertFalse(self.runs.exists() or self.calls.exists() or
                          (self.home / ".local").exists())
 
     def test_default_native_runs_unmapped_bindings_direct_by_rule_with_identity_kept(self):
         cases = [(("--seat", seat), "codex", "gpt-6-luna", "max")
                  for seat in ("scout", "explorer")]
-        cases += [(("--seat", seat), "claude", "claude-opus-5-5", "medium")
-                  for seat in ("framer", "decider", "maker", "investigator", "method-steward")]
-        cases += [(("--class", "new-foundation", "--basis", "frame.md"),
-                   "claude", "claude-opus-5-5", "medium"),
-                  (("--seat", "maker", "--kind", "creative"), "claude", "claude-opus-5-5", "high")]
+        reason = ("--override-reason", "unmapped Claude binding")
+        cases += [(("--seat", "framer", "--effort", effort, *reason), "claude", "claude-opus-5-5", effort)
+                  for effort in ("low", "xhigh", "max")]
+        cases += [(("--model", "claude-sonnet-5-5", "--provider", "claude", "--effort", "high",
+                    *reason), "claude", "claude-sonnet-5-5", "high"),
+                  (("--seat", "decider", "--profile", "claude6", *reason),
+                   "claude", "claude-opus-5-5", "medium")]
+        config = self.write_config(raw=[TWO_STORES])
         cases += [(("--model", alias, "--override-reason", "literal alias"),
                    "codex", "gpt-6.1-sol", effort)
                   for alias, effort in (("gpt-medium", "medium"), ("gpt-xhigh", "xhigh"))]
@@ -359,7 +377,7 @@ class NativeTest(unittest.TestCase):
                   for effort in ("minimal", "low", "medium", "xhigh", "max")]
         for extra, provider, model, effort in cases:
             with self.subTest(extra=extra):
-                record, _ = self.resolved(*extra)
+                record, _ = self.resolved(*extra, config=config)
                 self.assertEqual((record["transport"], record["transport_source"],
                                   record["transport_rule"], record["provider"],
                                   record["model"], record["effort"]),
@@ -390,6 +408,102 @@ class NativeTest(unittest.TestCase):
         record = json.loads((attempt / "route.json").read_text())
         self.assertEqual((record["transport_source"], record["transport_rule"], state["transport"]),
                          ("explicit", "explicit-direct", "direct"))
+
+    def test_default_native_maps_exactly_the_original_claude5_opus_contexts(self):
+        medium = [("--seat", seat) for seat in ("framer", "decider")]
+        medium += [("--seat", seat, *klass) for seat in ("maker", "investigator", "method-steward")
+                   for klass in ((), ("--class", "new-foundation", "--basis", "frame.md"))]
+        medium += [("--class", "new-foundation", "--basis", "frame.md"),
+                   ("--route", "direction", "--override-reason", "explicit route"),
+                   ("--seat", "framer", "--profile", "claude5", "--override-reason", "same store")]
+        high = [("--seat", seat, "--kind", "creative", *klass)
+                for seat in ("maker", "investigator", "method-steward")
+                for klass in ((), ("--class", "correction", "--basis", "frame.md"))]
+        high += [("--kind", "creative"), ("--seat", "framer", "--effort", "high",
+                                          "--override-reason", "high effort")]
+        for site_route, effort, cases in (("opus-medium", "medium", medium), ("opus-high", "high", high)):
+            for extra in cases:
+                with self.subTest(extra=extra):
+                    record, out = self.resolved(*extra)
+                    self.assertEqual((record["transport"], record["transport_rule"], record["site_route"],
+                                      record["provider"], record["model"], record["effort"],
+                                      record["profile"], record["native_credential"],
+                                      record["native_deadline_s"]),
+                                     ("native", "default-native", site_route, "claude",
+                                      "claude-opus-5-5", effort, "claude5", "none", 7200))
+                    command = next(l for l in out.splitlines() if l.startswith("DRY RUN: would run: "))
+                    argv = shlex.split(command.removeprefix("DRY RUN: would run: "))
+                    self.assertEqual(argv, [str(self.bin / "native-call"), "--route", site_route,
+                                            "--prompt-file", "<attempt>/prompt.md", "--cwd", str(self.cwd),
+                                            "--out", "<attempt>/native", "--trusted-task",
+                                            "--deadline", "7200"])
+                    self.assertIn("no credential, store read or profile lease", out)
+                    self.assertNotIn("must cover", out)
+        # Context still chooses the model first; the creative rule holds on every transport.
+        for transport in ((), ("--transport", "native"), ("--transport", "direct")):
+            with self.subTest(transport=transport):
+                result = self.dispatch("--dry-run", *transport, "--seat", "maker", "--kind", "creative",
+                                       "--effort", "medium", "--override-reason", "cheaper")
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("--kind creative requires claude / claude-opus-5-5 / high", result.stderr)
+        record, _ = self.resolved("--seat", "framer", "--transport", "direct")
+        self.assertEqual((record["transport"], record["transport_rule"], record["site_route"],
+                          record["profile"], record["effort"]),
+                         ("direct", "explicit-direct", None, "claude5", "medium"))
+        self.assertFalse(self.runs.exists() or self.calls.exists() or
+                         (self.home / ".local").exists())
+
+    def test_native_deadline_is_refused_unless_the_launch_runs_native(self):
+        cases = [("--seat", "scout"), ("--seat", "observer", "--transport", "direct"),
+                 ("--seat", "framer", "--transport", "direct"),
+                 ("--seat", "framer", "--effort", "low", "--override-reason", "unmapped"),
+                 ("--model", "gpt-xhigh", "--override-reason", "CRW opaque alias")]
+        for extra in cases:
+            for dry in ((), ("--dry-run",)):
+                with self.subTest(extra=extra, dry=dry):
+                    result = self.dispatch(*dry, "--native-deadline", "600", *extra)
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertIn("applies only to a native launch", result.stderr)
+                    self.assertIn("direct launches have no deadline", result.stderr)
+        for value in ("0", "-5"):
+            for extra in ((), ("--seat", "framer"), ("--seat", "scout"), ("--transport", "direct")):
+                with self.subTest(value=value, extra=extra):
+                    result = self.dispatch("--dry-run", "--native-deadline", value, *extra)
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertIn("must be a positive number of seconds", result.stderr)
+        result = self.dispatch("--dry-run", "--native-deadline", "soon")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid int value", result.stderr)
+        for extra in ((), ("--seat", "framer"), ("--kind", "creative")):
+            with self.subTest(extra=extra):
+                record, out = self.resolved("--native-deadline", "1800", *extra)
+                self.assertEqual((record["transport"], record["native_deadline_s"]), ("native", 1800))
+                self.assertIn("--deadline 1800", out)
+        self.assertFalse(self.runs.exists() or self.calls.exists() or
+                         (self.home / ".local").exists())
+
+    def test_native_binding_config_keeps_store_identity(self):
+        claude = ('[[native.bindings]]\nprovider = "claude"\nmodel = "claude-opus-5-5"\n'
+                  'effort = "medium"\nprofile = "claude5"\n')
+        codex = '[[native.bindings]]\nprovider = "codex"\nmodel = "gpt-6.1-sol"\neffort = "high"\n'
+        cases = (([(claude, claude.replace('profile = "claude5"\n', ''))], "plus profile for a Claude"),
+                 ([(codex, codex + 'profile = ".codex2"\n')], "plus profile for a Claude"),
+                 ([(claude, claude.replace('"claude5"', '"claude6"'))], "not a configured Claude profile"),
+                 ([TWO_STORES, ('pool = ["claude5"]', 'pool = ["claude5", "claude6"]')],
+                  "one-store Claude pool"),
+                 ([('site_route = "opus-high"', 'site_route = "opus-medium"'),
+                   ('effort = "high"\nprofile = "claude5"', 'effort = "medium"\nprofile = "claude5"')],
+                  "repeats a binding"))
+        for raw, message in cases:
+            with self.subTest(message=message):
+                result = self.dispatch("--dry-run", "--seat", "framer", config=self.write_config(raw=raw))
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertIn(message, result.stderr)
+        # A second store is valid when only claude5 is bound, and never maps.
+        record, _ = self.resolved("--seat", "framer", "--profile", "claude6", "--override-reason", "other",
+                                  config=self.write_config(raw=[TWO_STORES]))
+        self.assertEqual((record["transport"], record["transport_rule"], record["profile"]),
+                         ("direct", "default-native-unmapped-direct", "claude6"))
 
     # ------------------------------------------------------- native attempts
 
@@ -507,6 +621,95 @@ class NativeTest(unittest.TestCase):
                                  (str(code), result_status, native_class, "missing", "yes", str(code)))
                 self.assertIn("do-not-replay", state["native_retry"])
                 self.assertFalse((attempt / "native-credential").exists())
+
+    def claude_native(self, *extra, env=None, runs=None):
+        # An unreadable original store: any dispatcher read of it would fail.
+        store = self.home / ".claude5"
+        if not store.exists():
+            store.mkdir()
+            (store / ".credentials.json").write_text("SECRET-CLAUDE-STORE", encoding="utf-8")
+            store.chmod(0)
+            self.addCleanup(store.chmod, 0o700)
+        return self.dispatch(*extra, env=env, runs=runs)
+
+    def test_claude_native_uses_no_credential_lease_store_read_or_rotation(self):
+        for extra, site_route in ((("--seat", "decider"), "opus-medium"),
+                                  (("--seat", "maker", "--kind", "creative"), "opus-high")):
+            with self.subTest(site_route=site_route):
+                self.calls.unlink(missing_ok=True)
+                runs = self.root / site_route
+                result = self.claude_native(*extra, runs=runs)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.calls_of("codex"), [], "no app-server or direct Codex")
+                (call,) = self.calls_of("native-call")
+                args = call["args"]
+                self.assertEqual(args[args.index("--route") + 1], site_route)
+                self.assertIsNone(call["snapshot"])
+                for flag in ("--credential-codex-profile", "--credential-margin",
+                             "--credential-opencode-auth", "--model", "--effort"):
+                    self.assertNotIn(flag, args)
+                (attempt,) = runs.iterdir()
+                state = dict(line.split("=", 1) for line in (attempt / "state.txt").read_text().splitlines())
+                self.assertEqual((state["transport"], state["provider"], state["profile"],
+                                  state["site_route"], state["credential"], state["profile_lease"],
+                                  state["native_caller_exit"], state["native_class"],
+                                  state["final_status"], state["dispatcher_exit"]),
+                                 ("native", "claude", "claude5", site_route, "none", "none",
+                                  "0", "answered", "present", "0"))
+                for key in ("renewal", "lease_status", "credential_need_s", "credential_snapshot_removed"):
+                    self.assertNotIn(key, state)
+                self.assertIn("Read/Write/Edit bodies", state["native_record"])
+                self.assertIn("Read, Write and Edit", state["delegation_capability_note"])
+                self.assertFalse((attempt / "renewal.json").exists())
+                self.assertFalse((attempt / "native-credential").exists())
+                self.assertEqual((attempt / "final.md").read_text(), "final: Do the bounded task.\n")
+                route = json.loads((attempt / "route.json").read_text())
+                self.assertEqual((route["native_credential"], route["profile_source"]), ("none", "fixed"))
+        # No Codex lease, counter or store state was created; the claude5 wrapper was not needed.
+        self.assertFalse((self.home / ".local").exists())
+        for profile in (".codex", ".codex2", ".codex3", ".codex4", ".codex5"):
+            self.assertFalse((self.home / profile / LEASE).exists(), profile)
+        self.assertFalse((self.bin / "claude5").exists())
+        self.assertEqual(stat.S_IMODE((self.home / ".claude5").stat().st_mode), 0)
+
+    def test_claude_native_outcomes_are_legible_without_replay_or_direct_fallback(self):
+        wrapper = self.bin / "claude5"
+        wrapper.write_text("#!/bin/sh\necho direct >> \"$FAKE_CALLS.claude5\"\nexit 0\n", encoding="utf-8")
+        wrapper.chmod(0o755)
+        cases = (("answered", "87", 0, "answered", "present", "owner closed"),
+                 ("answered", "0", 0, "answered", "present", "entry ended"),
+                 ("no-answer", "87", 1, "no-answer", "missing", "owner closed"),
+                 ("refused", "90", 4, "front-door-refused", "missing", "refused admission"),
+                 ("partial", None, 6, "unknown", "missing", "not observed"))
+        for mode, front_door, code, native_class, final_status, meaning in cases:
+            with self.subTest(mode=mode, front_door=front_door):
+                self.calls.unlink(missing_ok=True)
+                runs = self.root / f"{mode}-{front_door}"
+                env = self.env | {"FAKE_CALLER": mode} | ({"FAKE_FRONT_DOOR": front_door} if front_door else {})
+                result = self.claude_native("--seat", "framer", env=env, runs=runs)
+                self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+                self.assertEqual(len(self.calls_of("native-call")), 1, "never replayed")
+                (attempt,) = runs.iterdir()
+                state = dict(line.split("=", 1) for line in (attempt / "state.txt").read_text().splitlines())
+                self.assertEqual((state["native_caller_exit"], state["native_class"],
+                                  state["front_door_exit"], state["final_status"], state["dispatcher_exit"]),
+                                 (str(code), native_class, front_door or "unknown", final_status, str(code)))
+                self.assertIn(meaning, state["front_door_exit_meaning"])
+                self.assertIn("answered is not correctness", state["native_status_note"])
+                self.assertIn("do-not-replay", state["native_retry"])
+                self.assertIn(f"FRONT_DOOR_EXIT={front_door or 'unknown'}", result.stdout)
+        self.assertFalse(Path(str(self.calls) + ".claude5").exists(), "no direct fallback")
+        self.assertEqual(self.calls_of("codex"), [])
+
+    def test_claude_native_signal_reaches_the_caller_and_is_collected(self):
+        env = self.env | {"CONTROL_MODE": "caller-start-signal", "FAKE_SIGNAL": str(int(signal.SIGTERM))}
+        result = self.claude_native("--seat", "framer", env=env)
+        self.assertEqual(result.returncode, 128 + signal.SIGTERM, result.stdout + result.stderr)
+        attempt, state = self.attempt()
+        self.assertEqual(state["native_signal"], str(int(signal.SIGTERM)))
+        self.assertNotEqual(state["native_caller_exit"], "none")
+        self.assertNotIn("credential_snapshot_removed", state)
+        self.assertEqual(len(self.calls_of("caller-spawn")), 1)
 
     def test_profile_without_a_chatgpt_access_token_is_refused_without_issuer_contact(self):
         self.write_auth(".codex4", 0, tokens={"access_token": "not-a-jwt", "refresh_token": "SECRET-REFRESH"})

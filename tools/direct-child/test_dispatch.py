@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
@@ -13,6 +14,15 @@ import unittest
 
 DISPATCH = Path(__file__).with_name("dispatch.py")
 CONFIG = Path(__file__).with_name("routes.toml")
+# Stand-in for the installed native caller: these tests exercise direct CLI
+# behaviour, so any native launch is recorded and fails instead of reaching
+# the real front door.
+FAKE_NATIVE_CALLER = r'''#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
+    calls.write(json.dumps({"tool": "native-call", "args": sys.argv[1:]}) + "\n")
+sys.exit(99)
+'''
 FAKE_CODEX = r'''#!/usr/bin/env python3
 import json, os, sys, tomllib
 from pathlib import Path
@@ -151,7 +161,8 @@ class DispatchTest(unittest.TestCase):
         for directory in (self.home, self.bin, self.cwd):
             directory.mkdir()
         self.prompt.write_text("Do the bounded task.\n", encoding="utf-8")
-        for name, body in (("codex", FAKE_CODEX), ("claude5", FAKE_CLAUDE)):
+        for name, body in (("codex", FAKE_CODEX), ("claude5", FAKE_CLAUDE),
+                           ("native-call", FAKE_NATIVE_CALLER)):
             (self.bin / name).write_text(body, encoding="utf-8")
             (self.bin / name).chmod(0o755)
         for profile in (".codex", ".codex2", ".codex3", ".codex4", ".codex5"):
@@ -162,13 +173,15 @@ class DispatchTest(unittest.TestCase):
         self.env = os.environ | {"HOME": str(self.home), "FAKE_CALLS": str(self.calls),
                                  # Never reach real codex or claude wrappers.
                                  "PATH": os.pathsep.join((str(self.bin), "/usr/bin", "/bin"))}
+        self.config = self.write_config(CONFIG.read_text(encoding="utf-8"), "routes-base.toml")
 
     def dispatch(self, *extra, env=None):
         selected_env = env or self.env
         command = ([sys.executable, "-c", FAULT_WRAPPER, str(DISPATCH)]
                    if "CUSTODY_FAULT" in selected_env else [str(DISPATCH)])
+        config = () if "--config" in extra else ("--config", self.config)
         return subprocess.run(
-            [*command, "--cwd", str(self.cwd), "--prompt", str(self.prompt),
+            [*command, *config, "--cwd", str(self.cwd), "--prompt", str(self.prompt),
              "--runs-dir", str(self.runs), "--id", "child", *extra],
             env=selected_env, capture_output=True, text=True, check=False)
 
@@ -187,8 +200,9 @@ class DispatchTest(unittest.TestCase):
         calls = [json.loads(line) for line in self.calls.read_text(encoding="utf-8").splitlines()]
         return calls if include_help else [call for call in calls if "--help" not in call["args"]]
 
-    def write_config(self, text):
-        path = self.root / "routes.toml"
+    def write_config(self, text, name="routes.toml"):
+        text = re.sub(r'(?m)^caller = ".*"$', f'caller = "{self.bin / "native-call"}"', text)
+        path = self.root / name
         path.write_text(text, encoding="utf-8")
         return str(path)
 
@@ -532,7 +546,7 @@ class DispatchTest(unittest.TestCase):
 
     def claude_attempt(self, mode, **environment):
         previous = set(self.runs.iterdir()) if self.runs.exists() else set()
-        result = self.dispatch("--seat", "framer",
+        result = self.dispatch("--transport", "direct", "--seat", "framer",
                                env=self.env | {"FAKE_CLAUDE_MODE": mode} | environment)
         attempt = (set(self.runs.iterdir()) - previous).pop()
         state = dict(line.split("=", 1) for line in
@@ -622,7 +636,7 @@ class DispatchTest(unittest.TestCase):
         for extra in (("--seat", "maker", "--class", "correction", "--basis", "frame.md#F1"), ()):
             with self.subTest(extra=extra):
                 previous = set(self.runs.iterdir()) if self.runs.exists() else set()
-                result = self.dispatch(*extra, "--kind", "creative")
+                result = self.dispatch("--transport", "direct", *extra, "--kind", "creative")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 attempt = (set(self.runs.iterdir()) - previous).pop()
                 call = self.calls_readback()[-1]
@@ -783,13 +797,13 @@ class DispatchTest(unittest.TestCase):
 
     def test_missing_claude_wrapper_refuses_before_attempt(self):
         (self.bin / "claude5").unlink()
-        result = self.dispatch("--seat", "decider")
+        result = self.dispatch("--transport", "direct", "--seat", "decider")
         self.assertEqual(result.returncode, 2)
         self.assertIn("claude5", result.stderr)
         self.assertFalse(self.runs.exists())
 
     def test_dry_run_command_round_trips_hostile_paths(self):
-        for extra in (("--seat", "decider"), ("--seat", "scout")):
+        for extra in (("--transport", "direct", "--seat", "decider"), ("--seat", "scout")):
             with self.subTest(extra=extra):
                 result = self.dispatch("--dry-run", *extra)
                 line = next(l for l in result.stdout.splitlines()
