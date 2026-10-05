@@ -14,7 +14,8 @@ manual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]
 efforts = ["minimal", "low", "medium", "high", "xhigh", "max"]
 
 [providers.claude]
-# Fixed wrapper (sets CLAUDE_CONFIG_DIR=~/.claude5); no Claude rotation yet.
+# Fixed wrapper (sets CLAUDE_CONFIG_DIR=~/.claude5) for direct runs; native
+# Claude bindings name this store and require a one-store pool. No rotation.
 pool = ["claude5"]
 manual_profiles = ["claude5"]
 efforts = ["low", "medium", "high", "xhigh", "max"]
@@ -35,7 +36,7 @@ wait_s = 120
 default = "native"
 
 [native]
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-103741ae3cce-add1b251a984/bin/oulipoly-native-call"
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-8c48c7eecb69-add1b251a984/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # The access token must still cover deadline + 2 x site grace + front-door
@@ -49,15 +50,32 @@ slack_s = 300
 renew_timeout_s = 60
 
 # Requester-side declaration of site routes installed in the root-owned site
-# config. A request names the site route only; the site fixes model and effort.
-# Only an exactly matching binding can run natively: with default native, any
-# other binding runs direct by rule; an explicit --transport native for it is
-# refused. Claude bindings have no native route.
+# config. A request names the site route only; the site fixes model and effort
+# (and, for Claude, the store). Only an exactly matching binding can run
+# natively: with default native, any other binding runs direct by rule; an
+# explicit --transport native for it is refused. A Codex binding has no
+# profile: rotation and the lease supply an access-only credential. A Claude
+# binding names its store (profile): the site route fixes ~/.claude5, so only
+# the original claude5 store maps, never another store or a store override.
 [[native.bindings]]
 provider = "codex"
 model = "gpt-6.1-sol"
 effort = "high"
 site_route = "sol-high"
+
+[[native.bindings]]
+provider = "claude"
+model = "claude-opus-5-5"
+effort = "medium"
+profile = "claude5"
+site_route = "opus-medium"
+
+[[native.bindings]]
+provider = "claude"
+model = "claude-opus-5-5"
+effort = "high"
+profile = "claude5"
+site_route = "opus-high"
 
 # Routes: provider-neutral names bound to native model and effort.
 [routes.default]
