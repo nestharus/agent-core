@@ -456,7 +456,7 @@ class DispatchTest(unittest.TestCase):
         (self.state_dir / "codex.counter").write_text("7\n", encoding="utf-8")
         seats = [("--seat", "scout")] * 6 + [()] * 6
         with ThreadPoolExecutor(max_workers=12) as pool:
-            results = list(pool.map(lambda extra: self.dispatch(*extra), seats))
+            results = list(pool.map(lambda extra: self.dispatch("--transport", "direct", *extra), seats))
         for result in results:
             self.assertEqual(result.returncode, 0, result.stderr)
         records = [json.loads((attempt / "route.json").read_text())
@@ -483,7 +483,7 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual((explicit_preview["profile"], explicit_preview["profile_source"]),
                          (".codex", "explicit"))
         previous = set(self.runs.iterdir())
-        explicit = self.dispatch("--profile", ".codex", "--override-reason", "manual history")
+        explicit = self.dispatch("--transport", "direct", "--profile", ".codex", "--override-reason", "manual history")
         self.assertEqual(explicit.returncode, 0, explicit.stderr)
         attempt = (set(self.runs.iterdir()) - previous).pop()
         record = json.loads((attempt / "route.json").read_text())
@@ -494,9 +494,10 @@ class DispatchTest(unittest.TestCase):
     # ----------------------------------------------------------------- codex
 
     def test_codex_route_keeps_mcp_preflight_and_records_route(self):
-        result = self.dispatch("--seat", "maker", "--class", "correction", "--basis", "F2")
+        result = self.dispatch("--transport", "direct", "--seat", "maker", "--class", "correction", "--basis", "F2")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("DIRECT_CODEX_EXIT=0", result.stdout)
+        self.assertIn('"transport_rule": "explicit-direct"', result.stdout)
         attempt = next(self.runs.iterdir())
         record = json.loads((attempt / "route.json").read_text())
         self.assertEqual((record["seat"], record["class"], record["basis"], record["rule"],
@@ -636,7 +637,7 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse(self.state_dir.exists())
 
     def test_technical_codex_route_json_records_unstated_kind(self):
-        result = self.dispatch("--seat", "observer")
+        result = self.dispatch("--transport", "direct", "--seat", "observer")
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads((next(self.runs.iterdir()) / "route.json").read_text())
         self.assertEqual((record["kind"], record["kind_source"], record["model"], record["effort"]),

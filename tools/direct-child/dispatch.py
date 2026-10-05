@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Contextual direct dispatcher: resolve a route from seat, class and kind, then run
-one native Codex or Claude child in the foreground, directly or (opt-in, Codex
-only) through the Linux native ACP v2 caller. See README.md."""
+one Codex or Claude child in the foreground, through the Linux native ACP v2
+caller for mapped Codex bindings by default, otherwise directly. See README.md."""
 
 import argparse
 import datetime

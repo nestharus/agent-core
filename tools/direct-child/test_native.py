@@ -251,7 +251,7 @@ class NativeTest(unittest.TestCase):
             env=env, capture_output=True, text=True, check=False, timeout=timeout)
         if capture := os.environ.get("NATIVE_CONTROL_CAPTURE"):
             saved = Path(tempfile.mkdtemp(prefix=self._testMethodName + ".", dir=capture))
-            evidence = {"command": command, "returncode": result.returncode,
+            evidence = {"command": command, "cwd": os.getcwd(), "returncode": result.returncode,
                         "stdout": result.stdout, "stderr": result.stderr,
                         "control_mode": env.get("CONTROL_MODE"),
                         "fake_app_server": env.get("FAKE_APP_SERVER"),
@@ -286,29 +286,46 @@ class NativeTest(unittest.TestCase):
         return attempts[0], state
 
     def native(self, *extra, env=None, config=None, timeout=60, runs=None):
-        return self.dispatch("--transport", "native", "--profile", ".codex4",
+        return self.dispatch("--profile", ".codex4",
                              "--override-reason", "fixed profile for the control", *extra,
                              env=env, config=config, timeout=timeout, runs=runs)
 
     # ------------------------------------------------------------ selection
 
-    def test_default_stays_direct_and_native_is_an_explicit_opt_in(self):
-        record, _ = self.resolved()
-        self.assertEqual((record["transport"], record["transport_rule"], record["site_route"]),
-                         ("direct", "default-direct", None))
-        record, out = self.resolved("--transport", "native")
-        self.assertEqual((record["transport"], record["transport_rule"], record["site_route"],
-                          record["model"], record["effort"], record["native_deadline_s"]),
-                         ("native", "explicit-native", "sol-high", "gpt-6.1-sol", "high", 7200))
-        command = next(l for l in out.splitlines() if l.startswith("DRY RUN: would run: "))
-        self.assertIn(f"{self.bin / 'native-call'} --route sol-high", command)
-        self.assertIn("--trusted-task --deadline 7200", command)
-        self.assertIn(f"--credential-margin {NEED - 7200 - 150}", command)
-        self.assertNotIn("--model", command)
-        self.assertIn(f"must cover {NEED}s", out)
-        record, _ = self.resolved("--transport", "native", "--native-deadline", "1800")
+    def test_default_native_covers_existing_sol_high_contexts_and_aliases(self):
+        cases = [(), ("--class", "correction", "--basis", "frame.md"),
+                 ("--seat", "observer")]
+        cases += [("--seat", seat, "--class", "correction", "--basis", "frame.md",
+                   "--kind", "technical")
+                  for seat in ("maker", "investigator", "method-steward")]
+        reason = ("--override-reason", "selection control")
+        cases += [("--route", route, *reason) for route in ("default", "refine")]
+        cases += [("--model", alias, *reason) for alias in ("gpt", "gpt-high")]
+        cases += [("--model", "gpt-6.1-sol", "--provider", "codex", "--effort", "high", *reason),
+                  ("--profile", ".codex", *reason)]
+        for extra in cases:
+            with self.subTest(extra=extra):
+                record, out = self.resolved(*extra)
+                self.assertEqual((record["transport"], record["transport_source"],
+                                  record["transport_rule"], record["site_route"],
+                                  record["provider"], record["model"], record["effort"],
+                                  record["native_deadline_s"]),
+                                 ("native", "default", "default-native", "sol-high",
+                                  "codex", "gpt-6.1-sol", "high", 7200))
+                command = next(l for l in out.splitlines() if l.startswith("DRY RUN: would run: "))
+                self.assertIn(f"{self.bin / 'native-call'} --route sol-high", command)
+                self.assertIn("--trusted-task --deadline 7200", command)
+                self.assertIn(f"--credential-margin {NEED - 7200 - 150}", command)
+                self.assertNotIn("--model", command)
+                self.assertIn(f"must cover {NEED}s", out)
+        self.assertEqual((record["profile"], record["profile_source"]), (".codex", "explicit"))
+        record, _ = self.resolved("--transport", "native")
+        self.assertEqual((record["transport_source"], record["transport_rule"]),
+                         ("explicit", "explicit-native"))
+        record, _ = self.resolved("--native-deadline", "1800")
         self.assertEqual(record["native_deadline_s"], 1800)
-        self.assertFalse(self.runs.exists() or self.calls.exists())
+        self.assertFalse(self.runs.exists() or self.calls.exists() or
+                         (self.home / ".local").exists())
 
     def test_explicit_native_without_a_declared_site_route_is_refused_before_effects(self):
         for extra in (("--seat", "scout"),
@@ -320,29 +337,59 @@ class NativeTest(unittest.TestCase):
                 result = self.dispatch("--transport", "native", *extra)
                 self.assertEqual(result.returncode, 2, result.stdout)
                 self.assertIn("no native site route", result.stderr)
-        result = self.dispatch("--native-deadline", "60")
+        # A direct-default configuration still requires native transport for a deadline.
+        result = self.dispatch("--native-deadline", "60", config=self.write_config(default='"direct"'))
         self.assertEqual(result.returncode, 2)
-        self.assertFalse(self.runs.exists() or self.calls.exists())
+        self.assertFalse(self.runs.exists() or self.calls.exists() or
+                         (self.home / ".local").exists())
 
     def test_default_native_runs_unmapped_bindings_direct_by_rule_with_identity_kept(self):
-        config = self.write_config(default='"native"')
-        for extra, expected in (((), ("native", "default-native", "codex", "gpt-6.1-sol", "high")),
-                                (("--seat", "scout"), ("direct", "default-native-unmapped-direct",
-                                                       "codex", "gpt-6-luna", "max")),
-                                (("--model", "gpt-xhigh", "--override-reason", "CRW"),
-                                 ("direct", "default-native-unmapped-direct", "codex", "gpt-6.1-sol", "xhigh")),
-                                (("--seat", "maker", "--kind", "creative"),
-                                 ("direct", "default-native-unmapped-direct", "claude", "claude-opus-5-5", "high")),
-                                (("--transport", "direct"), ("direct", "explicit-direct", "codex",
-                                                             "gpt-6.1-sol", "high"))):
+        cases = [(("--seat", seat), "codex", "gpt-6-luna", "max")
+                 for seat in ("scout", "explorer")]
+        cases += [(("--seat", seat), "claude", "claude-opus-5-5", "medium")
+                  for seat in ("framer", "decider", "maker", "investigator", "method-steward")]
+        cases += [(("--class", "new-foundation", "--basis", "frame.md"),
+                   "claude", "claude-opus-5-5", "medium"),
+                  (("--seat", "maker", "--kind", "creative"), "claude", "claude-opus-5-5", "high")]
+        cases += [(("--model", alias, "--override-reason", "literal alias"),
+                   "codex", "gpt-6.1-sol", effort)
+                  for alias, effort in (("gpt-medium", "medium"), ("gpt-xhigh", "xhigh"))]
+        cases += [(("--effort", effort, "--override-reason", "literal effort"),
+                   "codex", "gpt-6.1-sol", effort)
+                  for effort in ("minimal", "low", "medium", "xhigh", "max")]
+        for extra, provider, model, effort in cases:
             with self.subTest(extra=extra):
-                record, _ = self.resolved(*extra, config=config)
-                self.assertEqual((record["transport"], record["transport_rule"], record["provider"],
-                                  record["model"], record["effort"]), expected)
-        result = self.dispatch("--seat", "scout", config=config)
+                record, _ = self.resolved(*extra)
+                self.assertEqual((record["transport"], record["transport_source"],
+                                  record["transport_rule"], record["provider"],
+                                  record["model"], record["effort"]),
+                                 ("direct", "default", "default-native-unmapped-direct",
+                                  provider, model, effort))
+                self.assertIsNone(record["site_route"])
+                self.assertIsNone(record["native_caller"])
+                self.assertIsNone(record["native_deadline_s"])
+        result = self.dispatch("--seat", "scout")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.calls_of("codex")), 1)
         self.assertEqual(self.calls_of("native-call"), [])
+
+    def test_explicit_direct_choice_is_recorded_and_launches_only_direct(self):
+        default, _ = self.resolved("--seat", "observer")
+        direct, _ = self.resolved("--seat", "observer", "--transport", "direct")
+        for field in ("route", "rule", "seat", "class", "kind", "provider", "model", "effort", "profile"):
+            self.assertEqual(direct[field], default[field], field)
+        self.assertEqual((direct["transport"], direct["transport_source"], direct["transport_rule"]),
+                         ("direct", "explicit", "explicit-direct"))
+        self.assertIsNone(direct["site_route"])
+        self.assertIsNone(direct["native_deadline_s"])
+        result = self.dispatch("--seat", "observer", "--transport", "direct")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls_of("codex")), 1)
+        self.assertEqual(self.calls_of("native-call"), [])
+        attempt, state = self.attempt()
+        record = json.loads((attempt / "route.json").read_text())
+        self.assertEqual((record["transport_source"], record["transport_rule"], state["transport"]),
+                         ("explicit", "explicit-direct", "direct"))
 
     # ------------------------------------------------------- native attempts
 
@@ -370,6 +417,8 @@ class NativeTest(unittest.TestCase):
         route = json.loads((attempt / "route.json").read_text())
         self.assertEqual((route["transport"], route["site_route"], route["profile_source"]),
                          ("native", "sol-high", "explicit"))
+        self.assertEqual((route["transport_source"], route["transport_rule"]),
+                         ("default", "default-native"))
         self.assertEqual(stat.S_IMODE(attempt.stat().st_mode), 0o700)
         for name in ("state.txt", "renewal.json", "route.json", "final.md"):
             self.assertEqual(stat.S_IMODE((attempt / name).stat().st_mode), 0o600, name)
@@ -590,13 +639,13 @@ class NativeTest(unittest.TestCase):
         attempt, state = self.attempt()
         self.assertEqual((state["lease_status"], state["dispatcher_exit"]), ("timeout", "75"))
         self.assertFalse((attempt / "renewal.json").exists())
-        direct = self.dispatch("--profile", ".codex2", "--override-reason", "contended profile",
+        direct = self.dispatch("--transport", "direct", "--profile", ".codex2", "--override-reason", "contended profile",
                                config=config)
         self.assertEqual(direct.returncode, 75, direct.stdout + direct.stderr)
         self.assertIn("lease", direct.stderr)
         self.assertEqual(self.calls_of("codex") + self.calls_of("native-call"), [])
         fcntl.flock(lease, fcntl.LOCK_UN)
-        direct = self.dispatch("--profile", ".codex2", "--override-reason", "free profile",
+        direct = self.dispatch("--transport", "direct", "--profile", ".codex2", "--override-reason", "free profile",
                                config=config)
         self.assertEqual(direct.returncode, 0, direct.stderr)
         (task,) = self.calls_of("codex")
