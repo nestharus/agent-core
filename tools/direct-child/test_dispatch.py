@@ -28,6 +28,10 @@ if args[-3:] == ["mcp", "list", "--json"]:
     print(json.dumps([{"name": name, "enabled": f"mcp_servers.{name}.enabled=false" not in args
                        or name == os.environ.get("FAKE_FORCE_ENABLED")} for name in names]))
     sys.exit(0)
+if args[-2:] == ["features", "list"]:
+    state = "false" if "features.multi_agent=false" in args else "true"
+    print(f"goals    stable    true\nmulti_agent    stable    {state}")
+    sys.exit(0)
 prompt = sys.stdin.read()
 Path(args[args.index("-o") + 1]).write_text("final: " + prompt, encoding="utf-8")
 print("live: " + prompt.strip())
@@ -35,14 +39,39 @@ print("live: " + prompt.strip())
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, signal, sys
 args = sys.argv[1:]
+if "--help" in args:
+    with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
+        calls.write(json.dumps({"tool": os.path.basename(sys.argv[0]), "args": args,
+                                "cwd": os.getcwd(), "home": os.environ["HOME"],
+                                "claude_config": os.environ["CLAUDE_CONFIG_DIR"]}) + "\n")
+    help_mode = os.environ.get("FAKE_CLAUDE_HELP", "supported")
+    if help_mode in ("rejected-flag", "rejected-name"):
+        print(help_mode, file=sys.stderr)
+        sys.exit(2)
+    if help_mode == "unavailable":
+        sys.exit(1)
+    print("  --disallowedTools <tools...>  Deny tools" if help_mode == "supported" else "Usage: claude")
+    sys.exit(0)
 prompt = sys.stdin.read()
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"tool": os.path.basename(sys.argv[0]), "args": args,
                             "cwd": os.getcwd(), "prompt": prompt}) + "\n")
 mode = os.environ.get("FAKE_CLAUDE_MODE", "success")
-print(json.dumps({"type": "system", "subtype": "init", "mcp_servers": []}))
+if mode == "reject-denial" and "--disallowedTools" in args:
+    print("task parser rejects denial", file=sys.stderr)
+    sys.exit(2)
+init = {"type": "system", "subtype": "init", "mcp_servers": []}
+if "FAKE_CLAUDE_TOOLS" in os.environ:
+    init["tools"] = os.environ["FAKE_CLAUDE_TOOLS"].split(",")
+if "FAKE_CLAUDE_INIT_TOOLS_JSON" in os.environ:
+    init["tools"] = json.loads(os.environ["FAKE_CLAUDE_INIT_TOOLS_JSON"])
+print(json.dumps(init))
+for tools in json.loads(os.environ.get("FAKE_CLAUDE_LATER_INIT", "[]")):
+    print(json.dumps({"type": "system", "subtype": "init", "tools": tools}))
 print("not json noise")
-print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash"}]}}))
+for name in ["Bash"] + os.environ.get("FAKE_CLAUDE_TOOL_USES", "").split(","):
+    if name:
+        print(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name}]}}))
 print("claude warning", file=sys.stderr)
 if os.environ.get("FAKE_CLAUDE_LARGE_STREAM"):
     print("drain evidence " * 20000)
@@ -154,8 +183,9 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse(self.calls.exists())
         self.assertFalse(self.state_dir.exists())
 
-    def calls_readback(self):
-        return [json.loads(line) for line in self.calls.read_text(encoding="utf-8").splitlines()]
+    def calls_readback(self, include_help=False):
+        calls = [json.loads(line) for line in self.calls.read_text(encoding="utf-8").splitlines()]
+        return calls if include_help else [call for call in calls if "--help" not in call["args"]]
 
     def write_config(self, text):
         path = self.root / "routes.toml"
@@ -475,9 +505,12 @@ class DispatchTest(unittest.TestCase):
         state = (attempt / "state.txt").read_text()
         self.assertIn("profile=.codex2\nmodel=gpt-6.1-sol\neffort=high\n", state)
         self.assertIn(f"cwd={self.cwd}\n", state)
+        self.assertIn("delegation_capability=not-established\n", state)
+        self.assertIn("delegation_feature_readback=all-listed-false\n", state)
         calls = self.calls_readback()
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 5)
         exec_args = calls[-1]["args"]
+        self.assertIn("features.multi_agent=false", exec_args)
         self.assertEqual(exec_args[exec_args.index("-m") + 1], "gpt-6.1-sol")
         self.assertIn('model_reasoning_effort="high"', exec_args)
         self.assertEqual(exec_args[exec_args.index("-C") + 1], str(self.cwd))
@@ -514,6 +547,7 @@ class DispatchTest(unittest.TestCase):
                                         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                                         "--settings", '{"autoMemoryEnabled":false}',
                                         "--no-session-persistence",
+                                        "--disallowedTools", "Agent,Task,Workflow",
                                         "--output-format", "stream-json", "--verbose"])
         self.assertEqual((call["cwd"], call["prompt"]), (str(self.cwd), "Do the bounded task.\n"))
         self.assertEqual((attempt / "final.md").read_text(), "done: Do the bounded task.\n")
@@ -530,6 +564,58 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(json.loads((attempt / "route.json").read_text())["model"], "claude-opus-5-5")
         self.assertIn("DIRECT_CHILD_FINAL_BEGIN=", result.stdout)
         self.assertEqual(oct((attempt / "prompt.md").stat().st_mode & 0o777), "0o400")
+
+    def test_claude_delegation_provenance_comes_from_the_session_record(self):
+        cases = (
+            ({"FAKE_CLAUDE_TOOLS": "Bash,Read,Edit"}, "not-listed",
+             "known names absent from recorded init lists; capability absence unproven", "0"),
+            ({}, "unknown", "init tool metadata missing, empty or malformed", "0"),
+            ({"FAKE_CLAUDE_TOOLS": "Bash,Agent,Workflow", "FAKE_CLAUDE_TOOL_USES": "Agent,Agent"},
+             "offered", "init offered Agent,Workflow", "2"),
+        )
+        for environment, status, note, uses in cases:
+            with self.subTest(environment=environment):
+                result, attempt, state = self.claude_attempt("success", **environment)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(state["requested_disallowed_tools"], "Agent,Task,Workflow")
+                self.assertEqual(state["delegation_capability"], "not-established")
+                self.assertEqual(state["delegation_init_status"], status)
+                self.assertEqual(state.get("delegation_capability_note"), note)
+                self.assertEqual(state["delegation_tool_uses"], uses)
+                self.assertIn("shell-launched processes", state["delegation_scope"])
+
+    def test_claude_unavailable_restriction_is_omitted_before_one_task(self):
+        for help_mode in ("rejected-flag", "rejected-name", "unavailable", "undocumented"):
+            with self.subTest(help_mode=help_mode):
+                self.calls.unlink(missing_ok=True)
+                result, attempt, state = self.claude_attempt("success", FAKE_CLAUDE_HELP=help_mode)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = self.calls_readback(include_help=True)
+                self.assertEqual(len(calls), 2)
+                self.assertEqual(calls[0]["args"], ["--disallowedTools", "Agent,Task,Workflow", "--help"])
+                self.assertTrue(Path(calls[0]["home"]).is_relative_to(attempt))
+                self.assertTrue(Path(calls[0]["claude_config"]).is_relative_to(attempt))
+                self.assertNotIn("--disallowedTools", calls[1]["args"])
+                self.assertIn("--strict-mcp-config", calls[1]["args"])
+                self.assertEqual(state["restriction_selection"], "omitted")
+                self.assertEqual(state["requested_disallowed_tools"], "")
+                self.assertEqual(state["delegation_capability"], "not-established")
+
+    def test_claude_ambiguous_or_contradictory_init_does_not_claim_absence(self):
+        cases = (
+            ({"FAKE_CLAUDE_INIT_TOOLS_JSON": "[]"}, "unknown"),
+            ({"FAKE_CLAUDE_INIT_TOOLS_JSON": '[{"name":"Agent"}]'}, "unknown"),
+            ({"FAKE_CLAUDE_TOOLS": "Bash", "FAKE_CLAUDE_LATER_INIT": '[["Bash","Agent"]]'}, "offered"),
+            ({"FAKE_CLAUDE_TOOLS": "Bash", "FAKE_CLAUDE_LATER_INIT": '[["Read"]]'}, "unknown"),
+            ({"FAKE_CLAUDE_TOOLS": "Bash", "FAKE_CLAUDE_TOOL_USES": "Agent"}, "contradicted"),
+        )
+        for environment, init_status in cases:
+            with self.subTest(environment=environment):
+                result, attempt, state = self.claude_attempt("success", **environment)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(state["delegation_capability"], "not-established")
+                self.assertEqual(state["delegation_init_status"], init_status)
+                self.assertTrue(json.loads(state["delegation_init_tools"]))
 
     def test_creative_launch_carries_effort_high_to_claude5_and_records_kind(self):
         for extra in (("--seat", "maker", "--class", "correction", "--basis", "frame.md#F1"), ()):
@@ -577,6 +663,15 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(result.returncode, 5)
         self.assertEqual((state["claude_exit"], state["dispatcher_exit"]), ("5", "5"))
         self.assertIn("not json noise", (attempt / "log.txt").read_text())
+        self.assertEqual(len(self.calls_readback()), 1)
+
+    def test_claude_help_acceptance_does_not_replay_a_rejected_task(self):
+        result, attempt, state = self.claude_attempt("reject-denial")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(len(self.calls_readback()), 1)
+        self.assertEqual(state["restriction_selection"], "requested")
+        self.assertEqual(state["claude_exit"], "2")
+        self.assertEqual(state["delegation_capability"], "not-established")
 
     def test_claude_signal_exit_uses_shell_status_and_retains_raw_wait(self):
         result, attempt, state = self.claude_attempt("signal")

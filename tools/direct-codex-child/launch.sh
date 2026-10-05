@@ -140,6 +140,59 @@ if [[ $preflight_only == true ]]; then
   exit 0
 fi
 
+# Request restriction of delegation-like features. Metadata only, before any task
+# starts, and upgrade-tolerant: never a version check or a refusal. Only names
+# the installed CLI lists are disabled, through -c (`--disable` rejects unknown
+# names); feature metadata cannot establish model-facing tool absence. The child
+# still launches with capability recorded as not established.
+delegation_like='multi_agent|agent_message|collab|subagent'
+delegation_rows() {
+  CODEX_HOME="$profile_home" codex "$@" features list 2>/dev/null | python3 -c '
+import re
+import sys
+
+rows = {}
+for line in sys.stdin:
+    fields = line.split()
+    if fields and re.search(sys.argv[1], fields[0]) and (len(fields) < 3 or fields[-1] not in ("true", "false")):
+        sys.exit(1)
+    if len(fields) >= 3 and fields[-1] in ("true", "false") and re.fullmatch(r"[a-z0-9_]+", fields[0]):
+        if fields[0] in rows:
+            sys.exit(1)
+        rows[fields[0]] = fields[-1]
+if not rows:
+    sys.exit(1)
+for name in sorted(rows):
+    if re.search(sys.argv[1], name):
+        print(f"{name}\t{rows[name]}")
+' "$delegation_like"
+}
+delegation_flags=() delegation_status=not-established delegation_note='' delegation_readback=''
+delegation_feature_readback=unknown
+listed=$(delegation_rows); listed_rc=$?
+if ((listed_rc == 0)) && [[ -n $listed ]]; then
+  while IFS=$'\t' read -r feature _; do
+    delegation_flags+=(-c "features.$feature=false")
+  done <<< "$listed"
+  if delegation_readback=$(delegation_rows "${delegation_flags[@]}") && [[ -n $delegation_readback ]]; then
+    expected_readback=$(printf '%s\n' "$listed" | sed 's/\ttrue$/\tfalse/')
+    if [[ $delegation_readback == "$expected_readback" ]]; then
+      delegation_feature_readback=all-listed-false
+      delegation_note='listed features read back false; model-facing delegation capability not established'
+    else
+      delegation_feature_readback=incomplete-or-enabled
+      delegation_note='feature readback incomplete or still enabled; model-facing delegation capability not established'
+    fi
+  else
+    delegation_flags=() delegation_readback=''
+    delegation_note='feature readback with disable flags failed; flags not passed'
+  fi
+elif ((listed_rc == 0)); then
+  delegation_note='no delegation-like feature listed'
+else
+  delegation_note='feature listing unavailable or unparsed'
+fi
+
 mkdir -p -- "$runs_dir" || die "cannot create runs-dir: $runs_dir"
 runs_dir=$(cd -P -- "$runs_dir" && pwd -P) || die 'cannot resolve runs-dir'
 attempt=$(mktemp -d "$runs_dir/$child_id.XXXXXXXX") || die 'cannot reserve attempt directory'
@@ -161,19 +214,30 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   [[ -z $route_json ]] || printf 'route_record=%s\n' "$attempt/route.json"
   printf 'cwd=%s\ngit_branch=%s\ngit_head_at_start=%s\n' "$cwd" "$git_branch" "$git_head"
   printf 'prompt=%s\nlog=%s\nfinal=%s\n' "$prompt_snapshot" "$log_path" "$final_path"
+  printf 'delegation_capability=%s\n' "$delegation_status"
+  [[ -z $delegation_note ]] || printf 'delegation_capability_note=%s\n' "$delegation_note"
+  printf 'delegation_feature_readback=%s\n' "$delegation_feature_readback"
+  [[ -z $listed ]] || printf 'delegation_features_listed=%s\n' "$(printf '%s' "$listed" | tr '\t\n' '=,')"
+  printf 'delegation_restriction_args=%s\n' "${delegation_flags[*]}"
+  [[ -z $delegation_readback ]] || printf 'delegation_features=%s\n' "$(printf '%s' "$delegation_readback" | tr '\t\n' '=,')"
+  printf 'delegation_scope=built-in features listed by the installed CLI; shell-launched processes, hooks, plugins and skills not covered\n'
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "$state_path" || die 'cannot write state'
 
 printf 'DIRECT_CODEX_ATTEMPT=%s\nDIRECT_CODEX_STATE=%s\n' "$attempt" "$state_path"
 printf 'MCP_PREFLIGHT=all effective servers disabled\n'
+printf 'DELEGATION_CAPABILITY=%s\n' "$delegation_status"
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
 CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
-  -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" \
+  -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
   -C "$cwd" --color never -o "$final_path" - < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
 pipeline_status=("${PIPESTATUS[@]}")
 codex_rc=${pipeline_status[0]}
 tee_rc=${pipeline_status[1]}
-printf 'codex_exit=%s\nlog_capture_exit=%s\nend_utc=%s\n' "$codex_rc" "$tee_rc" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$state_path"
+# Codex's human log renders collaboration tool use as `collab:` lines (Wait seen;
+# spawn not rendered), so this count is a detection lead, not proof either way.
+collab_lines=$(grep -c '^collab:' -- "$log_path" 2>/dev/null) || collab_lines=${collab_lines:-unavailable}
+printf 'codex_exit=%s\nlog_capture_exit=%s\nlog_collab_lines=%s\nend_utc=%s\n' "$codex_rc" "$tee_rc" "$collab_lines" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$state_path"
 if ((tee_rc != 0)); then
   printf 'direct-codex-child: log capture failed with status %s; log may be incomplete\n' "$tee_rc" >&2
 fi
