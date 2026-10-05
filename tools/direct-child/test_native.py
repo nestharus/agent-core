@@ -171,13 +171,18 @@ import fcntl, json, os, sys
 ''' + LEASE_PROBE + r'''
 args = sys.argv[1:]
 value = lambda flag: args[args.index(flag) + 1]
-snapshot = mode_bits = None
+snapshot = mode_bits = child_snapshot = None
 if "--credential-codex-profile" in args:
     credential = os.path.join(value("--credential-codex-profile"), "auth.json")
     snapshot = json.load(open(credential))
     mode_bits = oct(os.stat(credential).st_mode & 0o777)
+if "--child-credential-codex-profile" in args:
+    credential = os.path.join(value("--child-credential-codex-profile"), "auth.json")
+    child_snapshot = json.load(open(credential))
+    mode_bits = oct(os.stat(credential).st_mode & 0o777)
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"tool": "native-call", "args": args, "snapshot": snapshot,
+                            "child_snapshot": child_snapshot,
                             "snapshot_mode": mode_bits, **lease_probe(os.environ["PROBE_HOME"])}) + "\n")
 mode = os.environ.get("FAKE_CALLER", "answered")
 out = value("--out")
@@ -188,9 +193,12 @@ classes = {"answered": ("answered", 0, 0), "refused": ("front-door-refused", 90,
            "no-answer": ("no-answer", 0, 1)}
 native_class, front_door, code = classes[mode]
 answered = mode == "answered"
+counts = {"bash_accepted": 2, "bash_ended": 2}
+if "--child-route" in args:
+    counts.update(child_accepted=1, child_refused=0, child_results=0)
 json.dump({"class": native_class,
            "front_door_exit": int(os.environ.get("FAKE_FRONT_DOOR", front_door)),
-           "answer": {"present": answered}, "counts": {"bash_accepted": 2, "bash_ended": 2},
+           "answer": {"present": answered}, "counts": counts,
            "processing_completion": "not-observed"}, open(os.path.join(out, "result.json"), "w"))
 if answered:
     open(os.path.join(out, "final.md"), "w").write("final: " + open(value("--prompt-file")).read())
@@ -622,7 +630,7 @@ class NativeTest(unittest.TestCase):
                 self.assertIn("do-not-replay", state["native_retry"])
                 self.assertFalse((attempt / "native-credential").exists())
 
-    def claude_native(self, *extra, env=None, runs=None):
+    def claude_native(self, *extra, env=None, runs=None, config=None):
         # An unreadable original store: any dispatcher read of it would fail.
         store = self.home / ".claude5"
         if not store.exists():
@@ -630,7 +638,7 @@ class NativeTest(unittest.TestCase):
             (store / ".credentials.json").write_text("SECRET-CLAUDE-STORE", encoding="utf-8")
             store.chmod(0)
             self.addCleanup(store.chmod, 0o700)
-        return self.dispatch(*extra, env=env, runs=runs)
+        return self.dispatch(*extra, env=env, runs=runs, config=config)
 
     def test_claude_native_uses_no_credential_lease_store_read_or_rotation(self):
         for extra, site_route in ((("--seat", "decider"), "opus-medium"),
@@ -828,6 +836,236 @@ class NativeTest(unittest.TestCase):
         for secret in SECRETS + tuple(self.accesses) + (".NEW-ACCESS",):
             for text in texts:
                 self.assertNotIn(secret, text)
+
+    # ------------------------------------------------- explicit child opt-in
+
+    def no_effects(self):
+        """Nothing allocated, leased, prepared, written or launched."""
+        self.assertFalse(self.runs.exists(), "attempt written")
+        self.assertFalse(self.calls.exists(), "a codex or caller process ran")
+        self.assertFalse((self.home / ".local").exists(), "rotation counter touched")
+        for profile in (".codex", ".codex2", ".codex3", ".codex4", ".codex5"):
+            self.assertFalse((self.home / profile / LEASE).exists(), profile)
+
+    def counter(self):
+        path = self.home / ".local" / "state" / "direct-child" / "codex.counter"
+        return path.read_text().strip() if path.exists() else None
+
+    def test_shipped_config_pins_the_versioned_caller_and_declares_child_offers(self):
+        import tomllib
+        config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+        self.assertEqual(config["native"]["caller"], "/opt/oulipoly-native/oulipoly-native-linux-"
+                         "x86_64-59fb7cf2dd17-add1b251a984/bin/oulipoly-native-call")
+        self.assertEqual(config["native"]["max_deadline_s"], 7200)
+        self.assertEqual(config["native"]["children"],
+                         {"routes": ["luna-max"], "max_starts": 4, "max_concurrent": 2})
+        self.assertEqual({b["site_route"]: b["children"] for b in config["native"]["bindings"]},
+                         {"sol-high": ["luna-max"], "opus-medium": ["luna-max"],
+                          "opus-high": ["luna-max"]})
+        # Standalone Luna still resolves direct by rule; no child flag is implied.
+        for seat in ("scout", "explorer", "maker", "framer", "observer"):
+            record, out = self.resolved("--seat", seat)
+            self.assertIsNone(record["native_children"], seat)
+            self.assertNotIn("--child-", out)
+        record, _ = self.resolved("--seat", "scout")
+        self.assertEqual((record["transport"], record["transport_rule"], record["model"]),
+                         ("direct", "default-native-unmapped-direct", "gpt-6-luna"))
+
+    def test_sol_opt_in_reuses_the_one_snapshot_without_more_preparation(self):
+        self.write_auth(".codex2", 100)
+        env = self.env | {"PROBE_HOME": str(self.home / ".codex2")}
+        result = self.dispatch("--seat", "maker", "--class", "correction", "--basis", "frame.md",
+                               "--native-child-route", "luna-max", "--native-child-max-starts", "3",
+                               env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.counter(), "1", "exactly one rotation step")
+        servers = self.calls_of("codex")
+        self.assertEqual(len(servers), 1, "one renewal for the one grant")
+        self.assertTrue(servers[0]["home"].endswith("/.codex2"))
+        (call,) = self.calls_of("native-call")
+        attempt, state = self.attempt()
+        out = str(attempt / "native")
+        self.assertEqual(call["args"], [
+            "--route", "sol-high", "--prompt-file", str(attempt / "prompt.md"), "--cwd", str(self.cwd),
+            "--out", out, "--trusted-task", "--deadline", "7200",
+            "--child-route", "luna-max", "--child-max-starts", "3",
+            "--credential-codex-profile", str(attempt / "native-credential"),
+            "--credential-margin", str(NEED - 7200 - 150)])
+        self.assertIsNone(call["child_snapshot"])
+        self.assertEqual(set(call["snapshot"]["tokens"]), {"access_token", "account_id"})
+        self.assertEqual((call["lease_held"], call["lease_inherited"]), (False, False))
+        self.assertFalse((attempt / "native-child-credential").exists())
+        self.assertFalse((attempt / "native-credential").exists())
+        for profile in (".codex", ".codex3", ".codex4", ".codex5"):
+            self.assertFalse((self.home / profile / LEASE).exists(), profile)
+        self.assertEqual((state["native_child_routes"], state["native_child_max_starts"],
+                          state["renewal"], state["credential_snapshot_removed"],
+                          state["native_child_accepted"], state["native_child_results"],
+                          state["dispatcher_exit"]),
+                         ("luna-max", "3", "renewed", "yes", "1", "0", "0"))
+        self.assertIn("reuses the parent's one", state["native_child_grant"])
+        self.assertIn("zero exports is not zero local results", state["native_children_note"])
+        self.assertNotIn("native_child_max_concurrent", state)
+        self.assertNotIn("child_grant_profile", state)
+        route = json.loads((attempt / "route.json").read_text())
+        self.assertEqual((route["native_children"]["routes"], route["native_children"]["max_starts"],
+                          route["native_children"]["max_concurrent"], route["native_credential"]),
+                         (["luna-max"], 3, None, "codex-access-snapshot"))
+
+    def test_claude_opt_in_takes_one_separate_grant_and_no_children_takes_none(self):
+        self.write_auth(".codex2", 100)
+        env = self.env | {"PROBE_HOME": str(self.home / ".codex2")}
+        # Without children: nothing prepared (the existing no-credential contract).
+        result = self.claude_native("--seat", "decider", env=env, runs=self.root / "plain")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIsNone(self.counter())
+        self.assertEqual(self.calls_of("codex"), [])
+        (plain,) = self.calls_of("native-call")
+        self.assertFalse(any(arg.startswith("--child") or arg.startswith("--credential")
+                             for arg in plain["args"]))
+        self.calls.unlink()
+        # Opted in: one rotated Codex profile, one renewal, one access-only child grant.
+        runs = self.root / "opted"
+        result = self.claude_native("--seat", "maker", "--kind", "creative",
+                                    "--native-child-route", "luna-max",
+                                    "--native-child-max-concurrent", "1", env=env, runs=runs)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.counter(), "1")
+        (server,) = self.calls_of("codex")
+        self.assertTrue(server["home"].endswith("/.codex2"))
+        self.assertEqual((server["lease_held"], server["lease_inherited"]), (True, False))
+        (call,) = self.calls_of("native-call")
+        (attempt,) = runs.iterdir()
+        self.assertEqual(call["args"], [
+            "--route", "opus-high", "--prompt-file", str(attempt / "prompt.md"), "--cwd", str(self.cwd),
+            "--out", str(attempt / "native"), "--trusted-task", "--deadline", "7200",
+            "--child-route", "luna-max", "--child-max-concurrent", "1",
+            "--child-credential-codex-profile", str(attempt / "native-child-credential"),
+            "--credential-margin", str(NEED - 7200 - 150)])
+        self.assertIsNone(call["snapshot"], "the Claude parent gets no credential")
+        self.assertEqual(set(call["child_snapshot"]["tokens"]), {"access_token", "account_id"})
+        self.assertTrue(call["child_snapshot"]["tokens"]["access_token"].endswith(".NEW-ACCESS"))
+        self.assertEqual(call["snapshot_mode"], "0o600")
+        self.assertEqual((call["lease_held"], call["lease_inherited"]), (False, False))
+        self.assertFalse((attempt / "native-child-credential").exists())
+        state = dict(line.split("=", 1) for line in (attempt / "state.txt").read_text().splitlines())
+        self.assertEqual((state["profile"], state["credential"], state["profile_lease"],
+                          state["child_grant_profile"], state["child_grant_profile_source"],
+                          state["lease_scope"], state["lease_status"], state["renewal"],
+                          state["credential_snapshot_removed"], state["dispatcher_exit"]),
+                         ("claude5", "none", "none", ".codex2", "rotation:0", "child grant profile",
+                          "acquired", "renewed", "yes", "0"))
+        self.assertIn("never the Claude store's login", state["native_child_grant"])
+        route = json.loads((attempt / "route.json").read_text())
+        self.assertEqual((route["profile"], route["native_credential"], route["child_profile"]),
+                         ("claude5", "none", ".codex2"))
+        # The original store was never read (it is unreadable) and no other profile was leased.
+        self.assertEqual(stat.S_IMODE((self.home / ".claude5").stat().st_mode), 0)
+        for profile in (".codex", ".codex3", ".codex4", ".codex5"):
+            self.assertFalse((self.home / profile / LEASE).exists(), profile)
+
+    def test_claude_child_grant_refusals_and_failures_clean_up_without_replay(self):
+        env = self.env | {"PROBE_HOME": str(self.home / ".codex2")}
+        opt = ("--seat", "framer", "--native-child-route", "luna-max")
+        # No admissible token on the rotated profile: 70, no caller.
+        self.write_auth(".codex2", 0, tokens={"access_token": "not-a-jwt"})
+        result = self.claude_native(*opt, env=env, runs=self.root / "no-token")
+        self.assertEqual(result.returncode, 70, result.stdout + result.stderr)
+        self.assertEqual(self.calls_of("native-call"), [])
+        (attempt,) = (self.root / "no-token").iterdir()
+        self.assertFalse((attempt / "native-child-credential").exists())
+        # Lease busy for the bound on the next rotated profile (.codex3): 75, no caller.
+        lease = os.open(self.home / ".codex3" / LEASE, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(os.close, lease)
+        fcntl.flock(lease, fcntl.LOCK_EX)
+        result = self.claude_native(*opt, env=env, runs=self.root / "busy",
+                                    config=self.write_config(wait_s=1))
+        self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
+        self.assertEqual(self.calls_of("native-call"), [])
+        fcntl.flock(lease, fcntl.LOCK_UN)
+        # Caller incomplete after launch (.codex4): its code, snapshot removed, never replayed.
+        result = self.claude_native(*opt, env=env | {"FAKE_CALLER": "partial"}, runs=self.root / "partial")
+        self.assertEqual(result.returncode, 6, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls_of("native-call")), 1)
+        (attempt,) = (self.root / "partial").iterdir()
+        state = dict(line.split("=", 1) for line in (attempt / "state.txt").read_text().splitlines())
+        self.assertEqual((state["child_grant_profile"], state["native_caller_exit"],
+                          state["native_class"], state["credential_snapshot_removed"]),
+                         (".codex4", "6", "unknown", "yes"))
+        self.assertFalse((attempt / "native-child-credential").exists())
+        # A signal at caller start is forwarded and collected; the grant is still removed.
+        sig = signal.SIGTERM
+        result = self.claude_native(*opt, env=env | {"CONTROL_MODE": "caller-start-signal",
+                                                     "FAKE_SIGNAL": str(int(sig))},
+                                    runs=self.root / "signal")
+        self.assertEqual(result.returncode, 128 + sig, result.stdout + result.stderr)
+        (attempt,) = (self.root / "signal").iterdir()
+        state = dict(line.split("=", 1) for line in (attempt / "state.txt").read_text().splitlines())
+        self.assertEqual((state["child_grant_profile"], state["credential_snapshot_removed"]),
+                         (".codex5", "yes"))
+        self.assertNotEqual(state["native_caller_exit"], "none")
+        self.assertFalse((attempt / "native-child-credential").exists())
+        self.assertEqual(self.counter(), "4", "one rotation step per opted-in attempt")
+        self.assertFalse(Path(str(self.calls) + ".claude5").exists(), "no direct fallback")
+
+    def test_invalid_or_direct_native_only_requests_are_refused_before_any_effect(self):
+        # Executables that would record any launch; nothing may run.
+        huge = "9" * 30
+        cases = [
+            (("--native-deadline", "7201"), "at most 7200"),
+            (("--native-deadline", huge), "at most 7200"),
+            (("--native-deadline", "0", "--seat", "scout"), "positive number of seconds"),
+            (("--native-deadline", "9" * 5000), "invalid int value"),
+            (("--native-child-max-starts", "2"), "need --native-child-route"),
+            (("--native-child-route", "luna-max", "--native-child-route", "luna-max"), "distinct"),
+            (("--native-child-route", "other"), "not declared as offered by site route sol-high"),
+            (("--seat", "framer", "--native-child-route", "luna-max",
+              "--native-child-max-starts", "5"), "max-starts must be 1..4"),
+            (("--native-child-route", "luna-max", "--native-child-max-concurrent", "3"),
+             "max-concurrent must be 1..2"),
+            (("--native-child-route", "luna-max", "--native-child-max-starts", "0"),
+             "max-starts must be 1..4"),
+            (("--native-child-route", "luna-max", "--native-child-max-starts", huge),
+             "max-starts must be 1..4"),
+            (("--seat", "scout", "--native-child-route", "luna-max"), "applies only to a native launch"),
+            (("--seat", "framer", "--transport", "direct", "--native-child-route", "luna-max"),
+             "applies only to a native launch"),
+            (("--seat", "observer", "--transport", "direct", "--native-child-route", "luna-max"),
+             "applies only to a native launch"),
+            (("--seat", "framer", "--effort", "low", "--override-reason", "unmapped",
+              "--native-child-route", "luna-max"), "applies only to a native launch"),
+            (("--seat", "scout", "--transport", "native", "--native-child-route", "luna-max"),
+             "no native site route"),
+        ]
+        for extra, message in cases:
+            for dry in ((), ("--dry-run",)):
+                with self.subTest(extra=extra[:4], dry=dry):
+                    result = self.claude_native(*dry, *extra)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertIn(message, result.stderr)
+                    self.assertNotIn("DIRECT_CHILD_ROUTE", result.stdout)
+                    self.no_effects()
+        # A lower declared site bound is applied before effects as well.
+        lower = self.write_config(max_deadline_s=3600, deadline_s=3600)
+        result = self.dispatch("--native-deadline", "3601", config=lower)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("at most 3600", result.stderr)
+        self.no_effects()
+        record, _ = self.resolved("--native-deadline", "3600", config=lower)
+        self.assertEqual(record["native_deadline_s"], 3600)
+        for replace, message in (({"max_deadline_s": 7201}, "max_deadline_s must be 1..7200"),
+                                 ({"max_deadline_s": 1800}, "deadline_s exceeds"),
+                                 ({"max_starts": 5}, "children.max_starts must be 1..4")):
+            with self.subTest(replace=replace):
+                result = self.dispatch("--dry-run", config=self.write_config(**replace))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(message, result.stderr)
+        result = self.dispatch("--dry-run", config=self.write_config(
+            raw=[('site_route = "sol-high"\nchildren = ["luna-max"]',
+                  'site_route = "sol-high"\nchildren = ["undeclared"]')]))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must list distinct [native.children] routes", result.stderr)
+        self.no_effects()
 
     # ----------------------------------------------------------------- lease
 
