@@ -38,9 +38,9 @@ wait_s = 120
 default = "native"
 
 [native]
-# Exact versioned pin (Runner 59fb7cf2, agent-bash add1b251); no shim or
-# stable alias. It exists only after ROOT installs that package.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-59fb7cf2dd17-add1b251a984/bin/oulipoly-native-call"
+# Exact versioned pin (Runner 0a24a50e, agent-bash 924a48e5); no shim or
+# stable alias. ROOT-installed pair; whole-pin activation on merge (U40).
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-0a24a50e6f08-924a48e58a59/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # Upper bound checked before any allocation, lease, credential preparation or
