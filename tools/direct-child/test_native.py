@@ -855,7 +855,7 @@ class NativeTest(unittest.TestCase):
         import tomllib
         config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
         self.assertEqual(config["native"]["caller"], "/opt/oulipoly-native/oulipoly-native-linux-"
-                         "x86_64-59fb7cf2dd17-add1b251a984/bin/oulipoly-native-call")
+                         "x86_64-0a24a50e6f08-924a48e58a59/bin/oulipoly-native-call")
         self.assertEqual(config["native"]["max_deadline_s"], 7200)
         self.assertEqual(config["native"]["children"],
                          {"routes": ["luna-max"], "max_starts": 4, "max_concurrent": 2})
