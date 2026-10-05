@@ -1,6 +1,6 @@
 # Contextual direct dispatcher (temporary outage transport)
 
-`dispatch.py` picks a route for **one** child from its run context, then runs a native Codex or Claude session in the foreground. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
+`dispatch.py` picks a route for **one** child from its run context, then runs a native Codex or Claude session in the foreground, directly through the CLI or, by explicit opt-in for Codex, through the installed Linux native ACP v2 caller ([Transport](#transport)). It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage) while `agents` / `agent-runner` is down. The same seat can take a different model depending on its class and on the kind of work. [`routes.toml`](routes.toml) is the single place to change providers, models, efforts, seat mappings, class mappings, and profile pools.
 
 It does not decide seat authority or context boundaries, and it does not check that a class or kind claim is true. The caller asserts both and owns them. It does not select tasks, allocate worktrees, authorize effects, or replace the review and delivery lifecycle.
 
@@ -101,12 +101,46 @@ The caller owns the claim, as it owns class. The dispatcher never infers kind fr
 - `--kind creative` routes the Act seats `maker`, `investigator` and `method-steward`, and launches with no seat, to `create`. On `framer`, `decider`, `observer`, `scout` and `explorer` it is **refused**: those seats look rather than make, and keep their routes.
 - An override under `--kind creative` that resolves to any other provider, model or effort is **refused**, whatever the reason. Overrides that keep `claude` / `claude-opus-5-5` / `high` (for example `--profile claude5` or `--effort high`) stay allowed with their reason. To change where creative work goes, change `[kinds.creative]` or `routes.create` in `routes.toml`.
 
+## Transport
+
+Transport is chosen after the route and before anything starts. It never changes provider, model, effort, alias, kind, seat, class or profile.
+
+- **Default `direct`** (`[transport] default` in `routes.toml`). Codex runs through [`launch.sh`](../direct-codex-child/README.md) and Claude through `claude5`, as before.
+- **`--transport native`** runs the attempt through the installed native caller (`[native] caller`, currently the retained `103741ae` package). A native request names a **site route** only; the root-owned site config fixes model and effort. `[[native.bindings]]` declares which provider / model / effort each site route serves. Today only `codex` / `gpt-6.1-sol` / `high` maps, to `sol-high`.
+- **No native binding, no native run.** `--transport native` on any other binding is refused before effects (exit 2): Luna, `gpt-xhigh`, an effort override, and every Claude route, including creative. Creative work therefore stays on Opus 5.5 high through `claude5`.
+- If the default is ever set to `native`, an unmapped binding runs direct by that rule, recorded as `default-native-unmapped-direct`. This is a pre-launch rule, never a fallback after a native attempt.
+- `--native-deadline SECONDS` overrides `[native] deadline_s` (7200, the front door's deadline and kill bound).
+
+Transport is **mixed**: native covers Codex Sol high only, and Claude stays direct. Native Claude, other site routes, registered children and Act-owned Luna remain pending. The default stays direct until ROOT has one actual witness of conditional renewal below, with the native deadline fitting the observed lifetime plus required margins. Adequate-life `renew` calls skip refresh and cannot witness it. Source and fake controls are not installed-runtime or real-renewal evidence.
+
+### Native credentials and renewal
+
+The native path sends an access token only, and the front door refuses a token that will not outlast the run. So under the [profile lease](#profiles), before the call:
+
+1. Read the profile's `auth.json` (the caller's own regular file, no symlink) for the access token's JWT `exp`. A profile with no file-store ChatGPT access token is refused (exit 70).
+2. The token must cover `need = deadline + 2 × site_grace_s + site_collection_s + site_margin_s + slack_s` (7862 s by default). The site terms are declarations, not root-config readback; the front door's own check decides. Actual lifetime, site binding and admission delay remain conditional. A shorter lifetime can renew and refuse on every new attempt.
+3. Only below `need`, ask the installed Codex CLI through one client RPC sequence: `codex app-server --listen stdio://`, newline-delimited JSON-RPC `initialize` (requesting `explicitGatewayOauth` to suppress gateway browser sign-in), `initialized`, then `account/read {"refreshToken": true}`. The handshake follows the public `openai/codex` source at `rust-v0.159.2`. Older servers may ignore the capability; installed compatibility is unwitnessed. Startup itself can contact the issuer, discover backends and perform other profile/config/plugin work; it is outside the direct task's MCP-disable preflight claim. One client sequence does not prove one issuer rotation.
+4. `account/read` answers even when the refresh failed, and it does not say why. `renewed` and `renewed-insufficient` mean expiry metadata changed and respectively covers or falls short of `need`; they establish neither issuer validity, advancement nor writer attribution. `profile_written=yes` is metadata observation only. `not-renewed` means unchanged expiry (expired, reused, revoked or transient, indistinguishable here). RPC errors, malformed output, timeouts, interruptions and launch failure give `helper-*`, with possible writes retained as unknown. Once app-server launches, `issuer_contact=possible`, including initialize failures and timeouts; no launch means `none`.
+5. Close the server's pipes and wait for its leader, then bounded TERM/KILL of its original process group, including after leader exit. An unobserved leader exit or remaining/unknown group gives `helper-stop-unconfirmed` and refuses (70), even with an answered RPC and sufficient changed expiry. No fresh token also refuses. Nothing is repeated, forced again, sent direct or replayed, and no OAuth request of our own is made. Empty original group and collected leader are bounded local observations, not whole-session/kernel proof: escaped process groups, PID/group reuse, zombies, SIGKILL and kernel-uninterruptibility remain limits. Cleanup discovers no global processes and touches no external daemon.
+6. If the token is fresh, write an access-only snapshot (`tokens.access_token`, plus `account_id` when present; no refresh grant or id token) to `native-credential/auth.json` (0600 in 0700). Release the lease, run the caller with `--credential-codex-profile` pointing there and a `--credential-margin` keeping half the slack, and remove the snapshot after the caller exits.
+
+Nothing prints or records token text, account fields, JSON-RPC error messages or server stderr. The server's stderr is discarded unread. `renewal.json` holds classes, remaining seconds, error codes and stop status only.
+
+`codex login status` loads credentials and never refreshes ChatGPT tokens in that source. Runner's `auth_refresh_command = codex login status` assumption is stale and should not be relied on. Direct Codex use refreshes only within five minutes of expiry, so it cannot keep a profile fresh enough for native.
+
+`codex_auth.py status|renew --profile P [--need-s N]` exposes the same lease, freshness read and gated renewal for ROOT's separately funded witness. Its output holds no token text. This standalone interface relies on finite positive wait/timeout/need arguments from its caller; it lacks the dispatcher's finite range validation. Server callbacks are skipped without replies, initialize result shape and id types are not fully validated, and the nominal line cap has a newline-boundary edge; total capture and read waits remain bounded. Fixed small pipe writes are blocking. These are development protocol limitations, not compatibility certification.
+
 ## Profiles
 
 - Sol and Luna share one Codex counter. Each real launch takes the next profile under an exclusive `flock`, so allocation is atomic and cycles evenly. The counter lives at `~/.local/state/direct-child/codex.counter`.
 - Configured Codex profiles must be `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`; unsupported names are refused before dry-run or allocation.
 - Allocation happens before the MCP preflight, so a refused preflight still uses its turn.
-- Rotation spreads starts across accounts. It does not prevent concurrent calls on one account, and it knows nothing about rate limits.
+- Rotation spreads starts across accounts. It knows nothing about rate limits or token health, and runs no health probe; a profile whose refresh token is still live can recover through the official renewal above.
+- **Profile lease.** Every cooperating Codex profile writer this tool launches takes an advisory exclusive `flock` on `<profile>/.oulipoly-direct-child.lease`. Direct launches hold it from MCP preflight through task exit and capture until launcher exit, because Codex can refresh mid-task. Native launches hold it for the freshness check, any renewal and the snapshot only; their access-only task path does not write the source profile, though a trusted task's shell is not constrained from doing so. A launch waits at most `[lease] wait_s` (120 s), then exits **75** without starting a task. There is no queue.
+- Direct tasks serialize per profile through task exit and capture. Four busy direct profile writers can make later launches wait for their rotated profile or refuse; allocation does not search for a free profile. A free-profile search could not preserve more than four simultaneous profile writers when all four are busy. Native access-only tasks can overlap after preparation releases the lease. There is no new scheduler or fan-out guarantee.
+- The lease descriptor is close-on-exec in Python and closed for each Codex call in `launch.sh`. Codex, the app-server, the native caller and their descendants never inherit it, so an orphaned descendant cannot keep a profile locked. Writes by such a descendant after the task exits are not covered either.
+- The lease does **not** cover writers we do not launch: interactive Codex, editors, desktop apps, other machines or copies of a profile. A refresh there can still rotate the grant and race ours. Keeping a profile single-writer is an ownership choice for the person and ROOT, not a guarantee of this tool.
+- It also does not cover external per-profile daemons. Their presence was historically reported, not freshly attested; the previously cited `HANDOFF_ENV` source does not establish direct-exec daemon handoff. Lease identity assumes trusted user-owned profile directories and an unchanged regular lease inode. Existing modes/type/owner are not revalidated; Bash check/open replacement, FIFO blocking, symlinked ancestry and replaced inodes remain conditional limits. Waits are application bounds, not kernel/filesystem guarantees.
 - To pick a profile yourself, pass `--profile` with `--override-reason`. Explicit profiles never advance the counter. `.codex` is manual-only; the automatic pool is `.codex2`, `.codex3`, `.codex4`, `.codex5`.
 - Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`.
 
@@ -126,17 +160,19 @@ Other forms:
 - `--seat maker --class correction --basis /abs/frame-return.md#F4 --kind creative` for a correction to a UI's look, which goes to Opus 5.5 high.
 - `--model gpt-xhigh --override-reason 'CRW contract names gpt-xhigh'` for a literal alias.
 
+- `--transport native` for a Sol high launch through the installed native caller ([Transport](#transport)).
+
 Add `--dry-run` to print:
 
-- the resolution record;
-- the exact quoted native command;
+- the resolution record, including transport;
+- the exact quoted native command (for native, the caller command with `<attempt>` placeholders and the freshness the token must cover);
 - the next pool profile, marked "not reserved".
 
-A dry run writes no files, advances no counter, launches nothing, and does not check whether the Claude wrapper is installed.
+A dry run writes no files, advances no counter, takes no lease, reads no credential, launches nothing, and does not check whether the Claude wrapper is installed.
 
 ## Execution and records
 
-**Codex routes** hand off with `exec` to [`direct-codex-child/launch.sh`](../direct-codex-child/README.md), passing `--model`, `--effort`, and the resolution record. That launcher keeps its behavior:
+**Codex routes** hand off with `exec` to [`direct-codex-child/launch.sh`](../direct-codex-child/README.md), passing `--model`, `--effort`, `--lease-wait` and the resolution record. That launcher keeps its behavior, now under the profile lease:
 
 - effective MCP discovery, per-server disable flags, and the injected docs-server disable;
 - the preflight refusal;
@@ -173,6 +209,28 @@ Claude exit codes:
 - Native exit 0 returns **3** for an unambiguous boolean error, **4** for missing/invalid results or failed final capture, and **1** for other incomplete custody.
 - Final write/read/output or encoding errors report `final_capture_error` and `final_status=capture-error`. State errors report `state_capture_error` to the terminal. Failed storage cannot guarantee durable metadata: available terminal metadata preserves the observed native status, while custody is explicitly incomplete.
 
+**Native attempts** (Codex only, by explicit opt-in) run the caller in the foreground after the credential step above. Their records are created 0600 in a 0700 attempt directory:
+
+- `prompt.md`, read-only, and the request's prompt file;
+- `route.json`;
+- `renewal.json`, the freshness and renewal classes;
+- `native/`, the caller's own output: `request.public.json` (credential reduced to provider and expiry), `events.jsonl`, `caller.jsonl`, `stderr.log`, `result.json` and `final.md`;
+- `final.md`, the caller's answer text, read back and printed between `DIRECT_CHILD_FINAL_BEGIN`/`END` markers only when the caller answered;
+- `state.txt`, which records the lease (`lease_status`, `lease_waited_s`, `lease_released_utc`), `renewal`, `issuer_contact`, `profile_written`, remaining seconds, the exact `native_command`, `native_caller_exit`, the caller's `native_class` and `front_door_exit`, answer presence, Bash counts, `credential_snapshot_removed`, `final_status`, `custody_status` and `dispatcher_exit`.
+
+This is a **qualified native record**: answer text, turn and owner events, and Bash argv. There are no Bash output bodies or reasoning, so it is not a complete log. Arbitrary task output in `native/` may still contain secrets; the caller has no redactor. Native constructs a Bash-only tool configuration, but a trusted shell can still start processes, CLIs and this dispatcher, so `delegation_capability=not-established` here too.
+
+Native exit codes:
+
+- **2**: input/selection/setup refusal; unmapped native and input checks precede launch, but allocation or partial attempt setup may already have written state;
+- **75**: profile lease not acquired within the bound, or the lease file was unusable; no task;
+- **70**: no admissible fresh access token (unavailable, not renewed, insufficient, helper failure or unconfirmed helper stop); no native task;
+- otherwise the caller's own code: 0 answered, 1 no answer, 3 local refusal, 4 front-door refusal, 5 cancelled, 6 incomplete, 7 cleanup failed, 8 launch failed, 9 ended otherwise; **6** also when the caller answered but its final could not be kept; `128+N` for a signal.
+
+Answered (0) means linked text and collected transport, not that the task was done. Catchable SIGINT, SIGTERM and SIGHUP are recorded throughout preparation, snapshot creation, caller launch and collection. Preparation cancellation cleans the helper/snapshot and starts no task; once a caller exists cancellation is forwarded, including a signal received during Popen, and collection continues within its bound. Snapshot removal is in a finally spanning the attempt. Cancellation returns `128+N`, with caller exit retained when started. The installed caller handles INT/TERM; HUP may terminate it without graceful native cancel. This is dispatcher cleanup, not native/kernel cancel certification; SIGKILL can leave private access-only residue. A native attempt is never replayed, never sent direct afterwards, and its pre-launch refusals are new decisions for the caller, not retries.
+
+Some initial/prelaunch state writes can fail or discard append errors; final custody checks cover selected later writes, not every record. Terminal capture failure is not itself accounted for. Partial records and storage errors remain development limitations; `custody_status=complete` does not certify every prior append.
+
 **Every attempt** has a `route.json` recording:
 
 - the config path and its sha256;
@@ -181,7 +239,8 @@ Claude exit codes:
 - the rule that fired and the route or alias;
 - provider, model, and effort;
 - overrides and their reason;
-- profile and profile source.
+- profile and profile source;
+- transport, its source and rule, the site route and native caller (or null), and the native deadline. `site_binding_source` notes that the binding is our declaration: the root-owned site config fixes the actual model and effort and is not read.
 
 **Delegation provenance** in `state.txt` is a record, never a launch gate or a reason to rerun:
 
@@ -197,14 +256,15 @@ Launch through a native persistent terminal, and record the terminal handle in t
 
 ## Limits
 
-- **No health checks or recovery.** There is no health check, provider fallback, queue, scheduler, or Claude rotation. A launch is never replayed automatically once the native task may have started.
+- **No health checks or recovery.** There is no health check, provider or transport fallback, queue, scheduler, or Claude rotation. A launch is never replayed automatically once the native task may have started.
+- **Renewal is source-designed, not witnessed.** The renewal protocol, the issuer's token lifetimes, whether a refresh revokes the old access token, and whether the installed CLI matches the source read are all unknown until ROOT funds one actual non-model witness. Cross-process refresh races are source readings, not observations.
 - **No version guard.** Neither tool checks or pins a native CLI version. Codex restriction requests use listed features; Claude denial arguments use pre-task private help metadata. Unavailable restriction metadata proceeds with qualified provenance. This is bounded compatibility selection, not universal upgrade support or removal of a product provider guard elsewhere.
 - **Routing is not validation.** Deterministic routing tests do not show that a class or kind was right or that a model was effective. Records exist for a later benchmark.
 - **Not yet in Runner.** This is not Runner or `agents` integration. Frontmatter still selects models inside `agents`.
 - **CRW is unchanged.** Its opaque `gpt-xhigh` contract stays as it is; see [`models/roles.md`](../../models/roles.md).
 - **Outcome is the caller's to judge.** Process custody proves that the process completed. It does not prove the task was done.
 
-Tests use fake CLIs and never launch a model:
+Tests use fake CLIs, a fake stdio app-server and a fake native caller. They never launch a model, read a real profile or contact an issuer:
 
 ```bash
 python3 -m unittest discover -s tools/direct-child -p 'test_*.py'

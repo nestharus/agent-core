@@ -1,5 +1,6 @@
 """Safe process-level tests; the fake CLI never contacts Codex or MCP servers."""
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import unittest
 
 LAUNCHER = Path(__file__).with_name("launch.sh")
 FAKE_CODEX = r'''#!/usr/bin/env python3
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -19,9 +21,31 @@ import tomllib
 DEFAULT_FEATURES = ("agent_message_board:under development:false,collaboration_modes:removed:true,"
                     "goals:stable:true,multi_agent:stable:true,multi_agent_v2:stable:false")
 args = sys.argv[1:]
+
+
+def lease_probe():
+    """Whether some other open file holds the profile lease, and whether this
+    process inherited a descriptor for it."""
+    path = os.path.join(os.environ["CODEX_HOME"], ".oulipoly-direct-child.lease")
+    if not os.path.exists(path):
+        return None, None
+    inherited = any(os.path.realpath(f"/proc/self/fd/{fd}") == os.path.realpath(path)
+                    for fd in os.listdir("/proc/self/fd") if os.path.exists(f"/proc/self/fd/{fd}"))
+    probe = os.open(path, os.O_RDWR)
+    try:
+        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False, inherited
+    except BlockingIOError:
+        return True, inherited
+    finally:
+        os.close(probe)
+
+
+held, inherited = lease_probe()
 with open(os.environ["FAKE_CALLS"], "a", encoding="utf-8") as calls:
     calls.write(json.dumps({"args": args, "home": os.environ["CODEX_HOME"],
-                            "cwd": os.getcwd()}) + "\n")
+                            "cwd": os.getcwd(), "lease_held": held,
+                            "lease_inherited": inherited}) + "\n")
 if args[-3:] == ["mcp", "list", "--json"]:
     with open(Path(os.environ["CODEX_HOME"]) / "config.toml", "rb") as config_file:
         servers = tomllib.load(config_file).get("mcp_servers", {})
@@ -340,6 +364,37 @@ class LauncherTest(unittest.TestCase):
                 self.exec_args()
                 self.assertIn("delegation_capability=not-established\n", self.state())
                 self.assertNotIn("delegation_feature_readback=all-listed-false", self.state())
+
+    def test_every_codex_call_runs_under_the_profile_lease_without_inheriting_it(self):
+        result = self.run_launcher(".codex3", "--lease-wait", "5")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls_readback()
+        self.assertEqual(len(calls), 5)
+        for call in calls:
+            self.assertEqual((call["lease_held"], call["lease_inherited"]), (True, False), call["args"])
+        state = (next(self.runs.iterdir()) / "state.txt").read_text()
+        self.assertIn(f"lease={self.home / '.codex3' / '.oulipoly-direct-child.lease'}\n", state)
+        self.assertIn("lease_wait_s=5\n", state)
+        lease = self.home / ".codex3" / ".oulipoly-direct-child.lease"
+        self.assertEqual(lease.stat().st_mode & 0o777, 0o600)
+        handle = os.open(lease, os.O_RDWR)
+        self.addCleanup(os.close, handle)
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)  # released at exit
+
+    def test_busy_profile_lease_refuses_before_any_codex_call(self):
+        lease = os.open(self.home / ".codex2" / ".oulipoly-direct-child.lease",
+                        os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(os.close, lease)
+        fcntl.flock(lease, fcntl.LOCK_EX)
+        result = self.run_launcher(".codex2", "--lease-wait", "0.5")
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("busy", result.stderr)
+        self.assertFalse(self.calls.exists())
+        self.assertFalse(self.runs.exists())
+        other = self.run_launcher(".codex4", "--lease-wait", "0.5")
+        self.assertEqual(other.returncode, 0, other.stderr)
+        for value in ("-1", "soon"):
+            self.assertEqual(self.run_launcher(".codex4", "--lease-wait", value).returncode, 2)
 
     def test_collab_lines_in_log_are_counted(self):
         env = self.env.copy()
