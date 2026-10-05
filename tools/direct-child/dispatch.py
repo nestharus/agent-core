@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Contextual direct dispatcher: resolve a route from seat, class and kind, then run
-one native Codex or Claude child in the foreground. See README.md."""
+one native Codex or Claude child in the foreground, directly or (opt-in, Codex
+only) through the Linux native ACP v2 caller. See README.md."""
 
 import argparse
 import datetime
@@ -12,12 +13,17 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import codex_auth  # noqa: E402  (sibling module; also when run through runpy)
+
 DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
 CLAUDE_EMPTY_MCP = '{"mcpServers":{}}'
@@ -29,6 +35,12 @@ NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 PROFILE = re.compile(r"\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 PROVIDERS = ("codex", "claude")
 PASSES = ("generative", "corrective", "unspecified")
+TRANSPORTS = ("direct", "native")
+# Dispatcher refusals after the attempt record exists and before any task:
+EXIT_NATIVE_CREDENTIAL = 70  # no fresh access token; renewal not needed, failed or unknown
+EXIT_LEASE_TIMEOUT = 75      # profile lease busy for the whole bound
+NATIVE_INTEGERS = ("deadline_s", "site_grace_s", "site_collection_s", "site_margin_s",
+                   "slack_s", "renew_timeout_s")
 
 
 class Refusal(Exception):
@@ -53,8 +65,10 @@ def parse_args(argv):
     for flag in ("--cwd", "--prompt", "--runs-dir", "--id"):
         parser.add_argument(flag, action=Once, required=True)
     for flag in ("--seat", "--class", "--basis", "--kind", "--pass", "--route", "--model",
-                 "--provider", "--effort", "--profile", "--override-reason", "--config"):
+                 "--provider", "--effort", "--profile", "--override-reason", "--config",
+                 "--transport"):
         parser.add_argument(flag, action=Once)
+    parser.add_argument("--native-deadline", action=Once, type=int)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
@@ -162,6 +176,46 @@ def validate_config(config):
                 raise Refusal(f"config: kinds.{name}.seats must list distinct configured seats")
     if _table(config, "legacy").get("route") not in routes:
         raise Refusal("config: legacy.route is not a configured route")
+    validate_transport(config)
+
+
+def validate_transport(config):
+    """[lease], [transport] and [native] are optional: without them the lease
+    waits 120 s, transport is direct and nothing can run natively."""
+    wait = config.get("lease", {}).get("wait_s", 120)
+    if type(wait) not in (int, float) or not 0 < wait <= 3600:
+        raise Refusal("config: lease.wait_s must be a number of seconds in (0, 3600]")
+    default = config.get("transport", {}).get("default", "direct")
+    if default not in TRANSPORTS:
+        raise Refusal("config: transport.default must be direct or native")
+    native = config.get("native")
+    if native is None:
+        if default == "native":
+            raise Refusal("config: transport.default native needs a [native] table")
+        return
+    if not isinstance(native, dict):
+        raise Refusal("config: [native] must be a table")
+    caller = _string(native.get("caller"), "native.caller")
+    if not caller.startswith("/") or "\n" in caller:
+        raise Refusal("config: native.caller must be an absolute path")
+    for key in NATIVE_INTEGERS:
+        if type(native.get(key)) is not int or native[key] < (1 if key in ("deadline_s", "renew_timeout_s") else 0):
+            raise Refusal(f"config: native.{key} must be a nonnegative integer (positive for deadlines)")
+    bindings = native.get("bindings", [])
+    seen = set()
+    for index, binding in enumerate(bindings if isinstance(bindings, list) else [None]):
+        where = f"native.bindings[{index}]"
+        if not isinstance(binding, dict) or set(binding) != {"provider", "model", "effort", "site_route"}:
+            raise Refusal(f"config: {where} needs exactly provider, model, effort and site_route")
+        _binding(binding, where, config["providers"])
+        if binding["provider"] != "codex":
+            raise Refusal(f"config: {where}: only Codex bindings can run natively")
+        if not NAME.fullmatch(_string(binding["site_route"], f"{where}.site_route")):
+            raise Refusal(f"config: {where}.site_route must be a site route name")
+        key = (binding["provider"], binding["model"], binding["effort"])
+        if key in seen:
+            raise Refusal(f"config: {where} repeats a binding")
+        seen.add(key)
 
 
 # ------------------------------------------------------------ resolution
@@ -263,6 +317,48 @@ def resolve(config, args):
     }
 
 
+def resolve_transport(config, args, record):
+    """Pick direct or native before anything starts. The route's provider,
+    model and effort are never changed; with default native an unmapped
+    binding runs direct by rule, and an explicit native request for one is
+    refused. Never a post-launch fallback."""
+    if args.transport is not None and args.transport not in TRANSPORTS:
+        raise Refusal("--transport must be direct or native")
+    if args.native_deadline is not None and args.transport != "native" and \
+            config.get("transport", {}).get("default", "direct") != "native":
+        raise Refusal("--native-deadline needs the native transport")
+    source = "explicit" if args.transport is not None else "default"
+    wanted = args.transport or config.get("transport", {}).get("default", "direct")
+    native = config.get("native", {})
+    key = (record["provider"], record["model"], record["effort"])
+    site_route = next((b["site_route"] for b in native.get("bindings", [])
+                       if (b["provider"], b["model"], b["effort"]) == key), None)
+    fields = {"transport_source": source, "site_route": None, "native_caller": None,
+              "native_deadline_s": None}
+    if wanted == "direct":
+        return dict(fields, transport="direct", transport_rule=f"{source}-direct")
+    if site_route is None:
+        if source == "explicit":
+            raise Refusal(f"--transport native: no native site route is declared for "
+                          f"{key[0]} / {key[1]} / {key[2]}; launch it direct")
+        return dict(fields, transport="direct", transport_rule="default-native-unmapped-direct")
+    deadline = args.native_deadline if args.native_deadline is not None else native["deadline_s"]
+    if deadline < 1:
+        raise Refusal("--native-deadline must be positive")
+    return dict(fields, transport="native", transport_rule=f"{source}-native",
+                site_route=site_route, native_caller=native["caller"],
+                native_deadline_s=deadline,
+                site_binding_source="routes.toml declaration; the root-owned site config "
+                                    "fixes the actual model and effort and is not read here")
+
+
+def credential_need(config, deadline):
+    """(seconds the token must cover at our check, the caller's margin)."""
+    native = config["native"]
+    site = 2 * native["site_grace_s"] + native["site_collection_s"] + native["site_margin_s"]
+    return deadline + site + native["slack_s"], site + native["slack_s"] // 2
+
+
 # -------------------------------------------------------------- rotation
 
 def counter_path(config, provider):
@@ -315,11 +411,27 @@ def allocate_profile(config, provider):
 
 # ----------------------------------------------------------------- launch
 
-def codex_command(args, record, profile, route_json=None):
+def lease_wait(config):
+    return config.get("lease", {}).get("wait_s", 120)
+
+
+def codex_command(args, record, profile, config, route_json=None):
     command = [str(CODEX_LAUNCHER), "--profile", profile, "--cwd", args.cwd,
                "--prompt", args.prompt, "--runs-dir", args.runs_dir, "--id", args.id,
-               "--model", record["model"], "--effort", record["effort"]]
+               "--model", record["model"], "--effort", record["effort"],
+               "--lease-wait", str(lease_wait(config))]
     return command + (["--route-json", route_json] if route_json is not None else [])
+
+
+def native_command(record, cwd, prompt, out, credential_dir, margin):
+    """The installed caller's documented interface; the request carries the
+    site route only. The caller's own freshness margin keeps half our slack,
+    so seconds between our check and its own do not refuse the launch."""
+    return [record["native_caller"], "--route", record["site_route"],
+            "--prompt-file", prompt, "--cwd", cwd, "--out", out, "--trusted-task",
+            "--deadline", str(record["native_deadline_s"]),
+            "--credential-codex-profile", credential_dir,
+            "--credential-margin", str(margin)]
 
 
 def claude_command(record, wrapper):
@@ -468,13 +580,13 @@ def run_claude(args, record, command):
     for name, error in (("launch_error", launch_error), ("log_capture_error", log_error),
                         ("final_capture_error", final_error), ("state_capture_error", state_error)):
         if error:
-            report_claude(f"direct-child: incomplete custody: {name}={error}", sys.stderr)
-    report_claude(f"DIRECT_CHILD_EXIT={exit_code} CLAUDE_EXIT={native_rc} "
+            report(f"direct-child: incomplete custody: {name}={error}", sys.stderr)
+    report(f"DIRECT_CHILD_EXIT={exit_code} CLAUDE_EXIT={native_rc} "
                   f"SEMANTIC_IS_ERROR={'unknown' if semantic_error is None else str(semantic_error).lower()} "
                   f"FINAL_STATUS={final_status} "
                   f"CUSTODY_STATUS={'incomplete' if custody_error or state_error else 'complete'}")
     if final_status == "missing":
-        report_claude(f"DIRECT_CHILD_FINAL_MISSING_OR_EMPTY={paths['final.md']}")
+        report(f"DIRECT_CHILD_FINAL_MISSING_OR_EMPTY={paths['final.md']}")
     return exit_code
 
 
@@ -559,7 +671,7 @@ def append_state(state, text):
     return None
 
 
-def report_claude(text, stream=None):
+def report(text, stream=None):
     try:
         print(text, file=stream or sys.stdout, flush=True)
     except (OSError, UnicodeError) as error:
@@ -579,8 +691,8 @@ def capture_final(path, text, result_valid):
         return "capture-error", str(error)
     status = "present" if result_valid else "invalid-result"
     label = "FINAL" if result_valid else "RESULT_TEXT"
-    error = (report_claude(f"DIRECT_CHILD_{label}_BEGIN={path}")
-             or report_claude(captured) or report_claude(f"DIRECT_CHILD_{label}_END"))
+    error = (report(f"DIRECT_CHILD_{label}_BEGIN={path}")
+             or report(captured) or report(f"DIRECT_CHILD_{label}_END"))
     return ("capture-error", error) if error else (status, None)
 
 
@@ -594,6 +706,185 @@ def claude_exit_code(native_rc, semantic_error, result_valid, final_status, cust
     if not result_valid or final_status != "present":
         return 4
     return 1 if custody_error else 0
+
+
+# ---------------------------------------------------------------- native
+
+NATIVE_RECORD_NOTE = ("qualified native record: answer text, turn and owner events and Bash argv; "
+                      "no Bash output bodies or reasoning; not a complete log")
+
+
+def run_native(args, config, record, profile):
+    """One native attempt: profile lease; freshness, with at most one official
+    renewal; an access-only snapshot; lease released; then the installed
+    caller in the foreground. Its exit is the attempt's. Nothing is replayed
+    or sent direct afterwards."""
+    os.umask(0o077)
+    profile_home = Path(os.path.expanduser("~")) / profile
+    runs_dir = Path(args.runs_dir)
+    try:
+        if not profile_home.is_dir():
+            raise Refusal(f"missing profile: {profile_home}")
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        attempt = Path(tempfile.mkdtemp(prefix=f"{args.id}.", dir=runs_dir.resolve()))
+        paths = {name: attempt / name for name in
+                 ("prompt.md", "final.md", "state.txt", "route.json", "renewal.json")}
+        shutil.copyfile(args.prompt, paths["prompt.md"])
+        paths["prompt.md"].chmod(0o400)
+        paths["final.md"].touch()
+        paths["route.json"].write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    except (OSError, Refusal) as error:
+        print(f"direct-child: {error}", file=sys.stderr)
+        return 2
+    out, credential_dir = attempt / "native", attempt / "native-credential"
+    need, margin = credential_need(config, record["native_deadline_s"])
+    command = native_command(record, args.cwd, str(paths["prompt.md"]), str(out),
+                             str(credential_dir), margin)
+    state = paths["state.txt"]
+
+    def git(*git_args):
+        result = subprocess.run(["git", "-C", args.cwd, *git_args], capture_output=True,
+                                text=True, check=False)
+        return result.stdout.strip() if result.returncode == 0 else "unavailable"
+
+    state.write_text(
+        f"child_id={args.id}\ntransport=native\nprovider=codex\nprofile={profile}\n"
+        f"model={record['model']}\neffort={record['effort']}\nsite_route={record['site_route']}\n"
+        f"seat={record['seat']}\nclass={record['class']}\nkind={record['kind']}\n"
+        f"rule={record['rule']}\ntransport_rule={record['transport_rule']}\n"
+        f"route_record={paths['route.json']}\ncwd={args.cwd}\n"
+        f"git_branch={git('branch', '--show-current')}\n"
+        f"git_head_at_start={git('rev-parse', 'HEAD')}\n"
+        f"prompt={paths['prompt.md']}\nfinal={paths['final.md']}\nnative_out={out}\n"
+        f"renewal_record={paths['renewal.json']}\n"
+        f"lease={profile_home / codex_auth.LEASE_NAME}\nlease_wait_s={lease_wait(config)}\n"
+        f"credential_need_s={need}\nstart_utc={utc_now()}\n"
+        "expected_status=native terminal exit plus native_caller_exit entry\n", encoding="utf-8")
+    print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
+
+    renewal, snapshot = None, None
+    try:
+        with codex_auth.ProfileLease(profile_home, lease_wait(config)) as lease:
+            append_state(state, f"lease_status=acquired\nlease_waited_s={lease.waited_s}\n")
+            renewal, snapshot = codex_auth.ensure_fresh(
+                profile_home, need, config["native"]["renew_timeout_s"], cwd=attempt)
+            paths["renewal.json"].write_text(json.dumps(renewal, sort_keys=True) + "\n",
+                                             encoding="utf-8")
+            if snapshot is not None:
+                codex_auth.write_access_snapshot(credential_dir, snapshot)
+    except codex_auth.LeaseTimeout as error:
+        return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=timeout\nlease_note={error}\n")
+    except OSError as error:
+        code = EXIT_LEASE_TIMEOUT if renewal is None else EXIT_NATIVE_CREDENTIAL
+        snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
+        return native_refused(state, code, f"native_prelaunch_error={type(error).__name__}\n"
+                              f"credential_snapshot_removed={snapshot_error or 'yes'}\n")
+    summary = (f"lease_released_utc={utc_now()}\nrenewal={renewal['renewal']}\n"
+               f"issuer_contact={renewal['issuer_contact']}\n"
+               f"profile_written={renewal['profile_written']}\n"
+               + "".join(f"credential_{key}={renewal[key]}\n"
+                         for key in ("remaining_s_before", "remaining_s_after") if key in renewal))
+    if snapshot is None:
+        return native_refused(state, EXIT_NATIVE_CREDENTIAL, summary + "native_task=not-started\n")
+    append_state(state, summary + f"native_command={shlex.join(command)}\n"
+                 f"native_start_utc={utc_now()}\n")
+
+    caller_rc, launch_error = run_foreground(command, attempt)
+    state_error = append_state(state, f"native_caller_exit={'none' if caller_rc is None else caller_rc}\n")
+    snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
+    result, result_status = read_native_result(out / "result.json")
+    text, text_error = "", None
+    try:
+        if (out / "final.md").exists():
+            text = (out / "final.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        text_error = type(error).__name__
+    answered = caller_rc == 0 and result.get("class") == "answered"
+    final_status, final_error = capture_final(paths["final.md"], text, answered)
+    custody_error = launch_error or state_error or final_error or text_error or snapshot_error
+    exit_code = native_exit(caller_rc, final_status, custody_error)
+    answer = result.get("answer") if isinstance(result.get("answer"), dict) else {}
+    counts = result.get("counts") if isinstance(result.get("counts"), dict) else {}
+    completion = ((f"native_launch_error={launch_error}\n" if launch_error else "")
+                  + f"native_result={result_status}\n"
+                  f"native_class={result.get('class', 'unknown')}\n"
+                  f"front_door_exit={result.get('front_door_exit', 'unknown')}\n"
+                  f"native_answer={'present' if answer.get('present') is True else 'absent-or-unknown'}\n"
+                  f"native_bash_accepted={counts.get('bash_accepted', 'unknown')}\n"
+                  f"native_bash_ended={counts.get('bash_ended', 'unknown')}\n"
+                  f"native_processing_completion={result.get('processing_completion', 'unknown')}\n"
+                  f"native_record={NATIVE_RECORD_NOTE}\n"
+                  "native_retry=do-not-replay; no direct fallback\n"
+                  f"credential_snapshot_removed={'yes' if snapshot_error is None else 'no:' + snapshot_error}\n"
+                  "delegation_capability=not-established\n"
+                  "delegation_capability_note=native constructs a Bash-only tool configuration; "
+                  "a trusted shell can still start processes, CLIs and this dispatcher\n"
+                  + (f"final_read_error={text_error}\n" if text_error else "")
+                  + f"final_status={final_status}\n"
+                  + (f"final_capture_error={final_error}\n" if final_error else "")
+                  + f"custody_status={'incomplete' if custody_error else 'complete'}\n"
+                  f"dispatcher_exit={exit_code}\nend_utc={utc_now()}\n")
+    completion_error = append_state(state, completion)
+    if completion_error:
+        exit_code = native_exit(caller_rc, final_status, completion_error)
+        report(f"direct-child: incomplete custody: state_capture_error={completion_error}",
+                      sys.stderr)
+    report(f"DIRECT_CHILD_EXIT={exit_code} NATIVE_CALLER_EXIT={caller_rc} "
+                  f"NATIVE_CLASS={result.get('class', 'unknown')} FINAL_STATUS={final_status} "
+                  f"CUSTODY_STATUS={'incomplete' if custody_error or completion_error else 'complete'}")
+    return exit_code
+
+
+def native_refused(state, code, text):
+    """Refused after the attempt record exists and before any native task."""
+    append_state(state, text + f"dispatcher_exit={code}\nend_utc={utc_now()}\n")
+    report(f"DIRECT_CHILD_EXIT={code} NATIVE_TASK=not-started STATE={state}")
+    return code
+
+
+def run_foreground(command, cwd):
+    """The caller in the foreground; SIGINT/SIGTERM/SIGHUP are passed on as its
+    own cancel and the wait continues (the caller bounds its collection)."""
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, cwd=cwd)
+    except OSError as error:
+        return None, f"{type(error).__name__}"
+    forwarded = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    previous = {sig: signal.signal(sig, lambda sig, frame: process.send_signal(sig))
+                for sig in forwarded}
+    try:
+        while True:
+            try:
+                return process.wait(), None
+            except InterruptedError:
+                continue
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
+def read_native_result(path):
+    try:
+        if path.stat().st_size > 16 * 1024 * 1024:
+            return {}, "oversized"
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, "missing"
+    except (OSError, ValueError) as error:
+        return {}, f"unreadable:{type(error).__name__}"
+    return (value, "present") if isinstance(value, dict) else ({}, "unreadable:not-object")
+
+
+def native_exit(caller_rc, final_status, custody_error):
+    """The caller's documented code; 6 (incomplete) when its answer could not be
+    kept; 128+N for a signal."""
+    if caller_rc is None:
+        return 8
+    if caller_rc < 0:
+        return 128 - caller_rc
+    if caller_rc == 0 and (final_status != "present" or custody_error):
+        return 6
+    return caller_rc
 
 
 def check_paths(args):
@@ -619,6 +910,7 @@ def main(argv):
         record = resolve(config, args)
         record.update(config=str(config_path.resolve()), config_sha256=digest)
         check_paths(args)
+        record.update(resolve_transport(config, args, record))
         provider = record["provider"]
         if provider == "claude":
             wrapper = args.profile or config["providers"]["claude"]["pool"][0]
@@ -630,12 +922,21 @@ def main(argv):
             else:
                 profile, source = preview_profile(config, provider)
             record.update(profile=profile, profile_source=source)
-            command = (claude_command(record, profile) if provider == "claude"
-                       else codex_command(args, record, profile))
+            if record["transport"] == "native":
+                need, margin = credential_need(config, record["native_deadline_s"])
+                command = native_command(record, args.cwd, "<attempt>/prompt.md", "<attempt>/native",
+                                         "<attempt>/native-credential", margin)
+            elif provider == "claude":
+                command = claude_command(record, profile)
+            else:
+                command = codex_command(args, record, profile, config)
             print("DRY RUN: " + json.dumps(record, sort_keys=True))
             print("DRY RUN: would run: " + shlex.join(command))
             if provider == "claude":
                 print("DRY RUN: denial arguments are conditional on pre-task private help metadata")
+            if record["transport"] == "native":
+                print(f"DRY RUN: at launch, under the profile lease, the access token must cover "
+                      f"{need}s or one official renewal is attempted first")
             print("DRY RUN: no files written, rotation not advanced, no model launched")
             return 0
         if args.profile is not None:
@@ -648,8 +949,10 @@ def main(argv):
         return 2
     route_json = json.dumps(record, sort_keys=True)
     print(f"DIRECT_CHILD_ROUTE={route_json}", flush=True)
+    if record["transport"] == "native":
+        return run_native(args, config, record, profile)
     if provider == "codex":
-        command = codex_command(args, record, profile, route_json)
+        command = codex_command(args, record, profile, config, route_json)
         os.execv(command[0], command)
     try:
         return run_claude(args, record, claude_command(record, profile))

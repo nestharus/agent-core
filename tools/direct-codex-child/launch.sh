@@ -7,7 +7,8 @@ usage() {
   cat <<'EOF'
 Usage: launch.sh --profile .codex[2|3|4|5] --cwd /absolute/workspace \
   --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name \
-  [--model native-model --effort native-effort] [--dry-run | --preflight-only]
+  [--model native-model --effort native-effort] [--lease-wait SECONDS] \
+  [--dry-run | --preflight-only]
 
 The launcher reserves one unique attempt directory and runs one Codex child in
 the foreground. Launch it in a native persistent terminal, record that terminal's
@@ -17,16 +18,19 @@ without creating files or invoking Codex; it does not certify MCP state.
 Without --model/--effort the child uses gpt-6.1-sol at high. Both values are
 passed literally to Codex. --route-json is the contextual dispatcher's
 single-line resolution record, stored as route.json in the attempt.
+Every Codex call, from MCP preflight to the task's exit, holds the profile's
+advisory lease (<profile>/.oulipoly-direct-child.lease); the launcher waits at
+most --lease-wait seconds (default 120) for it, then exits 75 without a child.
 EOF
 }
 
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
-model='' effort='' route_json=''
+model='' effort='' route_json='' lease_wait=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
@@ -37,6 +41,7 @@ while (($#)); do
         --model) [[ -z $model ]] || die 'duplicate --model'; model=$2 ;;
         --effort) [[ -z $effort ]] || die 'duplicate --effort'; effort=$2 ;;
         --route-json) [[ -z $route_json ]] || die 'duplicate --route-json'; route_json=$2 ;;
+        --lease-wait) [[ -z $lease_wait ]] || die 'duplicate --lease-wait'; lease_wait=$2 ;;
       esac
       shift 2 ;;
     --dry-run) [[ $dry_run == false ]] || die 'duplicate --dry-run'; dry_run=true; shift ;;
@@ -55,6 +60,8 @@ effort=${effort:-high}
 [[ $model =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'model must be a native model id'
 [[ $effort =~ ^[a-z]+$ ]] || die 'effort must be a lowercase native effort'
 [[ $route_json != *$'\n'* ]] || die 'route-json must be a single line'
+lease_wait=${lease_wait:-120}
+[[ $lease_wait =~ ^[0-9]+(\.[0-9]+)?$ ]] || die 'lease-wait must be a number of seconds'
 [[ $child_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'id must use letters, digits, dot, underscore, or hyphen'
 for value in "$cwd" "$prompt" "$runs_dir"; do
   [[ $value == /* && $value != *$'\n'* ]] || die 'cwd, prompt, and runs-dir must be absolute paths without newlines'
@@ -76,6 +83,21 @@ fi
 
 command -v codex >/dev/null 2>&1 || die 'codex is not installed'
 command -v python3 >/dev/null 2>&1 || die 'python3 is required to inspect effective MCP servers'
+command -v flock >/dev/null 2>&1 || die 'flock is required for the profile lease'
+
+# Our writers of this profile serialize on one advisory lease, held from the
+# first Codex call to the task's exit (Codex can refresh tokens mid-task). The
+# descriptor is closed for every Codex call, so its descendants never hold it.
+lease_path="$profile_home/.oulipoly-direct-child.lease"
+[[ ! -L $lease_path ]] || die "profile lease is a symlink: $lease_path"
+exec {lease_fd}>>"$lease_path" || die "cannot open profile lease: $lease_path"
+flock -E 75 -x -w "$lease_wait" "$lease_fd"; lease_rc=$?
+if ((lease_rc == 75)); then
+  printf 'direct-codex-child: profile lease %s busy for %ss; Codex child was not started\n' \
+    "$lease_path" "$lease_wait" >&2
+  exit 75
+fi
+((lease_rc == 0)) || die "cannot lock profile lease: $lease_path"
 parse_mcp_json() {
   python3 -c '
 import json
@@ -104,7 +126,7 @@ except (ValueError, TypeError, json.JSONDecodeError) as error:
 '
 }
 
-discovery_report=$(CODEX_HOME="$profile_home" codex -c 'mcp_servers={}' mcp list --json 2>/dev/null) \
+discovery_report=$(CODEX_HOME="$profile_home" codex -c 'mcp_servers={}' mcp list --json 2>/dev/null {lease_fd}>&-) \
   || die 'MCP discovery failed; Codex child was not started'
 server_rows=$(printf '%s\n' "$discovery_report" | parse_mcp_json) \
   || die 'cannot parse effective MCP server discovery'
@@ -128,7 +150,7 @@ mcp_flags+=(-c 'mcp_servers.openaiDeveloperDocs.url="https://developers.openai.c
 expected_rows+='openaiDeveloperDocs'$'\t0\n'
 ((server_count+=1))
 expected_rows=$(printf '%s' "$expected_rows" | LC_ALL=C sort)
-mcp_report=$(CODEX_HOME="$profile_home" codex "${mcp_flags[@]}" mcp list --json 2>/dev/null) \
+mcp_report=$(CODEX_HOME="$profile_home" codex "${mcp_flags[@]}" mcp list --json 2>/dev/null {lease_fd}>&-) \
   || die 'MCP preflight failed; Codex child was not started'
 verified_rows=$(printf '%s\n' "$mcp_report" | parse_mcp_json) \
   || die 'cannot parse effective MCP preflight'
@@ -147,7 +169,7 @@ fi
 # still launches with capability recorded as not established.
 delegation_like='multi_agent|agent_message|collab|subagent'
 delegation_rows() {
-  CODEX_HOME="$profile_home" codex "$@" features list 2>/dev/null | python3 -c '
+  CODEX_HOME="$profile_home" codex "$@" features list 2>/dev/null {lease_fd}>&- | python3 -c '
 import re
 import sys
 
@@ -221,6 +243,7 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   printf 'delegation_restriction_args=%s\n' "${delegation_flags[*]}"
   [[ -z $delegation_readback ]] || printf 'delegation_features=%s\n' "$(printf '%s' "$delegation_readback" | tr '\t\n' '=,')"
   printf 'delegation_scope=built-in features listed by the installed CLI; shell-launched processes, hooks, plugins and skills not covered\n'
+  printf 'transport=direct\nlease=%s\nlease_wait_s=%s\nlease_status=held from MCP preflight to codex exit\n' "$lease_path" "$lease_wait"
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "$state_path" || die 'cannot write state'
 
@@ -230,7 +253,7 @@ printf 'DELEGATION_CAPABILITY=%s\n' "$delegation_status"
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
 CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
   -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
-  -C "$cwd" --color never -o "$final_path" - < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
+  -C "$cwd" --color never -o "$final_path" - < "$prompt_snapshot" 2>&1 {lease_fd}>&- | tee -a "$log_path"
 pipeline_status=("${PIPESTATUS[@]}")
 codex_rc=${pipeline_status[0]}
 tee_rc=${pipeline_status[1]}
