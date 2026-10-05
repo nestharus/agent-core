@@ -39,6 +39,45 @@ KILL_GRACE_S = 2
 CLIENT_INFO = {"name": "oulipoly_direct_child", "title": None, "version": "1"}
 
 
+class CatchSignals:
+    """Keep cleanup ownership across preparation, Popen and collection.
+
+    Handlers record cancellation rather than raising inside resource creation.
+    Once a caller exists, forward cancellation and continue collecting it.
+    SIGKILL and kernel-uninterruptible work cannot be handled here.
+    """
+
+    def __init__(self):
+        self.received = None
+        self.process = None
+
+    def _receive(self, sig, frame):
+        if self.received is None:
+            self.received = sig
+        self._forward(sig)
+
+    def _forward(self, sig):
+        if self.process is not None:
+            try:
+                self.process.send_signal(sig)
+            except OSError:
+                pass  # Still collect the caller; it may already have exited.
+
+    def collect(self, process):
+        self.process = process
+        if self.received is not None:
+            self._forward(self.received)
+
+    def __enter__(self):
+        self.previous = {sig: signal.signal(sig, self._receive)
+                         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+        return self
+
+    def __exit__(self, *exc):
+        for sig, handler in self.previous.items():
+            signal.signal(sig, handler)
+
+
 class LeaseTimeout(Exception):
     """Another writer we launched held the profile for the whole bound."""
 
@@ -54,17 +93,20 @@ class ProfileLease:
     wait_s. The descriptor is close-on-exec, so launched children and their
     descendants never inherit the lock."""
 
-    def __init__(self, profile_home, wait_s, poll_s=0.1):
+    def __init__(self, profile_home, wait_s, poll_s=0.1, interrupts=None):
         self.path = Path(profile_home) / LEASE_NAME
         self.wait_s, self.poll_s = wait_s, poll_s
         self.fd = None
         self.waited_s = None
+        self.interrupts = interrupts
 
     def __enter__(self):
         start = time.monotonic()
         fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
             while True:
+                if self.interrupts is not None and self.interrupts.received is not None:
+                    raise _Interrupted
                 try:
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
@@ -167,12 +209,12 @@ def _request(rid, method, params):
     return json.dumps({"id": rid, "method": method, "params": params}).encode() + b"\n"
 
 
-def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None):
+def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None, interrupts=None):
     """One bounded official refresh request. Returns a record with no message
     text, account fields or stderr: the server's stderr is discarded unread."""
     record = {"rpc": None, "stage": "launch", "error_code": None, "account_present": None,
               "requires_openai_auth": None, "server_stop": None, "server_exit": None,
-              "unsolicited_lines": 0}
+              "server_group_stop": None, "launched": False, "unsolicited_lines": 0}
     start = time.monotonic()
     env = os.environ | {"CODEX_HOME": str(codex_home)}
     try:
@@ -184,14 +226,15 @@ def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None):
         record.update(rpc="launch-failed", launch_error=type(error).__name__,
                       elapsed_s=round(time.monotonic() - start, 3))
         return record
-    selector = selectors.DefaultSelector()
-    os.set_blocking(proc.stdout.fileno(), False)
-    selector.register(proc.stdout, selectors.EVENT_READ)
+    record["launched"] = True
+    selector = None
     buffer, total = b"", 0
 
     def response(rid):
         nonlocal buffer, total
         while True:
+            if interrupts is not None and interrupts.received is not None:
+                raise _Interrupted
             while b"\n" in buffer:
                 raw, buffer = buffer.split(b"\n", 1)
                 try:
@@ -209,7 +252,7 @@ def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None):
             remaining = start + timeout_s - time.monotonic()
             if remaining <= 0:
                 raise _Timeout
-            if not selector.select(timeout=remaining):
+            if not selector.select(timeout=min(remaining, 0.1) if interrupts else remaining):
                 continue
             chunk = os.read(proc.stdout.fileno(), 65536)
             if not chunk:
@@ -220,10 +263,15 @@ def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None):
             buffer += chunk
 
     try:
+        selector = selectors.DefaultSelector()
+        os.set_blocking(proc.stdout.fileno(), False)
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        if interrupts is not None and interrupts.received is not None:
+            raise _Interrupted
         record["stage"] = "initialize"
         proc.stdin.write(_request(1, "initialize", {
             "clientInfo": CLIENT_INFO,
-            # Never start browser sign-in from a renewal helper.
+            # Request the source-defined policy; older servers may ignore it.
             "capabilities": {"explicitGatewayOauth": True}}))
         proc.stdin.flush()
         reply = response(1)
@@ -247,14 +295,19 @@ def app_server_refresh(codex_home, timeout_s, codex="codex", cwd=None):
         record.update(rpc="error", error_code=code if type(code) is int else None)
     except _Timeout:
         record["rpc"] = "timeout"
+    except _Interrupted:
+        record.update(rpc="interrupted", signal=interrupts.received)
     except _Protocol as error:
         record.update(rpc="protocol-error", protocol_error=error.args[0])
     except OSError as error:
         record.update(rpc="protocol-error", protocol_error=f"pipe:{type(error).__name__}")
     finally:
-        selector.close()
-        record["server_stop"], record["server_exit"] = _stop(proc)
-        record["elapsed_s"] = round(time.monotonic() - start, 3)
+        try:
+            if selector is not None:
+                selector.close()
+        finally:
+            record["server_stop"], record["server_exit"], record["server_group_stop"] = _stop(proc)
+            record["elapsed_s"] = round(time.monotonic() - start, 3)
     return record
 
 
@@ -266,13 +319,30 @@ class _Timeout(Exception):
     pass
 
 
+class _Interrupted(Exception):
+    pass
+
+
 class _RpcError(Exception):
     pass
 
 
+def _group_state(pgid):
+    """Probe only the helper's original group, never discover global PIDs.
+    A zombie can keep a group present; that is conservative uncertainty."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return "empty"
+    except OSError:
+        return "unknown"
+    return "present"
+
+
 def _stop(proc):
     """Close stdin (the server's EOF shutdown), then bounded TERM and KILL of
-    its session. No unbounded wait."""
+    its original process group, even after the leader exits. Escaped groups
+    and kernel-wide termination are not established. No unbounded wait."""
     for pipe in (proc.stdin, proc.stdout):
         try:
             pipe.close()
@@ -280,21 +350,30 @@ def _stop(proc):
             pass
     for how, grace in (("exited", EXIT_GRACE_S), ("terminated", KILL_GRACE_S),
                        ("killed", KILL_GRACE_S)):
+        deadline = time.monotonic() + grace
         if how != "exited":
             try:
                 os.killpg(proc.pid, signal.SIGTERM if how == "terminated" else signal.SIGKILL)
             except OSError:
                 pass
         try:
-            return how, proc.wait(timeout=grace)
+            proc.wait(timeout=grace)
         except subprocess.TimeoutExpired:
             continue
-    return "unknown", None
+        while True:
+            group = _group_state(proc.pid)
+            if group == "empty":
+                return how, proc.returncode, group
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    return "unknown", proc.returncode, _group_state(proc.pid)
 
 
 # ------------------------------------------------------------ gated renew
 
-def ensure_fresh(codex_home, need_s, timeout_s, codex="codex", cwd=None, now=time.time):
+def ensure_fresh(codex_home, need_s, timeout_s, codex="codex", cwd=None, now=time.time,
+                 interrupts=None):
     """Under a lease the caller holds: refresh only when the access token has
     less than need_s left. One attempt, never repeated. Returns (record,
     snapshot or None); snapshot is set only when the token is fresh enough."""
@@ -309,9 +388,13 @@ def ensure_fresh(codex_home, need_s, timeout_s, codex="codex", cwd=None, now=tim
     if record["remaining_s_before"] >= need_s:
         record.update(renewal="not-needed", issuer_contact="none", profile_written="no")
         return record, snapshot
-    rpc = app_server_refresh(codex_home, timeout_s, codex=codex, cwd=cwd)
+    if interrupts is not None and interrupts.received is not None:
+        record.update(renewal="interrupted", issuer_contact="none", profile_written="no")
+        return record, None
+    rpc = app_server_refresh(codex_home, timeout_s, codex=codex, cwd=cwd,
+                             interrupts=interrupts)
     record["app_server"] = rpc
-    record["issuer_contact"] = "possible" if rpc["stage"] == "account/read" else "none"
+    record["issuer_contact"] = "possible" if rpc["launched"] else "none"
     try:
         exp_after, snapshot = read_access(codex_home)
         record["remaining_s_after"] = exp_after - int(now())
@@ -319,6 +402,12 @@ def ensure_fresh(codex_home, need_s, timeout_s, codex="codex", cwd=None, now=tim
         exp_after, snapshot = None, None
         record["after_reason"] = str(error)
     changed = None if exp_after is None else exp_after != exp
+    if rpc["launched"] and (rpc["server_exit"] is None
+                            or rpc["server_stop"] == "unknown"
+                            or rpc["server_group_stop"] != "empty"):
+        record.update(renewal="helper-stop-unconfirmed", profile_written="unknown",
+                      expiry_changed=changed)
+        return record, None
     if rpc["rpc"] != "answered":
         # A stopped server may or may not have written; never retry or fall back.
         record.update(renewal=f"helper-{rpc['rpc']}", profile_written="unknown",
@@ -328,6 +417,7 @@ def ensure_fresh(codex_home, need_s, timeout_s, codex="codex", cwd=None, now=tim
         record.update(renewal="unreadable-after", profile_written="unknown")
         return record, None
     record["profile_written"] = "yes" if changed else "not-observed"
+    record["profile_written_basis"] = "expiry metadata change; writer attribution not established"
     if not changed:
         # account/read answers even when the refresh failed; the class
         # (expired, reused, revoked or transient) is not reported to us.
@@ -354,20 +444,28 @@ def main(argv):
     if (args.command == "renew") != (args.need_s is not None):
         parser.error("--need-s goes with renew, and renew needs it")
     home = Path(os.path.expanduser("~")) / args.profile
-    try:
-        with ProfileLease(home, args.lease_wait) as lease:
-            if args.command == "status":
-                try:
-                    exp, _ = read_access(home)
-                    record = {"remaining_s": exp - int(time.time())}
-                except AuthUnavailable as error:
-                    record = {"unavailable": str(error)}
-            else:
-                record, _ = ensure_fresh(home, args.need_s, args.timeout)
-            record["lease_waited_s"] = lease.waited_s
-    except LeaseTimeout as error:
-        print(json.dumps({"lease": "timeout", "reason": str(error)}))
-        return 75
+    with CatchSignals() as interrupts:
+        try:
+            with ProfileLease(home, args.lease_wait, interrupts=interrupts) as lease:
+                if args.command == "status":
+                    try:
+                        exp, _ = read_access(home)
+                        record = {"remaining_s": exp - int(time.time())}
+                    except AuthUnavailable as error:
+                        record = {"unavailable": str(error)}
+                else:
+                    record, _ = ensure_fresh(home, args.need_s, args.timeout,
+                                             interrupts=interrupts)
+                record["lease_waited_s"] = lease.waited_s
+        except _Interrupted:
+            record = {"renewal": "interrupted", "issuer_contact": "none", "profile_written": "no"}
+        except LeaseTimeout as error:
+            print(json.dumps({"lease": "timeout", "reason": str(error)}))
+            return 75
+        if interrupts.received is not None:
+            record["signal"] = interrupts.received
+            print(json.dumps(record, sort_keys=True))
+            return 128 + interrupts.received
     print(json.dumps(record, sort_keys=True))
     return 0 if record.get("renewal", "not-needed") in ("not-needed", "renewed") \
         and "unavailable" not in record else 1

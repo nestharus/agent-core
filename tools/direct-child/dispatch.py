@@ -13,7 +13,6 @@ from pathlib import Path
 import re
 import shlex
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -715,6 +714,30 @@ NATIVE_RECORD_NOTE = ("qualified native record: answer text, turn and owner even
 
 
 def run_native(args, config, record, profile):
+    """Own catchable cancellation and snapshot cleanup for the whole attempt."""
+    cleanup = {}
+    with codex_auth.CatchSignals() as interrupts:
+        try:
+            code = _run_native(args, config, record, profile, interrupts, cleanup)
+        finally:
+            if "credential_dir" in cleanup and not cleanup.get("snapshot_cleanup_done"):
+                error = codex_auth.remove_access_snapshot(cleanup["credential_dir"])
+                cleanup["error"] = error
+                if "state" in cleanup:
+                    append_state(cleanup["state"],
+                                 f"credential_snapshot_removed={'yes' if error is None else 'no:' + error}\n")
+        if interrupts.received is not None:
+            code = 128 + interrupts.received
+            if "state" in cleanup:
+                append_state(cleanup["state"], f"native_signal={interrupts.received}\n"
+                             f"dispatcher_exit={code}\n")
+            report(f"DIRECT_CHILD_EXIT={code} SIGNAL={interrupts.received}")
+        elif cleanup.get("error") and code == 0:
+            code = 6
+        return code
+
+
+def _run_native(args, config, record, profile, interrupts, cleanup):
     """One native attempt: profile lease; freshness, with at most one official
     renewal; an access-only snapshot; lease released; then the installed
     caller in the foreground. Its exit is the attempt's. Nothing is replayed
@@ -737,10 +760,12 @@ def run_native(args, config, record, profile):
         print(f"direct-child: {error}", file=sys.stderr)
         return 2
     out, credential_dir = attempt / "native", attempt / "native-credential"
+    cleanup["credential_dir"] = credential_dir
     need, margin = credential_need(config, record["native_deadline_s"])
     command = native_command(record, args.cwd, str(paths["prompt.md"]), str(out),
                              str(credential_dir), margin)
     state = paths["state.txt"]
+    cleanup["state"] = state
 
     def git(*git_args):
         result = subprocess.run(["git", "-C", args.cwd, *git_args], capture_output=True,
@@ -764,19 +789,23 @@ def run_native(args, config, record, profile):
 
     renewal, snapshot = None, None
     try:
-        with codex_auth.ProfileLease(profile_home, lease_wait(config)) as lease:
+        with codex_auth.ProfileLease(profile_home, lease_wait(config), interrupts=interrupts) as lease:
             append_state(state, f"lease_status=acquired\nlease_waited_s={lease.waited_s}\n")
             renewal, snapshot = codex_auth.ensure_fresh(
-                profile_home, need, config["native"]["renew_timeout_s"], cwd=attempt)
+                profile_home, need, config["native"]["renew_timeout_s"], cwd=attempt,
+                interrupts=interrupts)
             paths["renewal.json"].write_text(json.dumps(renewal, sort_keys=True) + "\n",
                                              encoding="utf-8")
-            if snapshot is not None:
+            if snapshot is not None and interrupts.received is None:
                 codex_auth.write_access_snapshot(credential_dir, snapshot)
+    except codex_auth._Interrupted:
+        return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
     except codex_auth.LeaseTimeout as error:
         return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=timeout\nlease_note={error}\n")
     except OSError as error:
         code = EXIT_LEASE_TIMEOUT if renewal is None else EXIT_NATIVE_CREDENTIAL
         snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
+        cleanup["snapshot_cleanup_done"] = True
         return native_refused(state, code, f"native_prelaunch_error={type(error).__name__}\n"
                               f"credential_snapshot_removed={snapshot_error or 'yes'}\n")
     summary = (f"lease_released_utc={utc_now()}\nrenewal={renewal['renewal']}\n"
@@ -786,12 +815,15 @@ def run_native(args, config, record, profile):
                          for key in ("remaining_s_before", "remaining_s_after") if key in renewal))
     if snapshot is None:
         return native_refused(state, EXIT_NATIVE_CREDENTIAL, summary + "native_task=not-started\n")
+    if interrupts.received is not None:
+        return native_refused(state, 128 + interrupts.received, summary + "native_task=not-started\n")
     append_state(state, summary + f"native_command={shlex.join(command)}\n"
                  f"native_start_utc={utc_now()}\n")
 
-    caller_rc, launch_error = run_foreground(command, attempt)
+    caller_rc, launch_error = run_foreground(command, attempt, interrupts)
     state_error = append_state(state, f"native_caller_exit={'none' if caller_rc is None else caller_rc}\n")
     snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
+    cleanup["snapshot_cleanup_done"] = True
     result, result_status = read_native_result(out / "result.json")
     text, text_error = "", None
     try:
@@ -842,16 +874,16 @@ def native_refused(state, code, text):
     return code
 
 
-def run_foreground(command, cwd):
+def run_foreground(command, cwd, interrupts):
     """The caller in the foreground; SIGINT/SIGTERM/SIGHUP are passed on as its
     own cancel and the wait continues (the caller bounds its collection)."""
+    if interrupts.received is not None:
+        return None, "interrupted-before-launch"
     try:
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, cwd=cwd)
     except OSError as error:
         return None, f"{type(error).__name__}"
-    forwarded = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    previous = {sig: signal.signal(sig, lambda sig, frame: process.send_signal(sig))
-                for sig in forwarded}
+    interrupts.collect(process)
     try:
         while True:
             try:
@@ -859,8 +891,7 @@ def run_foreground(command, cwd):
             except InterruptedError:
                 continue
     finally:
-        for sig, handler in previous.items():
-            signal.signal(sig, handler)
+        interrupts.process = None
 
 
 def read_native_result(path):

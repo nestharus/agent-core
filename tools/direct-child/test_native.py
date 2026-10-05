@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -47,7 +48,7 @@ def lease_probe(home):
 '''
 
 FAKE_CODEX = r'''#!/usr/bin/env python3
-import base64, fcntl, json, os, signal, sys, time, tomllib
+import base64, fcntl, json, os, signal, subprocess, sys, time, tomllib
 from pathlib import Path
 ''' + LEASE_PROBE + r'''
 args = sys.argv[1:]
@@ -74,7 +75,7 @@ if args[:1] == ["exec"]:
     sys.exit(0)
 assert args == ["app-server", "--listen", "stdio://"], args
 mode = os.environ.get("FAKE_APP_SERVER", "renew")
-note(**lease_probe(home))
+note(pid=os.getpid(), **lease_probe(home))
 print("SECRET-STDERR refresh_token=SECRET-REFRESH person@example.com", file=sys.stderr, flush=True)
 if mode == "hang":
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -89,6 +90,14 @@ for raw in sys.stdin:
     with open(os.environ["FAKE_RPC"], "a", encoding="utf-8") as rpc:
         rpc.write(raw if raw.endswith("\n") else raw + "\n")
     if message.get("method") == "initialize":
+        if mode == "lingering-member":
+            member = subprocess.Popen([sys.executable, "-c",
+                "import os,signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                "print(os.getpgrp(), flush=True); time.sleep(120)"],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            group = int(member.stdout.readline())
+            member.stdout.close()
+            note(pid=os.getpid(), member_pid=member.pid, member_group=group)
         if mode == "garbage":
             print("this is not json", flush=True)
             continue
@@ -102,7 +111,7 @@ for raw in sys.stdin:
         if mode == "rpc-error":
             send({"id": message["id"], "error": {"code": -32601, "message": "SECRET-REFRESH person@example.com"}})
             continue
-        if mode in ("renew", "insufficient") and message.get("params") == {"refreshToken": True}:
+        if mode in ("renew", "insufficient", "signal-renew", "lingering-member") and message.get("params") == {"refreshToken": True}:
             lifetime = int(os.environ.get("FAKE_NEW_LIFETIME", "864000"))
             payload = base64.urlsafe_b64encode(json.dumps({"exp": int(time.time()) + lifetime}).encode()).decode().rstrip("=")
             auth = json.load(open(home / "auth.json"))
@@ -110,9 +119,48 @@ for raw in sys.stdin:
             auth["tokens"]["refresh_token"] = "SECRET-REFRESH-2"
             auth["last_refresh"] = "2026-10-04T00:00:00Z"
             open(home / "auth.json", "w").write(json.dumps(auth))
+        if mode == "signal-renew":
+            os.kill(os.getppid(), int(os.environ["FAKE_SIGNAL"]))
         send({"id": message["id"], "result": {
             "account": {"type": "chatgpt", "email": "person@example.com", "planType": "pro"},
             "requiresOpenaiAuth": True}})
+'''
+
+# Faults and signals affect only this fake attempt's dispatcher. Unknown stop
+# controls still perform real cleanup, then replace the observation, so a
+# failed assertion cannot leave a writer behind.
+CONTROL_WRAPPER = r'''
+import json, os, runpy, signal, sys
+sys.path.insert(0, os.path.dirname(sys.argv[1]))
+import codex_auth
+mode = os.environ["CONTROL_MODE"]
+if mode in ("unknown-stop", "outstanding-group"):
+    stop = codex_auth._stop
+    def unconfirmed(proc):
+        observed = stop(proc)
+        return ("unknown", None, "unknown") if mode == "unknown-stop" else (observed[0], observed[1], "present")
+    codex_auth._stop = unconfirmed
+elif mode == "snapshot-signal":
+    opening = os.open
+    def interrupted(path, *args, **kwargs):
+        fd = opening(path, *args, **kwargs)
+        if str(path).endswith("native-credential/auth.json"):
+            os.kill(os.getpid(), int(os.environ["FAKE_SIGNAL"]))
+        return fd
+    os.open = interrupted
+elif mode == "caller-start-signal":
+    import subprocess
+    popen = subprocess.Popen
+    def interrupted(command, *args, **kwargs):
+        proc = popen(command, *args, **kwargs)
+        if os.path.basename(command[0]) == "native-call":
+            with open(os.environ["FAKE_CALLS"], "a") as calls:
+                calls.write(json.dumps({"tool": "caller-spawn", "pid": proc.pid}) + "\n")
+            os.kill(os.getpid(), int(os.environ["FAKE_SIGNAL"]))
+        return proc
+    subprocess.Popen = interrupted
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name="__main__")
 '''
 
 FAKE_CALLER = r'''#!/usr/bin/env python3
@@ -194,11 +242,29 @@ class NativeTest(unittest.TestCase):
         return str(path)
 
     def dispatch(self, *extra, env=None, config=None, timeout=60, runs=None):
-        return subprocess.run(
-            [str(DISPATCH), "--config", config or self.config, "--cwd", str(self.cwd),
+        env = env or self.env
+        prefix = [sys.executable, "-c", CONTROL_WRAPPER] if "CONTROL_MODE" in env else []
+        command = [*prefix, str(DISPATCH), "--config", config or self.config, "--cwd", str(self.cwd),
              "--prompt", str(self.prompt), "--runs-dir", str(runs or self.runs), "--id", "child",
-             *extra],
-            env=env or self.env, capture_output=True, text=True, check=False, timeout=timeout)
+             *extra]
+        result = subprocess.run(command,
+            env=env, capture_output=True, text=True, check=False, timeout=timeout)
+        if capture := os.environ.get("NATIVE_CONTROL_CAPTURE"):
+            saved = Path(tempfile.mkdtemp(prefix=self._testMethodName + ".", dir=capture))
+            evidence = {"command": command, "returncode": result.returncode,
+                        "stdout": result.stdout, "stderr": result.stderr,
+                        "control_mode": env.get("CONTROL_MODE"),
+                        "fake_app_server": env.get("FAKE_APP_SERVER"),
+                        "signal": env.get("FAKE_SIGNAL"), "records": {}}
+            for path in (runs or self.runs).rglob("*"):
+                if path.is_file() and path.name in ("renewal.json", "state.txt", "route.json"):
+                    evidence["records"][str(path)] = path.read_text()
+            for path in (self.calls, self.rpc):
+                if path.exists():
+                    evidence["records"][str(path)] = path.read_text()
+            (saved / "result.json").write_text(json.dumps(evidence, indent=2) + "\n")
+            (saved / "result.json").chmod(0o600)
+        return result
 
     def resolved(self, *extra, config=None):
         result = self.dispatch("--dry-run", *extra, config=config)
@@ -371,6 +437,7 @@ class NativeTest(unittest.TestCase):
                 self.assertEqual((renewal["renewal"], renewal["profile_written"]),
                                  (renewal_class, written))
                 self.assertEqual(renewal["app_server"]["error_code"], code)
+                self.assertEqual(renewal["issuer_contact"], "possible", "startup may contact issuer")
                 self.assertFalse((attempt / "native-credential").exists())
 
     def test_caller_outcomes_propagate_once_without_replay_or_direct_fallback(self):
@@ -411,8 +478,92 @@ class NativeTest(unittest.TestCase):
         renewal = json.loads((attempt / "renewal.json").read_text())
         self.assertEqual((renewal["renewal"], renewal["profile_written"], renewal["issuer_contact"],
                           renewal["app_server"]["server_stop"]),
-                         ("helper-timeout", "unknown", "none", "killed"))
+                         ("helper-timeout", "unknown", "possible", "killed"))
         self.assertEqual(self.calls_of("native-call"), [])
+
+    def test_answered_fresh_token_with_unconfirmed_stop_never_launches(self):
+        for mode in ("unknown-stop", "outstanding-group"):
+            with self.subTest(mode=mode):
+                self.calls.unlink(missing_ok=True)
+                self.write_auth(".codex4", 100)
+                runs = self.root / mode
+                result = self.native(env=self.env | {"CONTROL_MODE": mode}, runs=runs)
+                self.assertEqual(result.returncode, 70, result.stdout + result.stderr)
+                self.assertEqual(len(self.calls_of("codex")), 1)
+                self.assertEqual(self.calls_of("native-call"), [])
+                (attempt,) = runs.iterdir()
+                renewal = json.loads((attempt / "renewal.json").read_text())
+                self.assertEqual(renewal["app_server"]["rpc"], "answered")
+                self.assertGreater(renewal["remaining_s_after"], NEED)
+                self.assertEqual((renewal["renewal"], renewal["profile_written"],
+                                  renewal["issuer_contact"], renewal["expiry_changed"]),
+                                 ("helper-stop-unconfirmed", "unknown", "possible", True))
+                self.assertFalse((attempt / "native-credential").exists())
+
+    def test_catchable_signals_clean_renewal_snapshot_and_caller_launch(self):
+        for phase in ("renewal", "snapshot-signal", "caller-start-signal"):
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                with self.subTest(phase=phase, signal=sig):
+                    self.calls.unlink(missing_ok=True)
+                    self.write_auth(".codex4", 100 if phase == "renewal" else NEED + 600)
+                    runs = self.root / f"{phase}-{sig}"
+                    env = self.env | {"FAKE_SIGNAL": str(int(sig))}
+                    env |= ({"FAKE_APP_SERVER": "signal-renew"} if phase == "renewal"
+                            else {"CONTROL_MODE": phase})
+                    result = self.native(env=env, runs=runs)
+                    self.assertEqual(result.returncode, 128 + sig, result.stdout + result.stderr)
+                    (attempt,) = runs.iterdir()
+                    state = dict(line.split("=", 1) for line in
+                                 (attempt / "state.txt").read_text().splitlines())
+                    self.assertEqual(state["native_signal"], str(int(sig)))
+                    self.assertEqual(state["credential_snapshot_removed"], "yes")
+                    self.assertFalse((attempt / "native-credential").exists())
+                    if phase == "renewal":
+                        renewal = json.loads((attempt / "renewal.json").read_text())
+                        self.assertEqual(renewal["issuer_contact"], "possible")
+                        self.assertIsNotNone(renewal["app_server"]["server_exit"])
+                        self.assertEqual(renewal["app_server"]["server_group_stop"], "empty")
+                        self.assertEqual(len(self.calls_of("codex")), 1)
+                        self.assertEqual(self.calls_of("native-call"), [])
+                    elif phase == "snapshot-signal":
+                        self.assertEqual(self.calls_of("codex") + self.calls_of("native-call"), [])
+                    else:
+                        self.assertIn("native_caller_exit", state, "started caller must be collected")
+                        self.assertNotEqual(state["native_caller_exit"], "none")
+                        self.assertEqual(len(self.calls_of("caller-spawn")), 1)
+                        self.assertEqual(self.calls_of("codex"), [])
+                    # Another own writer can acquire the ordinary lease after cleanup.
+                    with open(self.home / ".codex4" / LEASE, "a") as probe:
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_leader_exit_still_cleans_an_outstanding_group_member(self):
+        self.write_auth(".codex4", 100)
+        result = self.native(env=self.env | {"FAKE_APP_SERVER": "lingering-member"})
+        attempt, _ = self.attempt()
+        renewal = json.loads((attempt / "renewal.json").read_text())
+        self.assertEqual(renewal["app_server"]["rpc"], "answered")
+        self.assertEqual(renewal["app_server"]["server_exit"], 0)
+        if renewal["app_server"]["server_group_stop"] == "empty":
+            self.assertEqual(renewal["app_server"]["server_stop"], "killed")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(len(self.calls_of("native-call")), 1)
+        else:
+            self.assertEqual(result.returncode, 70, result.stdout + result.stderr)
+            self.assertEqual(renewal["renewal"], "helper-stop-unconfirmed")
+            self.assertEqual(self.calls_of("native-call"), [])
+        self.assertFalse((attempt / "native-credential").exists())
+        members = [call for call in self.calls_of("codex") if "member_pid" in call]
+        self.assertEqual(len(members), 1)
+        member = members[0]
+        self.assertEqual(member["member_group"], member["pid"])
+        # Own fake PID only: an orphan zombie is residual uncertainty, not a writer.
+        status = Path(f"/proc/{member['member_pid']}/stat")
+        try:
+            fields = status.read_text().rsplit(")", 1)[1].split()
+        except FileNotFoundError:
+            pass
+        else:
+            self.assertEqual(fields[0], "Z")
 
     def test_no_token_account_or_server_stderr_text_reaches_records_or_terminal(self):
         outputs = []

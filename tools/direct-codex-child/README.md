@@ -25,12 +25,14 @@ Do not send the command to shell background or use `&`, `nohup`, shell `wait`, P
 
 ## Profile lease
 
-Codex keeps tokens in `auth.json` and can refresh them during a task. It writes the file in place, and its refresh locks are in-process only. Two of our processes refreshing one profile could both spend its single-use refresh grant. So every launch takes an advisory exclusive `flock` on `<profile>/.oulipoly-direct-child.lease` (0600, our own file; a symlink is refused). It holds the lease from the first MCP preflight call until `codex exec` exits. The native path in [`../direct-child/`](../direct-child/README.md#profiles) takes the same lease for its freshness check and renewal.
+Codex keeps tokens in `auth.json` and can refresh them during a task. It writes the file in place, and its refresh locks are in-process only. Two of our processes refreshing one profile could both spend its single-use refresh grant. So every launch takes an advisory exclusive `flock` on `<profile>/.oulipoly-direct-child.lease` (0600, our own file; a symlink is refused). It holds the lease from the first MCP preflight call through task exit and capture until the launcher exits. The native path in [`../direct-child/`](../direct-child/README.md#profiles) takes the same lease for its freshness check and renewal.
 
 - `--lease-wait SECONDS` (default 120; the dispatcher passes `[lease] wait_s`) bounds the wait. A busy lease exits **75** before any Codex call or attempt directory. There is no queue.
-- Our launches therefore run one Codex task per profile at a time. This replaces the earlier statement that several children may share one profile concurrently.
+- Direct launches serialize per profile through task exit and capture. Native holds the lease during credential preparation only; its access-only tasks can overlap afterwards. Allocation still rotates before waiting, with no free-profile search. Four busy direct writers can make later launches wait or refuse; a free-profile search could not preserve more than four simultaneous profile writers when all four are busy.
 - The descriptor is closed for every Codex call, so Codex and its descendants never inherit the lock. It is released when the launcher exits, even if a descendant lives on.
 - Interactive Codex, editors, desktop apps, other machines and copies do not take the lease. They can still race a refresh; that is a profile-ownership limit, not something this tool prevents.
+
+The lease assumes a trusted user-owned profile and an unchanged regular lease inode. Creation uses 0600, but existing modes/type/owner are not revalidated. Bash's symlink check and open are separate; profile ancestry and replacement are not protected, and a FIFO open can block before the timed flock wait. The application wait is not a kernel/filesystem time guarantee. External daemons are also outside the lease; historical daemon reports are not current host attestation.
 
 `state.txt` records `transport=direct`, `lease`, `lease_wait_s` and the lease span.
 
