@@ -28,11 +28,11 @@ efforts = ["low", "medium", "high", "xhigh", "max"]
 wait_s = 120
 
 # How a resolved binding runs. "direct" runs the CLI (launch.sh or claude5);
-# "native" runs the installed Linux native ACP v2 caller. The default stays
-# direct until one actual official renewal has been witnessed; --transport
-# native selects native for one launch.
+# "native" runs the installed Linux native ACP v2 caller for an exact declared
+# binding; unmapped bindings run direct by rule. --transport direct explicitly
+# selects the CLI. Native failure never falls back or replays the task.
 [transport]
-default = "direct"
+default = "native"
 
 [native]
 caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-103741ae3cce-add1b251a984/bin/oulipoly-native-call"
