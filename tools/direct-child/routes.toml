@@ -38,10 +38,10 @@ wait_s = 120
 default = "native"
 
 [native]
-# Exact P6 pin (Runner a02520122600, agent-bash 213cac2323d7); no shim or
-# stable alias. U71 selects the U70 public-flow pair for all mapped bindings;
-# ROOT's delivery advances live /home/nes/ai routing, not a remote PR merge alone.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-160344de332f-213cac2323d7/bin/oulipoly-native-call"
+# Exact P8 selected pin (Runner b2c83ec0e7ea, agent-bash 213cac2323d7); no shim
+# or stable alias. U86 ROOT selects caller adoption for all mapped bindings;
+# ROOT delivery advances live /home/nes/ai routing, not a remote PR merge alone.
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-b2c83ec0e7ea-213cac2323d7/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # Upper bound checked before any allocation, lease, credential preparation or
