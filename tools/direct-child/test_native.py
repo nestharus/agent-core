@@ -854,8 +854,9 @@ class NativeTest(unittest.TestCase):
     def test_shipped_config_pins_the_versioned_caller_and_declares_child_offers(self):
         import tomllib
         config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
-        self.assertEqual(config["native"]["caller"], "/opt/oulipoly-native/oulipoly-native-linux-"
-                         "x86_64-0a24a50e6f08-924a48e58a59/bin/oulipoly-native-call")
+        expected_caller = ("/opt/oulipoly-native/oulipoly-native-linux-"
+                           "x86_64-0a24a50e6f08-ff76fa62e750/bin/oulipoly-native-call")
+        self.assertEqual(config["native"]["caller"], expected_caller)
         self.assertEqual(config["native"]["max_deadline_s"], 7200)
         self.assertEqual(config["native"]["children"],
                          {"routes": ["luna-max"], "max_starts": 4, "max_concurrent": 2})
@@ -863,13 +864,29 @@ class NativeTest(unittest.TestCase):
                          {"sol-high": ["luna-max"], "opus-medium": ["luna-max"],
                           "opus-high": ["luna-max"]})
         # Standalone Luna still resolves direct by rule; no child flag is implied.
-        for seat in ("scout", "explorer", "maker", "framer", "observer"):
-            record, out = self.resolved("--seat", seat)
-            self.assertIsNone(record["native_children"], seat)
-            self.assertNotIn("--child-", out)
-        record, _ = self.resolved("--seat", "scout")
+        # Resolve the shipped config itself: the fake-call controls replace its
+        # caller, so they cannot detect selecting the wrong installed package.
+        # Dry runs never execute this path or prepare a credential.
+        cases = [("scout", (), None), ("explorer", (), None),
+                 ("maker", (), "opus-medium"), ("framer", (), "opus-medium"),
+                 ("decider", (), "opus-medium"), ("observer", (), "sol-high"),
+                 ("maker", ("--kind", "creative"), "opus-high")]
+        for seat, extra, site_route in cases:
+            with self.subTest(seat=seat, extra=extra):
+                record, out = self.resolved("--seat", seat, *extra, config=str(CONFIG))
+                self.assertIsNone(record["native_children"], seat)
+                self.assertNotIn("--child-", out)
+                self.assertEqual(record["site_route"], site_route)
+                self.assertEqual(record["native_caller"], expected_caller if site_route else None)
+                if site_route:
+                    command = next(l for l in out.splitlines()
+                                   if l.startswith("DRY RUN: would run: "))
+                    self.assertEqual(shlex.split(command.removeprefix("DRY RUN: would run: "))[:3],
+                                     [expected_caller, "--route", site_route])
+        record, _ = self.resolved("--seat", "scout", config=str(CONFIG))
         self.assertEqual((record["transport"], record["transport_rule"], record["model"]),
                          ("direct", "default-native-unmapped-direct", "gpt-6-luna"))
+        self.no_effects()
 
     def test_sol_opt_in_reuses_the_one_snapshot_without_more_preparation(self):
         self.write_auth(".codex2", 100)
