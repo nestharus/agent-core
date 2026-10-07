@@ -38,14 +38,13 @@ wait_s = 120
 default = "native"
 
 [native]
-# Activation dependency (ROOT-owned): this caller must be the delivered
-# registered-only package whose site registers the routes below. The value is
-# the existing P7 pin (Runner 160344de332f, agent-bash 213cac2323d7), kept as
-# current path provenance only: it is not qualified for this site-route-only,
-# no-credential interface. ROOT replaces it with the delivered package's
-# versioned caller path when it installs that package and registers the site.
-# No stable alias or shim; a source edit or merge alone is not activation.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-160344de332f-213cac2323d7/bin/oulipoly-native-call"
+# Selected produced package: Runner 9bf6d295f2d5, agent-bash de23d83ac522.
+# This path selects the installation; schemas/capabilities govern compatibility.
+# ROOT owns installation, the matching site/account routes and production
+# discard, then live checkout activation and the fresh Luna consequence.
+# Construction and this declaration attest no installed or qualified default.
+# No stable alias, shim or readiness guard; source merge alone is not activation.
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-9bf6d295f2d5-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # Upper bound checked before any allocation, lease or write: the caller

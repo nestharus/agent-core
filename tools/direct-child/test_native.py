@@ -26,9 +26,10 @@ PROFILES = (".codex", ".codex2", ".codex3", ".codex4", ".codex5")
 POOL = (".codex2", ".codex3", ".codex4", ".codex5")
 # A second Claude store the dispatcher accepts, which no native binding names.
 TWO_STORES = ('manual_profiles = ["claude5"]', 'manual_profiles = ["claude5", "claude6"]')
-# The P7 caller path kept as current path provenance, not as qualification.
-P7_CALLER = ("/opt/oulipoly-native/oulipoly-native-linux-x86_64-"
-             "160344de332f-213cac2323d7/bin/oulipoly-native-call")
+# ROOT's selected produced package path: installation selection, not a
+# compatibility check or evidence that this executable is installed.
+PRODUCED_CALLER = ("/opt/oulipoly-native/oulipoly-native-linux-x86_64-"
+                   "9bf6d295f2d5-de23d83ac522/bin/oulipoly-native-call")
 RETIRED_FLAGS = ("--credential-codex-profile", "--child-credential-codex-profile",
                  "--credential-margin", "--credential-opencode-auth", "--child-route",
                  "--child-max-starts", "--child-max-concurrent", "--model", "--effort")
@@ -611,10 +612,10 @@ class NativeTest(unittest.TestCase):
                         self.no_effects()
         self.assertFalse((self.bin / "claude5").exists())
 
-    def test_shipped_config_declares_account_routes_and_keeps_caller_provenance(self):
+    def test_shipped_config_selects_produced_caller_and_declares_account_routes(self):
         import tomllib
         config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
-        self.assertEqual(config["native"]["caller"], P7_CALLER)
+        self.assertEqual(config["native"]["caller"], PRODUCED_CALLER)
         self.assertEqual(set(config["native"]), {"caller", "deadline_s", "max_deadline_s", "bindings"})
         bindings = {(b["provider"], b["model"], b["effort"]): b for b in config["native"]["bindings"]}
         for (model, effort), prefix in ((("gpt-6.1-sol", "high"), "sol-high-"), (("gpt-6-luna", "max"), "luna-max-")):
@@ -626,11 +627,13 @@ class NativeTest(unittest.TestCase):
         # Resolve the shipped config itself (the other controls replace its caller).
         for seat, extra, site_route in (("scout", (), "luna-max-codex2"), ("explorer", (), "luna-max-codex2"),
                                         ("observer", (), "sol-high-codex2"), ("framer", (), "opus-medium"),
-                                        ("maker", ("--kind", "creative"), "opus-high")):
+                                        ("maker", ("--kind", "creative"), "opus-high"),
+                                        ("scout", ("--profile", ".codex", "--override-reason", "explicit account"), "luna-max-codex"),
+                                        ("observer", ("--profile", ".codex", "--override-reason", "explicit account"), "sol-high-codex")):
             with self.subTest(seat=seat):
                 record, argv, _ = self.resolved("--seat", seat, *extra, config=str(CONFIG))
-                self.assertEqual((record["site_route"], record["native_caller"]), (site_route, P7_CALLER))
-                self.assertEqual(argv[:3], [P7_CALLER, "--route", site_route])
+                self.assertEqual((record["site_route"], record["native_caller"]), (site_route, PRODUCED_CALLER))
+                self.assertEqual(argv[:3], [PRODUCED_CALLER, "--route", site_route])
                 self.assert_no_credential_args(argv)
         self.no_effects()
 
