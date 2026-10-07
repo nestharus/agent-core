@@ -23,10 +23,10 @@ manual_profiles = ["claude5"]
 efforts = ["low", "medium", "high", "xhigh", "max"]
 
 # Per-profile advisory lease (our own file in each Codex profile). The direct
-# launcher holds it for its whole Codex run; native holds it for freshness
-# check, renewal and access snapshot. A launch waits at most wait_s, then
-# refuses. Writers we do not launch (interactive Codex, editors, copies) are
-# not covered.
+# launcher holds it for its whole Codex run; native holds it for the whole
+# caller operation, since the registered adapter runs Codex on that original
+# store. A launch waits at most wait_s, then refuses. Writers we do not launch
+# (interactive Codex, editors, copies) are not covered.
 [lease]
 wait_s = 120
 
@@ -38,50 +38,55 @@ wait_s = 120
 default = "native"
 
 [native]
-# Exact P6 pin (Runner a02520122600, agent-bash 213cac2323d7); no shim or
-# stable alias. U71 selects the U70 public-flow pair for all mapped bindings;
-# ROOT's delivery advances live /home/nes/ai routing, not a remote PR merge alone.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-160344de332f-213cac2323d7/bin/oulipoly-native-call"
+# Selected produced package: Runner 9bf6d295f2d5, agent-bash de23d83ac522.
+# This path selects the installation; schemas/capabilities govern compatibility.
+# ROOT owns installation, the matching site/account routes and production
+# discard, then live checkout activation and the fresh Luna consequence.
+# Construction and this declaration attest no installed or qualified default.
+# No stable alias, shim or readiness guard; source merge alone is not activation.
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-9bf6d295f2d5-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
-# Upper bound checked before any allocation, lease, credential preparation or
-# write: the pinned caller refuses above 7200. The site's max_deadline_s may
-# be lower; the front door then refuses (caller 4). Declared, not read back.
+# Upper bound checked before any allocation, lease or write: the caller
+# refuses above 7200. The site's max_deadline_s may be lower; the front door
+# then refuses (caller 4). Declared, not read back.
 max_deadline_s = 7200
-# The access token must still cover deadline + 2 x site grace + front-door
-# collection + site margin, plus slack for the time until admission. These
-# are declarations intended to match the shipped site config; they are not
-# read from it, and the front door's own check decides.
-site_grace_s = 30
-site_collection_s = 2
-site_margin_s = 300
-slack_s = 300
-# Bound on one official renewal (codex app-server, account/read refreshToken).
-renew_timeout_s = 60
 
-# Declared site child routes (the site's child_routes) and child_limits.
-# A launch opts in only explicitly (--native-child-route), and only to a route
-# its binding's children list declares; limits may only be lowered. The site
-# decides what it actually offers and admits; nothing here is read from it.
-[native.children]
-routes = ["luna-max"]
-max_starts = 4
-max_concurrent = 2
-
-# Requester-side declaration of site routes installed in the root-owned site
-# config. A request names the site route only; the site fixes model and effort
-# (and, for Claude, the store). Only an exactly matching binding can run
-# natively: with default native, any other binding runs direct by rule; an
-# explicit --transport native for it is refused. A Codex binding has no
-# profile: rotation and the lease supply an access-only credential. A Claude
-# binding names its store (profile): the site route fixes ~/.claude5, so only
-# the original claude5 store maps, never another store or a store override.
+# Requester-side declaration of site routes registered in the root-owned site
+# config. A request names the site route only; the site fixes provider, model,
+# effort and the account store (a Codex route's adapter settings_id selects
+# the original ~/.codexN store and owns its authentication). Only an exactly
+# matching binding can run natively: with default native, any other binding
+# runs direct by rule; an explicit --transport native for it is refused.
+# A Codex binding maps each Codex profile it serves to that profile's own
+# site route: rotation (or an explicit --profile) picks the profile, then its
+# route, and an explicit profile missing here is a different binding. Every
+# pool profile must be mapped. A Claude binding names its one store: the site
+# route fixes ~/.claude5, so only the original claude5 store maps.
+# Native children (--native-child-route) are refused pending ROOT's child
+# account and lease decision; no child offers are declared.
 [[native.bindings]]
 provider = "codex"
 model = "gpt-6.1-sol"
 effort = "high"
-site_route = "sol-high"
-children = ["luna-max"]
+[native.bindings.site_routes]
+".codex" = "sol-high-codex"
+".codex2" = "sol-high-codex2"
+".codex3" = "sol-high-codex3"
+".codex4" = "sol-high-codex4"
+".codex5" = "sol-high-codex5"
+
+# Standalone Luna (scout/explorer context) on the same per-account routes.
+[[native.bindings]]
+provider = "codex"
+model = "gpt-6-luna"
+effort = "max"
+[native.bindings.site_routes]
+".codex" = "luna-max-codex"
+".codex2" = "luna-max-codex2"
+".codex3" = "luna-max-codex3"
+".codex4" = "luna-max-codex4"
+".codex5" = "luna-max-codex5"
 
 [[native.bindings]]
 provider = "claude"
@@ -89,7 +94,6 @@ model = "claude-opus-5-5"
 effort = "medium"
 profile = "claude5"
 site_route = "opus-medium"
-children = ["luna-max"]
 
 [[native.bindings]]
 provider = "claude"
@@ -97,7 +101,6 @@ model = "claude-opus-5-5"
 effort = "high"
 profile = "claude5"
 site_route = "opus-high"
-children = ["luna-max"]
 
 # Routes: provider-neutral names bound to native model and effort.
 [routes.default]

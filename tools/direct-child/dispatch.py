@@ -21,7 +21,7 @@ import tomllib
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import codex_auth  # noqa: E402  (sibling module; also when run through runpy)
+import profile_lease  # noqa: E402  (sibling module; also when run through runpy)
 
 DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
@@ -35,16 +35,16 @@ PROFILE = re.compile(r"\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 PROVIDERS = ("codex", "claude")
 PASSES = ("generative", "corrective", "unspecified")
 TRANSPORTS = ("direct", "native")
-# Dispatcher refusals after the attempt record exists and before any task:
-EXIT_NATIVE_CREDENTIAL = 70  # no fresh access token; renewal not needed, failed or unknown
+# Dispatcher refusal after the attempt record exists and before any task:
 EXIT_LEASE_TIMEOUT = 75      # profile lease busy for the whole bound
-NATIVE_INTEGERS = ("deadline_s", "site_grace_s", "site_collection_s", "site_margin_s",
-                   "slack_s", "renew_timeout_s")
-# The pinned caller's own ceilings: it refuses a deadline above 7200 s and a
-# child allowance outside 1..4. A site may admit less; the front door decides.
+# The registered caller's own ceiling: it refuses a deadline above 7200 s. A
+# site may admit less; the front door decides.
 CALLER_MAX_DEADLINE_S = 7200
-CALLER_CHILD_LIMIT = 4
-CHILD_LIMITS = ("max_starts", "max_concurrent")
+# Retired with access-snapshot preparation: the registered adapter owns Codex
+# authentication in the original store, so these declarations have no reader.
+RETIRED_NATIVE_KEYS = ("site_grace_s", "site_collection_s", "site_margin_s", "slack_s",
+                       "renew_timeout_s", "children")
+CHILD_FLAGS = ("--native-child-route", "--native-child-max-starts", "--native-child-max-concurrent")
 
 
 class Refusal(Exception):
@@ -75,8 +75,8 @@ def parse_args(argv):
     parser.add_argument("--native-deadline", action=Once, type=int, metavar="SECONDS",
                         help="native front-door deadline; refused when the launch resolves direct")
     parser.add_argument("--native-child-route", action="append", metavar="NAME",
-                        help="explicit opt-in to a declared site child route (repeatable); "
-                             "refused when the launch resolves direct")
+                        help="explicit native child opt-in; currently refused before any effect "
+                             "(child account and lease ownership is undecided)")
     parser.add_argument("--native-child-max-starts", action=Once, type=int, metavar="N")
     parser.add_argument("--native-child-max-concurrent", action=Once, type=int, metavar="N")
     parser.add_argument("--dry-run", action="store_true")
@@ -208,44 +208,32 @@ def validate_transport(config):
     caller = _string(native.get("caller"), "native.caller")
     if not caller.startswith("/") or "\n" in caller:
         raise Refusal("config: native.caller must be an absolute path")
-    for key in NATIVE_INTEGERS:
-        if type(native.get(key)) is not int or native[key] < (1 if key in ("deadline_s", "renew_timeout_s") else 0):
-            raise Refusal(f"config: native.{key} must be a nonnegative integer (positive for deadlines)")
+    retired = [key for key in RETIRED_NATIVE_KEYS if key in native]
+    if retired:
+        raise Refusal(f"config: native.{', native.'.join(retired)} retired: the registered "
+                      "adapter owns authentication, and native children are refused")
+    if type(native.get("deadline_s")) is not int or native["deadline_s"] < 1:
+        raise Refusal("config: native.deadline_s must be a positive integer")
     ceiling = native.setdefault("max_deadline_s", CALLER_MAX_DEADLINE_S)
     if type(ceiling) is not int or not 1 <= ceiling <= CALLER_MAX_DEADLINE_S:
         raise Refusal(f"config: native.max_deadline_s must be 1..{CALLER_MAX_DEADLINE_S} "
-                      "(the pinned caller's ceiling)")
+                      "(the caller's ceiling)")
     if native["deadline_s"] > ceiling:
         raise Refusal("config: native.deadline_s exceeds native.max_deadline_s")
-    children = native.setdefault("children", {"routes": []})
-    if (not isinstance(children, dict) or set(children) - {"routes", *CHILD_LIMITS}
-            or not isinstance(children.get("routes"), list)
-            or not all(isinstance(name, str) and NAME.fullmatch(name) for name in children["routes"])
-            or len(set(children["routes"])) != len(children["routes"])):
-        raise Refusal("config: [native.children] takes routes (distinct site child route names) "
-                      "and optional max_starts, max_concurrent")
-    for key in CHILD_LIMITS:
-        value = children.setdefault(key, CALLER_CHILD_LIMIT)
-        if type(value) is not int or not 1 <= value <= CALLER_CHILD_LIMIT:
-            raise Refusal(f"config: native.children.{key} must be 1..{CALLER_CHILD_LIMIT}")
     bindings = native.get("bindings", [])
-    seen = set()
+    seen, routes = set(), []
     for index, binding in enumerate(bindings if isinstance(bindings, list) else [None]):
         where = f"native.bindings[{index}]"
-        # A Claude site route fixes its store, so the store is part of the
-        # binding; Codex credentials come from rotation, so it names none.
+        # A site route fixes its account store, so the store is part of the
+        # binding. A Claude binding names its one store; a Codex binding maps
+        # each Codex profile it serves to that profile's registered route.
         claude = isinstance(binding, dict) and binding.get("provider") == "claude"
-        fields = {"provider", "model", "effort", "site_route"} | ({"profile"} if claude else set())
-        if not isinstance(binding, dict) or set(binding) - {"children"} != fields:
-            raise Refusal(f"config: {where} needs exactly provider, model, effort and site_route, "
-                          "plus profile for a Claude binding, and optional children")
-        offers = binding.setdefault("children", [])
-        if (not isinstance(offers, list) or len(set(map(str, offers))) != len(offers)
-                or not all(isinstance(name, str) and name in children["routes"] for name in offers)):
-            raise Refusal(f"config: {where}.children must list distinct [native.children] routes")
+        fields = ({"provider", "model", "effort", "profile", "site_route"} if claude
+                  else {"provider", "model", "effort", "site_routes"})
+        if not isinstance(binding, dict) or set(binding) != fields:
+            raise Refusal(f"config: {where} needs exactly provider, model, effort, and profile "
+                          "with site_route for a Claude binding or site_routes for a Codex binding")
         _binding(binding, where, config["providers"])
-        if not NAME.fullmatch(_string(binding["site_route"], f"{where}.site_route")):
-            raise Refusal(f"config: {where}.site_route must be a site route name")
         if claude:
             store = config["providers"]["claude"]
             if binding["profile"] not in store["manual_profiles"]:
@@ -253,10 +241,25 @@ def validate_transport(config):
             if len(store["pool"]) != 1:
                 raise Refusal(f"config: {where}: a native Claude binding needs a one-store Claude "
                               "pool, so the store is known before transport is chosen")
+            names = [binding["site_route"]]
+        else:
+            accounts = binding["site_routes"]
+            codex = config["providers"]["codex"]
+            if (not isinstance(accounts, dict) or not set(accounts) <= set(codex["manual_profiles"])
+                    or not set(codex["pool"]) <= set(accounts)):
+                raise Refusal(f"config: {where}.site_routes must map every Codex pool profile, and "
+                              "only configured Codex profiles, to its registered site route")
+            names = list(accounts.values())
+        for name in names:
+            if not isinstance(name, str) or not NAME.fullmatch(name):
+                raise Refusal(f"config: {where}: site routes must be site route names")
+        routes += names
         key = (binding["provider"], binding["model"], binding["effort"], binding.get("profile"))
         if key in seen:
             raise Refusal(f"config: {where} repeats a binding")
         seen.add(key)
+    if len(set(routes)) != len(routes):
+        raise Refusal("config: native bindings must name distinct site routes, one per account")
 
 
 # ------------------------------------------------------------ resolution
@@ -358,29 +361,14 @@ def resolve(config, args):
     }
 
 
-def child_request(args):
-    """The explicit child opt-in as given, checked for form only; or None."""
-    routes = args.native_child_route or []
-    limits = {key: getattr(args, f"native_child_{key}") for key in CHILD_LIMITS}
-    if not routes:
-        if any(value is not None for value in limits.values()):
-            raise Refusal("--native-child-max-starts/--native-child-max-concurrent need "
-                          "--native-child-route")
-        return None
-    if len(set(routes)) != len(routes) or not all(NAME.fullmatch(name) for name in routes):
-        raise Refusal("--native-child-route must name distinct site child routes")
-    return routes, limits
-
-
 def resolve_transport(config, args, record):
     """Pick direct or native before anything starts. The route's provider,
-    model, effort and (for Claude) store are never changed; with default
-    native an unmapped binding runs direct by rule, and an explicit native
-    request for one is refused. Never a post-launch fallback. Native-only
-    requests (a deadline, a child opt-in) are checked here, before profile
-    allocation, lease, credential preparation or any write: an invalid value
-    is refused on every transport, and a valid one on a launch that resolves
-    direct is refused, not dropped."""
+    model and effort are never changed; with default native an unmapped
+    binding runs direct by rule, and an explicit native request for one is
+    refused. Never a post-launch fallback. Native-only requests are checked
+    here, before profile allocation, lease or any write: an invalid deadline
+    is refused on every transport, a valid one on a launch that resolves
+    direct is refused, not dropped, and every child option is refused."""
     if args.transport is not None and args.transport not in TRANSPORTS:
         raise Refusal("--transport must be direct or native")
     native = config.get("native", {})
@@ -388,68 +376,56 @@ def resolve_transport(config, args, record):
     if args.native_deadline is not None and not 1 <= args.native_deadline <= ceiling:
         raise Refusal(f"--native-deadline must be a positive number of seconds, at most {ceiling} "
                       "(declared bound; the site may admit less and refuses)")
-    asked = child_request(args)
+    asked = [flag for flag in CHILD_FLAGS
+             if getattr(args, flag[2:].replace("-", "_")) is not None]
+    if asked:
+        raise Refusal(f"{', '.join(asked)}: native children are refused before any effect while "
+                      "child account and lease ownership under registered original-store routes "
+                      "is undecided (ROOT-owned unfinished work). Nothing was started and nothing "
+                      "is sent direct; launch without child options. Direct launches have no "
+                      "native children")
     source = "explicit" if args.transport is not None else "default"
     wanted = args.transport or config.get("transport", {}).get("default", "direct")
-    # The Claude store is the explicit profile or the one-store pool (a native
-    # Claude binding requires one store); Codex bindings name no store.
-    store = (args.profile or config["providers"]["claude"]["pool"][0]
-             if record["provider"] == "claude" else None)
-    key = (record["provider"], record["model"], record["effort"], store)
+    # The account store is part of the binding: the explicit profile, the
+    # one-store Claude pool, or (Codex without --profile) the rotated pool
+    # profile chosen after transport, which every Codex binding must map.
+    claude = record["provider"] == "claude"
+    store = args.profile or (config["providers"]["claude"]["pool"][0] if claude else None)
+    key = (record["provider"], record["model"], record["effort"])
     declared = next((b for b in native.get("bindings", [])
-                     if (b["provider"], b["model"], b["effort"], b.get("profile")) == key), None)
-    site_route = declared["site_route"] if declared else None
-    binding = " / ".join(part for part in key if part is not None)
+                     if (b["provider"], b["model"], b["effort"]) == key
+                     and (not claude or b["profile"] == store)), None)
+    accounts = {}
+    if declared is not None:
+        accounts = ({store: declared["site_route"]} if claude else
+                    {profile: name for profile, name in declared["site_routes"].items()
+                     if store in (None, profile)})
+    binding = " / ".join(part for part in (*key, store) if part is not None)
     fields = {"transport_source": source, "site_route": None, "native_caller": None,
               "native_deadline_s": None, "native_children": None}
-    if wanted == "direct" or site_route is None:
-        if site_route is None and source == "explicit" and wanted == "native":
+    if wanted == "direct" or not accounts:
+        if not accounts and source == "explicit" and wanted == "native":
             raise Refusal(f"--transport native: no native site route is declared for "
                           f"{binding}; launch it direct")
         rule = f"{source}-direct" if wanted == "direct" else "default-native-unmapped-direct"
-        for flag, given in (("--native-deadline", args.native_deadline is not None),
-                            ("--native-child-route", asked is not None)):
-            if given:
-                raise Refusal(f"{flag} applies only to a native launch; {binding} runs "
-                              f"direct here ({rule}), and direct launches have no deadline or "
-                              "native children. Omit it, or launch a natively mapped binding")
+        if args.native_deadline is not None:
+            raise Refusal(f"--native-deadline applies only to a native launch; {binding} runs "
+                          f"direct here ({rule}), and direct launches have no deadline. Omit it, "
+                          "or launch a natively mapped binding")
         return dict(fields, transport="direct", transport_rule=rule)
     deadline = args.native_deadline if args.native_deadline is not None else native["deadline_s"]
-    children = None
-    if asked is not None:
-        routes, limits = asked
-        unoffered = [name for name in routes if name not in declared["children"]]
-        if unoffered:
-            raise Refusal(f"--native-child-route {', '.join(unoffered)}: not declared as offered "
-                          f"by site route {site_route} ({', '.join(declared['children']) or 'none'} "
-                          "declared); nothing was started")
-        for name, value in limits.items():
-            bound = native["children"][name]
-            if value is not None and not 1 <= value <= bound:
-                raise Refusal(f"--native-child-{name.replace('_', '-')} must be 1..{bound} "
-                              "(declared site limit; the site may admit less and refuses)")
-        children = {"routes": routes, **limits,
-                    "declared_limits": {name: native["children"][name] for name in CHILD_LIMITS},
-                    "grant": ("reuses the parent's one access-only Codex snapshot"
-                              if store is None else
-                              "one separate access-only Codex child grant from the rotated pool; "
-                              "never the Claude store's login"),
-                    "offer_source": "routes.toml declaration; the site's child_routes, offers "
-                                    "and child_limits decide and are not read here"}
     return dict(fields, transport="native", transport_rule=f"{source}-native",
-                site_route=site_route, native_caller=native["caller"],
-                native_deadline_s=deadline, native_children=children,
-                native_credential="codex-access-snapshot" if store is None else "none",
+                site_route=accounts.get(store), native_caller=native["caller"],
+                native_deadline_s=deadline, native_account_routes=accounts,
+                native_credential="none",
+                native_account=("the site route fixes the claude5 store; Claude Code uses its own "
+                                "login there; no lease" if claude else
+                                "the chosen Codex profile's registered site route; its adapter "
+                                "runs and authenticates on that original store; the profile lease "
+                                "spans the whole caller operation"),
                 site_binding_source="routes.toml declaration; the root-owned site config "
-                                    "fixes the actual model, effort and any Claude store and "
+                                    "fixes the actual model, effort and account store and "
                                     "is not read here")
-
-
-def credential_need(config, deadline):
-    """(seconds the token must cover at our check, the caller's margin)."""
-    native = config["native"]
-    site = 2 * native["site_grace_s"] + native["site_collection_s"] + native["site_margin_s"]
-    return deadline + site + native["slack_s"], site + native["slack_s"] // 2
 
 
 # -------------------------------------------------------------- rotation
@@ -516,27 +492,13 @@ def codex_command(args, record, profile, config, route_json=None):
     return command + (["--route-json", route_json] if route_json is not None else [])
 
 
-def native_command(record, cwd, prompt, out, credential_dir=None, margin=None):
-    """The pinned caller's documented interface; the request carries site
-    route names only. The one access-only snapshot is the Codex parent's own
-    (its children reuse it), or an opted-in Claude parent's separate child
-    grant; a Claude parent's own route takes no credential. The caller's
-    freshness margin keeps half our slack, so seconds between our check and
-    its own do not refuse the launch."""
-    command = [record["native_caller"], "--route", record["site_route"],
-               "--prompt-file", prompt, "--cwd", cwd, "--out", out, "--trusted-task",
-               "--deadline", str(record["native_deadline_s"])]
-    children = record.get("native_children")
-    for name in (children or {}).get("routes", ()):
-        command += ["--child-route", name]
-    for name in CHILD_LIMITS:
-        if (children or {}).get(name) is not None:
-            command += [f"--child-{name.replace('_', '-')}", str(children[name])]
-    if credential_dir is None:
-        return command
-    flag = ("--credential-codex-profile" if record["provider"] == "codex"
-            else "--child-credential-codex-profile")
-    return command + [flag, credential_dir, "--credential-margin", str(margin)]
+def native_command(record, cwd, prompt, out):
+    """The registered caller's documented interface: the request names a site
+    route only. The route's adapter owns authentication; nothing here
+    prepares or passes a credential."""
+    return [record["native_caller"], "--route", record["site_route"],
+            "--prompt-file", prompt, "--cwd", cwd, "--out", out, "--trusted-task",
+            "--deadline", str(record["native_deadline_s"])]
 
 
 def claude_command(record, wrapper):
@@ -828,11 +790,6 @@ NATIVE_TOOLS_NOTE = {
               "are not Bash records; a trusted shell can still start processes, CLIs and this "
               "dispatcher; Claude Code managed settings still apply",
 }
-NATIVE_CHILDREN_NOTE = ("counts are the caller's tally of owner exports in native/children.json: "
-                        "export can lag the parent's local result while Bash drains, zero exports "
-                        "is not zero local results, and none is parent consumption, answer "
-                        "correctness, the model, the account or the issuer; Bash counts combine "
-                        "parent and child")
 # The front door returns the native entry's status when observed, else its own
 # (Runner native_root.rs and the package README). Statuses describe transport
 # and retirement, not processing or task correctness; the caller's class is
@@ -863,51 +820,38 @@ def front_door_meaning(code):
 
 
 def run_native(args, config, record, profile):
-    """Own catchable cancellation and snapshot cleanup for the whole attempt."""
-    cleanup = {}
-    with codex_auth.CatchSignals() as interrupts:
-        try:
-            code = _run_native(args, config, record, profile, interrupts, cleanup)
-        finally:
-            if "credential_dir" in cleanup and not cleanup.get("snapshot_cleanup_done"):
-                error = codex_auth.remove_access_snapshot(cleanup["credential_dir"])
-                cleanup["error"] = error
-                if "state" in cleanup:
-                    append_state(cleanup["state"],
-                                 f"credential_snapshot_removed={'yes' if error is None else 'no:' + error}\n")
+    """Own catchable cancellation for the whole attempt."""
+    with profile_lease.CatchSignals() as interrupts:
+        state = {}
+        code = _run_native(args, config, record, profile, interrupts, state)
         if interrupts.received is not None:
             code = 128 + interrupts.received
-            if "state" in cleanup:
-                append_state(cleanup["state"], f"native_signal={interrupts.received}\n"
+            if "path" in state:
+                append_state(state["path"], f"native_signal={interrupts.received}\n"
                              f"dispatcher_exit={code}\n")
             report(f"DIRECT_CHILD_EXIT={code} SIGNAL={interrupts.received}")
-        elif cleanup.get("error") and code == 0:
-            code = 6
         return code
 
 
-def _run_native(args, config, record, profile, interrupts, cleanup):
-    """One native attempt, then the installed caller in the foreground. Codex:
-    profile lease; freshness, with at most one official renewal; an
-    access-only snapshot; lease released. Claude: none of these; the site
-    route fixes the store and Claude Code uses its own login there. The
-    caller's exit is the attempt's. Nothing is replayed or sent direct."""
+def _run_native(args, config, record, profile, interrupts, state_ref):
+    """One native attempt: the installed caller in the foreground, and its
+    exit is the attempt's. Codex: the chosen profile's advisory lease is held
+    from before the caller starts until it has exited and its result is
+    collected, because the registered adapter runs native Codex on that
+    original store and Codex refreshes its own login there. Claude: no lease;
+    the site route fixes the store and Claude Code uses its own login there.
+    Nothing is read, renewed or staged for either, nothing is replayed or
+    sent direct."""
     os.umask(0o077)
-    # One access-only Codex grant at most: the Sol parent's own, which its
-    # children reuse, or an opted-in Claude parent's separate child grant.
-    # A Claude parent without children prepares nothing.
-    child_grant = record["provider"] == "claude" and record.get("native_children") is not None
-    codex = record["provider"] == "codex" or child_grant
-    grant_profile = record.get("child_profile") if child_grant else profile
-    profile_home = Path(os.path.expanduser("~")) / grant_profile if codex else None
+    codex = record["provider"] == "codex"
+    profile_home = Path(os.path.expanduser("~")) / profile if codex else None
     runs_dir = Path(args.runs_dir)
     try:
         if codex and not profile_home.is_dir():
             raise Refusal(f"missing profile: {profile_home}")
         runs_dir.mkdir(parents=True, exist_ok=True)
         attempt = Path(tempfile.mkdtemp(prefix=f"{args.id}.", dir=runs_dir.resolve()))
-        paths = {name: attempt / name for name in
-                 ("prompt.md", "final.md", "state.txt", "route.json", "renewal.json")}
+        paths = {name: attempt / name for name in ("prompt.md", "final.md", "state.txt", "route.json")}
         shutil.copyfile(args.prompt, paths["prompt.md"])
         paths["prompt.md"].chmod(0o400)
         paths["final.md"].touch()
@@ -916,33 +860,19 @@ def _run_native(args, config, record, profile, interrupts, cleanup):
         print(f"direct-child: {error}", file=sys.stderr)
         return 2
     out = attempt / "native"
-    children = record.get("native_children")
-    preparation = ""
-    if record["provider"] == "claude":
+    command = native_command(record, args.cwd, str(paths["prompt.md"]), str(out))
+    if codex:
+        preparation = ("credential=none\naccount_store=" + str(profile_home) + "\n"
+                       "credential_note=the registered site route's adapter owns authentication in "
+                       "the original store; this dispatcher reads, renews and stages nothing\n"
+                       f"lease={profile_home / profile_lease.LEASE_NAME}\n"
+                       f"lease_wait_s={lease_wait(config)}\nlease_scope=whole caller operation\n")
+    else:
         preparation = ("credential=none\nprofile_lease=none\n"
                        "credential_note=the site route fixes the store; Claude Code uses its own "
                        "login there; this dispatcher reads, renews and stages nothing for it\n")
-    if children is not None:
-        preparation += (f"native_child_routes={','.join(children['routes'])}\n"
-                        + "".join(f"native_child_{name}={children[name]}\n" for name in CHILD_LIMITS
-                                  if children[name] is not None)
-                        + f"native_child_grant={children['grant']}\n")
-    if codex:
-        credential_dir = attempt / ("native-child-credential" if child_grant else "native-credential")
-        cleanup["credential_dir"] = credential_dir
-        need, margin = credential_need(config, record["native_deadline_s"])
-        command = native_command(record, args.cwd, str(paths["prompt.md"]), str(out),
-                                 str(credential_dir), margin)
-        preparation += ((f"child_grant_profile={grant_profile}\n"
-                         f"child_grant_profile_source={record['child_profile_source']}\n"
-                         "lease_scope=child grant profile\n" if child_grant else "")
-                        + f"renewal_record={paths['renewal.json']}\n"
-                        f"lease={profile_home / codex_auth.LEASE_NAME}\nlease_wait_s={lease_wait(config)}\n"
-                        f"credential_need_s={need}\n")
-    else:
-        command = native_command(record, args.cwd, str(paths["prompt.md"]), str(out))
     state = paths["state.txt"]
-    cleanup["state"] = state
+    state_ref["path"] = state
 
     def git(*git_args):
         result = subprocess.run(["git", "-C", args.cwd, *git_args], capture_output=True,
@@ -962,47 +892,33 @@ def _run_native(args, config, record, profile, interrupts, cleanup):
         "expected_status=native terminal exit plus native_caller_exit entry\n", encoding="utf-8")
     print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
 
-    summary = ""
-    if codex:
-        renewal, snapshot = None, None
-        try:
-            with codex_auth.ProfileLease(profile_home, lease_wait(config), interrupts=interrupts) as lease:
-                append_state(state, f"lease_status=acquired\nlease_waited_s={lease.waited_s}\n")
-                renewal, snapshot = codex_auth.ensure_fresh(
-                    profile_home, need, config["native"]["renew_timeout_s"], cwd=attempt,
-                    interrupts=interrupts)
-                paths["renewal.json"].write_text(json.dumps(renewal, sort_keys=True) + "\n",
-                                                 encoding="utf-8")
-                if snapshot is not None and interrupts.received is None:
-                    codex_auth.write_access_snapshot(credential_dir, snapshot)
-        except codex_auth._Interrupted:
-            return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
-        except codex_auth.LeaseTimeout as error:
-            return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=timeout\nlease_note={error}\n")
-        except OSError as error:
-            code = EXIT_LEASE_TIMEOUT if renewal is None else EXIT_NATIVE_CREDENTIAL
-            snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
-            cleanup["snapshot_cleanup_done"] = True
-            return native_refused(state, code, f"native_prelaunch_error={type(error).__name__}\n"
-                                  f"credential_snapshot_removed={snapshot_error or 'yes'}\n")
-        summary = (f"lease_released_utc={utc_now()}\nrenewal={renewal['renewal']}\n"
-                   f"issuer_contact={renewal['issuer_contact']}\n"
-                   f"profile_written={renewal['profile_written']}\n"
-                   + "".join(f"credential_{key}={renewal[key]}\n"
-                             for key in ("remaining_s_before", "remaining_s_after") if key in renewal))
-        if snapshot is None:
-            return native_refused(state, EXIT_NATIVE_CREDENTIAL, summary + "native_task=not-started\n")
-    if interrupts.received is not None:
-        return native_refused(state, 128 + interrupts.received, summary + "native_task=not-started\n")
-    append_state(state, summary + f"native_command={shlex.join(command)}\n"
-                 f"native_start_utc={utc_now()}\n")
+    if not codex:
+        return run_collect(record, command, attempt, out, paths, state, interrupts)
+    lease = profile_lease.ProfileLease(profile_home, lease_wait(config), interrupts=interrupts)
+    try:
+        lease.__enter__()
+    except profile_lease.Interrupted:
+        return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
+    except profile_lease.LeaseTimeout as error:
+        return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=timeout\nlease_note={error}\n")
+    except OSError as error:
+        return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=unusable\n"
+                              f"native_prelaunch_error={type(error).__name__}\n")
+    try:
+        append_state(state, f"lease_status=acquired\nlease_waited_s={lease.waited_s}\n")
+        return run_collect(record, command, attempt, out, paths, state, interrupts)
+    finally:
+        lease.__exit__(None, None, None)
+        append_state(state, f"lease_released_utc={utc_now()}\n")
 
+
+def run_collect(record, command, attempt, out, paths, state, interrupts):
+    """Launch the caller, wait for it, and keep its result and final."""
+    if interrupts.received is not None:
+        return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
+    append_state(state, f"native_command={shlex.join(command)}\nnative_start_utc={utc_now()}\n")
     caller_rc, launch_error = run_foreground(command, attempt, interrupts)
     state_error = append_state(state, f"native_caller_exit={'none' if caller_rc is None else caller_rc}\n")
-    snapshot_error = None
-    if codex:
-        snapshot_error = codex_auth.remove_access_snapshot(credential_dir)
-        cleanup["snapshot_cleanup_done"] = True
     result, result_status = read_native_result(out / "result.json")
     text, text_error = "", None
     try:
@@ -1012,7 +928,7 @@ def _run_native(args, config, record, profile, interrupts, cleanup):
         text_error = type(error).__name__
     answered = caller_rc == 0 and result.get("class") == "answered"
     final_status, final_error = capture_final(paths["final.md"], text, answered)
-    custody_error = launch_error or state_error or final_error or text_error or snapshot_error
+    custody_error = launch_error or state_error or final_error or text_error
     exit_code = native_exit(caller_rc, final_status, custody_error)
     answer = result.get("answer") if isinstance(result.get("answer"), dict) else {}
     counts = result.get("counts") if isinstance(result.get("counts"), dict) else {}
@@ -1030,13 +946,7 @@ def _run_native(args, config, record, profile, interrupts, cleanup):
                   f"native_processing_completion={result.get('processing_completion', 'unknown')}\n"
                   f"native_record={NATIVE_RECORD_NOTE[record['provider']]}\n"
                   "native_retry=do-not-replay; no direct fallback\n"
-                  + (f"credential_snapshot_removed={'yes' if snapshot_error is None else 'no:' + snapshot_error}\n"
-                     if codex else "")
-                  + (f"native_child_results={counts.get('child_results', 'unknown')}\n"
-                     f"native_child_accepted={counts.get('child_accepted', 'unknown')}\n"
-                     f"native_child_refused={counts.get('child_refused', 'unknown')}\n"
-                     f"native_children_note={NATIVE_CHILDREN_NOTE}\n" if children is not None else "")
-                  + "delegation_capability=not-established\n"
+                  "delegation_capability=not-established\n"
                   f"delegation_capability_note={NATIVE_TOOLS_NOTE[record['provider']]}\n"
                   + (f"final_read_error={text_error}\n" if text_error else "")
                   + f"final_status={final_status}\n"
@@ -1135,23 +1045,19 @@ def main(argv):
             wrapper = args.profile or config["providers"]["claude"]["pool"][0]
             if not args.dry_run and shutil.which(wrapper) is None:
                 raise Refusal(f"Claude wrapper {wrapper!r} is not on PATH")
+        if args.profile is not None:
+            profile, source = args.profile, "explicit"
+        elif args.dry_run:
+            profile, source = preview_profile(config, provider)
+        else:
+            profile, source = allocate_profile(config, provider)
+        record.update(profile=profile, profile_source=source)
+        if record["transport"] == "native":
+            # Every pool profile is mapped (config check), and an unmapped
+            # explicit profile already resolved direct or was refused.
+            record["site_route"] = record["native_account_routes"][profile]
         if args.dry_run:
-            if args.profile is not None:
-                profile, source = args.profile, "explicit"
-            else:
-                profile, source = preview_profile(config, provider)
-            record.update(profile=profile, profile_source=source)
-            child_grant = (record["transport"] == "native" and provider == "claude"
-                           and record["native_children"] is not None)
-            if child_grant:
-                child, child_source = preview_profile(config, "codex")
-                record.update(child_profile=child, child_profile_source=child_source)
-            if record["transport"] == "native" and (provider == "codex" or child_grant):
-                need, margin = credential_need(config, record["native_deadline_s"])
-                command = native_command(record, args.cwd, "<attempt>/prompt.md", "<attempt>/native",
-                                         "<attempt>/native-child-credential" if child_grant
-                                         else "<attempt>/native-credential", margin)
-            elif record["transport"] == "native":
+            if record["transport"] == "native":
                 command = native_command(record, args.cwd, "<attempt>/prompt.md", "<attempt>/native")
             elif provider == "claude":
                 command = claude_command(record, profile)
@@ -1161,28 +1067,14 @@ def main(argv):
             print("DRY RUN: would run: " + shlex.join(command))
             if provider == "claude" and record["transport"] == "direct":
                 print("DRY RUN: denial arguments are conditional on pre-task private help metadata")
-            if child_grant:
-                print("DRY RUN: the Claude parent's store is not read or leased; one separate "
-                      f"access-only Codex child grant from {child} (not reserved) must cover {need}s "
-                      "under that profile's lease, or one official renewal is attempted first")
             elif record["transport"] == "native" and provider == "claude":
                 print("DRY RUN: no credential, store read or profile lease; the site route fixes the store")
             elif record["transport"] == "native":
-                print(f"DRY RUN: at launch, under the profile lease, the access token must cover "
-                      f"{need}s or one official renewal is attempted first")
+                print(f"DRY RUN: at launch the {profile} profile lease is held for the whole caller "
+                      "operation; no credential is read, renewed or staged; the site route's adapter "
+                      "owns authentication in that original store")
             print("DRY RUN: no files written, rotation not advanced, no model launched")
             return 0
-        if args.profile is not None:
-            profile, source = args.profile, "explicit"
-        else:
-            profile, source = allocate_profile(config, provider)
-        record.update(profile=profile, profile_source=source)
-        if (record["transport"] == "native" and provider == "claude"
-                and record["native_children"] is not None):
-            # Only after every input check: the opted-in Claude parent's one
-            # separate child grant takes the next Codex pool profile.
-            child, child_source = allocate_profile(config, "codex")
-            record.update(child_profile=child, child_profile_source=child_source)
     except Refusal as error:
         print(f"direct-child: {error}", file=sys.stderr)
         return 2

@@ -536,7 +536,8 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse((self.root / "pwned").exists())
 
     def test_codex_enabled_mcp_refuses_launch(self):
-        result = self.dispatch("--seat", "scout", env=self.env | {"FAKE_FORCE_ENABLED": "firecrawl"})
+        result = self.dispatch("--transport", "direct", "--seat", "scout",
+                               env=self.env | {"FAKE_FORCE_ENABLED": "firecrawl"})
         self.assertEqual(result.returncode, 2)
         self.assertIn("MCP preflight", result.stderr)
         self.assertFalse(self.runs.exists())
@@ -803,13 +804,13 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse(self.runs.exists())
 
     def test_dry_run_command_round_trips_hostile_paths(self):
-        for extra in (("--transport", "direct", "--seat", "decider"), ("--seat", "scout")):
+        for extra in (("--transport", "direct", "--seat", "decider"), ("--transport", "direct", "--seat", "scout")):
             with self.subTest(extra=extra):
                 result = self.dispatch("--dry-run", *extra)
                 line = next(l for l in result.stdout.splitlines()
                             if l.startswith("DRY RUN: would run: "))
                 argv = shlex.split(line.removeprefix("DRY RUN: would run: "))
-                if extra[1] == "scout":
+                if extra[-1] == "scout":
                     self.assertEqual(argv[argv.index("--cwd") + 1], str(self.cwd))
                     self.assertEqual(argv[argv.index("--prompt") + 1], str(self.prompt))
                 else:
