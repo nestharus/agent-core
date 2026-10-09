@@ -448,7 +448,7 @@ class DispatchTest(unittest.TestCase):
                                        .replace('#new-foundation = "direction"\n', ''),
             "unknown basis": base.replace('[classes.unknown]\nrequires_basis = false',
                                           '[classes.unknown]\nrequires_basis = true'),
-            "pool outside manual": base.replace('pool = [".codex2", ".codex3", ".codex4", ".codex5"]',
+            "pool outside manual": base.replace('pool = [".codex2", ".codex4", ".codex5"]',
                                                 'pool = [".codex", ".codex7"]'),
             "bad provider": base.replace('[routes.explore]\nprovider = "codex"',
                                          '[routes.explore]\nprovider = "gemini"'),
@@ -477,21 +477,21 @@ class DispatchTest(unittest.TestCase):
                    for attempt in self.runs.iterdir()]
         self.assertEqual(sorted(r["profile_source"] for r in records),
                          sorted(f"rotation:{n}" for n in range(7, 19)))
-        expected_pool = (".codex2", ".codex3", ".codex4", ".codex5")
+        expected_pool = (".codex2", ".codex4", ".codex5")
         self.assertEqual({r["profile"] for r in records}, set(expected_pool))
         for profile in expected_pool:
-            self.assertEqual(sum(r["profile"] == profile for r in records), 3, profile)
+            self.assertEqual(sum(r["profile"] == profile for r in records), 4, profile)
         self.assertEqual({r["model"] for r in records}, {"gpt-6.1-sol", "gpt-6-luna"})
         for record in records:
             turn = int(record["profile_source"].split(":")[1])
-            self.assertEqual(record["profile"], expected_pool[turn % 4])
+            self.assertEqual(record["profile"], expected_pool[turn % 3])
         self.assertEqual((self.state_dir / "codex.counter").read_text(), "19\n")
         exec_homes = sorted(call["home"] for call in self.calls_readback() if call["args"][0] == "exec")
         self.assertEqual(exec_homes, sorted(str(self.home / r["profile"]) for r in records))
 
         dry = self.resolved()
         self.assertEqual((dry["profile"], dry["profile_source"]),
-                         (".codex5", "rotation-preview:19 (not reserved)"))
+                         (".codex4", "rotation-preview:19 (not reserved)"))
         explicit_preview = self.resolved("--profile", ".codex",
                                          "--override-reason", "manual history")
         self.assertEqual((explicit_preview["profile"], explicit_preview["profile_source"]),
