@@ -23,7 +23,7 @@ DISPATCH = HERE / "dispatch.py"
 CONFIG = HERE / "routes.toml"
 LEASE = ".oulipoly-direct-child.lease"
 PROFILES = (".codex", ".codex2", ".codex3", ".codex4", ".codex5")
-POOL = (".codex2", ".codex3", ".codex4", ".codex5")
+POOL = (".codex2", ".codex4", ".codex5")
 # A second Claude store the dispatcher accepts, which no native binding names.
 TWO_STORES = ('manual_profiles = ["claude5"]', 'manual_profiles = ["claude5", "claude6"]')
 # ROOT's selected produced package path: installation selection, not a
@@ -371,7 +371,7 @@ class NativeTest(unittest.TestCase):
         sol = '[[native.bindings]]\nprovider = "codex"\nmodel = "gpt-6.1-sol"\neffort = "high"\n'
         claude = ('[[native.bindings]]\nprovider = "claude"\nmodel = "claude-opus-5-5"\n'
                   'effort = "medium"\nprofile = "claude5"\n')
-        cases = (([('".codex3" = "sol-high-codex3"\n', '')], "must map every Codex pool profile"),
+        cases = (([('".codex4" = "sol-high-codex4"\n', '')], "must map every Codex pool profile"),
                  ([('".codex3" = "sol-high-codex3"\n', '".codex3" = "sol-high-codex3"\n".codex9" = "x"\n')],
                   "only configured Codex profiles"),
                  ([(sol, sol + 'site_route = "sol-high"\n')], "site_routes for a Codex binding"),
@@ -396,16 +396,19 @@ class NativeTest(unittest.TestCase):
     # ------------------------------------------------------- native attempts
 
     def test_rotation_selects_each_profile_and_its_route_under_a_whole_call_lease(self):
+        counter = self.home / ".local" / "state" / "direct-child" / "codex.counter"
+        counter.parent.mkdir(parents=True)
+        counter.write_text("7\n", encoding="utf-8")
         launches = [("--seat", "scout"), ("--seat", "observer"), ("--seat", "explorer"),
-                    (), ("--seat", "scout")]
+                    (), ("--seat", "scout"), ("--seat", "observer")]
         for index, extra in enumerate(launches):
             result = self.dispatch(*extra, runs=self.root / f"runs-{index}")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.counter(), "5")
+        self.assertEqual(self.counter(), "13")
         calls = self.calls_of("native-call")
-        expected = [(".codex2", "luna-max-codex2"), (".codex3", "sol-high-codex3"),
-                    (".codex4", "luna-max-codex4"), (".codex5", "sol-high-codex5"),
-                    (".codex2", "luna-max-codex2")]
+        expected = [(".codex4", "luna-max-codex4"), (".codex5", "sol-high-codex5"),
+                    (".codex2", "luna-max-codex2"), (".codex4", "sol-high-codex4"),
+                    (".codex5", "luna-max-codex5"), (".codex2", "sol-high-codex2")]
         self.assertEqual([call["args"][call["args"].index("--route") + 1] for call in calls],
                          [route for _, route in expected])
         for index, (call, (profile, route)) in enumerate(zip(calls, expected)):
@@ -428,7 +431,8 @@ class NativeTest(unittest.TestCase):
                                  ["final.md", "native", "prompt.md", "route.json", "state.txt"])
                 route_json = json.loads((attempt / "route.json").read_text())
                 self.assertEqual((route_json["site_route"], route_json["profile"],
-                                  route_json["native_credential"]), (route, profile, "none"))
+                                  route_json["native_credential"], route_json["profile_source"]),
+                                 (route, profile, "none", f"rotation:{7 + index}"))
                 self.assertEqual(stat.S_IMODE(attempt.stat().st_mode), 0o700)
         # After every call each lease is free again, and no store login was read.
         for profile in POOL:
@@ -436,6 +440,7 @@ class NativeTest(unittest.TestCase):
                 fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
             self.assertEqual(stat.S_IMODE((self.home / profile / "auth.json").stat().st_mode), 0)
         self.assertFalse((self.home / ".codex" / LEASE).exists(), ".codex is explicit-only")
+        self.assertFalse((self.home / ".codex3" / LEASE).exists(), ".codex3 is explicit-only")
         self.assertEqual(self.calls_of("codex"), [], "no app-server, CLI or direct fallback")
 
     def test_the_lease_spans_the_running_call_and_a_second_writer_waits_or_refuses(self):
