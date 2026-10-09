@@ -26,10 +26,10 @@ PROFILES = (".codex", ".codex2", ".codex3", ".codex4", ".codex5")
 POOL = (".codex2", ".codex4", ".codex5")
 # A second Claude store the dispatcher accepts, which no native binding names.
 TWO_STORES = ('manual_profiles = ["claude5"]', 'manual_profiles = ["claude5", "claude6"]')
-# ROOT's selected produced package path: installation selection, not a
+# ROOT's selected package target path: installation selection, not a
 # compatibility check or evidence that this executable is installed.
 PRODUCED_CALLER = ("/opt/oulipoly-native/oulipoly-native-linux-x86_64-"
-                   "efd7d53fd729-de23d83ac522/bin/oulipoly-native-call")
+                   "270964af182a-de23d83ac522/bin/oulipoly-native-call")
 RETIRED_FLAGS = ("--credential-codex-profile", "--child-credential-codex-profile",
                  "--credential-margin", "--credential-opencode-auth", "--child-route",
                  "--child-max-starts", "--child-max-concurrent", "--model", "--effort")
