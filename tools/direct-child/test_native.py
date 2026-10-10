@@ -21,6 +21,8 @@ import unittest
 HERE = Path(__file__).parent
 DISPATCH = HERE / "dispatch.py"
 CONFIG = HERE / "routes.toml"
+# The retired profile lock file: launches from before its removal may still
+# hold it, and new launches must neither wait on it nor create it.
 LEASE = ".oulipoly-direct-child.lease"
 PROFILES = (".codex", ".codex2", ".codex3", ".codex4", ".codex5")
 POOL = (".codex2", ".codex4", ".codex5")
@@ -37,7 +39,7 @@ CHILD_REFUSAL = "native children are refused before any effect"
 
 LEASE_PROBE = r'''
 def lease_probe(home):
-    """Which of our Codex profile leases are held now, and whether this
+    """Which retired Codex profile lease files are held now, and whether this
     process inherited any of their descriptors."""
     held, inherited = {}, False
     links = set()
@@ -118,8 +120,8 @@ def note(**fields):
                                 **lease_probe(os.environ["HOME"]), **fields}) + "\n")
 note()
 if mode == "block":
-    # Hold the call open until the test releases it, so the lease is
-    # observed from outside while the caller runs.
+    # Hold the call open until the test releases it, so other launches on the
+    # same profile are observed while this caller runs.
     started = os.environ["FAKE_STARTED"]
     open(started, "w").close()
     deadline = time.monotonic() + 30
@@ -225,7 +227,7 @@ class NativeTest(unittest.TestCase):
         return path.read_text().strip() if path.exists() else None
 
     def no_effects(self):
-        """Nothing allocated, leased, written or launched."""
+        """Nothing allocated, locked, written or launched."""
         self.assertFalse(self.runs.exists(), "attempt written")
         self.assertFalse(self.calls.exists(), "a codex or caller process ran")
         self.assertFalse((self.home / ".local").exists(), "rotation counter touched")
@@ -268,7 +270,7 @@ class NativeTest(unittest.TestCase):
                 self.assertEqual(argv, [str(self.bin / "native-call"), "--route", "sol-high-codex2",
                                         "--prompt-file", "<attempt>/prompt.md", "--cwd", str(self.cwd),
                                         "--out", "<attempt>/native", "--trusted-task", "--deadline", "7200"])
-                self.assertIn("lease is held for the whole caller operation", out)
+                self.assertIn("DRY RUN: no profile lock on .codex2", out)
                 self.assertNotIn("must cover", out)
         # .codex is explicit-only and maps to its own route; each profile to its own.
         for profile in PROFILES:
@@ -395,7 +397,7 @@ class NativeTest(unittest.TestCase):
 
     # ------------------------------------------------------- native attempts
 
-    def test_rotation_selects_each_profile_and_its_route_under_a_whole_call_lease(self):
+    def test_rotation_selects_each_profile_and_its_route_without_a_profile_lock(self):
         counter = self.home / ".local" / "state" / "direct-child" / "codex.counter"
         counter.parent.mkdir(parents=True)
         counter.write_text("7\n", encoding="utf-8")
@@ -414,17 +416,17 @@ class NativeTest(unittest.TestCase):
         for index, (call, (profile, route)) in enumerate(zip(calls, expected)):
             with self.subTest(index=index):
                 self.assert_no_credential_args(call["args"])
-                # The chosen profile, and only it, is leased while the caller runs,
-                # and the caller does not inherit the lease descriptor.
-                self.assertEqual((call["leases_held"], call["lease_inherited"]), ([profile], False))
+                # No profile is locked while the caller runs.
+                self.assertEqual((call["leases_held"], call["lease_inherited"]), ([], False))
                 attempt, state = self.attempt(self.root / f"runs-{index}")
                 self.assertEqual((state["profile"], state["site_route"], state["credential"],
-                                  state["account_store"], state["lease_scope"], state["lease_status"],
+                                  state["account_store"], state["profile_lock"],
                                   state["native_caller_exit"], state["final_status"],
                                   state["custody_status"], state["dispatcher_exit"]),
                                  (profile, route, "none", str(self.home / profile),
-                                  "whole caller operation", "acquired", "0", "present", "complete", "0"))
-                self.assertIn("lease_released_utc", state)
+                                  "none", "0", "present", "complete", "0"))
+                for key in ("lease", "lease_scope", "lease_status", "lease_released_utc"):
+                    self.assertNotIn(key, state)
                 for key in ("renewal", "issuer_contact", "credential_need_s", "credential_snapshot_removed"):
                     self.assertNotIn(key, state)
                 self.assertEqual(sorted(p.name for p in attempt.iterdir()),
@@ -434,50 +436,51 @@ class NativeTest(unittest.TestCase):
                                   route_json["native_credential"], route_json["profile_source"]),
                                  (route, profile, "none", f"rotation:{7 + index}"))
                 self.assertEqual(stat.S_IMODE(attempt.stat().st_mode), 0o700)
-        # After every call each lease is free again, and no store login was read.
+        # No lock file was created, and no store login was read.
+        for profile in PROFILES:
+            self.assertFalse((self.home / profile / LEASE).exists(), profile)
         for profile in POOL:
-            with open(self.home / profile / LEASE, "a") as probe:
-                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
             self.assertEqual(stat.S_IMODE((self.home / profile / "auth.json").stat().st_mode), 0)
-        self.assertFalse((self.home / ".codex" / LEASE).exists(), ".codex is explicit-only")
-        self.assertFalse((self.home / ".codex3" / LEASE).exists(), ".codex3 is explicit-only")
         self.assertEqual(self.calls_of("codex"), [], "no app-server, CLI or direct fallback")
 
-    def test_the_lease_spans_the_running_call_and_a_second_writer_waits_or_refuses(self):
+    def test_same_profile_launches_run_concurrently_past_a_foreign_old_lock(self):
+        # A foreign holder of the retired lock file, as a launcher from before
+        # its removal would be, blocks no new launch and is not inherited.
+        foreign = os.open(self.home / ".codex3" / LEASE, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(os.close, foreign)
+        fcntl.flock(foreign, fcntl.LOCK_EX)
         started, release = self.root / "started", self.root / "release"
         env = self.env | {"FAKE_CALLER": "block", "FAKE_STARTED": str(started), "FAKE_RELEASE": str(release)}
-        fixed = ("--profile", ".codex3", "--override-reason", "one contended profile")
-        config = self.write_config(wait_s=1)
-        first = self.dispatch("--seat", "scout", *fixed, env=env, config=config,
-                              runs=self.root / "first", wait=False)
+        fixed = ("--profile", ".codex3", "--override-reason", "one shared profile")
+        first = self.dispatch("--seat", "scout", *fixed, env=env, runs=self.root / "first", wait=False)
         try:
             deadline = time.monotonic() + 20
             while not started.exists() and time.monotonic() < deadline:
                 time.sleep(0.05)
             self.assertTrue(started.exists(), "first caller did not start")
-            # While the first caller runs, native and direct writers of .codex3 refuse (75).
-            native = self.dispatch("--seat", "observer", *fixed, config=config, runs=self.root / "second")
-            self.assertEqual(native.returncode, 75, native.stdout + native.stderr)
-            self.assertIn("NATIVE_TASK=not-started", native.stdout)
+            # While the first caller runs, native and direct launches on .codex3
+            # start and finish without waiting.
+            native = self.dispatch("--seat", "observer", *fixed, runs=self.root / "second", timeout=20)
+            self.assertEqual(native.returncode, 0, native.stdout + native.stderr)
             _, state = self.attempt(self.root / "second")
-            self.assertEqual((state["lease_status"], state["dispatcher_exit"]), ("timeout", "75"))
-            self.assertNotIn("native_command", state)
-            direct = self.dispatch("--seat", "observer", "--transport", "direct", *fixed, config=config,
-                                   runs=self.root / "direct")
-            self.assertEqual(direct.returncode, 75, direct.stdout + direct.stderr)
-            # Another profile is not blocked.
-            other = self.dispatch("--seat", "observer", "--profile", ".codex4", "--override-reason", "free",
-                                  config=config, runs=self.root / "other")
-            self.assertEqual(other.returncode, 0, other.stdout + other.stderr)
+            self.assertEqual((state["profile_lock"], state["native_caller_exit"], state["dispatcher_exit"]),
+                             ("none", "0", "0"))
+            direct = self.dispatch("--seat", "observer", "--transport", "direct", *fixed,
+                                   runs=self.root / "direct", timeout=20)
+            self.assertEqual(direct.returncode, 0, direct.stdout + direct.stderr)
+            self.assertIsNone(first.poll(), "first caller must still be running")
         finally:
             release.touch()
             out, err = first.communicate(timeout=60)
         self.assertEqual(first.returncode, 0, out + err)
-        self.assertEqual(len(self.calls_of("native-call")), 2)
-        self.assertEqual(self.calls_of("codex"), [])
-        # Released after the call: the same profile is usable again.
-        again = self.dispatch("--seat", "observer", *fixed, config=config, runs=self.root / "again")
-        self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+        calls = self.calls_of("native-call")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len({call["pid"] for call in calls}), 2)
+        (task,) = self.calls_of("codex")
+        for call in (*calls, task):
+            self.assertEqual((call["leases_held"], call["lease_inherited"]), ([".codex3"], False))
+        attempts = [self.attempt(self.root / name)[0] for name in ("first", "second", "direct")]
+        self.assertEqual(len(set(attempts)), 3, "distinct attempts")
 
     def test_caller_outcomes_propagate_once_without_replay_or_direct_fallback(self):
         for mode, code, result_status, native_class in (("refused", 4, "present", "front-door-refused"),
@@ -496,9 +499,8 @@ class NativeTest(unittest.TestCase):
                                       state["native_class"], state["final_status"], state["dispatcher_exit"]),
                                      (str(code), result_status, native_class, "missing", str(code)))
                     self.assertIn("do-not-replay", state["native_retry"])
-                    self.assertIn("lease_released_utc", state)
 
-    def test_signals_reach_the_caller_and_the_lease_is_released_after_collection(self):
+    def test_signals_reach_the_caller_and_it_is_collected(self):
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             with self.subTest(signal=sig):
                 self.calls.unlink(missing_ok=True)
@@ -510,31 +512,12 @@ class NativeTest(unittest.TestCase):
                 _, state = self.attempt(runs)
                 self.assertEqual(state["native_signal"], str(int(sig)))
                 self.assertNotEqual(state["native_caller_exit"], "none", "started caller must be collected")
-                self.assertIn("lease_released_utc", state)
                 self.assertEqual(len(self.calls_of("caller-spawn")), 1)
-                with open(self.home / ".codex4" / LEASE, "a") as probe:
-                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    def test_signal_while_waiting_for_the_lease_starts_nothing(self):
-        lease = os.open(self.home / ".codex2" / LEASE, os.O_RDWR | os.O_CREAT, 0o600)
-        self.addCleanup(os.close, lease)
-        fcntl.flock(lease, fcntl.LOCK_EX)
-        proc = self.dispatch("--seat", "scout", "--profile", ".codex2", "--override-reason", "busy", wait=False)
-        deadline = time.monotonic() + 20
-        while not any(self.runs.rglob("state.txt")) and time.monotonic() < deadline:
-            time.sleep(0.05)
-        time.sleep(0.3)
-        proc.send_signal(signal.SIGTERM)
-        out, err = proc.communicate(timeout=30)
-        self.assertEqual(proc.returncode, 128 + signal.SIGTERM, out + err)
-        _, state = self.attempt()
-        self.assertEqual((state["native_task"], state["native_signal"]), ("not-started", str(int(signal.SIGTERM))))
-        self.assertNotIn("lease_status", state)
-        self.assertEqual(self.calls_of("native-call"), [])
+                self.assertFalse((self.home / ".codex4" / LEASE).exists())
 
     # --------------------------------------------------------------- claude
 
-    def test_claude_native_uses_no_credential_lease_store_read_or_rotation(self):
+    def test_claude_native_uses_no_credential_lock_store_read_or_rotation(self):
         for extra, site_route in ((("--seat", "decider"), "opus-medium"),
                                   (("--seat", "maker", "--kind", "creative"), "opus-high")):
             with self.subTest(site_route=site_route):
@@ -548,7 +531,7 @@ class NativeTest(unittest.TestCase):
                 self.assertEqual(call["leases_held"], [])
                 attempt, state = self.attempt(runs)
                 self.assertEqual((state["provider"], state["profile"], state["site_route"],
-                                  state["credential"], state["profile_lease"], state["dispatcher_exit"]),
+                                  state["credential"], state["profile_lock"], state["dispatcher_exit"]),
                                  ("claude", "claude5", site_route, "none", "none", "0"))
                 for key in ("lease_status", "lease_scope", "account_store", "lease_released_utc"):
                     self.assertNotIn(key, state)

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -16,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 import tomllib
 
 DEFAULT_FEATURES = ("agent_message_board:under development:false,collaboration_modes:removed:true,"
@@ -24,8 +26,8 @@ args = sys.argv[1:]
 
 
 def lease_probe():
-    """Whether some other open file holds the profile lease, and whether this
-    process inherited a descriptor for it."""
+    """Whether some open file holds the retired profile lease file, and whether
+    this process inherited a descriptor for it."""
     path = os.path.join(os.environ["CODEX_HOME"], ".oulipoly-direct-child.lease")
     if not os.path.exists(path):
         return None, None
@@ -89,6 +91,13 @@ assert f'model_reasoning_effort="{os.environ.get("EXPECTED_EFFORT", "high")}"' i
 assert args[args.index("-C") + 1] == os.environ["EXPECTED_CWD"]
 assert args[-1] == "-"
 prompt = sys.stdin.read()
+if os.environ.get("FAKE_RELEASE"):
+    # Hold this task open until the test releases it, so other launches on the
+    # same profile are observed while it runs.
+    Path(os.environ["FAKE_STARTED_DIR"], str(os.getpid())).touch()
+    deadline = time.monotonic() + 30
+    while not os.path.exists(os.environ["FAKE_RELEASE"]) and time.monotonic() < deadline:
+        time.sleep(0.05)
 Path(args[args.index("-o") + 1]).write_text("final: " + prompt, encoding="utf-8")
 print("live: " + prompt.strip())
 for _ in range(int(os.environ.get("FAKE_COLLAB", "0"))):
@@ -365,36 +374,45 @@ class LauncherTest(unittest.TestCase):
                 self.assertIn("delegation_capability=not-established\n", self.state())
                 self.assertNotIn("delegation_feature_readback=all-listed-false", self.state())
 
-    def test_every_codex_call_runs_under_the_profile_lease_without_inheriting_it(self):
-        result = self.run_launcher(".codex3", "--lease-wait", "5")
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_launches_take_no_profile_lock_and_run_concurrently_on_one_profile(self):
+        # A foreign holder of the retired lock file (e.g. a launcher from before
+        # its removal) neither blocks nor is inherited by new launches.
+        lease = self.home / ".codex2" / ".oulipoly-direct-child.lease"
+        foreign = os.open(lease, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(os.close, foreign)
+        fcntl.flock(foreign, fcntl.LOCK_EX)
+        started, release = self.root / "started", self.root / "release"
+        started.mkdir()
+        env = self.env | {"FAKE_STARTED_DIR": str(started), "FAKE_RELEASE": str(release)}
+        command = [str(LAUNCHER), "--profile", ".codex2", "--cwd", str(self.cwd),
+                   "--prompt", str(self.prompt), "--runs-dir", str(self.runs), "--id", "child"]
+        launches = [subprocess.Popen(command + extra, env=env, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
+                    for extra in ([], ["--lease-wait", "0.5"])]  # retired option, ignored
+        try:
+            deadline = time.monotonic() + 20
+            while len(list(started.iterdir())) < 2 and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(len(list(started.iterdir())), 2, "both tasks must run at once")
+        finally:
+            release.touch()
+            results = [launch.communicate(timeout=60) for launch in launches]
+        for launch, (out, err) in zip(launches, results):
+            self.assertEqual(launch.returncode, 0, out + err)
+        attempts = sorted(self.runs.iterdir())
+        self.assertEqual(len(attempts), 2, "distinct attempts")
+        for attempt in attempts:
+            state = (attempt / "state.txt").read_text()
+            self.assertIn("profile_lock=none\n", state)
+            self.assertNotIn("lease", state)
+            self.assertIn("codex_exit=0\n", state)
         calls = self.calls_readback()
-        self.assertEqual(len(calls), 5)
+        self.assertEqual(len(calls), 10)
         for call in calls:
             self.assertEqual((call["lease_held"], call["lease_inherited"]), (True, False), call["args"])
-        state = (next(self.runs.iterdir()) / "state.txt").read_text()
-        self.assertIn(f"lease={self.home / '.codex3' / '.oulipoly-direct-child.lease'}\n", state)
-        self.assertIn("lease_wait_s=5\n", state)
-        lease = self.home / ".codex3" / ".oulipoly-direct-child.lease"
-        self.assertEqual(lease.stat().st_mode & 0o777, 0o600)
-        handle = os.open(lease, os.O_RDWR)
-        self.addCleanup(os.close, handle)
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)  # released at exit
-
-    def test_busy_profile_lease_refuses_before_any_codex_call(self):
-        lease = os.open(self.home / ".codex2" / ".oulipoly-direct-child.lease",
-                        os.O_RDWR | os.O_CREAT, 0o600)
-        self.addCleanup(os.close, lease)
-        fcntl.flock(lease, fcntl.LOCK_EX)
-        result = self.run_launcher(".codex2", "--lease-wait", "0.5")
-        self.assertEqual(result.returncode, 75)
-        self.assertIn("busy", result.stderr)
-        self.assertFalse(self.calls.exists())
-        self.assertFalse(self.runs.exists())
-        other = self.run_launcher(".codex4", "--lease-wait", "0.5")
-        self.assertEqual(other.returncode, 0, other.stderr)
-        for value in ("-1", "soon"):
-            self.assertEqual(self.run_launcher(".codex4", "--lease-wait", value).returncode, 2)
+        # Another profile gains no lock file.
+        self.assertEqual(self.run_launcher(".codex4").returncode, 0)
+        self.assertFalse((self.home / ".codex4" / ".oulipoly-direct-child.lease").exists())
 
     def test_collab_lines_in_log_are_counted(self):
         env = self.env.copy()

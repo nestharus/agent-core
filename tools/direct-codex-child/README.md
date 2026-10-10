@@ -15,7 +15,7 @@ Prepare a nonempty prompt file containing the child's task, authority, exact wor
   --id child-name
 ```
 
-`--profile` accepts only `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`. Current automatic allocation in the dispatcher uses `.codex2`, `.codex4`, and `.codex5`; `.codex` and `.codex3` retain manual parser allowance outside that pool. These are session stores, and each launch holds its local launcher profile lock (see [Local launcher profile lock](#local-launcher-profile-lock)). `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. Without `--model`/`--effort` the launcher uses `gpt-6.1-sol` at `high`. Give both flags to pass a native model id and effort literally, for example `--model gpt-6-luna --effort max`. `--route-json` is the dispatcher's resolution record; it is stored as `route.json` and referenced from state. The launcher discovers MCP server names from the effective `codex mcp list --json`, passes a disable flag for each, and verifies a second effective list reports exactly those servers disabled. It always supplies the URL and disable flag for `openaiDeveloperDocs`, because `codex exec` can inject that server even when `codex mcp list` omits it. It refuses the launch if discovery, parsing, or preflight fails, or if a new server appears in the second list. It does not check or pin the Codex version.
+`--profile` accepts only `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`. Current automatic allocation in the dispatcher uses `.codex2`, `.codex4`, and `.codex5`; `.codex` and `.codex3` retain manual parser allowance outside that pool. These are session stores; launches take no profile lock (see [Profile concurrency](#profile-concurrency)). `--cwd`, `--prompt`, and `--runs-dir` must be absolute. `--id` is a short attempt label; repeated uses create distinct directories. Without `--model`/`--effort` the launcher uses `gpt-6.1-sol` at `high`. Give both flags to pass a native model id and effort literally, for example `--model gpt-6-luna --effort max`. `--route-json` is the dispatcher's resolution record; it is stored as `route.json` and referenced from state. The launcher discovers MCP server names from the effective `codex mcp list --json`, passes a disable flag for each, and verifies a second effective list reports exactly those servers disabled. It always supplies the URL and disable flag for `openaiDeveloperDocs`, because `codex exec` can inject that server even when `codex mcp list` omits it. It refuses the launch if discovery, parsing, or preflight fails, or if a new server appears in the second list. It does not check or pin the Codex version.
 
 The launcher reserves `runs-dir/id.unique-suffix/` with private permissions and writes `prompt.md` (read-only snapshot), `log.txt` (live output), `final.md` (Codex `-o` output), and `state.txt` (start details and appended exit result). Paths are unique for each attempt and are never reused. A nonzero `log_capture_exit` in state flags an incomplete log while preserving the exact Codex exit code. Keep the runs directory outside a source diff when it is only machine-local evidence. Record task-specific base, owner, and expected handoff in the parent state or child prompt; the launcher records the exact canonical cwd and Git HEAD at start.
 
@@ -24,19 +24,16 @@ Launch this command through a **native persistent terminal** with a short initia
 Do not send the command to shell background or use `&`, `nohup`, shell `wait`, PID/file polling, repeated tail/status loops, or scrollback as completion evidence. Separate children get separate launcher commands, native terminal handles, attempts and writing workspaces. Do not restart an in-flight child only to apply this transport override; relay changes through a working session route and require acknowledgment.
 
 <a id="profile-lease"></a>
+<a id="local-launcher-profile-lock"></a>
 
-## Local launcher profile lock
+## Profile concurrency
 
-Codex keeps tokens in `auth.json` and can refresh them during a task. It writes the file in place, and its refresh locks are in-process only. Two of our processes refreshing one profile could both spend its single-use refresh grant. So every launch takes a local launcher profile lock: an advisory exclusive `flock` on `<profile>/.oulipoly-direct-child.lease` (0600, our own file; a symlink is refused). It holds the lock from the first MCP preflight call through task exit and capture until the launcher exits. The native path in [`../direct-child/`](../direct-child/README.md#profiles) takes the same lock for its whole caller operation, because the registered adapter runs Codex on the same original store.
+The launcher takes no profile lock: concurrent launches on one profile run side by side. ROOT's [U496 decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u496-remove-codex-profile-locks/root-decisions.md) retired the earlier whole-run local launcher profile lock, which serialized our own launches per profile as a precaution against concurrent Codex login refreshes and blocked later work. No refresh-caused outage was observed. Concurrent refresh or authentication conflicts on one profile are an accepted stress-testing risk, with no replacement lock, queue, copies or auth handling.
 
-- `--lease-wait SECONDS` (default 120; the dispatcher passes `[lease] wait_s`) bounds the wait. A busy profile lock exits **75** before any Codex call or attempt directory. There is no queue.
-- Direct and native launches serialize per profile for their whole run. Allocation still rotates before waiting, with no free-profile search. Three busy automatic-pool profile writers can make later launches wait or refuse; that pool supports at most three simultaneous cooperating profile writers, one per profile.
-- The descriptor is closed for every Codex call, so Codex and its descendants never inherit the lock. It is released when the launcher exits, even if a descendant lives on.
-- Interactive Codex, editors, desktop apps, other machines and copies do not take the profile lock. They can still race a refresh; that is a profile-ownership limit, not something this tool prevents.
-
-The profile lock assumes a trusted user-owned profile and an unchanged regular lock inode. Creation uses 0600, but existing modes/type/owner are not revalidated. Bash's symlink check and open are separate; profile ancestry and replacement are not protected, and a FIFO open can block before the timed flock wait. The application wait is not a kernel/filesystem time guarantee. External daemons are also outside the profile lock; historical daemon reports are not current host attestation.
-
-`state.txt` records `transport=direct`, `lease`, `lease_wait_s` and the lock span. The `lease` field names, `[lease]` configuration, `--lease-wait` flag and `.oulipoly-direct-child.lease` filename remain compatibility names for this local launcher profile lock.
+- `--lease-wait SECONDS` is a retired option, accepted and ignored. Nothing waits and the launcher has no exit 75.
+- An existing `<profile>/.oulipoly-direct-child.lease` file, possibly still locked by a launcher from before the retirement, is neither read, locked, created nor removed.
+- `state.txt` records `profile_lock=none`.
+- Interactive Codex, editors, desktop apps, other machines, copies and external daemons can also write a profile, as before.
 
 ## Built-in delegation
 
@@ -50,7 +47,7 @@ After exit, `log_collab_lines` counts literal line-start `collab:` text in the l
 
 ## Dry run and validation
 
-Add `--dry-run` to validate local arguments and show the chosen profile/cwd without making directories, writing files, calling Codex, or running MCP preflight. It cannot certify that a live launch will pass MCP preflight. Add `--preflight-only` to run effective MCP discovery and the exact disable-flag check, under the profile lock, without creating an attempt or starting a child. Run `python3 -m unittest discover -s tools/direct-codex-child -p 'test_*.py'` from `~/ai` for isolated fake-CLI tests; they do not start a real child.
+Add `--dry-run` to validate local arguments and show the chosen profile/cwd without making directories, writing files, calling Codex, or running MCP preflight. It cannot certify that a live launch will pass MCP preflight. Add `--preflight-only` to run effective MCP discovery and the exact disable-flag check without creating an attempt or starting a child. Run `python3 -m unittest discover -s tools/direct-codex-child -p 'test_*.py'` from `~/ai` for isolated fake-CLI tests; they do not start a real child.
 
 ## Limits and consumers
 
