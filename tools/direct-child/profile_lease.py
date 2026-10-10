@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
-"""Codex profile lease and catchable-signal custody for the dispatcher.
+"""Catchable-signal custody for the dispatcher's native attempts.
 
-The lease is an advisory exclusive flock on our own file inside the original
-profile. Every Codex writer this tool launches takes it: the direct launcher
-for its whole Codex run, and the native path for the whole caller operation,
-because the registered adapter runs native Codex on that original store and
-Codex refreshes its own login there. It does not cover interactive Codex,
-editors, desktop apps or copies of the profile. Nothing here reads, renews or
-copies credentials.
+The module keeps its name from the retired Codex profile lease. No profile
+lock is taken any more: concurrent launches on one profile run side by side.
+Nothing here reads, renews or copies credentials.
 """
 
-import fcntl
-import os
-from pathlib import Path
 import signal
-import time
-
-LEASE_NAME = ".oulipoly-direct-child.lease"
 
 
 class CatchSignals:
@@ -56,51 +46,3 @@ class CatchSignals:
     def __exit__(self, *exc):
         for sig, handler in self.previous.items():
             signal.signal(sig, handler)
-
-
-class LeaseTimeout(Exception):
-    """Another writer we launched held the profile for the whole bound."""
-
-
-class Interrupted(Exception):
-    """A catchable signal arrived while waiting for the lease."""
-
-
-# ----------------------------------------------------------------- lease
-
-class ProfileLease:
-    """Exclusive advisory lease on <profile>/LEASE_NAME, waited for at most
-    wait_s. The descriptor is close-on-exec, so launched children and their
-    descendants never inherit the lock."""
-
-    def __init__(self, profile_home, wait_s, poll_s=0.1, interrupts=None):
-        self.path = Path(profile_home) / LEASE_NAME
-        self.wait_s, self.poll_s = wait_s, poll_s
-        self.fd = None
-        self.waited_s = None
-        self.interrupts = interrupts
-
-    def __enter__(self):
-        start = time.monotonic()
-        fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-        try:
-            while True:
-                if self.interrupts is not None and self.interrupts.received is not None:
-                    raise Interrupted
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() - start >= self.wait_s:
-                        raise LeaseTimeout(f"profile lease busy for {self.wait_s}s") from None
-                    time.sleep(self.poll_s)
-        except BaseException:
-            os.close(fd)
-            raise
-        self.fd, self.waited_s = fd, round(time.monotonic() - start, 3)
-        return self
-
-    def __exit__(self, *exc):
-        if self.fd is not None:
-            os.close(self.fd)
-            self.fd = None

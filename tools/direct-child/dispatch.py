@@ -21,7 +21,7 @@ import tomllib
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import profile_lease  # noqa: E402  (sibling module; also when run through runpy)
+import profile_lease  # noqa: E402  (sibling module with CatchSignals; also via runpy)
 
 DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
@@ -35,8 +35,6 @@ PROFILE = re.compile(r"\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 PROVIDERS = ("codex", "claude")
 PASSES = ("generative", "corrective", "unspecified")
 TRANSPORTS = ("direct", "native")
-# Dispatcher refusal after the attempt record exists and before any task:
-EXIT_LEASE_TIMEOUT = 75      # profile lease busy for the whole bound
 # The registered caller's own ceiling: it refuses a deadline above 7200 s. A
 # site may admit less; the front door decides.
 CALLER_MAX_DEADLINE_S = 7200
@@ -76,7 +74,7 @@ def parse_args(argv):
                         help="native front-door deadline; refused when the launch resolves direct")
     parser.add_argument("--native-child-route", action="append", metavar="NAME",
                         help="explicit native child opt-in; currently refused before any effect "
-                             "(child account and lease ownership is undecided)")
+                             "(child account ownership is undecided)")
     parser.add_argument("--native-child-max-starts", action=Once, type=int, metavar="N")
     parser.add_argument("--native-child-max-concurrent", action=Once, type=int, metavar="N")
     parser.add_argument("--dry-run", action="store_true")
@@ -190,11 +188,9 @@ def validate_config(config):
 
 
 def validate_transport(config):
-    """[lease], [transport] and [native] are optional: without them the lease
-    waits 120 s, transport is direct and nothing can run natively."""
-    wait = config.get("lease", {}).get("wait_s", 120)
-    if type(wait) not in (int, float) or not 0 < wait <= 3600:
-        raise Refusal("config: lease.wait_s must be a number of seconds in (0, 3600]")
+    """[transport] and [native] are optional: without them transport is direct
+    and nothing can run natively. A [lease] table from before the profile lock
+    was retired is ignored."""
     default = config.get("transport", {}).get("default", "direct")
     if default not in TRANSPORTS:
         raise Refusal("config: transport.default must be direct or native")
@@ -366,7 +362,7 @@ def resolve_transport(config, args, record):
     model and effort are never changed; with default native an unmapped
     binding runs direct by rule, and an explicit native request for one is
     refused. Never a post-launch fallback. Native-only requests are checked
-    here, before profile allocation, lease or any write: an invalid deadline
+    here, before profile allocation or any write: an invalid deadline
     is refused on every transport, a valid one on a launch that resolves
     direct is refused, not dropped, and every child option is refused."""
     if args.transport is not None and args.transport not in TRANSPORTS:
@@ -380,7 +376,7 @@ def resolve_transport(config, args, record):
              if getattr(args, flag[2:].replace("-", "_")) is not None]
     if asked:
         raise Refusal(f"{', '.join(asked)}: native children are refused before any effect while "
-                      "child account and lease ownership under registered original-store routes "
+                      "child account ownership under registered original-store routes "
                       "is undecided (ROOT-owned unfinished work). Nothing was started and nothing "
                       "is sent direct; launch without child options. Direct launches have no "
                       "native children")
@@ -419,10 +415,9 @@ def resolve_transport(config, args, record):
                 native_deadline_s=deadline, native_account_routes=accounts,
                 native_credential="none",
                 native_account=("the site route fixes the claude5 store; Claude Code uses its own "
-                                "login there; no lease" if claude else
+                                "login there" if claude else
                                 "the chosen Codex profile's registered site route; its adapter "
-                                "runs and authenticates on that original store; the profile lease "
-                                "spans the whole caller operation"),
+                                "runs and authenticates on that original store; no profile lock"),
                 site_binding_source="routes.toml declaration; the root-owned site config "
                                     "fixes the actual model, effort and account store and "
                                     "is not read here")
@@ -480,15 +475,10 @@ def allocate_profile(config, provider):
 
 # ----------------------------------------------------------------- launch
 
-def lease_wait(config):
-    return config.get("lease", {}).get("wait_s", 120)
-
-
 def codex_command(args, record, profile, config, route_json=None):
     command = [str(CODEX_LAUNCHER), "--profile", profile, "--cwd", args.cwd,
                "--prompt", args.prompt, "--runs-dir", args.runs_dir, "--id", args.id,
-               "--model", record["model"], "--effort", record["effort"],
-               "--lease-wait", str(lease_wait(config))]
+               "--model", record["model"], "--effort", record["effort"]]
     return command + (["--route-json", route_json] if route_json is not None else [])
 
 
@@ -835,13 +825,11 @@ def run_native(args, config, record, profile):
 
 def _run_native(args, config, record, profile, interrupts, state_ref):
     """One native attempt: the installed caller in the foreground, and its
-    exit is the attempt's. Codex: the chosen profile's advisory lease is held
-    from before the caller starts until it has exited and its result is
-    collected, because the registered adapter runs native Codex on that
-    original store and Codex refreshes its own login there. Claude: no lease;
-    the site route fixes the store and Claude Code uses its own login there.
-    Nothing is read, renewed or staged for either, nothing is replayed or
-    sent direct."""
+    exit is the attempt's. Codex: the registered adapter runs native Codex on
+    the chosen profile's original store; no profile lock is taken, so
+    concurrent attempts on one profile run side by side. Claude: the site
+    route fixes the store and Claude Code uses its own login there. Nothing is
+    read, renewed or staged for either, nothing is replayed or sent direct."""
     os.umask(0o077)
     codex = record["provider"] == "codex"
     profile_home = Path(os.path.expanduser("~")) / profile if codex else None
@@ -865,10 +853,9 @@ def _run_native(args, config, record, profile, interrupts, state_ref):
         preparation = ("credential=none\naccount_store=" + str(profile_home) + "\n"
                        "credential_note=the registered site route's adapter owns authentication in "
                        "the original store; this dispatcher reads, renews and stages nothing\n"
-                       f"lease={profile_home / profile_lease.LEASE_NAME}\n"
-                       f"lease_wait_s={lease_wait(config)}\nlease_scope=whole caller operation\n")
+                       "profile_lock=none\n")
     else:
-        preparation = ("credential=none\nprofile_lease=none\n"
+        preparation = ("credential=none\nprofile_lock=none\n"
                        "credential_note=the site route fixes the store; Claude Code uses its own "
                        "login there; this dispatcher reads, renews and stages nothing for it\n")
     state = paths["state.txt"]
@@ -892,24 +879,7 @@ def _run_native(args, config, record, profile, interrupts, state_ref):
         "expected_status=native terminal exit plus native_caller_exit entry\n", encoding="utf-8")
     print(f"DIRECT_CHILD_ATTEMPT={attempt}\nDIRECT_CHILD_STATE={state}", flush=True)
 
-    if not codex:
-        return run_collect(record, command, attempt, out, paths, state, interrupts)
-    lease = profile_lease.ProfileLease(profile_home, lease_wait(config), interrupts=interrupts)
-    try:
-        lease.__enter__()
-    except profile_lease.Interrupted:
-        return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
-    except profile_lease.LeaseTimeout as error:
-        return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=timeout\nlease_note={error}\n")
-    except OSError as error:
-        return native_refused(state, EXIT_LEASE_TIMEOUT, f"lease_status=unusable\n"
-                              f"native_prelaunch_error={type(error).__name__}\n")
-    try:
-        append_state(state, f"lease_status=acquired\nlease_waited_s={lease.waited_s}\n")
-        return run_collect(record, command, attempt, out, paths, state, interrupts)
-    finally:
-        lease.__exit__(None, None, None)
-        append_state(state, f"lease_released_utc={utc_now()}\n")
+    return run_collect(record, command, attempt, out, paths, state, interrupts)
 
 
 def run_collect(record, command, attempt, out, paths, state, interrupts):
@@ -1068,11 +1038,10 @@ def main(argv):
             if provider == "claude" and record["transport"] == "direct":
                 print("DRY RUN: denial arguments are conditional on pre-task private help metadata")
             elif record["transport"] == "native" and provider == "claude":
-                print("DRY RUN: no credential, store read or profile lease; the site route fixes the store")
+                print("DRY RUN: no credential, store read or profile lock; the site route fixes the store")
             elif record["transport"] == "native":
-                print(f"DRY RUN: at launch the {profile} profile lease is held for the whole caller "
-                      "operation; no credential is read, renewed or staged; the site route's adapter "
-                      "owns authentication in that original store")
+                print(f"DRY RUN: no profile lock on {profile}; no credential is read, renewed or "
+                      "staged; the site route's adapter owns authentication in that original store")
             print("DRY RUN: no files written, rotation not advanced, no model launched")
             return 0
     except Refusal as error:

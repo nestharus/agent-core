@@ -22,14 +22,6 @@ pool = ["claude5"]
 manual_profiles = ["claude5"]
 efforts = ["low", "medium", "high", "xhigh", "max"]
 
-# Local launcher profile lock (our own file in each Codex profile). The direct
-# launcher holds it for its whole Codex run; native holds it for the whole
-# caller operation, since the registered adapter runs Codex on that original
-# store. A launch waits at most wait_s, then refuses. Writers we do not launch
-# (interactive Codex, editors, copies) are not covered.
-[lease]
-wait_s = 120
-
 # How a resolved binding runs. "direct" runs the CLI (launch.sh or claude5);
 # "native" runs the installed Linux native ACP v2 caller for an exact declared
 # binding; unmapped bindings run direct by rule. --transport direct explicitly
@@ -49,7 +41,7 @@ default = "native"
 caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-a8e9bfef0f7f-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
-# Upper bound checked before any allocation, profile lock or write: the caller
+# Upper bound checked before any allocation or write: the caller
 # refuses above 7200. The site's max_deadline_s may be lower; the front door
 # then refuses (caller 4). Declared, not read back.
 max_deadline_s = 7200
@@ -66,7 +58,7 @@ max_deadline_s = 7200
 # pool profile must be mapped. A Claude binding names its one store: the site
 # route fixes ~/.claude5, so only the original claude5 store maps.
 # Native children (--native-child-route) are refused pending ROOT's child
-# account and profile-lock decision; no child offers are declared.
+# account decision; no child offers are declared.
 [[native.bindings]]
 provider = "codex"
 model = "gpt-6.1-sol"
