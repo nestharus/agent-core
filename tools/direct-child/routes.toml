@@ -38,13 +38,13 @@ wait_s = 120
 default = "native"
 
 [native]
-# Selected package target: Runner 315ad84e2e70, agent-bash de23d83ac522.
+# Selected package target: Runner a8e9bfef0f7f, agent-bash de23d83ac522.
 # This path selects the installation; schemas/capabilities govern compatibility.
 # ROOT owns installation, the matching site/account routes and production
-# discard, then live checkout activation and the fresh Luna consequence.
+# discard, the needed encounter and its disposition before live activation.
 # Construction and this declaration attest no installed or qualified default.
 # No stable alias, shim or readiness guard; source merge alone is not activation.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-315ad84e2e70-de23d83ac522/bin/oulipoly-native-call"
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-a8e9bfef0f7f-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # Upper bound checked before any allocation, profile lock or write: the caller
