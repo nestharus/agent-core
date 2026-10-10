@@ -40,10 +40,12 @@ default = "native"
 [native]
 # Selected package target: Runner a8e9bfef0f7f, agent-bash de23d83ac522.
 # This path selects the installation; schemas/capabilities govern compatibility.
-# ROOT owns installation, the matching site/account routes and production
-# discard, the needed encounter and its disposition before live activation.
-# Construction and this declaration attest no installed or qualified default.
-# No stable alias, shim or readiness guard; source merge alone is not activation.
+# ROOT selected the installed target after the collected Luna/C4 encounter,
+# U472 Frame and U473 D-B1/D-B2 Decision; see README.md for scope and evidence.
+# ROOT owns matching site/account routes with production discard and activation
+# by advancing live /home/nes/ai; user selection and owned 315 retirement follow.
+# This declaration alone attests no activation or general runtime qualification.
+# No stable alias, shim or readiness guard.
 caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-a8e9bfef0f7f-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
