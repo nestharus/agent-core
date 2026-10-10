@@ -30,15 +30,16 @@ efforts = ["low", "medium", "high", "xhigh", "max"]
 default = "native"
 
 [native]
-# Selected package target: Runner a8e9bfef0f7f, agent-bash de23d83ac522.
+# Selected installed package target: Runner ba440a4c3368, agent-bash de23d83ac522.
 # This path selects the installation; schemas/capabilities govern compatibility.
-# ROOT selected the installed target after the collected Luna/C4 encounter,
-# U472 Frame and U473 D-B1/D-B2 Decision; see README.md for scope and evidence.
-# ROOT owns matching site/account routes with production discard and activation
-# by advancing live /home/nes/ai; user selection and owned 315 retirement follow.
-# This declaration alone attests no activation or general runtime qualification.
+# E516 A1/A3 after U514 Frame selects coherent shared and user adoption of the
+# delivered fixes. E516 records installation, not a native encounter; see README.
+# ROOT owns matching site/account routes with production discard, live checkout
+# activation, separate user selection and later exact-owned a8e9 retirement.
+# Existing calls keep their original handles; 315 is retired, 0227 stays inert.
+# This declaration alone attests no activation or runtime/recovery qualification.
 # No stable alias, shim or readiness guard.
-caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-a8e9bfef0f7f-de23d83ac522/bin/oulipoly-native-call"
+caller = "/opt/oulipoly-native/oulipoly-native-linux-x86_64-ba440a4c3368-de23d83ac522/bin/oulipoly-native-call"
 # Front-door deadline (also its kill bound); --native-deadline overrides.
 deadline_s = 7200
 # Upper bound checked before any allocation or write: the caller
