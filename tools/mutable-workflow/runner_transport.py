@@ -18,9 +18,11 @@ from runtime import require, text, validate_worker
 
 
 def validate_config(config):
-    require(isinstance(config, dict) and set(config) ==
-            {'runner', 'model', 'project', 'contract', 'authority'}, 'invalid runner configuration')
+    required = {'runner', 'model', 'project', 'contract', 'authority'}
+    require(isinstance(config, dict) and required <= set(config)
+            and set(config) <= required | {'fresh_provider_pin'}, 'invalid runner configuration')
     validate_worker('runner', config['runner'])
+    validate_fresh_pin(config)
     text(config['model'])
     for key in ('project', 'contract'):
         require(Path(config[key]).is_absolute(), f'{key} must be absolute')
@@ -34,6 +36,18 @@ def validate_config(config):
     values = declared_secret_values(load_secret_names(Path(config['contract'])), os.environ)
     require_secret_free(config, values)
     return values
+
+
+def validate_fresh_pin(config):
+    require(not any(arg == '--pin-provider' or arg.startswith('--pin-provider=')
+                    for arg in config['runner']),
+            'use fresh_provider_pin, not a shared runner prefix pin')
+    if 'fresh_provider_pin' not in config:
+        return
+    pin = config['fresh_provider_pin']
+    require(isinstance(pin, str) and bool(pin) and not pin.startswith('-')
+            and not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in pin),
+            'fresh_provider_pin must be a nonempty provider account name without whitespace/control characters')
 
 
 def invoke(config, arguments, log, secrets):
@@ -150,6 +164,8 @@ def dispatch_arguments(config, prompt, target):
     arguments = ['-m', config['model'], '-p', config['project'], '-f', str(prompt)]
     if target is not None:
         arguments = ['resume', '--session-id', target] + arguments
+    elif 'fresh_provider_pin' in config:
+        arguments += ['--pin-provider', config['fresh_provider_pin']]
     return arguments
 
 
