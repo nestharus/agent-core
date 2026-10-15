@@ -43,7 +43,7 @@ def rows(root):
 
 
 @pytest.fixture
-def started(tmp_path):
+def configured(tmp_path):
     assert ADAPTER.is_file() and FAKE.is_file(), 'compatible CRW checkout/fixtures required'
     # Public interface/source readback before starting the candidate consumer.
     provider = Path(os.environ.get('MUTABLE_WORKFLOW_PROVIDER', '/home/nes/ai/tools/mutable-workflow'))
@@ -75,6 +75,12 @@ def started(tmp_path):
                   allow_graph_edit=True, allow_activation=False,
                   workers={'alternative': [sys.executable, str(worker)]})
     write(tmp_path / 'mode.json', {})
+    return config, tmp_path
+
+
+@pytest.fixture
+def started(configured):
+    config, tmp_path = configured
     run = tmp_path / 'review'
     call(run, 'start', '--file', write(tmp_path / 'config.json', config))
     assert not (tmp_path / 'calls.jsonl').exists()  # no resident/root/semantic startup
@@ -166,7 +172,7 @@ def test_rejected_submission_resumes_and_role_can_propose_edit(started):
     assert not call(run, 'inspect')['policy']['cycles'][0]['qualified']
 
 
-def test_selection_is_required_and_adapter_errors_are_not_success(tmp_path):
+def test_explicit_adapter_errors_are_not_success(tmp_path):
     assert invoke('start', tmp_path / 'run').returncode == 2
     assert invoke('--adapter', 'relative.py', '--', '--help').returncode == 2
     assert invoke('--adapter', tmp_path / 'missing.py', '--', '--help').returncode == 2
