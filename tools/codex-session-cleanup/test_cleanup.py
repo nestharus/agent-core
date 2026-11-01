@@ -43,7 +43,8 @@ def plan_for(*members, retain=(), now=NOW):
 
 
 class FakeRpc:
-    def __init__(self, active, archived=(), loaded=(), fail=None, page_loop=False, goals=None):
+    def __init__(self, active, archived=(), loaded=(), fail=None, page_loop=False,
+                 goals=None, related=None):
         self.active = list(active)
         self.archived = list(archived)
         self.loaded = list(loaded)
@@ -52,6 +53,7 @@ class FakeRpc:
         self.calls = []
         self.deleted = False
         self.goals = goals or {}
+        self.related = related or {}
 
     def close(self):
         pass
@@ -61,7 +63,11 @@ class FakeRpc:
         if method == self.fail:
             raise c.Refuse("fake server refusal")
         if method == "thread/list":
-            data = self.archived if params["archived"] else self.active
+            if "parentThreadId" in params:
+                data = [item for item in self.related.get(params["parentThreadId"], ())
+                        if item.get("archived", False) == params["archived"]]
+            else:
+                data = self.archived if params["archived"] else self.active
             if self.page_loop:
                 return {"data": data[:1], "nextCursor": "repeat"}
             start = int(params.get("cursor", "0"))
@@ -298,6 +304,121 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(plan["candidates"], [])
         self.assertEqual(plan["indexOnlyRetainedCount"], 1)
 
+    def test_expected_hidden_spawn_is_recovered_and_retained(self):
+        parent = thread()
+        hidden = thread(1, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0], "agent_role": "PRIVATE"}}},
+            parent=IDS[0], preview="SECRET PREVIEW", name="SECRET TITLE", path="/private")
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, hidden], [(IDS[0], IDS[1])])
+            rpc = FakeRpc([parent], related={IDS[0]: [hidden]})
+            members, children = c.snapshot(rpc, profile, 3)
+        plan = c.prepare_plan(rpc, {}, members, children, set(), NOW, 86400, 10)
+        self.assertTrue(members[IDS[1]]["expectedHidden"])
+        self.assertEqual(children[IDS[0]], {IDS[1]})
+        self.assertEqual(plan["hiddenIndexedRetainedCount"], 1)
+        self.assertEqual(plan["indexOnlyRetainedCount"], 0)
+        self.assertTrue(plan["inventoryCompleteForApply"])
+        self.assertEqual(plan["candidates"], [])
+        self.assertNotIn("SECRET", json.dumps(plan))
+        listings = [p for method, p in rpc.calls if method == "thread/list" and
+                    "parentThreadId" in p]
+        self.assertEqual(len(listings), 2)
+        self.assertTrue(all(p["useStateDbOnly"] and p["modelProviders"] == [] and
+                            p["sourceKinds"] == ["subAgentThreadSpawn"] and
+                            p["limit"] == 10 for p in listings))
+
+    def test_hidden_spawn_plus_unavailable_row_keeps_plan_provisional(self):
+        parent = thread()
+        hidden = thread(1, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0]}}}, parent=IDS[0])
+        unknown = thread(2, source="vscode")
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, hidden, unknown], [(IDS[0], IDS[1])])
+            rpc = FakeRpc([parent], related={IDS[0]: [hidden]})
+            members, children = c.snapshot(rpc, profile, 3, allow_unlisted=True)
+            with self.assertRaises(c.Refuse):
+                c.snapshot(rpc, profile, 3)
+        plan = c.prepare_plan(rpc, {}, members, children, set(), NOW, 86400, 10)
+        self.assertTrue(members[IDS[2]]["metadataUnavailable"])
+        self.assertEqual(plan["hiddenIndexedRetainedCount"], 1)
+        self.assertEqual(plan["indexOnlyRetainedCount"], 1)
+        self.assertFalse(plan["inventoryCompleteForApply"])
+        self.assertEqual(plan["candidates"], [])
+
+    def test_visible_active_spawn_sibling_does_not_block_hidden_recovery(self):
+        parent = thread()
+        spawn_source = {"subAgent": {"thread_spawn": {"parent_thread_id": IDS[0]}}}
+        visible = thread(1, source=spawn_source, parent=IDS[0],
+                         status={"type": "active"})
+        hidden = thread(2, source=spawn_source, parent=IDS[0])
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, visible, hidden],
+                       [(IDS[0], IDS[1]), (IDS[0], IDS[2])])
+            rpc = FakeRpc([parent, visible], related={IDS[0]: [visible, hidden]})
+            members, children = c.snapshot(rpc, profile, 3)
+        self.assertTrue(members[IDS[2]]["expectedHidden"])
+        self.assertNotIn("expectedHidden", members[IDS[1]])
+        self.assertEqual(children[IDS[0]], {IDS[1], IDS[2]})
+
+    def test_relationship_rejects_mismatch_foreign_and_duplicate(self):
+        parent = thread()
+        hidden = thread(1, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0]}}}, parent=IDS[0])
+        cases = [
+            [dict(hidden, source={"subAgent": {"thread_spawn": {
+                "parent_thread_id": IDS[2]}}})],
+            [dict(hidden, parentThreadId=IDS[2])],
+            [dict(hidden, ephemeral=True)],
+            [dict(hidden, status={"type": "active"})],
+            [dict(hidden, id=IDS[2])],
+            [hidden, hidden],
+        ]
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, hidden], [(IDS[0], IDS[1])])
+            for related in cases:
+                with self.subTest(related=related):
+                    rpc = FakeRpc([parent], related={IDS[0]: related})
+                    with self.assertRaises(c.Refuse):
+                        c.snapshot(rpc, profile, 3, allow_unlisted=True)
+
+    def test_hidden_with_multiple_spawn_parents_refuses(self):
+        parent = thread()
+        hidden = thread(1, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0]}}}, parent=IDS[0])
+        other = thread(2)
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, hidden, other],
+                       [(IDS[0], IDS[1]), (IDS[2], IDS[1])])
+            rpc = FakeRpc([parent, other], related={IDS[0]: [hidden]})
+            with self.assertRaisesRegex(c.Refuse, "multiple spawn parents"):
+                c.snapshot(rpc, profile, 3, allow_unlisted=True)
+
+    def test_relationship_pagination_has_shared_page_budget(self):
+        parent = thread()
+        hidden = [thread(i, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0]}}}, parent=IDS[0], preview="PRIVATE")
+                  for i in range(1, 12)]
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [parent, *hidden], [(IDS[0], x["id"]) for x in hidden])
+            rpc = FakeRpc([parent], related={IDS[0]: hidden})
+            with self.assertRaisesRegex(c.Refuse, "relationship page budget"):
+                c.snapshot(rpc, profile, 2, allow_unlisted=True)
+            rpc = FakeRpc([parent], related={IDS[0]: hidden})
+            members, children = c.snapshot(rpc, profile, 3)
+        self.assertEqual(len(members), 12)
+        self.assertEqual(len(children[IDS[0]]), 11)
+        relation_pages = [p for method, p in rpc.calls if method == "thread/list" and
+                          "parentThreadId" in p]
+        self.assertEqual(len(relation_pages), 3)
+        self.assertEqual(relation_pages[1]["cursor"], "10")
+
     def test_optional_final_cursor_and_full_page_without_cursor(self):
         class MissingCursor:
             def __init__(self, count): self.count = count
@@ -502,6 +623,7 @@ class FakeWebSocketServer:
                     key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
                 client.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                                b"Connection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
+                experimental_api = False
                 while not self.stop.is_set():
                     head = self.exact(client, 2)
                     if head[0] != 0x81 or not head[1] & 0x80:
@@ -519,7 +641,13 @@ class FakeWebSocketServer:
                     mode = (self.base / "mode").read_text() if (self.base / "mode").exists() else "normal"
                     if mode == "exit":
                         return
-                    reply = self.reply(msg, mode)
+                    if msg["method"] == "initialize":
+                        experimental_api = msg["params"].get("capabilities", {}).get("experimentalApi") is True
+                    if msg["method"] == "thread/list" and "parentThreadId" in msg["params"] and not experimental_api:
+                        reply = {"id": msg["id"], "error": {"code": -32600,
+                                 "message": "parentThreadId requires experimentalApi"}}
+                    else:
+                        reply = self.reply(msg, mode)
                     data = json.dumps(reply).encode()
                     header = bytes([0x81, len(data)]) if len(data) < 126 else (
                         bytes([0x81, 126]) + len(data).to_bytes(2, "big"))
@@ -532,8 +660,14 @@ class FakeWebSocketServer:
         if method == "initialize":
             result = {"codexHome": "/wrong-profile" if mode == "mismatch" else str(self.base)}
         elif method == "thread/list":
-            item = json.loads((self.base / "thread.json").read_text())
-            data = [] if msg["params"]["archived"] or (self.base / "deleted").exists() else [item]
+            if "parentThreadId" in msg["params"]:
+                hidden_path = self.base / "hidden-thread.json"
+                data = ([json.loads(hidden_path.read_text())] if hidden_path.exists() and
+                        not msg["params"]["archived"] and
+                        not (self.base / "deleted").exists() else [])
+            else:
+                item = json.loads((self.base / "thread.json").read_text())
+                data = [] if msg["params"]["archived"] or (self.base / "deleted").exists() else [item]
             result = {"data": data, "nextCursor": None}
         elif method == "thread/loaded/list":
             result = {"data": [], "nextCursor": None}
@@ -606,6 +740,34 @@ class TransportTests(unittest.TestCase):
         repeated = self.invoke("apply", "--receipt", str(self.receipt), "--exclusive-maintenance", "--complete-index")
         self.assertNotEqual(repeated.returncode, 0)
         self.assertFalse((self.base / "invocations.txt").exists())
+
+    def test_hidden_child_is_recovered_in_plan_and_fresh_apply_without_delete(self):
+        hidden = thread(1, source={"subAgent": {"thread_spawn": {
+            "parent_thread_id": IDS[0]}}}, parent=IDS[0],
+            updated=int(time.time()) - 86400, preview="SECRET PREVIEW")
+        (self.base / "hidden-thread.json").write_text(json.dumps(hidden))
+        db = sqlite3.connect(self.base / "state_5.sqlite")
+        try:
+            db.execute("INSERT INTO threads VALUES(?,?,?)", (IDS[1], 0, IDS[0]))
+            db.execute("INSERT INTO thread_spawn_edges VALUES(?,?,?)",
+                       (IDS[0], IDS[1], "spawned"))
+            db.commit()
+        finally:
+            db.close()
+        planned = self.invoke("plan")
+        self.assertEqual(planned.returncode, 0, planned.stderr)
+        plan = json.loads(self.plan.read_text())
+        self.assertEqual(plan["hiddenIndexedRetainedCount"], 1)
+        self.assertEqual(plan["indexOnlyRetainedCount"], 0)
+        self.assertTrue(plan["inventoryCompleteForApply"])
+        self.assertEqual(plan["candidates"], [])
+        self.assertNotIn("SECRET", self.plan.read_text() + planned.stdout)
+        applied = self.invoke("apply", "--receipt", str(self.receipt),
+                              "--exclusive-maintenance", "--complete-index")
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertEqual([json.loads(x)["event"] for x in self.receipt.read_text().splitlines()],
+                         ["begin", "complete"])
+        self.assertFalse((self.base / "deleted").exists())
 
     def test_plan_defaults_to_standard_socket_and_empty_retention(self):
         directory = self.base / "app-server-control"

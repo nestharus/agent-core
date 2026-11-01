@@ -114,7 +114,8 @@ class Rpc:
                     os.close(parent)
             self.handshake()
             reply = self.request("initialize", {"clientInfo": {
-                "name": "codex_session_cleanup", "title": "Codex Session Cleanup", "version": "1.0"}})
+                "name": "codex_session_cleanup", "title": "Codex Session Cleanup", "version": "1.0"},
+                "capabilities": {"experimentalApi": True}})
             require(isinstance(reply, dict) and reply.get("codexHome") == profile,
                     "daemon profile identity does not match selected profile")
             self.send({"method": "initialized", "params": {}})
@@ -258,11 +259,14 @@ class Rpc:
             pass
 
 
-def pages(rpc, method, params, max_pages, project=None):
+def pages(rpc, method, params, max_pages, project=None, shared_budget=None):
     seen_cursors = set()
     cursor = None
     out = []
     for _ in range(max_pages):
+        if shared_budget is not None:
+            require(shared_budget[0] > 0, f"{method} exceeded relationship page budget; graph incomplete")
+            shared_budget[0] -= 1
         p = dict(params)
         if cursor is not None:
             p["cursor"] = cursor
@@ -378,9 +382,54 @@ def snapshot(rpc, profile, max_pages, allow_unlisted=False):
     loaded = set(loaded)
     pins, attached, stored_edges = state_metadata(profile)
     state_only = set(pins) - set(threads)
-    require(set(threads) <= set(pins) and (allow_unlisted or not state_only),
+    require(set(threads) <= set(pins),
             f"state DB and RPC thread inventories differ (RPC {len(threads)}, state {len(pins)}, "
             f"state-only {len(set(pins) - set(threads))}, RPC-only {len(set(threads) - set(pins))})")
+    spawn_parents = {}
+    for parent, child in stored_edges:
+        spawn_parents.setdefault(child, set()).add(parent)
+    require(all(len(spawn_parents.get(child, ())) <= 1 for child in state_only),
+            "state-only thread has multiple spawn parents")
+    # Ordinary state-backed listing omits empty-preview spawn children in
+    # 0.166.0. The parent relationship filter includes them. Query only
+    # parents recorded by the independent spawn-edge state, and accept only
+    # matching, non-ephemeral, unloaded spawn metadata. A returned sibling
+    # already in the ordinary listing must agree exactly with that listing.
+    parents = sorted({parent for child in state_only for parent in spawn_parents.get(child, ())})
+    relationship_budget = [max_pages]
+    seen_related = set()
+    for parent in parents:
+        require(parent in pins, "spawn relationship parent absent from state index")
+        for archived in (False, True):
+            related = pages(rpc, "thread/list", {
+                "archived": archived, "sourceKinds": ["subAgentThreadSpawn"],
+                "modelProviders": [],
+                "parentThreadId": parent, "useStateDbOnly": True,
+                "limit": THREAD_PAGE_SIZE}, max_pages, project=thread_record,
+                shared_budget=relationship_budget)
+            for entry in related:
+                tid = entry["id"]
+                require(tid not in seen_related, "duplicate relationship thread metadata")
+                seen_related.add(tid)
+                require(tid in pins and (parent, tid) in stored_edges and
+                        entry["source"] == "subAgentThreadSpawn" and
+                        entry["sourceParentThreadId"] == parent and
+                        entry["parentThreadId"] in (None, parent),
+                        "foreign or inconsistent relationship thread metadata")
+                entry["archived"] = archived
+                if tid in threads:
+                    require(threads[tid] == entry,
+                            "relationship metadata disagrees with ordinary listing")
+                else:
+                    require(entry["ephemeral"] is False and
+                            entry["status"]["type"] == "notLoaded",
+                            "hidden relationship thread is not a persistent unloaded child")
+                    entry["expectedHidden"] = True
+                    threads[tid] = entry
+                    state_only.remove(tid)
+    require(allow_unlisted or not state_only,
+            f"state DB and RPC thread inventories differ (RPC {len(threads)}, state {len(pins)}, "
+            f"state-only {len(state_only)}, RPC-only 0)")
     # Planning can show a provisional draft while preserving every entry that
     # lacks RPC metadata. Apply still requires an exact, complete inventory.
     for tid in state_only:
@@ -434,7 +483,9 @@ def age_ok(t, now, min_age):
 
 
 def qualified(t, now, min_age, retain, root=False):
-    if t.get("metadataUnavailable"):
+    # A relationship listing closes the inventory discrepancy, but ordinary
+    # listing still cannot independently expose this child. Keep its cascade.
+    if t.get("metadataUnavailable") or t.get("expectedHidden"):
         return False
     if t["id"] in retain:
         return False
@@ -501,8 +552,10 @@ def prepare_plan(rpc, identity, threads, children, retain, now, min_age, batch_l
             continue
         selected.append({**candidate, "goalStates": goals})
     index_only = sum(bool(t.get("metadataUnavailable")) for t in threads.values())
+    hidden = sum(bool(t.get("expectedHidden")) for t in threads.values())
     plan.update(format=3, candidates=selected, batchLimit=batch_limit,
                 indexOnlyRetainedCount=index_only, inventoryCompleteForApply=index_only == 0,
+                hiddenIndexedRetainedCount=hidden,
                 preliminaryRootCount=len(ordered), goalProtectedRootsExamined=protected,
                 unexaminedRootCount=len(ordered) - examined)
     plan.pop("planId")
@@ -614,6 +667,7 @@ def main(argv=None):
             print(json.dumps({"plan": args.plan, "planId": plan["planId"],
                               "candidates": len(plan["candidates"]), "mutated": False,
                               "provisional": not plan["inventoryCompleteForApply"],
+                              "hiddenIndexedRetainedCount": plan["hiddenIndexedRetainedCount"],
                               "indexOnlyRetainedCount": plan["indexOnlyRetainedCount"]}, sort_keys=True))
             return 0
         plan = json.loads(Path(args.plan).read_bytes())
