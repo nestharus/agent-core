@@ -6,6 +6,10 @@ Project `AGENTS.md` files should reference this file for the generic routing lay
 
 Routing precedence and conflict resolution live in [`~/ai/conventions/workflow-routing.md`](conventions/workflow-routing.md). This file stays lean and pointer-heavy.
 
+## Workspace storage and cleanup
+
+Before creating, copying, relocating, reusing or retiring workspaces and temporary outputs, follow [storage and cleanup](conventions/storage-cleanup.md). Keep checkout count tied to immediate parallel work, preserve source and required evidence, and give generated artifacts and one-off prompts an explicit cleanup disposition. Existing cleanup authorization does not require an unrelated RFQ/Main/Root review gate.
+
 ## Entry for new agents during the runner outage
 
 Point new agents at `/home/nes/ai/AGENTS.md`. Apply **Observe → Frame → Decide before Act**, including findings described as small local defects. **Decide sets goals, not implementation specifications; Act chooses the means and may use read-only Luna locators within its authority and budget.** The dispatcher's [Observe, Frame, Decide and Act binding](tools/direct-child/README.md#observe-frame-decide-and-act) records the local seat responsibilities and return loop and links the current method defining homes; its [resolution section](tools/direct-child/README.md#resolution) gives the current model defaults, and the [dispatcher](tools/direct-child/README.md#example) and [launcher](tools/direct-codex-child/README.md) give launch and collection. Read these with the protected-change lifecycle below and the project's own authority bounds. The [current campaign selection](tools/direct-child/README.md#current-campaign-selection) records the authorized minimal closure and its limits; this entry does not establish profile import loading or efficacy.
