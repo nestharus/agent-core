@@ -91,6 +91,15 @@ def db_fixture(directory, members, edges=()):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_page_projection_discards_unneeded_reply_fields(self):
+        members = [thread(i, preview="PRIVATE" * 1000) for i in range(15)]
+        result = c.pages(FakeRpc(members), "thread/list",
+                         {"archived": False, "limit": 10}, 10,
+                         project=c.thread_record)
+        self.assertEqual(len(result), 15)
+        self.assertTrue(all("preview" not in item for item in result))
+        self.assertNotIn("PRIVATE", json.dumps(result))
+
     def test_small_metadata_pages_preserve_complete_inventory(self):
         members = [thread(i) for i in range(15)]
         with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:

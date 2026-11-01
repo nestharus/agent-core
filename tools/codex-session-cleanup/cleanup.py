@@ -258,7 +258,7 @@ class Rpc:
             pass
 
 
-def pages(rpc, method, params, max_pages):
+def pages(rpc, method, params, max_pages, project=None):
     seen_cursors = set()
     cursor = None
     out = []
@@ -270,7 +270,9 @@ def pages(rpc, method, params, max_pages):
         require(isinstance(result, dict) and isinstance(result.get("data"), list),
                 f"{method} pagination data unavailable")
         require(len(result["data"]) <= params["limit"], f"{method} exceeded requested page size")
-        out.extend(result["data"])
+        # Discard unneeded reply fields on each page rather than retaining
+        # server previews for the whole profile while gathering the index.
+        out.extend(project(item) if project else item for item in result["data"])
         if "nextCursor" not in result:
             require(len(result["data"]) < params["limit"],
                     f"{method} pagination metadata unavailable at full page")
@@ -364,9 +366,10 @@ def snapshot(rpc, profile, max_pages):
     for archived in (False, True):
         entries = pages(rpc, "thread/list", {"archived": archived, "sourceKinds": SOURCES,
                                             "useStateDbOnly": True,
-                                            "limit": THREAD_PAGE_SIZE}, max_pages)
+                                            "limit": THREAD_PAGE_SIZE}, max_pages,
+                        project=thread_record)
         for entry in entries:
-            t = thread_record(entry)
+            t = entry
             require(t["id"] not in threads, "duplicate thread across pages or archive states")
             t["archived"] = archived
             threads[t["id"]] = t
