@@ -1,6 +1,6 @@
 # Direct Codex child launcher (temporary outage transport)
 
-New contextual launches should normally use [`../direct-child/dispatch.py`](../direct-child/README.md). It resolves provider, model, effort, and profile from the seat and class, then delegates Codex routes to this launcher. This tool starts **one** child in the foreground while `agents` / `agent-runner` is down. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage). It does not select tasks, authorize effects, allocate worktrees, or replace the mandatory review and delivery lifecycle.
+New contextual launches should normally use [`../direct-child/dispatch.py`](../direct-child/README.md). It resolves provider, model, effort, and profile from the seat and class, then delegates Codex routes to this launcher. This tool starts **one** child in the foreground while `agents` / `agent-runner` is down. It implements the [shared temporary dispatch rule](../../AGENTS.md#temporary-direct-codex-dispatch-during-agent-runner-outage). It does not select tasks, authorize effects, allocate worktrees, or replace review and delivery duties applicable to RFQ code.
 
 ## One command per child
 
@@ -22,6 +22,29 @@ The launcher reserves `runs-dir/id.unique-suffix/` with private permissions and 
 Launch this command through a **native persistent terminal** with a short initial yield. For a harness offering `exec_command` and `write_stdin`, record the returned `session_id` by appending `native_session_id=<id>` to the emitted `DIRECT_CODEX_STATE` path. Await that exact session with `write_stdin` until it returns `exit_code`; only then inspect `final.md`, `log.txt`, and `state.txt`. Keep at most one outstanding wait on a child. The launcher prints `DIRECT_CODEX_EXIT=<status>` and reads back `final.md` after Codex exits; an absent or empty final is marked explicitly. The native terminal exit code is the Codex exit code. A missing terminal exit or state exit entry means the attempt is incomplete, regardless of file contents.
 
 Do not send the command to shell background or use `&`, `nohup`, shell `wait`, PID/file polling, repeated tail/status loops, or scrollback as completion evidence. Separate children get separate launcher commands, native terminal handles, attempts and writing workspaces. Do not restart an in-flight child only to apply this transport override; relay changes through a working session route and require acknowledgment.
+
+## Storage for one-off investigations
+
+For a one-off cleanup investigation, add `--ephemeral --log-max-bytes 33554432` to
+the launcher command. `--ephemeral` is passed to Codex so that the run does not
+persist session rollout files; the launcher's owned prompt, final and state
+records remain. See the [official non-interactive mode documentation](https://learn.chatgpt.com/docs/non-interactive-mode#basic-usage).
+Persistent roles retain their existing session behavior unless explicitly selected otherwise.
+
+`--log-max-bytes` accepts a positive decimal byte count. It stores and mirrors at
+most that many bytes of combined child output, drains the remaining output, and
+writes `capture.json` with exact captured/dropped counts and any I/O error. A
+truncated capture has `log_capture_exit=3`; an I/O failure has a nonzero capture
+exit. Both mean incomplete evidence. The actual Codex exit is still recorded
+separately and remains the native terminal exit; a zero Codex exit does not make
+an incomplete capture complete. There is no automatic task replay or forced
+child termination. The log is opaque bytes, including non-UTF-8 output.
+
+The log budget covers child-output capture, not the separately retained prompt,
+final, state, caller terminal storage or other tools' files. Omitting the flag
+retains the existing full `tee` capture. Choose the required evidence and budget
+before launching; required full evidence must not silently be treated as covered
+by a capped prefix. Neither flag deletes existing sessions, logs or worktrees.
 
 <a id="profile-lease"></a>
 <a id="local-launcher-profile-lock"></a>

@@ -8,6 +8,7 @@ usage() {
 Usage: launch.sh --profile .codex[2|3|4|5] --cwd /absolute/workspace \
   --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name \
   [--model native-model --effort native-effort] \
+  [--ephemeral] [--log-max-bytes POSITIVE_INTEGER] \
   [--dry-run | --preflight-only]
 
 The launcher reserves one unique attempt directory and runs one Codex child in
@@ -26,10 +27,10 @@ EOF
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
-model='' effort='' route_json=''
+model='' effort='' route_json='' ephemeral=false log_max_bytes=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
@@ -40,11 +41,13 @@ while (($#)); do
         --model) [[ -z $model ]] || die 'duplicate --model'; model=$2 ;;
         --effort) [[ -z $effort ]] || die 'duplicate --effort'; effort=$2 ;;
         --route-json) [[ -z $route_json ]] || die 'duplicate --route-json'; route_json=$2 ;;
+        --log-max-bytes) [[ -z $log_max_bytes ]] || die 'duplicate --log-max-bytes'; log_max_bytes=$2 ;;
         --lease-wait) ;;  # retired with the profile lock; accepted and ignored
       esac
       shift 2 ;;
     --dry-run) [[ $dry_run == false ]] || die 'duplicate --dry-run'; dry_run=true; shift ;;
     --preflight-only) [[ $preflight_only == false ]] || die 'duplicate --preflight-only'; preflight_only=true; shift ;;
+    --ephemeral) [[ $ephemeral == false ]] || die 'duplicate --ephemeral'; ephemeral=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -58,6 +61,8 @@ model=${model:-gpt-6.1-sol}
 effort=${effort:-high}
 [[ $model =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'model must be a native model id'
 [[ $effort =~ ^[a-z]+$ ]] || die 'effort must be a lowercase native effort'
+[[ -z $log_max_bytes || $log_max_bytes =~ ^[1-9][0-9]{0,11}$ ]] \
+  || die 'log-max-bytes must be a positive decimal integer of at most 12 digits'
 [[ $route_json != *$'\n'* ]] || die 'route-json must be a single line'
 [[ $child_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'id must use letters, digits, dot, underscore, or hyphen'
 for value in "$cwd" "$prompt" "$runs_dir"; do
@@ -80,6 +85,8 @@ fi
 
 command -v codex >/dev/null 2>&1 || die 'codex is not installed'
 command -v python3 >/dev/null 2>&1 || die 'python3 is required to inspect effective MCP servers'
+launcher_dir=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P) || die 'cannot locate launcher'
+[[ -z $log_max_bytes || -r $launcher_dir/capture_output.py ]] || die 'missing bounded output collector'
 parse_mcp_json() {
   python3 -c '
 import json
@@ -218,6 +225,8 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   [[ -z $route_json ]] || printf 'route_record=%s\n' "$attempt/route.json"
   printf 'cwd=%s\ngit_branch=%s\ngit_head_at_start=%s\n' "$cwd" "$git_branch" "$git_head"
   printf 'prompt=%s\nlog=%s\nfinal=%s\n' "$prompt_snapshot" "$log_path" "$final_path"
+  printf 'ephemeral=%s\nlog_max_bytes=%s\n' "$ephemeral" "${log_max_bytes:-unlimited}"
+  [[ -z $log_max_bytes ]] || printf 'log_capture_summary=%s\n' "$attempt/capture.json"
   printf 'delegation_capability=%s\n' "$delegation_status"
   [[ -z $delegation_note ]] || printf 'delegation_capability_note=%s\n' "$delegation_note"
   printf 'delegation_feature_readback=%s\n' "$delegation_feature_readback"
@@ -233,10 +242,21 @@ printf 'DIRECT_CODEX_ATTEMPT=%s\nDIRECT_CODEX_STATE=%s\n' "$attempt" "$state_pat
 printf 'MCP_PREFLIGHT=all effective servers disabled\n'
 printf 'DELEGATION_CAPABILITY=%s\n' "$delegation_status"
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
-CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
-  -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
-  -C "$cwd" --color never -o "$final_path" - < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
-pipeline_status=("${PIPESTATUS[@]}")
+session_flags=()
+[[ $ephemeral == false ]] || session_flags+=(--ephemeral)
+run_child() {
+  CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
+    -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
+    "${session_flags[@]}" -C "$cwd" --color never -o "$final_path" -
+}
+if [[ -n $log_max_bytes ]]; then
+  run_child < "$prompt_snapshot" 2>&1 | python3 "$launcher_dir/capture_output.py" \
+    --log "$log_path" --summary "$attempt/capture.json" --max-bytes "$log_max_bytes"
+  pipeline_status=("${PIPESTATUS[@]}")
+else
+  run_child < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
+  pipeline_status=("${PIPESTATUS[@]}")
+fi
 codex_rc=${pipeline_status[0]}
 tee_rc=${pipeline_status[1]}
 # Codex's human log renders collaboration tool use as `collab:` lines (Wait seen;
@@ -246,7 +266,12 @@ printf 'codex_exit=%s\nlog_capture_exit=%s\nlog_collab_lines=%s\nend_utc=%s\n' "
 if ((tee_rc != 0)); then
   printf 'direct-codex-child: log capture failed with status %s; log may be incomplete\n' "$tee_rc" >&2
 fi
-printf 'DIRECT_CODEX_EXIT=%s\n' "$codex_rc" | tee -a "$log_path"
+if [[ -n $log_max_bytes ]]; then
+  # The bounded log contains only the selected output prefix; exits live in state.
+  printf 'DIRECT_CODEX_EXIT=%s\n' "$codex_rc"
+else
+  printf 'DIRECT_CODEX_EXIT=%s\n' "$codex_rc" | tee -a "$log_path"
+fi
 if [[ -s $final_path ]]; then
   printf 'DIRECT_CODEX_FINAL_BEGIN=%s\n' "$final_path"
   cat -- "$final_path"

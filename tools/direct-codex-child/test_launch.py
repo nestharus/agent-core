@@ -91,6 +91,8 @@ assert f'model_reasoning_effort="{os.environ.get("EXPECTED_EFFORT", "high")}"' i
 assert args[args.index("-C") + 1] == os.environ["EXPECTED_CWD"]
 assert args[-1] == "-"
 prompt = sys.stdin.read()
+if os.environ.get("FAKE_OUTPUT_BYTES"):
+    os.write(1, b"x" * int(os.environ["FAKE_OUTPUT_BYTES"]))
 if os.environ.get("FAKE_RELEASE"):
     # Hold this task open until the test releases it, so other launches on the
     # same profile are observed while it runs.
@@ -221,6 +223,84 @@ class LauncherTest(unittest.TestCase):
             self.assertIn("mcp_servers.openaiDeveloperDocs.enabled=false", call["args"])
             self.assertIn('mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"', call["args"])
         self.exec_args()  # a failed task is never replayed
+
+    def test_ephemeral_is_forwarded_only_when_selected(self):
+        result = self.run_launcher(".codex4", "--ephemeral")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--ephemeral", self.exec_args())
+        self.assertIn("ephemeral=true\n", self.state())
+        self.calls.unlink()
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--ephemeral", self.exec_args())
+
+    def test_bounded_log_drains_overflow_and_preserves_actual_child_exit(self):
+        env = self.env | {"FAKE_OUTPUT_BYTES": "131072", "FAKE_EXIT": "7"}
+        result = self.run_launcher(".codex4", "--ephemeral", "--log-max-bytes", "1024", env=env)
+        self.assertEqual(result.returncode, 7, result.stderr)
+        attempt = next(self.runs.iterdir())
+        capture = json.loads((attempt / "capture.json").read_text())
+        self.assertEqual((attempt / "log.txt").stat().st_size, 1024)
+        self.assertEqual(capture["captured_bytes"], 1024)
+        self.assertGreater(capture["dropped_bytes"], 0)
+        self.assertEqual(capture["seen_bytes"], capture["captured_bytes"] + capture["dropped_bytes"])
+        self.assertFalse(capture["complete"])
+        state = (attempt / "state.txt").read_text()
+        self.assertIn("codex_exit=7\n", state)
+        self.assertIn("log_capture_exit=3\n", state)
+        self.assertIn("DIRECT_CODEX_LOG_INCOMPLETE", result.stdout)
+        self.assertLess(len(result.stdout), 5000)
+        self.assertTrue((attempt / "final.md").read_text().startswith("final: "))
+        self.exec_args()  # No retry after truncation or a child failure.
+
+    def test_bounded_complete_log_records_success(self):
+        result = self.run_launcher(".codex4", "--log-max-bytes", "4096")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        attempt = next(self.runs.iterdir())
+        capture = json.loads((attempt / "capture.json").read_text())
+        self.assertTrue(capture["complete"])
+        self.assertEqual(capture["dropped_bytes"], 0)
+        self.assertEqual((attempt / "log.txt").stat().st_size, capture["captured_bytes"])
+        self.assertIn("log_capture_exit=0\n", self.state())
+
+    def test_invalid_log_budgets_are_refused_before_any_child(self):
+        for value in ("0", "-1", "1.5", "unlimited", "9999999999999"):
+            with self.subTest(value=value):
+                result = self.run_launcher(".codex4", "--log-max-bytes", value)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(self.calls.exists())
+                self.assertFalse(self.runs.exists())
+
+    def test_bounded_collector_keeps_non_utf8_output_opaque(self):
+        log = self.root / "opaque.log"
+        log.touch()
+        summary = self.root / "capture.json"
+        payload = b"\xff\x00" * 5000
+        result = subprocess.run(
+            ["python3", "-I", "-S", "-B", str(LAUNCHER.with_name("capture_output.py")),
+             "--log", str(log), "--summary", str(summary), "--max-bytes", "63"],
+            input=payload, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(log.read_bytes(), payload[:63])
+        capture = json.loads(summary.read_text())
+        self.assertEqual(capture["seen_bytes"], len(payload))
+        self.assertEqual(capture["captured_bytes"], 63)
+        self.assertEqual(capture["dropped_bytes"], len(payload) - 63)
+        self.assertFalse(capture["raw_output_decoded"])
+
+    def test_collector_drains_after_log_open_failure(self):
+        summary = self.root / "capture.json"
+        result = subprocess.run(
+            ["python3", "-I", "-S", "-B", str(LAUNCHER.with_name("capture_output.py")),
+             "--log", str(self.root), "--summary", str(summary), "--max-bytes", "63"],
+            input=b"x" * 131072, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        capture = json.loads(summary.read_text())
+        self.assertEqual(capture["seen_bytes"], 131072)
+        self.assertEqual(capture["captured_bytes"], 0)
+        self.assertIsInstance(capture["io_error_number"], int)
 
     def test_codex5_profile_launches_with_mcp_disabled(self):
         result = self.run_launcher(".codex5")
