@@ -272,6 +272,32 @@ class PolicyTests(unittest.TestCase):
             db_fixture(db_fixture2, [t], [(IDS[0], IDS[2])])
             with self.assertRaises(c.Refuse): c.snapshot(FakeRpc([t]), db_fixture2, 2)
 
+    def test_provisional_plan_retains_unlisted_index_entries(self):
+        visible, hidden = thread(), thread(1)
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [visible, hidden])
+            rpc = FakeRpc([visible])
+            with self.assertRaises(c.Refuse):
+                c.snapshot(rpc, profile, 10)
+            members, children = c.snapshot(rpc, profile, 10, allow_unlisted=True)
+        plan = c.prepare_plan(rpc, {}, members, children, set(), NOW, 86400, 10)
+        self.assertEqual(plan["indexOnlyRetainedCount"], 1)
+        self.assertFalse(plan["inventoryCompleteForApply"])
+        self.assertEqual([x["root"] for x in plan["candidates"]], [IDS[0]])
+        self.assertFalse(c.qualified(members[IDS[1]], NOW, 86400, set(), root=True))
+
+    def test_unlisted_descendant_blocks_provisional_root(self):
+        visible, hidden = thread(), thread(1, parent=IDS[0])
+        with tempfile.TemporaryDirectory(dir=TASK_DIR) as name:
+            profile = Path(name)
+            db_fixture(profile, [visible, hidden], [(IDS[0], IDS[1])])
+            rpc = FakeRpc([visible])
+            members, children = c.snapshot(rpc, profile, 10, allow_unlisted=True)
+        plan = c.prepare_plan(rpc, {}, members, children, set(), NOW, 86400, 10)
+        self.assertEqual(plan["candidates"], [])
+        self.assertEqual(plan["indexOnlyRetainedCount"], 1)
+
     def test_optional_final_cursor_and_full_page_without_cursor(self):
         class MissingCursor:
             def __init__(self, count): self.count = count
@@ -335,6 +361,22 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual([m for m, _ in fake.calls].count("thread/delete"), 1)
         with self.assertRaises(FileExistsError): self.run_apply(fake)
         self.assertNotIn("thread/delete", [m for m, _ in fake.calls])
+
+    def test_provisional_plan_cannot_apply_even_with_maintenance_assertions(self):
+        fake = FakeRpc([self.t])
+        plan = c.prepare_plan(fake, self.identity, self.threads, self.children,
+                              set(), int(time.time()), 86400, 10)
+        plan.update(inventoryCompleteForApply=False, indexOnlyRetainedCount=1)
+        plan.pop("planId")
+        plan["planId"] = c.digest(plan)
+        self.plan.write_bytes(c.canonical(plan))
+        fake.calls.clear()
+        with patch.object(c, "check_cli"), patch.object(c, "profile_identity", return_value=self.identity), \
+             patch.object(c, "Rpc", return_value=fake):
+            with self.assertRaisesRegex(c.Refuse, "provisional plan cannot be applied"):
+                c.main(self.args)
+        self.assertFalse(self.receipt.exists())
+        self.assertNotIn("thread/delete", [method for method, _ in fake.calls])
 
     def test_server_refusal_keeps_uncertain_intent_and_no_replay(self):
         with self.assertRaises(c.Refuse): self.run_apply(FakeRpc([self.t], fail="thread/delete"))

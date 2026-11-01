@@ -361,7 +361,7 @@ def state_metadata(profile):
     return pins, attached, graph_edges
 
 
-def snapshot(rpc, profile, max_pages):
+def snapshot(rpc, profile, max_pages, allow_unlisted=False):
     threads = {}
     for archived in (False, True):
         entries = pages(rpc, "thread/list", {"archived": archived, "sourceKinds": SOURCES,
@@ -377,18 +377,23 @@ def snapshot(rpc, profile, max_pages):
     require(all(valid_uuid(x) for x in loaded), "loaded thread ID invalid")
     loaded = set(loaded)
     pins, attached, stored_edges = state_metadata(profile)
-    require(set(threads) == set(pins),
+    state_only = set(pins) - set(threads)
+    require(set(threads) <= set(pins) and (allow_unlisted or not state_only),
             f"state DB and RPC thread inventories differ (RPC {len(threads)}, state {len(pins)}, "
             f"state-only {len(set(pins) - set(threads))}, RPC-only {len(set(threads) - set(pins))})")
+    # Planning can show a provisional draft while preserving every entry that
+    # lacks RPC metadata. Apply still requires an exact, complete inventory.
+    for tid in state_only:
+        threads[tid] = {"id": tid, "metadataUnavailable": True}
     edges = set(stored_edges)
     for tid, t in threads.items():
         t["isPinned"] = pins[tid]
         t["loaded"] = tid in loaded
-        for parent in (t["parentThreadId"], t["sourceParentThreadId"],
-                       t["forkedFromId"], attached[tid]):
+        for parent in (t.get("parentThreadId"), t.get("sourceParentThreadId"),
+                       t.get("forkedFromId"), attached[tid]):
             if parent is not None:
                 edges.add((parent, tid))
-        if t["sessionId"] != tid:
+        if t.get("sessionId") is not None and t["sessionId"] != tid:
             edges.add((t["sessionId"], tid))
     require(loaded <= set(threads), "loaded inventory contains an unlisted thread")
     require(all(p in threads and c in threads and p != c for p, c in edges),
@@ -429,6 +434,8 @@ def age_ok(t, now, min_age):
 
 
 def qualified(t, now, min_age, retain, root=False):
+    if t.get("metadataUnavailable"):
+        return False
     if t["id"] in retain:
         return False
     if t["isPinned"] or t["loaded"] or t["status"]["type"] != "notLoaded":
@@ -493,7 +500,9 @@ def prepare_plan(rpc, identity, threads, children, retain, now, min_age, batch_l
             protected += 1
             continue
         selected.append({**candidate, "goalStates": goals})
-    plan.update(format=2, candidates=selected, batchLimit=batch_limit,
+    index_only = sum(bool(t.get("metadataUnavailable")) for t in threads.values())
+    plan.update(format=3, candidates=selected, batchLimit=batch_limit,
+                indexOnlyRetainedCount=index_only, inventoryCompleteForApply=index_only == 0,
                 preliminaryRootCount=len(ordered), goalProtectedRootsExamined=protected,
                 unexaminedRootCount=len(ordered) - examined)
     plan.pop("planId")
@@ -598,18 +607,23 @@ def main(argv=None):
     rpc = Rpc(args.codex, profile, rpc_socket, deadline)
     try:
         if args.mode == "plan":
-            threads, children = snapshot(rpc, profile, args.max_pages)
+            threads, children = snapshot(rpc, profile, args.max_pages, allow_unlisted=True)
             plan = prepare_plan(rpc, identity, threads, children, retain, int(time.time()),
                                 args.min_age_hours * 3600, args.max_delete)
             write_new(args.plan, canonical(plan) + b"\n")
             print(json.dumps({"plan": args.plan, "planId": plan["planId"],
-                              "candidates": len(plan["candidates"]), "mutated": False}, sort_keys=True))
+                              "candidates": len(plan["candidates"]), "mutated": False,
+                              "provisional": not plan["inventoryCompleteForApply"],
+                              "indexOnlyRetainedCount": plan["indexOnlyRetainedCount"]}, sort_keys=True))
             return 0
         plan = json.loads(Path(args.plan).read_bytes())
-        require(isinstance(plan, dict) and plan.get("format") == 2, "plan format invalid")
+        require(isinstance(plan, dict) and plan.get("format") == 3, "plan format invalid")
         plan_id = plan.pop("planId", None)
         require(plan_id == digest(plan), "plan changed or corrupt")
         plan["planId"] = plan_id
+        require(plan.get("inventoryCompleteForApply") is True and
+                plan.get("indexOnlyRetainedCount") == 0,
+                "provisional plan cannot be applied; complete RPC/state inventory required")
         require(plan["codexVersion"] == VERSION and plan["profile"] == identity and
                 plan["retainedIds"] == sorted(retain) and
                 plan["minAgeSeconds"] == args.min_age_hours * 3600 and
