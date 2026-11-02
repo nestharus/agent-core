@@ -533,18 +533,30 @@ def goal_state(rpc, thread_id):
     return "complete" if goal.get("status") == "complete" else "unfinished"
 
 
-def prepare_plan(rpc, identity, threads, children, retain, now, min_age, batch_limit):
+def prepare_plan(rpc, identity, threads, children, retain, now, min_age, batch_limit,
+                 confirmed_headless=None):
+    if confirmed_headless is not None:
+        require(confirmed_headless <= set(threads),
+                "confirmed-headless ID missing from inventory")
     plan = make_plan(identity, threads, children, retain, now, min_age)
     ordered = sorted(plan["candidates"], key=lambda candidate: (
         max(max(t["createdAt"], t["updatedAt"], t["recencyAt"] or 0)
             for t in candidate["cascade"]), candidate["root"]))
     selected = []
     protected = 0
+    unconfirmed = 0
     examined = 0
     for candidate in ordered:
         if len(selected) >= batch_limit:
             break
         examined += 1
+        # Source is creation provenance. Resume preserves it, so an exec
+        # source cannot establish that later use was exclusively headless.
+        # Confirmation covers every member the cascade deletion would remove.
+        if confirmed_headless is not None and not all(
+                member["id"] in confirmed_headless for member in candidate["cascade"]):
+            unconfirmed += 1
+            continue
         goals = {member["id"]: goal_state(rpc, member["id"])
                  for member in candidate["cascade"]}
         if any(value == "unfinished" for value in goals.values()):
@@ -553,7 +565,11 @@ def prepare_plan(rpc, identity, threads, children, retain, now, min_age, batch_l
         selected.append({**candidate, "goalStates": goals})
     index_only = sum(bool(t.get("metadataUnavailable")) for t in threads.values())
     hidden = sum(bool(t.get("expectedHidden")) for t in threads.values())
-    plan.update(format=3, candidates=selected, batchLimit=batch_limit,
+    plan.update(format=4, candidates=selected, batchLimit=batch_limit,
+                headlessUseConfirmed=confirmed_headless is not None,
+                confirmedHeadlessIds=(sorted(confirmed_headless)
+                                      if confirmed_headless is not None else None),
+                headlessUnconfirmedRootsExamined=unconfirmed,
                 indexOnlyRetainedCount=index_only, inventoryCompleteForApply=index_only == 0,
                 hiddenIndexedRetainedCount=hidden,
                 preliminaryRootCount=len(ordered), goalProtectedRootsExamined=protected,
@@ -600,15 +616,15 @@ def write_all(fd, data):
         view = view[os.write(fd, view):]
 
 
-def read_retained(path):
+def read_retained(path, label="retention"):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as source:
-        require(stat.S_ISREG(os.fstat(source.fileno()).st_mode), "retention input is not a regular file")
+        require(stat.S_ISREG(os.fstat(source.fileno()).st_mode), f"{label} input is not a regular file")
         content = source.read(1_000_001)
-    require(len(content) <= 1_000_000, "retention file too large")
+    require(len(content) <= 1_000_000, f"{label} file too large")
     values = json.loads(content)
     require(isinstance(values, list) and all(valid_uuid(v) for v in values) and
-            len(values) == len(set(values)), "retention file must be a unique UUID JSON array")
+            len(values) == len(set(values)), f"{label} file must be a unique UUID JSON array")
     return set(values)
 
 
@@ -628,6 +644,8 @@ def main(argv=None):
     parser.add_argument("--profile", required=True, help="exact CODEX_HOME profile directory")
     parser.add_argument("--socket", help="existing daemon control socket; defaults to the selected profile's standard path")
     parser.add_argument("--retain", help="JSON array of explicitly retained UUIDs; required for apply")
+    parser.add_argument("--confirmed-headless",
+                        help="JSON UUID array with independently confirmed exclusively headless use; required for apply")
     parser.add_argument("--plan", required=True, help="new plan path for plan; existing path for apply")
     parser.add_argument("--receipt", help="new append-only receipt path for apply")
     parser.add_argument("--codex", default="/home/nes/.npm-global/bin/codex")
@@ -646,12 +664,16 @@ def main(argv=None):
     require(args.mode != "apply" or (args.receipt and args.exclusive_maintenance and args.complete_index),
             "apply requires --receipt, --exclusive-maintenance and --complete-index")
     require(args.mode != "apply" or args.retain, "apply requires explicit --retain preservation input")
+    require(args.mode != "apply" or args.confirmed_headless,
+            "apply requires --confirmed-headless; exec origin alone does not prove headless use")
     require(args.mode != "plan" or not args.receipt, "receipt is for apply only")
     check_cli(args.codex)
     if args.socket is None:
         args.socket = str(Path(args.profile).absolute() / "app-server-control" / "app-server-control.sock")
     identity = profile_identity(args.profile, args.socket)
     retain = read_retained(args.retain) if args.retain else set()
+    confirmed = (read_retained(args.confirmed_headless, "confirmed-headless")
+                 if args.confirmed_headless else None)
     profile = identity["profile"]["path"]
     deadline = time.monotonic() + args.deadline_seconds
     # Bind this connection to the target captured in the verified identity.
@@ -662,19 +684,25 @@ def main(argv=None):
         if args.mode == "plan":
             threads, children = snapshot(rpc, profile, args.max_pages, allow_unlisted=True)
             plan = prepare_plan(rpc, identity, threads, children, retain, int(time.time()),
-                                args.min_age_hours * 3600, args.max_delete)
+                                args.min_age_hours * 3600, args.max_delete, confirmed)
             write_new(args.plan, canonical(plan) + b"\n")
             print(json.dumps({"plan": args.plan, "planId": plan["planId"],
                               "candidates": len(plan["candidates"]), "mutated": False,
-                              "provisional": not plan["inventoryCompleteForApply"],
+                              "provisional": not (plan["inventoryCompleteForApply"] and
+                                                  plan["headlessUseConfirmed"]),
+                              "headlessUseConfirmed": plan["headlessUseConfirmed"],
                               "hiddenIndexedRetainedCount": plan["hiddenIndexedRetainedCount"],
                               "indexOnlyRetainedCount": plan["indexOnlyRetainedCount"]}, sort_keys=True))
             return 0
         plan = json.loads(Path(args.plan).read_bytes())
-        require(isinstance(plan, dict) and plan.get("format") == 3, "plan format invalid")
+        require(isinstance(plan, dict) and plan.get("format") == 4,
+                "plan format invalid; create a new plan with headless-use qualification")
         plan_id = plan.pop("planId", None)
         require(plan_id == digest(plan), "plan changed or corrupt")
         plan["planId"] = plan_id
+        require(plan.get("headlessUseConfirmed") is True and
+                plan.get("confirmedHeadlessIds") == sorted(confirmed),
+                "headless use unconfirmed or confirmation changed; create a new qualified plan")
         require(plan.get("inventoryCompleteForApply") is True and
                 plan.get("indexOnlyRetainedCount") == 0,
                 "provisional plan cannot be applied; complete RPC/state inventory required")
@@ -694,7 +722,7 @@ def main(argv=None):
             # Recompute the whole plan. No effect if any metadata or graph member changed.
             current, children = snapshot(rpc, profile, args.max_pages)
             rebuilt = prepare_plan(rpc, identity, current, children, retain, plan["generatedAt"],
-                                   plan["minAgeSeconds"], plan["batchLimit"])
+                                   plan["minAgeSeconds"], plan["batchLimit"], confirmed)
             require(rebuilt == plan, "inventory, lineage or eligibility changed since plan")
             for candidate in plan["candidates"]:
                 require(time.monotonic() < deadline, "deadline exceeded before next deletion")
@@ -704,6 +732,7 @@ def main(argv=None):
                         {m["id"] for m in candidate["cascade"]}, "cascade changed")
                 now = int(time.time())
                 for member in candidate["cascade"]:
+                    require(member["id"] in confirmed, "cascade member lacks headless confirmation")
                     require(fresh.get(member["id"]) == member, "candidate metadata changed")
                     require(qualified(member, now, plan["minAgeSeconds"], retain,
                                       root=member["id"] == candidate["root"]),

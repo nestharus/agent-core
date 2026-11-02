@@ -97,6 +97,50 @@ def db_fixture(directory, members, edges=()):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_exec_origin_is_only_an_unconfirmed_review_candidate(self):
+        raw = thread(turns=[{"items": [{"type": "userMessage", "content": "initial"}]},
+                            {"items": [{"type": "userMessage", "content": "followup"}]}])
+        item = {**thread(), **c.thread_record(raw)}
+        plan = c.prepare_plan(FakeRpc([raw]), {}, {IDS[0]: item}, {IDS[0]: set()},
+                              set(), NOW, 86400, 10)
+        self.assertEqual(len(plan["candidates"]), 1)
+        self.assertFalse(plan["headlessUseConfirmed"])
+        self.assertIsNone(plan["confirmedHeadlessIds"])
+        self.assertNotIn("followup", json.dumps(plan))
+
+    def test_confirmed_headless_resumes_may_have_multiple_input_turns(self):
+        # Roles do not identify a human; confirmed noninteractive resumes can
+        # provide more user-role inputs. No turn/body RPC is required.
+        raw = thread(turns=[{"id": "initial"}, {"id": "exec-resume-1"},
+                            {"id": "exec-resume-2"}])
+        item = {**thread(), **c.thread_record(raw)}
+        rpc = FakeRpc([raw])
+        plan = c.prepare_plan(rpc, {}, {IDS[0]: item}, {IDS[0]: set()},
+                              set(), NOW, 86400, 10, {IDS[0]})
+        self.assertTrue(plan["headlessUseConfirmed"])
+        self.assertEqual([x["root"] for x in plan["candidates"]], [IDS[0]])
+        self.assertEqual([method for method, _ in rpc.calls], ["thread/goal/get"])
+
+    def test_unconfirmed_descendant_blocks_entire_cascade(self):
+        parent, child = thread(), thread(1, source="subAgent", parent=IDS[0])
+        members = {x["id"]: x for x in (parent, child)}
+        children = {IDS[0]: {IDS[1]}, IDS[1]: set()}
+        plan = c.prepare_plan(FakeRpc([parent, child]), {}, members, children,
+                              set(), NOW, 86400, 10, {IDS[0]})
+        self.assertEqual(plan["candidates"], [])
+        self.assertEqual(plan["headlessUnconfirmedRootsExamined"], 1)
+        plan = c.prepare_plan(FakeRpc([parent, child]), {}, members, children,
+                              set(), NOW, 86400, 10, {IDS[0], IDS[1]})
+        self.assertEqual(len(plan["candidates"]), 1)
+
+    def test_confirmation_never_overrides_interactive_origin_or_retention(self):
+        a, b = thread(source="cli"), thread(1)
+        members = {x["id"]: x for x in (a, b)}
+        plan = c.prepare_plan(FakeRpc([a, b]), {}, members,
+                              {IDS[0]: set(), IDS[1]: set()}, {IDS[1]},
+                              NOW, 86400, 10, {IDS[0], IDS[1]})
+        self.assertEqual(plan["candidates"], [])
+
     def test_page_projection_discards_unneeded_reply_fields(self):
         members = [thread(i, preview="PRIVATE" * 1000) for i in range(15)]
         result = c.pages(FakeRpc(members), "thread/list",
@@ -454,17 +498,21 @@ class ApplyTests(unittest.TestCase):
         self.children = {IDS[0]: set()}
         self.retain = self.base / "retain.json"
         self.retain.write_text("[]")
+        self.confirmed = self.base / "confirmed-headless.json"
+        self.confirmed.write_text(json.dumps([IDS[0]]))
         self.plan = self.base / "plan.json"
         self.receipt = self.base / "receipt.jsonl"
         self.args = ["apply", "--profile", str(self.base), "--socket", str(self.base / "sock"),
-                     "--retain", str(self.retain), "--plan", str(self.plan),
+                     "--retain", str(self.retain), "--confirmed-headless", str(self.confirmed),
+                     "--plan", str(self.plan),
                      "--receipt", str(self.receipt), "--exclusive-maintenance", "--complete-index"]
 
     def run_apply(self, fake):
         now = int(__import__('time').time())
         self.t["createdAt"] = 1
         self.t["updatedAt"] = 1
-        plan = c.prepare_plan(fake, self.identity, self.threads, self.children, set(), now, 86400, 10)
+        plan = c.prepare_plan(fake, self.identity, self.threads, self.children, set(), now, 86400, 10,
+                              {IDS[0]})
         fake.calls.clear()
         self.plan.write_bytes(c.canonical(plan))
         def snapshot(*args):
@@ -483,10 +531,54 @@ class ApplyTests(unittest.TestCase):
         with self.assertRaises(FileExistsError): self.run_apply(fake)
         self.assertNotIn("thread/delete", [m for m, _ in fake.calls])
 
+    def test_apply_without_confirmation_refuses_before_profile_access(self):
+        args = self.args.copy()
+        index = args.index("--confirmed-headless")
+        del args[index:index + 2]
+        with patch.object(c, "check_cli") as cli, patch.object(c, "Rpc") as rpc:
+            with self.assertRaisesRegex(c.Refuse, "exec origin alone"):
+                c.main(args)
+        cli.assert_not_called()
+        rpc.assert_not_called()
+        self.assertFalse(self.receipt.exists())
+
+    def test_unconfirmed_plan_cannot_be_promoted_by_apply_flag(self):
+        fake = FakeRpc([self.t])
+        plan = c.prepare_plan(fake, self.identity, self.threads, self.children, set(),
+                              int(time.time()), 86400, 10)
+        self.plan.write_bytes(c.canonical(plan))
+        fake.calls.clear()
+        with patch.object(c, "check_cli"), patch.object(c, "profile_identity", return_value=self.identity), \
+             patch.object(c, "Rpc", return_value=fake):
+            with self.assertRaisesRegex(c.Refuse, "headless use unconfirmed"):
+                c.main(self.args)
+        self.assertFalse(self.receipt.exists())
+        self.assertFalse(fake.calls)
+
+    def test_old_plan_and_changed_confirmation_refuse_before_intent(self):
+        fake = FakeRpc([self.t])
+        plan = c.prepare_plan(fake, self.identity, self.threads, self.children, set(),
+                              int(time.time()), 86400, 10, {IDS[0]})
+        old_plan = copy.deepcopy(plan)
+        old_plan.update(format=3)
+        old_plan.pop("planId")
+        old_plan["planId"] = c.digest(old_plan)
+        with patch.object(c, "check_cli"), patch.object(c, "profile_identity", return_value=self.identity), \
+             patch.object(c, "Rpc", return_value=fake):
+            self.plan.write_bytes(c.canonical(old_plan))
+            with self.assertRaisesRegex(c.Refuse, "plan format invalid"):
+                c.main(self.args)
+            self.plan.write_bytes(c.canonical(plan))
+            self.confirmed.write_text("[]")
+            with self.assertRaisesRegex(c.Refuse, "confirmation changed"):
+                c.main(self.args)
+        self.assertFalse(self.receipt.exists())
+        self.assertNotIn("thread/delete", [m for m, _ in fake.calls])
+
     def test_provisional_plan_cannot_apply_even_with_maintenance_assertions(self):
         fake = FakeRpc([self.t])
         plan = c.prepare_plan(fake, self.identity, self.threads, self.children,
-                              set(), int(time.time()), 86400, 10)
+                              set(), int(time.time()), 86400, 10, {IDS[0]})
         plan.update(inventoryCompleteForApply=False, indexOnlyRetainedCount=1)
         plan.pop("planId")
         plan["planId"] = c.digest(plan)
@@ -531,7 +623,7 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(fake.calls)
 
         valid = c.prepare_plan(fake, self.identity, self.threads, self.children, set(),
-                               int(__import__('time').time()), 86400, 10)
+                               int(__import__('time').time()), 86400, 10, {IDS[0]})
         fake.calls.clear()
         self.plan.write_bytes(c.canonical(valid))
         changed = copy.deepcopy(self.identity)
@@ -545,7 +637,7 @@ class ApplyTests(unittest.TestCase):
     def test_changed_candidate_refuses_before_delete(self):
         fake = FakeRpc([self.t])
         valid = c.prepare_plan(fake, self.identity, self.threads, self.children, set(),
-                               int(__import__('time').time()), 86400, 10)
+                               int(__import__('time').time()), 86400, 10, {IDS[0]})
         fake.calls.clear()
         self.plan.write_bytes(c.canonical(valid))
         changed = copy.deepcopy(self.threads)
@@ -715,10 +807,12 @@ class TransportTests(unittest.TestCase):
         self.base.joinpath("thread.json").write_text(json.dumps(item))
         db_fixture(self.base, [item])
         self.base.joinpath("retain.json").write_text("[]")
+        self.base.joinpath("confirmed-headless.json").write_text(json.dumps([IDS[0]]))
         self.plan = self.base / "plan.json"
         self.receipt = self.base / "receipt.jsonl"
         self.common = ["--profile", str(self.base), "--socket", str(self.base / "control.sock"),
                        "--retain", str(self.base / "retain.json"), "--plan", str(self.plan),
+                       "--confirmed-headless", str(self.base / "confirmed-headless.json"),
                        "--codex", str(self.cli)]
 
     def invoke(self, mode, *extra):

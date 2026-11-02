@@ -4,7 +4,7 @@
 
 ## Run
 
-Quick dry-run, selecting at most ten old headless roots and leaving all sessions intact:
+Quick dry-run, listing at most ten preliminary old exec-origin roots and leaving all sessions intact:
 
 ```bash
 codex-headless-cleanup --profile "$HOME/.codex2" --plan /tmp/codex-headless-plan.json
@@ -14,16 +14,21 @@ Without installing the local alias, use `sh "$HOME/ai/tools/codex-session-cleanu
 
 The plan path must be new. The default socket is `<profile>/app-server-control/app-server-control.sock`, verified against the selected profile. Planning may omit `--retain`; apply requires an explicit preservation file. Before applying, prepare a JSON array containing every retained thread UUID. Use `[]` only when there are no explicit retains. Keep it with the plan and receipt.
 
+**Creation source is not a complete interaction history.** `exec` identifies Codex's noninteractive entry mode, not an arbitrary Bash process. `codex exec resume` can supply further inputs while staying headless, so neither a single-prompt rule nor counting `user` roles establishes headless use. The stored source is preserved on resume and cannot prove there was no later interactive use. See [noninteractive commands](https://learn.chatgpt.com/docs/developer-commands#codex-exec) and the pinned [resume source handling](https://github.com/openai/codex/blob/rust-v0.166.0/codex-rs/core/src/thread_manager.rs#L1284-L1296).
+
+Deletion also requires `--confirmed-headless FILE`: a JSON UUID array of threads whose exclusively noninteractive use has been independently established from launch/resume records or the actual owner. Include every cascade member that may be deleted. Preserve sessions with interactive or unknown use. Do not generate this confirmation from the `exec` tag, turn count, or the preliminary candidate list itself. Confirmation never overrides age, active-use, retention, goal, pin, source-kind, or lineage protections. Multiple input turns from confirmed headless resumes are allowed. Without this file, the plan is review-only and apply refuses it; supply the file when creating a **new** qualified plan, then supply the identical IDs at apply.
+
 ```bash
 printf '[]\n' > /path/to/retained-threads.json
 /home/nes/ai/tools/codex-session-cleanup/cleanup.sh plan \
   --profile /home/nes/.codex2 \
   --socket /path/to/that-profile/existing-control.sock \
   --retain /path/to/retained-threads.json \
+  --confirmed-headless /path/to/confirmed-headless.json \
   --plan /path/to/new-plan.json
 ```
 
-The socket must belong to an **already running** app-server daemon for the selected profile. The client makes a direct Unix-socket WebSocket connection using the documented HTTP Upgrade and JSON-RPC text frames; it does not send JSONL through `app-server proxy`. Supply the known socket path; this tool does not discover processes, inspect FDs, or start/restart a daemon. `initialize` must report the exact `CODEX_HOME` path in the plan. Plan and receipt files must be new paths and are created mode `0600`. Plan format 3 includes profile/socket/state-DB inode identities, exact candidate cascade metadata, selected age, explicit retained IDs, inventory count, and a digest. It excludes prompts, previews, titles, turns, instructions, cwd, auth, and log content.
+The socket must belong to an **already running** app-server daemon for the selected profile. The client makes a direct Unix-socket WebSocket connection using the documented HTTP Upgrade and JSON-RPC text frames; it does not send JSONL through `app-server proxy`. Supply the known socket path; this tool does not discover processes, inspect FDs, or start/restart a daemon. `initialize` must report the exact `CODEX_HOME` path in the plan. Plan and receipt files must be new paths and are created mode `0600`. Plan format 4 includes profile/socket/state-DB inode identities, exact candidate cascade metadata, selected age, explicit retained IDs, confirmed-headless IDs and qualification status, inventory count, and a digest. Old plans must be replaced with a new qualified plan. Plans exclude prompts, previews, titles, turns, instructions, cwd, auth, and log content.
 
 Apply only while the profile is under exclusive maintenance: all interactive, persistent, shared-daemon, and standalone `--no-daemon` clients are quiesced, and new access to this profile is prevented until the command exits. Also establish that every persistent rollout and spawned descendant link is indexed in `state_5.sqlite`; `useStateDbOnly` deliberately does not scan JSONL to repair an incomplete index. These are operator assertions, **not** claims established by `thread/loaded/list`. If either cannot be established, use the plan only and keep the sessions.
 
@@ -32,6 +37,7 @@ Apply only while the profile is under exclusive maintenance: all interactive, pe
   --profile /home/nes/.codex2 \
   --socket /path/to/that-profile/existing-control.sock \
   --retain /path/to/retained-threads.json \
+  --confirmed-headless /path/to/confirmed-headless.json \
   --plan /path/to/new-plan.json \
   --receipt /path/to/new-receipt.jsonl \
   --exclusive-maintenance --complete-index
@@ -43,7 +49,7 @@ The default limits are 1,000 pages per ordinary listing and **1,000 relationship
 
 ## Qualification and limits
 
-- Root provenance must be the protocol source `exec`. File names, titles, prompts, and model names are never used as provenance. Descendants may have recognized `subAgent*` or `exec` source. Interactive, unknown, custom, or otherwise ambiguous sources block the entire cascade.
+- Root creation provenance must be the protocol source `exec`, and every selected member must have independently confirmed headless use. The tag alone is preliminary evidence, not proof of exclusively noninteractive use. File names, titles, prompts, model names, and user-role counts are never used to establish that proof. Descendants may have recognized `subAgent*` or `exec` source. Interactive, unknown, custom, or otherwise ambiguous sources block the entire cascade.
 - Any pinned, explicitly retained, loaded, active, idle, errored, ephemeral, young, future-dated, or unknown member blocks its root. All archived and non-archived threads and every documented source kind are inventoried without a source filter default. Missing/repeated pages, RPC entries absent from the state DB, broken/cyclic edges, unknown schema, unavailable socket, and profile mismatch refuse the operation. Indexed entries with unavailable RPC metadata are always retained; a linked unknown descendant blocks its root.
 - An unfinished goal on any cascade member also blocks the root, including old unloaded sessions. Goal queries retain only `complete`, `unfinished`, or absence; objective text is discarded. Changed goal status is checked again immediately before an effect. Unknown or unavailable goal metadata refuses the operation.
 - The installed 0.166.0 protocol schema exposes thread source, lineage, timestamps and runtime status, but **does not expose `isPinned`**. The tool reads only `id`, `is_pinned`, `attached_thread_parent_id`, and `thread_spawn_edges` from the profile's `state_5.sqlite` with a read-only, query-only SQLite connection. It never changes the DB, runs VACUUM, scans rollout bodies, or deletes raw files. Unknown pin/edge schema blocks the operation. Legacy and paginated history are both handled through metadata; neither body format is opened.
