@@ -28,3 +28,9 @@ Keep active work usable and preserve unfinished source and required evidence whi
 - The legacy `ai-space-cleanup` and `ai-dot-tmp-cleanup` bulk scan/apply paths are not qualified for the current preservation boundaries: they inspect native/profile or process data and traverse broad areas. Do not run them for this cleanup. Use an explicitly scoped operation that honors current exclusions; do not inspect credentials, process environments, client/session stores or raw recovery captures to guess which data is disposable.
 
 These instructions select operating practices. They do not establish that a reuse pool, automatic retention scheduler or complete drive-wide cleanup has been deployed.
+
+## Session stores
+
+Use [session maintenance](../tools/session-maintenance/README.md) for an explicit OpenCode session reset and owner-written interactive handover records. Its default inventory does not delete data. A full reset requires the user's actual release of that history and a real maintenance window; keep project/account settings and unrelated state. The helper does not start a replacement, close a session, or prove that a handover occurred.
+
+Use [Codex headless cleanup](../tools/codex-session-cleanup/README.md) for Codex CLI history. Preserve active, human, unknown, pinned, goal-bearing and required recovery sessions. An `exec` creation tag is preliminary evidence, since later resumes can change how a session is used. For a long interactive session, have its owner write the current state and next actions, collect the replacement's actual adoption, and close the old client before a separately qualified history cleanup. Keep one-off work ephemeral and its output capture bounded so maintenance does not create another growing store.

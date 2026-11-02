@@ -9,6 +9,8 @@ from pathlib import Path
 import stat
 import sys
 
+from path_guard import reject_native_path
+
 
 REQUEST = """# Request to the current session owner
 
@@ -40,8 +42,18 @@ def state_path(directory):
     return directory / "state.json"
 
 
+def direct_parents(path):
+    reject_native_path(path)
+    for parent in reversed(path.parents):
+        if not stat.S_ISDIR(parent.lstat().st_mode):
+            raise ValueError("handover paths require direct directory parents")
+
+
 def read_state(directory):
-    with state_path(directory).open() as stream:
+    target = state_path(directory)
+    if not stat.S_ISREG(target.lstat().st_mode):
+        raise ValueError("handover state must be a direct regular file")
+    with target.open() as stream:
         return json.load(stream)
 
 
@@ -70,6 +82,9 @@ def main():
     args = parser.parse_args()
     directory = Path(args.dir).absolute()
     try:
+        direct_parents(directory)
+        if args.action != "request" and not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError("handover directory must be direct")
         if args.action == "request":
             directory.mkdir(mode=0o700, parents=False, exist_ok=False)
             write_new(directory / "REQUEST.md", REQUEST)
@@ -92,6 +107,7 @@ def main():
                 value["queued_at"] = now()
             elif args.action == "summary":
                 summary = Path(args.summary).absolute()
+                direct_parents(summary)
                 info = summary.lstat()
                 if not stat.S_ISREG(info.st_mode) or info.st_size == 0:
                     raise ValueError("summary must be an existing nonempty regular file")
@@ -107,7 +123,7 @@ def main():
                 value["closed_at"] = now()
             save_state(directory, value)
         print(json.dumps(value, indent=2, sort_keys=True))
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, json.JSONDecodeError) as error:
         print(f"handover: {error}", file=sys.stderr)
         return 2
     return 0

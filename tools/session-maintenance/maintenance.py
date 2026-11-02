@@ -14,6 +14,8 @@ import stat
 import subprocess
 import sys
 
+from path_guard import reject_native_path
+
 
 BASE = {"session", "message", "part"}
 EVENTS = {"event", "event_sequence"}
@@ -33,6 +35,7 @@ def quoted(name):
 
 def db_path(raw):
     path = Path(raw).absolute()
+    reject_native_path(path)
     if path.name != "opencode.db" or ".." in path.parts:
         fail("select a direct opencode.db path")
     if any(part.lower() in {"source", "capture", "captures"} for part in path.parts):

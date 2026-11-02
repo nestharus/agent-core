@@ -173,6 +173,47 @@ class SessionMaintenanceTests(unittest.TestCase):
         self.assertEqual(run(HANDOVER, "closed", "--dir", directory,
                              "--owner-confirmed").returncode, 2)
 
+    def test_native_store_refusal_precedes_any_metadata_lookup(self):
+        code = """
+import sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+import maintenance
+for prefix in ('.local/state/agent-bash', '.local/share/oulipoly-agent-runner',
+               '.local/state/../state/agent-bash'):
+    with patch.object(Path, 'lstat', side_effect=AssertionError('metadata accessed')):
+        try:
+            maintenance.db_path(Path.home() / prefix / 'opencode.db')
+        except RuntimeError as error:
+            assert 'protected native' in str(error)
+        else:
+            raise AssertionError('native path accepted')
+"""
+        checked = subprocess.run([sys.executable, "-c", code, str(HERE)],
+                                 capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        native = Path.home() / '.local/state/agent-bash/new-handover'
+        refused = run(HANDOVER, "status", "--dir", native)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn('protected native', refused.stderr)
+
+    def test_handover_rejects_symlinked_directory_and_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            actual = root / "actual"
+            actual.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(actual, target_is_directory=True)
+            refused = run(HANDOVER, "request", "--dir", alias / "new",
+                          "--old-label", "test")
+            self.assertEqual(refused.returncode, 2)
+            self.assertFalse((actual / "new").exists())
+            outside = root / "outside.json"
+            outside.write_text('{"phase":"request_prepared"}')
+            (actual / "state.json").symlink_to(outside)
+            self.assertEqual(run(HANDOVER, "status", "--dir", actual).returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
