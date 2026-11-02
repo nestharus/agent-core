@@ -1,0 +1,13 @@
+{
+  "work_owner": "01a18bac-b565-7742-86bc-0f9ba5ffc831",
+  "work_decision": {
+    "condition": "Relevant organization/architecture foundation is available AND Work selects whole-branch upstream reactivation after bounded current intent/risk/slice compatibility assessment.",
+    "satisfied": false,
+    "asserted_by_session": "01a18bac-b565-7742-86bc-0f9ba5ffc831",
+    "asserted_at": "2026-11-02T01:56:42.265968+00:00",
+    "basis_type": "EXPLICIT_CURRENT_WORK_ELIGIBILITY_DECISION",
+    "basis": "Work explicitly maintains PR1230 whole-upstream DEFERRED to Campaign phases2/3 under direct user/Campaign9304/9324. Work has not selected reactivation and positively selects continued upstream deferral now. This is an owner decision, not an inference from absent events or generic status.",
+    "foundation_runtime_or_code_readiness": "UNKNOWN_NOT_ASSERTED; the conjunctive condition is false because authoritative Work reactivation selection is explicitly false.",
+    "effective_until": "Explicit Work supersession/reactivation; this is durable eligibility, not a freshness heartbeat or external runtime claim."
+  }
+}

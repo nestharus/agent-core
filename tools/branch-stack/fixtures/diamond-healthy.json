@@ -1,0 +1,381 @@
+{
+  "schema": "stack-dag/v1",
+  "feed": {
+    "binding": "fixture-feed",
+    "snapshot_id": "s1",
+    "schema": "typed-fixture-v1"
+  },
+  "repo": "controlled/repository",
+  "main": "0000000000000000000000000000000000000001",
+  "units": [
+    {
+      "id": "A",
+      "pr": 10,
+      "ref": "refs/heads/A",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "000000000000000000000000000000000000000a",
+        "tree": "000000000000000000000000000000000000271a",
+        "parents": [
+          "0000000000000000000000000000000000000009"
+        ],
+        "content": "content-10",
+        "resolution": "resolution-0"
+      },
+      "requires": [],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/A"
+        ],
+        "tests": [
+          "tests/A"
+        ],
+        "oracles": [
+          "oracles/A"
+        ],
+        "signatures": [
+          "signed/A"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "B",
+      "pr": 20,
+      "ref": "refs/heads/B",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "0000000000000000000000000000000000000014",
+        "tree": "0000000000000000000000000000000000002724",
+        "parents": [
+          "0000000000000000000000000000000000000013"
+        ],
+        "content": "content-20",
+        "resolution": "resolution-0"
+      },
+      "requires": [
+        "A"
+      ],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/B"
+        ],
+        "tests": [
+          "tests/B"
+        ],
+        "oracles": [
+          "oracles/B"
+        ],
+        "signatures": [
+          "signed/B"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "C",
+      "pr": 30,
+      "ref": "refs/heads/C",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "000000000000000000000000000000000000001e",
+        "tree": "000000000000000000000000000000000000272e",
+        "parents": [
+          "000000000000000000000000000000000000001d"
+        ],
+        "content": "content-30",
+        "resolution": "resolution-0"
+      },
+      "requires": [
+        "A"
+      ],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/C"
+        ],
+        "tests": [
+          "tests/C"
+        ],
+        "oracles": [
+          "oracles/C"
+        ],
+        "signatures": [
+          "signed/C"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "D",
+      "pr": 40,
+      "ref": "refs/heads/D",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "0000000000000000000000000000000000000028",
+        "tree": "0000000000000000000000000000000000002738",
+        "parents": [
+          "0000000000000000000000000000000000000027"
+        ],
+        "content": "content-40",
+        "resolution": "resolution-0"
+      },
+      "requires": [
+        "B",
+        "C"
+      ],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/D"
+        ],
+        "tests": [
+          "tests/D"
+        ],
+        "oracles": [
+          "oracles/D"
+        ],
+        "signatures": [
+          "signed/D"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "X",
+      "pr": 50,
+      "ref": "refs/heads/X",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "0000000000000000000000000000000000000032",
+        "tree": "0000000000000000000000000000000000002742",
+        "parents": [
+          "0000000000000000000000000000000000000031"
+        ],
+        "content": "content-50",
+        "resolution": "resolution-0"
+      },
+      "requires": [
+        "B"
+      ],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/X"
+        ],
+        "tests": [
+          "tests/X"
+        ],
+        "oracles": [
+          "oracles/X"
+        ],
+        "signatures": [
+          "signed/X"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "Z",
+      "pr": 60,
+      "ref": "refs/heads/Z",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "000000000000000000000000000000000000003c",
+        "tree": "000000000000000000000000000000000000274c",
+        "parents": [
+          "000000000000000000000000000000000000003b"
+        ],
+        "content": "content-60",
+        "resolution": "resolution-0"
+      },
+      "requires": [],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/Z"
+        ],
+        "tests": [
+          "tests/Z"
+        ],
+        "oracles": [
+          "oracles/Z"
+        ],
+        "signatures": [
+          "signed/Z"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    }
+  ],
+  "segments": [],
+  "groups": [
+    {
+      "id": "join",
+      "tips": [
+        "D"
+      ],
+      "order": [
+        "A",
+        "C",
+        "B",
+        "D"
+      ]
+    },
+    {
+      "id": "cross",
+      "tips": [
+        "X"
+      ],
+      "order": [
+        "A",
+        "B",
+        "X"
+      ]
+    },
+    {
+      "id": "parallel",
+      "tips": [
+        "Z"
+      ],
+      "order": null
+    }
+  ],
+  "events": [],
+  "merges": [],
+  "probes": [
+    {
+      "kind": "ordered",
+      "units": [
+        "A",
+        "C",
+        "B",
+        "D"
+      ],
+      "versions": {
+        "A": "ea7c1ab8de0135a8d9202fe8dfb9157859afb8dc5a3a2770fb78d397d3c79c7c",
+        "C": "b8c94dbac2923d105dc78d96643210b0606fae5144a8c91805963ed9fed6a788",
+        "B": "36f10fdbbabcf1f8884eae8490c6369c5b3ea0cf3a279e8c41290511f58ba66d",
+        "D": "b5f08816b4990dcc070f9c64b3e9f57f6713b9d14efb054d214006796c271ff8"
+      },
+      "base": "0000000000000000000000000000000000000001",
+      "status": "CLEAN",
+      "paths": [],
+      "reason": "controlled-probe",
+      "evidence_ref": "evidence/probe",
+      "admitted": true,
+      "semantic": true
+    },
+    {
+      "kind": "ordered",
+      "units": [
+        "A",
+        "B",
+        "X"
+      ],
+      "versions": {
+        "A": "ea7c1ab8de0135a8d9202fe8dfb9157859afb8dc5a3a2770fb78d397d3c79c7c",
+        "B": "36f10fdbbabcf1f8884eae8490c6369c5b3ea0cf3a279e8c41290511f58ba66d",
+        "X": "39257fba3a4202ef2a27b50dbca392268e02f750a2a60a34de34e5746ba713e7"
+      },
+      "base": "0000000000000000000000000000000000000001",
+      "status": "CLEAN",
+      "paths": [],
+      "reason": "controlled-probe",
+      "evidence_ref": "evidence/probe",
+      "admitted": true,
+      "semantic": true
+    },
+    {
+      "kind": "ordered",
+      "units": [
+        "Z"
+      ],
+      "versions": {
+        "Z": "7144a0522ac6c6fb6e5e85f533b79c250cb31e49cd6d0d80069c800dd0add38f"
+      },
+      "base": "0000000000000000000000000000000000000001",
+      "status": "CLEAN",
+      "paths": [],
+      "reason": "controlled-probe",
+      "evidence_ref": "evidence/probe",
+      "admitted": true,
+      "semantic": true
+    }
+  ],
+  "violations": []
+}

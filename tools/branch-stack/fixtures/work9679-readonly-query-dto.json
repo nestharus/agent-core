@@ -1,0 +1,18 @@
+{
+  "schema": "bounded-structural-query-dto/v1",
+  "method": "GraphQL_READ_ONLY",
+  "repository": "lama-ai-RFQ/RFQautomation",
+  "stack_node": "PRS_kwDOOtFmdM4ALB_v",
+  "encountered_prs": [
+    1639,
+    1640,
+    1647,
+    1648,
+    1645,
+    1641
+  ],
+  "query": "query { repository(owner:\"lama-ai-RFQ\",name:\"RFQautomation\") { defaultBranchRef { name target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } p1639:pullRequest(number:1639) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } p1640:pullRequest(number:1640) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } p1647:pullRequest(number:1647) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } p1648:pullRequest(number:1648) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } p1645:pullRequest(number:1645) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } p1641:pullRequest(number:1641) { number state isDraft headRefName headRefOid baseRefName baseRefOid headRef { target { ... on Commit { oid tree { oid } parents(first:32) { nodes { oid } pageInfo { hasNextPage } } } } } } } node(id:\"PRS_kwDOOtFmdM4ALB_v\") { ... on PullRequestStack { id number size baseRefName entries(first:6) { nodes { position pullRequest { number state isDraft headRefName headRefOid baseRefName } } pageInfo { hasNextPage } } } } }",
+  "request_executed": false,
+  "provider_schema_qualification": "UNKNOWN",
+  "forbidden_acquisition": "No CI, bodies, diffs, comments, blobs or global census"
+}

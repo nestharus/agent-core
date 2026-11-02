@@ -1,0 +1,585 @@
+{
+  "schema": "actual-work9679-input-intake/v1",
+  "latest": {
+    "schema": "bounded-collector-neutral-intake/v0",
+    "input_name": "branches-latest.json",
+    "acquired_at": "2026-11-02T03:43:00.145282+00:00",
+    "producer_path": "/home/nes/.local/share/rfq-root-emergency-captures/01a1276d-c325-7c01-a079-ca1fbea2a3f4/20261030/Install-Work-board-monitors-using-allowed-dot-codex3-profile-20261101/state/branches-latest.json",
+    "original_shape": {
+      "check_id": "str",
+      "checked_at": "str",
+      "code_version": "str",
+      "errors": {
+        "list_count": 14,
+        "item_shapes": [
+          {
+            "reason": "str",
+            "source": "str",
+            "state": "str"
+          },
+          {
+            "reason": "str",
+            "source": "str",
+            "state": "str"
+          }
+        ]
+      },
+      "result": {
+        "active_obligation_alerts": {
+          "list_count": 0,
+          "item_shapes": []
+        },
+        "campaign_eligibility": {
+          "complete_inventory_required": "bool",
+          "encountered": {
+            "list_count": 0,
+            "item_shapes": []
+          },
+          "entries": {
+            "list_count": 1,
+            "item_shapes": [
+              {
+                "PR_disposition": "str",
+                "active_obligations": {
+                  "list_count": 4,
+                  "item_shapes": [
+                    "str",
+                    "str"
+                  ]
+                },
+                "basis": "str",
+                "classification": "str",
+                "exemption_scope": "str",
+                "known_branch": "str",
+                "named_campaign": "str",
+                "pull_request": "int",
+                "reactivation": {
+                  "asserted_at": "str",
+                  "asserted_by_session": "str",
+                  "basis": "str",
+                  "basis_type": "str",
+                  "condition": "str",
+                  "effective_until": "str",
+                  "foundation_runtime_or_code_readiness": "str",
+                  "satisfied": "bool"
+                },
+                "reactivation_condition": "str",
+                "remaining_real_failures_still_alert": "bool",
+                "repository": "str"
+              }
+            ]
+          },
+          "exemptions_applied": "int",
+          "generated_at": "str",
+          "mode": "str",
+          "ordinary_rules_for_unlisted": "bool",
+          "projection": "str",
+          "schema": "str",
+          "state": "str",
+          "trigger_truth_capability": "str"
+        },
+        "coverage": {
+          "list_count": 6,
+          "item_shapes": [
+            {
+              "local_registry": "str",
+              "remote_live_refs": "int",
+              "remote_live_state": "str",
+              "repo": "str"
+            },
+            {
+              "local_registry": "str",
+              "remote_live_refs": "int",
+              "remote_live_state": "str",
+              "repo": "str"
+            }
+          ]
+        },
+        "eligibility_unknowns": {
+          "list_count": 0,
+          "item_shapes": []
+        },
+        "external_bound_instance_coverage": {
+          "list_count": 4,
+          "item_shapes": [
+            {
+              "instance": "str",
+              "local_registry": "str"
+            },
+            {
+              "instance": "str",
+              "local_registry": "str"
+            }
+          ]
+        },
+        "pending_review_excluded": {
+          "list_count": 3,
+          "item_shapes": [
+            {
+              "activity": "float",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "float",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "branch": "str",
+                    "ci": {
+                      "current_head_correspondence": "bool",
+                      "head": "str",
+                      "other_head_receipts": {
+                        "list_count": 0,
+                        "item_shapes": []
+                      },
+                      "reason": "str",
+                      "state": "str"
+                    },
+                    "head": "str",
+                    "number": "int",
+                    "repo": "str",
+                    "requested": {
+                      "list_count": 1,
+                      "item_shapes": [
+                        "str"
+                      ]
+                    },
+                    "review": {
+                      "approval_evidence": "NoneType",
+                      "approved_current_head": "bool",
+                      "daily_alert": "bool",
+                      "hourly_excluded": "bool",
+                      "looked_since_request": "bool",
+                      "old_head_approval": "bool",
+                      "outstanding_adam_request": "bool",
+                      "request_age_seconds": "float",
+                      "request_at": "str",
+                      "request_clock": "str",
+                      "request_event_id": "int",
+                      "why_not_merged": "NoneType"
+                    },
+                    "url": "str"
+                  }
+                ]
+              },
+              "repo": "str"
+            },
+            {
+              "activity": "float",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "float",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "branch": "str",
+                    "ci": {
+                      "current_head_correspondence": "bool",
+                      "head": "str",
+                      "other_head_receipts": {
+                        "list_count": 0,
+                        "item_shapes": []
+                      },
+                      "reason": "str",
+                      "state": "str"
+                    },
+                    "head": "str",
+                    "number": "int",
+                    "repo": "str",
+                    "requested": {
+                      "list_count": 1,
+                      "item_shapes": [
+                        "str"
+                      ]
+                    },
+                    "review": {
+                      "approval_evidence": "NoneType",
+                      "approved_current_head": "bool",
+                      "daily_alert": "bool",
+                      "hourly_excluded": "bool",
+                      "looked_since_request": "bool",
+                      "old_head_approval": "bool",
+                      "outstanding_adam_request": "bool",
+                      "request_age_seconds": "float",
+                      "request_at": "str",
+                      "request_clock": "str",
+                      "request_event_id": "int",
+                      "why_not_merged": "NoneType"
+                    },
+                    "url": "str"
+                  }
+                ]
+              },
+              "repo": "str"
+            }
+          ]
+        },
+        "selected": {
+          "list_count": 30,
+          "item_shapes": [
+            {
+              "activity": "int",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "int",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "repo": "str"
+            },
+            {
+              "activity": "int",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "int",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "repo": "str"
+            }
+          ]
+        },
+        "stale_alerts": {
+          "list_count": 22,
+          "item_shapes": [
+            {
+              "action": "str",
+              "activity": "int",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "int",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "repo": "str"
+            },
+            {
+              "action": "str",
+              "activity": "int",
+              "age_seconds": "float",
+              "branch": "str",
+              "campaign_eligibility": {
+                "exemption_applied": "bool",
+                "ordinary_nudge_state": "str",
+                "reason": "str",
+                "state": "str"
+              },
+              "ci_by_head": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "current_head_correspondence": "bool",
+                    "head": "str",
+                    "other_head_receipts": {
+                      "list_count": 0,
+                      "item_shapes": []
+                    },
+                    "reason": "str",
+                    "state": "str"
+                  }
+                ]
+              },
+              "distinct_heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  "str"
+                ]
+              },
+              "head_relationships": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "heads": {
+                "list_count": 1,
+                "item_shapes": [
+                  {
+                    "activity": "int",
+                    "location": "str",
+                    "oid": "str"
+                  }
+                ]
+              },
+              "prs": {
+                "list_count": 0,
+                "item_shapes": []
+              },
+              "repo": "str"
+            }
+          ]
+        },
+        "window": {
+          "actual_window_days": "int",
+          "distinct_owned_total": "int",
+          "preferred_window_days": "int",
+          "ranking": "str",
+          "selected": "int",
+          "widened": "bool"
+        }
+      }
+    },
+    "partial": true,
+    "metadata": {
+      "checked_at": "2026-11-02T03:11:01.072198+00:00",
+      "errors": {
+        "opaque": true,
+        "type": "list",
+        "count": 14
+      }
+    }
+  },
+  "health": {
+    "schema": "bounded-collector-neutral-intake/v0",
+    "input_name": "branches-health.json",
+    "acquired_at": "2026-11-02T03:43:00.145282+00:00",
+    "producer_path": "/home/nes/.local/share/rfq-root-emergency-captures/01a1276d-c325-7c01-a079-ca1fbea2a3f4/20261030/Install-Work-board-monitors-using-allowed-dot-codex3-profile-20261101/state/branches-health.json",
+    "original_shape": {
+      "actual_board_notice": "bool",
+      "actual_recipient_response": "str",
+      "category": "str",
+      "check_id": "str",
+      "code_version": "str",
+      "command_count": "int",
+      "delivery": {
+        "actual_recipient_response": "str",
+        "board_post": "int",
+        "check_id": "str",
+        "digest": "str",
+        "generation": "int",
+        "notification": "int",
+        "reason": "NoneType",
+        "record_id": "str",
+        "resume_outcome": "str",
+        "resume_reason": "str",
+        "resume_requested": "bool",
+        "state": "str"
+      },
+      "ended_at": "str",
+      "live_30second_acceptance": "str",
+      "numeric_exit": "int",
+      "queue_accepted": "bool",
+      "recipient_acknowledged": "bool",
+      "resources": {
+        "admit": "bool",
+        "available_memory_bytes": "int",
+        "root_free_bytes": "int"
+      },
+      "resume_outcome": "str",
+      "resume_requested": "bool",
+      "runtime_notice": "NoneType",
+      "source_failures": "int",
+      "source_state": "str",
+      "started_at": "str"
+    },
+    "partial": true,
+    "metadata": {}
+  },
+  "commands": {
+    "state": "UNKNOWN",
+    "reason": "initial-2MiB-read-cap-exceeded; no parse or execution"
+  },
+  "known_limit": "Initial neutral allowlist omitted result/check_id/code_version/health values. No live reread or raw recovery."
+}

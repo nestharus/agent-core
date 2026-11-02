@@ -1,0 +1,34 @@
+{
+  "schema": "existing-six-stack-all-four-signed-private-inputs-ready/1",
+  "native_structure": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/FOUR-REPAIRS-PRECOMPOSE-ACTUAL-MAIN449e-NATIVE-STACK1649-STRUCTURAL-ONLY-20261102.json",
+  "Main": "449e2a3d89ce4f51e69558d56b278594a129fbac",
+  "Main_native_input": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/CLOUD-C1-PRIMARY-COMPLETE-IMMUTABLE-MAIN449e-OPAQUE-NATIVE-INPUT-ONLY-20261102.json",
+  "R1_R5_receipt": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/CLOSED28926-SIGNED-PROPER-R1efadb-R537107-RESTORED-CONSERVED-PRIVATE-20261102.json",
+  "R4_R10_receipt": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/CLOSED83909-SIGNED-PROPER-R4406c4-RESTORED-ALL7-SIGNED-R104511-PRIVATE-20261102.json",
+  "good_transport": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/CLOSED18187-GOOD-NATIVE-CACHE-FINITE-101-OBJECT-TRANSPORT-FOUR-REPAIRS-STILL-TO-RECEIVE-20261102.json",
+  "wholeunit_boundaries": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/SIX-STACK-REPAIR-COMPOSITION-EXACT-UNIT-BOUNDARIES-NATIVE-CASCADE-NO-CONFLICT-CLAIM-20261102.json",
+  "native_maintenance": "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/GITHUB-NATIVE-STACK1649-PRIMARY-DOCS-EXISTING-LOWER-LAYER-REPAIR-CASCADE-CONTRACT-20261102.json",
+  "CI_exclusivity": {
+    "actor": 92716,
+    "scope": "sole actual1623Readybinding/only1613Ready ifcap; no otherpublic/stack effects byanyactor",
+    "no_parallel_CI_API_ledger_by_composer": true
+  },
+  "all_four_source_purposes": {
+    "1639": "PROD41 efadb6bb383e5253d28b72795c1a476cb7859a6c",
+    "1640": "PROD45 37107c22dc98de575a4c194226342ce5333aa9ce",
+    "1647": "CLOUD809 406c42539022044defc45fe334262ed21d3775a7",
+    "1648": "CLOUD810 45110739bc1a980a55523ac72f54d2758e1f3031"
+  },
+  "order": [
+    1639,
+    1640,
+    1647,
+    1648,
+    1645,
+    1641
+  ],
+  "public_no_changes_since_prior_except1623Ready": true,
+  "no_conflict_claim": true,
+  "not_runtime_Review_Source_CI_Ready_qualification": true,
+  "immediate_authority": "Root9280/9297/Work9354; privately compose existing6 on actualMain now, no newpermission/sourceage/allgraph/paperwork gate"
+}

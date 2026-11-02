@@ -1,0 +1,116 @@
+{
+  "schema": "stack-dag/v1",
+  "feed": {
+    "binding": "fixture-feed",
+    "snapshot_id": "s1",
+    "schema": "typed-fixture-v1"
+  },
+  "repo": "controlled/repository",
+  "main": "0000000000000000000000000000000000000001",
+  "units": [
+    {
+      "id": "A",
+      "pr": 10,
+      "ref": "refs/heads/A",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "000000000000000000000000000000000000000a",
+        "tree": "000000000000000000000000000000000000271a",
+        "parents": [
+          "0000000000000000000000000000000000000009"
+        ],
+        "content": "content-10",
+        "resolution": "resolution-0"
+      },
+      "requires": [],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/A"
+        ],
+        "tests": [
+          "tests/A"
+        ],
+        "oracles": [
+          "oracles/A"
+        ],
+        "signatures": [
+          "signed/A"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    },
+    {
+      "id": "B",
+      "pr": 20,
+      "ref": "refs/heads/B",
+      "ticket": null,
+      "campaign": "controlled",
+      "native_stack": null,
+      "version": {
+        "head": "0000000000000000000000000000000000000014",
+        "tree": "0000000000000000000000000000000000002724",
+        "parents": [
+          "0000000000000000000000000000000000000013"
+        ],
+        "content": "content-20",
+        "resolution": "resolution-0"
+      },
+      "requires": [
+        "A"
+      ],
+      "physical_base": {
+        "ref": "main",
+        "head": "0000000000000000000000000000000000000001"
+      },
+      "provenance": {
+        "original": [
+          "original/B"
+        ],
+        "tests": [
+          "tests/B"
+        ],
+        "oracles": [
+          "oracles/B"
+        ],
+        "signatures": [
+          "signed/B"
+        ]
+      },
+      "evidence": [],
+      "admitted": true,
+      "eligibility": {
+        "active": true,
+        "deferred": false,
+        "trigger": false,
+        "deferral_ref": null
+      }
+    }
+  ],
+  "segments": [],
+  "groups": [
+    {
+      "id": "linear",
+      "tips": [
+        "B"
+      ],
+      "order": null
+    }
+  ],
+  "events": [],
+  "merges": [],
+  "probes": [],
+  "violations": []
+}

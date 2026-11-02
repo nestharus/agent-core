@@ -1,0 +1,32 @@
+{
+  "schema": "rfq.branch-deferral-eligibility-projection/1",
+  "generated_at": "2026-11-02T01:08:59.517730+00:00",
+  "canonical_source": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/ASSIGNMENTS.json#current_user_campaign_selection.branch_deferral_exemptions",
+  "derived_projection_only": true,
+  "mode": "ON_ENCOUNTER",
+  "complete_inventory_required": false,
+  "entries": [
+    {
+      "repository": "lama-ai-RFQ/RFQautomation",
+      "pull_request": 1230,
+      "known_branch": "feat/integrated-auth-cloud-full",
+      "classification": "DEFERRED_TO_NAMED_CAMPAIGN",
+      "named_campaign": "Phases2/3 code organization and remaining architecture",
+      "reactivation_condition": "Relevant organization/architecture foundation is available and a bounded current intent/risk/slice compatibility assessment selects reactivation.",
+      "exemption_scope": "Ordinary upstream-landing/inactivity nudges attributable to intentional campaign deferral while trigger is false.",
+      "PR_disposition": "Sole deferred PR explicitly kept OPEN for product demos/cloud operation.",
+      "active_obligations": [
+        "existing latest-Main cloud rebase",
+        "stage/demo delivery",
+        "source/WIP/evidence conservation",
+        "actual active review/repair obligations"
+      ],
+      "remaining_real_failures_still_alert": true,
+      "basis": "Direct user/Campaign9304/9324; current canonical PR1230 exception already selected."
+    }
+  ],
+  "ordinary_rules_for_unlisted": true,
+  "all_real_active_violations_repeat_each_check": true,
+  "healthy_checks_silent": true,
+  "unresolved_conservation_closure_or_active_demo_obligations_still_alert": true
+}

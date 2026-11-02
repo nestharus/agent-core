@@ -1,0 +1,98 @@
+{
+  "data": {
+    "repository": {
+      "defaultBranchRef": {
+        "name": "main",
+        "target": {
+          "oid": "449e2a3d89ce4f51e69558d56b278594a129fbac",
+          "tree": {
+            "oid": "1a154d75fab37c0f15f64696524c0bf5e6d77e3e"
+          },
+          "parents": {
+            "nodes": [
+              {
+                "oid": "3e95e2d3da2117415d544fe348b1738619d400d2"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "node": {
+      "id": "PRS_kwDOOtFmdM4ALB_v",
+      "number": 1649,
+      "size": 6,
+      "baseRefName": "main",
+      "entries": {
+        "nodes": [
+          {
+            "position": 1,
+            "pullRequest": {
+              "number": 1639,
+              "state": "OPEN",
+              "isDraft": true,
+              "headRefName": "integration/main-restoration-r1-authority-37793676c81e-20261101",
+              "headRefOid": "da99b3eb100f99f06d37eb61c7d663afd1bfe0c9",
+              "baseRefName": "main"
+            }
+          },
+          {
+            "position": 2,
+            "pullRequest": {
+              "number": 1640,
+              "state": "OPEN",
+              "isDraft": false,
+              "headRefName": "integration/main-restoration-r5-current-filter-7cb74e3b20e8-20261101",
+              "headRefOid": "49fd41f7c6cb79b007d2f6d7ab790c7896bfbe8e",
+              "baseRefName": "integration/main-restoration-r1-authority-37793676c81e-20261101"
+            }
+          },
+          {
+            "position": 3,
+            "pullRequest": {
+              "number": 1647,
+              "state": "OPEN",
+              "isDraft": true,
+              "headRefName": "CLOUD-809-authoritative-null-worksheet-identity",
+              "headRefOid": "e5ffc11d1d1c3c053fb960d3d8865d695a142012",
+              "baseRefName": "integration/main-restoration-r5-current-filter-7cb74e3b20e8-20261101"
+            }
+          },
+          {
+            "position": 4,
+            "pullRequest": {
+              "number": 1648,
+              "state": "OPEN",
+              "isDraft": true,
+              "headRefName": "CLOUD-810-research-evaluation-quantity-unit-scope",
+              "headRefOid": "7b25e65ff5ae657281931e86d27f11918ca1c607",
+              "baseRefName": "CLOUD-809-authoritative-null-worksheet-identity"
+            }
+          },
+          {
+            "position": 5,
+            "pullRequest": {
+              "number": 1645,
+              "state": "OPEN",
+              "isDraft": true,
+              "headRefName": "CLOUD-808-part-web-lookup-completion-oracle",
+              "headRefOid": "d0014f5c27bf821c60dbb5021b6d0b1411747ef1",
+              "baseRefName": "CLOUD-810-research-evaluation-quantity-unit-scope"
+            }
+          },
+          {
+            "position": 6,
+            "pullRequest": {
+              "number": 1641,
+              "state": "OPEN",
+              "isDraft": false,
+              "headRefName": "integration/main-restoration-r13-span-actor-a1706064e82d-20261101",
+              "headRefOid": "d805a5a619dbd96a207a308ba2cd9e430b374586",
+              "baseRefName": "CLOUD-808-part-web-lookup-completion-oracle"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

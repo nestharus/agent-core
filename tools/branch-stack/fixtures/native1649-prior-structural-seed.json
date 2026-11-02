@@ -1,0 +1,39 @@
+{
+  "schema": "native-stack-structural-seed/v1",
+  "qualification": "PRIOR_STRUCTURAL_BINDINGS_NOT_FRESH_API_NOT_READY",
+  "stack": {
+    "number": 1649,
+    "node": "PRS_kwDOOtFmdM4ALB_v",
+    "order": [
+      1639,
+      1640,
+      1647,
+      1648,
+      1645,
+      1641
+    ]
+  },
+  "repo_path": "/home/nes/projects/rfq/trunk/rfqautomation",
+  "repo_provider_identity": null,
+  "main": "449e2a3d89ce4f51e69558d56b278594a129fbac",
+  "heads": {
+    "1639": "da99b3eb100f99f06d37eb61c7d663afd1bfe0c9",
+    "1640": "49fd41f7c6cb79b007d2f6d7ab790c7896bfbe8e",
+    "1641": "d805a5a619dbd96a207a308ba2cd9e430b374586",
+    "1645": "d0014f5c27bf821c60dbb5021b6d0b1411747ef1",
+    "1647": "e5ffc11d1d1c3c053fb960d3d8865d695a142012",
+    "1648": "7b25e65ff5ae657281931e86d27f11918ca1c607"
+  },
+  "missing": [
+    "current qualified head/tree/ordered-parent bindings",
+    "canonical existing-account unit and ticket associations",
+    "actual accepted feed locator/schema",
+    "live board catalog and delivery receipt parser",
+    "admitted probe settings/backings and semantic evidence"
+  ],
+  "provenance": [
+    "/home/nes/.local/share/rfq-branch-emergency-captures/01a18bb3-2d8f-7eb0-a1ef-31b62ae96198/20261030/GITHUB-NATIVE-STACK1649-PRIMARY-DOCS-EXISTING-LOWER-LAYER-REPAIR-CASCADE-CONTRACT-20261102.json",
+    "direct Maker brief exact head bindings"
+  ],
+  "native_execution": false
+}
