@@ -628,7 +628,144 @@ wrapper, replacement managed_owner or extra daemon. Questions/effects/alerts and
 selected same-owner Reviews work need real receipt and actor control. Automatic
 routine handbacks remain with their delegated callback. Availability while busy,
 idle, absent or in an existing native wait is not established by instructions,
-membership, socket hints or queue acceptance. Targeted unattended wake is forward
-work. Status exposes declared receive mode, delivery creation/frontiers and pending
+membership, socket hints or queue acceptance. The explicit pointer adapter below
+does not establish unattended wake. Status exposes declared receive mode, delivery creation/frontiers and pending
 custody; configuration never proves active receipt/adoption. Root external,
 Dispatcher/Cloud unenrolled; Reviews preserves actual opaque method/collectors.
+
+### Explicit existing-context control pointer
+
+Decision13 adds an optional one-shot adapter for a **runtime delivery UUID** of
+kind question, alert, effect-request or result. It sends a bounded pointer to the
+full unchanged delivery; it cannot dispatch work. The genuine source role owner
+prepares/sends it from its current actor context. Its recipient must already have
+the selected role's current enrollment, exact profile, active membership and
+managed receive route on the same board/runtime. Reviews without enrollment is
+refused. No managed_owner, replacement coordinator, route downgrade, grant,
+normal intake, classification or delegated ACK change is supplied.
+
+| Selected mode | Required applicability | Effect and dependency |
+| --- | --- | --- |
+| `queue-existing` | Evidence of this existing context/profile, active or idle | Plain queue helper, no resume; true queue ID required for processing proof |
+| `queue-resume-existing` | Same explicit binding, active or idle | Explicit `resume=True` public helper interface required; no fallback |
+| `active-only-steer` | Active context and exact in-progress turn | Public steer/RPC helpers; expected turn and client message recorded before mutating RPC; no queue ID |
+
+Unloaded/unknown contexts are refused. The inspected base43f includes the plain
+queue helper, but **does not include active_transport.py/active_rpc.py or the queue
+resume interface** present in a different other-owned shared checkout. Those
+optional modes refuse before calling transport until compatible public sources
+are received and selected separately. This code neither copies nor qualifies
+that other checkout. Pins identify bytes, not source authority or daemon/native
+compatibility. Active steer additionally checks the actual public helper's active
+metadata/turn and uses its expectedTurnId precondition; a changed turn cannot be
+silently substituted. The queue interface cannot independently establish native
+availability; caller binding evidence and later consumer proof remain necessary.
+
+Future actual use needs its own caller scope, binding and applicability evidence.
+Publishing this adapter authorizes no live control/native operation, new Branch
+turn or role adoption. Existing legitimate operational authority can supply the
+selection; the adapter adds no default global human approval gate. Source/actor
+checks and attributed evidence are cooperative same-account checks, not independent
+authentication. A syntactically valid UUID is not context/profile binding evidence.
+
+The selection JSON has exactly these keys (uppercase values are placeholders):
+
+```json
+{
+  "intent": "NEW-CONTROL-UUID",
+  "mode": "active-only-steer",
+  "recipient": "GENUINE-RECIPIENT-UUID",
+  "profile": ".codexN",
+  "scope": "delivery-control-only",
+  "evidence": ["Actual caller selection, scope and why this delivery needs control"],
+  "binding": {
+    "context": "GENUINE-RECIPIENT-UUID",
+    "profile": ".codexN",
+    "state": "active",
+    "turn": "ACTUAL-IN-PROGRESS-TURN-UUID",
+    "valid_until": 0,
+    "evidence": ["Actual current context/profile/channel applicability evidence"]
+  },
+  "helper_sources": {
+    "queue_transport.py": "SELECTED-SHA256",
+    "active_transport.py": "SELECTED-SHA256",
+    "active_rpc.py": "SELECTED-SHA256"
+  }
+}
+```
+
+Use a fresh finite future epoch less than one hour away for valid_until. Queue
+modes use turn:null, state active/idle and only queue_transport.py in helper_sources.
+Sources are exact regular files in the configured board_library, loaded with
+isolated pinned dependencies. Evidence lists contain 1–16 nonempty strings of at
+most 2000 UTF8 bytes; the entire selection is at most 16000 UTF8 bytes. The complete
+pointer must fit the helper's 700-character bound; it is never truncated.
+
+```sh
+python3 "$RUNTIME" --config "$CONFIG" control-prepare "$SOURCE_ROLE" "$DELIVERY_ID" \
+  --selection /absolute/own/control-selection.json
+python3 "$RUNTIME" --config "$CONFIG" control-show "$SOURCE_ROLE" "$INTENT_ID"
+# Only within the separately selected actual caller operation:
+python3 "$RUNTIME" --config "$CONFIG" control-send "$SOURCE_ROLE" "$INTENT_ID" --execute
+# Withdraw only a preparation that has never been attempted:
+python3 "$RUNTIME" --config "$CONFIG" control-cancel "$SOURCE_ROLE" "$INTENT_ID"
+```
+
+Prepare persists the exact selection, full-payload hash, local attempt/client
+marker and pointer before any transport. Send checks the original source/grant,
+current enrollment and fresh binding again, checks the helper source/API, then
+commits an inflight claim before calling that single selected mode. Steer records
+the exact turn/request correlation before RPC and acceptance separately. Queue's
+local client marker is in the pointer; the actual server queue ID is learned only
+from its return. These two identifiers are never substituted for one another.
+
+Repeating the same intent returns the retained outcome without another send.
+An accepted/unknown/inflight attempt blocks a new intent for that delivery. No
+automatic pre-retry, channel fallback, resume, native start, original ACK/cursor
+rewrite or business replay follows. Helper preflight refusal is recorded as
+not-called; changing a refused selection requires an explicit new caller intent
+and fresh actual evidence, never an automatic retry. A still-prepared binding
+that expired can be withdrawn before selecting a new one. An interrupted inflight
+sender stays held with its actual collector; the API supplies no foreign recovery
+or generic clearing operation. A timeout/unknown queue outcome without a real queue
+ID remains an explicit consumer-proof gap. Inspect that outcome and return it to
+the owning caller; do not guess an ID or resend to populate proof.
+
+Transport acceptance, board ACK and managed_pending prove neither arrival nor
+processing. The actual recipient first reads the full delivery and records pickup.
+For a queue control, processed/settled additionally require the real returned
+queue_message_id, state processed and actual consumer evidence in receipt.transport,
+even though managed membership/notice route remains unchanged. For steer, never
+invent a queue ID: receipt.transport is refused. Instead receipt.control must have
+exactly:
+
+```json
+{
+  "kind": "existing-context-control",
+  "intent": "CONTROL-UUID",
+  "attempt": "RETAINED-ATTEMPT-UUID",
+  "client_message_id": "RETAINED-CLIENT-MESSAGE-UUID",
+  "turn_id": "RETAINED-STEER-TURN-UUID",
+  "received_by": "ACTUAL-RECIPIENT-UUID",
+  "profile": ".codexN",
+  "full_read": "RETAINED-PAYLOAD-HASH",
+  "state": "processed",
+  "evidence": ["Actual full-read/pickup and context/turn/client-message association"],
+  "disposition": "Actual substantive control action and remaining independent obligations"
+}
+```
+
+This is an honest attributed control proof, not queue-consumer proof or independent
+verification of semantic completion. Top-level receipt.evidence and the existing
+pickup → processing → settlement requirements remain. Consequential questions
+still need resolution; effect duties retain actual effect-owner reconciliation.
+Settling a control grants no execution/publication/acceptance authority and clears
+no independent source/outbox/recovery/effect duty. Fresh unchanged violation
+intervals still generate distinct deliveries and intents; same-intent idempotence
+never suppresses another interval's alert.
+
+Control records/steps are additive bounded board custody: max_events intents and
+max_bytes UTF8 accounting, with backpressure instead of discarding held records.
+There is no automatic deletion/retirement for these records. Retain them and their
+sources until actual processing completion +24h **and every hold**, including any
+uncollected send/consumer uncertainty. No platform physical cleanup is claimed.

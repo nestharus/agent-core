@@ -313,6 +313,8 @@ class BoardDelivery:
                 notice = conn.execute("SELECT * FROM notification_outbox WHERE notification_id=?", (row["notice"],)).fetchone()
                 if stage == "picked-up" and notice["delivery_state"] == "sending":
                     raise Refusal("original transport sender still owns an unsettled claim")
+                if stage in {'processed','settled'}:
+                    self.control_processing_proof(conn,row,actor,receipt)
                 if stage in {"processed", "settled"} and notice["route"] == "queue":
                     transport = receipt.get("transport", {})
                     if (not transport.get("evidence") or not notice["queue_message_id"] or

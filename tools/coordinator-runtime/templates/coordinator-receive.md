@@ -123,6 +123,25 @@ not executable authority. Questions/notifications preserve all original meaning
 and required duties; use actual delivery-stage evidence separately. A stored
 managed_pending, --steer request or this list is not native wake or processing.
 
+An explicitly selected existing-context CONTROL pointer may refer to an exact
+runtime delivery UUID and a separately retained control intent. Read it with
+control-show SOURCE_ROLE INTENT_ID, then delivery-show SOURCE_ROLE DELIVERY_ID.
+Keep source role, original author/recipient/required duty and actual collectors;
+never treat a source post/notice number or an old ACKed input as a new intent.
+The pointer grants no execution, publication, membership or fallback authority.
+Its sender's transport acceptance is separate from your actual receipt.
+
+If this delivery used queue control, processing/settlement require the exact real
+returned queue ID and actual consumer evidence in receipt.transport. For active
+steer there is NO queue ID. Use the README's separate receipt.control grammar,
+matching the retained intent/attempt/client message/turn/profile/full-payload hash,
+with your actual full-read and substantive disposition evidence. Do not manufacture
+queue proof, settle from acceptance, take over an interrupted sender or replay
+business work. Unknown arrival/processing retains the original duties and holds.
+This optional adapter supplies no existing-role adoption or native availability
+guarantee; its actual future caller operation needs separately selected scope and
+current applicability evidence, not an inferred permission from these instructions.
+
 Recovery exceptions appear in owner-controls too. After collected failed/invalid
 diagnosis, request-recovery can select redispose, authentic remaining target/WHY/
 evidence, or defer with remaining:null. Unknown originals/diagnoses retain their

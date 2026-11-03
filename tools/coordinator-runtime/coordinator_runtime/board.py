@@ -8,6 +8,8 @@ same-account cooperation records, NOT authentication or product-effect authority
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import builtins
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,6 +21,7 @@ from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, ident, reg
 from .board_delivery import BoardDelivery, SCHEMA as DELIVERY_SCHEMA
 from .completion import Completion
 from .routine import BOARD_SCHEMA as COMPLETION_SCHEMA
+from .owner_control import OwnerControl
 
 EXTENSION = """
 CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
@@ -36,14 +39,27 @@ CREATE TABLE IF NOT EXISTS coordinator_receipt_targets_v1(
 """
 
 
-def module_at(directory, name):
+def module_at(directory, name, imports=None):
     path = regular_path(str(Path(directory) / f"{name}.py"))
-    spec = importlib.util.spec_from_file_location(f"coordinator_substrate_{name}", path)
+    spec = importlib.util.spec_from_file_location(f"coordinator_substrate_{name}_{digest(str(path))[:16]}", path)
     module = importlib.util.module_from_spec(spec)
+    prior_module=sys.modules.get(spec.name)
+    sys.modules[spec.name]=module  # Dataclass/annotation resolution needs its actual module binding.
     original_path = list(sys.path)
     sys.path.insert(0, str(path.parent))
     try:
-        spec.loader.exec_module(module)
+        if imports:
+            def selected_import(name,globals=None,locals=None,fromlist=(),level=0):
+                if level==0 and name in imports:return imports[name]
+                return builtins.__import__(name,globals,locals,fromlist,level)
+            module.__builtins__={**vars(builtins),'__import__':selected_import}
+        source=path.read_bytes()
+        exec(compile(source,str(path),'exec'),module.__dict__)
+        module.__coordinator_source_sha256__=hashlib.sha256(source).hexdigest()
+    except BaseException:
+        if prior_module is None:sys.modules.pop(spec.name,None)
+        else:sys.modules[spec.name]=prior_module
+        raise
     finally:
         sys.path[:] = original_path
     return module
@@ -62,7 +78,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat()
 
 
-class Board(BoardDelivery, Completion):
+class Board(BoardDelivery, Completion, OwnerControl):
     def __init__(self, config, role):
         self.config, self.role = config, role
         self.selected = config["roles"][role]

@@ -14,7 +14,7 @@ import sys
 
 from .board import Board
 from .cleanup import conserve, sweep
-from .contracts import Refusal, canonical_uuid, encode, load_config, regular_path
+from .contracts import Refusal, canonical_uuid, encode, load_config, parse_json, regular_path
 from .dispatcher import Dispatcher
 from .store import Store, private_directory
 
@@ -66,6 +66,20 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    prepare=sub.add_parser('control-prepare',help='Prepare a bounded existing-owner delivery pointer; no native effect')
+    prepare.add_argument('role')
+    prepare.add_argument('delivery')
+    prepare.add_argument('--selection',required=True)
+    show_control=sub.add_parser('control-show',help='Read exact intent/correlation/uncertainty, never retry')
+    show_control.add_argument('role')
+    show_control.add_argument('intent')
+    cancel_control=sub.add_parser('control-cancel',help='Withdraw prepared, never attempted/uncertain, control only')
+    cancel_control.add_argument('role')
+    cancel_control.add_argument('intent')
+    send_control=sub.add_parser('control-send',help='Explicit one-shot selected channel; requires separate actual caller authority/applicability')
+    send_control.add_argument('role')
+    send_control.add_argument('intent')
+    send_control.add_argument('--execute',action='store_true')
     schema = sub.add_parser("qualify-schema")
     schema.add_argument("--codex", default="codex")
     schema.add_argument("--output", required=True)
@@ -157,6 +171,15 @@ async def serve(store):
 def operate(args, store):
     if args.command in {"init", "status"}:
         return store.status()
+    if args.command=='control-prepare':
+        return Board(store.config,args.role).control_prepare(store,args.delivery,parse_json(regular_path(args.selection).read_text()))
+    if args.command=='control-show':
+        return Board(store.config,args.role).control_show(args.intent)
+    if args.command=='control-cancel':
+        return Board(store.config,args.role).control_cancel(args.intent)
+    if args.command=='control-send':
+        if not args.execute:raise Refusal('explicit control-send --execute required; prepare/show has no native effect')
+        return Board(store.config,args.role).control_send(store,args.intent)
     if args.command == "enroll":
         grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery, completion=args.completion)
         store.enroll(args.role, grant)
