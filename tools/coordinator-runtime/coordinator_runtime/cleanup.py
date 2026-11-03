@@ -95,13 +95,15 @@ def eligible_event(store, event):
         return False
     attempts = store.rows("SELECT a.* FROM attempts a LEFT JOIN queue q ON q.job=a.job "
                           "WHERE a.event=? OR q.event=?", (event["id"], event["id"]))
-    if any(a["cleanup"] == "owned-ephemeral-lifecycle-observed" for a in attempts) and not store.config.get("session_cleanup_qualification"):
-        return False
+    # Session/store uncertainty stays separately owned, not a universal freeze
+    # on already conserved queue sources or permission to purge a profile.
     return all(a["collected"] is not None and (a["ended"] is not None or a["state"] == "not-started")
                and a["cleanup"] in {"done", "owned-ephemeral-lifecycle-observed", "no-session-created"} for a in attempts)
 
 
 def artifact_eligible(store, artifact):
+    if store.one("SELECT path FROM artifact_custody WHERE path=? AND kind='role-owned'",(artifact['path'],)):
+        return False  # Explicit canonical/role custody overrides disposable location.
     attempt = store.attempt(artifact["attempt"])
     if not artifact["conserved"] or attempt["cleanup"] not in {"done", "owned-ephemeral-lifecycle-observed"} or attempt["ended"] is None:
         return False
@@ -179,6 +181,8 @@ def retire_event(store, event):
 
 
 def sweep(store):
+    from .storage import sweep as storage_sweep
+    storage_receipts = storage_sweep(store)
     artifacts = store.rows("SELECT * FROM artifacts WHERE removed IS NULL AND error IS NULL")
     receipts = [retire_artifact(store, row) for row in artifacts]
     events = store.rows("SELECT * FROM events WHERE processed_at IS NOT NULL AND state!='retired'")
@@ -188,4 +192,4 @@ def sweep(store):
                          "AND NOT EXISTS(SELECT 1 FROM outboxes o WHERE o.alert=alerts.id AND "
                          "(o.state!='settled' OR o.hold IS NOT NULL OR o.processed_at IS NULL OR o.processed_at>?))",
                          (store.clock()-RETENTION, store.clock()-RETENTION))
-    return [receipt for receipt in receipts if receipt]
+    return storage_receipts + [receipt for receipt in receipts if receipt]

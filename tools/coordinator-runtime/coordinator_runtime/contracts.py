@@ -119,6 +119,11 @@ def validate_config(config):
         validate_role(role, selected, profiles)
     for name, task in config["tasks"].items():
         validate_task(name, task, config)
+        if task.get('routine_completion'):
+            from .routine import policy_for
+            policy_for(task)
+    if config.get('session_storage',{}).get('mode') not in {None,'owned-attempt'}:
+        raise Refusal('only exact owned-attempt auxiliary storage is supported')
     for selected in config["roles"].values():
         if set(selected["routes"]) - set(config["tasks"]):
             raise Refusal("role route references an unknown configured task")

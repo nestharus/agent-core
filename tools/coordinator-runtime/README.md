@@ -14,6 +14,13 @@ is disabled. Root is an external work recipient, never an enrolled role;
 Dispatcher and Cloud remain excluded. There is no JEV, external dependency,
 parent wait wrapper or replacement of an existing collector.
 
+The collected qualification2 encounter on `bfdd43b` already established actual
+provider wire acceptance, five attempts/six turns, one supported continuation,
+report → fresh Luna → writer progression and meaningful synthetic writes. Those
+original successful/failing receipts remain their own evidence. The completion,
+custody and owned-store changes below require a new bounded actual encounter;
+fixture results do not extend that qualification.
+
 ## Install, configure and inspect
 
 Use an isolated published checkout, Python 3.11+ and the standard library. Leave
@@ -71,12 +78,17 @@ membership. Full enrollment adds a distinct labelled managed service actor and
 bounded outgoing recipients/kinds, in addition to private intake/receipt rights:
 
 ```sh
-python3 "$RUNTIME" --config /absolute/private/config.json enroll Work --delivery \
+python3 "$RUNTIME" --config /absolute/private/config.json enroll Work --delivery --completion \
   --authority /home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/CONSEQUENCE-DECISION.json
 # For an already enrolled incoming/receipt-only grant, from that same real owner:
 python3 "$RUNTIME" --config /absolute/private/config.json delegate-delivery Work \
   --authority /home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/CONSEQUENCE-DECISION.json
 ```
+
+`--completion` explicitly delegates the bounded routine collector to this real
+service actor for configured role tasks. For an existing full delivery grant,
+the genuine owner uses `delegate-completion ROLE --authority FILE`. It is a
+role-lifetime grant, never per-task human approval. No owner ID is substituted.
 
 Repeat only from the genuine selected Branch successor, Reviews and QA actors.
 The automation actor never joins as an owner. Classification provenance retains
@@ -240,13 +252,69 @@ verified meaning/attribution. No assumption that all board history is permanent,
 no blanket duplication/profile purge. Exact registered single-link artifacts
 require actual conservation and symlink-safe identity checks before retirement.
 
-`owned-ephemeral-lifecycle-observed` means unsubscribe and owned exit were seen;
-`session_reclamation:not-qualified` remains separate. Retirement of those real
-attempts stays held until an explicit `session_cleanup_qualification` evidence
-binding exists. Journal/results/outbox/source custody remain cumulatively bounded;
-this release backpressures instead of automatic compaction of held custody or
-broad profile/history cleanup. Actual session/auxiliary-store reclamation and
-real owner correction/delivery behavior remain unqualified frontiers.
+Routine file writers may configure `routine_completion:{kind:"file-witness",
+targets:[absolute exact files]}` under explicit effect roots. They run from a fresh
+owned attempt directory with writable roots narrowed to those files and owned
+outputs, network disabled. The explicit role grant, actual collected process
+exit/capture/DONE, settled supported tool metadata and bounded pre/post file
+custody must agree. Real failures/unknowns, missing numeric tool completion,
+revocation, resource/legacy holds or unsupported external effects prevent routine
+reconciliation. Known numeric nonzero historical commands remain in the ledger;
+they do not invent running-process uncertainty when the final work/effects are
+known. `effects` becomes `reconciled` with actual service/role/worker/collector
+provenance and evidence, never falsely `none`.
+
+The delegated collector then genuinely consumes its own routine result/effect
+handback on the board. Its receipt names the service actor and delegating role,
+not a fictitious human read. External recipients/duties and separate outboxes
+remain owned. The supplied Work example covers its seven exact canonical files.
+Branch ref/network and QA CI/resource callbacks remain with their actual owners;
+this file-only callback does not claim their effects or override admissions.
+
+Artifact strings and structured `{path,...}` entries both produce exact bounded
+witnesses and content-addressed durable source bytes. Runtime-owned disposable
+files may retire; role/canonical files are never automatically deleted. Outside
+scope, link, malformed, changing or over-budget artifacts hold capture rather
+than silently skip. Frozen consumer inputs materialize only the declared bytes
+under that consumer's new attempt directory, so later canonical changes do not
+replace an old report's meaning. `artifact-source ATTEMPT PATH` exports bounded
+base64 source for the actual custodian; an actual addressed consumer may add
+`--delivery ID` for its exact already posted artifact grant. This is a source
+recovery operation, not shared journal/profile discovery. Held blobs and source
+metadata have cumulative limits/backpressure; broad automatic compaction is absent.
+Selected-owner report returns use explicit `owner:job:version` source contexts,
+with source_attempt=null. Their public in-scope artifacts receive the same custody
+without inventing a model process. Private/unavailable artifacts reject the return
+for that actual owner to conserve/correct; they are never silently skipped.
+
+`session_storage:{mode:"owned-attempt"}` keeps the selected account's CODEX_HOME
+and authentication unchanged. Supported CLI overrides route SQLite/log data to
+fresh exact attempt paths, disable history/feedback and shell snapshots, and
+`config/read` must verify those exact effective settings before the first model
+turn. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents the settings; installed strict-config metadata and generated API schema
+are separate evidence. No credential is copied, profile store inventoried or
+existing server attached. Missing/overridden settings refuse that new path before
+model effects; select a compatible qualified slice rather than manufacture readback.
+
+Ephemeral request/readback, unsubscribe, numeric owner exit, physical owned-path
+retirement and shared-profile absence are separate. Once all needed report/code/
+recovery meaning is durably conserved and actual processing+24h plus dependent
+holds pass, the exact newly owned auxiliary tree can be retired with descriptor-
+relative no-follow checks and physical absence readback. Unknown/link/special
+members remain partial-held. A sampled cumulative byte/count guard stops only its
+owned writer on overflow and backpressures admission; it is not a hard filesystem
+quota and does not discard held work. A missing RPC/API label does not freeze all
+already conserved queue sources. Shared-profile/session residual absence remains
+not-inventoried, never inferred from `thread not loaded`. Old shared-store attempts
+are not purged; the installed exact `thread/delete`/`codex delete --force UUID`
+interfaces are bounded alternatives for a separately qualified exact-owned need,
+not permission to scan, force-delete a live session or attach to a shared daemon.
+
+Command completion capture includes supported item/turn IDs, status, nullable
+numeric exit/duration and a bounded provider process label. That label is not an
+owned OS handle. No raw command/output protocol fields, reasoning or credential
+content is retained by this metadata capture, and no global descendant-liveness/cost claim follows.
 
 Use `status`, `hold EVENT --reason TEXT`, `release-hold EVENT --receipt FILE`,
 `conserve-artifact PATH --receipt FILE`, `ack-alert ID --receipt FILE` and `cleanup`
@@ -278,3 +346,13 @@ from its actual owner (`revoke ROLE --grant UUID`), then restore prospective boa
 routing only through that owner's supported handoff. Preserve existing cutovers,
 queues, source, private evidence and all consumer/recovery holds; do not uninstall
 by deleting responsibilities or retiring a worktree/profile.
+
+Rollback source catch-up must cover pause intervals explicitly. From the genuine
+owner after exact grant revocation and supported self-pause/queue restoration,
+`owner-catchup ROLE --after BEFORE_SEQ --through AFTER_SEQ` reads only that owner's
+addressed/own-thread source in the fixed interval. Use next_after with the SAME
+through until complete_interval. Posts without notification rows are preserved
+as source, not fictitiously ACKed; already processed responsibilities are skipped
+and pending originals remain identified. The command changes no membership/cursor,
+never resurrects a completed role, and does not replay work. The real owner
+consumes/routes unresolved material and uses its supported actual receipt path.

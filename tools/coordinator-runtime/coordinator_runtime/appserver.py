@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 
 from .contracts import PROFILES, Refusal, canonical_uuid, encode, parse_json
+from . import storage
 
 
 class RpcFailure(Refusal):
@@ -74,9 +75,9 @@ def decode_final(text):
     return value
 
 
-async def metadata(command, env, limit=1048576):
+async def metadata(command, env, limit=1048576, cwd=None):
     child = await asyncio.create_subprocess_exec(*command, env=env,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=limit+1)
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=limit+1, cwd=cwd)
     try:
         output = await asyncio.wait_for(child.stdout.read(limit+1), 20)
         if len(output) > limit:
@@ -120,24 +121,26 @@ def mcp_rows(text):
     return result
 
 
-async def preflight(codex, profile, expected_version):
+async def preflight(codex, profile, expected_version, storage_flags=(), cwd=None):
     env = environment(profile)
-    version = (await metadata([codex, "--version"], env)).strip()
+    async def probe(command):
+        return await metadata(command,env,cwd=cwd) if cwd is not None else await metadata(command,env)
+    version = (await probe([codex, *storage_flags, "--version"])).strip()
     if version != expected_version:
         raise Refusal("installed CLI differs from offline schema qualification")
-    before = mcp_rows(await metadata([codex, "-c", "mcp_servers={}", "mcp", "list", "--json"], env))
+    before = mcp_rows(await probe([codex, *storage_flags, "-c", "mcp_servers={}", "mcp", "list", "--json"]))
     expected = set(before) | {"openaiDeveloperDocs"}
-    flags = ["-c", "mcp_servers={}", "-c", 'mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"']
+    flags = [*storage_flags, "-c", "mcp_servers={}", "-c", 'mcp_servers.openaiDeveloperDocs.url="https://developers.openai.com/mcp"']
     for name in sorted(expected):
         flags += ["-c", f"mcp_servers.{name}.enabled=false"]
-    after = mcp_rows(await metadata([codex, *flags, "mcp", "list", "--json"], env))
+    after = mcp_rows(await probe([codex, *flags, "mcp", "list", "--json"]))
     if set(after) != expected or any(after.values()):
         raise Refusal("effective MCP readback changed or contains enabled servers")
-    features = await metadata([codex, "features", "list"], env)
+    features = await probe([codex, *storage_flags, "features", "list"])
     names = feature_names(features)
     for name in names:
         flags += ["-c", f"features.{name}=false"]
-    readback = feature_names(await metadata([codex, *flags, "features", "list"], env), require_false=True)
+    readback = feature_names(await probe([codex, *flags, "features", "list"]), require_false=True)
     # CLI feature visibility changes under overrides (observed Q01). Missing
     # names are not proof of absent tools; every returned relevant flag must be
     # false, and newly exposed names are disabled and read back once more.
@@ -145,7 +148,7 @@ async def preflight(codex, profile, expected_version):
     for name in extra:
         flags += ["-c", f"features.{name}=false"]
     if extra:
-        readback = feature_names(await metadata([codex, *flags, "features", "list"], env), require_false=True)
+        readback = feature_names(await probe([codex, *flags, "features", "list"]), require_false=True)
         if set(readback)-set(names)-set(extra):
             raise Refusal("feature metadata did not stabilize within bounded preflight")
     return flags, {"mcp": "all-effective-disabled", "mcp_count": len(after), "cli_version": version,
@@ -169,6 +172,7 @@ class Peer:
         self.pending, self.finals = {}, {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
         self.errors = []
+        self.tools, self.unknown_tools, self.thread = {}, set(), None
         self.events = asyncio.Queue(maxsize=8)
         self.sequence = 0
         self.capture = "complete"
@@ -229,6 +233,25 @@ class Peer:
 
     def notification(self, value):
         method, params = value.get("method"), value.get("params", {})
+        if method in {'item/started', 'item/completed'}:
+            item = params.get('item', {})
+            kind = item.get('type')
+            if kind in {'commandExecution','fileChange'}:
+                if self.thread and params.get('threadId') != self.thread:
+                    self.capture = 'foreign-tool-completion'
+                elif not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=128:
+                    self.capture = 'invalid-tool-item-identity'
+                elif len(self.tools) < 128 or item.get('id') in self.tools:
+                    self.tools[item.get('id')] = {'id': item.get('id'), 'type': kind, 'turn': params.get('turnId'),
+                        'status': item.get('status'), 'completed_notification': method == 'item/completed',
+                        'exit_code': item.get('exitCode') if type(item.get('exitCode')) is int else None,
+                        'duration_ms': item.get('durationMs') if type(item.get('durationMs')) is int else None,
+                        'provider_process_id': item.get('processId')[:128] if isinstance(item.get('processId'),str) else None,
+                        'OS_handle_owned': False}
+                else:
+                    self.capture = 'tool-metadata-count-bound'
+            elif kind not in {'agentMessage','userMessage','reasoning','plan','contextCompaction'}:
+                self.unknown_tools.add(str(kind)[:100])
         if method == "error" and len(self.errors) < 8:
             self.errors.append(safe_error(params.get("error", params)))
         if method == "item/completed":
@@ -310,9 +333,11 @@ class AppServer:
                    "error": None, "detail": {"resume_disposition": "unavailable-before-session-creation",
                        "unsubscribe": "not-attempted", "teardown": "not-started", "session_reclamation": "not-qualified"}}
         outcome["detail"]["creation"] = "not-attempted"
-        child = peer = None
+        outcome['detail']['thread_start']='not-requested'
+        child = peer = watcher = None
         try:
-            argv, preflight_result = await self.command(profile)
+            owned_storage = storage.prepare(store, attempt)
+            argv, preflight_result = await self.command(profile, storage.flags(owned_storage), spec['cwd'])
             store.authorize_launch(attempt)
             outcome["detail"]["creation"] = "uncertain"
             child = await asyncio.create_subprocess_exec(*argv, cwd=spec["cwd"], env=environment(profile),
@@ -322,11 +347,14 @@ class AppServer:
             store.begin(attempt, {**preflight_result, "process_handle": "owned-asyncio-subprocess",
                                   "pid_information_only": child.pid})
             peer = Peer(child, self.config["limits"]["max_result_bytes"])
+            peer.owned_storage = owned_storage
+            if owned_storage:
+                watcher=asyncio.create_task(storage.guard(store,child,outcome))
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
         except Exception as exc:
             if isinstance(exc, OSError) and exc.errno in {errno.ENOENT, errno.EACCES} and child is None:
                 outcome["detail"]["creation"] = "proved-rejected"
-            outcome["error"] = str(exc)[:1000] if isinstance(exc, Refusal) else f"adapter error: {type(exc).__name__}"
+            outcome["error"] = outcome['error'] or (str(exc)[:1000] if isinstance(exc, Refusal) else f"adapter error: {type(exc).__name__}")
             outcome["detail"]["capacity_error"] = isinstance(exc, (RpcFailure, TurnFailure)) and exc.capacity
             if isinstance(exc, (RpcFailure, TurnFailure)):
                 outcome["detail"]["causal_failure"] = exc.projection
@@ -346,13 +374,16 @@ class AppServer:
                 outcome["detail"]["teardown"] = ("actual-owned-process-exit-collected" if outcome["exit"] is not None else "unconfirmed")
                 outcome["detail"]["teardown_failure"] = type(exc).__name__
                 outcome["cleanup"] = "owned-teardown-needs-reconciliation"
+            if watcher:
+                watcher.cancel()
+                with suppress(asyncio.CancelledError):await watcher
         return outcome
 
-    async def command(self, profile):
+    async def command(self, profile, storage_flags=(), cwd=None):
         if self.fixture_command:
             return self.fixture_command, {"fixture": True, "mcp": "fixture-only", "delegation_capability": "not-established"}
         codex = self.config.get("codex", "codex")
-        flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"])
+        flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"], storage_flags,cwd)
         return [codex, *flags, "app-server", "--listen", "stdio://"], facts
 
     async def session(self, peer, store, attempt, prompt, spec, binding, profile, schema, outcome):
@@ -361,6 +392,12 @@ class AppServer:
         if hello.get("codexHome") != str(Path.home()/profile):
             raise Refusal("owned server opened a different profile")
         await peer.send({"method": "initialized", "params": {}})
+        if peer.owned_storage:
+            readback = await peer.rpc('config/read', {'includeLayers': False})
+            storage.verify(store, attempt, peer.owned_storage, readback)
+            outcome['detail']['owned_storage'] = {'effective': peer.owned_storage, 'scope': 'this newly owned attempt only',
+                'physical_reclamation': 'pending processing+24h and holds; no shared-profile absence claim'}
+        outcome['detail']['thread_start']='requested-uncertain'
         created = await peer.rpc("thread/start", {
             "model": binding["model"], "modelProvider": binding["provider"],
             "allowProviderModelFallback": False, "ephemeral": True, "cwd": spec["cwd"],
@@ -372,6 +409,9 @@ class AppServer:
                 "Do not inspect profile/history/credentials or change global routes. Return typed honest partials."})
         thread = created.get("thread", {})
         session = canonical_uuid(thread.get("id"))
+        peer.thread = session
+        store.session(attempt,session,detail={'root_identity_observed':True})
+        outcome['detail']['thread_start']='owned-root-observed'
         store.session(attempt, session, detail={"binding_readback": self.binding(created, binding),
                                               "ephemeral_readback": thread.get("ephemeral"),
                                               "sandbox_readback": self.sandbox(created, spec)})
@@ -490,11 +530,19 @@ class AppServer:
                 outcome["detail"]["late_or_conflicting_returns"] = peer.late_finals
             if peer.errors:
                 outcome["detail"]["protocol_failures"] = peer.errors
+            items = list(peer.tools.values())
+            outcome['detail']['tool_completion'] = {'items': items, 'unknown_types': sorted(peer.unknown_tools),
+                'complete': not peer.unknown_tools and all(x['completed_notification'] and x['status'] in {'completed','failed'}
+                     and (x['type'] != 'commandExecution' or x['exit_code'] is not None) for x in items),
+                'nonzero_completions': [x['id'] for x in items if x['exit_code'] is not None and x['exit_code'] != 0],
+                'meaning': 'provider completion metadata; not OS ownership, raw transcript or absence of descendants'}
         if (outcome["detail"].get("ephemeral") and outcome["exit"] == 0
                 and outcome["detail"].get("unsubscribe") in {"unsubscribed", "notLoaded", "notSubscribed"}):
             outcome["cleanup"] = "owned-ephemeral-lifecycle-observed"
         else:
             outcome["cleanup"] = "owned-teardown-needs-reconciliation"
+        if outcome['detail'].get('thread_start')=='not-requested' and outcome['exit'] is not None:
+            outcome['cleanup']='no-session-created'  # No root RPC was sent; not an inference from not-loaded.
         if outcome["detail"].get("resume_disposition") == "available-while-owner-alive":
             outcome["detail"]["resume_disposition"] = "unavailable-after-ephemeral-owner-exit"
 

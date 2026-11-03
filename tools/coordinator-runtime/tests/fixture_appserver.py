@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import time
 import uuid
+import sqlite3
 
 plan = json.loads(Path(sys.argv[1]).read_text())
 thread, turn, turns = str(uuid.uuid4()), None, 0
@@ -47,10 +48,17 @@ for line in sys.stdin:
         if plan.get("hang_first") and turns == 1:
             continue
         answer = plan.get("result")
+        if plan.get('target'):
+            Path(plan['target']).write_text(json.dumps(plan.get('target_contents',{'total':12})))
+        if plan.get('tool_metadata'):
+            meta = {'type':'commandExecution','id':str(uuid.uuid4()),'status':'completed',
+                    'command':'private command body NOT to retain','aggregatedOutput':'private output NOT to retain',
+                    'processId':'provider-label-only','durationMs':2,**plan['tool_metadata']}
+            send({'method':'item/completed','params':{'threadId':thread,'turnId':turn,'item':meta}})
         if plan.get("write_file"):
             path = Path.cwd() / plan["write_file"]
             path.write_text("conserved actionable fixture report\n")
-            answer = {**answer, "artifacts": [{"path": str(path), "meaning": "exact owned report"}]}
+            answer = {**answer, "artifacts": [str(path)] if plan.get('artifact_strings') else [{"path": str(path), "meaning": "exact owned report"}]}
         if set(params.get("outputSchema", {}).get("properties", {})) == {"payload_json"}:
             answer = {"payload_json": json.dumps(answer)}
         text = plan.get("raw_final") or json.dumps(answer)
@@ -62,6 +70,14 @@ for line in sys.stdin:
         completed("interrupted")
     elif method == "thread/read":
         respond(request, {"thread": {"id": thread, "status": {"type": plan.get("read_status", "idle")}}})
+    elif method == 'config/read':
+        config=plan.get('storage_config',{})
+        if plan.get('write_aux') and config.get('sqlite_home'):
+            with sqlite3.connect(str(Path(config['sqlite_home'])/'state.sqlite3')) as conn:
+                conn.execute('CREATE TABLE IF NOT EXISTS owned_marker(id TEXT)')
+                conn.execute('INSERT INTO owned_marker VALUES(?)',(thread,))
+            (Path(config['log_dir'])/'owned.log').write_text('synthetic auxiliary store\n')
+        respond(request,{'config':config,'origins':{}})
     elif method == "thread/unsubscribe":
         if plan.get("unsubscribe_error"):
             send({"id": request["id"], "error": {"code": -32000, "message": "synthetic unsubscribe failure"}})

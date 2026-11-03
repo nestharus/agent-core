@@ -187,7 +187,9 @@
           "/home/nes/projects/code-review-workflows/trunk"
         ],
         "write_roots": [
-          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/ASSIGNMENTS.json",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/ASSIGNMENTS.md",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/CONSOLIDATION_REGISTER.json",
           "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/WORK_NOW_20261030.json",
           "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/WORK_NOW_20261030.md",
           "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/ROOT_NEXT.md",
@@ -209,7 +211,19 @@
         "Reviews",
         "QA",
         "Root"
-      ]
+      ],
+      "routine_completion": {
+        "kind": "file-witness",
+        "targets": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/ASSIGNMENTS.json",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/ASSIGNMENTS.md",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/CONSOLIDATION_REGISTER.json",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/WORK_NOW_20261030.json",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/WORK_NOW_20261030.md",
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/ROOT_NEXT.md",
+          "/home/nes/projects/rfq/trunk/rfqautomation/WORK_LOG.md"
+        ]
+      }
     },
     "branch-proposer": {
       "role": "Branch",
@@ -619,5 +633,8 @@
     },
     "alert_role": "Work",
     "alert_recipient": "Work"
+  },
+  "session_storage": {
+    "mode": "owned-attempt"
   }
 }

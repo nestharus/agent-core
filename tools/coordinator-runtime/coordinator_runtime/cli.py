@@ -1,6 +1,8 @@
 """Operator entry points. No command adopts existing collectors or logs in."""
 
 import argparse
+import base64
+import hashlib
 import asyncio
 import json
 import os
@@ -71,9 +73,13 @@ def parser():
     enroll.add_argument("role")
     enroll.add_argument("--authority", required=True)
     enroll.add_argument("--delivery", action="store_true", help="Explicit role-lifetime outgoing delegation and real service actor")
+    enroll.add_argument('--completion', action='store_true', help='Explicit bounded routine collector/file completion delegation')
     extend = sub.add_parser("delegate-delivery")
     extend.add_argument("role")
     extend.add_argument("--authority", required=True)
+    complete = sub.add_parser('delegate-completion')
+    complete.add_argument('role')
+    complete.add_argument('--authority', required=True)
     revoke = sub.add_parser("revoke")
     revoke.add_argument("role")
     revoke.add_argument("--grant", required=True)
@@ -98,9 +104,17 @@ def parser():
     conserved.add_argument("path")
     conserved.add_argument("--receipt", required=True)
     sub.add_parser("cleanup")
+    catchup = sub.add_parser('owner-catchup')
+    catchup.add_argument('role')
+    catchup.add_argument('--after',type=int,required=True)
+    catchup.add_argument('--through',type=int)
     sub.add_parser("service-unit")
     source = sub.add_parser("recover-source")
     source.add_argument("event")
+    artifact = sub.add_parser('artifact-source')
+    artifact.add_argument('attempt')
+    artifact.add_argument('path')
+    artifact.add_argument('--delivery',help='Exact already addressed consumer delivery, when caller is not the source owner')
     for command in ("delivery-show", "delivery-stage", "delivery-correct"):
         delivery = sub.add_parser(command)
         delivery.add_argument("role")
@@ -130,11 +144,13 @@ def operate(args, store):
     if args.command in {"init", "status"}:
         return store.status()
     if args.command == "enroll":
-        grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery)
+        grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery, completion=args.completion)
         store.enroll(args.role, grant)
         return {"grant": grant, "legacy_hold": store.enrollment(args.role)["legacy_hold"]}
     if args.command == "delegate-delivery":
         return Board(store.config, args.role).extend_delivery(store, args.authority)
+    if args.command == 'delegate-completion':
+        return Board(store.config, args.role).extend_completion(store, args.authority)
     if args.command == "revoke":
         Board(store.config, args.role).revoke(args.grant)
         with store.tx():
@@ -169,10 +185,27 @@ def operate(args, store):
         return {"conserved": args.path}
     if args.command == "cleanup":
         return sweep(store)
+    if args.command == 'owner-catchup':
+        return Board(store.config,args.role).owner_catchup(store,args.after,args.through)
     if args.command == "recover-source":
         role = store.one("SELECT role FROM events WHERE id=?", (args.event,))["role"]
         actual_actor(store.config["roles"][role]["owner"])
         return store.recover_source(args.event)
+    if args.command == 'artifact-source':
+        row=store.one('SELECT * FROM artifact_custody WHERE attempt=? AND path=?',(args.attempt,args.path))
+        if not row:raise Refusal('artifact custody not recorded for this exact source')
+        caller=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
+        if caller != row['owner']:
+            delivery=store.one('SELECT * FROM outboxes WHERE id=?',(args.delivery,)) if args.delivery else None
+            target=store.config.get('delivery',{}).get('recipients',{}).get(delivery['recipient'],{}) if delivery else {}
+            listed=json.loads(delivery['payload']).get('artifact_witnesses',[]) if delivery else []
+            if (not delivery or not delivery['board_receipt'] or target.get('session')!=caller or
+                    not any((w.get('source_attempt')==args.attempt or w.get('source_context')==args.attempt) and w.get('path')==args.path and w.get('sha256')==row['sha256'] for w in listed)):
+                raise Refusal('artifact source is private to its actual owner or exact addressed consumer')
+        body=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))['body']
+        if hashlib.sha256(body).hexdigest()!=row['sha256']:raise Refusal('conserved artifact bytes no longer match the exact witness')
+        if len(body)>store.config['limits'].get('max_artifact_bytes',33554432):raise Refusal('source exceeds selected export bound; retained without truncation')
+        return {**row,'body_base64':base64.b64encode(body).decode()}
     if args.command == "service-unit":
         return service_unit(store.config, args.config)
     if args.command == "ack-alert":

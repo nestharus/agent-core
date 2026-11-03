@@ -18,6 +18,9 @@ import time
 from .contracts import (Backpressure, Refusal, classification, digest, encode, ident,
                         response_tasks, task_result)
 from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
+from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
+from .routine import SCHEMA as ROUTINE_SCHEMA
+from .storage import SCHEMA as STORAGE_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -71,12 +74,19 @@ def owned_bytes(home, maximum_entries):
     frontier, total, entries = [home], 0, 0
     while frontier:
         directory = frontier.pop()
-        with os.scandir(directory) as children:
+        try:
+            children = os.scandir(directory)
+        except FileNotFoundError:
+            continue  # Concurrent owned-store rotation/removal, no symlink walk.
+        with children:
             for child in children:
                 entries += 1
                 if entries > maximum_entries:
                     raise Backpressure("owned artifact entry-count bound reached")
-                info = child.stat(follow_symlinks=False)
+                try:
+                    info = child.stat(follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
                 total += info.st_size
                 if stat.S_ISDIR(info.st_mode):
                     frontier.append(child.path)
@@ -113,7 +123,7 @@ class Store(DeliveryJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -156,7 +166,7 @@ class Store(DeliveryJournal):
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
-        if usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
+        if kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
 
     def enroll(self, role, grant):
@@ -564,7 +574,7 @@ class Store(DeliveryJournal):
             "recipient": self.enrollment(destination)["owner"], "author": attempt["session"],
             "source_role": job["role"], "source_attempt": attempt["id"], "source_job": job["id"],
             "source_members": members, "package": job["package"], "parent": members[0]["event"],
-            "artifact_witnesses": self.rows("SELECT path,dev,ino,size,mtime,sha256 FROM artifacts WHERE attempt=?", (attempt["id"],)),
+            "artifact_witnesses": witnesses(self, attempt["id"]) or self.rows("SELECT path,dev,ino,size,mtime,sha256 FROM artifacts WHERE attempt=?", (attempt["id"],)),
             "allowed_tasks": choices, "notice": None, "board_id": None,
             "body": result, "kind": "response", "grant": None,
         }
@@ -682,6 +692,8 @@ class Store(DeliveryJournal):
     def violations(self):
         now, d = self.clock(), self.config["deadlines"]
         alerts = []
+        alerts += [{'subject':r['attempt'],'kind':'owned-storage-cleanup-hold','cause':r['error']}
+                   for r in self.rows('SELECT attempt,error FROM attempt_storage WHERE error IS NOT NULL AND removed IS NULL')]
         alerts += [{"subject": r["subject"], "kind": r["kind"], "role": r["role"], "cause": json.loads(r["detail"])}
                    for r in self.rows("SELECT * FROM operational_errors WHERE active=1")]
         alerts += [{"subject": r["id"], "kind": "ack-lag", "age": now-r["received"]} for r in
@@ -748,4 +760,7 @@ class Store(DeliveryJournal):
                 "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,processed_at FROM outboxes"),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
+                "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}
+                                     for r in self.rows('SELECT attempt,path,kind,owner,sha256 FROM artifact_custody')],
+                "session_storage": self.rows('SELECT * FROM attempt_storage'),
                 "violations": self.violations(), "adoption": "prospective grants only; no model/goal acceptance"}

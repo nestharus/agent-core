@@ -187,7 +187,7 @@ class Continuing(unittest.TestCase):
         self.assertEqual(next_job["package"], "other")
         self.assertEqual(self.store.job(first["id"])["state"], "awaiting-delivery")
 
-    def rejected_review(self):
+    def rejected_review(self, artifacts=None):
         queued(self.store, event(self.config, "selected-review", "Reviews", "reviews-proposer"))
         job = self.store.reserve()
         self.store.delegate_owner_job(job["id"])
@@ -196,7 +196,7 @@ class Continuing(unittest.TestCase):
         owner = self.config["roles"]["Reviews"]["owner"]
         for stage in ("picked-up", "processed"):
             self.store.delivery_observed(outbox["id"], self.stage("Reviews", outbox["id"], owner, stage))
-        returned = {"result": result(summary="Unique complete collected finding; category typo only"),
+        returned = {"result": {**result(summary="Unique complete collected finding; category typo only"), 'artifacts':artifacts or []},
                     "actual_originals": [{"collector": owner, "actual_end": 0, "reference": "synthetic original report; never replay"}],
                     "method_pin": "e67a1de4", "coverage_frontier": {"full": ["synthetic selected material"], "unread": ["explicit real qualification"]},
                     "effects": {"evidence": ["actual synthetic owner reconciliation"], "unknown_effects": []}}
@@ -244,6 +244,22 @@ class Continuing(unittest.TestCase):
         with patch.dict(os.environ, {"CODEX_SESSION_ID": owner}):
             self.assertRaises(Refusal, self.boards["Reviews"].correct_owner_return, outbox["id"], self.correction(repeated, reason="already collected"))
         self.assertEqual(len(self.store.rows("SELECT * FROM owner_results")), 1)
+
+    def test_L02_selected_owner_report_strings_have_custody_without_fabricated_model_attempt(self):
+        report=Path(self.temp.name)/'native-owner-report.json'
+        report.write_text('{"finding":"retain actual selected owner report"}')
+        body=report.read_bytes()
+        job,outbox,owner,original=self.rejected_review([str(report)])
+        with patch.dict(os.environ,{'CODEX_SESSION_ID':owner}):
+            self.boards['Reviews'].correct_owner_return(outbox['id'],self.correction(original))
+        self.runtime.pump_deliveries()
+        response=self.store.event(self.store.job(job['id'])['response'])
+        witness=response['artifact_witnesses'][0]
+        self.assertIsNone(witness['source_attempt'])
+        self.assertTrue(witness['source_context'].startswith('owner:'))
+        self.assertEqual(self.store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(witness['sha256'],))['body'],body)
+        self.assertEqual(self.store.rows('SELECT * FROM attempts WHERE kind=\'task\''),[])
+        self.assertTrue(report.is_file())
 
     def test_R03_corrections_are_version_fenced_bounded_and_keep_every_rejected_return(self):
         job, outbox, owner, current = self.rejected_review()

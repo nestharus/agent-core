@@ -17,6 +17,8 @@ import sys
 
 from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, ident, regular_path
 from .board_delivery import BoardDelivery, SCHEMA as DELIVERY_SCHEMA
+from .completion import Completion
+from .routine import BOARD_SCHEMA as COMPLETION_SCHEMA
 
 EXTENSION = """
 CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
@@ -60,7 +62,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat()
 
 
-class Board(BoardDelivery):
+class Board(BoardDelivery, Completion):
     def __init__(self, config, role):
         self.config, self.role = config, role
         self.selected = config["roles"][role]
@@ -131,13 +133,13 @@ class Board(BoardDelivery):
         if not invited:
             raise Refusal("actual role owner has no required catalog invitation")
 
-    def grant(self, runtime, authority, *, delivery=False):
+    def grant(self, runtime, authority, *, delivery=False, completion=False):
         owner = self.store.acting_session(self.selected["owner"])
         if not authority.strip():
             raise Refusal("actual user/role delegation authority reference required")
         stat = regular_path(str(runtime.path)).stat()
         with self.opened() as conn:
-            conn.executescript(EXTENSION + DELIVERY_SCHEMA)
+            conn.executescript(EXTENSION + DELIVERY_SCHEMA + COMPLETION_SCHEMA)
             with self.store.write(conn):
                 route = conn.execute("SELECT route FROM sessions WHERE session=?", (owner,)).fetchone()[0]
                 if route != "managed":
@@ -150,6 +152,8 @@ class Board(BoardDelivery):
                               stat.st_dev, stat.st_ino, cutover, owner, authority, utc()))
                 if delivery:
                     self.grant_delivery(conn, grant, authority, runtime)
+                if completion:
+                    self.grant_completion(conn, grant, authority)
         return grant
 
     def revoke(self, grant_id):
@@ -188,6 +192,41 @@ class Board(BoardDelivery):
     def verify_authority(self, runtime):
         with self.opened() as conn:
             return self._grant(conn, runtime)
+
+    def owner_catchup(self, runtime, after, through=None):
+        """Genuine paused-route owner recovers an explicit source interval.
+
+        No grant/membership/cursor mutation, manufactured notice or task replay.
+        """
+        self.store.acting_session(self.selected['owner'])
+        with self.opened() as conn:
+            upper = conn.execute('SELECT COALESCE(MAX(seq),0) FROM posts').fetchone()[0] if through is None else through
+            if after < 0 or upper < after:
+                raise Refusal('bounded monotonic source interval required')
+            owner=self.selected['owner']
+            ids=conn.execute('SELECT p.seq FROM posts p LEFT JOIN thread_posts tp ON tp.post_seq=p.seq '
+                'LEFT JOIN threads t ON t.thread_id=tp.thread_id LEFT JOIN posts root ON root.seq=t.thread_id '
+                'WHERE p.seq>? AND p.seq<=? AND (p.recipient=? OR t.opener=? OR root.recipient=?) ORDER BY p.seq LIMIT 101',
+                (after,upper,owner,owner,owner)).fetchall()
+            selected=[]
+            for item in ids[:100]:
+                visible=self.store.query_posts(conn,session=owner,after=item['seq']-1,topic=None,kind=None,limit=1,include_thread_members=True)
+                if not visible or visible[0]['seq']!=item['seq']:raise Refusal('catchup source visibility changed')
+                selected.append(visible[0])
+            recovered = []
+            for post in selected:
+                key = digest({'board':self.selected['board_id'],'post':post['seq'],'owner':self.selected['owner']})
+                existing = runtime.one('SELECT id,processed_at,hold FROM events WHERE id=?', (key,))
+                if existing and existing['processed_at'] is not None and not existing['hold']:
+                    continue
+                notice = conn.execute('SELECT notification_id FROM notification_outbox WHERE post_seq=? AND recipient=?',
+                                      (post['seq'],self.selected['owner'])).fetchone()
+                recovered.append({'post':post,'notice':notice[0] if notice else None,'existing_responsibility':existing,
+                                  'disposition':'actual owner consumes/routes source; no replay or notice ACK inferred'})
+            cursor = selected[-1]['seq'] if selected else upper
+            complete = len(ids) <= 100
+            return {'owner':self.selected['owner'],'after':after,'through':upper,'next_after':cursor,
+                    'complete_interval':bool(complete),'sources':recovered,'membership_or_cursor_changed':False}
 
     def scan(self, runtime, limit=100):
         """No owner ack_seq is read or advanced. Our prospective cursor is atomic with intake."""

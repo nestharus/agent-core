@@ -208,8 +208,17 @@ class BoardDelivery:
                     raise Refusal("owner return collection retains the exact original runtime grant")
                 receipt = self._delivery_record(conn, dict(row))
                 try:
+                    from .custody import inventory
+                    from .contracts import task_result
+                    job=runtime.job(outbox['job'])
+                    task=self.config['tasks'][job['task']]
+                    if task.get('execution')!='owner' or receipt['recipient']!=self.selected['owner']:
+                        raise Refusal('artifact custody must retain the actual selected owner procedure')
+                    context='owner:'+job['id']+':'+receipt['settlement_version']
+                    inventory(runtime,context,task_result(receipt['settlement'].get('result')),task,role_owned=True)
+                    receipt['artifact_context']=context
                     runtime.delivery_observed(outbox["id"], receipt)
-                except Refusal as exc:
+                except (Refusal,OSError) as exc:
                     failure = str(exc)[:1000]
                 conn.execute("INSERT INTO coordinator_owner_return_checks_v1 VALUES(?,?,?,?,?,?) "
                              "ON CONFLICT(delivery,version) DO UPDATE SET rejection=excluded.rejection,"

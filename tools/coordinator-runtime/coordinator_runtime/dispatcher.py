@@ -13,6 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
+from . import custody, routine
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task
 
 
@@ -58,10 +59,12 @@ def job_prompt(store, job, task=None):
     if any(digest(event) != member["hash"] for member, event in zip(members, events)):
         raise Refusal("frozen material changed; hold instead of silently refreshing batch")
     attempt = store.attempt(job["active_attempt"])
+    frozen_artifacts = custody.materialize(store, events, attempt['id'])
     context = {"role": job["role"], "phase": job["phase"], "reservation": job["id"],
                "collector": store.controller, "attempt": attempt["id"], "package": job["package"],
                "target_and_why": task["purpose"], "authority": task["authority"],
                "typed_effect_authority": task["effect_authority"],
+               "frozen_artifact_inputs": frozen_artifacts,
                "effect_policy": task["effects"], "members": members, "events": events,
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
@@ -74,6 +77,8 @@ def job_prompt(store, job, task=None):
             "approval gates are not reinstated. Keep all actionable findings, dissent, failures and UNKNOWNs "
             "with exact source references. Root code builders retain commit AND push duties. "
             "The selected templates govern the real task; the JSON final is its transport envelope. "
+            "Use supplied frozen_artifact_inputs.frozen_path for historical report bytes; "
+            "the original canonical path may have changed since that report. Preserve every required artifact path. "
             "A final/DONE does not establish process exit, acceptance, effect reconciliation or publication. "
             "Return handoffs as {recipient,kind,text,ref,required} within the task's allowed recipients; "
             "use required=settled for necessary work/results/questions. The real automation actor delivers "
@@ -219,6 +224,8 @@ class Dispatcher:
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
             task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
+            if task.get('routine_completion'):
+                routine.prepare(self.store, self.boards[job['role']], job, attempt, task)
             spec = execution_spec(task, directory)
             outcome = await self.run_model(attempt, job_prompt(self.store, job, task), spec, RESULT_SCHEMA)
         except (Refusal, OSError) as exc:
@@ -226,7 +233,7 @@ class Dispatcher:
                        "error": str(exc), "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         self.store.collect(attempt, outcome)
         try:
-            self.inventory_artifacts(attempt, outcome)
+            self.inventory_artifacts(attempt, outcome, task)
         except (Refusal, OSError) as exc:
             self.store.capture_gap(attempt, exc)
             self.store.hold_job(job_id, exc)
@@ -239,19 +246,18 @@ class Dispatcher:
                                       (job_id, attempt))
         self.try_finish(job_id)
 
-    def inventory_artifacts(self, attempt, outcome):
+    def inventory_artifacts(self, attempt, outcome, task=None):
         result = outcome.get("result")
         if not isinstance(result, dict):
             return
-        root = self.store.home / "artifacts" / attempt
-        for artifact in result.get("artifacts", []):
-            path = artifact.get("path") if isinstance(artifact, dict) else None
-            if path and Path(path).is_relative_to(root):
-                register_artifact(self.store, attempt, path)
+        job = self.store.job(self.store.attempt(attempt)['job'])
+        custody.inventory(self.store, attempt, result, task or self.config['tasks'][job['task']])
 
     def try_finish(self, job_id):
         job = self.store.job(job_id)
         try:
+            if self.config['tasks'][job['task']].get('routine_completion'):
+                routine.reconcile(self.store, self.boards[job['role']], job)
             self.store.finish_job(job_id, job["token"])
             if self.store.job(job_id)["state"] == "closed":
                 self.runtime_errors.pop(job_id, None)
@@ -415,6 +421,8 @@ class Dispatcher:
             receipt = board.delivery_status(outbox["id"])
             if receipt["state"] in {"posted", "ambiguous"}:
                 receipt = board.transport_delivery(self.store, outbox)
+            if receipt['state'] != 'settled' and hasattr(board, 'complete_own_delivery'):
+                receipt = board.complete_own_delivery(self.store, outbox) or receipt
             if owner_procedure and receipt["state"] == "settled":
                 board.collect_owner_return(self.store, outbox)
             else:
@@ -446,5 +454,7 @@ def execution_spec(task, directory):
     if task["effects"] == "none":
         return task
     authority = {**task["effect_authority"], "write_roots": [*task["effect_authority"]["write_roots"], str(directory)]}
-    cwd = str(directory) if task["effects"] == "owned-artifacts" else task["cwd"]
+    if task.get('routine_completion'):
+        authority['write_roots'] = [*task['routine_completion']['targets'], str(directory)]
+    cwd = str(directory) if task["effects"] == "owned-artifacts" or task.get('routine_completion') else task["cwd"]
     return {**task, "cwd": cwd, "effect_authority": authority}

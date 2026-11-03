@@ -7,6 +7,7 @@ ACK is never evidence that a recipient's Codex submission queue was processed.
 import json
 
 from .contracts import Refusal, digest, encode, ident, required_text
+from .custody import witnesses
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS outboxes(
@@ -65,6 +66,7 @@ class DeliveryJournal:
                      "author": attempt["session"], "kind": "outgoing-response", "body": result,
                      "source_attempt": attempt["id"], "source_job": job["id"], "source_members": members,
                      "delivery_plan": [{"id": r["id"], "recipient": r["recipient"], "kind": r["kind"]} for r in rows],
+                     "artifact_witnesses": witnesses(self, attempt['id']),
                      "package": job["package"], "parent": members[0]["event"], "allowed_tasks": ["@delivery"],
                      "notice": None, "board_id": None, "grant": None}
             self.budget("events", len(encode(event)))
@@ -81,7 +83,7 @@ class DeliveryJournal:
         existing = self.one("SELECT id FROM outboxes WHERE job=? AND recipient=?", (job["id"], job["role"]))
         if not existing:
             self._outbox(job["role"], job["role"], "result", {"job": job["id"], "attempt": attempt["id"],
-                         "result": result, "source_members": json.loads(job["members"])}, job=job["id"], producer=attempt["session"],
+                         "result": result, "artifact_witnesses":witnesses(self,attempt['id']), "source_members": json.loads(job["members"])}, job=job["id"], producer=attempt["session"],
                          key=digest({"owner_report": attempt["id"]}))
 
     def _task_handoff(self, job, attempt, task, result, handoff, index):
@@ -100,6 +102,7 @@ class DeliveryJournal:
                 raise Refusal("actual accepted QA package alone can qualify to Branch")
         required_text(handoff["text"], "handoff meaning", self.config["limits"]["max_result_bytes"])
         payload = {"job": job["id"], "attempt": attempt["id"], "package": job["package"],
+                   "artifact_witnesses":witnesses(self,attempt['id']),
                    "source_members": json.loads(job["members"]), "source_result": result,
                    "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"]}
         self._outbox(job["role"], target, handoff["kind"], payload, job=job["id"], producer=attempt["session"],
@@ -178,6 +181,10 @@ class DeliveryJournal:
             raise Refusal("actual selected review owner must return its collected result")
         returned = receipt.get("settlement", {})
         result = task_result(returned.get("result"))
+        artifact_context=receipt.get('artifact_context')
+        artifact_sources=witnesses(self,artifact_context) if artifact_context else []
+        if result['artifacts'] and not artifact_sources:
+            raise Refusal('owner report artifacts require exact captured source custody')
         originals = returned.get("actual_originals")
         if (not isinstance(originals, list) or not returned.get("method_pin") or not returned.get("coverage_frontier") or
                 (not originals and (result["semantic"] == "DONE" or not returned.get("no_start_evidence")))):
@@ -202,6 +209,7 @@ class DeliveryJournal:
                     "source_originals": originals, "method_pin": returned["method_pin"], "coverage_frontier": returned["coverage_frontier"],
                     "source_no_start_evidence": returned.get("no_start_evidence"),
                     "owner_return_history": history,
+                    "artifact_witnesses":artifact_sources,
                     "source_members": members, "source_attempt": None, "parent": members[0]["event"],
                     "package": job["package"], "allowed_tasks": choices, "body": result,
                     "notice": None, "board_id": None, "grant": None}
