@@ -412,10 +412,12 @@ class Store(DeliveryJournal):
             return None
         if task.get("require_package_scope") and not self.one("SELECT package FROM admissions WHERE package=?", (row["package"],)):
             return None
-        active = self.db.execute("SELECT COUNT(*) FROM jobs WHERE role=? AND phase=? AND state!='closed'",
-                                 (role, phase)).fetchone()[0]
+        outstanding = self.rows("SELECT * FROM jobs WHERE role=? AND phase=? AND state!='closed'", (role, phase))
+        active = sum(not self.execution_complete(job) for job in outstanding)
         if active >= self._capacity(task):
             return None
+        if task.get("require_package_scope") and any(j["package"] == row["package"] for j in outstanding):
+            return None  # Unsettled responsibility in the same admitted scope stays fenced.
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
         if role == "QA" and phase == "execution" and self.one(
@@ -461,6 +463,16 @@ class Store(DeliveryJournal):
             attempt = self._attempt("task", None, job, task["binding"], profile or task["profile"])
             self.db.execute("UPDATE jobs SET active_attempt=?,state='running' WHERE id=?", (attempt, job))
         return attempt
+
+    def execution_complete(self, job):
+        """Release only execution capacity; delivery, queue and source stay owned."""
+        if job["state"] != "awaiting-delivery" or job["effects"] not in {"none", "reconciled"} or job["hold_reason"]:
+            return False
+        attempt = self.attempt(job["active_attempt"]) if job["active_attempt"] else None
+        return bool(attempt and attempt["begin"] is not None and attempt["ended"] is not None
+                    and attempt["collected"] is not None and attempt["exit"] == 0
+                    and attempt["state"] == "collected" and attempt["capture"] == "complete"
+                    and attempt["semantic"] == "DONE" and not attempt["error"])
 
     def job(self, job, token=None):
         row = self.one("SELECT * FROM jobs WHERE id=?", (job,))
@@ -729,7 +741,8 @@ class Store(DeliveryJournal):
         return {"controller": self.controller, "usage": self.usage(),
                 "enrollments": self.rows("SELECT * FROM enrollments"),
                 "events": self.rows("SELECT id,role,state,ack,received,processed_at,hold,error FROM events"),
-                "slots": self.rows("SELECT * FROM jobs WHERE state!='closed'"),
+                "slots": [{**job, "execution_slot_held": not self.execution_complete(job)}
+                          for job in self.rows("SELECT * FROM jobs WHERE state!='closed'")],
                 "attempts": self.rows("SELECT id,kind,job,controller,profile,binding,state,begin,ended,exit,"
                                       "collected,session,semantic,capture,cleanup,error,detail FROM attempts"),
                 "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,processed_at FROM outboxes"),

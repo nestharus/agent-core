@@ -34,3 +34,12 @@ result to Work with required=settled, retaining normal Root correction/QA routes
 under actual existing owner procedures rather than inventing new approvals.
 Review/final-user/Adam once-only duties remain with Reviews. Reports and private
 sources stay held through downstream consumer/recovery needs.
+
+If the runtime rejects the owner return, preserve the settled original. The
+actual Reviews owner reads its exact settlement_version using delivery-show and
+uses delivery-correct with {supersedes,reason,settlement} to append a bounded
+correction to that same reservation. Keep original collectors, method/pin,
+no-start evidence, all reports/findings and genuine coverage frontiers. Correct
+a report/routing error without replaying Source or reviewers. The integrator
+receives the full original/correction history. Already collected returns route
+new findings as a new addressed message; no blind integration/review replay.

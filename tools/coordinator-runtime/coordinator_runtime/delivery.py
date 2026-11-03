@@ -189,7 +189,8 @@ class DeliveryJournal:
             raise Refusal("the actual review owner must reconcile this report task's effects; other historical holds remain scoped")
         if self.one("SELECT job FROM owner_results WHERE job=?", (job["id"],)):
             return
-        self.db.execute("INSERT INTO owner_results VALUES(?,?,?,?,?)", (job["id"], receipt["recipient"], encode(result), encode(returned), self.clock()))
+        history = {"original": receipt.get("original_settlement", returned), "corrections": receipt.get("owner_corrections", [])}
+        self.db.execute("INSERT INTO owner_results VALUES(?,?,?,?,?)", (job["id"], receipt["recipient"], encode(result), encode({"effective": returned, **history}), self.clock()))
         choices = response_tasks(task, result, self.config)
         if not choices:
             raise Refusal("actual selected review return needs its report-integrator route")
@@ -200,6 +201,7 @@ class DeliveryJournal:
                     "kind": "response", "source_job": job["id"], "source_owner": receipt["recipient"],
                     "source_originals": originals, "method_pin": returned["method_pin"], "coverage_frontier": returned["coverage_frontier"],
                     "source_no_start_evidence": returned.get("no_start_evidence"),
+                    "owner_return_history": history,
                     "source_members": members, "source_attempt": None, "parent": members[0]["event"],
                     "package": job["package"], "allowed_tasks": choices, "body": result,
                     "notice": None, "board_id": None, "grant": None}

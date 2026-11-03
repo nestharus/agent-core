@@ -101,13 +101,15 @@ def parser():
     sub.add_parser("service-unit")
     source = sub.add_parser("recover-source")
     source.add_argument("event")
-    for command in ("delivery-show", "delivery-stage"):
+    for command in ("delivery-show", "delivery-stage", "delivery-correct"):
         delivery = sub.add_parser(command)
         delivery.add_argument("role")
         delivery.add_argument("delivery")
         if command == "delivery-stage":
             delivery.add_argument("--stage", choices=["picked-up", "processed", "settled"], required=True)
             delivery.add_argument("--receipt", required=True)
+        if command == "delivery-correct":
+            delivery.add_argument("--receipt", required=True, help="Actual owner supersedes/reason/settlement correction")
     alert = sub.add_parser("ack-alert")
     alert.add_argument("occurrence")
     alert.add_argument("--receipt", required=True)
@@ -201,9 +203,14 @@ def main(argv=None):
         if not args.config:
             raise Refusal("--config is required")
         config = load_config(args.config)
-        if args.command in {"delivery-show", "delivery-stage"}:
+        if args.command in {"delivery-show", "delivery-stage", "delivery-correct"}:
             board = Board(config, args.role)
-            value = board.show_delivery(args.delivery) if args.command == "delivery-show" else board.delivery_stage(args.delivery, args.stage, read_record(args.receipt))
+            if args.command == "delivery-show":
+                value = board.show_delivery(args.delivery)
+            elif args.command == "delivery-correct":
+                value = board.correct_owner_return(args.delivery, read_record(args.receipt))
+            else:
+                value = board.delivery_stage(args.delivery, args.stage, read_record(args.receipt))
             print_json(value)
             return 0
         store = Store(config)

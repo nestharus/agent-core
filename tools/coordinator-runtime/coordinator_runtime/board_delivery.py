@@ -7,12 +7,24 @@ drain or takeover of an existing TUI/app-server/native collector.
 """
 
 import json
+from contextlib import closing
 import os
 import time
 import shlex
+import sqlite3
 from pathlib import Path
 
 from .contracts import Refusal, digest, encode, canonical_uuid, required_text
+
+OWNER_RETURN_SCHEMA = """
+CREATE TABLE IF NOT EXISTS coordinator_owner_return_checks_v1(
+ delivery TEXT NOT NULL,version TEXT NOT NULL,rejection TEXT,validated INTEGER NOT NULL DEFAULT 0,
+ runtime TEXT NOT NULL,observed TEXT NOT NULL,PRIMARY KEY(delivery,version));
+CREATE TABLE IF NOT EXISTS coordinator_owner_corrections_v1(
+ id TEXT PRIMARY KEY,delivery TEXT NOT NULL,revision INTEGER NOT NULL,actor TEXT NOT NULL,
+ supersedes TEXT NOT NULL,reason TEXT NOT NULL,receipt TEXT NOT NULL,created TEXT NOT NULL,
+ UNIQUE(delivery,revision));
+"""
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS coordinator_delivery_grants_v1(
@@ -23,7 +35,7 @@ CREATE TABLE IF NOT EXISTS coordinator_deliveries_v1(
  payload TEXT NOT NULL,post INTEGER UNIQUE NOT NULL,notice INTEGER NOT NULL,
  state TEXT NOT NULL,created TEXT NOT NULL,pickup TEXT,processing TEXT,settlement TEXT,
  processed_at REAL,transport_started INTEGER NOT NULL DEFAULT 0);
-"""
+""" + OWNER_RETURN_SCHEMA
 
 
 class BoardDelivery:
@@ -160,12 +172,113 @@ class BoardDelivery:
             state = "acknowledged"
         if state == "posted" and notice["delivery_state"] in {"ambiguous", "sending", "failed"}:
             state = "ambiguous"
+        corrections = []
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_owner_corrections_v1'").fetchone():
+            corrections = [{**dict(r), "receipt": json.loads(r["receipt"])} for r in conn.execute(
+                "SELECT * FROM coordinator_owner_corrections_v1 WHERE delivery=? ORDER BY revision", (row["id"],))]
+        original = json.loads(row["settlement"]) if row["settlement"] else None
+        settlement = corrections[-1]["receipt"] if corrections else original
         return {"id": row["id"], "state": state, "post": row["post"], "notice": row["notice"], "recipient": row["recipient"],
                 "actor": row["actor"], "producer": row["producer"], "processed_at": row["processed_at"],
                 "pickup": json.loads(row["pickup"]) if row["pickup"] else None,
                 "processing": json.loads(row["processing"]) if row["processing"] else None,
-                "settlement": json.loads(row["settlement"]) if row["settlement"] else None,
+                "settlement": settlement, "settlement_version": digest(settlement) if settlement else None,
+                "original_settlement": original, "owner_corrections": corrections,
                 "transport": dict(notice)}
+
+    def collect_owner_return(self, runtime, outbox):
+        """Serialize local result collection and owner corrections on the board.
+
+        A crash between the two databases is reconciled from retained immutable
+        source, never by rerunning the review. Rejection is durable on the board.
+        """
+        failure = None
+        with self.opened(settlement=True, owner_required=False) as conn:
+            with self.store.write(conn):
+                for sql in OWNER_RETURN_SCHEMA.split(";"):
+                    if sql.strip():
+                        conn.execute(sql)
+                row = conn.execute("SELECT * FROM coordinator_deliveries_v1 WHERE id=?", (outbox["id"],)).fetchone()
+                if not row or row["actor"] != self.config["actor"] or row["payload"] != outbox["payload"] or row["producer"] != outbox["producer"]:
+                    raise Refusal("owner return does not bind this exact delivery/source")
+                grant = conn.execute("SELECT * FROM coordinator_grants_v1 WHERE id=?", (row["grant_id"],)).fetchone()
+                stat = runtime.path.stat()
+                if (not grant or grant["runtime"] != str(runtime.path) or grant["owner"] != self.selected["owner"] or
+                        (grant["runtime_dev"], grant["runtime_ino"]) != (stat.st_dev, stat.st_ino)):
+                    raise Refusal("owner return collection retains the exact original runtime grant")
+                receipt = self._delivery_record(conn, dict(row))
+                try:
+                    runtime.delivery_observed(outbox["id"], receipt)
+                except Refusal as exc:
+                    failure = str(exc)[:1000]
+                conn.execute("INSERT INTO coordinator_owner_return_checks_v1 VALUES(?,?,?,?,?,?) "
+                             "ON CONFLICT(delivery,version) DO UPDATE SET rejection=excluded.rejection,"
+                             "validated=excluded.validated,observed=excluded.observed",
+                             (outbox["id"], receipt["settlement_version"], failure, int(failure is None), str(runtime.path), self.store.utc_now()))
+        if failure:
+            raise Refusal(failure)
+        return receipt
+
+    def correct_owner_return(self, delivery, correction):
+        actor = canonical_uuid(os.environ.get("CODEX_SESSION_ID"))
+        if not isinstance(correction, dict) or set(correction) != {"supersedes", "reason", "settlement"}:
+            raise Refusal("owner correction requires exact supersedes/reason/settlement")
+        required_text(correction["reason"], "actual owner correction reason", 4000)
+        if len(encode(correction).encode()) > self.config["limits"]["max_result_bytes"]:
+            raise Refusal("owner correction exceeds bounded result capture")
+        with self.opened(settlement=True, owner_required=False) as conn:
+            with self.store.write(conn):
+                row = conn.execute("SELECT * FROM coordinator_deliveries_v1 WHERE id=?", (delivery,)).fetchone()
+                if not row or row["recipient"] != actor or row["kind"] != "work" or row["state"] != "settled":
+                    raise Refusal("only the actual recipient can correct its settled owner-procedure return")
+                payload = json.loads(row["payload"])
+                if self.role != "Reviews" or payload.get("selected_binding") != {"model": "gpt-xhigh", "provider": "opaque", "effort": "opaque"}:
+                    raise Refusal("this correction path is only for the selected actual Reviews owner procedure")
+                current = self._delivery_record(conn, dict(row))
+                key = digest({"delivery": delivery, "actor": actor, "correction": correction})
+                if current["owner_corrections"] and current["owner_corrections"][-1]["id"] == key:
+                    return current  # Same correction delivery, not another review or revision.
+                if correction["supersedes"] != current["settlement_version"]:
+                    raise Refusal("stale owner correction; read the exact current rejected version")
+                rejected = conn.execute("SELECT * FROM coordinator_owner_return_checks_v1 WHERE delivery=? AND version=?",
+                                        (delivery, current["settlement_version"])).fetchone()
+                if not rejected or not rejected["rejection"] or rejected["validated"]:
+                    raise Refusal("runtime must record the exact rejected owner return before correction")
+                grant = conn.execute("SELECT * FROM coordinator_grants_v1 WHERE id=?", (row["grant_id"],)).fetchone()
+                if not grant or grant["owner"] != actor or grant["runtime"] != rejected["runtime"]:
+                    raise Refusal("correction is not bound to the original owner/runtime grant")
+                path = Path(grant["runtime"])
+                stat = path.stat()
+                if (stat.st_dev, stat.st_ino) != (grant["runtime_dev"], grant["runtime_ino"]):
+                    raise Refusal("original runtime identity changed; retain correction/source for recovery")
+                with closing(sqlite3.connect(path.as_uri()+"?mode=ro", uri=True)) as journal:
+                    configuration = journal.execute("SELECT value FROM meta WHERE key='configuration'").fetchone()
+                    pending = journal.execute("SELECT role,state FROM jobs WHERE id=?", (payload["job"],)).fetchone()
+                    accepted = journal.execute("SELECT job FROM owner_results WHERE job=?", (payload["job"],)).fetchone()
+                if configuration != (digest(self.config),):
+                    raise Refusal("correction configuration differs from the original runtime binding")
+                if accepted or pending != ("Reviews", "awaiting-owner"):
+                    raise Refusal("owner result already collected or reservation changed; send new findings as a new addressed message")
+                replacement = correction["settlement"]
+                if not isinstance(replacement, dict) or not replacement.get("evidence"):
+                    raise Refusal("corrected return needs actual evidence")
+                for field in ("actor", "actual_originals", "method_pin", "no_start_evidence"):
+                    before = current["settlement"].get(field)
+                    if before is not None and replacement.get(field) != before:
+                        raise Refusal("correction cannot replace actual owner/original collectors or selected method")
+                if replacement.get("actor") != actor:
+                    raise Refusal("corrected return retains its genuine owner actor")
+                limit = self.config["limits"].get("max_owner_corrections", 4)
+                if len(current["owner_corrections"]) >= limit:
+                    raise Refusal("bounded owner correction budget exhausted; retain source and explicit recovery ownership")
+                used = conn.execute("SELECT COALESCE(SUM(LENGTH(c.receipt)+LENGTH(c.reason)),0) FROM coordinator_owner_corrections_v1 c "
+                                    "JOIN coordinator_deliveries_v1 d ON d.id=c.delivery WHERE d.actor=?", (self.config["actor"],)).fetchone()[0]
+                if used + len(encode(correction).encode()) >= self.config["limits"]["max_bytes"]:
+                    raise Refusal("owned correction custody full; no source discarded")
+                conn.execute("INSERT INTO coordinator_owner_corrections_v1 VALUES(?,?,?,?,?,?,?,?)",
+                             (key, delivery, len(current["owner_corrections"])+1, actor, correction["supersedes"],
+                              correction["reason"], encode(replacement), self.store.utc_now()))
+                return self._delivery_record(conn, dict(row))
 
     def show_delivery(self, delivery):
         actor = canonical_uuid(os.environ.get("CODEX_SESSION_ID"))

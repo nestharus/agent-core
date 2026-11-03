@@ -113,9 +113,34 @@ delivery's recipient. Every stage needs actual `evidence`. Questions also need a
 Board ACK alone cannot prove queue processing. Effect-request settlement needs
 `effects:{evidence:[...],unknown_effects:[]}` from the real effect owner. This is
 actual reconciliation of possible effects, not extra permission. Completed stages
-are immutable; changed findings need a new addressed reply. Invalid immutable
-owner results remain held for explicit owner recovery; automatic amendment or
-resubmission of a settled receipt is not implemented.
+are immutable; changed findings after successful collection need a new addressed
+reply. A rejected selected-owner return has a bounded correction path:
+
+```sh
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-show Reviews DELIVERY_ID
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-correct Reviews DELIVERY_ID \
+  --receipt /absolute/owned/owner-correction.json
+```
+
+The correction is `{supersedes,reason,settlement}`. `supersedes` is the exact
+rejected `settlement_version` from delivery-show; settlement is the complete
+corrected owner return, retaining its genuine `actor`, actual original collectors,
+method/pin and no-start evidence. For the collected category error, the owner
+corrects `result.category` from `complete` to `consolidated` while retaining the
+full report. Runtime rejection must already be recorded; this is a version/ownership
+fence, not an approval request. Only that delivery's actual Reviews owner can
+append it. The original settled receipt is never edited. Every correction,
+reason, actor and old return remains recoverable in the board and routed report
+history. The runtime validates again, then routes to the configured report
+integrator without replaying Source/reviewers or inventing old originals.
+
+Default budget: four corrections per delivery (`limits.max_owner_corrections`,
+1–8), plus per-result and cumulative byte bounds. Exhausted/invalid corrections
+stay explicitly owned; no responsibility or source is discarded. A stale version,
+foreign actor, replacement collector/method, changed runtime identity or already
+collected result is refused. The collector and correction command serialize on
+the board; a local-collection/board-receipt interruption reconciles the same
+return without another review. No generic cross-role takeover is supplied.
 
 Necessary delivery remains durable through pickup/processing/settlement. A task
 DONE cannot silently drop a handoff. Report results mirror to the real owner;
@@ -147,7 +172,14 @@ Reviews report templates to these concrete procedures:
 
 Work/Branch/Reviews each have an independent single integration slot, with
 parallel instanced proposal/owner jobs. Arrivals after freeze form the next
-batch automatically. Actual legacy holds can name affected phases only; intake
+batch automatically. Execution capacity is separate from downstream custody:
+a collected, begun/ended exit0, complete-capture DONE attempt with known effects
+and no scoped job hold can release its execution slot while its job remains
+`awaiting-delivery`. Status exposes `execution_slot_held`. Its queue, source,
+outboxes, processing timestamp and actual recipient settlement remain unchanged.
+Uncertain process/effects, active work, legacy holds and an unresolved same admitted
+scope still exclude overlapping execution. Independent next batches progress.
+Actual legacy holds can name affected phases only; intake
 continues. Branch's existing integration/outbox hold remains real; historical
 native25, 100/88 queue history and an unacquired Reviews reply are not universal
 software freezes. No adoption is fabricated.
@@ -214,12 +246,18 @@ attempts stays held until an explicit `session_cleanup_qualification` evidence
 binding exists. Journal/results/outbox/source custody remain cumulatively bounded;
 this release backpressures instead of automatic compaction of held custody or
 broad profile/history cleanup. Actual session/auxiliary-store reclamation and
-invalid owner-result amendment remain unimplemented/unqualified frontiers.
+real owner correction/delivery behavior remain unqualified frontiers.
 
 Use `status`, `hold EVENT --reason TEXT`, `release-hold EVENT --receipt FILE`,
 `conserve-artifact PATH --receipt FILE`, `ack-alert ID --receipt FILE` and `cleanup`
 for exact owned operations. Healthy states emit no alert; unchanged violations
-recur as distinct durable occurrences until resolved. Alert retirement also waits
+recur as distinct durable occurrences until resolved. Failed alert delivery records
+one stable channel incident per role, with causal detail and exact outbox references;
+it cannot generate a new incident per failed alert. The original violations and
+channel incident continue recurring without deduplicating their occurrences. Old
+per-alert incident detail is conserved while retired from recursive notification.
+Channel recovery clears only the channel incident once all its delivery errors
+are reconciled. Alert retirement also waits
 for actual consumer/delivery processing plus 24h.
 
 Only after separate qualification/disposition:

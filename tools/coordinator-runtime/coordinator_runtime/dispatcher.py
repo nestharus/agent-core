@@ -302,7 +302,8 @@ class Dispatcher:
     def reconcile_completed(self):
         self.reconcile_classifications()
         collected = self.store.rows("SELECT j.* FROM jobs j JOIN attempts a ON j.active_attempt=a.id "
-                                    "WHERE j.state!='closed' AND j.recovery_owner IS NULL AND a.collected IS NOT NULL")
+                                    "WHERE j.state!='closed' AND (j.recovery_owner IS NULL OR j.recovery_state='handed-off') "
+                                    "AND a.collected IS NOT NULL")
         for job in collected:
             self.reconcile_collected(job)
         ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing' "
@@ -396,27 +397,43 @@ class Dispatcher:
         return await self.models.run(self.store, attempt, prompt, spec, schema)
 
     def pump_deliveries(self):
-        for outbox in self.store.rows("SELECT * FROM outboxes WHERE state NOT IN ('settled','classification-pending')"):
+        for outbox in self.store.rows("SELECT * FROM outboxes WHERE state NOT IN ('settled','classification-pending') "
+                                      "OR (state='settled' AND error IS NOT NULL)"):
             self.pump_delivery(outbox)
 
     def pump_delivery(self, outbox):
         board = self.boards.get(outbox["role"])
         if not board or not hasattr(board, "post_delivery"):
             return
+        job = self.store.job(outbox["job"]) if outbox["job"] else None
+        owner_procedure = job and self.config["tasks"][job["task"]].get("execution") == "owner"
         try:
             if not outbox["board_receipt"]:
                 receipt = board.reconcile_delivery(self.store, outbox) or board.post_delivery(self.store, outbox)
-                self.store.delivery_observed(outbox["id"], receipt)
+                if not (owner_procedure and receipt["state"] == "settled"):
+                    self.store.delivery_observed(outbox["id"], receipt)
             receipt = board.delivery_status(outbox["id"])
             if receipt["state"] in {"posted", "ambiguous"}:
                 receipt = board.transport_delivery(self.store, outbox)
-            self.store.delivery_observed(outbox["id"], receipt)
+            if owner_procedure and receipt["state"] == "settled":
+                board.collect_owner_return(self.store, outbox)
+            else:
+                self.store.delivery_observed(outbox["id"], receipt)
             self.store.clear_operational_error(outbox["id"])
+            if outbox["kind"] == "alert" and not self.store.one("SELECT id FROM outboxes WHERE role=? AND kind='alert' AND error IS NOT NULL", (outbox["role"],)):
+                self.store.clear_operational_error("alert-channel:"+outbox["role"])
         except Exception as exc:
             with self.store.tx():
                 self.store.db.execute("UPDATE outboxes SET error=? WHERE id=?", (str(exc)[:1000], outbox["id"]))
-            self.store.record_operational_error(outbox["id"], {"error": str(exc)[:1000], "delivery": outbox["id"]},
-                                               outbox["role"], "delivery-error")
+            # A failed alert is channel evidence, not a new incident per
+            # occurrence. Originals and this one channel incident still recur.
+            subject = "alert-channel:"+outbox["role"] if outbox["kind"] == "alert" else outbox["id"]
+            self.store.record_operational_error(subject, {"error": str(exc)[:1000], "delivery": outbox["id"]},
+                                               outbox["role"], "alert-channel-error" if outbox["kind"] == "alert" else "delivery-error")
+            if outbox["kind"] == "alert":
+                with self.store.tx():
+                    self.store.db.execute("UPDATE operational_errors SET active=0 WHERE kind='delivery-error' "
+                                          "AND subject IN (SELECT id FROM outboxes WHERE role=? AND kind='alert')", (outbox["role"],))
 
     async def pause(self):
         try:

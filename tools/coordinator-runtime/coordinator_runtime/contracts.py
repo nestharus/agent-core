@@ -140,6 +140,8 @@ def validate_config(config):
     for key in ("max_events", "max_attempts", "max_jobs", "max_bytes", "max_alerts", "max_result_bytes"):
         if type(config["limits"].get(key)) is not int or config["limits"][key] <= 0:
             raise Refusal(f"positive cumulative limit required: {key}")
+    if type(config["limits"].get("max_owner_corrections", 4)) is not int or not 1 <= config["limits"].get("max_owner_corrections", 4) <= 8:
+        raise Refusal("owner corrections require a bounded per-delivery budget from 1 through 8")
     for key in ("classify", "task", "ack", "backlog", "bind", "interrupt", "shutdown", "alert_interval"):
         if not isinstance(config["deadlines"].get(key), (int, float)) or config["deadlines"][key] <= 0:
             raise Refusal(f"positive deadline required: {key}")
