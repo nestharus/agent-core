@@ -80,6 +80,8 @@ def owned_bytes(home, maximum_entries):
             continue  # Concurrent owned-store rotation/removal, no symlink walk.
         with children:
             for child in children:
+                if Path(directory) == Path(home) and child.name == 'sessions':
+                    continue  # Legacy Codex namespaces: exclude BEFORE stat/traversal.
                 entries += 1
                 if entries > maximum_entries:
                     raise Backpressure("owned artifact entry-count bound reached")
@@ -160,6 +162,7 @@ class Store(DeliveryJournal):
         counts = {name: self.db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
                   for name in ("events", "attempts", "jobs", "alerts", "outboxes")}
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
+        counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
     def budget(self, kind, incoming=0):
@@ -692,7 +695,7 @@ class Store(DeliveryJournal):
     def violations(self):
         now, d = self.clock(), self.config["deadlines"]
         alerts = []
-        alerts += [{'subject':r['attempt'],'kind':'owned-storage-cleanup-hold','cause':r['error']}
+        alerts += [{'subject':r['attempt'],'kind':'opaque-storage-ownership-hold','cause':r['error']}
                    for r in self.rows('SELECT attempt,error FROM attempt_storage WHERE error IS NOT NULL AND removed IS NULL')]
         alerts += [{"subject": r["subject"], "kind": r["kind"], "role": r["role"], "cause": json.loads(r["detail"])}
                    for r in self.rows("SELECT * FROM operational_errors WHERE active=1")]

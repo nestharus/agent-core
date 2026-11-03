@@ -6,7 +6,6 @@ from pathlib import Path
 import sys
 import time
 import uuid
-import sqlite3
 
 plan = json.loads(Path(sys.argv[1]).read_text())
 thread, turn, turns = str(uuid.uuid4()), None, 0
@@ -72,11 +71,6 @@ for line in sys.stdin:
         respond(request, {"thread": {"id": thread, "status": {"type": plan.get("read_status", "idle")}}})
     elif method == 'config/read':
         config=plan.get('storage_config',{})
-        if plan.get('write_aux') and config.get('sqlite_home'):
-            with sqlite3.connect(str(Path(config['sqlite_home'])/'state.sqlite3')) as conn:
-                conn.execute('CREATE TABLE IF NOT EXISTS owned_marker(id TEXT)')
-                conn.execute('INSERT INTO owned_marker VALUES(?)',(thread,))
-            (Path(config['log_dir'])/'owned.log').write_text('synthetic auxiliary store\n')
         respond(request,{'config':config,'origins':{}})
     elif method == "thread/unsubscribe":
         if plan.get("unsubscribe_error"):

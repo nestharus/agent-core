@@ -23,7 +23,7 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.temp=tempfile.TemporaryDirectory(prefix='correction3-fixture-')
         self.addCleanup(self.temp.cleanup)
         self.config=config_at(self.temp.name)
-        self.config['session_storage']={'mode':'owned-attempt'}
+        self.config['session_storage']={'mode':'producer-owned'}
         self.target=Path(self.temp.name)/'canonical.json'
         self.target.write_text('{"total":0}')
         task=self.config['tasks']['work-integrator']
@@ -58,14 +58,12 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         queued(self.store,event(self.config,ident()))
         job=self.store.reserve()
         attempt=self.store.start_job(job['id'],job['token'])
-        root=self.store.home/'sessions'/attempt
-        config={'sqlite_home':str(root/'sqlite'),'log_dir':str(root/'logs'),'history':{'persistence':'none'},
-                'feedback':{'enabled':False},'features':{'shell_snapshot':False}}
-        if storage_bad:config['sqlite_home']=str(Path(self.temp.name)/'unowned')
+        config={'history':{'persistence':'none'},'feedback':{'enabled':False},'features':{'shell_snapshot':False}}
+        if storage_bad:config['history']['persistence']='save-all'
         answer={**result(),'artifacts':artifacts if artifacts is not None else [str(self.target)],
                 'handoffs':[],'no_handoff_reason':'Internal owned role result consumed by delegated collector; no external handoff.'}
         plan={'result':answer,'target':str(self.target),'target_contents':{'total':12},
-              'tool_metadata':{'exitCode':0} if tool is None else tool,'storage_config':config,'write_aux':not storage_bad}
+              'tool_metadata':{'exitCode':0} if tool is None else tool,'storage_config':config}
         if artifacts == 'runtime':
             plan.update(write_file='report.txt',artifact_strings=True)
         plan_path=Path(self.temp.name)/(attempt+'.json');plan_path.write_text(encode(plan))
@@ -146,30 +144,32 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(report.exists())
         self.assertEqual(self.store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))['body'],body)
 
-    async def test_L04_owned_real_fixture_store_later_hold_and_processed_plus_24h(self):
-        job,attempt=await self.run_writer()
-        path=self.store.home/'sessions'/attempt
-        self.assertTrue((path/'sqlite/state.sqlite3').is_file())
-        self.assertEqual(self.store.one('SELECT state FROM attempt_storage')['state'],'effective-paths-verified')
+    async def test_Q3_producer_outputs_later_hold_and_processed_plus_24h(self):
+        job,attempt=await self.run_writer(artifacts='runtime')
+        path=self.store.home/'artifacts'/attempt/'report.txt'
+        self.assertEqual(self.store.rows('SELECT * FROM attempt_storage'),[])
+        self.assertFalse((self.store.home/'sessions').exists())
+        detail=json.loads(self.store.attempt(attempt)['detail'])
+        self.assertEqual(detail['session_residuals']['state'],'unqualified-held')
+        self.assertFalse(detail['session_residuals']['automatic_store_deletion'])
         await self.settle_routine(job)
         source=json.loads(job['members'])[0]['event']
         processed=self.store.one('SELECT processed_at FROM events WHERE id=?',(source,))['processed_at']
-        self.store.set_hold(source,'later recovery needs source and owned stores')
+        self.store.set_hold(source,'later recovery needs exact producer output')
         with patch.object(self.store,'clock',return_value=processed+172801):sweep(self.store)
         self.assertTrue(path.exists())
         release=processed+172801
         with patch.object(self.store,'clock',return_value=release):self.store.set_hold(source,None)
         with patch.object(self.store,'clock',return_value=release+86399):sweep(self.store)
         self.assertTrue(path.exists())
-        with patch.object(self.store,'clock',return_value=release+86400):receipts=sweep(self.store)
+        with patch.object(self.store,'clock',return_value=release+86400):sweep(self.store)
         self.assertFalse(path.exists())
-        self.assertTrue(any(r.get('owned_paths')=='physically-retired' for r in receipts))
         self.assertTrue(self.target.exists())
 
     async def test_L04_settings_mismatch_refuses_before_any_model_turn(self):
         job,attempt=await self.run_writer(storage_bad=True)
         self.assertEqual(json.loads(self.target.read_text())['total'],0)
-        self.assertIn('storage',self.store.attempt(attempt)['error'])
+        self.assertIn('producer setting',self.store.attempt(attempt)['error'])
         self.assertIsNone(self.store.attempt(attempt)['turn'])
         self.assertEqual(self.store.attempt(attempt)['exit'],0)  # Actual fake control process, no task turn.
         self.assertEqual(self.store.attempt(attempt)['cleanup'],'no-session-created')
@@ -203,21 +203,28 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(Path(files[0]['frozen_path']).read_bytes(),original)
         self.assertNotEqual(Path(files[0]['frozen_path']).read_bytes(),self.target.read_bytes())
 
-    async def test_L04_partial_owned_cleanup_keeps_symlink_target_and_can_resume_after_queue_retirement(self):
-        job,attempt=await self.run_writer()
+    async def test_Q3_legacy_namespace_is_not_inspected_or_deleted_at_any_age(self):
+        job,attempt=await self.run_writer(artifacts='runtime')
         await self.settle_routine(job)
         root=self.store.home/'sessions'/attempt
-        link=root/'logs'/'foreign-link'
-        link.symlink_to(self.target)
-        now=self.store.clock()+86401
-        with patch.object(self.store,'clock',return_value=now):receipts=sweep(self.store)
-        self.assertTrue(any(r.get('state')=='partial-held' for r in receipts))
-        self.assertTrue(self.target.is_file())
+        root.mkdir(parents=True)
+        (root/'mixed-placeholder').write_text('synthetic foreign logical content; never inspected')
+        link=root/'foreign-link';link.symlink_to(self.target)
+        info=root.stat()
+        with self.store.tx():
+            self.store.db.execute('INSERT INTO attempt_storage VALUES(?,?,?,?,?,?,NULL,NULL)',
+                (attempt,str(root),info.st_dev,info.st_ino,'{}','effective-paths-verified'))
+        def forbidden(*args,**kwargs):raise AssertionError('legacy namespace touched')
+        # Strong boundary: no storage filesystem operation is needed at all.
+        with patch('coordinator_runtime.storage.os',create=True) as fs:
+            fs.stat=fs.scandir=fs.listdir=fs.open=fs.unlink=forbidden
+            with patch.object(self.store,'clock',return_value=self.store.clock()+86401):sweep(self.store)
+        self.assertEqual(self.store.one('SELECT state FROM attempt_storage')['state'],'opaque-ownership-held')
         self.assertTrue(root.exists())
-        link.unlink()  # This exact synthetic link only; never its canonical target.
-        with patch.object(self.store,'clock',return_value=now+1):sweep(self.store)
-        self.assertFalse(root.exists())
+        self.assertTrue(link.is_symlink())
         self.assertTrue(self.target.is_file())
+        self.assertEqual(self.store.job(job['id'])['state'],'closed')
+        self.assertEqual(self.store.one('SELECT state FROM events WHERE id=?',(json.loads(job['members'])[0]['event'],))['state'],'retired')
 
     async def test_L05_supported_command_metadata_omits_raw_bodies_and_OS_ownership(self):
         job,attempt=await self.run_writer()

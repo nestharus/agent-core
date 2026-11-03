@@ -62,9 +62,10 @@ def read_file(path, maximum):
 def capture(store, attempt, path, task, role_owned=False):
     root = store.home/'artifacts'/attempt
     authority = task['effect_authority']
-    p = safe_path(path, [str(root), *authority['read_roots'], *authority['write_roots']])
-    if p.is_relative_to(store.home) and not p.is_relative_to(store.home/'artifacts'):
+    candidate = Path(path)
+    if candidate.is_relative_to(store.home) and not candidate.is_relative_to(store.home/'artifacts'):
         raise Refusal('journal/session/auxiliary stores are not task report artifacts')
+    p = safe_path(path, [str(root), *authority['read_roots'], *authority['write_roots']])
     maximum = min(store.config['limits'].get('max_artifact_bytes', 33554432), store.config['limits']['max_bytes'])
     data, witness = read_file(p, maximum)
     prior = store.one('SELECT * FROM artifact_custody WHERE attempt=? AND path=?', (attempt, str(p)))

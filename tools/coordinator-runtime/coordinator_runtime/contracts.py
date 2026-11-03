@@ -122,8 +122,8 @@ def validate_config(config):
         if task.get('routine_completion'):
             from .routine import policy_for
             policy_for(task)
-    if config.get('session_storage',{}).get('mode') not in {None,'owned-attempt'}:
-        raise Refusal('only exact owned-attempt auxiliary storage is supported')
+    if config.get('session_storage',{}).get('mode') not in {None,'producer-owned'}:
+        raise Refusal('select producer-owned storage; allocated Codex namespaces do not prove logical ownership')
     for selected in config["roles"].values():
         if set(selected["routes"]) - set(config["tasks"]):
             raise Refusal("role route references an unknown configured task")

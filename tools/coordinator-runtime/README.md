@@ -18,7 +18,7 @@ The collected qualification2 encounter on `bfdd43b` already established actual
 provider wire acceptance, five attempts/six turns, one supported continuation,
 report → fresh Luna → writer progression and meaningful synthetic writes. Those
 original successful/failing receipts remain their own evidence. The completion,
-custody and owned-store changes below require a new bounded actual encounter;
+custody and producer-output changes below require a new bounded actual encounter;
 fixture results do not extend that qualification.
 
 ## Install, configure and inspect
@@ -287,29 +287,50 @@ with source_attempt=null. Their public in-scope artifacts receive the same custo
 without inventing a model process. Private/unavailable artifacts reject the return
 for that actual owner to conserve/correct; they are never silently skipped.
 
-`session_storage:{mode:"owned-attempt"}` keeps the selected account's CODEX_HOME
-and authentication unchanged. Supported CLI overrides route SQLite/log data to
-fresh exact attempt paths, disable history/feedback and shell snapshots, and
-`config/read` must verify those exact effective settings before the first model
-turn. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
-documents the settings; installed strict-config metadata and generated API schema
-are separate evidence. No credential is copied, profile store inventoried or
-existing server attached. Missing/overridden settings refuse that new path before
-model effects; select a compatible qualified slice rather than manufacture readback.
+`session_storage:{mode:"producer-owned"}` keeps the selected account's CODEX_HOME,
+authentication, SQLite/log roots and existing history in place. It requests only
+history persistence `none`, disabled feedback and disabled shell snapshots;
+`config/read` must verify these effective capture controls before the first model
+turn. A matching echo proves settings, never logical ownership or physical
+absence. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents the controls. Command-specific preflight passes supported `-c` overrides
+to MCP/features metadata, individually disables every effective MCP server and
+requires disabled readback. `--strict-config` is an app-server option, never an
+MCP/features/version argument. Model/provider/effort, sandbox and account checks
+remain required. Metadata child exits are recorded separately from task END;
+a proved pre-start refusal has no fabricated task begin/end or capacity claim.
 
-Ephemeral request/readback, unsubscribe, numeric owner exit, physical owned-path
-retirement and shared-profile absence are separate. Once all needed report/code/
-recovery meaning is durably conserved and actual processing+24h plus dependent
-holds pass, the exact newly owned auxiliary tree can be retired with descriptor-
-relative no-follow checks and physical absence readback. Unknown/link/special
-members remain partial-held. A sampled cumulative byte/count guard stops only its
-owned writer on overflow and backpressures admission; it is not a hard filesystem
-quota and does not discard held work. A missing RPC/API label does not freeze all
-already conserved queue sources. Shared-profile/session residual absence remains
-not-inventoried, never inferred from `thread not loaded`. Old shared-store attempts
-are not purged; the installed exact `thread/delete`/`codex delete --force UUID`
-interfaces are bounded alternatives for a separately qualified exact-owned need,
-not permission to scan, force-delete a live session or attach to a shared daemon.
+Qualification3 on e82b recorded this unsupported-flag failure before any model
+and a separate failed metadata control with mixed logical store ownership. Its
+safe reports and opaque evidence remain unchanged. A newly allocated SQLite/log
+directory MUST NOT be considered exclusive. `owned-attempt` is now refused before
+allocation/start, without silent fallback. No platform SQLite/log tree is created,
+scanned or automatically deleted by this runtime. Legacy `state/sessions` is
+excluded before stat/traversal even during byte accounting, and its journal rows
+remain opaque ownership holds. No alias search, database census or profile purge
+is an ownership proof.
+
+Ephemeral request/readback, unsubscribe, numeric owned exit, report retirement
+and shared-profile residuals remain separate. Every started control records a
+scoped unqualified shared-account residual, its actual known thread UUID when
+observed, and its real runtime custodian. This is visible in attempt detail;
+nonexistence is never inferred from not-loaded. Needed meaning is retained in
+bounded journal/report custody. Exact conserved producer report files may retire
+at actual processing+24h plus all dependent source/consumer/outbox/recovery/
+uncertainty holds. Shared-store uncertainty does not freeze unrelated conserved
+queues. The sampled guard bounds runtime-owned journal/artifact bytes/counts and
+stops only its owned child on overflow; shared/legacy stores are explicitly
+unmeasured and cannot be bounded by that guard. Attempt limits bound new starts,
+not unknown shared auxiliary byte growth. No hard quota or general blob compaction
+is claimed.
+
+The [supported delete API](https://learn.chatgpt.com/docs/app-server) concerns
+persisted threads and spawned descendants; ephemeral roots cannot be deleted.
+It is not a substitute cleanup call for these ephemeral roots. Persistent exact-
+owner cleanup would need separately qualified ownership, descendant/effect/source
+custody and retention before that supported operation; it is not implemented here.
+Actual platform residual reclamation remains a class-specific inactive frontier,
+with no shared daemon attachment, credential move or new per-job permission.
 
 Command completion capture includes supported item/turn IDs, status, nullable
 numeric exit/duration and a bounded provider process label. That label is not an

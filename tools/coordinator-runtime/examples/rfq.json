@@ -635,6 +635,6 @@
     "alert_recipient": "Work"
   },
   "session_storage": {
-    "mode": "owned-attempt"
+    "mode": "producer-owned"
   }
 }

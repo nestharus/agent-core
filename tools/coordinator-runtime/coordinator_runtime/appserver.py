@@ -35,6 +35,14 @@ class TurnFailure(Refusal):
         super().__init__("owned turn ended failed/interrupted" + (" with capacity error" if self.capacity else ""))
 
 
+class MetadataFailure(Refusal):
+    """Actual metadata child exit, never a model/task END or provider capacity."""
+    def __init__(self, code, command):
+        kind = 'MCP' if 'mcp' in command else 'features' if 'features' in command else 'CLI-version'
+        self.projection = {'command_kind': kind, 'exit': code, 'model_started': False}
+        super().__init__(f'{kind} preflight metadata command exited {code}')
+
+
 def safe_error(error):
     if not error:
         return None
@@ -79,12 +87,17 @@ async def metadata(command, env, limit=1048576, cwd=None):
     child = await asyncio.create_subprocess_exec(*command, env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, limit=limit+1, cwd=cwd)
     try:
-        output = await asyncio.wait_for(child.stdout.read(limit+1), 20)
-        if len(output) > limit:
-            raise Refusal("preflight metadata exceeds bounded input")
+        async def complete_output():
+            output = bytearray()
+            while block := await child.stdout.read(min(65536, limit+1-len(output))):
+                output.extend(block)
+                if len(output) > limit:
+                    raise Refusal("preflight metadata exceeds bounded input")
+            return output
+        output = await asyncio.wait_for(complete_output(), 20)
         code = await asyncio.wait_for(child.wait(), 20)
         if code:
-            raise Refusal("preflight metadata command failed")
+            raise MetadataFailure(code, command)
         return output.decode()
     finally:
         await end_owned(child, 3)
@@ -122,10 +135,12 @@ def mcp_rows(text):
 
 
 async def preflight(codex, profile, expected_version, storage_flags=(), cwd=None):
+    if '--strict-config' in storage_flags:
+        raise Refusal('runtime-only strict-config cannot be forwarded to metadata commands')
     env = environment(profile)
     async def probe(command):
         return await metadata(command,env,cwd=cwd) if cwd is not None else await metadata(command,env)
-    version = (await probe([codex, *storage_flags, "--version"])).strip()
+    version = (await probe([codex, "--version"])).strip()
     if version != expected_version:
         raise Refusal("installed CLI differs from offline schema qualification")
     before = mcp_rows(await probe([codex, *storage_flags, "-c", "mcp_servers={}", "mcp", "list", "--json"]))
@@ -334,6 +349,9 @@ class AppServer:
                        "unsubscribe": "not-attempted", "teardown": "not-started", "session_reclamation": "not-qualified"}}
         outcome["detail"]["creation"] = "not-attempted"
         outcome['detail']['thread_start']='not-requested'
+        outcome['detail']['session_residuals'] = {'state':'unqualified-held', 'owner':store.config['actor'],
+            'scope':'shared-account auxiliary data', 'inspection':'not-inventoried',
+            'automatic_store_deletion':False, 'known_thread':None}
         child = peer = watcher = None
         try:
             owned_storage = storage.prepare(store, attempt)
@@ -358,6 +376,8 @@ class AppServer:
             outcome["detail"]["capacity_error"] = isinstance(exc, (RpcFailure, TurnFailure)) and exc.capacity
             if isinstance(exc, (RpcFailure, TurnFailure)):
                 outcome["detail"]["causal_failure"] = exc.projection
+            if isinstance(exc, MetadataFailure):
+                outcome['detail']['metadata_failure'] = exc.projection
         finally:
             await self.unsubscribe(peer, store, attempt, outcome)
             try:
@@ -377,6 +397,8 @@ class AppServer:
             if watcher:
                 watcher.cancel()
                 with suppress(asyncio.CancelledError):await watcher
+            if child is None and outcome['cleanup']=='no-session-created':
+                outcome['detail']['session_residuals']['state']='no-runtime-start'
         return outcome
 
     async def command(self, profile, storage_flags=(), cwd=None):
@@ -384,7 +406,7 @@ class AppServer:
             return self.fixture_command, {"fixture": True, "mcp": "fixture-only", "delegation_capability": "not-established"}
         codex = self.config.get("codex", "codex")
         flags, facts = await preflight(codex, profile, self.config["protocol_cli_version"], storage_flags,cwd)
-        return [codex, *flags, "app-server", "--listen", "stdio://"], facts
+        return [codex, *flags, "app-server", "--strict-config", "--listen", "stdio://"], facts
 
     async def session(self, peer, store, attempt, prompt, spec, binding, profile, schema, outcome):
         hello = await peer.rpc("initialize", {"clientInfo": {"name": "coordinator_runtime", "version": "1"},
@@ -395,8 +417,8 @@ class AppServer:
         if peer.owned_storage:
             readback = await peer.rpc('config/read', {'includeLayers': False})
             storage.verify(store, attempt, peer.owned_storage, readback)
-            outcome['detail']['owned_storage'] = {'effective': peer.owned_storage, 'scope': 'this newly owned attempt only',
-                'physical_reclamation': 'pending processing+24h and holds; no shared-profile absence claim'}
+            outcome['detail']['producer_settings'] = {'effective':peer.owned_storage,
+                'scope':'capture controls only; account stores remain shared/unqualified'}
         outcome['detail']['thread_start']='requested-uncertain'
         created = await peer.rpc("thread/start", {
             "model": binding["model"], "modelProvider": binding["provider"],
@@ -410,6 +432,7 @@ class AppServer:
         thread = created.get("thread", {})
         session = canonical_uuid(thread.get("id"))
         peer.thread = session
+        outcome['detail']['session_residuals']['known_thread']=session
         store.session(attempt,session,detail={'root_identity_observed':True})
         outcome['detail']['thread_start']='owned-root-observed'
         store.session(attempt, session, detail={"binding_readback": self.binding(created, binding),
