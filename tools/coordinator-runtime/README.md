@@ -297,6 +297,19 @@ human permission is supplied. Original pre-clarification arrays must remain verb
 prefixes, with original completion and specific issues retained. See
 templates/local-completion.md and tests; the outer provider wire is unchanged.
 
+All role tasks share one outer-result contract in contracts.py: the generated job/
+wire/clarification instructions, live diagnostics, publisher, final task collector
+and routine callback use it. Missing fields, unsupported fields (including an
+outer dissent), types/categories and arrays have separate diagnostics. Dissent
+belongs as attributed finding data; genuine local defects still require failures/
+unknowns and blocked/partial work. Repairable outer mismatches can use the same
+one owned-idle continuation even without routine file completion. Complete original
+JSON and later return stay separate; valid original arrays remain verbatim
+prefixes and original extra/malformed array data must be conserved explicitly in
+findings kind=outer-contract-original. A repaired response that simply drops data
+is held. No original is automatically normalized, blindly replayed or resumed after
+its owner ends. See templates/local-completion.md for the data-preservation example.
+
 The selected canonical method is explicit:
 `canonical_publication:{method:"retention-same-inode-v1",library:ABS_LIBRARY}`.
 That library must expose the actual selected `retention.snapshot_lock`. The current

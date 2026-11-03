@@ -8,6 +8,36 @@ failures/unknowns, including resolved history. Never empty those arrays to obtai
 publication. The service preserves originals and uses the same assessment in the
 publisher, task finisher and delegated routine collector.
 
+Every role task also uses the shared OUTER contract emitted by
+contracts.task_result_instructions(). Its required keys are semantic, summary,
+category, findings, failures, unknowns and artifacts; only handoffs,
+no_handoff_reason and completion are optional. Dissent belongs in findings as
+attributed data, for example {kind:"dissent",author,source,meaning}. If it exposes
+unresolved local work, retain that work in failures/unknowns and remain truthfully
+partial/blocked. Neither a finding nor data conservation resolves a local defect.
+
+Live clarification and final collection share concrete missing-field, extra-field,
+type, category and array diagnostics. For a repairable outer mismatch, the SAME
+owned producer can use its ONE supported idle continuation. The complete original
+decoded JSON value and the later return remain separate, with issues and command
+identity. Preserve valid original findings/failures/unknowns/artifacts/handoffs as
+verbatim prefixes; malformed non-list findings/failures/unknowns become the first
+item of their corrected list, never fabricated []. Unsupported/malformed array
+fields must also be conserved exactly in findings, for example:
+
+```json
+{"kind":"outer-contract-original","fields":{"dissent":[{"author":"original reviewer","meaning":"Exact original dissent"}]}}
+```
+
+This is the producer's explicit new representation of original data, not automatic
+key stripping, runtime normalization, effect authority or independent semantic
+acceptance. The original stays untouched. For a non-object original use fields
+{"$result":ORIGINAL_JSON_VALUE}. Final collection refuses erased history, omitted
+original-field data or a still-invalid outer contract. It never runs a second
+clarification or resumes an ended owner. no_handoff_reason:null is valid with
+nonempty handoffs; empty/no handoffs retain the existing meaningful-reason policy.
+The payload_json provider envelope is unchanged.
+
 Add completion with version1, local=ready|blocked, failures, unknowns and tools.
 Each failure/unknown index must be covered exactly once. Unknowns may contain
 original prose or objects combining several responsibilities. Preserve that

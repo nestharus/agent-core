@@ -10,6 +10,7 @@ import test_writer_custody as fixtures
 from coordinator_runtime import readiness
 from coordinator_runtime.appserver import AppServer
 from coordinator_runtime.contracts import Refusal
+from support import result
 
 
 def duty(owner, name, status='deferred'):
@@ -29,7 +30,7 @@ def original():
     p['unknowns'][1]={'index':1,**duty('controller','custody/collection/delivery/publication/effect reconciliation')}
     p['unknowns'][2]={'index':2,**duty('outside-workflow','review and acceptance outside this local result','boundary')}
     p['tools']=[{'id':'visible-success-label','status':'resolved','reason':'Producer visible check exited zero.'}]
-    return {'semantic':'DONE','failures':[], 'unknowns':[
+    return {**result(),'failures':[], 'unknowns':[
         {'owner':'Root','meaning':'External consumption still pending.'},
         'Expected later controller custody, collection, delivery and publication.',
         'Review and acceptance remain unclaimed.'], 'completion':p,
@@ -165,7 +166,7 @@ class OwnedClarification(unittest.IsolatedAsyncioTestCase):
                                          (Path(self.temp.name)/'outside-attempt',[],'belong to this producer attempt')]:
             with self.subTest(path=path):
                 self.config['artifact_exclusions']=exclusions
-                answer={'semantic':'DONE','failures':['Claim needs an allowed byte witness'],'unknowns':[],
+                answer={**result(),'semantic':'DONE','failures':['Claim needs an allowed byte witness'],'unknowns':[],
                     'artifacts':[str(path)],'completion':{'version':1,'local':'ready','unknowns':[],'tools':[],
                     'failures':[{'index':0,'status':'resolved','evidence':[{'path':str(path),'sha256':'0'*64}],
                                  'verification_items':['protocol-command']}]}}

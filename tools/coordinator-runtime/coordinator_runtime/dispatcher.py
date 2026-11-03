@@ -14,7 +14,7 @@ from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
 from . import custody, routine, publication, readiness
-from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task
+from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
 
 
 CLASSIFICATION_SCHEMA = {
@@ -87,8 +87,7 @@ def job_prompt(store, job, task=None):
             "An empty handoffs list requires a meaningful no_handoff_reason. Do not send directly or "
             "borrow another actor's membership. Effect reconciliation returns to the actual owning role. "
             "Return only the required typed JSON final; include exact meaningful artifact references.\n"
-            "Inner categories: proposal, consolidated, qualification, scope, blocker, complete. "
-            "Use blocker for blocked work; PARTIAL/FAILED/UNKNOWN retain failures or unknowns. "
+            + task_result_instructions() +
             "When staged_targets is nonempty, edit ONLY the mapped staged paths for canonical changes. "
             "Canonical targets are read-only to you. The genuine delegated controller publishes exact "
             "staged bytes only after collected successful work, artifact custody and unchanged before-state. "

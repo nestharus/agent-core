@@ -280,27 +280,102 @@ def classification(answer, event, config):
     return answer
 
 
-def task_result(answer):
-    keys = {"semantic", "summary", "findings", "failures", "unknowns", "artifacts", "category"}
-    if not isinstance(answer, dict) or not keys <= set(answer) or set(answer)-keys-{"handoffs", "no_handoff_reason", "completion"}:
-        raise Refusal("task result must conserve summary/findings/failures/unknowns/artifacts/category")
-    if not isinstance(answer['semantic'],str) or answer["semantic"] not in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
-        raise Refusal("unknown semantic completion")
-    if answer.get('category')=='blocked' and answer['semantic']!='DONE':
-        answer={**answer,'category':'blocker'}  # Faithful alias; caller records original and projection.
-    required_text(answer["summary"], "summary")
-    for key in ("findings", "failures", "unknowns", "artifacts"):
-        if not isinstance(answer[key], list):
-            raise Refusal(f"{key} must be an explicit list, including honest empties")
-    if not isinstance(answer['category'],str) or answer["category"] not in {"proposal", "consolidated", "qualification", "scope", "blocker", "complete"}:
-        raise Refusal("typed response category required")
-    if answer["semantic"] != "DONE" and not (answer["failures"] or answer["unknowns"]):
-        raise Refusal("partial/failed/unknown work must retain its unresolved meaning")
-    if "handoffs" in answer and not isinstance(answer["handoffs"], list):
-        raise Refusal("handoffs must be an explicit bounded list")
-    if len(answer.get("handoffs", [])) > 16:
-        raise Refusal("handoff count exceeds admitted per-task bound")
+TASK_REQUIRED = {'semantic','summary','findings','failures','unknowns','artifacts','category'}
+TASK_OPTIONAL = {'handoffs','no_handoff_reason','completion'}
+TASK_ARRAYS = ('findings','failures','unknowns','artifacts','handoffs')
+TASK_SEMANTICS = {'DONE','PARTIAL','FAILED','UNKNOWN'}
+TASK_CATEGORIES = {'proposal','consolidated','qualification','scope','blocker','complete'}
+ORIGINAL_FIELDS_KIND = 'outer-contract-original'
+_NO_PRIOR = object()
+
+
+def task_result_instructions():
+    """The prompt and both live/collected validators use this same contract."""
+    return ('INNER TASK RESULT: required keys='+encode(sorted(TASK_REQUIRED))+
+        '; only optional keys='+encode(sorted(TASK_OPTIONAL))+'. No other outer keys. '
+        'semantic is one of '+encode(sorted(TASK_SEMANTICS))+'; category is one of '+encode(sorted(TASK_CATEGORIES))+'. '
+        'Use blocker for blocked work (legacy blocked alias is accepted only for non-DONE). '
+        'summary is nonempty text (at most16000 UTF-8 bytes); findings/failures/unknowns/artifacts are explicit lists, '
+        'including honest empties, never invented empties to obtain DONE. PARTIAL/FAILED/UNKNOWN must retain '
+        'failures or unknowns. Optional handoffs is a list of at most16; no_handoff_reason is text (or null when '
+        'handoffs is nonempty); completion is an object. '
+        'Preserve dissent as attributed entries in findings with its full original evidence/meaning, not an outer dissent key. '
+        'If dissent exposes unresolved local work, also retain that work in failures/unknowns and return truthful blocked/partial readiness. '
+        'If clarifying an outer mismatch, preserve original valid findings/failures/unknowns/artifacts/handoffs as verbatim '
+        'array prefixes. Original non-list findings/failures/unknowns must be retained as the first item of the repaired '
+        'list, not silently replaced by []. Conserve original unsupported or malformed array fields exactly in a findings '
+        'entry {kind:"'+ORIGINAL_FIELDS_KIND+'",fields:{ORIGINAL_KEY:ORIGINAL_VALUE,...}}. For a non-object original, '
+        'fields={"$result":ORIGINAL_JSON_VALUE}. This is data preservation, not authority or a resolution/acceptance claim. '
+        'Correct only the representation or genuinely remaining authorized work in this SAME context; do not hide a local '
+        'blocker, change PARTIAL to DONE merely to repair JSON, drop adverse evidence or replay completed effects.\n')
+
+
+def task_result_issues(answer):
+    """Pure complete outer diagnostics; never mutate/drop/project a producer return."""
+    if not isinstance(answer,dict):return ['task result must be a JSON object']
+    issues=[]
+    missing=TASK_REQUIRED-set(answer);extra=set(answer)-TASK_REQUIRED-TASK_OPTIONAL
+    if missing:issues.append('missing required task-result fields: '+', '.join(sorted(missing)))
+    if extra:issues.append('unsupported task-result fields: '+', '.join(sorted(extra)))
+    if 'semantic' in answer and (not isinstance(answer['semantic'],str) or answer['semantic'] not in TASK_SEMANTICS):
+        issues.append('semantic must be one of '+', '.join(sorted(TASK_SEMANTICS)))
+    if 'summary' in answer:
+        try:required_text(answer['summary'],'summary')
+        except Refusal as exc:issues.append(str(exc))
+    for key in TASK_ARRAYS:
+        if key in answer and not isinstance(answer[key],list):issues.append(key+' must be an explicit list, including honest empties')
+    category=answer.get('category')
+    alias=category=='blocked' and isinstance(answer.get('semantic'),str) and answer['semantic'] in TASK_SEMANTICS-{'DONE'}
+    if 'category' in answer and (not isinstance(category,str) or category not in TASK_CATEGORIES) and not alias:
+        issues.append('category must be one of '+', '.join(sorted(TASK_CATEGORIES))+'; blocked alias only for non-DONE')
+    if isinstance(answer.get('semantic'),str) and answer['semantic'] in TASK_SEMANTICS-{'DONE'} and not (answer.get('failures') or answer.get('unknowns')):
+        issues.append('partial/failed/unknown work must retain its unresolved meaning in failures or unknowns')
+    if isinstance(answer.get('handoffs'),list) and len(answer['handoffs'])>16:issues.append('handoff count exceeds admitted per-task bound16')
+    if ('no_handoff_reason' in answer and not isinstance(answer['no_handoff_reason'],str)
+            and not (answer['no_handoff_reason'] is None and isinstance(answer.get('handoffs'),list) and answer['handoffs'])):
+        issues.append('no_handoff_reason must be text; null is allowed only with nonempty handoffs')
+    if 'completion' in answer and not isinstance(answer['completion'],dict):issues.append('completion must be an object')
+    return issues
+
+
+def clarification_fields(prior):
+    if not isinstance(prior,dict):return {'$result':prior}
+    return {k:v for k,v in prior.items() if k not in TASK_REQUIRED|TASK_OPTIONAL or k in TASK_ARRAYS and not isinstance(v,list)}
+
+
+def clarification_issues(answer,prior):
+    """Exact conservation, not semantic normalization of an old rejected response."""
+    if not isinstance(answer,dict):return ['clarification must return a task-result object']
+    issues=[]
+    if isinstance(prior,dict):
+        for key in TASK_ARRAYS:
+            if key not in prior:continue
+            old=prior[key]
+            if not isinstance(old,list):
+                if key not in {'findings','failures','unknowns'}:continue
+                old=[old]
+            if not isinstance(answer.get(key),list) or answer[key][:len(old)]!=old:
+                issues.append('clarification erased or rewrote original '+key)
+    fields=clarification_fields(prior)
+    if fields and (not isinstance(answer.get('findings'),list) or
+            {'kind':ORIGINAL_FIELDS_KIND,'fields':fields} not in answer['findings']):
+        issues.append('clarification must conserve original extra/malformed fields in findings kind='+ORIGINAL_FIELDS_KIND+': '+', '.join(sorted(fields)))
+    return issues
+
+
+def task_result(answer,prior=_NO_PRIOR):
+    issues=task_result_issues(answer)
+    if prior is not _NO_PRIOR:issues+=clarification_issues(answer,prior)
+    if issues:raise Refusal('; '.join(issues))
+    if answer.get('category')=='blocked':
+        return {**answer,'category':'blocker'}  # Existing non-DONE alias; raw remains conserved, no other projection.
     return answer
+
+
+def collected_task_result(attempt):
+    answer=json.loads(attempt['result']) if attempt['result'] else None
+    detail=json.loads(attempt['detail'])
+    return task_result(answer,detail['prior_turn_result']) if 'prior_turn_result' in detail else task_result(answer)
 
 
 def response_tasks(task, result, config):

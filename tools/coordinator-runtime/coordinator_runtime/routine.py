@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from .contracts import Refusal, encode, task_result
+from .contracts import Refusal, encode, collected_task_result
 from .custody import safe_path, read_file
 from . import publication, readiness
 
@@ -76,7 +76,7 @@ def reconcile(store, board, job):
     grant = board.completion_authority(store, job['task'])
     if grant['id'] != run['grant_id'] or store.enrollment(job['role'])['legacy_hold'] or job['hold_reason']:
         return False
-    answer = task_result(json.loads(attempt['result'])) if attempt['result'] else {}
+    answer = collected_task_result(attempt)
     if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['capture'] != 'complete'
             or attempt['error'] or answer.get('semantic') != 'DONE'):
         return False

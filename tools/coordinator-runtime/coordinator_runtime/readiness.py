@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-from .contracts import Refusal, digest, required_text
+from .contracts import Refusal, digest, required_text, task_result_issues, collected_task_result
 
 CONTROLLER_DUTIES={'publication','artifact-custody','effect-reconciliation','delivery'}
 BOUNDARY_DUTIES={'review','acceptance'}
@@ -86,15 +86,16 @@ def inspect(answer,items,task=None,config=None,check_ref=None):
     Unsettled execution/capture is a separate hard fence, not a proof grammar
     repair or a label the producer can waive. Returns issues without mutating input.
     """
-    issues=[];duties=[]
+    issues=task_result_issues(answer);duties=[]
     def check(action):
         try:return action()
         except Refusal as exc:issues.append(str(exc))
-    proof=answer.get('completion') if isinstance(answer,dict) else None
+    if not isinstance(answer,dict) or answer.get('semantic')!='DONE':return None,[],issues
+    proof=answer.get('completion')
     if not isinstance(proof,dict) or not {'version','local','failures','unknowns','tools'}<=set(proof) or set(proof)-{'version','local','failures','unknowns','tools','reported_commands'}:
-        return None,[],['explicit completion fields/version1 required; original return retained']
+        return None,[],issues+['explicit completion fields/version1 required; original return retained']
     if type(proof['version']) is not int or proof['version']!=1 or not isinstance(proof['local'],str) or proof['local'] not in {'ready','blocked'}:
-        return proof,[],['typed version1 local ready/blocked assessment required']
+        return proof,[],issues+['typed version1 local ready/blocked assessment required']
     zero={r['id'] for r in items if r.get('type')=='commandExecution' and r.get('exit_code')==0 and r.get('completed_notification') and r.get('status')=='completed'}
     adverse={r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'}
     def failure(row):
@@ -144,11 +145,12 @@ def inspect(answer,items,task=None,config=None,check_ref=None):
 
 
 def needs_clarification(answer,items,task=None,config=None,check_ref=None):
-    return isinstance(answer,dict) and answer.get('semantic')=='DONE' and bool(inspect(answer,items,task,config,check_ref)[2])
+    return bool(inspect(answer,items,task,config,check_ref)[2])
 
 
 def live_issues(store,attempt,answer,items,task):
-    if not isinstance(answer,dict) or answer.get('semantic')!='DONE':return []
+    if not task.get('routine_completion') or not isinstance(answer,dict) or answer.get('semantic')!='DONE':
+        return task_result_issues(answer)
     from .custody import read_file,safe_path
     from .publication import stages
     root=store.home/'artifacts'/attempt
@@ -166,13 +168,8 @@ def live_issues(store,attempt,answer,items,task):
 
 
 def assess(store,attempt):
-    answer=json.loads(attempt['result']) if attempt['result'] else {}
+    answer=collected_task_result(attempt)
     detail=json.loads(attempt['detail'])
-    if detail.get('readiness_clarification'):
-        prior=detail['prior_turn_result']
-        for key in ['failures','unknowns']:
-            old=prior.get(key,[])
-            _require(isinstance(answer.get(key),list) and answer[key][:len(old)]==old,'clarification erased or rewrote original '+key)
     tools=detail.get('tool_completion',{})
     _require(tools.get('complete'),'unsettled tool metadata blocks local readiness')
     root=store.home/'artifacts'/attempt['id']
@@ -189,5 +186,5 @@ def assess(store,attempt):
         'original_failures':answer['failures'],'original_unknowns':answer['unknowns'],
         'resolved_history':proof['failures'],'tool_dispositions':proof['tools'],'subsequent_duties':duties,
         'reported_commands':proof.get('reported_commands',[]),
-        'clarification_origin':{'result_hash':digest(detail['prior_turn_result']),'completion':detail['prior_turn_result'].get('completion'),'issues':detail.get('readiness_issues',[])} if detail.get('readiness_clarification') else None,
+        'clarification_origin':{'result_hash':digest(detail['prior_turn_result']),'completion':detail['prior_turn_result'].get('completion') if isinstance(detail['prior_turn_result'],dict) else None,'issues':detail.get('readiness_issues',[])} if detail.get('readiness_clarification') else None,
         'qualification':'producer-attested local readiness/resolution with actual protocol IDs and conserved-byte links; producer-visible labels are uncorrelated claims, not OS handles; not independent semantic verification or downstream acceptance'}

@@ -14,7 +14,8 @@ import os
 from pathlib import Path
 import re
 
-from .contracts import PROFILES, Refusal, canonical_uuid, encode, parse_json
+from .contracts import (PROFILES, Refusal, canonical_uuid, encode, parse_json,
+                        task_result, task_result_issues, task_result_instructions)
 from . import storage, readiness
 
 
@@ -452,8 +453,11 @@ class AppServer:
         outcome["detail"].update({"ephemeral": True, "resume_disposition": "available-while-owner-alive"})
         result = await self.turn(peer, store, attempt, session, prompt, spec, binding, schema, outcome)
         outcome["result"] = result
-        if isinstance(result, dict) and result.get("semantic") in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
+        if isinstance(result, dict) and isinstance(result.get('semantic'),str) and result['semantic'] in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
             store.observe_semantic(attempt, result["semantic"])
+        if schema and set(schema.get('properties',{}))=={'payload_json'}:
+            if 'prior_turn_result' in outcome['detail']:task_result(result,outcome['detail']['prior_turn_result'])
+            else:task_result(result)
         return result
 
     async def unsubscribe(self, peer, store, attempt, outcome):
@@ -503,15 +507,18 @@ class AppServer:
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
         outcome["result"] = result
         items=list(peer.tools.values())
-        issues=readiness.live_issues(store,attempt,result,items,spec) if spec.get('routine_completion') else []
+        is_task=bool(schema and set(schema.get('properties',{}))=={'payload_json'})
+        issues=readiness.live_issues(store,attempt,result,items,spec) if is_task else []
         if issues:
-            outcome['detail'].update({'prior_turn_result':result,'readiness_clarification':True,
+            outcome['detail'].update({'prior_turn_result':result,'readiness_clarification':bool(spec.get('routine_completion')),
+                'result_contract_issues':task_result_issues(result),
                 'readiness_issues':issues,
-                'resume_disposition':'attempted-owned-local-readiness-clarification'})
-            prompt=('Clarify this SAME owned staged task once; do not replay or rewrite completed work blindly. '
-                'Retain the original failures/unknowns verbatim as array prefixes. Resolve genuine remaining local '
-                'construction/verification, distinguish deferred controller duties, and return the full original '
-                'result with explicit completion evidence. No canonical writes or new duties.\n'+readiness.INSTRUCTIONS+
+                'resume_disposition':'attempted-owned-task-contract-clarification'})
+            prompt=('Clarify this SAME owned task once; do not replay or rewrite completed work blindly. '
+                'Preserve the complete original meaning, including dissent, arrays and command evidence. '
+                'Correct the representation and only genuinely remaining local construction/verification. '
+                'A real partial/blocker remains partial/blocked; no DONE merely to repair JSON, canonical writes or new duties.\n'+
+                task_result_instructions()+(readiness.INSTRUCTIONS if spec.get('routine_completion') else '')+
                 '\nCOMPLETION_ISSUES='+encode(issues)+
                 '\nThese IDs are controller-observed protocol identity, not a correlation to your visible chunk labels.'+
                 '\nOBSERVED_TOOL_METADATA='+encode(items)+
@@ -527,8 +534,8 @@ class AppServer:
     async def start_turn(self, peer, thread, prompt, binding, schema, spec):
         if schema and set(schema.get("properties", {})) == {"payload_json"}:
             prompt += ("\nWIRE FORMAT: return {\"payload_json\": \"<the complete task-result JSON serialized as a string>\"}. "
-                       "Inside that string preserve semantic, summary, category, findings, failures, unknowns, artifacts, "
-                       "handoffs, no_handoff_reason and completion when required. Do not omit consequential content to fit the wire envelope.")
+                       "Inside that string use this exact shared contract. Do not omit consequential content to fit the wire envelope.\n"+
+                       task_result_instructions())
         params = {"threadId": thread, "model": binding["model"], "effort": binding["effort"],
                   "input": [{"type": "text", "text": prompt, "text_elements": []}],
                   "sandboxPolicy": sandbox_policy(spec)}
@@ -555,6 +562,8 @@ class AppServer:
         prompt = clarification or ("Continue this exact owned task after the collected interruption. Reconcile prior effects; "
                   "do not replay them. Complete only remaining authorized work, or return explicit UNKNOWN. "
                   "Use the original required JSON result contract. This is the single supported resume budget.")
+        if not clarification and schema and set(schema.get('properties',{}))=={'payload_json'}:
+            prompt+='\n'+task_result_instructions()
         next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])

@@ -53,6 +53,9 @@ for line in sys.stdin:
         if plan.get("hang_first") and turns == 1:
             continue
         answer = plan.get("result")
+        if turns>1 and 'second_result' in plan:
+            assert 'INNER TASK RESULT:' in prompt
+            answer=plan['second_result']
         write_stage=turns==1 or not (plan.get('write_once') or str(plan.get('completion_mode','')).startswith('legacy'))
         if plan.get('target') and write_stage:
             target=task_context.get('staged_targets',{}).get(plan['target'],plan['target'])
@@ -69,6 +72,7 @@ for line in sys.stdin:
                     'command':'private command body NOT to retain','aggregatedOutput':'private output NOT to retain',
                     'processId':'provider-label-only','durationMs':2,**plan['tool_metadata']}
             if plan.get('completion_mode')=='legacy-resolved' and turns>1:meta.update(exitCode=0,status='completed')
+            if turns>1:meta.update(plan.get('second_tool_metadata',{}))
             send({'method':'item/completed','params':{'threadId':thread,'turnId':turn,'item':meta}})
             tool_records.append(meta)
         if plan.get("write_file"):

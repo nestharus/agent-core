@@ -16,7 +16,7 @@ import stat
 import time
 
 from .contracts import (Backpressure, Refusal, classification, digest, encode, ident,
-                        response_tasks, task_result)
+                        response_tasks, collected_task_result)
 from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
 from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
 from .routine import SCHEMA as ROUTINE_SCHEMA
@@ -533,7 +533,7 @@ class Store(DeliveryJournal):
                 self.failure_delivery(row,attempt,task,"Collected failure/capture requires bounded recovery or real owner disposition")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
-            try:result = task_result(json.loads(attempt["result"]) if attempt['result'] else None)
+            try:result = collected_task_result(attempt)
             except Refusal as exc:
                 self.failure_delivery(row,attempt,task,'Invalid inner task contract: '+str(exc))
                 self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?",(str(exc),job))
