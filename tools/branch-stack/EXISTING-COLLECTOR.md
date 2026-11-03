@@ -36,6 +36,15 @@ and health remain explicit. A branch row does not establish logical dependencies
 eligibility fulfillment, landed mappings, semantic correctness or full inventory.
 A current matching code version is necessary but does not erase source errors.
 
+Physical base qualification follows `FeedAdapter.native`: a present PR
+`baseRefOid` binds `physical_base.head`; only a genuinely absent key falls back
+to the observed Main/member ref target. An unresolved fallback stays UNKNOWN;
+a null or malformed present pin is rejected by native validation. The base ref
+name must still match. This pair is independent of current Main and full
+head/tree/ordered-parent metadata, which remain separately checked. It asserts
+no immediate-parent, merge-base or ancestry relationship and creates no logical
+edges or owner facts.
+
 Owner PR head/ref/base/membership must match native observations. Available
 immutable tree and ordered parent metadata must also match. When Main carries
 complete metadata, supply `OwnerBindings.main_version` with its exact

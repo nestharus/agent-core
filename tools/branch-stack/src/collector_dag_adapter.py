@@ -394,9 +394,12 @@ def translate(core,bundle,*,account,repo,binding,expected_snapshot_id,now,captur
             partial["frontiers"]=native["frontiers"]+gaps+["owner-PR-outside-encountered-scope-UNKNOWN"]
             return partial
         p=known[u["pr"]]
+        # Match FeedAdapter.native: a present PR pin wins; only absence uses
+        # the observed ref target. Current Main metadata remains bound above.
+        base=native_prs[u["pr"]].get("baseRefOid", refs.get(p["baseRefName"]))
         if not (u["ref"]=="refs/heads/"+p["headRefName"] and u["version"]["head"]==p["headRefOid"]
              and u["native_stack"]=="1649" and u["physical_base"]["ref"]==p["baseRefName"]
-             and u["physical_base"]["head"]==refs.get(p["baseRefName"])):
+             and u["physical_base"]["head"]==base):
             partial["frontiers"]=native["frontiers"]+gaps+["owner-PR-ref-head-base-membership-CAS-UNKNOWN"]
             return partial
         target=(native_prs[u["pr"]].get("headRef") or {}).get("target")
