@@ -124,6 +124,13 @@ def validate_config(config):
             policy_for(task)
     if config.get('session_storage',{}).get('mode') not in {None,'producer-owned'}:
         raise Refusal('select producer-owned storage; allocated Codex namespaces do not prove logical ownership')
+    if any(t.get('routine_completion') for t in config['tasks'].values()):
+        method=config.get('canonical_publication',{})
+        if method.get('method')!='retention-same-inode-v1' or not isinstance(method.get('library'),str) or not Path(method['library']).is_absolute():
+            raise Refusal('explicit selected retention.snapshot_lock library and same-inode method required')
+    excluded_paths=config.get('artifact_exclusions',[])
+    if not isinstance(excluded_paths,list) or len(excluded_paths)>64 or any(not isinstance(p,str) or not Path(p).is_absolute() or '..' in Path(p).parts for p in excluded_paths):
+        raise Refusal('bounded absolute opaque artifact exclusions required')
     for selected in config["roles"].values():
         if set(selected["routes"]) - set(config["tasks"]):
             raise Refusal("role route references an unknown configured task")
@@ -275,7 +282,7 @@ def classification(answer, event, config):
 
 def task_result(answer):
     keys = {"semantic", "summary", "findings", "failures", "unknowns", "artifacts", "category"}
-    if not isinstance(answer, dict) or not keys <= set(answer) or set(answer)-keys-{"handoffs", "no_handoff_reason"}:
+    if not isinstance(answer, dict) or not keys <= set(answer) or set(answer)-keys-{"handoffs", "no_handoff_reason", "completion"}:
         raise Refusal("task result must conserve summary/findings/failures/unknowns/artifacts/category")
     if not isinstance(answer['semantic'],str) or answer["semantic"] not in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
         raise Refusal("unknown semantic completion")

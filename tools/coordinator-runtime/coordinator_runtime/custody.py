@@ -49,11 +49,13 @@ def read_file(path, maximum):
             if len(data) > maximum:
                 raise Refusal('artifact grew beyond custody budget')
         after = os.fstat(fd)
-        identity = lambda x: (x.st_dev, x.st_ino, x.st_size, x.st_mtime_ns)
+        identity = lambda x: (x.st_dev, x.st_ino, x.st_size, x.st_mtime_ns,x.st_mode,x.st_uid,x.st_gid,x.st_ctime_ns)
         if identity(before) != identity(after) or identity(after) != identity(os.stat(path.name,dir_fd=parent,follow_symlinks=False)):
             raise Refusal('artifact changed while capturing exact source')
         return bytes(data), {'dev': after.st_dev, 'ino': after.st_ino, 'size': after.st_size,
-                             'mtime': after.st_mtime_ns, 'sha256': hashlib.sha256(data).hexdigest()}
+                             'mtime': after.st_mtime_ns, 'mode':stat.S_IMODE(after.st_mode),
+                             'uid':after.st_uid,'gid':after.st_gid,'ctime':after.st_ctime_ns,
+                             'sha256': hashlib.sha256(data).hexdigest()}
     finally:
         os.close(fd)
         os.close(parent)
@@ -63,6 +65,8 @@ def capture(store, attempt, path, task, role_owned=False):
     root = store.home/'artifacts'/attempt
     authority = task['effect_authority']
     candidate = Path(path)
+    if any(candidate==Path(p) or candidate.is_relative_to(Path(p)) for p in store.config.get('artifact_exclusions',[])):
+        raise Refusal('opaque artifact excluded before metadata or source acquisition')
     if candidate.is_relative_to(store.home) and not candidate.is_relative_to(store.home/'artifacts'):
         raise Refusal('journal/session/auxiliary stores are not task report artifacts')
     p = safe_path(path, [str(root), *authority['read_roots'], *authority['write_roots']])

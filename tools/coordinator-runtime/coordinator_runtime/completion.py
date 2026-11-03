@@ -49,11 +49,18 @@ class Completion:
         answer = json.loads(attempt['result']) if attempt['result'] else {}
         if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['error']
                 or attempt['capture'] != 'complete' or answer.get('semantic') != 'DONE'
-                or answer.get('failures') or answer.get('unknowns') or job['effects'] not in {'none','reconciled'} or job['hold_reason']):
+                or job['effects'] not in {'none','reconciled'} or job['hold_reason']):
             return None
+        from .readiness import assess
+        local=None
+        if runtime.config['tasks'][job['task']].get('routine_completion'):
+            try:local=assess(runtime,attempt)
+            except Refusal:return None
+        elif answer.get('failures') or answer.get('unknowns'):return None
         proof = {'actor': self.config['actor'], 'delegated_by': grant['owner'], 'grant_id': grant['id'],
                  'recipient': grant['owner'], 'worker': attempt['session'], 'collector': attempt['controller'],
                  'evidence': {'attempt': attempt['id'], 'result_hash': digest(answer), 'effect_receipt': job['effect_receipt']},
+                 'local_readiness':local,
                  'meaning': 'actual delegated collector consumed routine handback; other outboxes remain owned'}
         if outbox['kind'] == 'effect-request':
             proof['effects'] = {'evidence': [job['effect_receipt']], 'unknown_effects': []}

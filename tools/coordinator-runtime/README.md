@@ -272,25 +272,48 @@ selected-source/privacy bounds still apply, and no exact-read isolation is claim
 No canonical parent or network scope is widened. Local input copies share the
 owned directory ceiling; durable original report bytes remain in journal custody.
 
-After actual collected successful completion, settled supported tool metadata,
-valid inner contract and conserved proposed/report bytes, the current real role
-grant, source holds and unchanged canonical preimages are checked. The real
-service publishes only the exact granted targets via bounded single-link/no-follow
-reads and a known exclusive temporary plus atomic per-file replacement, retaining
-mode and durable per-file intent/receipt. The receipt identifies model producer,
-real service publisher, role, collector and grant. Canonical replacements are
-service effects, never attributed as direct model writes. Existing owner fencing
-and last-moment witness checks remain; this is not a filesystem compare-and-swap
-against arbitrary noncooperating writers.
+Local producer readiness now distinguishes current defects from expected later
+controller/review/delivery duties and resolved history. The required file-worker
+`completion` protocol covers every original failure/unknown index and adverse tool
+item; original arrays are never erased. Resolved claims bind exact conserved own
+report hashes and explicit actual successful verification IDs. An unrelated later
+zero is insufficient. Standard controller publication/custody duties name the real
+service actor; necessary external duties require admitted settled handoffs. Review/
+acceptance boundaries remain unclaimed, not waived. These are producer-attested
+resolution claims with mechanically verified links, not independent semantic proof.
+Genuine unresolved local work, missing evidence, unsettled tools, invalid ownership
+or source/resource/revocation fences still hold. Legacy ambiguous DONE can use the
+ONE existing same-owned-idle continuation for faithful clarification/verification;
+no new session, blind rewrite, text heuristic, repeated clarification or per-job
+human permission is supplied. Original pre-clarification arrays must remain verbatim
+prefixes. See the embedded protocol and tests; the outer provider wire is unchanged.
 
-Multi-file publication is not atomic. A conflict/interruption keeps actual partial
-effects, original/proposed bytes, exact intent/temporary and source/uncertainty
-holds; it never rolls back foreign changes, blindly republishes or invents a lost
-actor receipt from matching content. Unresolved intents also prevent processing/
-retirement. Automatic interrupted-publication disposition/temporary reclamation
-is not implemented: actual effect/source custodians retain that precise recovery
-frontier. Normal qualified writers need no per-job manual approval. Effects become
-`reconciled` only with the actual evidence above, never falsely `none`.
+The selected canonical method is explicit:
+`canonical_publication:{method:"retention-same-inode-v1",library:ABS_LIBRARY}`.
+That library must expose the actual selected `retention.snapshot_lock`. The current
+live message-board substrate has it; this isolated base does not. Tests use an
+explicit owned interface fixture, never overwrite/copy the dirty live library or
+call its global lock. Initial exact preimages are acquired under that cooperative
+lock. Publication reacquires it, checks every regular single-link file's exact
+bytes/inode/metadata and current role/controller/source authority, then durably
+creates compressed BEFORE-only recovery backups for all targets before any write.
+The service writes/fsyncs/readbacks each EXISTING canonical inode; it never uses
+inode replacement, chmod/chown, canonical directory widening or worker-owned locks.
+Each receipt names the selected method, compressed preimage, model producer, actual
+service publisher, role and collector. Peer changes fail preconditions rather than
+being silently overwritten. Same-inode creation of a missing target is unsupported.
+
+The cooperative lock does not establish CAS against arbitrary noncooperating writers,
+and multi-file/same-inode writes are not atomic. Interruption can leave partial
+bytes: exact before backups, proposed bytes, prior effects and unresolved intent
+stay held; generic effect receipts cannot waive the intent or release/process it.
+No blind replay, automatic rollback or lost-actor inference from matching bytes.
+Automatic interrupted-write resolution is inactive pending supported exact source/
+effect recovery; healthy normal jobs do not need per-job manual reconciliation.
+Lock contention retries within bind/task budgets with the same owned responsibility,
+never another model or false END. Backups are registered conserved producer recovery
+artifacts: retirement still needs actual processing+24h and all consumer/source/
+outbox/recovery/effect-uncertainty holds. No canonical/platform cleanup follows.
 
 The delegated collector then genuinely consumes its own routine result/effect
 handback on the board. Its receipt names the service actor and delegating role,
@@ -421,3 +444,22 @@ as source, not fictitiously ACKed; already processed responsibilities are skippe
 and pending originals remain identified. The command changes no membership/cursor,
 never resurrects a completed role, and does not replay work. The real owner
 consumes/routes unresolved material and uses its supported actual receipt path.
+
+## Genuine coordinator control receive
+
+Selected option A keeps managed routine intake and each genuine existing owner's
+cooperative receive duty. [coordinator-receive.md](templates/coordinator-receive.md)
+gives concrete board watch/notifications/read and recipient delivery-show/stage
+commands, exact identity/source-role selection, paging and lost-hint handling.
+Use it in persistent owner contexts, never append it to a disposable worker as an
+owner-impersonation instruction. Receive at actual supported points while continuing
+the existing backlog Goal. The delegated runtime remains sole normal intake/ACK
+writer; no competing ack_seq/intake cursor, foreign queue drain, native handle
+wrapper, replacement managed_owner or extra daemon. Questions/effects/alerts and
+selected same-owner Reviews work need real receipt and actor control. Automatic
+routine handbacks remain with their delegated callback. Availability while busy,
+idle, absent or in an existing native wait is not established by instructions,
+membership, socket hints or queue acceptance. Targeted unattended wake is forward
+work. Status exposes declared receive mode, delivery creation/frontiers and pending
+custody; configuration never proves active receipt/adoption. Root external,
+Dispatcher/Cloud unenrolled; Reviews preserves actual opaque method/collectors.

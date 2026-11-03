@@ -636,5 +636,14 @@
   },
   "session_storage": {
     "mode": "producer-owned"
+  },
+  "canonical_publication": {
+    "method": "retention-same-inode-v1",
+    "library": "/home/nes/ai/tools/message-board"
+  },
+  "control_receive": {
+    "mode": "cooperative",
+    "instructions": "/absolute/published-checkout/tools/coordinator-runtime/templates/coordinator-receive.md",
+    "availability": "not-acquired; genuine existing owner receive points required"
   }
 }

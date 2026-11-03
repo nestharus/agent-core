@@ -40,6 +40,7 @@ def config_at(directory):
     for task in tasks.values():
         task["responses"].update({"blocker": ["work-proposer"], "scope": ["work-proposer"]})
     value = {"version": 1, "enabled": False, "actor": ident(), "state_dir": str(home / "state"),
+             "canonical_publication": {"method":"retention-same-inode-v1","library":str(Path(__file__).parent.resolve()/"fixture_snapshot")},
              "board_home": str(home / "boards"), "board_library": os.environ.get("COORDINATOR_TEST_BOARD_LIBRARY", str(Path(__file__).resolve().parents[2] / "message-board")),
              "profiles": [".codex", ".codex2", ".codex3", ".codex4", ".codex5"],
              "roles": roles, "tasks": tasks, "classifier": {"binding": copy.deepcopy(LUNA), "profile": ".codex2", "cwd": str(home)},

@@ -542,6 +542,9 @@ class Store(DeliveryJournal):
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            if task.get('routine_completion'):
+                from .readiness import assess
+                assess(self,attempt)  # Same local obligation contract as publisher and delegated collector.
             self.prepare_handoffs(row, attempt, task, result)
             if row["role"] == "Work" and result["category"] in {"scope", "blocker"}:
                 self.owner_question(row, attempt, "Work-owned consequential question stays with the actual Decider; no automatic self-loop")
@@ -775,11 +778,14 @@ class Store(DeliveryJournal):
                           for job in self.rows("SELECT * FROM jobs WHERE state!='closed'")],
                 "attempts": self.rows("SELECT id,kind,job,controller,profile,binding,state,begin,ended,exit,"
                                       "collected,session,semantic,capture,cleanup,error,detail FROM attempts"),
-                "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,processed_at FROM outboxes"),
+                "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,created,processed_at FROM outboxes"),
+                "control_receive": {'declared':self.config.get('control_receive',{}),
+                    'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
                 "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}
                                      for r in self.rows('SELECT attempt,path,kind,owner,sha256 FROM artifact_custody')],
                 "session_storage": self.rows('SELECT * FROM attempt_storage'),
                 "file_publications": self.rows('SELECT * FROM file_publications'),
+                "canonical_backups": self.rows('SELECT * FROM canonical_backups'),
                 "violations": self.violations(), "adoption": "prospective grants only; no model/goal acceptance"}

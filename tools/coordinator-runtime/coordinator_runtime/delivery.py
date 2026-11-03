@@ -80,6 +80,8 @@ class DeliveryJournal:
                 self._task_handoff(job,attempt,task,{'category':'blocker'},handoff,index,informative=informative)
             except Refusal as exc:errors.append('handoff '+str(index)+': '+str(exc))
         self.owner_question(job,attempt,reason+('; '+ '; '.join(errors) if errors else ''))
+        if task['effects']=='owner-reconcile' and job['effects'] not in {'none','reconciled'}:
+            self.owner_question(job,attempt,'Actual effect owner retains unresolved local/publication effects: '+reason,effects=True)
         return self.gate_result_delivery(job,attempt,informative)
 
     def gate_result_delivery(self, job, attempt, result, internal=None):

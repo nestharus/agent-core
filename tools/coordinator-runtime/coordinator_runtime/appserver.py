@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 
 from .contracts import PROFILES, Refusal, canonical_uuid, encode, parse_json
-from . import storage
+from . import storage, readiness
 
 
 class RpcFailure(Refusal):
@@ -502,6 +502,15 @@ class AppServer:
             outcome["detail"]["resume_disposition"] = "attempted-after-collected-failed-turn"
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
         outcome["result"] = result
+        if spec.get('routine_completion') and readiness.needs_clarification(result,list(peer.tools.values())):
+            outcome['detail'].update({'prior_turn_result':result,'readiness_clarification':True,
+                'resume_disposition':'attempted-owned-local-readiness-clarification'})
+            prompt=('Clarify this SAME owned staged task once; do not replay or rewrite completed work blindly. '
+                'Retain the original failures/unknowns verbatim as array prefixes. Resolve genuine remaining local '
+                'construction/verification, distinguish deferred controller duties, and return the full original '
+                'result with explicit completion evidence. No canonical writes or new duties.\n'+readiness.INSTRUCTIONS+
+                '\nOBSERVED_TOOL_METADATA='+encode(list(peer.tools.values())))
+            return await self.continue_idle(peer,store,attempt,thread,turn,spec,binding,schema,prompt)
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
             outcome["detail"]["resume_disposition"] = "attempted-after-semantic-incompletion"
@@ -512,7 +521,7 @@ class AppServer:
         if schema and set(schema.get("properties", {})) == {"payload_json"}:
             prompt += ("\nWIRE FORMAT: return {\"payload_json\": \"<the complete task-result JSON serialized as a string>\"}. "
                        "Inside that string preserve semantic, summary, category, findings, failures, unknowns, artifacts, "
-                       "handoffs and no_handoff_reason. Do not omit consequential content to fit the wire envelope.")
+                       "handoffs, no_handoff_reason and completion when required. Do not omit consequential content to fit the wire envelope.")
         params = {"threadId": thread, "model": binding["model"], "effort": binding["effort"],
                   "input": [{"type": "text", "text": prompt, "text_elements": []}],
                   "sandboxPolicy": sandbox_policy(spec)}
@@ -531,12 +540,12 @@ class AppServer:
             return decode_final(peer.finals.pop(turn))
         return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
 
-    async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema):
+    async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema, clarification=None):
         state = await peer.rpc("thread/read", {"threadId": thread, "includeTurns": False})
         if state.get("thread", {}).get("id") != thread or state.get("thread", {}).get("status", {}).get("type") != "idle":
             raise Refusal("owned same-session continuation requires actual idle readback")
         store.authorize_launch(attempt)
-        prompt = ("Continue this exact owned task after the collected interruption. Reconcile prior effects; "
+        prompt = clarification or ("Continue this exact owned task after the collected interruption. Reconcile prior effects; "
                   "do not replay them. Complete only remaining authorized work, or return explicit UNKNOWN. "
                   "Use the original required JSON result contract. This is the single supported resume budget.")
         next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])

@@ -73,7 +73,7 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         answer={**result(),'artifacts':artifacts if artifacts is not None else [str(self.target)],
                 'handoffs':[],'no_handoff_reason':'Internal owned role result consumed by delegated collector; no external handoff.'}
         plan={'result':answer,'target':str(self.target),'target_contents':{'total':12},
-              'tool_metadata':{'exitCode':0} if tool is None else tool,'storage_config':config}
+              'tool_metadata':{'exitCode':0} if tool is None else tool,'storage_config':config,'completion_mode':'auto'}
         if artifacts == 'runtime':
             plan.update(write_file='report.txt',artifact_strings=True)
         if answer_extra:plan['result'].update(answer_extra)
@@ -254,7 +254,7 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         detail=json.loads(self.store.attempt(attempt)['detail'])
         self.assertEqual(detail['tool_completion']['items'][0]['exit_code'],1)
         self.assertTrue(detail['tool_completion']['nonzero_completions'])
-        self.assertEqual(self.store.job(job['id'])['effects'],'reconciled')
+        self.assertEqual(self.store.job(job['id'])['effects'],'unknown')  # Settled process is known, but its local resolution is not attested.
 
     async def test_L03_actual_paused_interval_source_without_notice_is_owner_bound(self):
         with patch.dict(os.environ,{'CODEX_SESSION_ID':self.owner}):self.board.revoke(self.store.enrollment('Work')['grant_id'])

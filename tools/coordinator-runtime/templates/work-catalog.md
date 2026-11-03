@@ -21,10 +21,20 @@ log sections and preserve peer prefixes. Do not normalize older row schemas.
 
 A proposer returns exact additive deltas, selectors, current-byte/inode
 preconditions, causal evidence and unresolved allocation choices. No canonical
-writes. The single integrator rereads current selected rows, applies compatible
-frozen deltas with the selected snapshot_lock, exact bytes/inode CAS, compressed
-before-only backups, same-inode writes, fsync and readback receipts. Multi-file
-partial effects must remain explicit for the actual Work owner; never blind rerun.
+writes. The single integrator worker reads the supplied exact preimages and full
+relevant returns, reconciles compatible frozen deltas and changes ONLY its mapped
+staged files. Preserve peer text, row schemas and original evidence. Return explicit
+local completion and evidence: expected later controller/review/delivery duties
+are distinct from unresolved local defects; resolved verifier history stays recorded.
+The actual delegated SERVICE publisher owns the canonical procedure: selected
+retention.snapshot_lock, exact regular-file byte/inode preimages, durable compressed
+before-only recovery backups, same-inode writes, fsync and readback receipts with
+mode/ownership unchanged. Staged workers do not acquire canonical locks or claim
+canonical backups/writes. Canonical parents never become model-writable directories.
+The cooperative lock and exact preconditions do not establish CAS against an
+arbitrary noncooperating writer, nor atomicity across files. Multi-file/partial-write
+effects and all backup/source uncertainty remain with the actual Work custodian;
+never blindly rerun, roll back peers or infer a lost receipt from matching bytes.
 Do not drop unexamined entries or findings merely because a batch is complete.
 
 Return accepted bounded execution as typed handoffs to actual Root/Branch/QA or

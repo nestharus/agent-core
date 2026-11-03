@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication
+from . import custody, routine, publication, readiness
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task
 
 
@@ -93,6 +93,7 @@ def job_prompt(store, job, task=None):
             "Canonical targets are read-only to you. The genuine delegated controller publishes exact "
             "staged bytes only after collected successful work, artifact custody and unchanged before-state. "
             "This is a writable OWNED DIRECTORY, not direct canonical file sandbox authority.\n"
+            + (readiness.INSTRUCTIONS+'\n' if task.get('routine_completion') else '')
             + "TASK_CONTEXT=" + encode(context) + "\n" + "\n".join(templates))
 
 
@@ -232,7 +233,13 @@ class Dispatcher:
         try:
             task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
             if task.get('routine_completion'):
-                routine.prepare(self.store, self.boards[job['role']], job, attempt, task)
+                until=self.store.clock()+self.config['deadlines']['bind']
+                while True:
+                    try:
+                        routine.prepare(self.store,self.boards[job['role']],job,attempt,task);break
+                    except BlockingIOError:
+                        if self.stopping.is_set() or self.store.clock()>=until:raise Refusal('canonical snapshot lock unavailable within bind budget')
+                        await asyncio.sleep(min(self.config.get('recheck_seconds',1),1))
             spec = execution_spec(task, directory)
             outcome = await self.run_model(attempt, job_prompt(self.store, job, task), spec, RESULT_SCHEMA)
         except (Refusal, OSError) as exc:
@@ -274,6 +281,14 @@ class Dispatcher:
             if self.store.job(job_id)["state"] == "closed":
                 self.runtime_errors.pop(job_id, None)
                 self.store.clear_operational_error(job_id)
+        except BlockingIOError as exc:
+            row=self.store.attempt(job['active_attempt']);detail=json.loads(row['detail'])
+            start=detail.get('canonical_lock_wait_since',self.store.clock())
+            if self.store.clock()-start>=self.config['deadlines']['task']:
+                self.store.hold_job(job_id,'canonical publication lock unavailable within task budget')
+            else:
+                with self.store.tx():self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode({**detail,'canonical_lock_wait_since':start}),row['id']))
+            self.store.record_operational_error(job_id,{'error':'canonical snapshot lock busy; original collected worker retained'},job['role'],'canonical-lock-wait')
         except (Refusal,OSError) as exc:
             self.runtime_errors[job_id] = str(exc)
             self.store.hold_job(job_id, exc)

@@ -149,11 +149,11 @@ class PartialBoundary(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.rows('SELECT * FROM file_publications'),[])
 
     async def test_publication_crash_retains_exact_intent_and_untouched_original(self):
-        with patch('coordinator_runtime.publication.os.replace',side_effect=OSError('synthetic publication interruption')):
+        with patch('coordinator_runtime.publication.write_same_inode',side_effect=OSError('synthetic publication interruption')):
             job,attempt=await self.run_writer()
         row=self.store.one('SELECT * FROM file_publications')
         self.assertEqual(row['state'],'intent');self.assertIn('interruption',row['error'])
-        self.assertTrue(Path(row['temp']).is_file())
+        self.assertTrue(Path(self.store.one('SELECT path FROM canonical_backups')['path']).is_file())
         self.assertEqual(json.loads(self.target.read_text())['total'],0)
         self.assertGreater(self.store.usage()['publication_reserved_bytes'],0)
         self.assertEqual(self.store.job(job['id'])['effects'],'unknown')
@@ -162,7 +162,7 @@ class PartialBoundary(unittest.IsolatedAsyncioTestCase):
         self.runtime.try_finish(job['id'])
         self.assertEqual(self.store.job(job['id'])['state'],'held')
         with patch.object(self.store,'clock',return_value=self.store.clock()+172800):sweep(self.store)
-        self.assertTrue(Path(row['temp']).is_file())  # Never canonical-parent purge.
+        self.assertTrue(Path(self.store.one('SELECT path FROM canonical_backups')['path']).is_file())  # Never canonical-parent purge.
 
     def test_category_alias_is_explicit_only_for_non_DONE_and_prompts_name_contract(self):
         raw={**result('PARTIAL','blocker'),'category':'blocked'}
@@ -177,11 +177,11 @@ class MultiFilePublication(unittest.IsolatedAsyncioTestCase):
     run_writer=fixtures.WriterCustody.run_writer
 
     async def test_second_file_interruption_preserves_first_effect_and_both_source_holds(self):
-        original=os.replace
-        def interrupted(source,target,**kwargs):
-            if str(target)==self.second_target.name:raise OSError('synthetic second-file interruption')
-            return original(source,target,**kwargs)
-        with patch('coordinator_runtime.publication.os.replace',interrupted):
+        original=publication.write_same_inode
+        def interrupted(fd,body):
+            if os.fstat(fd).st_ino==self.second_target.stat().st_ino:raise OSError('synthetic second-file interruption')
+            return original(fd,body)
+        with patch('coordinator_runtime.publication.write_same_inode',interrupted):
             job,attempt=await self.run_writer(plan_extra={'additional_target':str(self.second_target),'additional_contents':{'total':78}})
         self.assertEqual(json.loads(self.target.read_text())['total'],12)
         self.assertEqual(json.loads(self.second_target.read_text())['total'],0)
@@ -193,4 +193,4 @@ class MultiFilePublication(unittest.IsolatedAsyncioTestCase):
         source=json.loads(job['members'])[0]['event']
         with patch.object(self.store,'clock',return_value=self.store.clock()+172800):sweep(self.store)
         self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(source,))['processed_at'])
-        self.assertTrue(Path(rows[str(self.second_target)]['temp']).is_file())
+        self.assertTrue(Path(self.store.one('SELECT path FROM canonical_backups WHERE target=?',(str(self.second_target),))['path']).is_file())
