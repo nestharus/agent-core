@@ -330,7 +330,7 @@ array in `outer-contract-original.fields` and retain every valid old item as a
 verbatim prefix. Never guess a missing path or erase adverse arrays to repair it.
 
 Collected DONE with a recorded disposition error now receives the bounded fresh
-Luna diagnosis as well. Its diagnostic result returns to Work; it cannot by
+Luna diagnosis as well. Its diagnostic result returns to its actual role owner; it cannot by
 itself launch another task. The old result, stages, source holds and unknown
 effects stay owned. Genuine same-session clarification still requires actual
 idle readback before the original owner exits. Numeric process END, complete
@@ -372,6 +372,90 @@ collection fields remain unchanged. Unknown originals, active recovery and
 unreconciled external effects cannot transfer. An unavailable original collector
 remains an explicit frontier; this provides no process adoption or new deployment
 authority. Current bindings alone authorize no transfer.
+
+Recovery diagnosis receives the consumed actual owner selection **before** any
+handoff: target, WHY, evidence, owner and request identity, with the original
+result/effects. An independent external future-use choice remains a duty; it does
+not silently veto separately admitted local reconciliation. Source, resource,
+publication-intent and current-peer fences remain binding. A diagnosis can return
+`profile:"@owner"` with a precise missing decision in remaining/rationale. Failed
+or invalid collected diagnoses retain their raw results and return recovery to
+`awaiting-disposition`, with an actual-role question and public next step instead
+of endlessly revisiting the same invalid choice. An unknown diagnosis remains
+with its actual collector. An already recorded bad diagnosing state can be
+recognized by `request-recovery` from its collected matching evidence, without
+rewriting the old result or forcing a profile. A fresh diagnosis is tied to its
+exact owner selection; an old diagnosis cannot authorize a later selection.
+`mode:"defer", remaining:null` records a bounded owned unresolved decision and
+keeps the original held, without another automatic diagnosis, processing or
+acceptance. Request budgets and independent holds persist.
+
+## Input controls and actual owner decisions
+
+Fresh classification retains four fields: event_id, task, package and reason.
+In addition to configured tasks, `@control` addresses board controls/status/results
+to their actual coordinator; `@unresolved` records honest uncertainty and asks
+that role owner. Neither creates an execution job or needs an invented package.
+Real ordinary Branch proof work can select its actual configured non-QA task;
+actual QA and other scoped execution still require their actual package admission.
+`@delivery` validates the fixed notification/duty plan, not substantive permission,
+publication, recipient processing, accepted QA or settlement. A necessary external
+duty stays explicit. Later notifications receive separate immutable plans; earlier
+plans and their classifier histories are not silently changed. Malformed answers
+still have one bounded classifier recovery; even then the genuine owner can inspect
+and resolve the exception through the public commands below. There is no generic
+Work catchall, automatic route bypass or repeated unbounded diagnosis.
+
+From the existing genuine actor only:
+
+```sh
+python3 "$RUNTIME" --config "$CONFIG" owner-controls QA --limit 100
+python3 "$RUNTIME" --config "$CONFIG" input-show EXACT_EVENT
+python3 "$RUNTIME" --config "$CONFIG" resolve-input EXACT_EVENT --receipt /absolute/own/input-decision.json
+```
+
+`owner-controls` lists only that enrolled role's pending input/recovery exceptions;
+page inputs with `--after NEXT_AFTER` when more_inputs is true. A full recovery
+page remains an explicit inspection frontier. `input-show` returns the immutable
+source/hash, current responsibility and all attributed derived decisions. None of
+these commands proves native wake, pickup or processing. Existing genuine-owner
+watch/read/delivery-stage duties remain necessary.
+
+The resolution has exact keys:
+
+```json
+{"source_hash":"EXACT_INPUT_SHOW_HASH","mode":"route","task":"branch-proposer","package":null,"related_event":null,"related_job":null,"reason":"Actual meaning, selected outcome and why","evidence":["Actual source/owner/current-responsibility evidence"],"remaining_obligations":["Independent unresolved duty, if any"]}
+```
+
+Modes:
+
+- `route`: select an originally configured task and actual admitted package when
+  execution needs one. For an outgoing fixed plan, only `@delivery` with the SAME
+  package/plan can be selected; the owner clarifies meaning, without an effect or
+  acceptance grant. Another fresh Luna classification must still succeed, or
+  return a truthful `@unresolved`. The command itself launches/sends nothing.
+- `control`: task/package/related fields are null; reason/evidence record actual
+  processing of this input control only. Do not invent empty remaining obligations
+  or declare effects/other jobs settled. Existing source/outbox/consumer/effect
+  holds remain. A normal fresh classification commits control responsibility;
+  actual notification receipts and every independent hold still govern processing.
+- `coalesce`: task is null; name the exact existing same-role related_event,
+  related_job and its package, with actual owner evidence of one purpose. This
+  preserves the already admitted/running/ended job instead of scheduling another
+  executor. Its numeric END does not process the old source: the existing target
+  must actually close/process, and all independent obligations must clear.
+
+Owner resolution appends bounded history beside the unchanged payload/hash and
+original attempt/result. It freezes into subsequent task context. Stale hashes,
+foreign actors, unknown/live classifiers and already reserved/executed originals
+are refused. It does not overwrite source, notice ACK, owner/runtime cursor,
+admission or old results; an already ACKed input is not re-ACKed. Previously
+unACKed sources receive only the normal delegated receipt after fresh validated
+classification and durable responsibility. Default limit is four owner decisions
+per input, with byte bounds; unresolved/exhausted cases remain visibly owned.
+Current genuine source meanings and owner choices are evidence, not proof from an
+enum. This capability neither extends a resource lease nor provides DSN access,
+native execution, account repair or unattended coordinator wake.
 
 The selected canonical method is explicit:
 `canonical_publication:{method:"retention-same-inode-v1",library:ABS_LIBRARY}`.

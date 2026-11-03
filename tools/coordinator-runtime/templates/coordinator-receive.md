@@ -95,3 +95,36 @@ Real four-coordinator acquisition/receive/actor control and availability are sti
 qualified by actual owner encounters during staged adoption. A config, instruction,
 fixture recipient or membership never fabricates adoption. Option B targeted
 unattended wake is separately owned forward work if later required.
+
+For a normal input held before a usable task/control distinction, inspect only
+this genuine role's exceptions through the runtime:
+
+```sh
+python3 "$RUNTIME" --config "$CONFIG" owner-controls "$ROLE" --limit 100
+python3 "$RUNTIME" --config "$CONFIG" input-show "$EVENT_ID"
+python3 "$RUNTIME" --config "$CONFIG" resolve-input "$EVENT_ID" --receipt /absolute/own/input-decision.json
+```
+
+Page inputs using next_after while more_inputs is true. The input decision uses
+the exact source_hash plus mode/task/package/related_event/related_job/reason/
+evidence/remaining_obligations; README defines its bounded grammar. State actual
+meaning and WHY. Controls/releases/status/results are not automatically package
+execution; ordinary non-QA proof work retains its real configured role task.
+Actual QA execution still needs its existing genuine admission. Where an authentic
+later admission already owns the same purpose, use exact existing-event/job
+coalescence; do not rebind or launch an unexecuted null source as another executor.
+An ended result can still have independent delivery/effect/publication duties.
+
+Owner decisions are derived attributed records, never source/ACK/cursor/result
+rewrites. Fresh classification and normal delegated receipt remain the runtime's
+sole path. A control processing record settles only actual input scope and clears
+no independent source/outbox/effect duty. @unresolved is an honest owner question,
+not executable authority. Questions/notifications preserve all original meaning
+and required duties; use actual delivery-stage evidence separately. A stored
+managed_pending, --steer request or this list is not native wake or processing.
+
+Recovery exceptions appear in owner-controls too. After collected failed/invalid
+diagnosis, request-recovery can select redispose, authentic remaining target/WHY/
+evidence, or defer with remaining:null. Unknown originals/diagnoses retain their
+actual collectors. Never force a profile, borrow a handle, reuse an expired grant,
+replay accepted work or infer external selection from local readiness.

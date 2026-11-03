@@ -23,6 +23,7 @@ from .routine import SCHEMA as ROUTINE_SCHEMA
 from .storage import SCHEMA as STORAGE_SCHEMA
 from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
+from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -107,7 +108,7 @@ def private_directory(path):
     return path
 
 
-class Store(DeliveryJournal, RecoveryJournal):
+class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
@@ -127,7 +128,7 @@ class Store(DeliveryJournal, RecoveryJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -275,7 +276,7 @@ class Store(DeliveryJournal, RecoveryJournal):
             selected = self.config["classifier"]
             attempt = self._attempt("classifier", row["id"], None, selected["binding"], selected["profile"])
             self.db.execute("UPDATE events SET state='classifying',classifier=? WHERE id=?", (attempt, row["id"]))
-        return attempt, self.event(row["id"])
+        return attempt, self.routing_event(row["id"])
 
     def _classification_available(self):
         active = self.db.execute("SELECT COUNT(*) FROM attempts WHERE job IS NULL "
@@ -298,7 +299,7 @@ class Store(DeliveryJournal, RecoveryJournal):
             self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(detail), attempt))
             self.db.execute("UPDATE events SET state='classifying',classifier=?,recovery_count=1 WHERE id=?",
                             (attempt, row["id"]))
-        return attempt, self.event(row["id"])
+        return attempt, self.routing_event(row["id"])
 
     def attempt(self, attempt):
         row = self.one("SELECT * FROM attempts WHERE id=?", (attempt,))
@@ -359,7 +360,7 @@ class Store(DeliveryJournal, RecoveryJournal):
 
     def classification_failed(self, attempt, error):
         with self.tx():
-            self.db.execute("UPDATE events SET state='classification-held',error=? WHERE classifier=?",
+            self.db.execute("UPDATE events SET state='classification-held',error=? WHERE classifier=? AND state='classifying'",
                             (str(error)[:2000], attempt))
 
     def capture_gap(self, attempt, error):
@@ -379,7 +380,7 @@ class Store(DeliveryJournal, RecoveryJournal):
         row = self.attempt(attempt)
         if row["exit"] != 0 or not row["collected"] or row["capture"] != "complete" or row["error"]:
             raise Refusal("classification requires actual successful collection and complete typed capture")
-        event = self.event(row["event"])
+        event = self.routing_event(row["event"])
         answer = classification(json.loads(row["result"]), event, self.config)
         task = self.config["tasks"].get(answer["task"])
         with self.tx():
@@ -387,11 +388,14 @@ class Store(DeliveryJournal, RecoveryJournal):
             if state != {"state": "classifying", "classifier": attempt}:
                 raise Refusal("stale classification cannot replace responsibility")
             delivery = event["kind"] == "outgoing-response" and answer["task"] == "@delivery"
-            self.db.execute("INSERT INTO queue VALUES(?,?,?,?,?,?,?,NULL)",
-                            (ident(), event["id"], event["role"] if delivery else task["role"], "delivery" if delivery else task["phase"],
-                             answer["task"], answer["package"], "routed" if delivery else "queued"))
-            self.db.execute("UPDATE outboxes SET state='pending' WHERE event=? AND state='classification-pending'", (event["id"],))
-            self.db.execute("UPDATE events SET classification=?,state='queued',ack='ready',error=NULL WHERE id=?",
+            control=answer['task'] in CONTROL_ROUTES
+            if control:self.queue_input_control(event,answer)
+            else:
+                self.write_input_queue(event,answer,event['role'] if delivery else task['role'],
+                                       'delivery' if delivery else task['phase'],'routed' if delivery else 'queued')
+                self.db.execute("UPDATE outboxes SET state='pending' WHERE event=? AND state='classification-pending'", (event["id"],))
+            self.db.execute("UPDATE events SET classification=?,state='queued',ack=CASE WHEN ack IN ('done','plain','internal') "
+                            "THEN ack ELSE 'ready' END,error=NULL WHERE id=?",
                             (encode(answer), event["id"]))
         return answer
 
@@ -466,13 +470,19 @@ class Store(DeliveryJournal, RecoveryJournal):
 
     def _members(self, row):
         if row["phase"] != "integrator":
-            return [{"queue": row["id"], "event": row["event"], "hash": digest(self.event(row["event"])), "package": row["package"]}]
+            return [self._input_member(row)]
         rows = self.rows("SELECT q.* FROM queue q JOIN events e ON q.event=e.id WHERE q.role=? "
                          "AND q.task=? AND q.state='queued' AND e.hold IS NULL ORDER BY e.received,q.id",
                          (row["role"], row["task"]))
         if self.config["tasks"][row["task"]].get("require_package_scope"):
             rows = [r for r in rows if r["package"] == row["package"]]
-        return [{"queue": r["id"], "event": r["event"], "hash": digest(self.event(r["event"])), "package": r["package"]} for r in rows]
+        return [self._input_member(r) for r in rows]
+
+    def _input_member(self,row):
+        member={'queue':row['id'],'event':row['event'],'hash':digest(self.event(row['event'])),'package':row['package']}
+        selection=self.input_resolution(row['event'])
+        if selection:member['input_resolution']=selection['version']
+        return member
 
     def start_job(self, job, token, profile=None):
         with self.tx():
@@ -618,8 +628,12 @@ class Store(DeliveryJournal, RecoveryJournal):
         with self.tx():
             changed = True
             while changed:
+                self.complete_input_controls()
                 cursor = self.db.execute("UPDATE events SET state='processed',processed_at=? "
                     "WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
+                    "AND NOT EXISTS (SELECT 1 FROM input_resolutions ir WHERE ir.event=events.id "
+                    "AND ir.version=(SELECT MAX(v.version) FROM input_resolutions v WHERE v.event=events.id) "
+                    "AND json_array_length(json_extract(ir.receipt,'$.remaining_obligations'))>0) "
                     "AND id IN (SELECT event FROM queue WHERE state='done') "
                     "AND NOT EXISTS (SELECT 1 FROM file_publications fp JOIN attempts a ON a.id=fp.attempt JOIN queue q ON q.job=a.job WHERE q.event=events.id AND fp.state!='published') "
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
@@ -656,6 +670,8 @@ class Store(DeliveryJournal, RecoveryJournal):
             selected = self.config["diagnosis"]
             attempt = self._attempt("diagnosis", None, job, selected["binding"], selected["profile"])
             detail={**json.loads(self.attempt(attempt)['detail']),'prior_task_attempt':row['active_attempt']}
+            selection=self.owner_remaining_selection(job,row['active_attempt'])
+            detail['owner_selection']=selection['id'] if selection else None
             self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt))
             self.db.execute("UPDATE jobs SET recovery_state='diagnosing' WHERE id=?", (job,))
         return attempt
@@ -672,15 +688,7 @@ class Store(DeliveryJournal, RecoveryJournal):
             detail = json.loads(old["detail"])
             if not detail.get("resume_disposition"):
                 raise Refusal("supported same-session resume must be attempted or explicitly unavailable first")
-            if (diag["kind"] != "diagnosis" or diag["job"] != job or diag["exit"] != 0 or diag["error"]
-                    or not diag["collected"] or diag["capture"] != "complete"
-                    or json.loads(diag['detail']).get('prior_task_attempt')!=old['id']):
-                raise Refusal("actual matching Luna-low diagnosis required")
-            choice = json.loads(diag["result"])
-            if set(choice) != {"profile", "remaining", "rationale"}:
-                raise Refusal("explicit informed profile/remaining-work/rationale choice required")
-            if choice["profile"] not in self.config["profiles"] or not choice["remaining"] or not choice["rationale"]:
-                raise Refusal("unusable profile handoff choice")
+            choice=self.diagnosis_choice(row,diag)
             task = self.config["tasks"][row["task"]]
             selection=self.owner_remaining_selection(job,old['id'])
             if old['semantic']=='DONE' and not selection:
@@ -716,8 +724,13 @@ class Store(DeliveryJournal, RecoveryJournal):
             row = self.job(job)
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
-            if row["state"] == "closed" or row["recovery_owner"]:
+            if row["state"] == "closed" or row["recovery_owner"] and row['recovery_state']!='awaiting-disposition':
                 raise Refusal("closed/recovering reservation cannot transfer collection closure")
+            if row['recovery_owner']:
+                diag=self.current_diagnosis(row)
+                no_start=diag and diag['state']=='not-started' and json.loads(diag['detail']).get('known_not_started')
+                if not diag or diag['collected'] is None or diag['ended'] is None and not no_start:
+                    raise Refusal('unknown recovery diagnosis prevents closure transfer')
             if attempt["ended"] is None or not attempt["collected"]:
                 raise Refusal("unknown/live original cannot transfer closure")
             if task["effects"] == "owner-reconcile" and row["effects"] != "reconciled":
@@ -802,6 +815,8 @@ class Store(DeliveryJournal, RecoveryJournal):
                     'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
+                "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),
+                "input_resolutions":self.rows('SELECT event,version,source_hash,actor,receipt,created FROM input_resolutions'),
                 "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
                 "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}
                                      for r in self.rows('SELECT attempt,path,kind,owner,sha256 FROM artifact_custody')],

@@ -86,10 +86,10 @@ class DeliveryJournal:
 
     def gate_result_delivery(self, job, attempt, result, internal=None):
         """One fresh Luna-low response classification precedes outgoing model results."""
-        rows = self.rows("SELECT * FROM outboxes WHERE job=?", (job["id"],))
+        rows = self.rows("SELECT * FROM outboxes WHERE job=? AND event IS NULL ORDER BY id", (job["id"],))
         if not rows:
-            return internal
-        response_id = internal or digest({"outgoing_response": attempt["id"]})
+            return internal or self.job(job['id'])['response']
+        response_id = internal or digest({"outgoing_response": attempt["id"],"plan":[r['id'] for r in rows]})
         if not internal and not self.one("SELECT id FROM events WHERE id=?", (response_id,)):
             members = json.loads(job["members"])
             event = {"id": response_id, "role": job["role"], "recipient": self.config["roles"][job["role"]]["owner"],
@@ -104,7 +104,7 @@ class DeliveryJournal:
                             (response_id, job["role"], encode(event), digest(event), self.clock(), event["parent"]))
         classified = self.one("SELECT classification FROM events WHERE id=?", (response_id,))["classification"]
         self.db.execute("UPDATE outboxes SET event=?,state=CASE WHEN state='pending' AND ? IS NULL "
-                        "THEN 'classification-pending' ELSE state END WHERE job=? AND board_receipt IS NULL",
+                        "THEN 'classification-pending' ELSE state END WHERE job=? AND event IS NULL AND board_receipt IS NULL",
                         (response_id, classified, job["id"]))
         self.db.execute("UPDATE jobs SET response=? WHERE id=?", (response_id, job["id"]))
         return response_id
@@ -123,7 +123,7 @@ class DeliveryJournal:
             raise Refusal("task cannot delegate to this recipient")
         if job["role"] == "Reviews" and target != "Work":
             raise Refusal("Reviews consolidated results/questions return to Work")
-        if job["role"] == "QA" and result["category"] == "qualification":
+        if job["role"] == "QA" and result["category"] == "qualification" and delivery_kind!='question' and not informative:
             accepted = self.one("SELECT accepted FROM admissions WHERE package=?", (job["package"],))
             if target != "Branch" or not accepted or not accepted["accepted"]:
                 raise Refusal("actual accepted QA package alone can qualify to Branch")
@@ -134,6 +134,8 @@ class DeliveryJournal:
                    "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"],
                    "original_handoff":handoff,"intent_label":handoff['kind'],
                    "delivery_kind":delivery_kind}
+        if delivery_kind=='question':
+            payload.update(notification_only=True,qualification_acceptance='not claimed; original result/duties retained')
         if delivery_kind!=handoff['kind']:
             payload['disposition']='Unfamiliar intent label: actual recipient must interpret/select; no execution or acceptance granted'
         if informative:

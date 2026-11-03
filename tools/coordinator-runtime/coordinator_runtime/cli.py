@@ -98,7 +98,16 @@ def parser():
     recovery.add_argument('job')
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
-    recovery.add_argument('--receipt',required=True)
+    recovery.add_argument('--receipt',required=True,help='JSON mode/reason/evidence/remaining; redispose or defer uses remaining:null; remaining-work states target AND WHY')
+    controls=sub.add_parser('owner-controls',help='Genuine coordinator reads its bounded pending inputs/recovery; no native wake inferred')
+    controls.add_argument('role')
+    controls.add_argument('--limit',type=int,choices=range(1,101),default=100,metavar='1..100')
+    controls.add_argument('--after',help='Same-role input cursor from next_after')
+    show=sub.add_parser('input-show',help='Actual owner reads immutable source and attributed derived decisions')
+    show.add_argument('event')
+    resolve=sub.add_parser('resolve-input',help='Actual owner supplies source_hash/mode/task/package/related_event/related_job/reason/evidence/remaining_obligations; see README')
+    resolve.add_argument('event')
+    resolve.add_argument('--receipt',required=True)
     hold = sub.add_parser("hold")
     hold.add_argument("event")
     hold.add_argument("--reason", required=True)
@@ -179,6 +188,20 @@ def operate(args, store):
         actor=actual_actor(store.enrollment(job['role'])['owner'])
         Board(store.config,job['role']).verify_authority(store)
         return store.request_recovery(args.job,args.token,args.attempt,actor,read_record(args.receipt))
+    if args.command=='owner-controls':
+        actual_actor(store.enrollment(args.role)['owner'])
+        Board(store.config,args.role).verify_authority(store)
+        return store.owner_controls(args.role,args.limit,args.after)
+    if args.command in {'input-show','resolve-input'}:
+        role=store.one('SELECT role FROM events WHERE id=?',(args.event,))
+        if not role:raise Refusal('exact owned input required')
+        actor=actual_actor(store.enrollment(role['role'])['owner'])
+        Board(store.config,role['role']).verify_authority(store)
+        if args.command=='resolve-input':return store.resolve_input(args.event,actor,read_record(args.receipt))
+        return {'source':store.recover_source(args.event),
+                'state':store.one('SELECT id,hash,state,classification,classifier,ack,processed_at,hold,error FROM events WHERE id=?',(args.event,)),
+                'resolutions':store.rows('SELECT * FROM input_resolutions WHERE event=? ORDER BY version',(args.event,)),
+                'responsibility':store.one('SELECT * FROM queue WHERE event=?',(args.event,))}
     if args.command == "hold":
         store.set_hold(args.event, args.reason)
         return {"held": args.event}

@@ -257,10 +257,20 @@ def scoped_task(name, task, admission):
 
 
 def classification(answer, event, config):
+    from .inputs import input_routes, CONTROL_ROUTES
     if not isinstance(answer, dict) or set(answer) != {"event_id", "task", "package", "reason"}:
         raise Refusal("complete classification object required")
     if answer["event_id"] != event["id"]:
         raise Refusal("classification is for a different event")
+    if not isinstance(answer['task'],str) or answer['task'] not in input_routes(event):
+        raise Refusal("classification exceeds event's typed routing authority")
+    if answer['package']!=event.get('package'):
+        raise Refusal('classifier cannot invent or change a package identity')
+    required_text(answer['reason'],'classification rationale',4000)
+    if answer['task'] in CONTROL_ROUTES:
+        if answer['task']=='@coalesce' and event.get('owner_resolution',{}).get('receipt',{}).get('mode')!='coalesce':
+            raise Refusal('coalescence requires actual owner selection of an existing responsibility')
+        return answer
     if event["kind"] == "outgoing-response" and answer["task"] == "@delivery":
         if answer["package"] != event.get("package") or not event.get("delivery_plan"):
             raise Refusal("outgoing response must retain its bound package and admitted delivery plan")
