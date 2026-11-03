@@ -47,7 +47,8 @@ class OuterContract(unittest.TestCase):
         self.assertIn('No other outer keys',instructions)
 
     def test_nonempty_handoff_allows_original_null_reason_without_projection(self):
-        answer={**result(),'handoffs':[{'recipient':'Root','required':'settled'}],'no_handoff_reason':None}
+        answer={**result(),'handoffs':[{'recipient':'Root','kind':'question','text':'Actual recipient duty',
+            'ref':None,'required':'settled'}],'no_handoff_reason':None}
         self.assertIs(task_result(answer),answer);self.assertIsNone(answer['no_handoff_reason'])
         with self.assertRaisesRegex(Refusal,'null is allowed only with nonempty handoffs'):
             task_result({**answer,'handoffs':[]})

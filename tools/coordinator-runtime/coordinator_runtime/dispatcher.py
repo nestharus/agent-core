@@ -60,12 +60,15 @@ def job_prompt(store, job, task=None):
         raise Refusal("frozen material changed; hold instead of silently refreshing batch")
     attempt = store.attempt(job["active_attempt"])
     frozen_artifacts = custody.materialize(store, events, attempt['id'])
+    prior=json.loads(attempt['detail'])
+    prior_artifacts=custody.materialize(store,[{'artifact_witnesses':prior.get('prior_artifact_witnesses',[])}],attempt['id'])
     context = {"role": job["role"], "phase": job["phase"], "reservation": job["id"],
                "collector": store.controller, "attempt": attempt["id"], "package": job["package"],
                "target_and_why": task["purpose"], "authority": task["authority"],
                "typed_effect_authority": task["effect_authority"],
                "staged_targets": publication.stages(store,attempt['id']),
                "frozen_artifact_inputs": frozen_artifacts,
+               "prior_owned_artifact_inputs":prior_artifacts,
                "effect_policy": task["effects"], "members": members, "events": events,
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
@@ -81,6 +84,9 @@ def job_prompt(store, job, task=None):
             "Use supplied frozen_artifact_inputs.frozen_path for historical report bytes; "
             "the original canonical path may have changed since that report. Preserve every required artifact path. "
             "A final/DONE does not establish process exit, acceptance, effect reconciliation or publication. "
+            "An owner_remaining_selection authorizes only its bounded remaining target and rationale. "
+            "Use prior_owned_artifact_inputs for conserved old reports/stages; reconcile with current peer bytes "
+            "in the NEW staged mapping. Never copy an old stage over peer updates or replay accepted effects. "
             "Return handoffs as {recipient,kind,text,ref,required} within the task's allowed recipients; "
             "use required=settled for necessary work/results/questions. The real automation actor delivers "
             "after fresh response classification; actual recipients record pickup/processing/settlement. "
@@ -314,6 +320,21 @@ class Dispatcher:
     def advance_recovery(self, job_id, diagnosis):
         if self.stopping.is_set():
             return
+        job=self.store.job(job_id)
+        old=self.store.attempt(job['active_attempt'])
+        if old['semantic']=='DONE' and not self.store.owner_remaining_selection(job_id,old['id']):
+            diag=self.store.attempt(diagnosis)
+            if not diag['collected']:return
+            with self.store.tx():
+                self.store.db.execute("UPDATE jobs SET recovery_state='awaiting-disposition' WHERE id=?",(job_id,))
+                payload={'job':job_id,'attempt':old['id'],'reservation':job['token'],
+                    'reason':'Collected DONE has a disposition failure. Retain original meaning/effects; no automatic replacement. Actual owner may request redispose or select bounded remaining-work after effect reconciliation.',
+                    'result':json.loads(old['result']) if old['result'] else None,
+                    'diagnosis':diag,'source_members':json.loads(job['members'])}
+                self.store._outbox(job['role'],'Work','question',payload,job=job_id,
+                    producer=old['session'],key=digest({'disposition_diagnosis':diagnosis}))
+                self.store.gate_result_delivery(job,diag,payload)
+            return
         try:
             replacement = self.store.handoff(job_id, diagnosis)
             self.spawn(self.execute(job_id, replacement))
@@ -324,7 +345,8 @@ class Dispatcher:
         jobs = self.store.rows("SELECT j.* FROM jobs j JOIN attempts a ON j.active_attempt=a.id "
                                "WHERE j.state='held' AND a.collected IS NOT NULL AND j.recovery_count=0 "
                                "AND (a.exit!=0 OR a.error IS NOT NULL OR a.capture!='complete' "
-                               "OR COALESCE(a.semantic,'UNKNOWN')!='DONE')")
+                               "OR COALESCE(a.semantic,'UNKNOWN')!='DONE' OR EXISTS "
+                               "(SELECT 1 FROM operational_errors e WHERE e.subject=j.id AND e.active=1 AND e.kind='task-disposition-error'))")
         for job in jobs:
             claimed = self.store.claim_recovery(job["id"])
             if claimed:
@@ -332,19 +354,47 @@ class Dispatcher:
 
     def reconcile_completed(self):
         self.reconcile_classifications()
+        self.reconcile_recovery_requests()
         collected = self.store.rows("SELECT j.* FROM jobs j JOIN attempts a ON j.active_attempt=a.id "
-                                    "WHERE j.state!='closed' AND (j.recovery_owner IS NULL OR j.recovery_state='handed-off') "
+                                    "WHERE j.state!='closed' AND (j.recovery_owner IS NULL OR j.recovery_state IN ('handed-off','awaiting-disposition')) "
                                     "AND a.collected IS NOT NULL")
         for job in collected:
             self.reconcile_collected(job)
         ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing' "
                                 "AND effects IN ('none','reconciled')", (self.store.controller,))
         for job in ready:
-            diagnosis = self.store.one("SELECT id FROM attempts WHERE job=? AND kind='diagnosis' AND collected IS NOT NULL",
-                                       (job["id"],))
+            diagnosis = self.store.one("SELECT id FROM attempts WHERE job=? AND kind='diagnosis' AND collected IS NOT NULL "
+                                       "AND json_extract(detail,'$.prior_task_attempt')=? ORDER BY created DESC LIMIT 1",
+                                       (job["id"],job['active_attempt']))
             if diagnosis:
                 self.advance_recovery(job["id"], diagnosis["id"])
         self.store.complete_events()
+
+    def reconcile_recovery_requests(self):
+        if self.stopping.is_set():return
+        for request in self.store.rows("SELECT * FROM recovery_requests WHERE state='pending' ORDER BY created"):
+            job=self.store.job(request['job'])
+            try:
+                self.authorize_roles(self.store.source_roles(job=job['id']))
+                if job['controller']!=self.store.controller:
+                    self.store.adopt_collected(job['id'])  # Existing proved closure-only transfer; never process collection.
+                current=self.store.consume_recovery_request(request['id'])
+                if not current:continue
+                if current['receipt']['mode']=='remaining-work':
+                    self.spawn(self.recover(self.store.job(job['id'])))
+                else:
+                    old=self.store.attempt(current['attempt'])
+                    self.inventory_artifacts(old['id'],{'result':json.loads(old['result']) if old['result'] else None})
+                    self.store.recheck_artifact_capture(old['id'])
+                    self.store.retry_disposition_hold(job['id'])
+                    self.try_finish(job['id'])
+                with self.store.tx():
+                    record=json.loads(self.store.one('SELECT result FROM recovery_requests WHERE id=?',(request['id'],))['result'])
+                    self.store.db.execute('UPDATE recovery_requests SET result=? WHERE id=?',
+                        (encode({**record,'collector':self.store.controller,'job_state':self.store.job(job['id'])['state'],
+                                 'meaning':'request consumed; not processing/acceptance/effect waiver'}),request['id']))
+            except (Refusal,OSError) as exc:
+                self.store.record_operational_error(request['id'],{'error':str(exc),'job':job['id']},job['role'],'owner-recovery-error')
 
     def reconcile_classifications(self):
         rows = self.store.rows("SELECT e.classifier FROM events e JOIN attempts a ON e.classifier=a.id "

@@ -94,6 +94,11 @@ def parser():
     effects.add_argument("job")
     effects.add_argument("--token", required=True)
     effects.add_argument("--receipt", required=True)
+    recovery=sub.add_parser('request-recovery',help='Actual owner queues exact redisposition or bounded remaining work; no direct model/effect')
+    recovery.add_argument('job')
+    recovery.add_argument('--token',required=True)
+    recovery.add_argument('--attempt',required=True)
+    recovery.add_argument('--receipt',required=True)
     hold = sub.add_parser("hold")
     hold.add_argument("event")
     hold.add_argument("--reason", required=True)
@@ -169,6 +174,11 @@ def operate(args, store):
         actor = actual_actor(store.config["roles"][job["role"]]["owner"])
         store.reconcile_effects(args.job, args.token, actor, read_record(args.receipt))
         return {"job": args.job, "effects_reconciled": True}
+    if args.command=='request-recovery':
+        job=store.job(args.job,args.token)
+        actor=actual_actor(store.enrollment(job['role'])['owner'])
+        Board(store.config,job['role']).verify_authority(store)
+        return store.request_recovery(args.job,args.token,args.attempt,actor,read_record(args.receipt))
     if args.command == "hold":
         store.set_hold(args.event, args.reason)
         return {"held": args.event}

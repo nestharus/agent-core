@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 from contextlib import contextmanager, ExitStack
 
-from .contracts import Refusal, encode
+from .contracts import Refusal, encode, artifact_paths
 from .custody import capture, read_file, safe_path
 from .cleanup import open_parent
 
@@ -42,13 +42,12 @@ def prepare(store, attempt, before):
 def artifact_view(store, attempt, answer):
     mapping=stages(store,attempt)
     if not mapping:return answer
-    if not isinstance(answer.get('artifacts'),list):raise Refusal('declared artifacts must be a list')
-    items=[]
-    for item in answer.get('artifacts',[]):
-        if isinstance(item,str):items.append(mapping.get(item,item))
-        elif isinstance(item,dict):items.append({**item,'path':mapping.get(item.get('path'),item.get('path'))} if isinstance(item.get('path'),str) else item)
-        else:items.append(item)
-    return {**answer,'artifacts':items}
+    artifact_paths(answer.get('artifacts'))
+    def mapped(item):
+        if isinstance(item,str):return mapping.get(item,item)
+        if 'files' in item:return {**item,'files':[mapped(child) for child in item['files']]}
+        return {**item,'path':mapping.get(item['path'],item['path'])}
+    return {**answer,'artifacts':[mapped(item) for item in answer['artifacts']]}
 
 
 def conserve_stages(store, attempt, task):

@@ -6,7 +6,7 @@ ACK is never evidence that a recipient's Codex submission queue was processed.
 
 import json
 
-from .contracts import Refusal, digest, encode, ident, required_text
+from .contracts import Refusal, digest, encode, ident, required_text, handoff_delivery_kind
 from .custody import witnesses
 
 SCHEMA = """
@@ -117,17 +117,10 @@ class DeliveryJournal:
                          key=digest({"owner_report": attempt["id"]}))
 
     def _task_handoff(self, job, attempt, task, result, handoff, index, informative=None):
-        if not isinstance(handoff, dict) or set(handoff) != {"recipient", "kind", "text", "ref", "required"}:
-            raise Refusal("handoff needs exact recipient/kind/text/ref/required fields")
+        delivery_kind=handoff_delivery_kind(handoff)
         target = handoff["recipient"]
-        if handoff["required"] != "settled":
-            raise Refusal("necessary task handoffs retain actual recipient processing and settlement")
         if target not in task.get("allowed_handoffs", []):
             raise Refusal("task cannot delegate to this recipient")
-        if not isinstance(handoff['kind'],str) or handoff['kind'] not in {'work','result','question'}:
-            raise Refusal('task handoff kind is outside bounded task delivery')
-        if handoff['ref'] is not None and not isinstance(handoff['ref'],str):
-            raise Refusal('handoff reference must be a string or null')
         if job["role"] == "Reviews" and target != "Work":
             raise Refusal("Reviews consolidated results/questions return to Work")
         if job["role"] == "QA" and result["category"] == "qualification":
@@ -138,12 +131,16 @@ class DeliveryJournal:
         payload = {"job": job["id"], "attempt": attempt["id"], "package": job["package"],
                    "artifact_witnesses":witnesses(self,attempt['id']),
                    "source_members": json.loads(job["members"]), "source_result": result,
-                   "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"]}
+                   "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"],
+                   "original_handoff":handoff,"intent_label":handoff['kind'],
+                   "delivery_kind":delivery_kind}
+        if delivery_kind!=handoff['kind']:
+            payload['disposition']='Unfamiliar intent label: actual recipient must interpret/select; no execution or acceptance granted'
         if informative:
             payload.update({'informative_failure':informative,'original_handoff':handoff,
                             'source_result':informative['original_result'],
                             'text':'INCOMPLETE — no completion/effect settlement claim. '+handoff['text']})
-        self._outbox(job["role"], target, 'question' if informative else handoff["kind"], payload, job=job["id"], producer=attempt["session"],
+        self._outbox(job["role"], target, 'question' if informative else delivery_kind, payload, job=job["id"], producer=attempt["session"],
                      key=digest({"attempt": attempt["id"], "handoff": index}), required=handoff["required"])
 
     def owner_question(self, job, attempt, reason, *, effects=False):

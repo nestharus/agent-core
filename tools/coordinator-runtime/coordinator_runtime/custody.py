@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import stat
 
-from .contracts import PROFILES, Refusal, digest, encode
+from .contracts import PROFILES, Refusal, digest, encode, artifact_leaves
 from .cleanup import register_artifact
 
 SCHEMA = """
@@ -103,18 +103,18 @@ def capture(store, attempt, path, task, role_owned=False):
 
 
 def inventory(store, attempt, answer, task, role_owned=False):
-    if not isinstance(answer.get('artifacts'),list):raise Refusal('declared artifacts must be a list')
-    if len(answer.get('artifacts',[])) > 64:
-        raise Refusal('bounded declared artifact count exceeded; source/result retained')
+    leaves=artifact_leaves(answer.get('artifacts'))
     seen,errors = set(),[]
-    for item in answer.get('artifacts', []):
-        path = item if isinstance(item, str) else item.get('path') if isinstance(item, dict) else None
+    for item in leaves:
+        path=item['path']
         try:
-            if not isinstance(path, str) or not path:
-                raise Refusal('accepted artifact needs an absolute path string or structured path; no silent skip')
             if path not in seen:
                 capture(store, attempt, path, task,role_owned)
                 seen.add(path)
+            witness=json.loads(store.one('SELECT witness FROM artifact_custody WHERE attempt=? AND path=?',(attempt,path))['witness'])
+            if ('sha256' in item and item['sha256']!=witness['sha256'] or
+                    'bytes' in item and (type(item['bytes']) is not int or item['bytes']!=witness['size'])):
+                raise Refusal('declared artifact hash/bytes differ from captured source; original claim retained')
         except (Refusal,OSError) as exc:errors.append(type(exc).__name__+': '+str(exc)[:500])
     if errors:raise Refusal('artifact inventory incomplete: '+encode(errors))
 

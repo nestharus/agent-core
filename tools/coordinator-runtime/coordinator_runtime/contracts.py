@@ -287,6 +287,59 @@ TASK_SEMANTICS = {'DONE','PARTIAL','FAILED','UNKNOWN'}
 TASK_CATEGORIES = {'proposal','consolidated','qualification','scope','blocker','complete'}
 ORIGINAL_FIELDS_KIND = 'outer-contract-original'
 _NO_PRIOR = object()
+HANDOFF_KINDS = {'work','result','question'}
+
+
+def artifact_leaves(artifacts):
+    """Validate declared references without acquiring metadata or inventing paths.
+
+    Groups retain their full meaning in the result; only explicit leaf paths
+    select bytes for custody. Metadata such as common/canonical_target is data.
+    """
+    leaves=[]
+    def visit(items,depth):
+        if not isinstance(items,list) or len(items)>64 or depth>4:
+            raise Refusal('artifacts require bounded lists/groups (64 items/leaves, depth4)')
+        for item in items:
+            if isinstance(item,dict) and 'files' in item:
+                if 'path' in item or not item['files']:
+                    raise Refusal('artifact group needs nonempty files and no ambiguous group path')
+                visit(item['files'],depth+1)
+                continue
+            path=item if isinstance(item,str) else item.get('path') if isinstance(item,dict) else None
+            if not isinstance(path,str) or not path or not Path(path).is_absolute() or '..' in Path(path).parts:
+                raise Refusal('artifact leaf needs an explicit absolute path; no invented or relative paths')
+            leaves.append({'path':path} if isinstance(item,str) else item)
+            if len(leaves)>64:raise Refusal('bounded declared artifact leaf count64 exceeded')
+    visit(artifacts,0)
+    return leaves
+
+
+def artifact_paths(artifacts):
+    return [item['path'] for item in artifact_leaves(artifacts)]
+
+
+def handoff_issue(handoff):
+    if not isinstance(handoff,dict) or set(handoff)!={'recipient','kind','text','ref','required'}:
+        return 'handoff needs exact recipient/kind/text/ref/required fields'
+    if not isinstance(handoff['recipient'],str) or handoff['recipient'] not in ROLES|{'Root'}:
+        return 'handoff recipient must name a selected role or external Root'
+    if handoff['required']!='settled':
+        return 'necessary task handoffs retain actual recipient processing and settlement'
+    try:
+        required_text(handoff['kind'],'handoff intent label',128)
+        required_text(handoff['text'],'handoff meaning',65536)
+        if handoff['ref'] is not None:required_text(handoff['ref'],'handoff reference',16000)
+    except Refusal as exc:return str(exc)
+    return None
+
+
+def handoff_delivery_kind(handoff):
+    issue=handoff_issue(handoff)
+    if issue:raise Refusal(issue)
+    # Unfamiliar intent labels are faithful questions for the actual recipient,
+    # never executable message kinds or an automatic grant of work authority.
+    return handoff['kind'] if handoff['kind'] in HANDOFF_KINDS else 'question'
 
 
 def task_result_instructions():
@@ -299,10 +352,23 @@ def task_result_instructions():
         'including honest empties, never invented empties to obtain DONE. PARTIAL/FAILED/UNKNOWN must retain '
         'failures or unknowns. Optional handoffs is a list of at most16; no_handoff_reason is text (or null when '
         'handoffs is nonempty); completion is an object. '
+        'Artifacts: at most64 explicit absolute path strings or {path:ABSOLUTE_PATH,...metadata}; '
+        'groups use {files:[LEAVES_OR_GROUPS],...metadata}, nonempty files, no group path, depth at most4 '
+        'and at most64 total leaves. Keep common/kind/hash/byte/anchor/read-extent metadata intact; '
+        'Supplied leaf sha256/bytes must match the declared source bytes actually captured. '
+        'common metadata is never an implicit path or authority. No relative or invented paths. '
+        'Handoffs use exact {recipient,kind,text,ref,required}; recipient is an allowed role or Root, '
+        'required="settled", text is full nonempty meaning, ref is a nonempty string or null. '
+        'kind is a nonempty intent label up to128 UTF-8 bytes. Prefer work/result/question. '
+        'Other labels are conserved verbatim and delivered only as addressed questions for actual recipient '
+        'disposition, never automatic execution, acceptance or expanded effects. '
         'Preserve dissent as attributed entries in findings with its full original evidence/meaning, not an outer dissent key. '
         'If dissent exposes unresolved local work, also retain that work in failures/unknowns and return truthful blocked/partial readiness. '
         'If clarifying an outer mismatch, preserve original valid findings/failures/unknowns/artifacts/handoffs as verbatim '
-        'array prefixes. Original non-list findings/failures/unknowns must be retained as the first item of the repaired '
+        'array prefixes. If artifact/handoff items themselves are malformed, conserve that entire original array '
+        'in outer-contract-original.fields and keep its valid items as verbatim prefixes of the repaired list. '
+        'Clarify missing paths only from genuine owned evidence, never guess them. '
+        'Original non-list findings/failures/unknowns must be retained as the first item of the repaired '
         'list, not silently replaced by []. Conserve original unsupported or malformed array fields exactly in a findings '
         'entry {kind:"'+ORIGINAL_FIELDS_KIND+'",fields:{ORIGINAL_KEY:ORIGINAL_VALUE,...}}. For a non-object original, '
         'fields={"$result":ORIGINAL_JSON_VALUE}. This is data preservation, not authority or a resolution/acceptance claim. '
@@ -331,6 +397,13 @@ def task_result_issues(answer):
     if isinstance(answer.get('semantic'),str) and answer['semantic'] in TASK_SEMANTICS-{'DONE'} and not (answer.get('failures') or answer.get('unknowns')):
         issues.append('partial/failed/unknown work must retain its unresolved meaning in failures or unknowns')
     if isinstance(answer.get('handoffs'),list) and len(answer['handoffs'])>16:issues.append('handoff count exceeds admitted per-task bound16')
+    if isinstance(answer.get('artifacts'),list):
+        try:artifact_paths(answer['artifacts'])
+        except Refusal as exc:issues.append('artifacts: '+str(exc))
+    if isinstance(answer.get('handoffs'),list):
+        for index,handoff in enumerate(answer['handoffs']):
+            issue=handoff_issue(handoff)
+            if issue:issues.append('handoff '+str(index)+': '+issue)
     if ('no_handoff_reason' in answer and not isinstance(answer['no_handoff_reason'],str)
             and not (answer['no_handoff_reason'] is None and isinstance(answer.get('handoffs'),list) and answer['handoffs'])):
         issues.append('no_handoff_reason must be text; null is allowed only with nonempty handoffs')
@@ -340,7 +413,20 @@ def task_result_issues(answer):
 
 def clarification_fields(prior):
     if not isinstance(prior,dict):return {'$result':prior}
-    return {k:v for k,v in prior.items() if k not in TASK_REQUIRED|TASK_OPTIONAL or k in TASK_ARRAYS and not isinstance(v,list)}
+    return {k:v for k,v in prior.items() if k not in TASK_REQUIRED|TASK_OPTIONAL or
+            k in TASK_ARRAYS and (not isinstance(v,list) or valid_items(k,v)!=v)}
+
+
+def valid_items(key,items):
+    """Conserve invalid nested representations separately, never erase them."""
+    if key=='handoffs':return [item for item in items if not handoff_issue(item)]
+    if key!='artifacts':return items
+    valid=[]
+    for item in items:
+        try:artifact_paths([item])
+        except Refusal:continue
+        valid.append(item)
+    return valid
 
 
 def clarification_issues(answer,prior):
@@ -354,6 +440,7 @@ def clarification_issues(answer,prior):
             if not isinstance(old,list):
                 if key not in {'findings','failures','unknowns'}:continue
                 old=[old]
+            else:old=valid_items(key,old)
             if not isinstance(answer.get(key),list) or answer[key][:len(old)]!=old:
                 issues.append('clarification erased or rewrote original '+key)
     fields=clarification_fields(prior)

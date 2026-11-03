@@ -22,6 +22,7 @@ from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
 from .routine import SCHEMA as ROUTINE_SCHEMA
 from .storage import SCHEMA as STORAGE_SCHEMA
 from .publication import SCHEMA as PUBLICATION_SCHEMA
+from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -106,7 +107,7 @@ def private_directory(path):
     return path
 
 
-class Store(DeliveryJournal):
+class Store(DeliveryJournal, RecoveryJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
@@ -126,7 +127,7 @@ class Store(DeliveryJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -545,6 +546,11 @@ class Store(DeliveryJournal):
             if task.get('routine_completion'):
                 from .readiness import assess
                 assess(self,attempt)  # Same local obligation contract as publisher and delegated collector.
+                run=self.one('SELECT state FROM routine_runs WHERE attempt=?',(attempt['id'],))
+                published=self.rows("SELECT target FROM file_publications WHERE attempt=? AND state='published'",(attempt['id'],))
+                if (not run or run['state']!='reconciled' or
+                        {p['target'] for p in published}!=set(task['routine_completion']['targets'])):
+                    raise Refusal('routine canonical publication remains incomplete; effect receipt cannot waive exact preimage/publication')
             self.prepare_handoffs(row, attempt, task, result)
             if row["role"] == "Work" and result["category"] in {"scope", "blocker"}:
                 self.owner_question(row, attempt, "Work-owned consequential question stays with the actual Decider; no automatic self-loop")
@@ -632,6 +638,10 @@ class Store(DeliveryJournal):
         with self.tx():
             row = self.job(job)
             self.require_active_sources(job=job)
+            old=self.attempt(row['active_attempt'])
+            no_start=old['state']=='not-started' and json.loads(old['detail']).get('known_not_started')
+            if not no_start and (old['ended'] is None or old['collected'] is None):return None
+            if self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'",(job,)):return None
             if row["state"] == "closed" or row["recovery_owner"] or row["recovery_count"] >= 1:
                 return None
             self.db.execute("UPDATE jobs SET recovery_owner=?,recovery_state='claimed',recovery_count=1 WHERE id=?",
@@ -645,6 +655,8 @@ class Store(DeliveryJournal):
                 raise Refusal("recovery is exclusively owned or already attempted")
             selected = self.config["diagnosis"]
             attempt = self._attempt("diagnosis", None, job, selected["binding"], selected["profile"])
+            detail={**json.loads(self.attempt(attempt)['detail']),'prior_task_attempt':row['active_attempt']}
+            self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt))
             self.db.execute("UPDATE jobs SET recovery_state='diagnosing' WHERE id=?", (job,))
         return attempt
 
@@ -661,7 +673,8 @@ class Store(DeliveryJournal):
             if not detail.get("resume_disposition"):
                 raise Refusal("supported same-session resume must be attempted or explicitly unavailable first")
             if (diag["kind"] != "diagnosis" or diag["job"] != job or diag["exit"] != 0 or diag["error"]
-                    or not diag["collected"] or diag["capture"] != "complete"):
+                    or not diag["collected"] or diag["capture"] != "complete"
+                    or json.loads(diag['detail']).get('prior_task_attempt')!=old['id']):
                 raise Refusal("actual matching Luna-low diagnosis required")
             choice = json.loads(diag["result"])
             if set(choice) != {"profile", "remaining", "rationale"}:
@@ -669,15 +682,21 @@ class Store(DeliveryJournal):
             if choice["profile"] not in self.config["profiles"] or not choice["remaining"] or not choice["rationale"]:
                 raise Refusal("unusable profile handoff choice")
             task = self.config["tasks"][row["task"]]
+            selection=self.owner_remaining_selection(job,old['id'])
+            if old['semantic']=='DONE' and not selection:
+                raise Refusal('collected DONE needs disposition; completed work cannot be blindly relaunched')
+            if selection:self.remaining_work_fence(row,old)
+            self.require_recoverable_hold(row,old)
             attempt = self._attempt("task", None, job, task["binding"], choice["profile"])
             context = {"prior_attempt": old["id"], "prior_session": old["session"],
                        "prior_result": old["result"], "prior_error": old["error"],
                        "effect_receipt": row["effect_receipt"], "choice": choice,
                        "diagnosis": diagnosis, "native_resume": False}
+            context.update({'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])})
             context = {**json.loads(self.attempt(attempt)["detail"]), **context}
             self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(context), attempt))
             self.db.execute("UPDATE jobs SET active_attempt=?,controller=?,effects='unknown',state='running',"
-                            "recovery_state='handed-off' WHERE id=?", (attempt, self.controller, job))
+                            "recovery_state='handed-off',hold_reason=NULL WHERE id=?", (attempt, self.controller, job))
         return attempt
 
     def set_hold(self, event, reason):
@@ -782,6 +801,7 @@ class Store(DeliveryJournal):
                 "control_receive": {'declared':self.config.get('control_receive',{}),
                     'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
+                "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
                 "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}
                                      for r in self.rows('SELECT attempt,path,kind,owner,sha256 FROM artifact_custody')],

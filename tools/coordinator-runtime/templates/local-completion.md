@@ -38,6 +38,16 @@ clarification or resumes an ended owner. no_handoff_reason:null is valid with
 nonempty handoffs; empty/no handoffs retain the existing meaningful-reason policy.
 The payload_json provider envelope is unchanged.
 
+Artifact items are explicit absolute paths or {path,...metadata}; nonempty
+{files:[items],...metadata} groups retain their grouping/common metadata, without
+an invented group path. Limits are depth4 and 64 leaves. Handoffs retain exact
+recipient/kind/text/ref/required=settled. An unfamiliar bounded kind label travels
+only as an addressed question retaining the original handoff, never an execution
+or acceptance grant. If artifact/handoff items are malformed, conserve the entire
+original array in outer-contract-original.fields and keep its valid items as
+verbatim prefixes of the repaired list. Missing paths require genuine evidence;
+the original data and adverse history cannot be dropped to repair representation.
+
 Add completion with version1, local=ready|blocked, failures, unknowns and tools.
 Each failure/unknown index must be covered exactly once. Unknowns may contain
 original prose or objects combining several responsibilities. Preserve that
@@ -110,7 +120,8 @@ they are preliminary byte checks, not capture, process collection or publication
 Post-collection assessment requires complete tool metadata and conserved bytes.
 Specific clarification issues and the full original return, including original
 completion/labels and history, remain durable. The
-original arrays must remain verbatim prefixes of the final arrays; no blind stage
+original valid arrays must remain verbatim prefixes of the final arrays (malformed
+artifact/handoff items use the explicit conservation rule above); no blind stage
 rewrite, canonical write, new session, profile handoff, repeated clarification or
 per-job human permission follows. Exhausted/ambiguous/unresolved evidence stays
 held and causally delivered. No text heuristic auto-classifies RESOLVED strings.

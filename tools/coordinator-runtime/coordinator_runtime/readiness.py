@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import re
 
-from .contracts import Refusal, digest, required_text, task_result_issues, collected_task_result
+from .contracts import Refusal, digest, required_text, task_result_issues, collected_task_result, artifact_paths
 
 CONTROLLER_DUTIES={'publication','artifact-custody','effect-reconciliation','delivery'}
 BOUNDARY_DUTIES={'review','acceptance'}
@@ -154,7 +154,8 @@ def live_issues(store,attempt,answer,items,task):
     from .custody import read_file,safe_path
     from .publication import stages
     root=store.home/'artifacts'/attempt
-    declared={r if isinstance(r,str) else r.get('path') for r in answer.get('artifacts',[]) if isinstance(r,str) or isinstance(r,dict) and isinstance(r.get('path'),str)} if isinstance(answer.get('artifacts'),list) else set()
+    try:declared=set(artifact_paths(answer.get('artifacts')))
+    except Refusal:return task_result_issues(answer)
     declared.update(stages(store,attempt).values())
     def reference(ref):
         path=Path(ref['path'])

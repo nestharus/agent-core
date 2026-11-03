@@ -100,6 +100,12 @@ outgoing threads. It does not attach to an existing listener or move `ack_seq`.
 
 A model returns typed handoffs `{recipient,kind,text,ref,required}` within its
 allowlist; necessary handoffs require `settled`. Empty handoffs require a reason.
+`kind` is a bounded nonempty intent label. `work`, `result` and `question` retain
+their existing delivery kind. Other labels (for example `catalog-proposal` or
+`bounded-execution`) travel only as questions to the same actual recipient. The
+payload retains the full original handoff, label, source result, meaning, reference
+and required settlement. A question conveys no execution, acceptance or effect
+authority. Role/recipient/package admission checks still apply.
 The dispatcher posts work/result/question/recurring-alert messages as the actual
 service actor, after fresh response classification. Retries use the same exact
 ID; distinct unchanged violation occurrences get distinct deliveries. It invokes
@@ -309,6 +315,63 @@ prefixes and original extra/malformed array data must be conserved explicitly in
 findings kind=outer-contract-original. A repaired response that simply drops data
 is held. No original is automatically normalized, blindly replayed or resumed after
 its owner ends. See templates/local-completion.md for the data-preservation example.
+
+Artifact items use the same item contract in prompts, live clarification and
+collected custody: an explicit absolute path string, `{path,...metadata}`, or a
+nonempty `{files:[items],...metadata}` group without a group path. Groups are
+bounded to depth four and 64 total leaves. `common`, `kind`, anchors and read
+extents remain original data; they supply no implicit path or access authority.
+Leaf hash/byte claims, when supplied, must match actual captured bytes. Current
+peer changes can therefore hold a historical reference rather than replace its
+meaning. Declared target paths map to their owned stages even inside groups;
+the original result is never rewritten. Missing/invalid item representations can
+use the existing one actual-owned-idle clarification: conserve the entire old
+array in `outer-contract-original.fields` and retain every valid old item as a
+verbatim prefix. Never guess a missing path or erase adverse arrays to repair it.
+
+Collected DONE with a recorded disposition error now receives the bounded fresh
+Luna diagnosis as well. Its diagnostic result returns to Work; it cannot by
+itself launch another task. The old result, stages, source holds and unknown
+effects stay owned. Genuine same-session clarification still requires actual
+idle readback before the original owner exits. Numeric process END, complete
+capture, DONE, publication, recipient processing and acceptance are separate.
+
+The actual enrolled role owner can queue a bounded request for its existing
+collector without SQL, original-return edits or borrowed process handles:
+
+```sh
+python3 "$RUNTIME" --config /absolute/private/config.json request-recovery JOB \
+  --token EXACT_RESERVATION --attempt EXACT_CURRENT_ATTEMPT \
+  --receipt /absolute/owned/recovery-decision.json
+```
+
+The receipt has exact keys `mode`, `reason`, `evidence` (nonempty reference list)
+and `remaining`. `mode:"redispose", remaining:null` retries artifact inventory
+and ordinary disposition of the unchanged original. An inventory-only gap may
+receive a derived capture correction only with complete original protocol
+capture and successful current custody. Original result/results rows and prior
+capture errors remain conserved. Incomplete streams, semantic UNKNOWN, canonical
+preimage conflicts and unrelated readiness/source holds remain binding.
+
+`mode:"remaining-work"` requires an authentic bounded target **and why** in
+`remaining`, actual collected end, reconciled effects, no unresolved publication
+intent, no independent source/legacy/job hold and an explicit prior continuation
+disposition. The owner uses the existing `reconcile-effects` operation only with
+real effect evidence; that receipt cannot waive canonical publication. The
+original service collector consumes the request and runs a new matching bounded
+Luna diagnosis before any remaining-work attempt. That attempt receives conserved
+old reports/stages plus fresh canonical preimages and new owned stages; it must
+reconcile peer content and preserve accepted effects rather than replay them.
+Prior diagnosis/replacement work cannot be duplicated while claimed/diagnosing.
+Stale attempts, foreign owners/collectors and unknown live originals are refused.
+Default request bound is four per job (`max_owner_corrections`); consumed requests
+are idempotent records, never automatic retries. Requests and causal errors are
+visible in status. A restarted service can use only the existing proved collected
+closure handoff (including required effect reconciliation); original process
+collection fields remain unchanged. Unknown originals, active recovery and
+unreconciled external effects cannot transfer. An unavailable original collector
+remains an explicit frontier; this provides no process adoption or new deployment
+authority. Current bindings alone authorize no transfer.
 
 The selected canonical method is explicit:
 `canonical_publication:{method:"retention-same-inode-v1",library:ABS_LIBRARY}`.
