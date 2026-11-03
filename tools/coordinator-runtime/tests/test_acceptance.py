@@ -224,6 +224,10 @@ os._exit(73)
         self.assertFalse(context["native_resume"])
         second.begin(replacement, {"fixture_process_began": True})
         self.assertEqual(json.loads(second.attempt(replacement)["detail"])["prior_attempt"], old)
+        self.assertRaises(Refusal, self.store.collect, old,
+                          {"exit": 0, "capture": "complete", "cleanup": "done", "result": result()})
+        self.assertIsNone(second.attempt(replacement)["ended"])
+        self.assertEqual(second.job(job["id"])["active_attempt"], replacement)
         self.assertRaises(Refusal, self.store.finish_job, job["id"], job["token"])
         self.assertRaises(Refusal, second.handoff, job["id"], diagnosis)
 

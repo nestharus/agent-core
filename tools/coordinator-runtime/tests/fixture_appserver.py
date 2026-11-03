@@ -57,6 +57,9 @@ for line in sys.stdin:
     elif method == "thread/read":
         respond(request, {"thread": {"id": thread, "status": {"type": "idle"}}})
     elif method == "thread/unsubscribe":
+        if plan.get("late_result"):
+            send({"method": "item/completed", "params": {"threadId": thread, "turnId": turn,
+                "item": {"type": "agentMessage", "id": str(uuid.uuid4()), "phase": "final_answer", "text": json.dumps(plan["late_result"])}}})
         respond(request, {"status": "unsubscribed"})
 
 time.sleep(plan.get("exit_delay", 0))

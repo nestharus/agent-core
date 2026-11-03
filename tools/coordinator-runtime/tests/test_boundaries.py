@@ -155,6 +155,30 @@ class Retention(unittest.TestCase):
 
 
 class ProtocolAndCapacity(unittest.IsolatedAsyncioTestCase):
+    async def test_A09_actual_late_final_preserves_findings_and_cannot_route_twice(self):
+        with tempfile.TemporaryDirectory(prefix="coordinator-late-final-fixture-") as temp:
+            config = config_at(temp)
+            store = enrolled(config)
+            self.addCleanup(store.close)
+            queued(store, event(config))
+            job = store.reserve()
+            attempt = store.start_job(job["id"], job["token"])
+            late = result("PARTIAL", summary="Late original contains another actionable failure")
+            plan = Path(temp)/"late.json"
+            plan.write_text(encode({"result": result(), "late_result": late}))
+            adapter = AppServer(config, [sys.executable, str(Path(__file__).with_name("fixture_appserver.py")), str(plan)])
+            outcome = await adapter.run(store, attempt, "fixture", config["tasks"]["work-integrator"])
+            self.assertEqual(outcome["exit"], 0)
+            self.assertEqual(outcome["capture"], "late-final-needs-reconciliation")
+            self.assertEqual(outcome["detail"]["late_or_conflicting_returns"][0]["typed_return"], late)
+            store.collect(attempt, outcome)
+            store.finish_job(job["id"], job["token"])
+            self.assertEqual(store.job(job["id"])["state"], "held")
+            self.assertIsNone(store.job(job["id"])["response"])
+            self.assertIsNone(store.reserve())
+            stored = json.loads(store.attempt(attempt)["detail"])
+            self.assertEqual(stored["late_or_conflicting_returns"][0]["typed_return"]["failures"], late["failures"])
+
     async def test_one_fresh_Luna_low_diagnosis_recovers_collected_classifier_failure(self):
         with tempfile.TemporaryDirectory(prefix="coordinator-classifier-recovery-fixture-") as temp:
             config = config_at(temp)
