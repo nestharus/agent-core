@@ -394,6 +394,12 @@ def translate(core,bundle,*,account,repo,binding,expected_snapshot_id,now,captur
             partial["frontiers"]=native["frontiers"]+gaps+["owner-PR-outside-encountered-scope-UNKNOWN"]
             return partial
         p=known[u["pr"]]
+        # Partial native decoding has no canonical associations. Do not let
+        # owner overlay erase an explicit negative skipped by that decoder.
+        if "stack" in native_prs[u["pr"]] and native_prs[u["pr"]]["stack"] is None:
+            partial["frontiers"]=native["frontiers"]+gaps+[{"pr":u["pr"],
+                "reason":"explicit-stack-removal-inconsistent-with-entry-UNKNOWN"}]
+            return partial
         # Match FeedAdapter.native: a present PR pin wins; only absence uses
         # the observed ref target. Current Main metadata remains bound above.
         base=native_prs[u["pr"]].get("baseRefOid", refs.get(p["baseRefName"]))
