@@ -54,6 +54,34 @@ class DeliveryJournal:
         for index, handoff in enumerate(handoffs):
             self._task_handoff(job, attempt, task, result, handoff, index)
 
+    def failure_delivery(self, job, attempt, task, reason):
+        """Informative custody can progress while execution/capture/effects stay held."""
+        original=json.loads(attempt['result']) if attempt['result'] else None
+        errors=[]
+        try:
+            from .contracts import task_result
+            view=task_result(original)
+            if view!=original:
+                detail={**json.loads(attempt['detail']),'contract_normalization':{
+                    'field':'category','original':original['category'],'projection':view['category'],
+                    'basis':'blocked is an explicit non-DONE blocker alias; original result retained'}}
+                self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt['id']))
+                attempt={**attempt,'detail':encode(detail)}
+        except Refusal as exc:
+            errors.append(str(exc));view={'invalid_result':original}
+        informative={'disposition':'incomplete; execution/effects/source remain held',
+                     'original_result':original,'projection':view,'capture':attempt['capture'],
+                     'capture_error':attempt['error'],'exit':attempt['exit'],'contract_errors':errors}
+        handoffs=original.get('handoffs',[]) if isinstance(original,dict) else []
+        if not isinstance(handoffs,list) or len(handoffs)>16:
+            errors.append('handoffs malformed/over bound; originals retained for actual owner');handoffs=[]
+        for index,handoff in enumerate(handoffs):
+            try:
+                self._task_handoff(job,attempt,task,{'category':'blocker'},handoff,index,informative=informative)
+            except Refusal as exc:errors.append('handoff '+str(index)+': '+str(exc))
+        self.owner_question(job,attempt,reason+('; '+ '; '.join(errors) if errors else ''))
+        return self.gate_result_delivery(job,attempt,informative)
+
     def gate_result_delivery(self, job, attempt, result, internal=None):
         """One fresh Luna-low response classification precedes outgoing model results."""
         rows = self.rows("SELECT * FROM outboxes WHERE job=?", (job["id"],))
@@ -86,7 +114,7 @@ class DeliveryJournal:
                          "result": result, "artifact_witnesses":witnesses(self,attempt['id']), "source_members": json.loads(job["members"])}, job=job["id"], producer=attempt["session"],
                          key=digest({"owner_report": attempt["id"]}))
 
-    def _task_handoff(self, job, attempt, task, result, handoff, index):
+    def _task_handoff(self, job, attempt, task, result, handoff, index, informative=None):
         if not isinstance(handoff, dict) or set(handoff) != {"recipient", "kind", "text", "ref", "required"}:
             raise Refusal("handoff needs exact recipient/kind/text/ref/required fields")
         target = handoff["recipient"]
@@ -94,6 +122,10 @@ class DeliveryJournal:
             raise Refusal("necessary task handoffs retain actual recipient processing and settlement")
         if target not in task.get("allowed_handoffs", []):
             raise Refusal("task cannot delegate to this recipient")
+        if not isinstance(handoff['kind'],str) or handoff['kind'] not in {'work','result','question'}:
+            raise Refusal('task handoff kind is outside bounded task delivery')
+        if handoff['ref'] is not None and not isinstance(handoff['ref'],str):
+            raise Refusal('handoff reference must be a string or null')
         if job["role"] == "Reviews" and target != "Work":
             raise Refusal("Reviews consolidated results/questions return to Work")
         if job["role"] == "QA" and result["category"] == "qualification":
@@ -105,7 +137,11 @@ class DeliveryJournal:
                    "artifact_witnesses":witnesses(self,attempt['id']),
                    "source_members": json.loads(job["members"]), "source_result": result,
                    "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"]}
-        self._outbox(job["role"], target, handoff["kind"], payload, job=job["id"], producer=attempt["session"],
+        if informative:
+            payload.update({'informative_failure':informative,'original_handoff':handoff,
+                            'source_result':informative['original_result'],
+                            'text':'INCOMPLETE — no completion/effect settlement claim. '+handoff['text']})
+        self._outbox(job["role"], target, 'question' if informative else handoff["kind"], payload, job=job["id"], producer=attempt["session"],
                      key=digest({"attempt": attempt["id"], "handoff": index}), required=handoff["required"])
 
     def owner_question(self, job, attempt, reason, *, effects=False):

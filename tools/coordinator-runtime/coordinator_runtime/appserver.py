@@ -101,6 +101,15 @@ async def metadata(command, env, limit=1048576, cwd=None):
         return output.decode()
     finally:
         await end_owned(child, 3)
+        # Retire this metadata pipe after bounded overflow, too. No raw output
+        # is retained and no descendant/process absence is inferred from EOF.
+        async def discard_tail():
+            remaining=2*limit+131072
+            while remaining>0:
+                block=await child.stdout.read(min(65536,remaining))
+                if not block:return
+                remaining-=len(block)
+        with suppress(Exception):await asyncio.wait_for(discard_tail(),1)
 
 
 async def end_owned(child, grace):

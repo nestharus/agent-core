@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine
+from . import custody, routine, publication
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task
 
 
@@ -64,6 +64,7 @@ def job_prompt(store, job, task=None):
                "collector": store.controller, "attempt": attempt["id"], "package": job["package"],
                "target_and_why": task["purpose"], "authority": task["authority"],
                "typed_effect_authority": task["effect_authority"],
+               "staged_targets": publication.stages(store,attempt['id']),
                "frozen_artifact_inputs": frozen_artifacts,
                "effect_policy": task["effects"], "members": members, "events": events,
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
@@ -86,6 +87,12 @@ def job_prompt(store, job, task=None):
             "An empty handoffs list requires a meaningful no_handoff_reason. Do not send directly or "
             "borrow another actor's membership. Effect reconciliation returns to the actual owning role. "
             "Return only the required typed JSON final; include exact meaningful artifact references.\n"
+            "Inner categories: proposal, consolidated, qualification, scope, blocker, complete. "
+            "Use blocker for blocked work; PARTIAL/FAILED/UNKNOWN retain failures or unknowns. "
+            "When staged_targets is nonempty, edit ONLY the mapped staged paths for canonical changes. "
+            "Canonical targets are read-only to you. The genuine delegated controller publishes exact "
+            "staged bytes only after collected successful work, artifact custody and unchanged before-state. "
+            "This is a writable OWNED DIRECTORY, not direct canonical file sandbox authority.\n"
             + "TASK_CONTEXT=" + encode(context) + "\n" + "\n".join(templates))
 
 
@@ -237,7 +244,6 @@ class Dispatcher:
         except (Refusal, OSError) as exc:
             self.store.capture_gap(attempt, exc)
             self.store.hold_job(job_id, exc)
-            return
         # A failed read-only task still cannot mutate the protected role account.
         if (outcome.get("detail", {}).get("known_not_started") or
                 (task["effects"] in {"none", "owned-artifacts"} and outcome["exit"] is not None and outcome["capture"] == "complete")):
@@ -251,7 +257,13 @@ class Dispatcher:
         if not isinstance(result, dict):
             return
         job = self.store.job(self.store.attempt(attempt)['job'])
-        custody.inventory(self.store, attempt, result, task or self.config['tasks'][job['task']])
+        selected=task or self.config['tasks'][job['task']]
+        errors=[]
+        try:custody.inventory(self.store,attempt,publication.artifact_view(self.store,attempt,result),selected)
+        except (Refusal,OSError) as exc:errors.append(str(exc))
+        try:publication.conserve_stages(self.store,attempt,selected)
+        except (Refusal,OSError) as exc:errors.append(str(exc))
+        if errors:raise Refusal('; '.join(errors))
 
     def try_finish(self, job_id):
         job = self.store.job(job_id)
@@ -262,15 +274,14 @@ class Dispatcher:
             if self.store.job(job_id)["state"] == "closed":
                 self.runtime_errors.pop(job_id, None)
                 self.store.clear_operational_error(job_id)
-        except Refusal as exc:
+        except (Refusal,OSError) as exc:
             self.runtime_errors[job_id] = str(exc)
             self.store.hold_job(job_id, exc)
             self.store.record_operational_error(job_id, {"error": str(exc), "job": job_id}, job["role"], "task-disposition-error")
             attempt = self.store.attempt(job["active_attempt"])
             if attempt["collected"]:
                 with self.store.tx():
-                    self.store.owner_question(job, attempt, str(exc))
-                    self.store.gate_result_delivery(job, attempt, json.loads(attempt["result"]) if attempt["result"] else {"failure": str(exc), "detail": json.loads(attempt["detail"])})
+                    self.store.failure_delivery(job,attempt,self.config['tasks'][job['task']],str(exc))
 
     async def recover(self, job):
         attempt = self.store.diagnosis_attempt(job["id"])
@@ -455,6 +466,6 @@ def execution_spec(task, directory):
         return task
     authority = {**task["effect_authority"], "write_roots": [*task["effect_authority"]["write_roots"], str(directory)]}
     if task.get('routine_completion'):
-        authority['write_roots'] = [*task['routine_completion']['targets'], str(directory)]
+        authority['write_roots'] = [str(directory)]  # Files are staged; canonical parents never become writable.
     cwd = str(directory) if task["effects"] == "owned-artifacts" or task.get('routine_completion') else task["cwd"]
     return {**task, "cwd": cwd, "effect_authority": authority}

@@ -99,16 +99,20 @@ def capture(store, attempt, path, task, role_owned=False):
 
 
 def inventory(store, attempt, answer, task, role_owned=False):
+    if not isinstance(answer.get('artifacts'),list):raise Refusal('declared artifacts must be a list')
     if len(answer.get('artifacts',[])) > 64:
         raise Refusal('bounded declared artifact count exceeded; source/result retained')
-    seen = set()
+    seen,errors = set(),[]
     for item in answer.get('artifacts', []):
         path = item if isinstance(item, str) else item.get('path') if isinstance(item, dict) else None
-        if not isinstance(path, str) or not path:
-            raise Refusal('accepted artifact needs an absolute path string or structured path; no silent skip')
-        if path not in seen:
-            capture(store, attempt, path, task,role_owned)
-            seen.add(path)
+        try:
+            if not isinstance(path, str) or not path:
+                raise Refusal('accepted artifact needs an absolute path string or structured path; no silent skip')
+            if path not in seen:
+                capture(store, attempt, path, task,role_owned)
+                seen.add(path)
+        except (Refusal,OSError) as exc:errors.append(type(exc).__name__+': '+str(exc)[:500])
+    if errors:raise Refusal('artifact inventory incomplete: '+encode(errors))
 
 
 def witnesses(store, attempt):

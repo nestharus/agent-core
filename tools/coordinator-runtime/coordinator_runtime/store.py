@@ -21,6 +21,7 @@ from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
 from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
 from .routine import SCHEMA as ROUTINE_SCHEMA
 from .storage import SCHEMA as STORAGE_SCHEMA
+from .publication import SCHEMA as PUBLICATION_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -125,7 +126,7 @@ class Store(DeliveryJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -162,6 +163,8 @@ class Store(DeliveryJournal):
         counts = {name: self.db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
                   for name in ("events", "attempts", "jobs", "alerts", "outboxes")}
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
+        counts['publication_reserved_bytes']=self.db.execute("SELECT COALESCE(SUM(length(b.body)),0) FROM file_publications p JOIN artifact_blobs b ON b.sha256=p.proposed_sha WHERE p.state!='published'").fetchone()[0]
+        counts['bytes']+=counts['publication_reserved_bytes']
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
@@ -363,10 +366,13 @@ class Store(DeliveryJournal):
             row = self.attempt(attempt)
             if row["controller"] != self.controller:
                 raise Refusal("capture qualification belongs to the original collector")
-            self.db.execute("UPDATE attempts SET capture='artifact-inventory-incomplete',error=? WHERE id=?",
-                            (str(error)[:1000], attempt))
+            detail={**json.loads(row['detail']),'protocol_capture':row['capture'],
+                    'pre_inventory_error':row['error'],'artifact_inventory_error':str(error)[:1000]}
+            message=((row['error']+'; ') if row['error'] else '')+'artifact inventory: '+str(error)
+            self.db.execute("UPDATE attempts SET capture='artifact-inventory-incomplete',error=?,detail=? WHERE id=?",
+                            (message[:2000],encode(detail),attempt))
             self.db.execute("UPDATE results SET capture='artifact-inventory-incomplete',error=? WHERE attempt=?",
-                            (str(error)[:1000], attempt))
+                            (message[:2000], attempt))
 
     def commit_classification(self, attempt):
         row = self.attempt(attempt)
@@ -501,6 +507,8 @@ class Store(DeliveryJournal):
                 raise Refusal("effects cannot release a live/uncollected/unknown attempt")
             if actor != self.config["roles"][row["role"]]["owner"]:
                 raise Refusal("actual role owner must reconcile possible effects/outboxes")
+            if self.one("SELECT target FROM file_publications WHERE attempt=? AND state!='published'",(attempt['id'],)):
+                raise Refusal('unresolved exact publication intent needs actual source/effect recovery; generic effect receipt cannot waive it')
             if not receipt.get("evidence") or receipt.get("unknown_effects") != []:
                 raise Refusal("effect evidence and explicit empty unknown effects required")
             self.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=?",
@@ -514,21 +522,27 @@ class Store(DeliveryJournal):
             if row["state"] == "closed":
                 return None
             attempt = self.attempt(row["active_attempt"])
+            task = self.config["tasks"][row["task"]]
             if not attempt["collected"] or attempt["ended"] is None:
                 raise Refusal("actual owned exit and collection required before release")
+            if self.one("SELECT target FROM file_publications WHERE attempt=? AND state!='published'",(attempt['id'],)):
+                self.failure_delivery(row,attempt,task,'Unresolved exact publication intent; source/effect uncertainty remains held')
+                self.db.execute("UPDATE jobs SET state='held',hold_reason='unresolved publication intent' WHERE id=?",(job,))
+                return None
             if attempt["exit"] != 0 or attempt["capture"] != "complete" or attempt["error"]:
-                self.owner_question(row, attempt, "Collected failure/capture requires bounded recovery or real owner disposition")
-                self.gate_result_delivery(row, attempt, json.loads(attempt["result"]) if attempt["result"] else {"error": attempt["error"], "detail": json.loads(attempt["detail"])})
+                self.failure_delivery(row,attempt,task,"Collected failure/capture requires bounded recovery or real owner disposition")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
-            result = task_result(json.loads(attempt["result"]))
-            task = self.config["tasks"][row["task"]]
-            self.prepare_handoffs(row, attempt, task, result)
+            try:result = task_result(json.loads(attempt["result"]) if attempt['result'] else None)
+            except Refusal as exc:
+                self.failure_delivery(row,attempt,task,'Invalid inner task contract: '+str(exc))
+                self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?",(str(exc),job))
+                return None
             if result["semantic"] != "DONE":
-                self.owner_question(row, attempt, "Incomplete task: retain all findings/failures/UNKNOWNs")
-                self.gate_result_delivery(row, attempt, result)
+                self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            self.prepare_handoffs(row, attempt, task, result)
             if row["role"] == "Work" and result["category"] in {"scope", "blocker"}:
                 self.owner_question(row, attempt, "Work-owned consequential question stays with the actual Decider; no automatic self-loop")
                 self.gate_result_delivery(row, attempt, result)
@@ -598,6 +612,7 @@ class Store(DeliveryJournal):
                 cursor = self.db.execute("UPDATE events SET state='processed',processed_at=? "
                     "WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
                     "AND id IN (SELECT event FROM queue WHERE state='done') "
+                    "AND NOT EXISTS (SELECT 1 FROM file_publications fp JOIN attempts a ON a.id=fp.attempt JOIN queue q ON q.job=a.job WHERE q.event=events.id AND fp.state!='published') "
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
                     "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "
                     "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
@@ -766,4 +781,5 @@ class Store(DeliveryJournal):
                 "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}
                                      for r in self.rows('SELECT attempt,path,kind,owner,sha256 FROM artifact_custody')],
                 "session_storage": self.rows('SELECT * FROM attempt_storage'),
+                "file_publications": self.rows('SELECT * FROM file_publications'),
                 "violations": self.violations(), "adoption": "prospective grants only; no model/goal acceptance"}

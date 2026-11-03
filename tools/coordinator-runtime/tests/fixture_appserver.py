@@ -9,6 +9,7 @@ import uuid
 
 plan = json.loads(Path(sys.argv[1]).read_text())
 thread, turn, turns = str(uuid.uuid4()), None, 0
+task_context = {}
 
 
 def send(value):
@@ -38,6 +39,9 @@ for line in sys.stdin:
             "reasoningEffort": params["config"]["model_reasoning_effort"],
             "sandbox": {"type": "readOnly" if params["sandbox"] == "read-only" else "workspaceWrite", "networkAccess": False}})
     elif method == "turn/start":
+        prompt=params['input'][0]['text']
+        if 'TASK_CONTEXT=' in prompt:
+            task_context=json.JSONDecoder().raw_decode(prompt.split('TASK_CONTEXT=',1)[1])[0]
         turn, turns = str(uuid.uuid4()), turns+1
         respond(request, {"turn": {"id": turn, "status": "inProgress"}})
         if plan.get("turn_error"):
@@ -48,7 +52,13 @@ for line in sys.stdin:
             continue
         answer = plan.get("result")
         if plan.get('target'):
-            Path(plan['target']).write_text(json.dumps(plan.get('target_contents',{'total':12})))
+            target=task_context.get('staged_targets',{}).get(plan['target'],plan['target'])
+            Path(target).write_text(json.dumps(plan.get('target_contents',{'total':12})))
+            if plan.get('probe_record'):
+                Path(plan['probe_record']).write_text(json.dumps({'actual_write_path':target,'canonical_before_publication':json.loads(Path(plan['target']).read_text())}))
+        if plan.get('additional_target'):
+            extra=task_context['staged_targets'][plan['additional_target']]
+            Path(extra).write_text(json.dumps(plan['additional_contents']))
         if plan.get('tool_metadata'):
             meta = {'type':'commandExecution','id':str(uuid.uuid4()),'status':'completed',
                     'command':'private command body NOT to retain','aggregatedOutput':'private output NOT to retain',

@@ -3,8 +3,9 @@
 import json
 from pathlib import Path
 
-from .contracts import Refusal, encode
+from .contracts import Refusal, encode, task_result
 from .custody import safe_path, read_file
+from . import publication
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS routine_runs(
@@ -60,6 +61,7 @@ def prepare(store, board, job, attempt, task):
     with store.tx():
         store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
                          (attempt, job['task'], grant['id'], encode(policy), encode(before), 'prepared'))
+    publication.prepare(store,attempt,before)
 
 
 def reconcile(store, board, job):
@@ -73,21 +75,28 @@ def reconcile(store, board, job):
     grant = board.completion_authority(store, job['task'])
     if grant['id'] != run['grant_id'] or store.enrollment(job['role'])['legacy_hold'] or job['hold_reason']:
         return False
-    answer = json.loads(attempt['result']) if attempt['result'] else {}
+    answer = task_result(json.loads(attempt['result'])) if attempt['result'] else {}
     if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['capture'] != 'complete'
             or attempt['error'] or answer.get('semantic') != 'DONE' or answer.get('unknowns') or answer.get('failures')):
         return False
     tools = json.loads(attempt['detail']).get('tool_completion')
     if not tools or not tools['complete']:
         return False
+    if not tools['items']:
+        before=json.loads(run['before_files'])
+        for target,path in publication.stages(store,attempt['id']).items():
+            proposed=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],path))
+            if not proposed or proposed['sha256']!=before[target].get('sha256'):return False
+    published=publication.publish(store,board,job,attempt,run,task)
     after = snapshot(store, json.loads(run['policy'])['targets'])
     before = json.loads(run['before_files'])
     if any(after[p] != before[p] for p in after) and not tools['items']:
         return False
     receipt = {'actor': store.config['actor'], 'delegated_by': grant['owner'], 'grant_id': grant['id'],
                'collector': attempt['controller'], 'worker': attempt['session'], 'attempt': attempt['id'],
-               'basis': 'role-granted collected file writer; bounded actual pre/post custody and tool completion',
-               'before': before, 'after': after, 'tool_completion': tools, 'unknown_effects': []}
+               'basis': 'role-granted staged model writer and exact service publication; bounded pre/post custody and tool completion',
+               'before': before, 'after': after, 'publication':published,
+               'tool_completion': tools, 'unknown_effects': []}
     with store.tx():
         store.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=? AND active_attempt=?",
                          (encode(receipt), job['id'], attempt['id']))

@@ -277,13 +277,15 @@ def task_result(answer):
     keys = {"semantic", "summary", "findings", "failures", "unknowns", "artifacts", "category"}
     if not isinstance(answer, dict) or not keys <= set(answer) or set(answer)-keys-{"handoffs", "no_handoff_reason"}:
         raise Refusal("task result must conserve summary/findings/failures/unknowns/artifacts/category")
-    if answer["semantic"] not in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
+    if not isinstance(answer['semantic'],str) or answer["semantic"] not in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
         raise Refusal("unknown semantic completion")
+    if answer.get('category')=='blocked' and answer['semantic']!='DONE':
+        answer={**answer,'category':'blocker'}  # Faithful alias; caller records original and projection.
     required_text(answer["summary"], "summary")
     for key in ("findings", "failures", "unknowns", "artifacts"):
         if not isinstance(answer[key], list):
             raise Refusal(f"{key} must be an explicit list, including honest empties")
-    if answer["category"] not in {"proposal", "consolidated", "qualification", "scope", "blocker", "complete"}:
+    if not isinstance(answer['category'],str) or answer["category"] not in {"proposal", "consolidated", "qualification", "scope", "blocker", "complete"}:
         raise Refusal("typed response category required")
     if answer["semantic"] != "DONE" and not (answer["failures"] or answer["unknowns"]):
         raise Refusal("partial/failed/unknown work must retain its unresolved meaning")

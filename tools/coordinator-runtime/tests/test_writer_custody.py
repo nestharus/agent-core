@@ -30,9 +30,17 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         task.update(effects='owner-reconcile',sandbox='workspace-write',network=False,
                     routine_completion={'kind':'file-witness','targets':[str(self.target)]},delivery_required=True,allowed_handoffs=[])
         task['effect_authority'].update(write_roots=[str(self.target)],operations=['read-reports','write-role-records'])
+        if getattr(self,'include_second_target',False):
+            self.second_target=Path(self.temp.name)/'canonical-second.json';self.second_target.write_text('{"total":0}')
+            task['routine_completion']['targets'].append(str(self.second_target))
+            task['effect_authority']['write_roots'].append(str(self.second_target))
         self.owner=self.config['roles']['Work']['owner']
         self.sender=ident()
         self.config['delivery']={'recipients':{'Work':{'session':self.owner,'profile':'.codex','board_role':'work'}},'alert_role':'Work','alert_recipient':'Work'}
+        if getattr(self,'include_root',False):
+            self.root=ident()
+            self.config['delivery']['recipients']['Root']={'session':self.root,'profile':'.codex2','board_role':'execution-manager'}
+            task['allowed_handoffs']=['Root']
         from coordinator_runtime.store import Store
         self.store=Store(self.config)
         self.addCleanup(self.store.close)
@@ -44,8 +52,10 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.path=Path(entry['db_path'])
         with self.substrate.database(str(self.path)) as conn:
             self.substrate.bind_board(conn,entry['board_id'],initialize=True)
-            for actor,role in [(self.owner,'work'),(self.sender,'sender')]:
-                args=self.substrate.parser().parse_args(['register','--session',actor,'--role',role,'--profile','.codex','--route','managed'])
+            actors=[(self.owner,'work','.codex'),(self.sender,'sender','.codex')]
+            if getattr(self,'include_root',False):actors.append((self.root,'execution-manager','.codex2'))
+            for actor,role,profile in actors:
+                args=self.substrate.parser().parse_args(['register','--session',actor,'--role',role,'--profile',profile,'--route','managed'])
                 with patch.dict(os.environ,{'CODEX_SESSION_ID':actor}):self.substrate.register(conn,args)
         self.board=Board(self.config,'Work')
         with patch.dict(os.environ,{'CODEX_SESSION_ID':self.owner}):
@@ -54,7 +64,7 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.store.reconcile_legacy('Work',self.owner,{'collector':self.owner,'evidence':['synthetic closed original'],'remaining_holds':[]})
         self.runtime=Dispatcher(self.store,models=object(),boards={'Work':self.board})
 
-    async def run_writer(self, artifacts=None, tool=None, storage_bad=False):
+    async def run_writer(self, artifacts=None, tool=None, storage_bad=False, answer_extra=None, plan_extra=None):
         queued(self.store,event(self.config,ident()))
         job=self.store.reserve()
         attempt=self.store.start_job(job['id'],job['token'])
@@ -66,6 +76,8 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
               'tool_metadata':{'exitCode':0} if tool is None else tool,'storage_config':config}
         if artifacts == 'runtime':
             plan.update(write_file='report.txt',artifact_strings=True)
+        if answer_extra:plan['result'].update(answer_extra)
+        if plan_extra:plan.update(plan_extra)
         plan_path=Path(self.temp.name)/(attempt+'.json');plan_path.write_text(encode(plan))
         self.runtime.models=AppServer(self.config,[sys.executable,str(Path(__file__).with_name('fixture_appserver.py')),str(plan_path)])
         await self.runtime.execute(job['id'],attempt)
@@ -125,13 +137,14 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.attempt(attempt)['capture'],'artifact-inventory-incomplete')
         self.assertEqual(self.store.job(job['id'])['state'],'held')
         self.assertIn('/unselected/foreign-report',self.store.attempt(attempt)['result'])
-        self.assertEqual(self.store.rows('SELECT * FROM artifact_custody'),[])
+        self.assertEqual(self.store.rows('SELECT * FROM artifact_custody WHERE path=?',('/unselected/foreign-report',)),[])
+        self.assertTrue(self.store.rows('SELECT * FROM artifact_custody'))  # Exact staged recovery meaning survives the bad declaration.
 
     async def test_L02_runtime_string_report_is_conserved_before_exact_file_retirement(self):
         job,attempt=await self.run_writer(artifacts='runtime')
         report=self.store.home/'artifacts'/attempt/'report.txt'
         body=report.read_bytes()
-        row=self.store.one('SELECT * FROM artifact_custody WHERE attempt=?',(attempt,))
+        row=self.store.one('SELECT * FROM artifact_custody WHERE attempt=? AND path=?',(attempt,str(report)))
         self.assertEqual(row['kind'],'runtime-owned')
         await self.settle_routine(job)
         response=self.store.job(job['id'])['response']

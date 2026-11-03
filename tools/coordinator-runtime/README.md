@@ -253,16 +253,44 @@ no blanket duplication/profile purge. Exact registered single-link artifacts
 require actual conservation and symlink-safe identity checks before retirement.
 
 Routine file writers may configure `routine_completion:{kind:"file-witness",
-targets:[absolute exact files]}` under explicit effect roots. They run from a fresh
-owned attempt directory with writable roots narrowed to those files and owned
-outputs, network disabled. The explicit role grant, actual collected process
-exit/capture/DONE, settled supported tool metadata and bounded pre/post file
-custody must agree. Real failures/unknowns, missing numeric tool completion,
-revocation, resource/legacy holds or unsupported external effects prevent routine
-reconciliation. Known numeric nonzero historical commands remain in the ledger;
-they do not invent running-process uncertainty when the final work/effects are
-known. `effects` becomes `reconciled` with actual service/role/worker/collector
-provenance and evidence, never falsely `none`.
+targets:[absolute exact files]}` under explicit logical effect roots. Actual
+qualification4 on 4ead established working installed preflight/capture controls,
+two models/three turns/one owned-idle continuation and incoming Luna commit/ACK,
+but its exact file-root writer could not execute. Both partials, missing report
+and held sources remain original evidence. An installed native exact-file policy
+probe also hit directory-style mount errors. Accepted sandbox type is not proof
+of usable exact-file mounts.
+
+The corrected writer uses **owned staging and exact controller publication**.
+Only the new attempt directory is writable to the model; canonical files and
+parents stay read-only. `staged_targets` maps each real exact target to its owned
+copy. Templates keep their actual purpose/owner; the task edits the mapped copy
+and writes its reports in the owned output directory. Directory sandbox mechanics
+are an explicit ceiling for owned outputs, not direct canonical file authority.
+The legacy sandbox retains its existing broad read-only OS ceiling: logical
+selected-source/privacy bounds still apply, and no exact-read isolation is claimed.
+No canonical parent or network scope is widened. Local input copies share the
+owned directory ceiling; durable original report bytes remain in journal custody.
+
+After actual collected successful completion, settled supported tool metadata,
+valid inner contract and conserved proposed/report bytes, the current real role
+grant, source holds and unchanged canonical preimages are checked. The real
+service publishes only the exact granted targets via bounded single-link/no-follow
+reads and a known exclusive temporary plus atomic per-file replacement, retaining
+mode and durable per-file intent/receipt. The receipt identifies model producer,
+real service publisher, role, collector and grant. Canonical replacements are
+service effects, never attributed as direct model writes. Existing owner fencing
+and last-moment witness checks remain; this is not a filesystem compare-and-swap
+against arbitrary noncooperating writers.
+
+Multi-file publication is not atomic. A conflict/interruption keeps actual partial
+effects, original/proposed bytes, exact intent/temporary and source/uncertainty
+holds; it never rolls back foreign changes, blindly republishes or invents a lost
+actor receipt from matching content. Unresolved intents also prevent processing/
+retirement. Automatic interrupted-publication disposition/temporary reclamation
+is not implemented: actual effect/source custodians retain that precise recovery
+frontier. Normal qualified writers need no per-job manual approval. Effects become
+`reconciled` only with the actual evidence above, never falsely `none`.
 
 The delegated collector then genuinely consumes its own routine result/effect
 handback on the board. Its receipt names the service actor and delegating role,
@@ -270,6 +298,22 @@ not a fictitious human read. External recipients/duties and separate outboxes
 remain owned. The supplied Work example covers its seven exact canonical files.
 Branch ref/network and QA CI/resource callbacks remain with their actual owners;
 this file-only callback does not claim their effects or override admissions.
+
+Actual partial/failure/scope evidence takes an informative delivery path even
+when artifact capture, category or effect admission fails. Each declared artifact
+is challenged independently within the bound; successful witnesses survive a
+missing/invalid neighbor, and the original return is retained. Non-DONE `blocked`
+is a traced alias for `blocker`; DONE/blocked is invalid. Prompts name all admitted
+categories. Other malformed results receive causal owner questions with the exact
+original meaning, never invented completed/consolidated semantics.
+
+Necessary allowlisted handoffs are retained as **incomplete questions**, preserving
+the original handoff/result, actual capture/error/exit and unresolved duties.
+One fresh Luna response classification precedes real service delivery. Posting,
+pickup, processing and settlement remain separate; successful failure notification
+does not close the held task, reconcile effects or release its integration slot.
+Independent incoming classification can progress. Invalid/unauthorized handoffs
+stay in original source with a causal owner question; they grant no new effects.
 
 Artifact strings and structured `{path,...}` entries both produce exact bounded
 witnesses and content-addressed durable source bytes. Runtime-owned disposable
