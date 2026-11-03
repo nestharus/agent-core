@@ -1,0 +1,240 @@
+"""Additive schema-4 board delegation bridge.
+
+Role: adapter. Translates: message-board catalog/store visibility and exact notice
+receipt; coordinator runtime durable responsibility. No owner cursor, membership,
+queue transport, TUI socket or native collector is borrowed. Grants are explicit
+same-account cooperation records, NOT authentication or product-effect authority.
+"""
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sqlite3
+import sys
+
+from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, ident, regular_path
+
+EXTENSION = """
+CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
+ id TEXT PRIMARY KEY,board_id TEXT NOT NULL,role TEXT NOT NULL,owner TEXT NOT NULL,
+ profile TEXT NOT NULL,actor TEXT NOT NULL,runtime TEXT NOT NULL,runtime_dev INTEGER NOT NULL,
+ runtime_ino INTEGER NOT NULL,cutover INTEGER NOT NULL,issued_by TEXT NOT NULL,
+ authority TEXT NOT NULL,created TEXT NOT NULL,revoked TEXT);
+CREATE TABLE IF NOT EXISTS coordinator_receipts_v1(
+ event TEXT PRIMARY KEY,grant_id TEXT NOT NULL,notice INTEGER,post INTEGER NOT NULL,
+ owner TEXT NOT NULL,controller_actor TEXT NOT NULL,classifier_actor TEXT NOT NULL,
+ classifier_attempt TEXT NOT NULL,classification TEXT NOT NULL,responsibility TEXT NOT NULL,
+ kind TEXT NOT NULL,created TEXT NOT NULL);
+"""
+
+
+def module_at(directory, name):
+    path = regular_path(str(Path(directory) / f"{name}.py"))
+    spec = importlib.util.spec_from_file_location(f"coordinator_substrate_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    original_path = list(sys.path)
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = original_path
+    return module
+
+
+def connect(path):
+    path = regular_path(str(path))
+    conn = sqlite3.connect(path.as_uri()+"?mode=rw", uri=True, isolation_level=None, timeout=15)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA synchronous=FULL")
+    return conn
+
+
+def utc():
+    return datetime.now(timezone.utc).isoformat()
+
+
+class Board:
+    def __init__(self, config, role):
+        self.config, self.role = config, role
+        self.selected = config["roles"][role]
+        self.library = config["board_library"]
+        self.catalog = module_at(self.library, "catalog")
+        self.store = module_at(self.library, "board_store")
+        self.home = Path(config["board_home"])
+        self.path = Path(self._entry()["db_path"])
+        stat = regular_path(str(self.path)).stat()
+        if stat.st_nlink != 1:
+            raise Refusal("board aliases/hard links refused")
+        self.identity = (stat.st_dev, stat.st_ino)
+
+    def _entry(self):
+        path = regular_path(str(self.home / "catalog.sqlite3"))
+        with sqlite3.connect(path.as_uri()+"?mode=ro", uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            entry = self.catalog.board(conn, self.selected["board_id"])
+        return entry
+
+    @contextmanager
+    def opened(self, *, settlement=False):
+        entry = self._entry()
+        with self.catalog.lifecycle_lock(entry, self.home, exclusive=False):
+            entry = self._entry()
+            self._policy(entry, settlement)
+            conn = connect(self.path)
+            try:
+                self._schema(conn)
+                yield conn
+            finally:
+                conn.close()
+
+    def _policy(self, entry, settlement):
+        if entry["state"] not in ({"active", "retired"} if settlement else {"active"}):
+            raise Refusal("board lifecycle does not permit this operation")
+        stat = regular_path(entry["db_path"]).stat()
+        if str(self.path) != entry["db_path"] or self.identity != (stat.st_dev, stat.st_ino):
+            raise Refusal("board file/catalog identity changed")
+
+    def _schema(self, conn):
+        if self.store.SCHEMA_VERSION != 4 or conn.execute("PRAGMA user_version").fetchone()[0] != 4:
+            raise Refusal("bridge supports inspected schema 4 only; no automatic migration")
+        board = conn.execute("SELECT board_id FROM board_meta").fetchall()
+        if [r[0] for r in board] != [self.selected["board_id"]]:
+            raise Refusal("embedded board UUID differs")
+        member = conn.execute("SELECT * FROM sessions WHERE session=?", (self.selected["owner"],)).fetchone()
+        if not member or member["status"] != "active":
+            raise Refusal("actual role owner must remain an active board member")
+        if member["profile"] != self.selected["profile"] or member["role"] != self.selected["board_role"]:
+            raise Refusal("actual role/profile membership differs from configured identity")
+        entry = self._entry()
+        if member["route"] not in entry["allowed_routes"].split(","):
+            raise Refusal("role member route forbidden by catalog policy")
+        if entry["membership_policy"] == "invited":
+            self._invited()
+
+    def _invited(self):
+        path = regular_path(str(self.home / "catalog.sqlite3"))
+        with sqlite3.connect(path.as_uri()+"?mode=ro", uri=True) as conn:
+            invited = conn.execute("SELECT 1 FROM invitations WHERE board_id=? AND session=?",
+                                   (self.selected["board_id"], self.selected["owner"])).fetchone()
+        if not invited:
+            raise Refusal("actual role owner has no required catalog invitation")
+
+    def grant(self, runtime, authority):
+        owner = self.store.acting_session(self.selected["owner"])
+        if not authority.strip():
+            raise Refusal("actual user/role delegation authority reference required")
+        stat = regular_path(str(runtime.path)).stat()
+        with self.opened() as conn:
+            conn.executescript(EXTENSION)
+            with self.store.write(conn):
+                route = conn.execute("SELECT route FROM sessions WHERE session=?", (owner,)).fetchone()[0]
+                if route != "managed":
+                    raise Refusal("actual owner must select prospective managed delivery before delegation; old notice routes remain owned")
+                cutover = conn.execute("SELECT COALESCE(MAX(seq),0) FROM posts").fetchone()[0]
+                grant = {"id": ident(), "owner": owner, "actor": self.config["actor"], "cutover": cutover}
+                conn.execute("INSERT INTO coordinator_grants_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                             (grant["id"], self.selected["board_id"], self.role, owner,
+                              self.selected["profile"], grant["actor"], str(runtime.path),
+                              stat.st_dev, stat.st_ino, cutover, owner, authority, utc()))
+        return grant
+
+    def revoke(self, grant_id):
+        owner = self.store.acting_session(self.selected["owner"])
+        with self.opened(settlement=True) as conn:
+            with self.store.write(conn):
+                changed = conn.execute("UPDATE coordinator_grants_v1 SET revoked=? WHERE id=? AND owner=?",
+                                       (utc(), grant_id, owner)).rowcount
+        if changed != 1:
+            raise Refusal("grant does not belong to actual owner")
+
+    def _grant(self, conn, runtime):
+        enrollment = runtime.enrollment(self.role)
+        row = conn.execute("SELECT * FROM coordinator_grants_v1 WHERE id=?", (enrollment["grant_id"],)).fetchone()
+        stat = runtime.path.stat()
+        if not row or row["revoked"] is not None:
+            raise Refusal("delegation is absent or revoked")
+        expected = (self.selected["board_id"], self.role, self.selected["owner"], self.config["actor"],
+                    str(runtime.path), stat.st_dev, stat.st_ino)
+        actual = tuple(row[k] for k in ("board_id", "role", "owner", "actor", "runtime", "runtime_dev", "runtime_ino"))
+        if actual != expected:
+            raise Refusal("grant runtime/role/actor identity differs")
+        return dict(row)
+
+    def verify_authority(self, runtime):
+        with self.opened() as conn:
+            return self._grant(conn, runtime)
+
+    def scan(self, runtime, limit=100):
+        """No owner ack_seq is read or advanced. Our prospective cursor is atomic with intake."""
+        with self.opened() as conn:
+            grant = self._grant(conn, runtime)
+            after = runtime.one("SELECT seq FROM cursors WHERE role=?", (self.role,))["seq"]
+            rows = conn.execute("SELECT p.seq,n.notification_id FROM posts p LEFT JOIN notification_outbox n "
+                "ON n.post_seq=p.seq AND n.recipient=? WHERE p.seq>? AND "
+                "(n.notification_id IS NOT NULL OR (p.recipient=? AND NOT EXISTS "
+                "(SELECT 1 FROM thread_posts t WHERE t.post_seq=p.seq))) ORDER BY p.seq LIMIT ?",
+                (grant["owner"], max(after, grant["cutover"]), grant["owner"], limit)).fetchall()
+            return [self._event(conn, row, grant) for row in rows]
+
+    def _event(self, conn, row, grant):
+        posts = self.store.query_posts(conn, session=grant["owner"], after=row["seq"]-1,
+                                       topic=None, kind=None, limit=1, include_thread_members=True)
+        if not posts or posts[0]["seq"] != row["seq"]:
+            raise Refusal("delegated owner cannot see this addressed event")
+        body = posts[0]
+        # A package identity comes from an existing role admission packet, never a model guess.
+        package = body.get("ref") if self.role == "QA" else None
+        return {"id": digest({"board": grant["board_id"], "post": row["seq"], "owner": grant["owner"]}),
+                "board_id": grant["board_id"], "post": row["seq"], "notice": row["notification_id"],
+                "role": self.role, "recipient": grant["owner"], "author": body["author"],
+                "kind": "board", "body": body, "package": package, "grant": grant["id"],
+                "allowed_tasks": self.selected["routes"]}
+
+    def receipt(self, runtime, event_id):
+        """A board-local audit commit is the idempotency/readback boundary, including lost replies."""
+        event = runtime.event(event_id)
+        with self.opened(settlement=True) as conn:
+            with self.store.write(conn):
+                grant = self._grant(conn, runtime)
+                existing = conn.execute("SELECT * FROM coordinator_receipts_v1 WHERE event=?", (event_id,)).fetchone()
+                if existing:
+                    return dict(existing)
+                proof = self._proof(runtime, event, grant)
+                self._ack(conn, event, grant)
+                kind = "delegated-notice-receipt" if event["notice"] is not None else "plain-post-receipt"
+                conn.execute("INSERT INTO coordinator_receipts_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (event_id, grant["id"], event["notice"], event["post"], grant["owner"], grant["actor"],
+                     proof["session"], proof["id"], proof["classification"], proof["responsibility"], kind, utc()))
+                return dict(conn.execute("SELECT * FROM coordinator_receipts_v1 WHERE event=?", (event_id,)).fetchone())
+
+    def _proof(self, runtime, event, grant):
+        if event["grant"] != grant["id"] or event["recipient"] != grant["owner"] or event["post"] <= grant["cutover"]:
+            raise Refusal("event is not covered by this prospective role grant")
+        row = runtime.one("SELECT * FROM events WHERE id=?", (event["id"],))
+        queue = runtime.one("SELECT id FROM queue WHERE event=?", (event["id"],))
+        if not row or not row["classification"] or not queue:
+            raise Refusal("durable validated classification AND queue responsibility required")
+        attempt = runtime.attempt(row["classifier"])
+        if json.loads(attempt["binding"]) != LUNA or attempt["exit"] != 0 or not attempt["collected"]:
+            raise Refusal("actual matching Luna-low collection required")
+        canonical_uuid(attempt["session"])
+        return {**attempt, "classification": row["classification"], "responsibility": queue["id"]}
+
+    def _ack(self, conn, event, grant):
+        if event["notice"] is None:
+            row = conn.execute("SELECT recipient FROM posts WHERE seq=?", (event["post"],)).fetchone()
+            if not row or row["recipient"] != grant["owner"]:
+                raise Refusal("plain post not addressed to granted owner")
+            return
+        row = conn.execute("SELECT * FROM notification_outbox WHERE notification_id=?", (event["notice"],)).fetchone()
+        if not row or row["recipient"] != grant["owner"] or row["post_seq"] != event["post"]:
+            raise Refusal("notice does not belong to delegated owner/event")
+        if row["delivery_state"] == "sending":
+            raise Refusal("original queue sender still owns an unsettled sending effect")
+        conn.execute("UPDATE notification_outbox SET delivery_state='acknowledged',"
+                     "acknowledged_at=COALESCE(acknowledged_at,?),state_changed_at=?,claim_token=NULL "
+                     "WHERE notification_id=?", (utc(), utc(), event["notice"]))

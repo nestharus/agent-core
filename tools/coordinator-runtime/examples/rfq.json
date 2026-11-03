@@ -1,0 +1,493 @@
+{
+  "version": 1,
+  "enabled": false,
+  "actor": "e45493ab-5586-4b0e-bc51-f70b9922d6f6",
+  "state_dir": "/absolute/private/coordinator-state",
+  "board_home": "/absolute/actual-private-board-home",
+  "board_library": "/home/nes/ai/tools/message-board",
+  "profiles": [
+    ".codex",
+    ".codex2",
+    ".codex3",
+    ".codex4",
+    ".codex5"
+  ],
+  "classifier": {
+    "binding": {
+      "model": "gpt-6-luna",
+      "effort": "low",
+      "provider": "openai"
+    },
+    "profile": ".codex2",
+    "cwd": "/home/nes/ai-worktrees/coordinator-runtime-20261103"
+  },
+  "diagnosis": {
+    "binding": {
+      "model": "gpt-6-luna",
+      "effort": "low",
+      "provider": "openai"
+    },
+    "profile": ".codex4",
+    "cwd": "/home/nes/ai-worktrees/coordinator-runtime-20261103"
+  },
+  "roles": {
+    "Work": {
+      "owner": "01a18bac-b565-7742-86bc-0f9ba5ffc831",
+      "profile": ".codex",
+      "board_id": "00000000-0000-0000-0000-000000000000",
+      "board_role": "work",
+      "legacy_hold": "REQUIRED: actual owner reconciles legacy originals, reservations, partial effects and outboxes; no idle inference",
+      "routes": [
+        "work-proposer",
+        "work-integrator"
+      ],
+      "package_admission_required": true
+    },
+    "Branch": {
+      "owner": "01a1a07d-8b03-7492-9bf9-6adac79d241e",
+      "profile": ".codex5",
+      "board_id": "00000000-0000-0000-0000-000000000000",
+      "board_role": "branch",
+      "legacy_hold": "REQUIRED: actual owner reconciles legacy originals, reservations, partial effects and outboxes; no idle inference",
+      "routes": [
+        "branch-proposer",
+        "branch-integrator",
+        "work-proposer"
+      ],
+      "package_admission_required": true
+    },
+    "Reviews": {
+      "owner": "01a18bad-fd78-7db1-b9eb-4d883a8e2e28",
+      "profile": ".codex3",
+      "board_id": "00000000-0000-0000-0000-000000000000",
+      "board_role": "reviews",
+      "legacy_hold": "REQUIRED: actual owner reconciles legacy originals, reservations, partial effects and outboxes; no idle inference",
+      "routes": [
+        "reviews-proposer",
+        "reviews-integrator",
+        "work-proposer"
+      ],
+      "package_admission_required": true
+    },
+    "QA": {
+      "owner": "01a18bb3-55fd-77c3-8183-470b6f5115c8",
+      "profile": ".codex5",
+      "board_id": "00000000-0000-0000-0000-000000000000",
+      "board_role": "ci",
+      "legacy_hold": "REQUIRED: actual owner reconciles legacy originals, reservations, partial effects and outboxes; no idle inference",
+      "routes": [
+        "qa-execution",
+        "qa-cleanup",
+        "work-proposer"
+      ],
+      "package_admission_required": true
+    }
+  },
+  "tasks": {
+    "work-proposer": {
+      "role": "Work",
+      "phase": "proposer",
+      "profile": ".codex",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work",
+      "sandbox": "read-only",
+      "effects": "none",
+      "network": false,
+      "capacity": 5,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/proposal.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Work proposer task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bac-b565-7742-86bc-0f9ba5ffc831",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": []
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "proposal": [
+          "work-integrator"
+        ]
+      }
+    },
+    "work-integrator": {
+      "role": "Work",
+      "phase": "integrator",
+      "profile": ".codex",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work",
+      "sandbox": "workspace-write",
+      "effects": "owner-reconcile",
+      "network": false,
+      "capacity": 1,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/batch-integrator.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Work integrator task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bac-b565-7742-86bc-0f9ba5ffc831",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents",
+          "write-role-records",
+          "write-owned-artifacts"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/work"
+        ]
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ]
+      }
+    },
+    "branch-proposer": {
+      "role": "Branch",
+      "phase": "proposer",
+      "profile": ".codex5",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/branch",
+      "sandbox": "read-only",
+      "effects": "none",
+      "network": false,
+      "capacity": 5,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/branch/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/branch-analysis.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Branch proposer task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a1a07d-8b03-7492-9bf9-6adac79d241e",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": []
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "proposal": [
+          "branch-integrator"
+        ]
+      }
+    },
+    "branch-integrator": {
+      "role": "Branch",
+      "phase": "integrator",
+      "profile": ".codex5",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/branch",
+      "sandbox": "workspace-write",
+      "effects": "owner-reconcile",
+      "network": false,
+      "capacity": 1,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/branch/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/batch-integrator.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Branch integrator task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a1a07d-8b03-7492-9bf9-6adac79d241e",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents",
+          "write-role-records",
+          "write-owned-artifacts",
+          "organize-authorized-refs"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/branch"
+        ]
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ]
+      }
+    },
+    "reviews-proposer": {
+      "role": "Reviews",
+      "phase": "proposer",
+      "profile": ".codex3",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/reviews",
+      "sandbox": "read-only",
+      "effects": "none",
+      "network": false,
+      "capacity": 5,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/reviews/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/proposal.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Reviews proposer task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bad-fd78-7db1-b9eb-4d883a8e2e28",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": []
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "proposal": [
+          "reviews-integrator"
+        ]
+      }
+    },
+    "reviews-integrator": {
+      "role": "Reviews",
+      "phase": "integrator",
+      "profile": ".codex3",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/reviews",
+      "sandbox": "workspace-write",
+      "effects": "owned-artifacts",
+      "network": false,
+      "capacity": 1,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/reviews/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/reviews/review-report-integrator.prompt.md"
+      ],
+      "purpose": "Perform the current bounded Reviews integrator task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bad-fd78-7db1-b9eb-4d883a8e2e28",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents",
+          "consolidate-reports",
+          "write-owned-artifacts"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": []
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "consolidated": [
+          "work-proposer"
+        ]
+      }
+    },
+    "qa-execution": {
+      "role": "QA",
+      "phase": "execution",
+      "profile": ".codex5",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/ci",
+      "sandbox": "workspace-write",
+      "effects": "owner-reconcile",
+      "network": false,
+      "capacity": 1,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/ci/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/ai-worktrees/coordinator-runtime-20261103/tools/coordinator-runtime/templates/qa-package.md"
+      ],
+      "purpose": "Perform the current bounded QA execution task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bb3-55fd-77c3-8183-470b6f5115c8",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents",
+          "write-role-records",
+          "write-owned-artifacts",
+          "execute-admitted-qa"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/ci"
+        ]
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "consolidated": [
+          "qa-cleanup"
+        ]
+      }
+    },
+    "qa-cleanup": {
+      "role": "QA",
+      "phase": "cleanup",
+      "profile": ".codex5",
+      "binding": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "provider": "openai"
+      },
+      "cwd": "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/ci",
+      "sandbox": "workspace-write",
+      "effects": "owned-artifacts",
+      "network": false,
+      "capacity": 1,
+      "templates": [
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/ci/AGENTS.md",
+        "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION/PARALLEL_COORDINATION/README.md",
+        "/home/nes/ai-worktrees/coordinator-runtime-20261103/tools/coordinator-runtime/templates/qa-package.md"
+      ],
+      "purpose": "Perform the current bounded QA cleanup task; conserve complete findings/failures/UNKNOWNs and existing outcome/rationale/owners.",
+      "authority": "Prospective selected role task only. Read ordinary explicitly required source/reports within listed roots. Follow actual frozen input, method, per-package admission and existing effect owners. Prepare exact intents rather than board sends. No Root product-code writes, new CI admission/monitor/resource owners, global routes, private stores or foreign handles. Actual canonical/external effects require the listed owner reconciliation.",
+      "effect_authority": {
+        "owner": "01a18bb3-55fd-77c3-8183-470b6f5115c8",
+        "operations": [
+          "read-source",
+          "read-reports",
+          "prepare-intents",
+          "consolidate-reports",
+          "write-owned-artifacts"
+        ],
+        "read_roots": [
+          "/home/nes/projects/rfq/planning/session-recovery-20261010-01a0cc90/unified-review-adoption-20261020/PERSISTENT_COORDINATION",
+          "/home/nes/projects/rfq/trunk/rfqautomation"
+        ],
+        "write_roots": []
+      },
+      "responses": {
+        "scope": [
+          "work-proposer"
+        ],
+        "blocker": [
+          "work-proposer"
+        ],
+        "qualification": [
+          "branch-proposer"
+        ]
+      }
+    }
+  },
+  "protocol_cli_version": "codex-cli 0.166.0",
+  "protocol_qualification": "/absolute/owned-evidence/new-schema-directory/qualification.json",
+  "codex": "codex",
+  "classification_capacity": 5,
+  "recheck_seconds": 1,
+  "deadlines": {
+    "classify": 180,
+    "task": 1800,
+    "ack": 30,
+    "backlog": 600,
+    "bind": 30,
+    "interrupt": 30,
+    "shutdown": 10,
+    "alert_interval": 60
+  },
+  "limits": {
+    "max_events": 100000,
+    "max_attempts": 300000,
+    "max_jobs": 100000,
+    "max_alerts": 100000,
+    "max_bytes": 536870912,
+    "max_result_bytes": 262144,
+    "max_files": 50000
+  },
+  "dispatch_authority": "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/DECISION.json D02/D05/D06: Luna6 low per event/diagnosis, Sol6.1 xhigh Work/integrators; proposer bindings are explicit prospective examples requiring actual owner reconciliation, never global route changes."
+}
