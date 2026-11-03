@@ -9,30 +9,44 @@ publication. The service preserves originals and uses the same assessment in the
 publisher, task finisher and delegated routine collector.
 
 Add completion with version1, local=ready|blocked, failures, unknowns and tools.
-Each failure/unknown index must be covered exactly once. For example, when unknowns
-index0 describes the still-pending controller publication duty:
+Each failure/unknown index must be covered exactly once. Unknowns may contain
+original prose or objects combining several responsibilities. Preserve that
+original entry and split its proof into individual typed duties. For example,
+when unknowns index0 describes later publication/custody and index1 describes
+review/acceptance this producer does not establish:
 
 ```json
 {
   "version": 1,
   "local": "ready",
   "failures": [],
-  "unknowns": [{
-    "index": 0,
-    "status": "deferred",
-    "owner": "controller",
-    "duty": "publication",
-    "reason": "Local staged files verified; the real controller must still check current canonical preimages and publish."
-  }],
+  "unknowns": [
+    {"index": 0, "duties": [
+      {"status": "deferred", "owner": "controller", "duty": "publication",
+       "reason": "Controller still checks canonical preimages and publishes."},
+      {"status": "deferred", "owner": "controller", "duty": "artifact-custody",
+       "reason": "Controller still conserves required bytes and witnesses."}
+    ]},
+    {"index": 1, "duties": [
+      {"status": "boundary", "owner": "outside-workflow", "duty": "review",
+       "reason": "This local result does not establish the selected owner's review."},
+      {"status": "boundary", "owner": "outside-workflow", "duty": "acceptance",
+       "reason": "Outside acceptance remains unclaimed."}
+    ]}
+  ],
   "tools": []
 }
 ```
 
-Controller duties are publication, artifact-custody, effect-reconciliation and
-delivery, bound to the actual runtime actor. A necessary external deferred duty
+Each indexed unknown has either one {index,status,owner,duty,reason} or one
+{index,duties:[{status,owner,duty,reason},...]}, with 1..16 distinct members. Duty
+values for controller are EXACTLY publication, artifact-custody,
+effect-reconciliation or delivery, bound to the actual runtime actor. A necessary external deferred duty
 must name an allowlisted real recipient and its required=settled handoff. A review/
 acceptance statement this local result does not establish may be status=boundary,
-owner=outside-workflow, duty=review|acceptance. Boundary is NOT a new assignment,
+owner=outside-workflow, duty EXACTLY review OR acceptance; split a combined
+statement as above. Never put a prose sentence or combined list in these enums.
+Boundary is NOT a new assignment,
 acceptance claim or waiver of a required handoff. Unresolved current local issues
 stay status=unresolved and local=blocked; they do not become deferred by renaming.
 
@@ -45,12 +59,27 @@ repair evidence and original text. Do not select an unrelated later zero. Own
 artifact hashes are checked against conserved exact bytes; actual successful item
 IDs are checked against the owned control's captured metadata. These qualify the
 producer's resolution claim, not independent proof of the semantic explanation,
-universal correctness, review acceptance or absence of other defects.
+universal correctness, review acceptance or absence of other defects. Unknown or
+unsettled tool metadata remains a separate hard fence even if a later item exits0.
+
+tools covers ONLY observed adverse protocol items, exactly once. When all observed
+commands succeeded, tools MUST be []; successful commands require no adverse
+disposition. Visible exec_command chunk labels are a different namespace from
+provider protocol-item IDs. Neither establishes an OS handle. Never guess a
+correlation. Optional completion.reported_commands may retain uncorrelated producer
+claims as {namespace:"producer-visible",label,status,exit_code,reason}; exit_code is
+numeric or null. Those claims cannot discharge adverse items or prove verification.
 
 If actual item IDs are not visible to the producer, or an otherwise DONE return
-lacks a coherent explicit contract, the service may use its one existing supported
+lacks a coherent explicit contract, the service uses the same grammar/ownership/
+evidence checks while live as it does after collection, within its one supported
 same-owned-idle continuation. It supplies bounded safe actual item metadata and
-asks for faithful clarification/remaining verification in the SAME context. The
+asks for faithful clarification/remaining verification in the SAME context. Live
+checks read only declared or mapped staged own files under the current attempt;
+they are preliminary byte checks, not capture, process collection or publication.
+Post-collection assessment requires complete tool metadata and conserved bytes.
+Specific clarification issues and the full original return, including original
+completion/labels and history, remain durable. The
 original arrays must remain verbatim prefixes of the final arrays; no blind stage
 rewrite, canonical write, new session, profile handoff, repeated clarification or
 per-job human permission follows. Exhausted/ambiguous/unresolved evidence stays

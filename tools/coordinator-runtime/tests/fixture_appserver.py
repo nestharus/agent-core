@@ -53,10 +53,12 @@ for line in sys.stdin:
         if plan.get("hang_first") and turns == 1:
             continue
         answer = plan.get("result")
-        write_stage=turns==1 or not str(plan.get('completion_mode','')).startswith('legacy')
+        write_stage=turns==1 or not (plan.get('write_once') or str(plan.get('completion_mode','')).startswith('legacy'))
         if plan.get('target') and write_stage:
             target=task_context.get('staged_targets',{}).get(plan['target'],plan['target'])
             Path(target).write_text(json.dumps(plan.get('target_contents',{'total':12})))
+            if plan.get('stage_write_record'):
+                with Path(plan['stage_write_record']).open('a') as record:record.write(target+'\n')
             if plan.get('probe_record'):
                 Path(plan['probe_record']).write_text(json.dumps({'actual_write_path':target,'canonical_before_publication':json.loads(Path(plan['target']).read_text())}))
         if plan.get('additional_target') and write_stage:
@@ -77,6 +79,19 @@ for line in sys.stdin:
         if isinstance(answer,dict) and answer.get('semantic')=='DONE' and mode:
             if mode=='auto' and not answer.get('failures') and not answer.get('unknowns'):
                 answer={**answer,'completion':{'version':1,'local':'ready','failures':[],'unknowns':[],'tools':[]}}
+            elif mode=='representation-repair' and turns>1:
+                assert 'COMPLETION_ISSUES=' in prompt and 'OBSERVED_ADVERSE_PROTOCOL_IDS=' in prompt
+                assert 'Visible exec_command chunk labels' in prompt
+                answer={**answer,'completion':plan['clarified_completion']}
+                if plan.get('erase_unknowns'):answer={**answer,'unknowns':[]}
+            elif mode=='live-evidence-repair':
+                report=Path.cwd()/'resolution.json'
+                if turns==1:report.write_text('{"verified":"exact owned fixture bytes"}')
+                ref={'path':str(report),'sha256':hashlib.sha256(report.read_bytes()).hexdigest() if turns>1 else '0'*64}
+                check=tool_records[-1]['id']
+                answer={**answer,'artifacts':[*answer.get('artifacts',[]),str(report)],'completion':{
+                    'version':1,'local':'ready','failures':[{'index':0,'status':'resolved',
+                    'evidence':[ref],'verification_items':[check]}],'unknowns':[],'tools':[]}}
             elif mode.startswith('legacy') and turns>1:
                 proof={'version':1,'local':'ready','failures':[],'unknowns':[], 'tools':[]}
                 if mode=='legacy-deferred':

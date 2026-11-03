@@ -275,18 +275,27 @@ owned directory ceiling; durable original report bytes remain in journal custody
 Local producer readiness now distinguishes current defects from expected later
 controller/review/delivery duties and resolved history. The required file-worker
 `completion` protocol covers every original failure/unknown index and adverse tool
-item; original arrays are never erased. Resolved claims bind exact conserved own
+item; original arrays are never erased. A combined original unknown may use one
+indexed duties group containing individual exact controller or review/acceptance
+duties. Prose is rationale, not an enum. Successful commands need no adverse
+disposition; tools=[] when there are none. Producer-visible chunk labels remain
+uncorrelated claims in optional reported_commands, never protocol IDs or OS handles.
+Resolved claims bind exact conserved own
 report hashes and explicit actual successful verification IDs. An unrelated later
 zero is insufficient. Standard controller publication/custody duties name the real
 service actor; necessary external duties require admitted settled handoffs. Review/
 acceptance boundaries remain unclaimed, not waived. These are producer-attested
 resolution claims with mechanically verified links, not independent semantic proof.
 Genuine unresolved local work, missing evidence, unsettled tools, invalid ownership
-or source/resource/revocation fences still hold. Legacy ambiguous DONE can use the
+or source/resource/revocation fences still hold. Live clarification uses the same
+proof grammar/ownership checks, plus bounded declared own-byte checks; final
+assessment still requires actual collection, complete tool metadata and conserved
+byte witnesses. Ambiguous DONE can use the
 ONE existing same-owned-idle continuation for faithful clarification/verification;
 no new session, blind rewrite, text heuristic, repeated clarification or per-job
 human permission is supplied. Original pre-clarification arrays must remain verbatim
-prefixes. See the embedded protocol and tests; the outer provider wire is unchanged.
+prefixes, with original completion and specific issues retained. See
+templates/local-completion.md and tests; the outer provider wire is unchanged.
 
 The selected canonical method is explicit:
 `canonical_publication:{method:"retention-same-inode-v1",library:ABS_LIBRARY}`.

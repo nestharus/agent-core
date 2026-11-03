@@ -502,14 +502,21 @@ class AppServer:
             outcome["detail"]["resume_disposition"] = "attempted-after-collected-failed-turn"
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
         outcome["result"] = result
-        if spec.get('routine_completion') and readiness.needs_clarification(result,list(peer.tools.values())):
+        items=list(peer.tools.values())
+        issues=readiness.live_issues(store,attempt,result,items,spec) if spec.get('routine_completion') else []
+        if issues:
             outcome['detail'].update({'prior_turn_result':result,'readiness_clarification':True,
+                'readiness_issues':issues,
                 'resume_disposition':'attempted-owned-local-readiness-clarification'})
             prompt=('Clarify this SAME owned staged task once; do not replay or rewrite completed work blindly. '
                 'Retain the original failures/unknowns verbatim as array prefixes. Resolve genuine remaining local '
                 'construction/verification, distinguish deferred controller duties, and return the full original '
                 'result with explicit completion evidence. No canonical writes or new duties.\n'+readiness.INSTRUCTIONS+
-                '\nOBSERVED_TOOL_METADATA='+encode(list(peer.tools.values())))
+                '\nCOMPLETION_ISSUES='+encode(issues)+
+                '\nThese IDs are controller-observed protocol identity, not a correlation to your visible chunk labels.'+
+                '\nOBSERVED_TOOL_METADATA='+encode(items)+
+                '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
+                '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools)))
             return await self.continue_idle(peer,store,attempt,thread,turn,spec,binding,schema,prompt)
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
