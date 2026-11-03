@@ -76,7 +76,7 @@ def conserve(store, path, actor, receipt):
         raise Refusal("artifact is not in exact owned inventory")
     attempt = store.attempt(row["attempt"])
     job = store.job(attempt["job"])
-    if actor != store.enrollment(job["role"])["owner"] or not receipt:
+    if actor != store.config["roles"][job["role"]]["owner"] or not receipt:
         raise Refusal("actual consumer/role owner conservation receipt required")
     with store.tx():
         store.db.execute("UPDATE artifacts SET conserved=? WHERE path=?", (encode({"actor": actor, "receipt": receipt}), str(path)))
@@ -85,18 +85,25 @@ def conserve(store, path, actor, receipt):
 def eligible_event(store, event):
     if event["processed_at"] is None or store.clock() < event["processed_at"]+RETENTION or event["hold"]:
         return False
+    if store.dependency_hold(event["id"]):
+        return False
+    if any(row["processed_at"] is None or store.clock() < row["processed_at"]+RETENTION for row in store.dependents(event["id"])):
+        return False
     active = store.one("SELECT j.id FROM queue q JOIN jobs j ON j.id=q.job WHERE q.event=? "
                        "AND (j.state!='closed' OR j.effects NOT IN ('none','reconciled'))", (event["id"],))
     if active:
         return False
     attempts = store.rows("SELECT a.* FROM attempts a LEFT JOIN queue q ON q.job=a.job "
                           "WHERE a.event=? OR q.event=?", (event["id"], event["id"]))
-    return all(a["collected"] is not None and a["ended"] is not None and a["cleanup"] == "done" for a in attempts)
+    if any(a["cleanup"] == "owned-ephemeral-lifecycle-observed" for a in attempts) and not store.config.get("session_cleanup_qualification"):
+        return False
+    return all(a["collected"] is not None and (a["ended"] is not None or a["state"] == "not-started")
+               and a["cleanup"] in {"done", "owned-ephemeral-lifecycle-observed", "no-session-created"} for a in attempts)
 
 
 def artifact_eligible(store, artifact):
     attempt = store.attempt(artifact["attempt"])
-    if not artifact["conserved"] or attempt["cleanup"] != "done" or attempt["ended"] is None:
+    if not artifact["conserved"] or attempt["cleanup"] not in {"done", "owned-ephemeral-lifecycle-observed"} or attempt["ended"] is None:
         return False
     events = store.rows("SELECT e.* FROM events e JOIN queue q ON e.id=q.event WHERE q.job=?", (attempt["job"],))
     if not events:
@@ -166,8 +173,8 @@ def retire_event(store, event):
         if held:
             return {"event": event["id"], "state": "artifact-held"}
         store.db.execute("DELETE FROM queue WHERE event=?", (event["id"],))
-        # Retain a deduplication tombstone, classification/provenance and final results.
-        store.db.execute("UPDATE events SET payload='{}',state='retired' WHERE id=?", (event["id"],))
+        payload = store.source_for_retirement(fresh)
+        store.db.execute("UPDATE events SET payload=?,state='retired' WHERE id=?", (payload, event["id"]))
     return {"event": event["id"], "state": "retired", "processed_at": fresh["processed_at"]}
 
 
@@ -177,5 +184,8 @@ def sweep(store):
     events = store.rows("SELECT * FROM events WHERE processed_at IS NOT NULL AND state!='retired'")
     receipts += [retire_event(store, row) for row in events]
     with store.tx():
-        store.db.execute("DELETE FROM alerts WHERE processed_at IS NOT NULL AND processed_at<=?", (store.clock()-RETENTION,))
+        store.db.execute("DELETE FROM alerts WHERE processed_at IS NOT NULL AND processed_at<=? "
+                         "AND NOT EXISTS(SELECT 1 FROM outboxes o WHERE o.alert=alerts.id AND "
+                         "(o.state!='settled' OR o.hold IS NOT NULL OR o.processed_at IS NULL OR o.processed_at>?))",
+                         (store.clock()-RETENTION, store.clock()-RETENTION))
     return [receipt for receipt in receipts if receipt]

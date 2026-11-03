@@ -16,6 +16,7 @@ import sqlite3
 import sys
 
 from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, ident, regular_path
+from .board_delivery import BoardDelivery, SCHEMA as DELIVERY_SCHEMA
 
 EXTENSION = """
 CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
@@ -28,6 +29,8 @@ CREATE TABLE IF NOT EXISTS coordinator_receipts_v1(
  owner TEXT NOT NULL,controller_actor TEXT NOT NULL,classifier_actor TEXT NOT NULL,
  classifier_attempt TEXT NOT NULL,classification TEXT NOT NULL,responsibility TEXT NOT NULL,
  kind TEXT NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS coordinator_receipt_targets_v1(
+ event TEXT PRIMARY KEY,actual_recipient TEXT NOT NULL,authorizing_owner TEXT NOT NULL);
 """
 
 
@@ -57,7 +60,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat()
 
 
-class Board:
+class Board(BoardDelivery):
     def __init__(self, config, role):
         self.config, self.role = config, role
         self.selected = config["roles"][role]
@@ -79,16 +82,19 @@ class Board:
         return entry
 
     @contextmanager
-    def opened(self, *, settlement=False):
+    def opened(self, *, settlement=False, owner_required=True):
         entry = self._entry()
         with self.catalog.lifecycle_lock(entry, self.home, exclusive=False):
             entry = self._entry()
             self._policy(entry, settlement)
             conn = connect(self.path)
+            original_path = list(sys.path)
+            sys.path.insert(0, str(Path(self.library)))
             try:
-                self._schema(conn)
+                self._schema(conn, owner_required=owner_required)
                 yield conn
             finally:
+                sys.path[:] = original_path
                 conn.close()
 
     def _policy(self, entry, settlement):
@@ -98,12 +104,14 @@ class Board:
         if str(self.path) != entry["db_path"] or self.identity != (stat.st_dev, stat.st_ino):
             raise Refusal("board file/catalog identity changed")
 
-    def _schema(self, conn):
+    def _schema(self, conn, *, owner_required=True):
         if self.store.SCHEMA_VERSION != 4 or conn.execute("PRAGMA user_version").fetchone()[0] != 4:
             raise Refusal("bridge supports inspected schema 4 only; no automatic migration")
         board = conn.execute("SELECT board_id FROM board_meta").fetchall()
         if [r[0] for r in board] != [self.selected["board_id"]]:
             raise Refusal("embedded board UUID differs")
+        if not owner_required:
+            return
         member = conn.execute("SELECT * FROM sessions WHERE session=?", (self.selected["owner"],)).fetchone()
         if not member or member["status"] != "active":
             raise Refusal("actual role owner must remain an active board member")
@@ -123,13 +131,13 @@ class Board:
         if not invited:
             raise Refusal("actual role owner has no required catalog invitation")
 
-    def grant(self, runtime, authority):
+    def grant(self, runtime, authority, *, delivery=False):
         owner = self.store.acting_session(self.selected["owner"])
         if not authority.strip():
             raise Refusal("actual user/role delegation authority reference required")
         stat = regular_path(str(runtime.path)).stat()
         with self.opened() as conn:
-            conn.executescript(EXTENSION)
+            conn.executescript(EXTENSION + DELIVERY_SCHEMA)
             with self.store.write(conn):
                 route = conn.execute("SELECT route FROM sessions WHERE session=?", (owner,)).fetchone()[0]
                 if route != "managed":
@@ -140,6 +148,8 @@ class Board:
                              (grant["id"], self.selected["board_id"], self.role, owner,
                               self.selected["profile"], grant["actor"], str(runtime.path),
                               stat.st_dev, stat.st_ino, cutover, owner, authority, utc()))
+                if delivery:
+                    self.grant_delivery(conn, grant, authority, runtime)
         return grant
 
     def revoke(self, grant_id):
@@ -150,6 +160,17 @@ class Board:
                                        (utc(), grant_id, owner)).rowcount
         if changed != 1:
             raise Refusal("grant does not belong to actual owner")
+
+    def extend_delivery(self, runtime, authority):
+        self.store.acting_session(self.selected["owner"])
+        with self.opened() as conn:
+            conn.executescript(DELIVERY_SCHEMA)
+            with self.store.write(conn):
+                grant = self._grant(conn, runtime)
+                if conn.execute("SELECT 1 FROM coordinator_delivery_grants_v1 WHERE grant_id=?", (grant["id"],)).fetchone():
+                    raise Refusal("outgoing grant already exists; do not silently expand recipient scope")
+                self.grant_delivery(conn, grant, authority, runtime)
+        return {"grant_id": grant["id"], "delivery_delegation": "explicit-current-owner"}
 
     def _grant(self, conn, runtime):
         enrollment = runtime.enrollment(self.role)
@@ -175,24 +196,45 @@ class Board:
             after = runtime.one("SELECT seq FROM cursors WHERE role=?", (self.role,))["seq"]
             rows = conn.execute("SELECT p.seq,n.notification_id FROM posts p LEFT JOIN notification_outbox n "
                 "ON n.post_seq=p.seq AND n.recipient=? WHERE p.seq>? AND "
+                "NOT EXISTS (SELECT 1 FROM coordinator_deliveries_v1 d WHERE d.post=p.seq AND d.actor=? "
+                "AND NOT (d.kind='work' AND d.recipient=? AND d.owner!=?)) AND "
                 "(n.notification_id IS NOT NULL OR (p.recipient=? AND NOT EXISTS "
                 "(SELECT 1 FROM thread_posts t WHERE t.post_seq=p.seq))) ORDER BY p.seq LIMIT ?",
-                (grant["owner"], max(after, grant["cutover"]), grant["owner"], limit)).fetchall()
-            return [self._event(conn, row, grant) for row in rows]
+                (grant["owner"], max(after, grant["cutover"]), self.config["actor"], grant["owner"], grant["owner"], grant["owner"], limit)).fetchall()
+            replies = conn.execute("SELECT p.seq,n.notification_id,d.id AS parent_delivery FROM posts p "
+                "JOIN thread_posts t ON t.post_seq=p.seq JOIN coordinator_deliveries_v1 d ON d.post=t.thread_id "
+                "LEFT JOIN notification_outbox n ON n.post_seq=p.seq AND n.recipient=? "
+                "WHERE p.seq>? AND p.recipient=? AND d.owner=? AND p.author!=? ORDER BY p.seq LIMIT ?",
+                (self.config["actor"], max(after, grant["cutover"]), self.config["actor"], grant["owner"], self.config["actor"], limit)).fetchall()
+            selected = sorted([*rows, *replies], key=lambda r: r["seq"])[:limit]
+            return [self._event(conn, row, grant) for row in selected]
 
     def _event(self, conn, row, grant):
-        posts = self.store.query_posts(conn, session=grant["owner"], after=row["seq"]-1,
+        service_reply = "parent_delivery" in row.keys()
+        if service_reply and not conn.execute("SELECT 1 FROM coordinator_delivery_grants_v1 WHERE grant_id=?", (grant["id"],)).fetchone():
+            raise Refusal("service reply body requires the explicit delivery/delegation grant")
+        recipient = self.config["actor"] if service_reply else grant["owner"]
+        posts = self.store.query_posts(conn, session=recipient, after=row["seq"]-1,
                                        topic=None, kind=None, limit=1, include_thread_members=True)
         if not posts or posts[0]["seq"] != row["seq"]:
             raise Refusal("delegated owner cannot see this addressed event")
         body = posts[0]
         # A package identity comes from an existing role admission packet, never a model guess.
-        package = body.get("ref") if self.role == "QA" else None
-        return {"id": digest({"board": grant["board_id"], "post": row["seq"], "owner": grant["owner"]}),
+        package = body.get("ref") if self.role in {"QA", "Branch"} else None
+        owned_work = conn.execute("SELECT * FROM coordinator_deliveries_v1 WHERE post=? AND recipient=? AND kind='work'",
+                                  (row["seq"], grant["owner"])).fetchone()
+        if owned_work:
+            material = json.loads(owned_work["payload"])
+            body = {**body, "delivery": material, "original_producer": owned_work["producer"]}
+            package = material.get("package") or material.get("ref")
+        event = {"id": digest({"board": grant["board_id"], "post": row["seq"], "owner": grant["owner"]}),
                 "board_id": grant["board_id"], "post": row["seq"], "notice": row["notification_id"],
                 "role": self.role, "recipient": grant["owner"], "author": body["author"],
                 "kind": "board", "body": body, "package": package, "grant": grant["id"],
                 "allowed_tasks": self.selected["routes"]}
+        if service_reply:
+            event.update({"receipt_recipient": recipient, "parent_delivery": row["parent_delivery"]})
+        return event
 
     def receipt(self, runtime, event_id):
         """A board-local audit commit is the idempotency/readback boundary, including lost replies."""
@@ -202,14 +244,22 @@ class Board:
                 grant = self._grant(conn, runtime)
                 existing = conn.execute("SELECT * FROM coordinator_receipts_v1 WHERE event=?", (event_id,)).fetchone()
                 if existing:
-                    return dict(existing)
+                    return self._receipt_record(conn, dict(existing))
                 proof = self._proof(runtime, event, grant)
                 self._ack(conn, event, grant)
                 kind = "delegated-notice-receipt" if event["notice"] is not None else "plain-post-receipt"
+                if event.get("parent_delivery"):
+                    kind = "automation-reply-receipt"
                 conn.execute("INSERT INTO coordinator_receipts_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                     (event_id, grant["id"], event["notice"], event["post"], grant["owner"], grant["actor"],
                      proof["session"], proof["id"], proof["classification"], proof["responsibility"], kind, utc()))
-                return dict(conn.execute("SELECT * FROM coordinator_receipts_v1 WHERE event=?", (event_id,)).fetchone())
+                conn.execute("INSERT INTO coordinator_receipt_targets_v1 VALUES(?,?,?)",
+                             (event_id, event.get("receipt_recipient", grant["owner"]), grant["owner"]))
+                return self._receipt_record(conn, dict(conn.execute("SELECT * FROM coordinator_receipts_v1 WHERE event=?", (event_id,)).fetchone()))
+
+    def _receipt_record(self, conn, row):
+        target = conn.execute("SELECT actual_recipient,authorizing_owner FROM coordinator_receipt_targets_v1 WHERE event=?", (row["event"],)).fetchone()
+        return {**row, **(dict(target) if target else {})}
 
     def _proof(self, runtime, event, grant):
         if event["grant"] != grant["id"] or event["recipient"] != grant["owner"] or event["post"] <= grant["cutover"]:
@@ -225,13 +275,20 @@ class Board:
         return {**attempt, "classification": row["classification"], "responsibility": queue["id"]}
 
     def _ack(self, conn, event, grant):
+        recipient = event.get("receipt_recipient", grant["owner"])
+        if recipient != grant["owner"]:
+            own = conn.execute("SELECT 1 FROM coordinator_deliveries_v1 d JOIN thread_posts t ON t.thread_id=d.post "
+                               "WHERE t.post_seq=? AND d.id=? AND d.owner=? AND d.actor=?",
+                               (event["post"], event.get("parent_delivery"), grant["owner"], recipient)).fetchone()
+            if not own or recipient != self.config["actor"]:
+                raise Refusal("reply receipt does not belong to this actual automation/role delegation")
         if event["notice"] is None:
             row = conn.execute("SELECT recipient FROM posts WHERE seq=?", (event["post"],)).fetchone()
-            if not row or row["recipient"] != grant["owner"]:
+            if not row or row["recipient"] != recipient:
                 raise Refusal("plain post not addressed to granted owner")
             return
         row = conn.execute("SELECT * FROM notification_outbox WHERE notification_id=?", (event["notice"],)).fetchone()
-        if not row or row["recipient"] != grant["owner"] or row["post_seq"] != event["post"]:
+        if not row or row["recipient"] != recipient or row["post_seq"] != event["post"]:
             raise Refusal("notice does not belong to delegated owner/event")
         if row["delivery_state"] == "sending":
             raise Refusal("original queue sender still owns an unsettled sending effect")

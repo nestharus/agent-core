@@ -7,6 +7,7 @@ qualification. Configuration readback is not model execution attestation.
 """
 
 import asyncio
+import errno
 from contextlib import suppress
 import json
 import os
@@ -18,6 +19,7 @@ from .contracts import PROFILES, Refusal, canonical_uuid, encode, parse_json
 
 class RpcFailure(Refusal):
     def __init__(self, method, error):
+        self.projection = safe_error(error) or {}
         self.capacity = bool(re.search(r"capacity|rate.limit|quota|usage.limit", str(error), re.I))
         code = error.get("code", "unknown") if isinstance(error, dict) else "unknown"
         self.code = code if isinstance(code, (int, str)) and len(str(code)) < 100 else "unknown"
@@ -35,9 +37,23 @@ class TurnFailure(Refusal):
 def safe_error(error):
     if not error:
         return None
-    # Deliberately do not retain arbitrary error message/details bodies.
     capacity = bool(re.search(r"capacity|rate.limit|quota|usage.limit", str(error), re.I))
-    return {"capacity": capacity, "details": "not-captured-private-error-body"}
+    result = {"capacity": capacity, "details": "unselected-private-details-not-captured"}
+    # Preserve the observed provider schema diagnostic, without arbitrary error
+    # bodies, URLs, source text, credentials, reasoning or additionalDetails.
+    text = str(error)
+    schema_path = re.search(r"schema(?:\.[A-Za-z_][A-Za-z_0-9]*)+", text)
+    if "invalid_json_schema" in text or "Invalid schema for response_format" in text:
+        result.update({"provider_code": "invalid_json_schema",
+                       "schema_path": schema_path.group() if schema_path else None,
+                       "cause": "object schema requires properties" if "properties" in text else "provider rejected output schema"})
+        if re.search(r"(?:status|HTTP|http_status)[\s\"':=]+400\b", text):
+            result["http_status"] = 400
+        if "text.format.schema" in text:
+            result["param"] = "text.format.schema"
+    if isinstance(error, dict) and isinstance(error.get("code"), int):
+        result["rpc_code"] = error["code"]
+    return result
 
 
 def environment(profile):
@@ -47,6 +63,15 @@ def environment(profile):
     env.pop("CODEX_SESSION_ID", None)
     env.pop("CODEX_THREAD_ID", None)
     return env
+
+
+def decode_final(text):
+    value = parse_json(text)
+    if isinstance(value, dict) and set(value) == {"payload_json"}:
+        if not isinstance(value["payload_json"], str):
+            raise Refusal("result wire payload_json must be a JSON string")
+        return parse_json(value["payload_json"])
+    return value
 
 
 async def metadata(command, env, limit=1048576):
@@ -113,10 +138,19 @@ async def preflight(codex, profile, expected_version):
     for name in names:
         flags += ["-c", f"features.{name}=false"]
     readback = feature_names(await metadata([codex, *flags, "features", "list"], env), require_false=True)
-    if names != readback:
-        raise Refusal("delegation-like feature readback differs")
+    # CLI feature visibility changes under overrides (observed Q01). Missing
+    # names are not proof of absent tools; every returned relevant flag must be
+    # false, and newly exposed names are disabled and read back once more.
+    extra = sorted(set(readback)-set(names))
+    for name in extra:
+        flags += ["-c", f"features.{name}=false"]
+    if extra:
+        readback = feature_names(await metadata([codex, *flags, "features", "list"], env), require_false=True)
+        if set(readback)-set(names)-set(extra):
+            raise Refusal("feature metadata did not stabilize within bounded preflight")
     return flags, {"mcp": "all-effective-disabled", "mcp_count": len(after), "cli_version": version,
-                   "delegation_features": names, "delegation_capability": "not-established"}
+                   "delegation_features": sorted(set(names)|set(extra)), "feature_readback": readback,
+                   "feature_names_omitted": sorted(set(names)-set(readback)), "delegation_capability": "not-established"}
 
 
 def feature_names(text, require_false=False):
@@ -134,6 +168,7 @@ class Peer:
         self.child, self.limit = child, limit
         self.pending, self.finals = {}, {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
+        self.errors = []
         self.events = asyncio.Queue(maxsize=8)
         self.sequence = 0
         self.capture = "complete"
@@ -194,6 +229,8 @@ class Peer:
 
     def notification(self, value):
         method, params = value.get("method"), value.get("params", {})
+        if method == "error" and len(self.errors) < 8:
+            self.errors.append(safe_error(params.get("error", params)))
         if method == "item/completed":
             self.final_item(params.get("turnId"), params.get("item", {}))
         if method == "turn/completed":
@@ -238,7 +275,7 @@ class Peer:
 
     def preserve_late(self, turn, text):
         try:
-            typed = parse_json(text)
+            typed = decode_final(text)
         except (ValueError, Refusal):
             typed = {"error": "invalid late/conflicting JSON", "bytes": len(text.encode())}
         self.late_finals.append({"turn": turn, "typed_return": typed})
@@ -259,7 +296,7 @@ class Peer:
         if turn not in self.finals:
             raise Refusal("completed turn has no final answer")
         self.completed_turns.add(turn)
-        return parse_json(self.finals.pop(turn))
+        return decode_final(self.finals.pop(turn))
 
 
 class AppServer:
@@ -270,22 +307,45 @@ class AppServer:
         row = store.attempt(attempt)
         binding, profile = json.loads(row["binding"]), row["profile"]
         outcome = {"exit": None, "capture": "unknown", "cleanup": "unknown", "result": None,
-                   "error": None, "detail": {"resume_disposition": "unavailable-before-session-creation"}}
+                   "error": None, "detail": {"resume_disposition": "unavailable-before-session-creation",
+                       "unsubscribe": "not-attempted", "teardown": "not-started", "session_reclamation": "not-qualified"}}
+        outcome["detail"]["creation"] = "not-attempted"
         child = peer = None
         try:
             argv, preflight_result = await self.command(profile)
+            store.authorize_launch(attempt)
+            outcome["detail"]["creation"] = "uncertain"
             child = await asyncio.create_subprocess_exec(*argv, cwd=spec["cwd"], env=environment(profile),
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL, limit=1048577)
+            outcome["detail"]["creation"] = "owned"
             store.begin(attempt, {**preflight_result, "process_handle": "owned-asyncio-subprocess",
                                   "pid_information_only": child.pid})
             peer = Peer(child, self.config["limits"]["max_result_bytes"])
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
         except Exception as exc:
+            if isinstance(exc, OSError) and exc.errno in {errno.ENOENT, errno.EACCES} and child is None:
+                outcome["detail"]["creation"] = "proved-rejected"
             outcome["error"] = str(exc)[:1000] if isinstance(exc, Refusal) else f"adapter error: {type(exc).__name__}"
             outcome["detail"]["capacity_error"] = isinstance(exc, (RpcFailure, TurnFailure)) and exc.capacity
+            if isinstance(exc, (RpcFailure, TurnFailure)):
+                outcome["detail"]["causal_failure"] = exc.projection
         finally:
-            await self.teardown(child, peer, outcome)
+            await self.unsubscribe(peer, store, attempt, outcome)
+            try:
+                await self.teardown(child, peer, outcome)
+            except Exception as exc:
+                # Keep an observed numeric exit even if later capture handling
+                # fails. If waiting itself failed, retain this exact owned
+                # process and make one bounded collection attempt, never detach.
+                if child is not None and outcome["exit"] is None:
+                    try:
+                        outcome["exit"] = await end_owned(child, self.config["deadlines"]["shutdown"])
+                    except Exception:
+                        pass
+                outcome["detail"]["teardown"] = ("actual-owned-process-exit-collected" if outcome["exit"] is not None else "unconfirmed")
+                outcome["detail"]["teardown_failure"] = type(exc).__name__
+                outcome["cleanup"] = "owned-teardown-needs-reconciliation"
         return outcome
 
     async def command(self, profile):
@@ -319,13 +379,23 @@ class AppServer:
             raise Refusal("owned ephemeral root/path readback did not match; no persistent fallback")
         outcome["detail"].update({"ephemeral": True, "resume_disposition": "available-while-owner-alive"})
         result = await self.turn(peer, store, attempt, session, prompt, spec, binding, schema, outcome)
+        outcome["result"] = result
         if isinstance(result, dict) and result.get("semantic") in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
             store.observe_semantic(attempt, result["semantic"])
-        unsubscribed = await peer.rpc("thread/unsubscribe", {"threadId": session})
-        if unsubscribed.get("status") not in {"unsubscribed", "notLoaded", "notSubscribed"}:
-            raise Refusal("owned thread unsubscribe outcome unknown")
-        outcome["detail"]["unsubscribe"] = unsubscribed["status"]
         return result
+
+    async def unsubscribe(self, peer, store, attempt, outcome):
+        session = store.attempt(attempt)["session"]
+        if not peer or not session:
+            return
+        try:
+            result = await peer.rpc("thread/unsubscribe", {"threadId": session})
+            if result.get("status") not in {"unsubscribed", "notLoaded", "notSubscribed"}:
+                raise Refusal("unsubscribe receipt not recognized")
+            outcome["detail"]["unsubscribe"] = result["status"]
+        except Exception as exc:
+            outcome["detail"]["unsubscribe"] = "failed-or-unknown"
+            outcome["detail"]["unsubscribe_failure"] = type(exc).__name__
 
     @staticmethod
     def binding(created, binding):
@@ -346,6 +416,7 @@ class AppServer:
         return {"type": actual["type"], "networkAccess": actual.get("networkAccess", False)}
 
     async def turn(self, peer, store, attempt, thread, prompt, spec, binding, schema, outcome):
+        store.authorize_launch(attempt)
         started = await self.start_turn(peer, thread, prompt, binding, schema, spec)
         turn = canonical_uuid(started["turn"]["id"])
         store.session(attempt, thread, turn)
@@ -358,6 +429,7 @@ class AppServer:
             outcome["detail"]["prior_turn_failure"] = exc.projection
             outcome["detail"]["resume_disposition"] = "attempted-after-collected-failed-turn"
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+        outcome["result"] = result
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
             outcome["detail"]["resume_disposition"] = "attempted-after-semantic-incompletion"
@@ -365,6 +437,10 @@ class AppServer:
         return result
 
     async def start_turn(self, peer, thread, prompt, binding, schema, spec):
+        if schema and set(schema.get("properties", {})) == {"payload_json"}:
+            prompt += ("\nWIRE FORMAT: return {\"payload_json\": \"<the complete task-result JSON serialized as a string>\"}. "
+                       "Inside that string preserve semantic, summary, category, findings, failures, unknowns, artifacts, "
+                       "handoffs and no_handoff_reason. Do not omit consequential content to fit the wire envelope.")
         params = {"threadId": thread, "model": binding["model"], "effort": binding["effort"],
                   "input": [{"type": "text", "text": prompt, "text_elements": []}],
                   "sandboxPolicy": sandbox_policy(spec)}
@@ -380,13 +456,14 @@ class AppServer:
             raise Refusal("original interruption/end unknown; overlapping continuation prohibited")
         # The original may have completed concurrently with interrupt. Conserve that result.
         if event["turn"]["status"] == "completed" and turn in peer.finals:
-            return parse_json(peer.finals.pop(turn))
+            return decode_final(peer.finals.pop(turn))
         return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
 
     async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema):
         state = await peer.rpc("thread/read", {"threadId": thread, "includeTurns": False})
         if state.get("thread", {}).get("id") != thread or state.get("thread", {}).get("status", {}).get("type") != "idle":
             raise Refusal("owned same-session continuation requires actual idle readback")
+        store.authorize_launch(attempt)
         prompt = ("Continue this exact owned task after the collected interruption. Reconcile prior effects; "
                   "do not replay them. Complete only remaining authorized work, or return explicit UNKNOWN. "
                   "Use the original required JSON result contract. This is the single supported resume budget.")
@@ -396,11 +473,13 @@ class AppServer:
 
     async def teardown(self, child, peer, outcome):
         if child is None:
-            outcome["detail"]["known_not_started"] = True
-            outcome["capture"] = "not-started"
-            outcome["cleanup"] = "no-session-created"
+            proved = outcome["detail"].get("creation") in {"not-attempted", "proved-rejected"}
+            outcome["detail"]["known_not_started"] = proved
+            outcome["capture"] = "not-started" if proved else "unknown"
+            outcome["cleanup"] = "no-session-created" if proved else "unknown-creation"
             return
         outcome["exit"] = await end_owned(child, self.config["deadlines"]["shutdown"])
+        outcome["detail"]["teardown"] = "actual-owned-process-exit-collected"
         if peer:
             try:
                 await asyncio.wait_for(peer.reader, self.config["deadlines"]["shutdown"])
@@ -409,8 +488,11 @@ class AppServer:
             outcome["capture"] = peer.capture
             if peer.late_finals:
                 outcome["detail"]["late_or_conflicting_returns"] = peer.late_finals
-        if outcome["detail"].get("ephemeral") and outcome["exit"] == 0:
-            outcome["cleanup"] = "done"
+            if peer.errors:
+                outcome["detail"]["protocol_failures"] = peer.errors
+        if (outcome["detail"].get("ephemeral") and outcome["exit"] == 0
+                and outcome["detail"].get("unsubscribe") in {"unsubscribed", "notLoaded", "notSubscribed"}):
+            outcome["cleanup"] = "owned-ephemeral-lifecycle-observed"
         else:
             outcome["cleanup"] = "owned-teardown-needs-reconciliation"
         if outcome["detail"].get("resume_disposition") == "available-while-owner-alive":

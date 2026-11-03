@@ -19,9 +19,9 @@ def respond(request, value):
     send({"id": request["id"], "result": value})
 
 
-def completed(status="completed"):
+def completed(status="completed", error=None):
     send({"method": "turn/completed", "params": {"threadId": thread,
-        "turn": {"id": turn, "status": status, "items": [], "error": None}}})
+        "turn": {"id": turn, "status": status, "items": [], "error": error}}})
 
 
 for line in sys.stdin:
@@ -40,6 +40,10 @@ for line in sys.stdin:
     elif method == "turn/start":
         turn, turns = str(uuid.uuid4()), turns+1
         respond(request, {"turn": {"id": turn, "status": "inProgress"}})
+        if plan.get("turn_error"):
+            send({"method": "error", "params": {"error": plan["turn_error"]}})
+            completed("failed", plan["turn_error"])
+            continue
         if plan.get("hang_first") and turns == 1:
             continue
         answer = plan.get("result")
@@ -47,6 +51,8 @@ for line in sys.stdin:
             path = Path.cwd() / plan["write_file"]
             path.write_text("conserved actionable fixture report\n")
             answer = {**answer, "artifacts": [{"path": str(path), "meaning": "exact owned report"}]}
+        if set(params.get("outputSchema", {}).get("properties", {})) == {"payload_json"}:
+            answer = {"payload_json": json.dumps(answer)}
         text = plan.get("raw_final") or json.dumps(answer)
         send({"method": "item/completed", "params": {"threadId": thread, "turnId": turn,
             "item": {"type": "agentMessage", "id": str(uuid.uuid4()), "phase": "final_answer", "text": text}}})
@@ -55,8 +61,11 @@ for line in sys.stdin:
         respond(request, {})
         completed("interrupted")
     elif method == "thread/read":
-        respond(request, {"thread": {"id": thread, "status": {"type": "idle"}}})
+        respond(request, {"thread": {"id": thread, "status": {"type": plan.get("read_status", "idle")}}})
     elif method == "thread/unsubscribe":
+        if plan.get("unsubscribe_error"):
+            send({"id": request["id"], "error": {"code": -32000, "message": "synthetic unsubscribe failure"}})
+            continue
         if plan.get("late_result"):
             send({"method": "item/completed", "params": {"threadId": thread, "turnId": turn,
                 "item": {"type": "agentMessage", "id": str(uuid.uuid4()), "phase": "final_answer", "text": json.dumps(plan["late_result"])}}})

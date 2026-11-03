@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from .contracts import Refusal, classification, digest, encode, regular_path
+from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task
 
 
 CLASSIFICATION_SCHEMA = {
@@ -25,12 +25,8 @@ CLASSIFICATION_SCHEMA = {
 
 RESULT_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "properties": {"semantic": {"type": "string", "enum": ["DONE", "PARTIAL", "FAILED", "UNKNOWN"]},
-                   "summary": {"type": "string"}, "category": {"type": "string", "enum": [
-                       "proposal", "consolidated", "qualification", "scope", "blocker", "complete"]},
-                   **{k: {"type": "array", "items": {"type": "object"}} for k in
-                      ("findings", "failures", "unknowns", "artifacts")}},
-    "required": ["semantic", "summary", "category", "findings", "failures", "unknowns", "artifacts"],
+    "properties": {"payload_json": {"type": "string"}},
+    "required": ["payload_json"],
 }
 
 DIAGNOSIS_SCHEMA = {
@@ -41,7 +37,8 @@ DIAGNOSIS_SCHEMA = {
 
 
 def classifier_prompt(event, config):
-    routes = {name: {k: config["tasks"][name][k] for k in ("role", "phase", "authority")}
+    routes = {name: ({"role": event["role"], "phase": "delivery", "authority": "Validate the producer's fixed admitted plan; no new task/effect authority"}
+                    if name == "@delivery" else {k: config["tasks"][name][k] for k in ("role", "phase", "authority")})
               for name in event["allowed_tasks"]}
     return ("You are the fresh Luna6 LOW classifier for ONE incoming event, including response events. "
         "No tools, shell, source edits, delegation, board effects, or ACK calls. The controller commits your "
@@ -53,8 +50,8 @@ def classifier_prompt(event, config):
         + "ALLOWED_TASKS=" + encode(routes) + "\nEVENT=" + encode(event))
 
 
-def job_prompt(store, job):
-    task = store.config["tasks"][job["task"]]
+def job_prompt(store, job, task=None):
+    task = task or store.config["tasks"][job["task"]]
     templates = [template_text(path) for path in task["templates"]]
     members = json.loads(job["members"])
     events = [store.event(m["event"]) for m in members]
@@ -66,6 +63,7 @@ def job_prompt(store, job):
                "target_and_why": task["purpose"], "authority": task["authority"],
                "typed_effect_authority": task["effect_authority"],
                "effect_policy": task["effects"], "members": members, "events": events,
+               "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
@@ -77,7 +75,11 @@ def job_prompt(store, job):
             "with exact source references. Root code builders retain commit AND push duties. "
             "The selected templates govern the real task; the JSON final is its transport envelope. "
             "A final/DONE does not establish process exit, acceptance, effect reconciliation or publication. "
-            "Do not send board messages: return durable artifacts/intents for the existing effect owner. "
+            "Return handoffs as {recipient,kind,text,ref,required} within the task's allowed recipients; "
+            "use required=settled for necessary work/results/questions. The real automation actor delivers "
+            "after fresh response classification; actual recipients record pickup/processing/settlement. "
+            "An empty handoffs list requires a meaningful no_handoff_reason. Do not send directly or "
+            "borrow another actor's membership. Effect reconciliation returns to the actual owning role. "
             "Return only the required typed JSON final; include exact meaningful artifact references.\n"
             + "TASK_CONTEXT=" + encode(context) + "\n" + "\n".join(templates))
 
@@ -99,6 +101,15 @@ class Dispatcher:
         self.last_alert = 0
         self.last_cleanup = 0
         self.runtime_errors = {}
+        self.store.launch_authorizer = self.authorize_roles
+
+    def authorize_roles(self, roles):
+        if self.stopping.is_set():
+            raise Refusal("dispatcher stopping; no new model launch")
+        for role in roles:
+            board = self.boards.get(role)
+            if board:
+                board.verify_authority(self.store)
 
     def spawn(self, coroutine):
         task = asyncio.create_task(coroutine)
@@ -112,6 +123,7 @@ class Dispatcher:
         error = task.exception()
         if error:
             self.runtime_errors["task"] = f"{type(error).__name__}: {str(error)[:1000]}"
+            self.store.record_operational_error("task", {"error": self.runtime_errors["task"]})
 
     def intake(self):
         for role, board in self.boards.items():
@@ -125,8 +137,10 @@ class Dispatcher:
             for event in events:
                 self.store.ingest(event, cursor=event["post"])
             self.runtime_errors.pop(role, None)
+            self.store.clear_operational_error(role)
         except Exception as exc:
             self.runtime_errors[role] = f"{type(exc).__name__}: {str(exc)[:1000]}"
+            self.store.record_operational_error(role, {"error": self.runtime_errors[role]}, role, "intake-error")
 
     def receipts(self):
         for row in self.store.rows("SELECT id FROM events WHERE ack IN ('ready','unknown','inflight')"):
@@ -134,7 +148,7 @@ class Dispatcher:
 
     def receipt(self, event_id):
         event = self.store.event(event_id)
-        if event["kind"] == "response":
+        if event["kind"] in {"response", "outgoing-response"}:
             self.store.ack_state(event_id, "internal", {"kind": "durable-response-handoff"})
             return
         self.store.ack_state(event_id, "inflight")
@@ -156,13 +170,16 @@ class Dispatcher:
                        "when appropriate; inability to do so stays unACKed. This is one read-only recovery, "
                        "not task replay or product acceptance. PRIOR="+encode(prior))
             spec["cwd"] = self.config["diagnosis"]["cwd"]
-        outcome = await self.models.run(self.store, attempt, prompt, spec,
+        outcome = await self.run_model(attempt, prompt, spec,
                                         CLASSIFICATION_SCHEMA)
         self.store.collect(attempt, outcome)
         try:
             self.store.commit_classification(attempt)
+            self.store.clear_operational_error(event["id"])
         except Exception as exc:
             self.store.classification_failed(attempt, exc)
+            self.store.record_operational_error(event["id"], {"error": str(exc), "attempt": attempt,
+                                                           "cause": outcome.get("detail", {})}, event["role"], "classification-error")
 
     def schedule_classifications(self):
         count = self.store.db.execute("SELECT COUNT(*) FROM attempts WHERE kind='classifier' "
@@ -189,6 +206,9 @@ class Dispatcher:
         except Refusal as exc:
             self.store.hold_job(job["id"], "pre-launch role delegation refused: "+str(exc))
             return
+        if self.config["tasks"][job["task"]].get("execution") == "owner":
+            self.store.delegate_owner_job(job["id"])
+            return
         attempt = self.store.start_job(job["id"], job["token"])
         self.spawn(self.execute(job["id"], attempt))
 
@@ -197,8 +217,13 @@ class Dispatcher:
         task = self.config["tasks"][job["task"]]
         directory = self.store.home / "artifacts" / attempt
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
-        spec = execution_spec(task, directory)
-        outcome = await self.models.run(self.store, attempt, job_prompt(self.store, job), spec, RESULT_SCHEMA)
+        try:
+            task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
+            spec = execution_spec(task, directory)
+            outcome = await self.run_model(attempt, job_prompt(self.store, job, task), spec, RESULT_SCHEMA)
+        except (Refusal, OSError) as exc:
+            outcome = {"exit": None, "capture": "not-started", "cleanup": "no-session-created", "result": None,
+                       "error": str(exc), "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         self.store.collect(attempt, outcome)
         try:
             self.inventory_artifacts(attempt, outcome)
@@ -207,7 +232,8 @@ class Dispatcher:
             self.store.hold_job(job_id, exc)
             return
         # A failed read-only task still cannot mutate the protected role account.
-        if task["effects"] in {"none", "owned-artifacts"} and outcome["exit"] is not None and outcome["capture"] == "complete":
+        if (outcome.get("detail", {}).get("known_not_started") or
+                (task["effects"] in {"none", "owned-artifacts"} and outcome["exit"] is not None and outcome["capture"] == "complete")):
             with self.store.tx():
                 self.store.db.execute("UPDATE jobs SET effects='none' WHERE id=? AND active_attempt=?",
                                       (job_id, attempt))
@@ -229,9 +255,16 @@ class Dispatcher:
             self.store.finish_job(job_id, job["token"])
             if self.store.job(job_id)["state"] == "closed":
                 self.runtime_errors.pop(job_id, None)
+                self.store.clear_operational_error(job_id)
         except Refusal as exc:
             self.runtime_errors[job_id] = str(exc)
             self.store.hold_job(job_id, exc)
+            self.store.record_operational_error(job_id, {"error": str(exc), "job": job_id}, job["role"], "task-disposition-error")
+            attempt = self.store.attempt(job["active_attempt"])
+            if attempt["collected"]:
+                with self.store.tx():
+                    self.store.owner_question(job, attempt, str(exc))
+                    self.store.gate_result_delivery(job, attempt, json.loads(attempt["result"]) if attempt["result"] else {"failure": str(exc), "detail": json.loads(attempt["detail"])})
 
     async def recover(self, job):
         attempt = self.store.diagnosis_attempt(job["id"])
@@ -243,11 +276,13 @@ class Dispatcher:
                   "Do not claim native resume or authorize blind replay. Return profile/remaining/rationale JSON.\n"
                   + encode({"job": job, "prior_attempt": old, "profiles": self.config["profiles"]}))
         spec = {"cwd": self.config["diagnosis"]["cwd"], "sandbox": "read-only"}
-        outcome = await self.models.run(self.store, attempt, prompt, spec, DIAGNOSIS_SCHEMA)
+        outcome = await self.run_model(attempt, prompt, spec, DIAGNOSIS_SCHEMA)
         self.store.collect(attempt, outcome)
         self.advance_recovery(job["id"], attempt)
 
     def advance_recovery(self, job_id, diagnosis):
+        if self.stopping.is_set():
+            return
         try:
             replacement = self.store.handoff(job_id, diagnosis)
             self.spawn(self.execute(job_id, replacement))
@@ -305,6 +340,7 @@ class Dispatcher:
     async def tick(self):
         self.intake()
         self.receipts()
+        self.pump_deliveries()
         self.reconcile_completed()
         self.schedule_classifications()
         self.schedule_classification_recovery()
@@ -334,20 +370,53 @@ class Dispatcher:
     async def guarded_tick(self, emit):
         try:
             await self.tick()
+            self.store.clear_operational_error("dispatcher")
             self.alerts(emit)
         except Exception as exc:
-            emit({"id": digest({"controller": self.store.controller, "at": time.time_ns()}),
-                  "kind": "runtime-held", "error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
+            self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
+            self.alerts(emit)
 
     def alerts(self, emit):
         if self.store.clock()-self.last_alert < self.config["deadlines"]["alert_interval"]:
             return
+        for subject, error in self.runtime_errors.items():
+            self.store.record_operational_error(subject, {"error": error})
         for occurrence in self.store.emit_alerts():
             emit(occurrence)
-        for subject, error in self.runtime_errors.items():
-            emit({"id": digest({"subject": subject, "at": time.time_ns()}), "kind": "runtime-held",
-                  "subject": subject, "error": error})
+        self.pump_deliveries()
         self.last_alert = self.store.clock()
+
+    async def run_model(self, attempt, prompt, spec, schema):
+        try:
+            self.store.authorize_launch(attempt)
+        except Exception as exc:
+            return {"exit": None, "result": None, "error": "launch authority refused: "+str(exc)[:500],
+                    "capture": "not-started", "cleanup": "no-session-created",
+                    "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
+        return await self.models.run(self.store, attempt, prompt, spec, schema)
+
+    def pump_deliveries(self):
+        for outbox in self.store.rows("SELECT * FROM outboxes WHERE state NOT IN ('settled','classification-pending')"):
+            self.pump_delivery(outbox)
+
+    def pump_delivery(self, outbox):
+        board = self.boards.get(outbox["role"])
+        if not board or not hasattr(board, "post_delivery"):
+            return
+        try:
+            if not outbox["board_receipt"]:
+                receipt = board.reconcile_delivery(self.store, outbox) or board.post_delivery(self.store, outbox)
+                self.store.delivery_observed(outbox["id"], receipt)
+            receipt = board.delivery_status(outbox["id"])
+            if receipt["state"] in {"posted", "ambiguous"}:
+                receipt = board.transport_delivery(self.store, outbox)
+            self.store.delivery_observed(outbox["id"], receipt)
+            self.store.clear_operational_error(outbox["id"])
+        except Exception as exc:
+            with self.store.tx():
+                self.store.db.execute("UPDATE outboxes SET error=? WHERE id=?", (str(exc)[:1000], outbox["id"]))
+            self.store.record_operational_error(outbox["id"], {"error": str(exc)[:1000], "delivery": outbox["id"]},
+                                               outbox["role"], "delivery-error")
 
     async def pause(self):
         try:

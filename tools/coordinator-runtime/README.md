@@ -1,364 +1,242 @@
 # Opt-in coordinator runtime
 
-This is a candidate dispatcher for the selected Work, Branch, Reviews and QA
-pattern. It owns new private stdio app-server children, classifies messages and
-responses with fresh `gpt-6-luna` low task sessions, commits queued responsibility
-before delegated receipt, freezes batches, and schedules the next available
-batch. There is no JEV, external service dependency or parent wait wrapper.
-Python 3.11+ and the standard library are sufficient for fixture tests.
+This candidate dispatches actual bounded Work, Branch, Reviews and QA tasks.
+Fresh Luna6 LOW sessions classify each incoming message and each model response;
+validated classification and queued responsibility commit before delegated ACK.
+Frozen batches, reservations and outgoing responsibilities live in SQLite
+WAL/FULL. Work and all integrators use Sol6.1 XHIGH. New disposable jobs prefer
+`.codex3`; actual role-owner accounts remain unchanged.
 
-**No live service, role enrollment, grant, model call, cutover or session cleanup
-has been qualified by this implementation.** Independent routing/design/code
-assessment and parent-collected real qualification precede activation. The
-example is disabled and preserves unresolved legacy holds. Root, Dispatcher and
-Cloud have no runtime enrollment. Publication is not acceptance.
+**No service, role enrollment, actual model success, adoption or session-store
+reclamation is established by fixture tests or publication.** Parent separately
+collects independent consequences and actual-model qualification. The example
+is disabled. Root is an external work recipient, never an enrolled role;
+Dispatcher and Cloud remain excluded. There is no JEV, external dependency,
+parent wait wrapper or replacement of an existing collector.
 
-## Install and inspect
+## Install, configure and inspect
 
-Keep an isolated checkout of the published feature revision; do not overwrite
-the dirty live `/home/nes/ai/tools/message-board` substrate. Nothing requires a
-global Python installation or profile/config changes.
+Use an isolated published checkout, Python 3.11+ and the standard library. Leave
+the dirty live message-board checkout untouched. No global installation, login,
+credential copying or global route/model-selector change is needed.
 
 ```sh
 RUNTIME=/absolute/selected-checkout/tools/coordinator-runtime/coordinator
 python3 "$RUNTIME" --help
 python3 -m unittest discover -s /absolute/selected-checkout/tools/coordinator-runtime/tests -v
-python3 "$RUNTIME" qualify-schema --output /absolute/owned-evidence/new-schema-directory
+python3 "$RUNTIME" qualify-schema --output /absolute/owned-evidence/fresh-schema-directory
 ```
 
-`qualify-schema` runs only installed CLI version/schema generation. It starts no
-app-server/model. Its private output must be a fresh empty directory; retain the
-qualification receipt and schema for current consumers, at least 24h and all
-holds. Codex 0.166.0's generated experimental schema exposes
-`thread/start.ephemeral`, `thread/read`, `turn/start`, `turn/interrupt`, and
-`thread/unsubscribe`. The [official app-server reference](https://learn.chatgpt.com/docs/app-server#threads)
-documents ephemeral fork; installed start support here comes from generated
-schema, not an inference from that reference. Schema presence does not prove
-runtime lifecycle behavior.
+Schema qualification starts no app-server/model. Retain its schema/receipt for
+current consumers, at least 24h plus all holds. Installed 0.166.0 schema exposes
+experimental ephemeral start, read, turn, interrupt and unsubscribe. The
+[official thread reference](https://learn.chatgpt.com/docs/app-server#threads)
+documents ephemeral fork; it does not prove installed start behavior. Strict
+provider output uses a closed `{payload_json:string}` wire object containing the
+complete typed result JSON. Inner schema/routing is independently validated.
+The prior actual provider400 and unexercised capabilities remain qualification
+inputs; a fake provider accepting this wire is no live success.
 
-Copy [examples/rfq.json](examples/rfq.json) to an owned private configuration
-path. Fill the actual board catalog home/UUID, exact board-local role strings,
-selected runtime checkout/template paths, private state directory, actual source
-and effect roots, and the offline qualification receipt. Verify the literal
-provider/model/effort against the installed service during parent qualification.
-The four current role UUID/profile pairs are supplied as prospective selectors;
-the zero board UUID and placeholder paths are deliberately unusable. They are
-not enrollment, actor authentication, an operational handoff or a live census.
+Copy [examples/rfq.json](examples/rfq.json) to a mode-0600 private config. Select
+the actual board home/UUID, board-local role/profile identities, checkout/template
+paths, operator config/CLI paths, owned mode-0700 state directory and schema
+receipt. Example zero UUIDs/placeholder paths are deliberately unusable. Its Root
+locator is inactive until Work binds the actual current recipient membership;
+that is operational identity binding, not another Source/human approval gate.
+Actual recipients are verified again on delivery. No live board census occurs
+by loading configuration.
 
-Choose `enabled` before initializing a journal. Configuration is bound by digest;
-changing it under a running journal is refused. Use an offline owned migration
-and explicit responsibility handoff for later configuration changes; this release
-does not automate migrations or import legacy queues. Never discard an old
-journal to evade its holds.
+Choose `enabled` before initialization, after parent disposition. Config is
+bound by digest; later changes need an offline owned migration and explicit
+responsibility handoff. Never discard an existing journal to escape holds.
 
 ```sh
 python3 "$RUNTIME" --config /absolute/private/config.json init
 python3 "$RUNTIME" --config /absolute/private/config.json status
 ```
 
-State is private SQLite WAL/FULL plus exact owned artifacts. Use mode 0700 for
-the state directory and mode 0600 for configuration/evidence containing private
-message material. No private profile/history/environment inventory is needed.
+## Actual owner enrollment and delivery
 
-## Real enrollment and held adoption
+Each selected role owner executes enrollment from its **existing genuine actor
+context**. Do not set or borrow `CODEX_SESSION_ID`, membership, native handles or
+owner cursors. The grant is explicit revocable role-lifetime cooperation within
+the shared Unix account, not authentication against other same-account actors.
+It verifies active membership, exact role/profile, invitation/catalog policy,
+board UUID/file identity and binds the exact runtime DB inode. It takes a new
+prospective intake cutover; no old queue is imported.
 
-Each actual role owner executes the following commands in its existing actor
-context. `CODEX_SESSION_ID` must already identify that actual caller. **Do not
-synthesize an owner's environment, borrow membership, move its cursor, or point
-the runtime at a TUI/app-server/native collector.** The selected user authority
-allows these roles; it is not authentication. The bridge records explicit
-revocable role-lifetime delegation and real actors within the shared Unix
-account's cooperative trust boundary.
-
-```sh
-python3 "$RUNTIME" --config /absolute/private/config.json enroll Work \
-  --authority /home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/DECISION.json
-```
-
-Repeat from the actual Branch successor, Reviews and QA actors for those roles.
-Before delegating new receipt, the actual owner must select prospective
-`managed` delivery using its existing board CLI/context and reconcile duplicate
-intake writers. The runtime refuses to grant over a queue-route membership; it
-does not change that membership or reroute any existing notice. Historical
-route snapshots, sending effects and original collectors remain intact. This
-prospective route selection and a return to prior routing need actual owner
-handoff, not a fabricated idle claim or a managed-owner process takeover.
-Enrollment verifies active actual membership, exact role/profile, catalog policy,
-invitation when required, board UUID and file identity. It records a prospective
-post-sequence cutover and a grant bound to this runtime DB inode and actor.
-The automation/classifier never joins as, impersonates or advances the owner.
-Private body access is limited to the enrolled owner's addressed events.
-Notices and role-directed flat posts are covered; flat posts get processing
-receipts, not fictitious notice ACKs. No old event is imported automatically.
-
-All configured legacy holds remain until the actual owner supplies its real
-collector/effect reconciliation. Example receipt shape (values must be actual):
-
-```json
-{"collector":"actual original collector","evidence":["exact closure/outbox receipt"],"remaining_holds":[]}
-```
+The actual owner first selects the board's managed receive route and reconciles
+its existing intake writer. The runtime refuses to silently change queue-route
+membership. Full enrollment adds a distinct labelled managed service actor and
+bounded outgoing recipients/kinds, in addition to private intake/receipt rights:
 
 ```sh
-python3 "$RUNTIME" --config /absolute/private/config.json reconcile-legacy Reviews \
-  --receipt /absolute/owned/actual-legacy-reconciliation.json
+python3 "$RUNTIME" --config /absolute/private/config.json enroll Work --delivery \
+  --authority /home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/CONSEQUENCE-DECISION.json
+# For an already enrolled incoming/receipt-only grant, from that same real owner:
+python3 "$RUNTIME" --config /absolute/private/config.json delegate-delivery Work \
+  --authority /home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/CONSEQUENCE-DECISION.json
 ```
 
-This assertion is the owner handoff boundary, not a process census. Never fill
-it from null queue fields, labels or this example. Classified intake/ACK can run
-while a legacy hold blocks task launches. Existing originals, CI admission,
-reviews, source/resource/monitor owners and partially sent effects remain with
-their actual collectors.
+Repeat only from the genuine selected Branch successor, Reviews and QA actors.
+The automation actor never joins as an owner. Classification provenance retains
+actual model session, attempt, configured/read-back binding and source author.
+The additive board extension records original producer, authorizing role owner,
+real service author, exact post/notice/recipient and immutable full payload.
+Private access covers only granted addressed input and replies on its owned
+outgoing threads. It does not attach to an existing listener or move `ack_seq`.
 
-Grant creation and runtime enrollment are two commits. If enrollment fails after
-grant creation, retain the exact grant as an orphan operational record; it did
-not enroll the runtime. The actual owner can revoke it explicitly:
+A model returns typed handoffs `{recipient,kind,text,ref,required}` within its
+allowlist; necessary handoffs require `settled`. Empty handoffs require a reason.
+The dispatcher posts work/result/question/recurring-alert messages as the actual
+service actor, after fresh response classification. Retries use the same exact
+ID; distinct unchanged violation occurrences get distinct deliveries. It invokes
+existing queue transport only for its exact new post/recipient, at most once;
+ambiguous sends remain held. It never drains a foreign submission queue.
+
+The addressed message includes usable commands for the **actual recipient**:
 
 ```sh
-python3 "$RUNTIME" --config /absolute/private/config.json revoke Reviews --grant ACTUAL_GRANT_UUID
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-show Work DELIVERY_ID
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-stage Work DELIVERY_ID \
+  --stage picked-up --receipt /absolute/owned/pickup.json
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-stage Work DELIVERY_ID \
+  --stage processed --receipt /absolute/owned/processing.json
+python3 "$RUNTIME" --config /absolute/private/config.json delivery-stage Work DELIVERY_ID \
+  --stage settled --receipt /absolute/owned/settlement.json
 ```
 
-Revocation stops new delegated reads/receipts and new launches. Already owned
-attempts retain collection/effect obligations; it neither kills them nor loses
-their queues. Re-enrollment/config migration after revocation requires an exact
-owner-selected prospective handoff; it is not an automatic replay path.
+`Work` above identifies the sender grant; the current actor must be that exact
+delivery's recipient. Every stage needs actual `evidence`. Questions also need a
+`resolution`. Queue-route processing/settlement needs `transport` with exact
+`queue_message_id`, `state:"processed"` and evidence from its actual consumer.
+Board ACK alone cannot prove queue processing. Effect-request settlement needs
+`effects:{evidence:[...],unknown_effects:[]}` from the real effect owner. This is
+actual reconciliation of possible effects, not extra permission. Completed stages
+are immutable; changed findings need a new addressed reply. Invalid immutable
+owner results remain held for explicit owner recovery; automatic amendment or
+resubmission of a settled receipt is not implemented.
 
-## Run as the actual dispatcher
+Necessary delivery remains durable through pickup/processing/settlement. A task
+DONE cannot silently drop a handoff. Report results mirror to the real owner;
+Reviews consolidated results go Work, accepted QA qualification goes Branch,
+and Root code work retains commit **and** push. Status shows every pending
+outbox and operational failure; no private-journal discovery is needed to learn
+that work/questions/errors exist.
 
-Only after independent assessment and parent-collected qualification/continuing
-disposition, use an explicitly enabled configuration:
+## Actual role procedures and holds
+
+The example connects the current parallel method/proposer/batch-integrator and
+Reviews report templates to these concrete procedures:
+
+- [Work catalog](templates/work-catalog.md): exact seven surfaces, full semantic
+  deltas and allocation, CAS/before-only backup/same-inode/fsync/readback.
+- [Branch repository](templates/branch-repository.md): real admitted refs,
+  worktrees, clean mechanical/native stack organization and effect reconciliation.
+- [Selected Reviews](templates/reviews-selected.md): actual existing owner runs
+  its selected Source/reviewer procedure and original collection; no generic
+  replacement review or newly resolved opaque binding. The returned full reports
+  feed the single Sol XHIGH report integrator. Owner settlement needs complete
+  `result`, `actual_originals:[{collector,actual_end,reference}]`, `method_pin`,
+  `coverage_frontier` and `effects`. A genuinely unstarted incomplete return can
+  instead supply empty originals plus `no_start_evidence`; no process END is
+  invented. Missing review remains an explicit Work-owned frontier.
+- [QA package](templates/qa-package.md): actual separately admitted execution,
+  five independent packages, one execution owner per admitted package and one
+  global cleanup slot processing one package. The sixth package stays pending.
+
+Work/Branch/Reviews each have an independent single integration slot, with
+parallel instanced proposal/owner jobs. Arrivals after freeze form the next
+batch automatically. Actual legacy holds can name affected phases only; intake
+continues. Branch's existing integration/outbox hold remains real; historical
+native25, 100/88 queue history and an unacquired Reviews reply are not universal
+software freezes. No adoption is fabricated.
+
+The current Branch resource owner records existing admission with:
 
 ```sh
+python3 "$RUNTIME" --config /absolute/private/config.json admit-package EXACT_PACKAGE \
+  --receipt /absolute/owned/admission.json --accepted-receipt /absolute/owned/actual-acceptance.json
+```
+
+Acceptance is optional until it actually exists. For Branch integration or QA
+execution, admission supplies `task_scopes` keyed by task ID, each with exact
+`cwd`, `read_roots`, `write_roots`, `network`, `procedure`, `resource_evidence` and
+selected refs/PR/head/event/runner/commands. These narrow configured `scope_roots`;
+they cannot authorize a private profile, symlink escape, arbitrary message shell
+or expanded network. Existing source/review/resource/CI/GLOBAL/monitor owners
+persist. Missing compatible scope remains an explicit inactive frontier rather
+than pretending a proposal is real repository/QA execution.
+
+Actual owners conserve legacy originals/effects/outboxes through
+`reconcile-legacy ROLE --receipt FILE` with
+`{collector,evidence:[...],remaining_holds:[...]}`. No PID/timeout/file/label proves
+closure. `reconcile-effects JOB --token TOKEN --receipt FILE` records a genuine
+owner's collected effects even after revocation. Root/Work owns publication
+recovery, not a new runtime permission ritual.
+
+## Process, recovery, retention and service
+
+Owned process begin, numeric exit, collection, semantic DONE, typed capture,
+unsubscribe, teardown and session reclamation are separate fields. Valid finals
+survive unsubscribe/teardown failure. Output/reasoning/raw protocol bodies are
+not logged; capture is selected typed returns/lifecycle, not a full transcript.
+Provider schema/capacity failures retain bounded safe causal projections. A
+proved pre-start failure records no fabricated process END and can recover
+within bounds. Unknown creation/foreign/lost handles retain their slot.
+
+One supported same-session continuation requires actual idle readback. Then
+fresh Luna LOW diagnoses and selects one explicit authorized profile handoff
+with prior owned context/effects, only after actual end/collection (or proved
+no-start) and reconciled effects. No overlapping mutation, orphan resume,
+credential move or foreign native handle. Revocation fences every new classifier,
+diagnosis, initial turn, continuation and replacement against current source-role
+grants. Owned collection and recipient settlement continue.
+
+Every launch reads effective MCP metadata and individually disables every server,
+then requires complete disabled readback. Feature-name variation/omission is
+recorded; false/absent flags do **not** prove nondelegation capability. Unknown
+server requests are refused, observed delegation holds capture. Actual available
+tool surface remains a parent qualification question.
+
+Queue retirement starts actual `processed_at+24h`, including later dependent
+processing and cleared consumer/recovery/outbox/uncertainty holds. Later holds
+protect upstream sources/artifacts; their release restarts the processing clock.
+Internal results can supply verified exact source custody. Unproven unique input
+remains in place under its actual role owner; `recover-source EVENT` reconstructs
+verified meaning/attribution. No assumption that all board history is permanent,
+no blanket duplication/profile purge. Exact registered single-link artifacts
+require actual conservation and symlink-safe identity checks before retirement.
+
+`owned-ephemeral-lifecycle-observed` means unsubscribe and owned exit were seen;
+`session_reclamation:not-qualified` remains separate. Retirement of those real
+attempts stays held until an explicit `session_cleanup_qualification` evidence
+binding exists. Journal/results/outbox/source custody remain cumulatively bounded;
+this release backpressures instead of automatic compaction of held custody or
+broad profile/history cleanup. Actual session/auxiliary-store reclamation and
+invalid owner-result amendment remain unimplemented/unqualified frontiers.
+
+Use `status`, `hold EVENT --reason TEXT`, `release-hold EVENT --receipt FILE`,
+`conserve-artifact PATH --receipt FILE`, `ack-alert ID --receipt FILE` and `cleanup`
+for exact owned operations. Healthy states emit no alert; unchanged violations
+recur as distinct durable occurrences until resolved. Alert retirement also waits
+for actual consumer/delivery processing plus 24h.
+
+Only after separate qualification/disposition:
+
+```sh
+python3 "$RUNTIME" --config /absolute/private/config.json service-unit
 python3 "$RUNTIME" --config /absolute/private/config.json run --enable-models
 ```
 
-A foreground invocation is usable. For a service, an operator can install the
-following user unit with absolute qualified paths; this repository installs or
-starts nothing:
-
-```ini
-[Unit]
-Description=Selected coordinator runtime
-[Service]
-Type=simple
-UMask=0077
-ExecStart=/usr/bin/python3 /absolute/selected-checkout/tools/coordinator-runtime/coordinator --config /absolute/private/config.json run --enable-models
-Restart=no
-KillMode=mixed
-TimeoutStopSec=900
-StandardOutput=null
-StandardError=null
-[Install]
-WantedBy=default.target
-```
-
-SIGTERM/SIGINT stop intake and collect already owned attempts. Allow the selected
-task deadline, one continuation budget, interrupt and shutdown bounds before
-outer service termination. `Restart=no` avoids pretending that a replacement
-service owns old handles. A forced service/container/host loss leaves unknown
-reservations held. Do not add automatic restart/replay until the original owner
-has reconciled those reservations. Units/log rotation are operator-owned, outside
-this install. JSON alert output excludes raw protocol bodies; private message
-and typed final content remain in the private journal.
-
-## Routing, slots and actual authority
-
-Routes are configured task IDs, templates, exact model bindings, purpose and
-typed effect/access operations. No incoming message can supply a shell command
-for the dispatcher. Invalid, partial, wrong-event or disallowed classifications
-stay owned and unACKed. A Work exception task can be explicitly allowlisted.
-Same-event redelivery is deduplicated by event identity; distinct occurrences
-with identical bodies remain distinct. The classifier's UUID, actual attempt,
-configured/read-back binding, source author, recipient and package survive the
-handoff. Binding readback establishes configuration, not execution attestation.
-
-Classification and queue responsibility commit in one transaction. The additive
-board bridge then verifies that durable pair, records real automation/classifier
-actors and updates only the exact notice in one board transaction. An interrupted
-reply is reconciled using that board-local receipt; no send or blind enqueue is
-replayed. There is no owner `ack_seq` mutation. The board extension does not
-authenticate users against each other on the same Unix account.
-
-Work/Branch/Reviews each have one independent integration slot. Members and
-revisions freeze at reservation; arrivals enter the next batch. Read-only
-proposers are instanced with their configured task bindings. Work and all
-integrators explicitly require `gpt-6.1-sol` xhigh. QA has five independent
-execution slots and one separate per-package consolidation slot; there is no
-cross-package QA batch. Reservation, active-attempt identity and controller
-fences prevent double launch/closure across controllers.
-
-QA admission is per package and stays with actual Branch ownership:
-
-```sh
-python3 "$RUNTIME" --config /absolute/private/config.json admit-package EXACT_PACKAGE_ID \
-  --receipt /absolute/actual-branch-admission.json
-```
-
-The `ref` on a QA board post is that exact admitted package ID. Accepted QA
-qualification needs a separately supplied actual accepted receipt with the same
-command's `--accepted-receipt`. Neither a model's `qualification` category nor
-this software accepts a package. Missing admission/acceptance holds the work.
-
-The supplied real method/proposer/Branch/report-integrator references are loaded
-as actual task instructions; tasks receive frozen source identities, original
-results and reservation/collector/authority context. Reviews consolidation routes
-to Work; scope/blockers route to Work; accepted QA qualification routes to
-Branch. Root code-writing workers retain commit AND push. Root is not enrolled
-as an automated recipient. Real external Root/CI/PR/board send effects remain
-with existing owners and their exact intents, not a generic shell transport.
-
-Responses are durable internal addressed handoffs between enrolled roles,
-classified by another fresh Luna-low invocation. They do not issue duplicate
-board messages. Every source occurrence/report remains linked through frozen
-members, original attempt results and the response payload. Local handoff is not
-a claim that an existing human/TUI coordinator read or adopted it.
-
-## Effects, recovery and observability
-
-`status` shows intake/legacy holds, ACK lag, queued/held work, reservations,
-attempt controllers, model/profile bindings, real begin/exit/collection,
-semantic status, capture, cleanup, capacity errors and backlog/storage pressure.
-A semantic DONE may be visible while the owned process is still alive. Numeric
-exit zero alone is not DONE or acceptance. Failed/invalid/partial results remain
-recoverable; they do not silently free slots or become successful reports.
-
-Read-only tasks can close automatically after successful actual collection and
-valid DONE. `owned-artifacts` report tasks use a fresh attempt directory as cwd
-and their only writable root, with no network, allowing automatic report drains.
-The kernel sandbox and model's actual behavior still need live qualification.
-Canonical/external-effect tasks require the actual role owner to reconcile all
-possible writes/intents/outboxes. Supply genuine evidence, never a fabricated
-empty set:
-
-```json
-{"evidence":["exact actual per-file/effect/outbox reconciliation"],"unknown_effects":[]}
-```
-
-```sh
-python3 "$RUNTIME" --config /absolute/private/config.json reconcile-effects JOB_UUID \
-  --token RESERVATION_TOKEN --receipt /absolute/actual-effects.json
-```
-
-The running controller then drains automatically. This version does not verify
-arbitrary external effects, execute send intents or automatically judge a model's
-effect report. Effectful progress depends on those real owner returns. Partial
-results after bounded recovery remain held for consequential owner disposition;
-there is no forced `accept-partial`/drop/slot-release shortcut in this release.
-Work's own scope/blocker returns remain with the actual outside Decider; they
-are not fed through an unlimited model self-loop or treated as capacity recovery.
-
-Timeout recovery first interrupts the exact owned turn, waits for its matching
-completion and checks idle state before one same-session continuation. Failed
-or semantically incomplete turns also get at most one supported idle continuation.
-An unavailable or ambiguous API/end stays held. After collection, at most one
-fresh Luna-low diagnosis may select an authorized profile and explicit remaining
-work. Replacement requires actual original collection/end, reconciled effects,
-and an exclusive journal transition. It receives prior owned session reference,
-result/error, effect receipt and diagnosis. This is an informed cold handoff,
-not native resume or restoration of lost ephemeral memory. A late original
-cannot satisfy the replacement's attempt or route a second result.
-An actually collected failed/invalid classifier gets at most one separate fresh
-Luna-low diagnosis/classification on the explicitly selected diagnosis account.
-Its route still must pass the same event allowlist; no valid route means no ACK.
-The prior failure remains conserved and cleanup gaps remain held. Unknown/live
-classifiers are never replayed; classification capacity is reserved across
-controllers under the same database write lock.
-
-Controller/host-loss recovery is deliberately limited: no PID/file/age inference,
-orphan resume, foreign native wait/kill or blind mutating replay. Automatic
-reconciliation of lost process handles, transport-ambiguous thread creation,
-unknown effectful attempts and preflight failures without a child exit is not
-implemented. They remain explicit holds for the original owner/parent. A new
-controller can still classify new events and run genuinely free independent
-slots; it cannot free unknown old reservations.
-Already durably collected attempts can transfer *closure work* under the same
-automation grant when their effects are absent/reconciled and no recovery owner
-exists. That transfer records the original collector/attempt/exit separately;
-it adopts no process handle. Valid already-collected classifications also finish
-their interrupted queue commit without another model call.
-
-Each launch checks all effective MCP names, disables them individually (including
-the injected docs transport), and requires a second complete disabled readback.
-Delegation-like feature flags are requested/read back false. They **do not prove
-absence of model-facing delegation tools**; that capability remains
-`not-established`. Unexpected observed delegation makes capture incomplete.
-No credentials are copied, no login occurs, and no global model/profile selector
-changes. `.codex` through `.codex5` are explicit account choices, not exclusive
-profile locks. Real availability, identity, capacity and nondelegation still need
-parent qualification. Missing raw stderr/reasoning is deliberate: `capture`
-means the bounded typed protocol/final boundary, not a complete tool transcript.
-
-Distinct unresolved violation occurrences recur even with unchanged text;
-healthy operation emits none. Same-event deduplication is unrelated to alert
-recurrence. Alert journal/output has a cumulative bound. Actual consumers mark
-processed occurrences with `ack-alert OCCURRENCE --receipt ACTUAL_JSON`; only
-that processing starts their 24h retirement clock. Unprocessed alert backlog
-produces backpressure, not discard. External journald/log storage needs its own
-operator retention bound; runtime output is not a claim of consumer receipt.
-The proposed service unit discards duplicate console presentation and keeps
-durable alerts in the bounded runtime journal, visible in `status`. If console
-capture is selected instead, its cumulative limit belongs in that operator's
-explicit capture configuration; do not create an unlimited redirected log.
-
-## Queue and one-off cleanup
-
-Queue processing completes only after job closure, durable downstream
-responsibility, processed descendants and settled receipt outcomes. Retirement
-begins at actual `processed_at + 86400`, never enqueue or ACK time. Consumer,
-recovery, process, artifact and effect holds survive. Required final results,
-classification/provenance and event deduplication tombstones remain conserved.
-
-The dispatcher sweeps eligible queue/artifact records automatically. Operators
-can also use `cleanup`. `hold EVENT --reason TEXT` preserves a consumer/recovery
-hold; `release-hold EVENT --receipt ACTUAL_JSON` requires the actual role owner.
-New task artifact paths are inventoried only below that exact owned attempt
-directory. The actual role owner must first record conservation:
-
-```sh
-python3 "$RUNTIME" --config /absolute/private/config.json conserve-artifact \
-  /absolute/state/artifacts/ATTEMPT/one-file --receipt /absolute/actual-consumer-conservation.json
-```
-
-Deletion rechecks processing age, all holds, exact dev/inode/size/mtime and
-single-link regular-file identity under the journal lock; directory-descriptor
-walks refuse symlinks. Partial deletion errors remain receipts and are excluded
-from automatic replay. Changed/missing/uninventoried files and errored partials
-need deliberate owner reconciliation; this release has no bulk retry/purge.
-An untrusted same-account actor racing directory entries is outside this
-cooperative boundary; Unix unlink has no inode-conditional transaction.
-
-Sessions use supported ephemeral-start/readback plus unsubscribe and actual
-owned-server exit. There is no persistent fallback or profile-wide cleaner.
-Persistent/unexpected thread readback and nonzero/unknown teardown retain a
-cleanup gap. No existing human, persistent, foreign or live session is deleted.
-Actual memory/session reclamation remains unqualified until a live encounter.
-
-Cumulative DB/WAL/artifact bytes, event/attempt/job/alert counts and filesystem
-entry counts gate admission. Held work is never quota-purged. Required results
-and tombstones can eventually fill their bound: offline conservation/migration
-is then required, not automatic history deletion. Budgets are admission controls,
-not kernel disk quotas on authorized agent file writes. Already running writers
-and external logs require the operator's storage limits. Empty generated attempt
-directories and offline schema/evidence are retained here; there is no blanket
-directory retirement. These limits must be included in deployment disposition.
-
-## Verification and rollback
-
-Tests use fake models and real owned fixture processes/SQLite boards. A01–A14
-cover deduplication, invalid classification, real delegated receipt, crashes,
-frozen batches, cross-controller slot races, six QA packages, response provenance,
-late/capacity handling, process-vs-DONE, restart uncertainty, supported continuation,
-exclusive recovery, recurring alerts and processing+24h cleanup/symlink holds.
-These are fixture results, never live model/source/CI/provider acceptance.
-
-Before activation, parent must collect independent assessment, live literal
-Luna-low/Sol-xhigh bindings, supported ephemeral lifecycle/continuation/teardown,
-effective MCP and delegation limits, and actual role grant/enrollment/adoption
-with legacy/resource holds. The code does not self-accept those capabilities.
-
-Rollback: stop new intake with SIGTERM, let the owned controller collect its
-originals, preserve the journal/results/receipts/unknown holds, revoke exact role
-grants from actual owners, and deliberately restore prior operational routing
-under existing owners. Do not reset cursors, delete held journals, restart old
-mutating tasks, replace collectors or purge profiles. Leave the additive board
-grant/receipt audit records as evidence. Removing an unactivated checkout has
-no service rollback effect; follow ordinary worktree retention rules separately.
+`service-unit` renders, never installs, a unit with a stop budget derived from two
+turn deadlines, interruption, bounded metadata/RPC and owned teardown. With the
+example deadlines it is 4176 seconds, replacing the incompatible 900s example.
+SIGTERM/SIGINT stop new launches/intake and collect owned work. `Restart=no`
+avoids losing unknown handles through automatic replay. After forced loss, retain
+journal/artifacts/grants and actual original collectors for recovery. Rollback:
+stop gracefully, inspect real held effects/deliveries, revoke each exact grant
+from its actual owner (`revoke ROLE --grant UUID`), then restore prospective board
+routing only through that owner's supported handoff. Preserve existing cutovers,
+queues, source, private evidence and all consumer/recovery holds; do not uninstall
+by deleting responsibilities or retiring a worktree/profile.

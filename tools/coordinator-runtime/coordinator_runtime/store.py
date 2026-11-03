@@ -17,6 +17,7 @@ import time
 
 from .contracts import (Backpressure, Refusal, classification, digest, encode, ident,
                         response_tasks, task_result)
+from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS results(
  exit INTEGER,capture TEXT NOT NULL,created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS admissions(
  package TEXT PRIMARY KEY,owner TEXT NOT NULL,receipt TEXT NOT NULL,accepted TEXT);
+CREATE TABLE IF NOT EXISTS qa_package_owners(package TEXT PRIMARY KEY,admission TEXT NOT NULL,job TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS alerts(
  id TEXT PRIMARY KEY,subject TEXT NOT NULL,kind TEXT NOT NULL,created REAL NOT NULL,
  payload TEXT NOT NULL,processed_at REAL);
@@ -91,9 +93,10 @@ def private_directory(path):
     return path
 
 
-class Store:
+class Store(DeliveryJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
+        self.launch_authorizer = None
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -110,7 +113,7 @@ class Store:
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -145,7 +148,7 @@ class Store:
 
     def usage(self):
         counts = {name: self.db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
-                  for name in ("events", "attempts", "jobs", "alerts")}
+                  for name in ("events", "attempts", "jobs", "alerts", "outboxes")}
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
         return counts
 
@@ -153,7 +156,7 @@ class Store:
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
-        if usage[kind] >= limits[f"max_{kind}"]:
+        if usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
 
     def enroll(self, role, grant):
@@ -216,6 +219,7 @@ class Store:
         return json.loads(row["payload"])
 
     def _attempt(self, kind, event, job, binding, profile):
+        self.require_active_sources(event, job)
         self.budget("attempts")
         attempt = ident()
         self.db.execute("INSERT INTO attempts(id,kind,event,job,controller,profile,binding,created) "
@@ -226,11 +230,29 @@ class Store:
         self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(provenance), attempt))
         return attempt
 
+    def source_roles(self, event=None, job=None):
+        if event:
+            return {self.one("SELECT role FROM events WHERE id=?", (event,))["role"]}
+        row = self.job(job)
+        members = json.loads(row["members"])
+        return {row["role"]} | {self.one("SELECT role FROM events WHERE id=?", (m["event"],))["role"] for m in members}
+
+    def require_active_sources(self, event=None, job=None):
+        for role in self.source_roles(event, job):
+            self.enrollment(role)
+
+    def authorize_launch(self, attempt):
+        row = self.attempt(attempt)
+        self.require_active_sources(row["event"], row["job"])
+        if self.launch_authorizer:
+            self.launch_authorizer(self.source_roles(row["event"], row["job"]))
+
     def claim_classification(self):
         with self.tx():
             if not self._classification_available():
                 return None
-            row = self.one("SELECT id FROM events WHERE state='received' ORDER BY received,id LIMIT 1")
+            row = self.one("SELECT e.id FROM events e JOIN enrollments r ON r.role=e.role "
+                           "WHERE e.state='received' AND r.intake=1 ORDER BY e.received,e.id LIMIT 1")
             if not row:
                 return None
             selected = self.config["classifier"]
@@ -248,7 +270,8 @@ class Store:
             if not self._classification_available():
                 return None
             row = self.one("SELECT e.id,e.classifier FROM events e JOIN attempts a ON e.classifier=a.id "
-                           "WHERE e.state='classification-held' AND e.recovery_count=0 AND a.collected IS NOT NULL "
+                           "JOIN enrollments r ON r.role=e.role "
+                           "WHERE e.state='classification-held' AND e.recovery_count=0 AND a.collected IS NOT NULL AND r.intake=1 "
                            "ORDER BY e.received,e.id LIMIT 1")
             if not row:
                 return None
@@ -304,12 +327,13 @@ class Store:
                 outcome = {**outcome, "error": "typed result exceeded bounded capture; original responsibility held",
                            "capture": "incomplete"}
                 result, result_json = None, None
+            no_start = bool(outcome.get("detail", {}).get("known_not_started")) and row["begin"] is None
             ended = self.clock() if outcome.get("exit") is not None else None
             self.db.execute("UPDATE attempts SET state=?,ended=?,exit=?,collected=?,result=?,error=?,"
                             "semantic=?,capture=?,cleanup=?,detail=? WHERE id=?",
-                            ("collected" if ended else "unknown", ended, outcome.get("exit"),
-                             self.clock() if ended else None, result_json, outcome.get("error"),
-                             result.get("semantic") if isinstance(result, dict) else None,
+                            ("not-started" if no_start else ("collected" if ended else "unknown"), ended, outcome.get("exit"),
+                             self.clock() if ended or no_start else None, result_json, outcome.get("error"),
+                             result.get("semantic") if isinstance(result, dict) else row["semantic"],
                              outcome["capture"], outcome["cleanup"],
                              encode({**json.loads(row["detail"]), **outcome.get("detail", {})}), attempt))
             self.db.execute("INSERT INTO results VALUES(?,?,?,?,?,?,?,?)",
@@ -337,13 +361,16 @@ class Store:
             raise Refusal("classification requires actual successful collection and complete typed capture")
         event = self.event(row["event"])
         answer = classification(json.loads(row["result"]), event, self.config)
-        task = self.config["tasks"][answer["task"]]
+        task = self.config["tasks"].get(answer["task"])
         with self.tx():
             state = self.one("SELECT state,classifier FROM events WHERE id=?", (event["id"],))
             if state != {"state": "classifying", "classifier": attempt}:
                 raise Refusal("stale classification cannot replace responsibility")
-            self.db.execute("INSERT INTO queue VALUES(?,?,?,?,?,?,'queued',NULL)",
-                            (ident(), event["id"], task["role"], task["phase"], answer["task"], answer["package"]))
+            delivery = event["kind"] == "outgoing-response" and answer["task"] == "@delivery"
+            self.db.execute("INSERT INTO queue VALUES(?,?,?,?,?,?,?,NULL)",
+                            (ident(), event["id"], event["role"] if delivery else task["role"], "delivery" if delivery else task["phase"],
+                             answer["task"], answer["package"], "routed" if delivery else "queued"))
+            self.db.execute("UPDATE outboxes SET state='pending' WHERE event=? AND state='classification-pending'", (event["id"],))
             self.db.execute("UPDATE events SET classification=?,state='queued',ack='ready',error=NULL WHERE id=?",
                             (encode(answer), event["id"]))
         return answer
@@ -378,13 +405,27 @@ class Store:
     def _reserve_candidate(self, row):
         role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
         enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
-        if not enrollment or not enrollment["intake"] or enrollment["legacy_hold"]:
+        held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
+        if not enrollment or not enrollment["intake"] or (enrollment["legacy_hold"] and phase in held_phases):
+            return None
+        if task.get("active") is False:
+            return None
+        if task.get("require_package_scope") and not self.one("SELECT package FROM admissions WHERE package=?", (row["package"],)):
             return None
         active = self.db.execute("SELECT COUNT(*) FROM jobs WHERE role=? AND phase=? AND state!='closed'",
                                  (role, phase)).fetchone()[0]
         if active >= self._capacity(task):
             return None
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
+            return None
+        if role == "QA" and phase == "execution" and self.one(
+                "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
+            return None
+        admission = self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)) if role == "QA" else None
+        prior = self.one("SELECT * FROM qa_package_owners WHERE package=?", (row["package"],)) if admission and phase == "execution" else None
+        if prior and prior["admission"] == digest(admission["receipt"]):
+            return None
+        if prior and any(self.dependency_hold(m["event"]) for m in json.loads(self.job(prior["job"])["members"])):
             return None
         members = self._members(row)
         packages = {member["package"] for member in members}
@@ -394,6 +435,8 @@ class Store:
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
                                                      encode(members), self.controller, token, self.clock()))
+        if admission and phase == "execution":
+            self.db.execute("INSERT OR REPLACE INTO qa_package_owners VALUES(?,?,?)", (row["package"], digest(admission["receipt"]), job))
         for member in members:
             self.db.execute("UPDATE queue SET state='reserved',job=? WHERE id=? AND state='queued'",
                             (job, member["queue"]))
@@ -405,6 +448,8 @@ class Store:
         rows = self.rows("SELECT q.* FROM queue q JOIN events e ON q.event=e.id WHERE q.role=? "
                          "AND q.task=? AND q.state='queued' AND e.hold IS NULL ORDER BY e.received,q.id",
                          (row["role"], row["task"]))
+        if self.config["tasks"][row["task"]].get("require_package_scope"):
+            rows = [r for r in rows if r["package"] == row["package"]]
         return [{"queue": r["id"], "event": r["event"], "hash": digest(self.event(r["event"])), "package": r["package"]} for r in rows]
 
     def start_job(self, job, token, profile=None):
@@ -429,7 +474,7 @@ class Store:
             attempt = self.attempt(row["active_attempt"])
             if not attempt["collected"] or attempt["ended"] is None:
                 raise Refusal("effects cannot release a live/uncollected/unknown attempt")
-            if actor != self.enrollment(row["role"])["owner"]:
+            if actor != self.config["roles"][row["role"]]["owner"]:
                 raise Refusal("actual role owner must reconcile possible effects/outboxes")
             if not receipt.get("evidence") or receipt.get("unknown_effects") != []:
                 raise Refusal("effect evidence and explicit empty unknown effects required")
@@ -447,21 +492,38 @@ class Store:
             if not attempt["collected"] or attempt["ended"] is None:
                 raise Refusal("actual owned exit and collection required before release")
             if attempt["exit"] != 0 or attempt["capture"] != "complete" or attempt["error"]:
+                self.owner_question(row, attempt, "Collected failure/capture requires bounded recovery or real owner disposition")
+                self.gate_result_delivery(row, attempt, json.loads(attempt["result"]) if attempt["result"] else {"error": attempt["error"], "detail": json.loads(attempt["detail"])})
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
             result = task_result(json.loads(attempt["result"]))
+            task = self.config["tasks"][row["task"]]
+            self.prepare_handoffs(row, attempt, task, result)
             if result["semantic"] != "DONE":
+                self.owner_question(row, attempt, "Incomplete task: retain all findings/failures/UNKNOWNs")
+                self.gate_result_delivery(row, attempt, result)
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
-            task = self.config["tasks"][row["task"]]
             if row["role"] == "Work" and result["category"] in {"scope", "blocker"}:
-                raise Refusal("Work-owned consequential question stays with the actual Decider; no automatic self-loop")
+                self.owner_question(row, attempt, "Work-owned consequential question stays with the actual Decider; no automatic self-loop")
+                self.gate_result_delivery(row, attempt, result)
+                if not self.deliveries_settled(job):
+                    self.db.execute("UPDATE jobs SET state='held',hold_reason='awaiting actual Decider delivery/settlement' WHERE id=?", (job,))
+                    return None
             if task["effects"] in {"none", "owned-artifacts"}:
                 self.db.execute("UPDATE jobs SET effects='none' WHERE id=?", (job,))
             elif row["effects"] != "reconciled":
+                self.owner_question(row, attempt, "Actual owning role: reconcile the collected task's possible effects/outboxes", effects=True)
+                self.gate_result_delivery(row, attempt, result)
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
-            response = self._response(row, attempt, task, result)
+            response = None if row["role"] == "Work" and result["category"] in {"scope", "blocker"} else self._response(row, attempt, task, result)
+            if task.get("delivery_required"):
+                self.owner_report(row, attempt, result)
+            response = self.gate_result_delivery(row, attempt, result, response)
+            if not self.deliveries_settled(job):
+                self.db.execute("UPDATE jobs SET state='awaiting-delivery',response=? WHERE id=?", (response, job))
+                return response
             self.db.execute("UPDATE queue SET state='done' WHERE job=?", (job,))
             self.db.execute("UPDATE jobs SET state='closed',closed_at=?,response=? WHERE id=?",
                             (self.clock(), response, job))
@@ -474,6 +536,9 @@ class Store:
             raise Refusal("unroutable result retains its slot and original meaning")
         if not choices:
             return None
+        response_id = digest({"response": attempt["id"]})
+        if self.one("SELECT id FROM events WHERE id=?", (response_id,)):
+            return response_id
         if task["role"] == "QA" and task["phase"] == "cleanup" and result["category"] == "qualification":
             admitted = self.one("SELECT accepted FROM admissions WHERE package=?", (job["package"],))
             if not admitted or not admitted["accepted"]:
@@ -483,7 +548,7 @@ class Store:
         if any(self.config["tasks"][n]["role"] != destination for n in choices):
             raise Refusal("response route must name one actual recipient role")
         response = {
-            "id": digest({"response": attempt["id"]}), "role": destination,
+            "id": response_id, "role": destination,
             "recipient": self.enrollment(destination)["owner"], "author": attempt["session"],
             "source_role": job["role"], "source_attempt": attempt["id"], "source_job": job["id"],
             "source_members": members, "package": job["package"], "parent": members[0]["event"],
@@ -495,6 +560,9 @@ class Store:
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),
                          self.clock(), response["parent"]))
+        if task.get("publish_internal_results"):
+            self._outbox(job["role"], destination, "result", response, job=job["id"], event=response_id,
+                         producer=attempt["session"], key=digest({"response_delivery": response_id}))
         return response["id"]
 
     def complete_events(self):
@@ -505,6 +573,9 @@ class Store:
                 cursor = self.db.execute("UPDATE events SET state='processed',processed_at=? "
                     "WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
                     "AND id IN (SELECT event FROM queue WHERE state='done') "
+                    "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
+                    "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "
+                    "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
                     "AND NOT EXISTS (SELECT 1 FROM events child WHERE child.parent=events.id "
                     "AND child.processed_at IS NULL) "
                     "AND NOT EXISTS (SELECT 1 FROM jobs j,json_each(j.members) m "
@@ -517,6 +588,7 @@ class Store:
     def claim_recovery(self, job):
         with self.tx():
             row = self.job(job)
+            self.require_active_sources(job=job)
             if row["state"] == "closed" or row["recovery_owner"] or row["recovery_count"] >= 1:
                 return None
             self.db.execute("UPDATE jobs SET recovery_owner=?,recovery_state='claimed',recovery_count=1 WHERE id=?",
@@ -539,7 +611,8 @@ class Store:
             old, diag = self.attempt(row["active_attempt"]), self.attempt(diagnosis)
             if row["recovery_owner"] != self.controller or row["recovery_state"] != "diagnosing":
                 raise Refusal("recovery fence differs")
-            if old["ended"] is None or not old["collected"] or row["effects"] not in {"none", "reconciled"}:
+            proved_no_start = old["state"] == "not-started" and old["begin"] is None and json.loads(old["detail"]).get("known_not_started")
+            if (not proved_no_start and (old["ended"] is None or not old["collected"])) or row["effects"] not in {"none", "reconciled"}:
                 raise Refusal("unknown original liveness/effects prohibit replacement")
             detail = json.loads(old["detail"])
             if not detail.get("resume_disposition"):
@@ -566,7 +639,9 @@ class Store:
 
     def set_hold(self, event, reason):
         with self.tx():
-            self.db.execute("UPDATE events SET hold=? WHERE id=?", (reason, event))
+            self.db.execute("UPDATE events SET processed_at=CASE WHEN hold IS NOT NULL AND ? IS NULL "
+                            "AND processed_at IS NOT NULL THEN ? ELSE processed_at END,hold=? WHERE id=?",
+                            (reason, self.clock(), reason, event))
 
     def hold_job(self, job, reason):
         with self.tx():
@@ -595,6 +670,8 @@ class Store:
     def violations(self):
         now, d = self.clock(), self.config["deadlines"]
         alerts = []
+        alerts += [{"subject": r["subject"], "kind": r["kind"], "role": r["role"], "cause": json.loads(r["detail"])}
+                   for r in self.rows("SELECT * FROM operational_errors WHERE active=1")]
         alerts += [{"subject": r["id"], "kind": "ack-lag", "age": now-r["received"]} for r in
                    self.rows("SELECT * FROM events WHERE ack NOT IN ('done','plain','internal')") if now-r["received"] > d["ack"]]
         alerts += [{"subject": r["id"], "kind": "backlog", "age": now-r["received"]} for r in
@@ -608,7 +685,8 @@ class Store:
 
     def _attempt_violation(self, row, now, d):
         job = self.one("SELECT state,active_attempt FROM jobs WHERE id=?", (row["job"],)) if row["job"] else None
-        if job and (job["state"] == "closed" or job["active_attempt"] != row["id"]) and row["cleanup"] == "done":
+        observed = row["cleanup"] in {"done", "owned-ephemeral-lifecycle-observed", "no-session-created"}
+        if job and (job["state"] == "closed" or job["active_attempt"] != row["id"]) and observed:
             return None
         if row["state"] == "reserved" and now-row["created"] > d["bind"]:
             return {"subject": row["id"], "kind": "launch-bind-unknown"}
@@ -616,7 +694,7 @@ class Store:
             return {"subject": row["id"], "kind": "live-or-unknown-timeout"}
         if row["ended"] and row["semantic"] != "DONE" and row["kind"] == "task":
             return {"subject": row["id"], "kind": "ended-not-DONE", "error": row["error"]}
-        if row["ended"] and row["cleanup"] != "done":
+        if row["ended"] and not observed:
             return {"subject": row["id"], "kind": "cleanup-hold", "cleanup": row["cleanup"]}
         return None
 
@@ -629,6 +707,10 @@ class Store:
                 self.db.execute("INSERT INTO alerts VALUES(?,?,?,?,?,NULL)",
                                 (occurrence["id"], occurrence["subject"], occurrence["kind"],
                                  occurrence["created"], encode(occurrence)))
+                alert_role = self.config.get("delivery", {}).get("alert_role", "Work")
+                if self.config.get("delivery"):
+                    self._outbox(alert_role, self.config.get("delivery", {}).get("alert_recipient", "Work"),
+                                 "alert", occurrence, alert=occurrence["id"], key=digest({"alert": occurrence["id"]}))
                 emitted.append(occurrence)
         return emitted
 
@@ -650,4 +732,7 @@ class Store:
                 "slots": self.rows("SELECT * FROM jobs WHERE state!='closed'"),
                 "attempts": self.rows("SELECT id,kind,job,controller,profile,binding,state,begin,ended,exit,"
                                       "collected,session,semantic,capture,cleanup,error,detail FROM attempts"),
+                "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,processed_at FROM outboxes"),
+                "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
+                "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
                 "violations": self.violations(), "adoption": "prospective grants only; no model/goal acceptance"}

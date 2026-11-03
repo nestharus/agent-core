@@ -70,6 +70,10 @@ def parser():
     enroll = sub.add_parser("enroll")
     enroll.add_argument("role")
     enroll.add_argument("--authority", required=True)
+    enroll.add_argument("--delivery", action="store_true", help="Explicit role-lifetime outgoing delegation and real service actor")
+    extend = sub.add_parser("delegate-delivery")
+    extend.add_argument("role")
+    extend.add_argument("--authority", required=True)
     revoke = sub.add_parser("revoke")
     revoke.add_argument("role")
     revoke.add_argument("--grant", required=True)
@@ -94,6 +98,16 @@ def parser():
     conserved.add_argument("path")
     conserved.add_argument("--receipt", required=True)
     sub.add_parser("cleanup")
+    sub.add_parser("service-unit")
+    source = sub.add_parser("recover-source")
+    source.add_argument("event")
+    for command in ("delivery-show", "delivery-stage"):
+        delivery = sub.add_parser(command)
+        delivery.add_argument("role")
+        delivery.add_argument("delivery")
+        if command == "delivery-stage":
+            delivery.add_argument("--stage", choices=["picked-up", "processed", "settled"], required=True)
+            delivery.add_argument("--receipt", required=True)
     alert = sub.add_parser("ack-alert")
     alert.add_argument("occurrence")
     alert.add_argument("--receipt", required=True)
@@ -114,9 +128,11 @@ def operate(args, store):
     if args.command in {"init", "status"}:
         return store.status()
     if args.command == "enroll":
-        grant = Board(store.config, args.role).grant(store, args.authority)
+        grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery)
         store.enroll(args.role, grant)
         return {"grant": grant, "legacy_hold": store.enrollment(args.role)["legacy_hold"]}
+    if args.command == "delegate-delivery":
+        return Board(store.config, args.role).extend_delivery(store, args.authority)
     if args.command == "revoke":
         Board(store.config, args.role).revoke(args.grant)
         with store.tx():
@@ -132,7 +148,7 @@ def operate(args, store):
         return {"package": args.package, "admitted_by": actor}
     if args.command == "reconcile-effects":
         job = store.job(args.job, args.token)
-        actor = actual_actor(store.enrollment(job["role"])["owner"])
+        actor = actual_actor(store.config["roles"][job["role"]]["owner"])
         store.reconcile_effects(args.job, args.token, actor, read_record(args.receipt))
         return {"job": args.job, "effects_reconciled": True}
     if args.command == "hold":
@@ -140,7 +156,7 @@ def operate(args, store):
         return {"held": args.event}
     if args.command == "release-hold":
         role = store.one("SELECT role FROM events WHERE id=?", (args.event,))["role"]
-        actual_actor(store.enrollment(role)["owner"])
+        actual_actor(store.config["roles"][role]["owner"])
         if not read_record(args.receipt):
             raise Refusal("hold release needs conservation/recovery evidence")
         store.set_hold(args.event, None)
@@ -151,6 +167,12 @@ def operate(args, store):
         return {"conserved": args.path}
     if args.command == "cleanup":
         return sweep(store)
+    if args.command == "recover-source":
+        role = store.one("SELECT role FROM events WHERE id=?", (args.event,))["role"]
+        actual_actor(store.config["roles"][role]["owner"])
+        return store.recover_source(args.event)
+    if args.command == "service-unit":
+        return service_unit(store.config, args.config)
     if args.command == "ack-alert":
         actor = canonical_uuid(os.environ.get("CODEX_SESSION_ID"))
         store.process_alert(args.occurrence, actor, read_record(args.receipt))
@@ -178,7 +200,13 @@ def main(argv=None):
             return 0
         if not args.config:
             raise Refusal("--config is required")
-        store = Store(load_config(args.config))
+        config = load_config(args.config)
+        if args.command in {"delivery-show", "delivery-stage"}:
+            board = Board(config, args.role)
+            value = board.show_delivery(args.delivery) if args.command == "delivery-show" else board.delivery_stage(args.delivery, args.stage, read_record(args.receipt))
+            print_json(value)
+            return 0
+        store = Store(config)
         try:
             print_json(operate(args, store))
         finally:
@@ -187,6 +215,21 @@ def main(argv=None):
     except (Refusal, ValueError, KeyError, OSError, sqlite3.Error) as exc:
         print_json({"state": "held", "error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
         return 2
+
+
+def stop_budget(config):
+    d = config["deadlines"]
+    # Two bounded turns, interruption, six bounded metadata subprocesses,
+    # initialization/start/read/unsubscribe RPCs and exact owned teardown.
+    return int(2*max(d["task"], d["classify"])+d["interrupt"]+6*46+180+3*d["shutdown"]+60)
+
+
+def service_unit(config, path):
+    cli = str(Path(__file__).resolve().parents[1]/"coordinator")
+    return {"stop_budget_seconds": stop_budget(config), "unit":
+        "[Service]\nType=simple\nUMask=0077\n"
+        f"ExecStart=/usr/bin/python3 {cli} --config {path} run --enable-models\n"
+        f"Restart=no\nKillMode=mixed\nTimeoutStopSec={stop_budget(config)}\nStandardOutput=null\nStandardError=null\n"}
 
 
 if __name__ == "__main__":

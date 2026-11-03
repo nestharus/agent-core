@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -39,7 +40,7 @@ def config_at(directory):
     for task in tasks.values():
         task["responses"].update({"blocker": ["work-proposer"], "scope": ["work-proposer"]})
     value = {"version": 1, "enabled": False, "actor": ident(), "state_dir": str(home / "state"),
-             "board_home": str(home / "boards"), "board_library": str(Path(__file__).resolve().parents[2] / "message-board"),
+             "board_home": str(home / "boards"), "board_library": os.environ.get("COORDINATOR_TEST_BOARD_LIBRARY", str(Path(__file__).resolve().parents[2] / "message-board")),
              "profiles": [".codex", ".codex2", ".codex3", ".codex4", ".codex5"],
              "roles": roles, "tasks": tasks, "classifier": {"binding": copy.deepcopy(LUNA), "profile": ".codex2", "cwd": str(home)},
              "diagnosis": {"binding": copy.deepcopy(LUNA), "profile": ".codex4", "cwd": str(home)},
@@ -84,13 +85,16 @@ def collect(store, attempt, answer, code=0, error=None, capture="complete", **de
 
 def queued(store, message, answer=None):
     store.ingest(message)
-    attempt, actual = store.claim_classification()
-    answer = answer or {"event_id": actual["id"], "task": actual["allowed_tasks"][0],
-                        "package": actual["package"], "reason": "fixture meaning selects this authorized role"}
-    collect(store, attempt, answer)
-    store.commit_classification(attempt)
-    store.ack_state(actual["id"], "internal")
-    return attempt
+    while True:
+        attempt, actual = store.claim_classification()
+        selected = answer if actual["id"] == message["id"] and answer else {
+            "event_id": actual["id"], "task": actual["allowed_tasks"][0],
+            "package": actual["package"], "reason": "fixture meaning selects this authorized role"}
+        collect(store, attempt, selected)
+        store.commit_classification(attempt)
+        store.ack_state(actual["id"], "internal")
+        if actual["id"] == message["id"]:
+            return attempt
 
 
 def ended_job(store, job, answer=None, code=0):

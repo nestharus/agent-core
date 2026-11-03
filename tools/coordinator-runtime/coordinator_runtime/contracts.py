@@ -122,6 +122,21 @@ def validate_config(config):
     for selected in config["roles"].values():
         if set(selected["routes"]) - set(config["tasks"]):
             raise Refusal("role route references an unknown configured task")
+    recipients = config.get("delivery", {}).get("recipients", {})
+    for name, recipient in recipients.items():
+        if name not in ROLES | {"Root"}:
+            raise Refusal("delivery selects only the four roles and external Root")
+        canonical_uuid(recipient["session"])
+        required_text(recipient["board_role"], "recipient board role", 128)
+        if recipient.get("profile") not in PROFILES:
+            raise Refusal("recipient retains its actual selected account")
+        if name in config["roles"] and recipient["session"] != config["roles"][name]["owner"]:
+            raise Refusal("delivery cannot substitute a selected role owner")
+    for task in config["tasks"].values():
+        if set(task.get("allowed_handoffs", [])) - set(recipients):
+            raise Refusal("task handoffs exceed selected recipients")
+        if task.get("require_package_scope") and not task.get("scope_roots"):
+            raise Refusal("package effects need explicit admitted scope roots")
     for key in ("max_events", "max_attempts", "max_jobs", "max_bytes", "max_alerts", "max_result_bytes"):
         if type(config["limits"].get(key)) is not int or config["limits"][key] <= 0:
             raise Refusal(f"positive cumulative limit required: {key}")
@@ -152,7 +167,10 @@ def validate_task(name, task, config):
         raise Refusal("task role/phase outside enrollment")
     if (role == "QA") != (phase in {"execution", "cleanup"}):
         raise Refusal("QA uses execution/cleanup; other roles use proposer/integrator")
-    binding = model_binding(task["binding"])
+    owner_execution = task.get("execution") == "owner"
+    if owner_execution and (role != "Reviews" or phase != "proposer" or task["binding"] != {"model": "gpt-xhigh", "provider": "opaque", "effort": "opaque"}):
+        raise Refusal("owner execution retains the current selected opaque Reviews binding; no substitute model")
+    binding = task["binding"] if owner_execution else model_binding(task["binding"])
     if (phase in {"integrator", "cleanup"} or role == "Work") and binding != SOL:
         raise Refusal("Work and integrators require explicit gpt-6.1-sol xhigh")
     if task["profile"] not in config["profiles"]:
@@ -196,11 +214,44 @@ def validate_task(name, task, config):
         raise Refusal("bounded proposer capacity required")
 
 
+def scoped_task(name, task, admission):
+    """Branch's actual per-package admission narrows configured effect roots.
+
+    Nothing in message text becomes launcher argv or authority. The existing
+    resource owner records the exact execution scope using admit-package.
+    """
+    if not task.get("require_package_scope"):
+        return task
+    receipt = parse_json(admission["receipt"]) if admission else {}
+    scope = receipt.get("task_scopes", {}).get(name)
+    if not isinstance(scope, dict) or not scope.get("procedure") or not scope.get("resource_evidence"):
+        raise Refusal("actual package procedure, resource-owner evidence and task scope are missing")
+    roots = scope.get("write_roots", []) + scope.get("read_roots", []) + [scope.get("cwd", "")]
+    allowed = [Path(p) for p in task["scope_roots"]]
+    private = [Path.home()/p for p in PROFILES]
+    for value in roots:
+        path = Path(value)
+        if (not path.is_absolute() or not any(path.is_relative_to(root) for root in allowed)
+                or any(path.is_relative_to(p) or p.is_relative_to(path) for p in private)
+                or any(p.is_symlink() for p in (path, *path.parents)) or ".." in path.parts):
+            raise Refusal("package scope escapes selected roots or crosses a symlink/private boundary")
+    network = scope.get("network", False)
+    if type(network) is not bool or (network and not task.get("network", False)):
+        raise Refusal("admission cannot expand selected network authority")
+    authority = {**task["effect_authority"], "read_roots": scope.get("read_roots", []), "write_roots": scope.get("write_roots", [])}
+    return {**task, "cwd": scope["cwd"], "network": network, "effect_authority": authority, "admitted_scope": scope}
+
+
 def classification(answer, event, config):
     if not isinstance(answer, dict) or set(answer) != {"event_id", "task", "package", "reason"}:
         raise Refusal("complete classification object required")
     if answer["event_id"] != event["id"]:
         raise Refusal("classification is for a different event")
+    if event["kind"] == "outgoing-response" and answer["task"] == "@delivery":
+        if answer["package"] != event.get("package") or not event.get("delivery_plan"):
+            raise Refusal("outgoing response must retain its bound package and admitted delivery plan")
+        required_text(answer["reason"], "response classification reason", 4000)
+        return answer
     task = config["tasks"].get(answer["task"])
     if task is None:
         raise Refusal("message-selected task is not allowlisted")
@@ -208,7 +259,7 @@ def classification(answer, event, config):
     if not isinstance(allowed, list) or answer["task"] not in allowed:
         raise Refusal("classification exceeds event's typed routing authority")
     required_text(answer["reason"], "classification rationale", 4000)
-    if task["role"] == "QA":
+    if task["role"] == "QA" or task.get("require_package_scope"):
         required_text(answer["package"], "QA package", 128)
     if answer["package"] != event.get("package"):
         raise Refusal("classifier cannot invent or change a package identity")
@@ -217,7 +268,7 @@ def classification(answer, event, config):
 
 def task_result(answer):
     keys = {"semantic", "summary", "findings", "failures", "unknowns", "artifacts", "category"}
-    if not isinstance(answer, dict) or set(answer) != keys:
+    if not isinstance(answer, dict) or not keys <= set(answer) or set(answer)-keys-{"handoffs", "no_handoff_reason"}:
         raise Refusal("task result must conserve summary/findings/failures/unknowns/artifacts/category")
     if answer["semantic"] not in {"DONE", "PARTIAL", "FAILED", "UNKNOWN"}:
         raise Refusal("unknown semantic completion")
@@ -229,6 +280,10 @@ def task_result(answer):
         raise Refusal("typed response category required")
     if answer["semantic"] != "DONE" and not (answer["failures"] or answer["unknowns"]):
         raise Refusal("partial/failed/unknown work must retain its unresolved meaning")
+    if "handoffs" in answer and not isinstance(answer["handoffs"], list):
+        raise Refusal("handoffs must be an explicit bounded list")
+    if len(answer.get("handoffs", [])) > 16:
+        raise Refusal("handoff count exceeds admitted per-task bound")
     return answer
 
 

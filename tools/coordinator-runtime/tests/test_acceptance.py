@@ -283,6 +283,7 @@ os._exit(73)
         sweep(self.store)
         self.assertTrue(target.exists())
         self.store.set_hold(original["id"], None)
+        self.now += 86400  # Actual consumer-hold release restarts processing retention.
         external = Path(self.temp.name) / "foreign.txt"
         external.write_text("never delete")
         target.unlink()
@@ -342,7 +343,8 @@ class Processes(unittest.IsolatedAsyncioTestCase):
         outcome = await task
         self.assertEqual(outcome["exit"], 0)
         self.assertEqual(outcome["result"]["semantic"], "DONE")
-        self.assertEqual(outcome["cleanup"], "done")
+        self.assertEqual(outcome["cleanup"], "owned-ephemeral-lifecycle-observed")
+        self.assertEqual(outcome["detail"]["session_reclamation"], "not-qualified")
         self.store.collect(attempt, outcome)
         self.store.finish_job(job["id"], job["token"])
         self.assertEqual(self.store.job(job["id"])["state"], "closed")
