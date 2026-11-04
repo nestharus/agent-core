@@ -346,6 +346,7 @@ class Dispatcher:
         if job['recovery_state']!='diagnosing':return
         old=self.store.attempt(job['active_attempt'])
         current=self.store.current_diagnosis(job)
+        if not current or current['id']!=diagnosis:return  # A late old callback cannot dispose a newer pending diagnosis.
         if current and current['id']==diagnosis and current.get('legacy_lineage'):
             with self.store.tx():self.store.retain_recovery_disposition(job,current,'Legacy collected diagnosis recognized; actual owner disposition remains required, no task replay/effect waiver')
             return
@@ -399,11 +400,15 @@ class Dispatcher:
             try:
                 self.authorize_roles(self.store.source_roles(job=job['id']))
                 if job['controller']!=self.store.controller:
+                    if json.loads(request['receipt'])['mode']=='use-diagnosis':
+                        raise Refusal('retained diagnosis awaits its existing lawful collector; no automatic custody transfer')
                     self.store.adopt_collected(job['id'])  # Existing proved closure-only transfer; never process collection.
                 current=self.store.consume_recovery_request(request['id'])
                 if not current:continue
                 if current['receipt']['mode']=='remaining-work':
                     self.spawn(self.recover(self.store.job(job['id'])))
+                elif current['receipt']['mode']=='use-diagnosis':
+                    self.spawn(self.execute(job['id'],current['successor']))
                 elif current['receipt']['mode']=='defer':
                     pass  # Explicit owned unresolved decision; no new process, settlement or release.
                 else:

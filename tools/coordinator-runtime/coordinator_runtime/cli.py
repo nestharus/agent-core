@@ -123,7 +123,7 @@ def parser():
     recovery.add_argument('job')
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
-    recovery.add_argument('--receipt',required=True,help='JSON mode/reason/evidence/remaining; redispose or defer uses remaining:null; remaining-work states target AND WHY')
+    recovery.add_argument('--receipt',required=True,help='JSON mode/reason/evidence/remaining; use-diagnosis adds exact diagnosis/selection refs with remaining:null; remaining-work requests fresh diagnosis')
     controls=sub.add_parser('owner-controls',help='Genuine coordinator reads its bounded pending inputs/recovery; no native wake inferred')
     controls.add_argument('role')
     controls.add_argument('--limit',type=int,choices=range(1,101),default=100,metavar='1..100')

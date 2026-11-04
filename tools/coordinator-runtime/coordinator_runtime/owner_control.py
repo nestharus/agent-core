@@ -211,7 +211,7 @@ class OwnerControl(AutomaticControl):
                 raise Refusal('independent control already actually processed; no native send')
             selection=json.loads(row['selection']);self._control_selection(selection)
             delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection,service=service)
-            if (delivery['processed_at'] is not None and not self.control_receipt_status(conn,delivery)['pending']) or digest(json.loads(delivery['payload']))!=row['payload_hash']:
+            if not self.control_receipt_status(conn,delivery)['pending'] or digest(json.loads(delivery['payload']))!=row['payload_hash']:
                 raise Refusal('current delivery processed or source changed')
         # Public source/API preflight only, before the durable one-shot claim.
         try:helper=load_helper(self,selection)
@@ -224,7 +224,8 @@ class OwnerControl(AutomaticControl):
         with self.opened() as conn:
             with self.store.write(conn):
                 delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection,service=service)
-                if delivery['processed_at'] is not None and not self.control_receipt_status(conn,delivery)['pending']:raise Refusal('delivery processed before control effect')
+                if not self.control_receipt_status(conn,delivery)['pending']:raise Refusal('control processed during preflight; no native effect')
+                if digest(json.loads(delivery['payload']))!=row['payload_hash']:raise Refusal('source changed before control effect')
                 changed=conn.execute("UPDATE coordinator_controls_v1 SET state='inflight' WHERE id=? AND state='prepared'",(intent,)).rowcount
                 if not changed:return self._control_record(conn,conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(intent,)).fetchone())
         def record(phase,turn,rpc_id):
@@ -270,7 +271,7 @@ class OwnerControl(AutomaticControl):
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_controls_v1'").fetchone():return None
         return conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(intent,)).fetchone()
 
-    def control_processing_proof(self,conn,row,actor,receipt):
+    def control_processing_proof(self,conn,row,actor,receipt,*,stage=None):
         """Independent control evidence; substantive callback receipts stay immutable."""
         if not self.control_receipt_status(conn,row)['required']:return
         if len(encode(receipt).encode())>self.config['limits']['max_result_bytes']:raise Refusal('bounded independent control receipt required')
@@ -290,11 +291,18 @@ class OwnerControl(AutomaticControl):
             for item in proof['evidence']:required_text(item,'actual direct control evidence',2000)
         else:self._native_control_proof(conn,row,actor,receipt)
         record={'actor':actor,'control':proof if direct else receipt.get('control'),
-                'transport':receipt.get('transport'),'native_receipt_claimed':not direct,'meaning':'actual independent control processing only; no business/effect/publication waiver'}
+                'transport':receipt.get('transport'),'supplied_receipt':receipt,
+                'native_receipt_claimed':not direct,'meaning':'actual independent control processing only; no business/effect/publication waiver'}
         encoded=encode(record)
         prior=conn.execute('SELECT * FROM coordinator_control_receipts_v1 WHERE delivery=?',(row['id'],)).fetchone()
         if prior:
-            if prior['receipt']!=encoded:raise Refusal('completed independent control receipt is immutable')
+            retained=json.loads(prior['receipt'])
+            # Each substantive stage retains its own full receipt in delivery_stage.
+            # It must reuse the same control proof, not replace the independent receipt.
+            if stage is not None:
+                keys=('actor','control','transport','native_receipt_claimed')
+                if any(retained.get(k)!=record[k] for k in keys):raise Refusal('completed independent control proof is immutable')
+            elif prior['receipt']!=encoded:raise Refusal('completed independent control receipt is immutable; full supplied meaning differs')
         else:conn.execute('INSERT INTO coordinator_control_receipts_v1 VALUES(?,?,?,?)',(row['id'],control['id'],encoded,time.time()))
 
     def control_receipt(self,delivery,receipt):

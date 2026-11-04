@@ -2,7 +2,7 @@
 
 import json
 
-from .contracts import Refusal, digest, encode, required_text
+from .contracts import LUNA, Refusal, digest, encode, required_text
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recovery_requests(
@@ -33,10 +33,12 @@ class RecoveryJournal:
                 diag=self.current_diagnosis(row)
                 if not diag or diag['collected'] is None or diag['ended'] is None or type(diag['exit']) is not int:
                     raise Refusal('existing recovery must be collected; exact current diagnosis/END evidence missing; actual collector retains custody')
-            if not isinstance(receipt,dict) or set(receipt)!={'mode','reason','evidence','remaining'}:
+            keys={'mode','reason','evidence','remaining'}
+            reuse=isinstance(receipt,dict) and receipt.get('mode')=='use-diagnosis'
+            if not isinstance(receipt,dict) or set(receipt)!=(keys|{'diagnosis','selection'} if reuse else keys):
                 raise Refusal('recovery receipt needs mode/reason/evidence/remaining')
             mode=receipt['mode']
-            if mode not in {'redispose','remaining-work','defer'}:raise Refusal('unknown recovery mode')
+            if mode not in {'redispose','remaining-work','defer','use-diagnosis'}:raise Refusal('unknown recovery mode')
             required_text(receipt['reason'],'owner recovery reason',4000)
             if not isinstance(receipt['evidence'],list) or not receipt['evidence']:
                 raise Refusal('actual owner recovery evidence required')
@@ -45,7 +47,7 @@ class RecoveryJournal:
                 required_text(receipt['remaining'],'bounded remaining target and why',16000)
                 self.remaining_work_fence(row,old)
             elif receipt['remaining'] is not None:
-                raise Refusal('redispose/defer cannot authorize new model work')
+                raise Refusal('only remaining-work states a new target; other modes require remaining:null')
             if len(encode(receipt).encode())>self.config['limits']['max_result_bytes']:
                 raise Refusal('owner recovery receipt exceeds the admitted result bound')
             key=digest({'job':job,'attempt':attempt,'actor':actor,'receipt':receipt})
@@ -56,9 +58,10 @@ class RecoveryJournal:
             count=self.db.execute('SELECT COUNT(*) FROM recovery_requests WHERE job=?',(job,)).fetchone()[0]
             if count>=self.config['limits'].get('max_owner_corrections',4):
                 raise Refusal('bounded owner recovery requests exhausted; original duties retained')
+            witness=self.retained_diagnosis_witness(row,receipt) if reuse else None
             self.budget(None,len(encode(receipt).encode())+1024)
-            self.db.execute('INSERT INTO recovery_requests VALUES(?,?,?,?,?,\'pending\',?,NULL)',
-                            (key,job,attempt,actor,encode(receipt),self.clock()))
+            self.db.execute('INSERT INTO recovery_requests VALUES(?,?,?,?,?,\'pending\',?,?)',
+                            (key,job,attempt,actor,encode(receipt),self.clock(),encode({'retained_diagnosis':witness}) if reuse else None))
         return self.one('SELECT * FROM recovery_requests WHERE id=?',(key,))
 
     def remaining_work_fence(self,row,old):
@@ -92,11 +95,18 @@ class RecoveryJournal:
                 raise Refusal('request awaits actual original collector; no custody transfer')
             if row['active_attempt']!=old['id'] or row['state']!='held':
                 raise Refusal('request stale; no replacement or replay')
+            receipt=json.loads(current['receipt'])
+            if receipt['mode']=='use-diagnosis':
+                successor=self._handoff(row['id'],receipt['diagnosis'],retained_request=current)
+                self.db.execute("UPDATE recovery_requests SET state='consumed',result=? WHERE id=?",
+                    (encode({'collector':self.controller,'at':self.clock(),'prior_job':row,
+                             'retained_diagnosis':json.loads(current['result'])['retained_diagnosis'],'successor':successor,
+                             'meaning':'one remaining attempt allocated in same job; no diagnosis/model start/publication/acceptance claim'}),request))
+                return {**current,'receipt':receipt,'successor':successor}
             if row['recovery_state'] in {'claimed','diagnosing'}:
                 diag=self.current_diagnosis(row)
                 self.retain_recovery_disposition(row,diag,'Actual owner request selects a new disposition of the collected diagnosis; no replay or effect waiver')
                 row=self.job(row['id'])
-            receipt=json.loads(current['receipt'])
             if receipt['mode']=='remaining-work':
                 self.remaining_work_fence(row,old)
                 self.db.execute("UPDATE jobs SET recovery_owner=?,recovery_state='claimed',recovery_count=recovery_count+1 WHERE id=?",
@@ -109,6 +119,43 @@ class RecoveryJournal:
                             (encode({'collector':self.controller,'at':self.clock(),
                                      'prior_job':row,'prior_capture':old['capture'],'prior_error':old['error']}),request))
         return {**current,'receipt':receipt}
+
+    def retained_diagnosis_witness(self,row,receipt,*,request=None):
+        """Reaffirm qualified same-purpose evidence, not a fresh diagnosis or forced state."""
+        if row['state']!='held' or row['recovery_state']!='awaiting-disposition':
+            raise Refusal('retained diagnosis use requires the exact held awaiting-disposition job; defer/successor/current recovery remains binding')
+        old=self.attempt(row['active_attempt'])
+        self.require_active_sources(job=row['id'])
+        self.remaining_work_fence(row,old)
+        for field in ['diagnosis','selection']:required_text(receipt[field],'exact retained '+field,128)
+        diag=self.current_diagnosis(row)
+        if not diag or diag['id']!=receipt['diagnosis'] or diag.get('legacy_lineage'):
+            raise Refusal('requested diagnosis is not the current exact explicit diagnosis; newer/pending or ambiguous evidence remains binding')
+        detail=json.loads(diag['detail'])
+        if (diag['state']!='collected' or diag['ended'] is None or diag['collected'] is None
+                or type(diag['exit']) is not int or diag['exit']!=0 or diag['capture']!='complete' or diag['error']
+                or json.loads(diag['binding'])!=LUNA or detail.get('binding_readback')!=LUNA
+                or detail.get('root_identity_observed') is not True or diag['controller']!=row['recovery_owner']):
+            raise Refusal('retained diagnosis needs actual collected zero/complete/error-free bound Luna LOW identity and original recovery collector; no semantic DONE inference')
+        if self.one('SELECT diagnosis FROM recovery_dispositions WHERE diagnosis=?',(diag['id'],)):
+            raise Refusal('current diagnosis already has an owned disposition/question; do not override it')
+        selection=self.owner_remaining_selection(row['id'],old['id'])
+        if (not selection or selection['id']!=receipt['selection'] or detail.get('owner_selection')!=selection['id']
+                or selection['actor']!=self.enrollment(row['role'])['owner']):
+            raise Refusal('exact consumed authentic remaining-work selection required; no new purpose inferred')
+        choice_order=self.one('SELECT rowid AS ordinal FROM recovery_requests WHERE id=?',(selection['id'],))['ordinal']
+        newer=self.one('SELECT id FROM recovery_requests WHERE job=? AND attempt=? AND rowid>? AND id!=?',
+                       (row['id'],old['id'],choice_order,request or ''))
+        if newer:raise Refusal('newer owner choice '+newer['id']+' remains binding; retained selection is not current')
+        self.diagnosis_choice(row,diag)  # Preserves @owner, profile, target/WHY and authentic selection checks.
+        fields=('id','job','kind','controller','profile','binding','state','ended','exit','collected','capture','error','semantic','result')
+        identity={k:detail.get(k) for k in ['prior_task_attempt','owner_selection','binding_readback','root_identity_observed']}
+        return {'diagnosis':diag['id'],'selection':selection['id'],'prior_task':old['id'],
+                'diagnosis_hash':digest({**{k:diag[k] for k in fields},'identity':identity}),
+                'original_task_hash':digest({k:old[k] for k in ['id','job','controller','ended','exit','collected','semantic','capture','error','result']}),
+                'closure_hash':digest(row['collection_handoff']),
+                'selection_hash':digest({k:selection[k] for k in ['id','job','attempt','actor','receipt','state','created']}),
+                'basis':'actual owner reaffirmation of retained qualified same-purpose diagnosis; no source/history/END rewrite'}
 
     def owner_remaining_selection(self,job,attempt):
         row=self.one("SELECT * FROM recovery_requests WHERE job=? AND attempt=? AND state='consumed' "
@@ -180,6 +227,9 @@ class RecoveryJournal:
             raise Refusal('unknown diagnosis remains with its actual collector')
         if not self.owns_disposition(current,self.attempt(job['active_attempt'])):
             raise Refusal('recovery disposition remains with the actual original collector; no custody transfer')
+        selected=self.current_diagnosis(current)
+        if not selected or selected['id']!=diag['id']:
+            raise Refusal('stale diagnosis cannot dispose newer current/pending diagnosis')
         lineage=diag.get('legacy_lineage')
         if lineage:self.legacy_diagnosis_lineage(job,diag)
         elif json.loads(diag['detail']).get('prior_task_attempt')!=job['active_attempt']:

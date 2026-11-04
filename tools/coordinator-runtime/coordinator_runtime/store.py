@@ -678,33 +678,49 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def handoff(self, job, diagnosis):
         with self.tx():
-            row = self.job(job)
-            old, diag = self.attempt(row["active_attempt"]), self.attempt(diagnosis)
-            if row["recovery_owner"] != self.controller or row["recovery_state"] != "diagnosing":
-                raise Refusal("recovery fence differs")
-            proved_no_start = old["state"] == "not-started" and old["begin"] is None and json.loads(old["detail"]).get("known_not_started")
-            if (not proved_no_start and (old["ended"] is None or not old["collected"])) or row["effects"] not in {"none", "reconciled"}:
-                raise Refusal("unknown original liveness/effects prohibit replacement")
-            detail = json.loads(old["detail"])
-            if not detail.get("resume_disposition"):
-                raise Refusal("supported same-session resume must be attempted or explicitly unavailable first")
-            choice=self.diagnosis_choice(row,diag)
-            task = self.config["tasks"][row["task"]]
-            selection=self.owner_remaining_selection(job,old['id'])
-            if old['semantic']=='DONE' and not selection:
-                raise Refusal('collected DONE needs disposition; completed work cannot be blindly relaunched')
-            if selection:self.remaining_work_fence(row,old)
-            self.require_recoverable_hold(row,old)
-            attempt = self._attempt("task", None, job, task["binding"], choice["profile"])
-            context = {"prior_attempt": old["id"], "prior_session": old["session"],
-                       "prior_result": old["result"], "prior_error": old["error"],
-                       "effect_receipt": row["effect_receipt"], "choice": choice,
-                       "diagnosis": diagnosis, "native_resume": False}
-            context.update({'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])})
-            context = {**json.loads(self.attempt(attempt)["detail"]), **context}
-            self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(context), attempt))
-            self.db.execute("UPDATE jobs SET active_attempt=?,controller=?,effects='unknown',state='running',"
-                            "recovery_state='handed-off',hold_reason=NULL WHERE id=?", (attempt, self.controller, job))
+            return self._handoff(job,diagnosis)
+
+    def _handoff(self,job,diagnosis,*,retained_request=None):
+        """Allocate once inside the caller's journal transaction, never start a model."""
+        if not self.db.in_transaction:raise Refusal('handoff requires the owned journal write transaction')
+        row=self.job(job)
+        old,diag=self.attempt(row['active_attempt']),self.attempt(diagnosis)
+        if retained_request:
+            receipt=json.loads(retained_request['receipt'])
+            if (retained_request['state']!='pending' or retained_request['job']!=job or retained_request['attempt']!=old['id']
+                    or retained_request['actor']!=self.enrollment(row['role'])['owner']
+                    or receipt['mode']!='use-diagnosis' or receipt['diagnosis']!=diagnosis
+                    or not self.owns_disposition(row,old)):
+                raise Refusal('exact actual-owner request and lawful original disposition collector required')
+            witness=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'])
+            if json.loads(retained_request['result'])['retained_diagnosis']!=witness:
+                raise Refusal('retained qualified diagnosis/selection changed since owner reaffirmation')
+        elif row['recovery_owner']!=self.controller or row['recovery_state']!='diagnosing':
+            raise Refusal('recovery fence differs')
+        selected=self.current_diagnosis(row)
+        if not selected or selected['id']!=diagnosis:raise Refusal('only current diagnosis can authorize handoff; no stale/pending substitution')
+        proved_no_start=old['state']=='not-started' and old['begin'] is None and json.loads(old['detail']).get('known_not_started')
+        if (not proved_no_start and (old['ended'] is None or not old['collected'])) or row['effects'] not in {'none','reconciled'}:
+            raise Refusal('unknown original liveness/effects prohibit replacement')
+        if not json.loads(old['detail']).get('resume_disposition'):
+            raise Refusal('supported same-session resume must be attempted or explicitly unavailable first')
+        choice=self.diagnosis_choice(row,diag)
+        task=self.config['tasks'][row['task']]
+        selection=self.owner_remaining_selection(job,old['id'])
+        if old['semantic']=='DONE' and not selection:
+            raise Refusal('collected DONE needs disposition; completed work cannot be blindly relaunched')
+        if selection:self.remaining_work_fence(row,old)
+        self.require_recoverable_hold(row,old)
+        attempt=self._attempt('task',None,job,task['binding'],choice['profile'])
+        context={'prior_attempt':old['id'],'prior_session':old['session'],'prior_result':old['result'],
+                 'prior_error':old['error'],'prior_job_hold':row['hold_reason'],'effect_receipt':row['effect_receipt'],
+                 'choice':choice,'diagnosis':diagnosis,'native_resume':False,
+                 'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])}
+        if retained_request:context['retained_diagnosis_request']=retained_request
+        context={**json.loads(self.attempt(attempt)['detail']),**context}
+        self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(context),attempt))
+        self.db.execute("UPDATE jobs SET active_attempt=?,controller=?,effects='unknown',state='running',"
+                        "recovery_state='handed-off',hold_reason=NULL WHERE id=?",(attempt,self.controller,job))
         return attempt
 
     def set_hold(self, event, reason):

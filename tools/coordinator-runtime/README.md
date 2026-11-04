@@ -891,3 +891,83 @@ diagnosis with the authentic new selection. Ambiguous/multiple diagnoses, missin
 numeric END, wrong collector or successor evidence return a precise remaining
 question with exact IDs. No raw-history search, foreign wait, force-release, source
 root widening, handoff deletion or task launch is used to make compatibility pass.
+
+### Complete receipts and the preflight boundary
+
+Independent control receipts now retain the entire supplied JSON under
+`control_receipt.receipt.supplied_receipt`, alongside actual actor and derived
+queue/control-proof metadata. Top-level full-read/disposition evidence, additional
+fields and the real queue consumer proof all survive. Repeating an independent
+receipt requires the same complete meaning; changing supplied evidence is refused
+instead of being treated as identical. This is attributed evidence, not independent
+proof that the owner read or understood anything.
+
+Direct delivery-stage also retains its complete receipts. A later substantive
+stage may add its own stage evidence/resolution in the normal immutable stage
+column while reusing the same control/transport proof. It does not replace the
+independent receipt or erase its original full supplied meaning. Legitimate routine
+callbacks still establish only delegated substance, never native arrival/full-read.
+
+Control send rechecks pending duty and source hash inside the write transaction
+that claims prepared → inflight, after helper preflight. A genuine direct
+disposition during preflight therefore prevents the helper call even while
+substantive processed_at is null. Once inflight is claimed, direct disposition
+cannot waive it. Unknown transport combined with a prior direct/non-native receipt
+also remains pending, with combined processed_at:null and false satisfaction.
+This preserves unknown/inflight sender/consumer and source/outbox/retirement duties;
+it supplies no native reconciliation/clearing/retry or claim about live race frequency.
+
+Historical receipts that omitted supplied evidence cannot be reconstructed from
+queue proof. No earlier conservation/adoption claim is retroactively supplied.
+Aggregate max_bytes accounting remains a static/unexecuted question; finite existing
+input/count bounds remain, without a new aggregate-capacity qualification.
+
+### Use an already-qualified diagnosis for an already-held remainder
+
+`request-recovery` additionally accepts this exact receipt shape:
+
+```json
+{
+  "mode": "use-diagnosis",
+  "reason": "Actual same-role owner reaffirms the captured target and WHY remain current",
+  "evidence": ["Actual qualified diagnosis/consumed selection read and currentness authority"],
+  "remaining": null,
+  "diagnosis": "EXACT-CURRENT-DIAGNOSIS-ID",
+  "selection": "EXACT-CONSUMED-REMAINING-WORK-SELECTION-ID"
+}
+```
+
+This expresses the held Work928 relationship without requesting an equivalent
+Luna diagnosis. The genuine owner queues it through the existing actual-owner
+command; acceptance starts no model. Only the existing lawful disposition collector
+consumes it. This mode performs no automatic custody adoption and does not ask an
+operator to borrow a controller ID. The actual owner reaffirmation is recorded
+within existing authority; it is not another blanket human/Source/CI permission gate.
+
+Predicates are explicit: same active held task/reservation in awaiting-disposition;
+current explicit diagnosis (including latest pending selection, never an old
+collected substitute); actual collected zero/complete/error-free diagnosis;
+configured and observed Luna LOW identity; matching prior task/original recovery
+collector and authentic consumed remaining-work selection. Diagnosis semantic:null
+is preserved. @owner, a current diagnosis disposition/question, defer, any newer
+owner choice, successor or mismatched lineage remains binding. The existing original
+closure/effects/resume/source/legacy/resource/publication/hold gates all remain.
+
+The request captures bounded hashes of qualified diagnosis, original task source,
+closure and selected owner purpose. Consumption rechecks those exact witnesses,
+currentness, existing collector and fences in its allocation transaction. It
+allocates at most one remaining task attempt within the SAME job/token/members,
+consumes that request atomically and preserves original records. It never changes
+the successful diagnosis/selection, fabricates task DONE, resets recovery to
+diagnosing or increments a diagnosis count. The new attempt carries original
+result/artifact references, prior hold, exact remaining/rationale, old selection
+and current reaffirmation. Later ordinary task launch/admission/collection and
+fresh preimage/staging/publication gates still decide actual execution/effects.
+
+Repeating consumption does not allocate again. A late old diagnosis callback cannot
+dispose a newer current/pending diagnosis. If predicates fail, the request/hold and
+precise reason stay with the actual owner/collector; no forced SQL/history edit,
+new diagnosis, stage replay, second integrator or generic unknown-effect waiver is
+used to make the transition succeed. Existing per-job request and finite storage
+bounds still apply. Source presence and fixture success establish no live Work928
+successor, canonical publication, receiver arrival, rollout admission or acceptance.

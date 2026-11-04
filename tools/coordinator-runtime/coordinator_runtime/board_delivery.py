@@ -319,7 +319,7 @@ class BoardDelivery:
                 if stage == "picked-up" and notice["delivery_state"] == "sending":
                     raise Refusal("original transport sender still owns an unsettled claim")
                 if stage in {'processed','settled'}:
-                    self.control_processing_proof(conn,row,actor,receipt)
+                    self.control_processing_proof(conn,row,actor,receipt,stage=stage)
                 if stage in {"processed", "settled"} and notice["route"] == "queue":
                     transport = receipt.get("transport", {})
                     if (not transport.get("evidence") or not notice["queue_message_id"] or

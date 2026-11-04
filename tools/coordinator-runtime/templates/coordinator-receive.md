@@ -159,6 +159,22 @@ old work replay. Multiple candidates/missing END/wrong collector stay precise
 questions. Preserve original incomplete capture, semantic UNKNOWN, handoff/inventory
 errors, unknown effects and the actual collector; do not clear slots or widen roots.
 
+For an already-held awaiting-disposition job with a successful current diagnosis,
+the same genuine owner can request-recovery using mode use-diagnosis, remaining:null
+and exact diagnosis/consumed-selection references plus currentness reason/evidence
+(README grammar). This reaffirms existing qualified purpose, not another diagnosis
+or new purpose. Only its existing lawful collector consumes it, after current
+qualification/lineage/closure/effect/source/publication/resource/hold checks; no
+automatic foreign custody adoption occurs. Original success/selection/history and
+external duties stay. A current owner question/defer/newer choice remains binding.
+
+Independent control-receipt retains its entire supplied JSON, including top-level
+full-read/disposition evidence. Changing accepted evidence is not idempotent.
+Substantive stages retain their own full evidence while reusing the same control
+proof. Direct disposition during helper preflight blocks the subsequent send;
+unknown/inflight sends retain combined pending/clock holds even if a saved direct
+receipt exists. Never clear those uncertainties from callback/ACK/acceptance.
+
 Recovery exceptions appear in owner-controls too. After collected failed/invalid
 diagnosis, request-recovery can select redispose, authentic remaining target/WHY/
 evidence, or defer with remaining:null. Unknown originals/diagnoses retain their

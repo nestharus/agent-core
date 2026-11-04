@@ -150,8 +150,12 @@ class AutomaticControl:
         if not required and not retained:return {'required':False,'pending':False}
         receipt=conn.execute('SELECT * FROM coordinator_control_receipts_v1 WHERE delivery=?',(row['id'],)).fetchone() if has('coordinator_control_receipts_v1') else None
         ctrl=conn.execute('SELECT * FROM coordinator_controls_v1 WHERE delivery=? ORDER BY created DESC,rowid DESC LIMIT 1',(row['id'],)).fetchone() if retained else None
-        return {'required':True,'pending':receipt is None,'receipt':json.loads(receipt['receipt']) if receipt else None,
+        proof=json.loads(receipt['receipt']) if receipt else None
+        unresolved_send=bool(ctrl and (ctrl['state']=='inflight' or
+            ctrl['state']=='unknown' and (not proof or not proof.get('native_receipt_claimed'))))
+        pending=receipt is None or unresolved_send or bool(ctrl and receipt['intent']!=ctrl['id'])
+        return {'required':True,'pending':pending,'unresolved_send':unresolved_send,'receipt':proof,
                 'intent':ctrl['id'] if ctrl else None,'payload_hash':ctrl['payload_hash'] if ctrl else None,
                 'transport_state':ctrl['state'] if ctrl else 'not-prepared',
                 'transport_outcome':json.loads(ctrl['result']) if ctrl and ctrl['result'] else None,
-                'processed_at':receipt['processed_at'] if receipt else None,'native_arrival':'not inferred from callback/transport acceptance'}
+                'processed_at':receipt['processed_at'] if receipt and not pending else None,'native_arrival':'not inferred from callback/transport acceptance'}
