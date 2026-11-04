@@ -39,12 +39,15 @@ class InputJournal:
         return {**original,'original_package':original.get('package'),
                 'package':selection['receipt']['package'],'owner_resolution':selection}
 
-    def resolve_input(self,event,actor,receipt):
+    def resolve_input(self,event,actor,receipt,*,processing_attempt=None):
         with self.tx():
             row=self.one('SELECT * FROM events WHERE id=?',(event,))
             if not row:raise Refusal('exact existing input required')
             original=self.event(event)
-            if actor!=self.enrollment(row['role'])['owner']:
+            software = None
+            if processing_attempt is not None and self.processing and actor == self.config['actor']:
+                software = self.processing.control_proof(event, processing_attempt, receipt)
+            if actor!=self.enrollment(row['role'])['owner'] and not software:
                 raise Refusal('input resolution belongs to its actual enrolled owner')
             keys={'source_hash','mode','task','package','related_event','related_job','reason','evidence','remaining_obligations'}
             if not isinstance(receipt,dict) or set(receipt)!=keys:
@@ -74,6 +77,8 @@ class InputJournal:
             windows.charge(self, 'decisions')
             prior={'state':row['state'],'classification':row['classification'],'classifier':row['classifier'],
                    'error':row['error'],'queue':queue,'ack':row['ack'],'ack_receipt':row['ack_receipt']}
+            if software:
+                prior['software_processing'] = software
             self.budget(None,len(encode(receipt).encode())+len(encode(prior).encode())+1024)
             self.db.execute('INSERT INTO input_resolutions VALUES(?,?,?,?,?,?,?)',
                             (event,version,row['hash'],actor,encode(receipt),encode(prior),self.clock()))
@@ -120,6 +125,8 @@ class InputJournal:
                  and not selection['receipt']['remaining_obligations'])
         self.write_input_queue(event,answer,event['role'],'control','done' if settled else 'awaiting-owner')
         if settled or answer['task']=='@coalesce':return
+        if self.processing and self.processing.event(event):
+            return  # The actual delegated control worker owns this input; no recursive question copies.
         payload={'event':event['id'],'source':self.event(event['id']),'classification':answer,
                  'owner_resolution':selection,'reason':'Actual input control/unresolved meaning requires its genuine coordinator.',
                  'next':'Read input-show; resolve-input with actual meaning/evidence, or retain unresolved. No task/effect/acceptance inferred.'}

@@ -381,7 +381,7 @@ class AppServer:
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.DEVNULL, limit=1048577)
                 outcome["detail"]["creation"] = "owned"
-                store.begin(attempt, {**preflight_result, "process_handle": "owned-asyncio-subprocess",
+                store.begin(attempt, {**preflight_result, "argv": argv, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
             peer = Peer(child, self.config["limits"]["max_result_bytes"])
             peer.owned_storage = owned_storage

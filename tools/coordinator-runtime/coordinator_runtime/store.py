@@ -116,6 +116,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
         self.task_launch_authorizer = None
+        self.processing = None  # Explicit service-local capability, never an intake flag rewrite.
         self.execution_pool = ExecutionPool(config)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
@@ -147,6 +148,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
+        from .processing import SCHEMA as PROCESSING_SCHEMA
+        self.db.executescript(PROCESSING_SCHEMA)
 
     def _bind_config(self):
         with self.tx():
@@ -215,10 +218,14 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             self.db.execute("INSERT INTO cursors VALUES(?,?)", (role, grant["cutover"]))
 
     def enrollment(self, role):
-        row = self.one("SELECT * FROM enrollments WHERE role=? AND intake=1", (role,))
-        if not row:
+        row = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
+        if not row or not self.role_enabled(role):
             raise Refusal("role has no active runtime enrollment")
         return row
+
+    def role_enabled(self, role):
+        row = self.one('SELECT intake FROM enrollments WHERE role=?', (role,))
+        return bool(row and (self.processing.role(role) if self.processing else row['intake']))
 
     def reconcile_legacy(self, role, actor, receipt):
         if actor != self.enrollment(role)["owner"]:
@@ -240,6 +247,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def ingest(self, event, cursor=None):
         role = event["role"]
         self.enrollment(role)
+        if self.processing and not self.processing.event(event):
+            raise Refusal('input outside explicit processing selection; no journal migration/replay')
         if role not in self.config["roles"] or event["recipient"] != self.config["roles"][role]["owner"]:
             raise Refusal("event recipient is outside actual enrollment")
         content = encode(event)
@@ -281,6 +290,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                       'configured_dispatch_authority': self.config.get('dispatch_authority'),
                       "configuration_sha256": digest(self.config),
                       "profile_advice": profile, "execution_pool_allocation": allocation}
+        if self.processing:
+            provenance['processing_capability'] = self.processing.reserve(attempt, event, job)
         self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(provenance), attempt))
         return attempt
 
@@ -297,6 +308,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def authorize_launch(self, attempt):
         row = self.attempt(attempt)
+        if self.processing:
+            self.processing.authorize(row)
         if row['job']:
             self.require_execution_open(row['job'])
         self.require_active_sources(row["event"], row["job"])
@@ -319,8 +332,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             if not self._classification_available():
                 return None
-            row = self.one("SELECT e.id FROM events e JOIN enrollments r ON r.role=e.role "
-                           "WHERE e.state='received' AND r.intake=1 ORDER BY e.received,e.id LIMIT 1")
+            row = next((e for e in self.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' ORDER BY e.received,e.id")
+                        if self.role_enabled(e['role']) and (not self.processing or self.processing.event(self.event(e['id'])))), None)
             if not row:
                 return None
             selected = self.config["classifier"]
@@ -486,7 +499,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
         enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
         held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
-        if not enrollment or not enrollment["intake"] or (enrollment["legacy_hold"] and phase in held_phases):
+        independent_proposal = self.processing and phase == 'proposer' and task['effects'] == 'none'
+        if (not enrollment or not self.role_enabled(role)
+                or self.processing and not self.processing.task(row)
+                or self.processing and task.get('execution') == 'owner'
+                or enrollment["legacy_hold"] and phase in held_phases and not independent_proposal):
             return None
         if task.get("active") is False:
             return None
@@ -500,7 +517,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             return None  # Unsettled responsibility in the same admitted scope stays fenced.
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
-        if role == 'QA' and self.config.get('window_service'):
+        if role == 'QA' and (self.config.get('window_service') or self.processing):
             other = 'cleanup' if phase == 'execution' else 'execution'
             if any(not self.execution_complete(j) for j in self.rows(
                     "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
@@ -541,6 +558,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         rows = self.rows("SELECT q.* FROM queue q JOIN events e ON q.event=e.id WHERE q.role=? "
                          "AND q.task=? AND q.state='queued' AND e.hold IS NULL ORDER BY e.received,q.id",
                          (row["role"], row["task"]))
+        if self.processing:
+            rows = [r for r in rows if self.processing.task(r)]
         if self.config["tasks"][row["task"]].get("require_package_scope"):
             rows = [r for r in rows if r["package"] == row["package"]]
         if self.config.get('window_service'):

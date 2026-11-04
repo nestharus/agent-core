@@ -204,7 +204,7 @@ class Dispatcher:
             self.intake_role(role, board)
 
     def intake_role(self, role, board):
-        if not self.store.one("SELECT role FROM enrollments WHERE role=? AND intake=1", (role,)):
+        if not self.store.role_enabled(role):
             return
         try:
             events = board.scan(self.store)

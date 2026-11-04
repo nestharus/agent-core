@@ -1,5 +1,10 @@
 # Opt-in coordinator runtime
 
+The [explicit software processing interface](owner-processing.md) supports
+Work-issued bounded consumption of stopped software duties and separately
+selected future intake in their original journal. It preserves original grant
+revocation, effect holds, real collectors and selected role procedures.
+
 The [closed integration lifecycle](closed-integration.md) separates genuinely
 closed Work execution from unresolved original responsibilities. It provides
 explicit retirement and one-use next-window selection without promoting held

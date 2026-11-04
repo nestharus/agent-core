@@ -275,7 +275,7 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
         """No owner ack_seq is read or advanced. Our prospective cursor is atomic with intake."""
         with self.opened() as conn:
             grant = self._grant(conn, runtime)
-            after = runtime.one("SELECT seq FROM cursors WHERE role=?", (self.role,))["seq"]
+            after = self.scan_after(runtime, grant)
             rows = conn.execute("SELECT p.seq,n.notification_id FROM posts p LEFT JOIN notification_outbox n "
                 "ON n.post_seq=p.seq AND n.recipient=? WHERE p.seq>? AND "
                 "NOT EXISTS (SELECT 1 FROM coordinator_deliveries_v1 d WHERE d.post=p.seq AND d.actor=? "
@@ -291,6 +291,9 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
                 (self.config["actor"], max(after, grant["cutover"]), self.config["actor"], grant["owner"], self.config["actor"], limit)).fetchall()
             selected = sorted([*rows, *replies], key=lambda r: r["seq"])[:limit]
             return [self._event(conn, row, grant, runtime) for row in selected]
+
+    def scan_after(self, runtime, grant):
+        return runtime.one('SELECT seq FROM cursors WHERE role=?', (self.role,))['seq']
 
     def _event(self, conn, row, grant, runtime=None):
         service_reply = "parent_delivery" in row.keys()

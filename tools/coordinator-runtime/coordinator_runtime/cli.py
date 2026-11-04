@@ -67,6 +67,22 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    issue_processing = sub.add_parser('delegate-processing')
+    issue_processing.add_argument('--selection', required=True)
+    for name in ('processing-status', 'revoke-processing', 'processing-run', 'processing-source', 'processing-apply-control', 'processing-release'):
+        item = sub.add_parser(name, help='Explicit software capability; no ordinary grant reactivation or native-owner claim')
+        item.add_argument('capability')
+        if name == 'processing-run':
+            item.add_argument('--seconds', type=int, choices=range(1, 3601), required=True, metavar='1..3600')
+            item.add_argument('--enable-models', action='store_true')
+        if name in {'processing-source', 'processing-apply-control'}:
+            item.add_argument('event')
+        if name == 'processing-apply-control':
+            item.add_argument('--attempt', required=True)
+        if name == 'processing-release':
+            item.add_argument('--controller', required=True)
+            item.add_argument('--receipt', required=True)
     drain = sub.add_parser('retained-drain', help='Actual Work: one finite four-role retained software sweep, no intake or execution')
     drain.add_argument('--authority', required=True)
     drain.add_argument('--shared-rows', type=int, required=True)
@@ -231,6 +247,39 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'processing-basis', 'delegate-processing', 'processing-status', 'revoke-processing',
+                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release'}:
+        from . import processing
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
+        if args.command == 'processing-basis':
+            return processing.basis(store, boards)
+        if args.command == 'delegate-processing':
+            return processing.select(store, boards, read_record(args.selection))
+        if args.command == 'processing-status':
+            return processing.status(store, args.capability)
+        if args.command == 'revoke-processing':
+            return processing.revoke(store, boards, args.capability)
+        if args.command == 'processing-release':
+            return processing.release(store, boards, args.capability, args.controller, read_record(args.receipt))
+        store.processing = processing.Access(store, args.capability)
+        store.processing.current()
+        if args.command in {'processing-source', 'processing-apply-control'}:
+            if not store.processing.event(store.event(args.event)):
+                raise Refusal('source outside exact software processing selection')
+            boards[store.event(args.event)['role']].verify_authority(store)
+            if args.command == 'processing-apply-control':
+                return processing.apply_control(store, args.event, args.attempt)
+            return {'source': store.recover_source(args.event),
+                    'resolution': store.input_resolution(args.event),
+                    'responsibility': store.one('SELECT * FROM queue WHERE event=?', (args.event,))}
+        if not args.enable_models or store.config.get('enabled') is not True:
+            raise Refusal('processing-run needs unchanged enabled config and explicit --enable-models')
+        qualified = read_record(store.config['protocol_qualification'])
+        if qualified['cli_version'] != store.config['protocol_cli_version']:
+            raise Refusal('offline protocol qualification differs from configured CLI')
+        asyncio.run(processing.run(store, boards, args.capability, args.seconds, print_json))
+        return {'controller': store.controller, 'meaning': 'parent must collect original END; inspect processing-status/errors/holds'}
     if args.command == 'retained-drain':
         from .retained import drain
         return drain(store, args.authority, args.shared_rows, args.shared_payload_bytes,
