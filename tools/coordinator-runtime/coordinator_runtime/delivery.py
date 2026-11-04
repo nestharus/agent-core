@@ -6,7 +6,7 @@ ACK is never evidence that a recipient's Codex submission queue was processed.
 
 import json
 
-from .contracts import Refusal, digest, encode, ident, required_text, handoff_delivery_kind
+from .contracts import Backpressure, Refusal, digest, encode, ident, required_text, handoff_delivery_kind
 from .custody import witnesses
 from . import ordinary
 
@@ -43,15 +43,15 @@ class DeliveryJournal:
         old = self.one("SELECT * FROM outboxes WHERE id=?", (key,))
         if old:
             return key
-        if self.db.execute("SELECT COUNT(*) FROM outboxes").fetchone()[0] >= self.config["limits"].get("max_outboxes", self.config["limits"]["max_events"]):
-            raise Refusal("outbox capacity held; no responsibility discarded")
+        if not self.config.get('window_service') and self.db.execute("SELECT COUNT(*) FROM outboxes").fetchone()[0] >= self.config["limits"].get("max_outboxes", self.config["limits"]["max_events"]):
+            raise Backpressure("outbox capacity held; no responsibility discarded")
         if required not in {"acknowledged", "picked-up", "processed", "settled"}:
             raise Refusal("unknown required delivery frontier")
         if recipient not in self.config.get("delivery", {}).get("recipients", self.config["roles"]):
             raise Refusal("recipient is outside the selected delivery allowlist")
         if kind not in {"work", "result", "question", "alert", "effect-request"}:
             raise Refusal("unknown outgoing message kind")
-        self.budget("outboxes", len(encode(payload).encode()))
+        self.budget("outboxes", len(encode(payload).encode()), event=event, job=job)
         self.db.execute("INSERT INTO outboxes(id,role,job,event,alert,producer,recipient,kind,required,payload,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (key, role, job, event, alert, producer or self.config["actor"],
                                                          recipient, kind, required, encode(payload), self.clock()))
@@ -112,7 +112,7 @@ class DeliveryJournal:
                      "artifact_witnesses": witnesses(self, attempt['id']),
                      "package": job["package"], "parent": members[0]["event"], "allowed_tasks": ["@delivery"],
                      "notice": None, "board_id": None, "grant": None}
-            self.budget("events", len(encode(event)))
+            self.budget("events", len(encode(event)), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (response_id, job["role"], encode(event), digest(event), self.clock(), event["parent"]))
         classified = self.one("SELECT classification FROM events WHERE id=?", (response_id,))["classification"]

@@ -17,7 +17,7 @@ from .cleanup import conserve, sweep
 from .contracts import Refusal, canonical_uuid, encode, load_config, parse_json, regular_path
 from .dispatcher import Dispatcher
 from .store import Store, private_directory
-from . import prospective, ordinary
+from . import prospective, ordinary, windows
 
 
 def print_json(value):
@@ -67,6 +67,9 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    sub.add_parser('window-basis', help='Current retained journal binding; no processing or hold waiver')
+    advance = sub.add_parser('advance-window', help='Actual Work continues allocations and conserved duties')
+    advance.add_argument('--receipt', required=True)
     boundary = sub.add_parser('authorize-prospective', help='Actual Work explicitly authorizes future work in unchanged original journal')
     boundary.add_argument('--selection', required=True)
     revoke_boundary = sub.add_parser('revoke-prospective')
@@ -195,6 +198,12 @@ def parser():
     alert = sub.add_parser("ack-alert")
     alert.add_argument("occurrence")
     alert.add_argument("--receipt", required=True)
+    basis = sub.add_parser('alert-retirement-basis', help='Exact source binding only; no eligibility or processing claim')
+    basis.add_argument('occurrence')
+    retirement = sub.add_parser('retire-alert', help='Genuine same source/consumer owner, processing+24h and every hold')
+    retirement.add_argument('role')
+    retirement.add_argument('occurrence')
+    retirement.add_argument('--receipt', required=True)
     run = sub.add_parser("run")
     run.add_argument("--enable-models", action="store_true")
     return p
@@ -220,6 +229,15 @@ def operate(args, store):
         if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, read_record(args.receipt))
         if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
         return store.select_integration_window(actor, read_record(args.receipt))
+    if args.command in {'window-basis', 'advance-window'}:
+        actor = actual_actor(store.enrollment('Work')['owner'])
+        Board(store.config, 'Work').verify_authority(store)
+        if args.command == 'advance-window':
+            return windows.advance(store, actor, read_record(args.receipt))
+        if not store.config.get('window_service'):
+            raise Refusal('recurring allocation windows not selected')
+        with store.tx():
+            return windows.basis(store)
     if args.command in {'authorize-prospective', 'revoke-prospective'}:
         actor = actual_actor(store.config['roles']['Work']['owner'])
         if args.command == 'authorize-prospective':
@@ -352,6 +370,12 @@ def operate(args, store):
         actor = canonical_uuid(os.environ.get("CODEX_SESSION_ID"))
         store.process_alert(args.occurrence, actor, read_record(args.receipt))
         return {"alert_processed": args.occurrence}
+    if args.command == 'alert-retirement-basis':
+        from .capacity import retirement_basis
+        alert, outbox, basis = retirement_basis(store, args.occurrence)
+        return {'alert': alert['id'], 'delivery': outbox['id'], 'basis': basis, 'eligibility': 'not established'}
+    if args.command == 'retire-alert':
+        return Board(store.config, args.role).retire_alert(store, args.occurrence, read_record(args.receipt))
     if args.command == "run":
         return run_selected(args, store)
     raise Refusal("unknown operator command")

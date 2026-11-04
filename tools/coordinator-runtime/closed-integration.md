@@ -168,3 +168,9 @@ mounts, network/PID isolation and explicit owned fixture storage. They check
 cumulative retained fixture headroom before every new case and retain all
 beforeimages/SQL traces. Fictional no-launch/collector/Board/allocation facts
 are protocol premises; this establishes no operating adoption or live recovery.
+
+When recurring allocation windows are selected, an explicit conserved-debt
+integration selection also retains that configuration's batch-size bound. It
+refuses an oversized selection intact; it does not truncate members, drop duties
+or replace the selected target and WHY. Allocation-window renewal remains
+separate from integration selection and its retained lifetime evidence bound.

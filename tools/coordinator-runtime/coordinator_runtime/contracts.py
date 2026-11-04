@@ -95,6 +95,12 @@ def load_config(path):
 
 
 def validate_config(config):
+    from .admitted import policy
+    policy(config)
+    from .windows import policy as window_policy
+    window_policy(config)
+    from .custodian_service import policy as custodian_policy
+    custodian_policy(config)
     if config.get("version") != 1:
         raise Refusal("configuration version 1 required")
     canonical_uuid(config["actor"])
@@ -173,6 +179,12 @@ def validate_config(config):
     for key in ("max_events", "max_attempts", "max_jobs", "max_bytes", "max_alerts", "max_result_bytes"):
         if type(config["limits"].get(key)) is not int or config["limits"][key] <= 0:
             raise Refusal(f"positive cumulative limit required: {key}")
+    cadences = config.get('alert_cadences', {})
+    if (not isinstance(cadences, dict) or len(cadences) > 32
+            or any(not isinstance(k, str) or type(v) is not int or v <= 0 for k, v in cadences.items())):
+        raise Refusal('bounded positive per-kind alert cadence required')
+    if 'max_alert_debt' in config['limits'] and (type(config['limits']['max_alert_debt']) is not int or config['limits']['max_alert_debt'] <= 0):
+        raise Refusal('positive exact alert-debt capacity required')
     if type(config["limits"].get("max_owner_corrections", 4)) is not int or not 1 <= config["limits"].get("max_owner_corrections", 4) <= 8:
         raise Refusal("owner corrections require a bounded per-delivery budget from 1 through 8")
     for key in ("classify", "task", "ack", "backlog", "bind", "interrupt", "shutdown", "alert_interval"):

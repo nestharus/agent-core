@@ -281,6 +281,8 @@ class IntegrationJournal:
             raise Refusal('Work integration task required')
         if not isinstance(events, list) or not events or len(set(events)) != len(events):
             raise Refusal('nonempty distinct exact next-window input identities required')
+        if self.config.get('window_service') and len(events) > self.config['window_service']['batch_size']:
+            raise Refusal('selected integration batch exceeds current allocation-window batch size')
         members = []
         for event in events:
             row = self.one("SELECT q.* FROM queue q JOIN events e ON e.id=q.event WHERE q.event=? AND q.task=? AND q.state='queued' AND e.hold IS NULL", (event, task))

@@ -218,6 +218,24 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
         with self.opened() as conn:
             return self._grant(conn, runtime)
 
+    def retire_alert(self, runtime, occurrence, receipt):
+        from . import capacity
+        actor = self.store.acting_session(self.selected['owner'])
+        # Fence cooperating Board changes through current grant/recipient/
+        # control/transport revalidation and the runtime transaction. This is
+        # not multi-file atomicity or a noncooperating-writer guarantee.
+        with self.opened() as conn:
+            with self.store.write(conn):
+                self._grant(conn, runtime)
+                _, outbox, _ = capacity.retirement_basis(runtime, occurrence)
+                if outbox['role'] != self.role:
+                    raise Refusal('alert belongs to another source owner')
+                self._delivery_grant(conn, runtime, outbox)
+                row = conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?', (outbox['id'],)).fetchone()
+                if not row or row['payload'] != outbox['payload'] or row['producer'] != outbox['producer']:
+                    raise Refusal('exact current Board delivery source is unavailable')
+                return capacity.retire(runtime, occurrence, actor, receipt, self._delivery_record(conn, dict(row)))
+
     def owner_catchup(self, runtime, after, through=None):
         """Genuine paused-route owner recovers an explicit source interval.
 

@@ -191,9 +191,7 @@ def sweep(store):
     receipts = [retire_artifact(store, row) for row in artifacts]
     events = store.rows("SELECT * FROM events WHERE processed_at IS NOT NULL AND state!='retired'")
     receipts += [retire_event(store, row) for row in events]
-    with store.tx():
-        store.db.execute("DELETE FROM alerts WHERE processed_at IS NOT NULL AND processed_at<=? "
-                         "AND NOT EXISTS(SELECT 1 FROM outboxes o WHERE o.alert=alerts.id AND "
-                         "(o.state!='settled' OR o.hold IS NOT NULL OR o.processed_at IS NULL OR o.processed_at>?))",
-                         (store.clock()-RETENTION, store.clock()-RETENTION))
+    # An old processed timestamp alone does not qualify external control,
+    # publication, effect, recovery or privacy holds. Standalone alert retirement
+    # now requires the genuine same source/consumer owner's exact current proof.
     return storage_receipts + [receipt for receipt in receipts if receipt]

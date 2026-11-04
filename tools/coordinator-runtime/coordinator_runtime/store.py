@@ -26,7 +26,7 @@ from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
 from .integration import IntegrationJournal, SCHEMA as INTEGRATION_SCHEMA
-from . import prospective, ordinary
+from . import prospective, ordinary, capacity, admitted, windows, custodian_service
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -141,7 +141,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA)
+        admitted.policy(config)
+        windows.policy(config)
+        custodian_service.policy(config)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -153,6 +156,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("configuration differs from this journal; reconcile/migrate offline")
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('configuration',?)", (expected,))
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('actor',?)", (self.config["actor"],))
+            windows.initialize(self)
 
     def close(self):
         self.db.close()
@@ -180,15 +184,25 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
         counts['publication_reserved_bytes']=self.db.execute("SELECT COALESCE(SUM(length(b.body)),0) FROM file_publications p JOIN artifact_blobs b ON b.sha256=p.proposed_sha WHERE p.state!='published'").fetchone()[0]
         counts['bytes']+=counts['publication_reserved_bytes']
+        counts['custodian_reserved_bytes'] = self.one(
+            "SELECT COUNT(*) AS n FROM custodian_visits WHERE state IN ('prepared','running')")['n'] * (3 * custodian_service.CAPTURE + 4096)
+        counts['bytes'] += counts['custodian_reserved_bytes']
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
-    def budget(self, kind, incoming=0):
+    def budget(self, kind, incoming=0, *, event=None, job=None):
+        if event or job:
+            if not self.db.in_transaction:
+                raise Refusal('duty credit allocation requires the source write transaction')
+            admitted.charge(self, kind, event=event, job=job)
         usage, limits = self.usage(), self.config["limits"]
-        if usage["bytes"] + incoming >= limits["max_bytes"]:
+        if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
-        if kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
+        if self.config.get('window_service') and kind in windows.KINDS:
+            windows.charge(self, kind)
+        elif kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
+        admitted.check(self, usage, kind)
 
     def enroll(self, role, grant):
         selected = self.config["roles"][role]
@@ -236,7 +250,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if old and old["hash"] != digest(event):
                 raise Refusal("same event identity has different immutable content")
             if not old:
-                self.budget("events", len(content.encode()))
+                windows.charge(self, None, new_input=True)
+                admitted.admit(self, event)
+                self.budget("events", len(content.encode()), event=event['id'])
                 self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                                 (event["id"], role, content, digest(event), self.clock(), event.get("parent")))
             if cursor is not None:
@@ -253,7 +269,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if job:
             self.require_execution_open(job)
         self.require_active_sources(event, job)
-        self.budget("attempts")
+        self.budget("attempts", event=event, job=job)
         if profile not in self.config['profiles']:
             raise Refusal('profile advice outside runtime account authorization')
         allocation = self.execution_pool.allocate()
@@ -484,6 +500,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             return None  # Unsettled responsibility in the same admitted scope stays fenced.
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
+        if role == 'QA' and self.config.get('window_service'):
+            other = 'cleanup' if phase == 'execution' else 'execution'
+            if any(not self.execution_complete(j) for j in self.rows(
+                    "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
+                return None  # First phase (<=5 separate packages), then one consolidation slot.
         if role == "QA" and phase == "execution" and self.one(
                 "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
             return None
@@ -500,7 +521,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         members = json.loads(window['basis'])['members'] if window else self._members(row)
         packages = {member["package"] for member in members}
         package = next(iter(packages)) if len(packages) == 1 else None
-        self.budget("jobs")
+        self.budget("jobs", event=row['event'])
         job, token = ident(), ident()
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
@@ -522,6 +543,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                          (row["role"], row["task"]))
         if self.config["tasks"][row["task"]].get("require_package_scope"):
             rows = [r for r in rows if r["package"] == row["package"]]
+        if self.config.get('window_service'):
+            rows = rows[:self.config['window_service']['batch_size']]
         return [self._input_member(r) for r in rows]
 
     def _input_member(self,row):
@@ -681,7 +704,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             "allowed_tasks": choices, "notice": None, "board_id": None,
             "body": result, "kind": "response", "grant": None,
         }
-        self.budget("events", len(encode(response).encode()))
+        self.budget("events", len(encode(response).encode()), job=job['id'])
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),
                          self.clock(), response["parent"]))
@@ -892,19 +915,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return None
 
     def emit_alerts(self):
-        with self.tx():
-            emitted = []
-            for violation in self.violations():
-                self.budget("alerts")
-                occurrence = {"id": ident(), "created": self.clock(), **violation}
-                self.db.execute("INSERT INTO alerts VALUES(?,?,?,?,?,NULL)",
-                                (occurrence["id"], occurrence["subject"], occurrence["kind"],
-                                 occurrence["created"], encode(occurrence)))
-                alert_role = self.config.get("delivery", {}).get("alert_role", "Work")
-                if self.config.get("delivery"):
-                    self._outbox(alert_role, self.config.get("delivery", {}).get("alert_recipient", "Work"),
-                                 "alert", occurrence, alert=occurrence["id"], key=digest({"alert": occurrence["id"]}))
-                emitted.append(occurrence)
+        emitted = capacity.capture(self)
+        capacity.deliver_pending(self)
         return emitted
 
     def process_alert(self, occurrence, actor, receipt):
@@ -930,6 +942,12 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,created,processed_at FROM outboxes"),
                 "control_receive": {'declared':self.config.get('control_receive',{}),
                     'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
+                "alert_service": capacity.service(self),
+                "admitted_duty_accounts": self.rows('SELECT * FROM duty_accounts'),
+                "admitted_count_credits": admitted.reserved(self),
+                "allocation_window": windows.current(self) if self.config.get('window_service') else None,
+                "custodian_progress": self.one("SELECT value FROM meta WHERE key='custodian-progress'"),
+                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),

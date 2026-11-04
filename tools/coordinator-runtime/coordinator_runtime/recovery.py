@@ -3,6 +3,7 @@
 import json
 
 from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, required_text
+from . import windows
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recovery_requests(
@@ -60,8 +61,9 @@ class RecoveryJournal:
             if self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'",(job,)):
                 raise Refusal('one existing owner request is pending for this job')
             count=self.db.execute('SELECT COUNT(*) FROM recovery_requests WHERE job=?',(job,)).fetchone()[0]
-            if count>=self.config['limits'].get('max_owner_corrections',4):
+            if not self.config.get('window_service') and count>=self.config['limits'].get('max_owner_corrections',4):
                 raise Refusal('bounded owner recovery requests exhausted; original duties retained')
+            windows.charge(self, 'decisions')
             witness=self.retained_diagnosis_witness(row,receipt,publication_board=publication_board) if reuse else None
             if reuse and 'collector_continuity' in receipt:self.validate_collector_continuity(row,receipt['collector_continuity'])
             self.budget(None,len(encode(receipt).encode())+1024)
