@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS alert_cadence(
 
 
 def service(store):
-    return store.one("SELECT * FROM alert_service WHERE singleton=1")
+    row = store.one("SELECT * FROM alert_service WHERE singleton=1")
+    latest = store.one("SELECT value FROM meta WHERE key='alert-observation'")
+    return {**row, 'latest': json.loads(latest['value']) if latest else None} if row else None
 
 
 def capture(store):
@@ -42,6 +44,7 @@ def capture(store):
     """
     now = store.clock()
     interval = store.config['deadlines']['alert_interval']
+    refusal = None
     with store.tx():
         previous = service(store)
         if previous and now < previous['last_observed'] + interval:
@@ -79,20 +82,47 @@ def capture(store):
             # Keep exact original occurrences, not just an interval/digest. A
             # later representation keeps its original ID/time and does not
             # claim that the missed delivery/cadence was fulfilled on time.
-            pending = store.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=0')['n']
-            maximum = store.config['limits'].get('max_alert_debt', store.config['limits']['max_alerts'])
-            if pending + len(occurrences) > maximum:
-                raise Backpressure('exact alert debt capacity exhausted; observation unavailable, causes remain held')
-            for occurrence in occurrences:
-                store.budget(None, len(encode(occurrence).encode()) + 1024)
-                store.db.execute('INSERT INTO alert_debt VALUES(?,?,?,?,?,0)',
-                    (occurrence['id'], occurrence['subject'], occurrence['kind'], now, encode(occurrence)))
+            try:
+                store.db.execute('SAVEPOINT exact_debt')
+                pending = store.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=0')['n']
+                maximum = store.config['limits'].get('max_alert_debt', store.config['limits']['max_alerts'])
+                if pending + len(occurrences) > maximum:
+                    raise Backpressure('exact alert debt capacity exhausted')
+                for occurrence in occurrences:
+                    store.budget(None, len(encode(occurrence).encode()) + 1024)
+                    store.db.execute('INSERT INTO alert_debt VALUES(?,?,?,?,?,0)',
+                        (occurrence['id'], occurrence['subject'], occurrence['kind'], now, encode(occurrence)))
+                store.db.execute('RELEASE exact_debt')
+                disposition = 'exact-debt'
+            except Refusal as exc:
+                store.db.execute('ROLLBACK TO exact_debt')
+                store.db.execute('RELEASE exact_debt')
+                refusal = Backpressure(str(exc) + '; newest due payloads unavailable; originals remain held')
+                disposition = 'unavailable'
+                store.db.execute('UPDATE alert_service SET reason=? WHERE singleton=1', (str(refusal),))
             emitted = []
-        for occurrence in occurrences:
-            store.db.execute('INSERT INTO alert_cadence VALUES(?,?,?) ON CONFLICT(subject,kind) '
-                             'DO UPDATE SET last_created=excluded.last_created',
-                             (occurrence['subject'], occurrence['kind'], now))
+        else:
+            disposition = 'exact-alerts'
+        # One reserved, bounded newest-observation record is independent of the
+        # all-or-nothing occurrence/debt savepoints. It is not an exact payload
+        # archive, a missed-population census or a delivery/processing receipt.
+        observation = {'at': now, 'custodian': owner, 'due_count': len(occurrences),
+                       'scope': digest({'observed_at': now, 'violations': violations}),
+                       'representation': disposition,
+                       'coverage': 'newest due payloads unavailable' if refusal else 'exact observed due cohort retained'}
+        store.db.execute("INSERT INTO meta VALUES('alert-observation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                         (encode(observation),))
+        if refusal is None:
+            for occurrence in occurrences:
+                store.db.execute('INSERT INTO alert_cadence VALUES(?,?,?) ON CONFLICT(subject,kind) '
+                                 'DO UPDATE SET last_created=excluded.last_created',
+                                 (occurrence['subject'], occurrence['kind'], now))
         store.db.execute('UPDATE alert_service SET last_observed=? WHERE singleton=1', (now,))
+    if refusal is not None:
+        # Raise only after COMMIT. A refusal cannot roll back the very evidence
+        # that tells supported callers/status that current coverage was lost.
+        refusal.observation = observation
+        raise refusal
     return emitted
 
 

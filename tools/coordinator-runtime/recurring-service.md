@@ -91,7 +91,14 @@ no-effect requalification after `recheck_seconds`; `progressed/completed` suppre
 repeat for the same source basis. Unknown earlier visits block automatic replay
 for that occurrence even if its source subsequently changes. The actual owner
 must independently reconcile original effects; this source adds no unknown-clearing
-or retry command. Unrelated occurrences can continue.
+or retry command. Unrelated occurrences can continue. Each selected role has its own bounded
+fixed-frontier sweep. A busy role does not consume its later entries; a launched
+visit stops that role's page at the actual occurrence visited. Repeated eligible
+held entries therefore yield attention to later entries in a stable finite
+population. Different roles retain independent active visits. These in-memory
+frontiers restart at the beginning after a controller restart; no infinite-arrival
+or universal latency guarantee follows. A separate bounded audit preserves gap
+reporting for originals with no delivery linked to a selected role.
 
 The adapter retains responsibility for genuine owner/grants, substantive
 processing, current all-hold qualification, source/consumer/control/transport
@@ -112,8 +119,23 @@ violation at its due time produces a fresh ID. Under alert-row pressure, bounded
 those originals and cannot erase missed-cadence/gap evidence. No-violation scans
 create no alert. Unobserved historical intervals remain UNKNOWN; the runtime does
 not invent violations for them. When exact debt or physical evidence storage is
-also exhausted, capture refuses and the observation remains unavailable; summary
-counters do not discharge those duties.
+also exhausted, capture commits the newest observed time, gap/counter update
+and a bounded `alert_service.latest` summary before raising `Backpressure`.
+The exception carries the same `observation` for the caller's owned handling.
+The summary names the custodian, sample time, exact observed due count and scope
+digest, and distinguishes exact alerts, exact debt and unavailable due payloads.
+It is the newest summary, not an occurrence archive, a missed-population census
+or a delivery/processing receipt. `last_observed` is a sample attempt, including
+refused representation; per-subject cadence advances only for exact retained
+cohorts. Failed samples are throttled by the sampling interval. Repeated later
+due attempts can contribute repeated unrepresented counts; the count does not
+claim a unique missed population. Prior gap start/scope and all held rows remain.
+Partial debt insertion rolls back as a whole. No-violation samples still produce
+no alert and do not erase a prior gap. Summary writes use the existing bounded
+pressure reserve; disk/SQLite/commit failure can still leave the newest fact
+unrecorded and must be retained as a storage/observation uncertainty by the caller.
+A successful separate operational-error write is not a substitute for this
+committed observation. Summary counters do not discharge the missing duties.
 
 The representative software controls run directly from `tests/test_windows76.py`
 with an explicit fresh fixture directory. They use imported production classes,
@@ -128,3 +150,14 @@ sources across allocation boundaries. It does not add a safe cancellation or
 reselection path, compose lifecycle75, or prove that combined service. Publication
 remainder's existing one-successor policy also remains; an exhausted remainder
 stays with its actual owner rather than becoming an assumed completed campaign.
+
+
+Targeted custody/pressure controls in `tests/test_pressure78.py` require an
+explicit fresh fictional fixture root. They import the affected production
+capacity and broker methods and use literal production SQLite schemas, PERSIST
+journals with synchronous FULL, fictional budget/authority inputs and tiny
+no-effect adapters. The controlled broker retains each original child PID before
+waiting and numeric END after collection. These controls retain SQL traces and
+before/after images; they are not Store initialization/WAL/crash tests, actual
+retirement or live service qualification. Run them in the supplied kernel read-only
+`/src` namespace with isolated PID/network/dev/tmp and writable `/fixtures`.

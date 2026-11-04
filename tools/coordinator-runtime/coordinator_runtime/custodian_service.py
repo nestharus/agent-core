@@ -46,7 +46,8 @@ class Service:
         self.store, self.selected = store, policy(store.config)
         self.authorize = authorize
         self.active = {}  # Original asyncio Tasks own their original Process handles.
-        self.cursor, self.end = 0, 0
+        self.audit_frontier = (0, 0)
+        self.frontiers = {}  # One finite sweep per role, independent of busy peers.
 
     def schedule(self):
         store = self.store
@@ -59,56 +60,84 @@ class Service:
                 except BaseException as exc:
                     store.record_operational_error('custodian-worker:' + role, {'reason': str(exc)}, role, 'custodian-unknown')
                 del self.active[role]
-        if self.cursor >= self.end:
-            self.cursor = 0
-            self.end = store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM alerts')['n']
-        page = store.rows('SELECT id,rowid AS seq FROM alerts WHERE rowid>? AND rowid<=? ORDER BY rowid LIMIT 16',
-                          (self.cursor, self.end))
-        for item in page:
-            self.cursor = item['seq']
-            try:
-                alert, outbox, basis = capacity.retirement_basis(store, item['id'])
-                role = outbox['role']
-                if role in self.active:
-                    continue
-                if role not in self.selected:
-                    store.record_operational_error('custodian-missing:' + role,
-                        {'occurrence': item['id'], 'owner': store.enrollment(role)['owner'],
-                         'reason': 'no existing owner worker registered; originals remain held'}, role, 'custodian-unavailable')
-                    continue
-                self.authorize({role})
-                # Unknown includes a crash between retained intent and child binding.
-                prior = store.one("SELECT * FROM custodian_visits WHERE occurrence=? AND "
-                                  "(state NOT IN ('held','done') OR basis=?) ORDER BY created DESC,rowid DESC LIMIT 1",
-                                  (item['id'], basis))
-                if prior and (prior['state'] != 'held' or store.clock() < prior['next_at']):
-                    continue
-                owner = store.enrollment(role)['owner']
-                request = {'visit': ident(), 'owner': owner, 'role': role, 'occurrence': item['id'],
-                           'basis': basis, 'alert': alert, 'outbox': outbox,
-                           'authority': self.selected[role]['authority'],
-                           'obligation': 'existing genuine owner qualification/processing/holds/custody; no ACK or END inference'}
-                encoded = encode(request)
-                if len(encoded.encode()) > CAPTURE:
-                    raise Refusal('custodian request exceeds bounded visit; exact source remains in journal')
-                with store.tx():
-                    # A second cooperating controller cannot prepare the same
-                    # effect visit between our earlier read and write lock.
-                    if store.one("SELECT id FROM custodian_visits WHERE occurrence=? AND "
-                                 "(state NOT IN ('held','done') OR (basis=? AND (state='done' OR next_at>?))) LIMIT 1",
-                                 (item['id'], basis, store.clock())):
+        # Do not advance a role's frontier while it has an owned active visit.
+        # Scanning past busy entries loses their opportunity: a recurring held
+        # prefix can otherwise monopolize each page indefinitely.
+        for role in store.config['roles']:
+            if role in self.active:
+                continue
+            cursor, end = self.frontiers.get(role, (0, 0))
+            if cursor >= end:
+                cursor = 0
+                end = store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM alerts')['n']
+            page = store.rows('SELECT a.id,a.rowid AS seq FROM alerts a WHERE a.rowid>? AND a.rowid<=? '
+                              'AND EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id AND o.role=?) '
+                              'ORDER BY a.rowid LIMIT 16', (cursor, end, role))
+            for item in page:
+                cursor = item['seq']
+                try:
+                    alert, outbox, basis = capacity.retirement_basis(store, item['id'])
+                    if outbox['role'] != role:
+                        raise Refusal('custodian lane/source role changed')
+                    if role not in self.selected:
+                        store.record_operational_error('custodian-missing:' + role,
+                            {'occurrence': item['id'], 'owner': store.enrollment(role)['owner'],
+                             'reason': 'no existing owner worker registered; originals remain held'}, role, 'custodian-unavailable')
                         continue
-                    if capacity.retirement_basis(store, item['id'])[2] != basis:
-                        raise Refusal('custodian source changed before retained intent')
-                    store.budget(None, len(encoded.encode()) + 3 * CAPTURE + 4096)
-                    store.db.execute('INSERT INTO custodian_visits VALUES(?,?,?,?,?,?,\'prepared\',?,NULL,NULL,NULL,NULL,0)',
-                                     (request['visit'], item['id'], role, owner, basis, encoded, store.clock()))
-                task = asyncio.create_task(self.visit(request))
-                self.active[role] = task
-            except Refusal as exc:
-                store.record_operational_error('custodian-source:' + item['id'], {'reason': str(exc)}, kind='custodian-held')
-        if len(page) < 16:
-            self.cursor = self.end
+                    self.authorize({role})
+                    # Unknown includes a crash between retained intent and child binding.
+                    prior = store.one("SELECT * FROM custodian_visits WHERE occurrence=? AND "
+                                      "(state NOT IN ('held','done') OR basis=?) ORDER BY created DESC,rowid DESC LIMIT 1",
+                                      (item['id'], basis))
+                    if prior and (prior['state'] != 'held' or store.clock() < prior['next_at']):
+                        continue
+                    owner = store.enrollment(role)['owner']
+                    request = {'visit': ident(), 'owner': owner, 'role': role, 'occurrence': item['id'],
+                               'basis': basis, 'alert': alert, 'outbox': outbox,
+                               'authority': self.selected[role]['authority'],
+                               'obligation': 'existing genuine owner qualification/processing/holds/custody; no ACK or END inference'}
+                    encoded = encode(request)
+                    if len(encoded.encode()) > CAPTURE:
+                        raise Refusal('custodian request exceeds bounded visit; exact source remains in journal')
+                    with store.tx():
+                        # A second cooperating controller cannot prepare the same
+                        # effect visit between our earlier read and write lock.
+                        if store.one("SELECT id FROM custodian_visits WHERE occurrence=? AND "
+                                     "(state NOT IN ('held','done') OR (basis=? AND (state='done' OR next_at>?))) LIMIT 1",
+                                     (item['id'], basis, store.clock())):
+                            continue
+                        if capacity.retirement_basis(store, item['id'])[2] != basis:
+                            raise Refusal('custodian source changed before retained intent')
+                        store.budget(None, len(encoded.encode()) + 3 * CAPTURE + 4096)
+                        store.db.execute('INSERT INTO custodian_visits VALUES(?,?,?,?,?,?,\'prepared\',?,NULL,NULL,NULL,NULL,0)',
+                                         (request['visit'], item['id'], role, owner, basis, encoded, store.clock()))
+                    task = asyncio.create_task(self.visit(request))
+                    self.active[role] = task
+                    break  # Leave later same-role entries for the next available visit.
+                except Refusal as exc:
+                    store.record_operational_error('custodian-source:' + item['id'], {'reason': str(exc)}, kind='custodian-held')
+            # A short page is complete only if no visit stopped it early.
+            if not page or (len(page) < 16 and cursor == page[-1]['seq']):
+                cursor = end
+            self.frontiers[role] = (cursor, end)
+
+        # Malformed/unlinked occurrences still have an explicit source duty;
+        # role lanes must not make those originals disappear from attention.
+        cursor, end = self.audit_frontier
+        if cursor >= end:
+            cursor = 0
+            end = store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM alerts')['n']
+        roles = tuple(store.config['roles'])
+        marks = ','.join('?' for _ in roles)
+        rows = store.rows('SELECT a.id,a.rowid AS seq FROM alerts a WHERE a.rowid>? AND a.rowid<=? '
+                          'AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id '
+                          f'AND o.role IN ({marks})) ORDER BY a.rowid LIMIT 16', (cursor, end, *roles))
+        for item in rows:
+            cursor = item['seq']
+            store.record_operational_error('custodian-source:' + item['id'],
+                {'occurrence': item['id'], 'reason': 'no linked delivery for a selected role; original source remains held'},
+                kind='custodian-held')
+        self.audit_frontier = (end if len(rows) < 16 else cursor, end)
 
     async def visit(self, request):
         store, role = self.store, request['role']
