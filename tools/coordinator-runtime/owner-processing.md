@@ -8,6 +8,11 @@ workers, frozen reservations, role integrators and QA execution/consolidation.
 It neither reenrolls native owners nor unrevokes any ordinary/retained grant.
 This source interface has protocol tests, not live operating qualification.
 
+The prospective admission/control additions are described in
+[processing-prospective.md](processing-prospective.md). They are a partial
+delivery: no continuing Reviews executor, unbounded service, automatic original
+recovery or sustainable same-journal retention is established by this adapter.
+
 Only actual Work uses these commands in its existing genuine issuer context.
 Never set identity, HOME, profile or credentials to invoke them. The original
 configuration must already select Work software delegation and an enabled,
@@ -96,7 +101,11 @@ custodian. Work/result handoffs continue through existing task handoff policies
 and actual collected job proofs. Missing handoff routes, absent source work,
 external holders or uncollected originals are dependencies, never fake reviews.
 
-The selected Reviews opaque `execution=owner` procedure is preserved. This
+The selected Reviews `execution=owner` dependency is preserved. RFQ's normative
+SELECTION selects Sol 6.1 high, a continuing goal-blind unified context, actual
+method/pins/history/coverage and complete collected returns, rather than the
+stopped snapshot's opaque task binding. Other consumers' opaque bindings are
+unchanged. This
 adapter does not implement its external executor: the exact selected procedure
 holder must supply its supported execution/return. The dependency is visible
 while independent admitted work continues. QA scope/admission, real integration,

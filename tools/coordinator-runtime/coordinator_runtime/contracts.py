@@ -295,7 +295,7 @@ def classification(answer, event, config):
         raise Refusal("complete classification object required")
     if answer["event_id"] != event["id"]:
         raise Refusal("classification is for a different event")
-    if not isinstance(answer['task'],str) or answer['task'] not in input_routes(event):
+    if not isinstance(answer['task'],str) or answer['task'] not in input_routes(event, config):
         raise Refusal("classification exceeds event's typed routing authority")
     if answer['package']!=event.get('package'):
         raise Refusal('classifier cannot invent or change a package identity')

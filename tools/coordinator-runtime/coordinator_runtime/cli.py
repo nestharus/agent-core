@@ -78,13 +78,13 @@ def parser():
     owner_source.add_argument('role')
     owner_source.add_argument('kind', choices=['admit-package', 'legacy-disposition', 'resolve-input'])
     owner_source.add_argument('target')
-    for name in ('processing-status', 'revoke-processing', 'processing-run', 'processing-source', 'processing-apply-control', 'processing-release'):
+    for name in ('processing-status', 'revoke-processing', 'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-admit-source'):
         item = sub.add_parser(name, help='Explicit software capability; no ordinary grant reactivation or native-owner claim')
         item.add_argument('capability')
         if name == 'processing-run':
             item.add_argument('--seconds', type=int, choices=range(1, 3601), required=True, metavar='1..3600')
             item.add_argument('--enable-models', action='store_true')
-        if name in {'processing-source', 'processing-apply-control'}:
+        if name in {'processing-source', 'processing-apply-control', 'processing-admit-source'}:
             item.add_argument('event')
         if name == 'processing-apply-control':
             item.add_argument('--attempt', required=True)
@@ -265,7 +265,7 @@ def operate(args, store):
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         return processing.apply_owner(store, boards, args.capability, request, actor)
     if args.command in {'processing-basis', 'delegate-processing', 'processing-status', 'revoke-processing',
-                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-owner-source'}:
+                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-owner-source', 'processing-admit-source'}:
         from . import processing
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
@@ -283,14 +283,22 @@ def operate(args, store):
         store.processing.current()
         if args.command == 'processing-owner-source':
             return processing.owner_source(store, boards, args.capability, args.role, args.kind, args.target)
+        if args.command == 'processing-admit-source':
+            from .processing_admission import admit
+            boards[store.event(args.event)['role']].verify_authority(store)
+            return admit(store, args.event)
         if args.command in {'processing-source', 'processing-apply-control'}:
             if not store.processing.event(store.event(args.event)):
                 raise Refusal('source outside exact software processing selection')
             boards[store.event(args.event)['role']].verify_authority(store)
             if args.command == 'processing-apply-control':
                 return processing.apply_control(store, args.event, args.attempt)
+            control = store.one('SELECT * FROM processing_controls WHERE event=?', (args.event,))
             return {'source': store.recover_source(args.event),
                     'resolution': store.input_resolution(args.event),
+                    'control': control,
+                    'actual_control_attempt': store.attempt(control['attempt']) if control else None,
+                    'control_return': store.one('SELECT * FROM processing_control_returns WHERE source=?', (args.event,)),
                     'responsibility': store.one('SELECT * FROM queue WHERE event=?', (args.event,))}
         if not args.enable_models or store.config.get('enabled') is not True:
             raise Refusal('processing-run needs unchanged enabled config and explicit --enable-models')

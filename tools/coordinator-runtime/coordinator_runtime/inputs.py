@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS input_resolutions(
 CONTROL_ROUTES={'@control','@unresolved','@coalesce'}
 
 
-def input_routes(event):
+def input_routes(event, config=None):
     routes=list(event['allowed_tasks'])
     routes.append('@unresolved')
     if event['kind']=='board':routes.append('@control')
@@ -23,6 +23,13 @@ def input_routes(event):
         mode=selection['receipt']['mode']
         routes=[selection['receipt']['task']] if mode=='route' else ['@coalesce' if mode=='coalesce' else '@control']
         routes.append('@unresolved')
+    if config is not None and event.get('package') is None:
+        # A null-package QA control has control routes, not runnable package
+        # tasks. Keep those impossible choices out of the classifier's input
+        # as well as refusing them at commit; never invent an admission.
+        routes = [name for name in routes if name in CONTROL_ROUTES or name == '@delivery'
+                  or not (config['tasks'][name]['role'] == 'QA'
+                          or config['tasks'][name].get('require_package_scope'))]
     return list(dict.fromkeys(routes))
 
 

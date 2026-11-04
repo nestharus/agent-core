@@ -67,7 +67,7 @@ def classifier_prompt(event, config):
               '@coalesce':'Actual owner-selected same-purpose existing job; retain it without another executor. Numeric END is not processing.'}
     routes = {name: (controls[name] if name in controls else {"role": event["role"], "phase": "delivery", "authority": "Validate the fixed notification/duty plan, not substantive permission, publication, settlement or acceptance"}
                     if name == "@delivery" else {k: config["tasks"][name][k] for k in ("role", "phase", "authority")})
-              for name in input_routes(event)}
+              for name in input_routes(event, config)}
     return ("You are the fresh Luna6 LOW classifier for ONE incoming event, including response events. "
         "No tools, shell, source edits, delegation, board effects, or ACK calls. The controller commits your "
         "validated classification plus queued responsibility, then performs the exact delegated receipt "

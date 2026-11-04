@@ -5,8 +5,12 @@ request. This is not a replacement app-server review or new model policy. The
 owner retains actual selected Source/reviewer bindings, original contexts,
 collectors and supported launch/collection interfaces. Preserve the ordinary
 unified episode e67a1de4, architecture-first all-nine/27 exposure and actual
-full/partial/unread coverage/history/pins. Preserve opaque gpt-xhigh reviewer
-bindings wherever selected; do not resolve them into provider/model claims.
+full/partial/unread coverage/history/pins. For the RFQ campaign, its normative
+SELECTION selects Sol 6.1 high in one continuing goal-blind context per
+artifact/component; it supersedes the stopped task snapshot's opaque binding.
+Use the current user-controlled public pool for future allocations (currently
+2/3/5, excluding 0/4), with no rewrite of started contexts. Preserve other
+consumers' actually selected opaque bindings and historical encounters.
 Source input keeps its actual goal-blind procedure. Do not force migration to a
 generic review or repeat unchanged Source/heads due to elapsed time. Ordinary
 source access explicitly needed is allowed; obsolete 55/37 gates do not return.
@@ -24,6 +28,15 @@ actual collector attribution; no model-success assertion follows from labels.
 Missing procedure, reply, supported execution or required work remains explicit
 PARTIAL/UNKNOWN and is returned to Work. This owner path is inactive until its
 actual grant and handoff are acquired; a config does not establish adoption.
+
+The current processing adapter cannot execute this owner task. Its disposable
+app-server turns do not supply the selected native live-context interface.
+Keep this exact execution/continuity dependency visible; intake proposals and
+the report integrator cannot stand in for Source. Actual material/origin/base/
+head, method and incorporated definitions, whole history, correction diff and
+answered observation IDs, access bounds, genuine context/collector and full
+coverage/returns must be bound before the selected review runs. Do not pass
+Root's goal, acceptance criteria, proposed fix or leading hypothesis to Source.
 
 The single Sol6.1 XHIGH report integrator reads all complete collected reports and
 the current selected report-integrator template. Conserve every finding/advice,

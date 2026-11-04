@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS processing_controls(
 CREATE TABLE IF NOT EXISTS processing_owner_operations(
  capability TEXT NOT NULL,request_hash TEXT NOT NULL,actor TEXT NOT NULL,
  receipt TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(capability,request_hash));
+CREATE TABLE IF NOT EXISTS processing_control_returns(
+ source TEXT PRIMARY KEY,response TEXT NOT NULL UNIQUE,attempt TEXT NOT NULL,
+ payload TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_admissions(
+ package TEXT PRIMARY KEY,capability TEXT NOT NULL,event TEXT NOT NULL UNIQUE,
+ scope TEXT NOT NULL,receipt TEXT NOT NULL,created REAL NOT NULL);
 """
 
 
@@ -150,7 +156,7 @@ def apply_owner(runtime, boards, key, request, actor):
 def select(runtime, boards, selection):
     keys = {'basis', 'authority', 'expires', 'retained_events', 'recover_controls', 'future_intake', 'tasks',
             'max_starts', 'max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'}
-    if not isinstance(selection, dict) or set(selection) - {'owner_operations'} != keys:
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
@@ -188,6 +194,13 @@ def select(runtime, boards, selection):
         control = runtime.one('SELECT * FROM processing_controls WHERE event=? AND attempt=?', (event, attempt))
         if not isinstance(attempt, str) or not control or runtime.attempt(attempt)['collected'] is None:
             raise Refusal('dependency: actual original control collector/return required; never relaunch it')
+    recognitions = selection.get('control_recognitions', {})
+    if not isinstance(recognitions, dict) or set(recognitions) - set(recover):
+        raise Refusal('legacy control recognition requires an exact selected recovery event/attempt')
+    for event, recognition in recognitions.items():
+        validate_recognition(runtime, event, recover[event], recognition)
+    from . import processing_admission
+    processing_admission.validate(runtime, selection)
     current = basis(runtime, boards)
     if selection['basis'] != current:
         raise Refusal('processing source/capacity/frontier basis changed; no automatic retry')
@@ -245,6 +258,14 @@ class Access:
         if event.get('processing_capability') == self.key:
             board = (self.boards or {}).get(event['role']) or ProcessingBoard(self.runtime.config, event['role'])
             return board.receiving_intent(self.runtime, event)
+        if event.get('processing_control_return'):
+            returned = self.runtime.one('SELECT * FROM processing_control_returns WHERE response=?', (event['id'],))
+            if not returned or json.loads(returned['payload']) != event:
+                raise Refusal('control response needs its exact persisted original return')
+            control = self.runtime.one('SELECT * FROM processing_controls WHERE event=?', (returned['source'],))
+            if not control or control['attempt'] != returned['attempt']:
+                raise Refusal('original control response binding changed')
+            return control['capability'] == self.key or selection['recover_controls'].get(returned['source']) == returned['attempt']
         if event.get('source_job'):
             job = self.runtime.job(event['source_job'])
             proof = json.loads(self.runtime.attempt(job['active_attempt'])['detail']).get('processing_capability')
@@ -258,7 +279,8 @@ class Access:
 
     def task(self, row):
         _, selection = self.current()
-        return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event']))
+        from .processing_admission import permits
+        return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event'])) and permits(self.runtime, row)
 
     def reserve(self, attempt, event, job):
         row, selection = self.current()
@@ -293,14 +315,21 @@ class Access:
                 or row['begin'] is None or row['ended'] is None or row['collected'] is None
                 or row['exit'] != 0 or row['error'] or row['capture'] != 'complete'
                 or json.loads(row['binding']) != SOL or not tools.get('complete')
-                or tools.get('nonzero_completions') or tools.get('items') or result.get('semantic') != 'DONE'
+                or tools.get('nonzero_completions') or tools.get('items') or tools.get('unknown_types')
                 or parse_json(result.get('decision_json', 'null')) != receipt):
             raise Refusal('control disposition requires its meaningful actual worker return and original numeric END')
+        validate_control_result(result, receipt)
+        recognition = selection.get('control_recognitions', {}).get(event)
+        if result['semantic'] != 'DONE':
+            if not recognition:
+                raise Refusal('legacy free-text semantic needs exact genuine Work recognition; original result is unchanged')
+            validate_recognition(self.runtime, event, attempt, recognition)
         canonical_uuid(row['session'])  # Actual observed worker, never the native role owner.
         required_text(result.get('summary'), 'actual control handling summary')
         return {'capability': self.key, 'original_capability': original_cap, 'attempt': attempt, 'worker': row['session'],
                 'controller': row['controller'], 'actual_END': row['exit'], 'source_hash': record['source_hash'],
-                'result_hash': digest(result), 'native_owner_receipt': False}
+                'result_hash': digest(result), 'native_owner_receipt': False,
+                'legacy_semantic_recognition': recognition}
 
 
 class ProcessingBoard(RetainedBoard):
@@ -475,6 +504,8 @@ def status(runtime, key):
     return {**row, 'selection': json.loads(row['selection']),
             'runs': runtime.rows('SELECT * FROM processing_runs WHERE capability=?', (key,)),
             'controls': runtime.rows('SELECT * FROM processing_controls WHERE capability=?', (key,)),
+            'control_returns': runtime.rows('SELECT r.* FROM processing_control_returns r JOIN processing_controls c ON c.event=r.source WHERE c.capability=?', (key,)),
+            'software_admissions': runtime.rows('SELECT * FROM processing_admissions WHERE capability=?', (key,)),
             'owner_operations': runtime.rows('SELECT * FROM processing_owner_operations WHERE capability=?', (key,)),
             'meaning': 'custody/status only; real worker return and original END required'}
 
@@ -482,8 +513,39 @@ def status(runtime, key):
 from .dispatcher import Dispatcher
 
 CONTROL_SCHEMA = {'type': 'object', 'additionalProperties': False,
-                  'properties': {k: {'type': 'string'} for k in ('semantic', 'summary', 'decision_json')},
+                  'properties': {'semantic': {'type': 'string', 'enum': ['DONE', 'PARTIAL', 'FAILED', 'UNKNOWN']},
+                                 'summary': {'type': 'string'}, 'decision_json': {'type': 'string'}},
                   'required': ['semantic', 'summary', 'decision_json']}
+
+
+def validate_control_result(result, receipt):
+    if not isinstance(result, dict) or set(result) != {'semantic', 'summary', 'decision_json'}:
+        raise Refusal('complete actual control return required')
+    semantic = required_text(result['semantic'], 'actual control semantic', 16000)
+    if semantic.strip().upper() in {'PARTIAL', 'FAILED', 'UNKNOWN'} or not isinstance(receipt, dict):
+        raise Refusal('incomplete original control cannot become processing or be replayed')
+    required_text(result['summary'], 'actual control handling summary')
+
+
+def validate_recognition(runtime, event, attempt, recognition):
+    """Work can interpret an old free-text status without rewriting its return.
+
+    This is scoped software meaning, never native consent or old-effect release.
+    Actual process/capture/source checks still run in control_proof.
+    """
+    if not isinstance(recognition, dict) or set(recognition) != {'attempt', 'result_hash', 'reason', 'evidence'}:
+        raise Refusal('exact legacy attempt/result hash and genuine Work reason/evidence required')
+    row = runtime.attempt(attempt)
+    result = parse_json(row['result'] or 'null')
+    if (recognition['attempt'] != attempt or row['event'] != event
+            or recognition['result_hash'] != digest(result) or not isinstance(result, dict)):
+        raise Refusal('legacy control recognition differs from the immutable collected result')
+    validate_control_result(result, parse_json(result.get('decision_json', 'null')))
+    required_text(recognition['reason'], 'genuine Work interpretation of original control', 4000)
+    if not isinstance(recognition['evidence'], list) or not 1 <= len(recognition['evidence']) <= 16:
+        raise Refusal('bounded original-return recognition evidence required')
+    for evidence in recognition['evidence']:
+        required_text(evidence, 'actual Work recognition evidence', 4000)
 
 
 class ProcessingDispatcher(Dispatcher):
@@ -501,6 +563,11 @@ class ProcessingDispatcher(Dispatcher):
         for row in self.store.rows("SELECT e.id,e.classifier FROM events e JOIN attempts a ON a.id=e.classifier WHERE e.state='classifying' AND a.collected IS NOT NULL"):
             if self.store.processing.event(self.store.event(row['id'])):
                 self.reconcile_classification(row['classifier'])
+
+    def schedule_classifications(self):
+        from .processing_admission import admit_pending
+        admit_pending(self.store)
+        super().schedule_classifications()
 
     def automatic_cleanup(self):
         pass  # No cleanup authority is included in a processing capability.
@@ -557,7 +624,10 @@ class ProcessingDispatcher(Dispatcher):
         prompt = ('You are the actually delegated software input/control worker at Work xhigh. Actual Work issuer, '
                   'native owner, Root and final human/Adam are outside your session. No model children, tools, '
                   'shell, native wake, effect, grant, pool or acceptance operations. Personally read the full source '
-                  'and interpret its meaning within the unchanged routes. Return semantic, meaningful summary, '
+                  'and interpret its meaning within the unchanged routes. semantic MUST be exactly DONE, PARTIAL, '
+                  'FAILED or UNKNOWN. DONE means this bounded input interpretation is complete, not that native '
+                  'QA read, external effects, downstream processing or acceptance occurred. Put the actual meaning '
+                  'in summary and decision_json.reason, never in semantic. Return semantic, meaningful summary, '
                   'decision_json (a serialized input-resolution object with EXACT keys source_hash,mode,task,package,'
                   'related_event,related_job,reason,evidence,remaining_obligations). Never invent consent or processing. '
                   'mode=control processes a board control only; mode=route selects an original allowed task; '
@@ -588,10 +658,43 @@ def apply_control(runtime, event, attempt):
     result = json.loads(runtime.attempt(attempt)['result'] or 'null') or {}
     receipt = parse_json(result.get('decision_json', 'null'))
     runtime.processing.control_proof(event, attempt, receipt)
-    resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
     with runtime.tx():
+        resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
+        control_return(runtime, event, attempt, result, resolution)
         runtime.db.execute('UPDATE processing_controls SET resolution=?,error=NULL WHERE event=?', (encode(resolution), event))
     return resolution
+
+
+def control_return(runtime, event, attempt, result, resolution):
+    """A durable, freshly classified Work consumer precedes source completion.
+
+    One return per original, including dependency/hold interpretations. The
+    original result and resolution are transported whole, with no source replay.
+    """
+    previous = runtime.one('SELECT * FROM processing_control_returns WHERE source=?', (event,))
+    if previous:
+        if previous['attempt'] != attempt:
+            raise Refusal('control return already has a different original collector')
+        return previous['response']
+    _, selection = runtime.processing.current()
+    routes = [name for name in selection['tasks'] if runtime.config['tasks'][name]['role'] == 'Work'
+              and runtime.config['tasks'][name]['phase'] == 'proposer'
+              and runtime.config['tasks'][name]['effects'] == 'none']
+    if not routes:
+        raise Refusal('meaningful control return needs a selected read-only Work proposer consumer')
+    response = {'id': digest({'processing_control_return': event, 'attempt': attempt}),
+                'kind': 'response', 'role': 'Work', 'recipient': runtime.enrollment('Work')['owner'],
+                'author': runtime.attempt(attempt)['session'], 'parent': event, 'package': None,
+                'notice': None, 'board_id': None, 'grant': None, 'allowed_tasks': routes,
+                'processing_control_return': {'source': event, 'attempt': attempt},
+                'body': {'source': runtime.event(event), 'actual_worker_return': result,
+                         'software_resolution': resolution, 'native_owner_receipt': False}}
+    runtime.budget('events', len(encode(response).encode()) + 1024)
+    runtime.db.execute('INSERT INTO processing_control_returns VALUES(?,?,?,?,?)',
+                       (event, response['id'], attempt, encode(response), runtime.clock()))
+    runtime.db.execute('INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)',
+                       (response['id'], 'Work', encode(response), digest(response), runtime.clock(), event))
+    return response['id']
 
 
 def release(runtime, boards, key, controller, receipt):
