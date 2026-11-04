@@ -1,0 +1,35 @@
+{
+  "worktree": "/home/nes/ai-worktrees/coordinator-execution-pool-20261104",
+  "branch": "feat/coordinator-execution-pool-20261104",
+  "base_commit": "bfd8df6f31545d1b3feae872fab3ded80708c0ec",
+  "base_tree": "159b5e213a30cbeb989431f54c404895d9a40c1b",
+  "code_commit": "cb1130202af5a1949acc805a29ec6d556fce4b60",
+  "code_tree": "501b85d32c52c32d5270dac511197d2570315ea9",
+  "source_scope": [
+    "tools/coordinator-runtime",
+    "tools/direct-child",
+    "tools/direct-codex-child/launch.sh",
+    "tools/direct-codex-child/README.md"
+  ],
+  "necessary_launcher_scope": "Direct automatic profile must be rechecked after preflight at actual codex exec, not merely when dispatch selects or invokes the shell launcher.",
+  "signed_commit": {
+    "command": "git commit -S -m \"Add shared execution pool controls and fair coordinator allocation\"",
+    "END": 0
+  },
+  "code_publication": {
+    "command": "git push origin HEAD:refs/heads/feat/coordinator-execution-pool-20261104",
+    "END": 0,
+    "remote_notice": "Existing origin redirected ai.git to agent-core.git; push accepted new own branch. No remote configuration changed."
+  },
+  "report_packaging": "These five reports are a following signed commit, whose parent is code_commit; final response gives published report HEAD. No source change after final verification.",
+  "decision_inputs": [
+    "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/CONSEQUENCE-DECISION-25-EXECUTION-POOL-CONTROLS.json",
+    "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/execution-pool25/ACTUAL-WORK-DECISION-25B.json",
+    "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/execution-pool25-brief-frame/SAFE-FRAME.md",
+    "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/execution-pool25-brief-frame/RESULT.json",
+    "/home/nes/projects/rfq/planning/coordinator-runtime-rollout-20261103-01/execution-pool25-brief-frame/PARENT-COLLECTED.json"
+  ],
+  "exposure": "Bounds first; all required primary/decision/frame bodies fully read before source Act. Narrow public source and owned offline fixtures. No children, foreign change staging, Source22/23 merging, canonical inventory or admission.",
+  "actual_adverse_effect": "One unintended allocation call used shared public counter due to first parent fixture ~ expansion; later observed turn5252, exact preimage/concurrency unknown. No restoration attempted. See verification.json.",
+  "retention": "Source and required evidence retained for actual processing+24h AND all holds; no cleanup selected."
+}

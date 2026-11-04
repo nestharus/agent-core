@@ -1,0 +1,100 @@
+{
+  "qualification": "Producer construction witness only; no independent admission or live efficacy claim.",
+  "final_code_commit": "cb1130202af5a1949acc805a29ec6d556fce4b60",
+  "final_runs": [
+    {
+      "command": "python3 -c 'import logging, unittest; logging.getLogger(\"asyncio\").setLevel(logging.ERROR); unittest.main(module=None)' discover -s tools/coordinator-runtime/tests -q > verification-output/runtime-final.txt 2>&1",
+      "session": 59213,
+      "END": 0,
+      "tests": 236,
+      "seconds": 70.124,
+      "log": "verification-output/runtime-final.txt"
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-child -p 'test_*.py' -q > verification-output/direct-child-final.txt 2>&1",
+      "session": 38946,
+      "END": 0,
+      "tests": 55,
+      "seconds": 25.916,
+      "log": "verification-output/direct-child-final.txt"
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-codex-child -p test_launch.py -q > verification-output/direct-codex-final.txt 2>&1",
+      "session": 88194,
+      "END": 0,
+      "tests": 24,
+      "seconds": 5.528,
+      "log": "verification-output/direct-codex-final.txt"
+    },
+    {
+      "command": "bash -n tools/direct-codex-child/launch.sh",
+      "END": 0
+    },
+    {
+      "command": "git diff --check",
+      "END": 0
+    }
+  ],
+  "earlier_actual_runs": [
+    {
+      "command": "python3 -m unittest discover -s tools/coordinator-runtime/tests -p test_acceptance.py -q",
+      "session": 7849,
+      "END": 1,
+      "tests": 18,
+      "reason": "Old assertion required diagnosis-advised fixed3; actual fair successor2. Test updated to preserve advice separately."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/coordinator-runtime/tests -p test_execution_pool.py -v",
+      "session": 27174,
+      "END": 0,
+      "tests": 8,
+      "qualification": "Before final concurrent-update test and final edits."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/coordinator-runtime/tests -q",
+      "session": 14041,
+      "END": 1,
+      "tests": 235,
+      "reason": "Old classifier-recovery assertion required fixed diagnosis4; actual shared rotation3. Updated to assert real choice plus conserved advice."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-child -p 'test_*.py' -q",
+      "session": 91992,
+      "END": 1,
+      "tests": 51,
+      "reason": "Six subtest failures: old native artifact list omitted new pool-admission.json. Other assertions passed; expected receipts updated."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-child -p test_execution_pool.py -q",
+      "session": 79524,
+      "END": 1,
+      "tests": 40,
+      "reason": "Imported legacy TestCase caused duplicate discovery; one fixture mkdir error and one counter expectation failure exposed real-HOME expansion. See adverse."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-child -p test_execution_pool.py -q",
+      "session": 50908,
+      "END": 0,
+      "tests": 4,
+      "qualification": "Absolute owned state fixed before this run; later final suite includes containment guard."
+    },
+    {
+      "command": "python3 -m unittest discover -s tools/direct-codex-child -p test_launch.py -q",
+      "session": 90312,
+      "END": 0,
+      "tests": 24
+    }
+  ],
+  "adverse": {
+    "incident": "Initial ParentPoolControl test used Pool(fake routes) in parent process with real HOME while fake routes contained ~ state_dir.",
+    "known_effect": "One Pool.allocate call consumed a shared /home/nes/.local/state/direct-child/codex.counter turn. Subsequent fixture assertion read turn5252. Other fixture status/set operations acquired this shared counter lock; set altered only owned fake routes.",
+    "unknown": "Exact preimage and concurrent allocations not captured; do not infer5251 as a proved preimage.",
+    "no_effect_from_error": "No task/provider/native caller or real account store read from this fixture error.",
+    "response": "No shared counter rewind, repair or later inquiry. Fixture state path made absolute within synthetic home and containment asserted. Duplicate discovery removed. Final suites pass.",
+    "authority": "This counter allocation was outside the no-live-state bound; outside Work must dispose its consequence."
+  },
+  "coverage": "Actual owned app-server fixture launches/readback; 1/4 disabled after reservation/preflight; concurrent operator waits through creation+BEGIN; current empty/invalid/missing/incompatible pool and corrupt/empty-existing counter; cross-process fairness/restart/shared parent counter; retained diagnosis profile3 advice preserved while current successor uses2 without equivalent Luna; original source/enrollment/collector/call preservation; full existing singleton/QA5+1/currentness/effect/unknown/ACK/retention/alert regressions.",
+  "limits": "Owned offline fixtures, no real capacity/account/service qualification. Cooperating local locks only. Reservation fairness, no cross-file transaction or power-loss counter atomicity. Native boundary is local caller creation, not remote adapter execution. Existing/manual callers need adoption alignment.",
+  "invocation_END": "Not observable by this Maker inside its running invocation; outside parent must collect original terminal numeric END and full return.",
+  "retention": "Required outputs/source retained actual processing completion+24h AND all holds. Synthetic test fixtures are test-lifetime disposable; no live cleanup selected."
+}

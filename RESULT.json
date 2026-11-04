@@ -1,0 +1,34 @@
+{
+  "status": "MAKER_CONTRIBUTION_ONLY_NOT_ADMITTED",
+  "personal": true,
+  "children": 0,
+  "code_commit": "cb1130202af5a1949acc805a29ec6d556fce4b60",
+  "branch": "feat/coordinator-execution-pool-20261104",
+  "authority": "Decision25 and Actual Work25B after full brief-frame return; outside Work01a18bac-b565-7742-86bc-0f9ba5ffc831 owns collection/decision.",
+  "delta": "Shared public pool status/set plus durable fair NEW allocation across runtime and parent automatic workers. Runtime config/explicit/diagnosis profile suggestions preserved as advice; actual allocation/admission recorded separately. Standalone explicit manual --profile semantics retained.",
+  "boundary": "Runtime lock through process creation+BEGIN; direct parent after preflight at exec; native parent at local caller Popen. Disabled reserved attempt known unstarted without reassignment; existing calls/custody unchanged.",
+  "verification": {
+    "runtime_tests": 236,
+    "dispatcher_tests": 55,
+    "direct_launcher_tests": 24,
+    "total": 315,
+    "suite_ENDs": [
+      0,
+      0,
+      0
+    ],
+    "syntax_END": 0,
+    "diff_END": 0,
+    "detail": "verification.json; verification-output/"
+  },
+  "publication": {
+    "signed_code_commit_END": 0,
+    "normal_push_END": 0,
+    "reports": "Following signed report commit on same branch; final terminal return supplies its HEAD."
+  },
+  "adverse": "First parent fixture expanded ~ against real HOME: one unintended shared Codex counter allocation; later observed5252, exact preimage/concurrent changes unknown. Other fixture status/set took its lock; set wrote only fake routes. No account read/task launch from this error. No rewind/repair. Fixture now absolute-owned with containment assertion; final tests pass. Outside no-live-state bound; outside disposition required.",
+  "compatibility": "Default central public routes, unchanged existing config/grants when authorized. Deploy matching runtime/pool/dispatcher/direct-launcher together. Custom control-path config or rotation-state relocation requires existing reconciliation/cutover. Pending Source22/23 not integrated/admitted.",
+  "limits": "No rollout/admission, capacity/quota attestation, provider-side revocation, noncooperating CAS, cross-file crash transaction or counter power-loss atomicity. New native calls admitted locally may reach original adapter later.",
+  "next": "Parent collects actual original numeric invocation END/full return, then independent consequences/Frame/Work decision before adoption. This Maker cannot observe its own terminal END here.",
+  "retention": "Actual processing completion+24h AND all holds; no cleanup selected."
+}
