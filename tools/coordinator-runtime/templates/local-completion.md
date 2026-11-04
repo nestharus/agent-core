@@ -110,8 +110,17 @@ correlation. Optional completion.reported_commands may retain uncorrelated produ
 claims as {namespace:"producer-visible",label,status,exit_code,reason}; exit_code is
 numeric or null. Those claims cannot discharge adverse items or prove verification.
 
-If actual item IDs are not visible to the producer, or an otherwise DONE return
-lacks a coherent explicit contract, the service uses the same grammar/ownership/
+If actual item IDs are not visible to the producer, return an honest PARTIAL with
+the precise missing evidence and actual owner question; do not label it DONE to
+obtain observations. Blocked PARTIAL and undecodable completed task finals, as
+well as otherwise DONE returns lacking a coherent contract, use the existing
+single same-owned-idle continuation. The service supplies safe observed protocol
+identity/status/exit metadata, without acquiring command/output bodies. These are
+snapshots, not command correlations: if you cannot genuinely bind a command or
+verification, keep it unknown and return a scoped question to Work for the
+original controller/collector and actual effect/artifact/delivery custodian.
+No active-turn question RPC or repeated observation loop is promised.
+The service uses the same grammar/ownership/
 evidence checks while live as it does after collection, within its one supported
 same-owned-idle continuation. It supplies bounded safe actual item metadata and
 asks for faithful clarification/remaining verification in the SAME context. Live
@@ -124,7 +133,10 @@ original valid arrays must remain verbatim prefixes of the final arrays (malform
 artifact/handoff items use the explicit conservation rule above); no blind stage
 rewrite, canonical write, new session, profile handoff, repeated clarification or
 per-job human permission follows. Exhausted/ambiguous/unresolved evidence stays
-held and causally delivered. No text heuristic auto-classifies RESOLVED strings.
+held and causally delivered. An initial decode failure remains a capture/error
+hold even if the continuation returns valid JSON; the new representation is
+informative, not a replacement for the failed original. No text heuristic
+auto-classifies RESOLVED strings.
 
 The model writes only mapped staged proposals/reports. The true service owns
 retention.snapshot_lock, exact regular-file byte/inode/mode/owner preconditions,

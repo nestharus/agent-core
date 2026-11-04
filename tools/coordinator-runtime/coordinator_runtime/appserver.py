@@ -1,7 +1,9 @@
 """Private stdio app-server owner. Never attaches to another process or thread.
 
 Role: adapter. Translates: installed Codex v2 JSON-RPC and owned subprocess
-lifecycle; dispatcher attempts. Wire bodies/reasoning/stderr are never logged.
+lifecycle; dispatcher attempts. Command/output bodies, reasoning and stderr are
+never logged. Bounded task final returns, including undecodable text, are retained
+as result evidence; they are not an alternate result-selection mechanism.
 Schema support is checked offline; model-backed behavior needs separate live
 qualification. Configuration readback is not model execution attestation.
 """
@@ -34,6 +36,13 @@ class TurnFailure(Refusal):
         self.capacity = error.get("capacity", False)
         self.projection = error
         super().__init__("owned turn ended failed/interrupted" + (" with capacity error" if self.capacity else ""))
+
+
+class FinalDecodeFailure(Refusal):
+    """A matching completed turn returned undecodable data, not a process failure."""
+    def __init__(self, turn, error):
+        self.projection = {"turn": turn, "error_class": type(error).__name__}
+        super().__init__("owned final decode failed: " + type(error).__name__)
 
 
 class MetadataFailure(Refusal):
@@ -196,12 +205,26 @@ class Peer:
         self.child, self.limit = child, limit
         self.pending, self.finals = {}, {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
+        self.final_returns, self.tool_history, self.turn_history = [], [], []
+        self.capture_history = []
         self.errors = []
         self.tools, self.unknown_tools, self.thread = {}, set(), None
         self.events = asyncio.Queue(maxsize=8)
         self.sequence = 0
         self.capture = "complete"
         self.reader = asyncio.create_task(self.read())
+
+    @property
+    def capture(self):
+        return self._capture
+
+    @capture.setter
+    def capture(self, value):
+        self._capture = value
+        if len(self.capture_history) < 256:
+            self.capture_history.append(value)
+        else:
+            self._capture = "capture-history-exceeded-bound"
 
     async def send(self, value):
         self.child.stdin.write((encode(value)+"\n").encode())
@@ -267,12 +290,26 @@ class Peer:
                 elif not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=128:
                     self.capture = 'invalid-tool-item-identity'
                 elif len(self.tools) < 128 or item.get('id') in self.tools:
-                    self.tools[item.get('id')] = {'id': item.get('id'), 'type': kind, 'turn': params.get('turnId'),
-                        'status': item.get('status'), 'completed_notification': method == 'item/completed',
+                    if len(self.tool_history) >= 256:
+                        self.capture = 'tool-history-exceeded-bound'
+                        raise Refusal('bounded tool observation history exhausted')
+                    observed_turn = params.get('turnId')
+                    if not isinstance(observed_turn, str) or not 1 <= len(observed_turn) <= 128:
+                        self.capture = 'invalid-tool-turn-identity'
+                        return
+                    row = {'id': item.get('id'), 'type': kind, 'turn': observed_turn,
+                        'status': item.get('status') if item.get('status') in ('inProgress', 'completed', 'failed', 'declined') else None,
+                        'completed_notification': method == 'item/completed',
                         'exit_code': item.get('exitCode') if type(item.get('exitCode')) is int else None,
                         'duration_ms': item.get('durationMs') if type(item.get('durationMs')) is int else None,
                         'provider_process_id': item.get('processId')[:128] if isinstance(item.get('processId'),str) else None,
                         'OS_handle_owned': False}
+                    self.tool_history.append(row)
+                    prior = self.tools.get(item['id'])
+                    if prior and prior['completed_notification'] and prior != row:
+                        self.capture = 'conflicting-tool-observation'
+                    else:
+                        self.tools[item['id']] = row
                 else:
                     self.capture = 'tool-metadata-count-bound'
             elif kind not in {'agentMessage','userMessage','reasoning','plan','contextCompaction'}:
@@ -304,12 +341,17 @@ class Peer:
         if not isinstance(item_id, str) or not item_id or len(item_id) > 128:
             self.capture = "invalid-final-item-identity"
             return
-        if item_id in self.final_items and self.final_items[item_id] == text:
+        key = (turn, item_id)
+        if key in self.final_items and self.final_items[key] == text:
             return
-        if len(self.final_items) >= 16:
+        if len(self.final_returns) >= 16:
             self.capture = "final-count-exceeded-bound"
             return
-        self.final_items[item_id] = text
+        self.final_items[key] = text
+        # Final task returns only: never command/output/reasoning bodies. Keep
+        # exact undecodable and conflicting returns as evidence, not candidates
+        # to select by lastness. The existing per-return/count ceilings apply.
+        self.final_returns.append({'turn': turn, 'item': item_id, 'text': text})
         if turn in self.completed_turns:
             self.preserve_late(turn, text)
             self.capture = "late-final-needs-reconciliation"
@@ -340,11 +382,21 @@ class Peer:
         if event["threadId"] != thread or event["turn"]["id"] != turn:
             raise Refusal("foreign or stale completion cannot satisfy this owned turn")
         if event["turn"]["status"] != "completed" or event["turn"]["error"]:
+            self.turn_history.append(event)
             raise TurnFailure(event["turn"]["error"] or {"capacity": False})
         if turn not in self.finals:
             raise Refusal("completed turn has no final answer")
         self.completed_turns.add(turn)
-        return decode_final(self.finals.pop(turn))
+        self.turn_history.append(event)
+        return self.decode_turn(turn)
+
+    def decode_turn(self, turn):
+        text = self.finals.pop(turn)
+        try:
+            return decode_final(text)
+        except (ValueError, Refusal) as exc:
+            self.capture = 'invalid-final-needs-reconciliation'
+            raise FinalDecodeFailure(turn, exc) from exc
 
 
 class AppServer:
@@ -514,7 +566,20 @@ class AppServer:
         except TurnFailure as exc:
             outcome["detail"]["prior_turn_failure"] = exc.projection
             outcome["detail"]["resume_disposition"] = "attempted-after-collected-failed-turn"
-            return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+            return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
+        except FinalDecodeFailure as exc:
+            if not (schema and set(schema.get('properties', {})) == {'payload_json'}):
+                raise
+            outcome['detail']['prior_final_decode_failure'] = exc.projection
+            # A subsequent representation is informative. It cannot erase this
+            # failure or qualify the original capture by being valid JSON.
+            outcome['error'] = str(exc)
+            outcome['detail']['resume_disposition'] = 'attempted-after-final-decode-failure'
+            return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
+        return await self.completed_result(peer, store, attempt, thread, turn, spec, binding, schema, outcome, result)
+
+    async def completed_result(self, peer, store, attempt, thread, turn, spec, binding, schema, outcome, result):
+        """Normal and interrupt-raced completions have the same progress contract."""
         outcome["result"] = result
         items=list(peer.tools.values())
         is_task=bool(schema and set(schema.get('properties',{}))=={'payload_json'})
@@ -529,17 +594,55 @@ class AppServer:
                 'Correct the representation and only genuinely remaining local construction/verification. '
                 'A real partial/blocker remains partial/blocked; no DONE merely to repair JSON, canonical writes or new duties.\n'+
                 task_result_instructions()+(readiness.INSTRUCTIONS if spec.get('routine_completion') else '')+
-                '\nCOMPLETION_ISSUES='+encode(issues)+
-                '\nThese IDs are controller-observed protocol identity, not a correlation to your visible chunk labels.'+
-                '\nOBSERVED_TOOL_METADATA='+encode(items)+
-                '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
-                '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools)))
-            return await self.continue_idle(peer,store,attempt,thread,turn,spec,binding,schema,prompt)
+                '\nCOMPLETION_ISSUES='+encode(issues))
+            return await self.progress(peer,store,attempt,thread,turn,spec,binding,schema,outcome,prompt)
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
             outcome["detail"]["resume_disposition"] = "attempted-after-semantic-incompletion"
-            return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+            return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
         return result
+
+    async def progress(self, peer, store, attempt, thread, turn, spec, binding, schema, outcome, prompt=None):
+        """Use the existing single continuation; leave a real owner question on failure.
+
+        Observation identity is only the owned attempt/thread/turn and the
+        controller's protocol item IDs. No command bodies are acquired to guess
+        correspondence. Missing semantic bindings remain an owner question.
+        """
+        if not (schema and set(schema.get('properties', {})) == {'payload_json'}):
+            return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema, prompt)
+        items = [{key: row.get(key) for key in ('id', 'type', 'turn', 'status',
+                  'completed_notification', 'exit_code', 'OS_handle_owned')} for row in peer.tools.values()]
+        observation = {'attempt': attempt, 'thread': thread, 'prior_turn': turn,
+            'items': items, 'unknown_types': sorted(peer.unknown_tools),
+            'capture': peer.capture, 'capture_history': list(peer.capture_history),
+            'command_correspondence': 'unobserved; command/output bodies not acquired',
+            'scope': 'snapshot before continuation; later items require their own qualification'}
+        question = ('Actual Work owner and original controller/collector: qualify the conserved returns for attempt '+
+            attempt+' and owned turn '+turn+'. Supply a genuine protocol-ID-to-command/verification witness '
+            'where entitled, or retain each missing binding as unknown and select a scoped blocked handoff '
+            'with the actual effect/artifact/delivery custodian. Never infer bindings from counts, labels, '
+            'order, duration or a later zero. No completion, publication, acceptance or hold release is implied.')
+        record = {'observation': observation, 'state': 'not-submitted', 'owner_question': question}
+        outcome['detail']['completion_progress'] = record
+        prompt = prompt or ('Continue only genuinely remaining work in this SAME owned context once. '
+            'Do not replay prior effects. Preserve every prior failure/unknown/finding and truthful PARTIAL/blocker. '
+            'If the prior final could not decode, explain the representation failure without claiming it succeeded.\n'+
+            task_result_instructions()+(readiness.INSTRUCTIONS if spec.get('routine_completion') else ''))
+        prompt += ('\nThese IDs are controller-observed protocol identity, not command/chunk-label correspondence. '
+            'Do not invent a mapping. If evidence is insufficient, return a truthful blocked result with '
+            'a precise question to Work for the original controller/collector before teardown.\n'+
+            'OBSERVED_TOOL_METADATA='+encode(items)+
+            '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
+            '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools))+
+            '\nCOMPLETION_OBSERVATION='+encode(observation)+'\nOWNER_QUESTION='+question)
+        try:
+            result = await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema, prompt, progress=record)
+            record['state'] = 'returned; qualification separate'
+            return result
+        except Exception as exc:
+            record['failure_class'] = type(exc).__name__
+            raise
 
     async def start_turn(self, peer, thread, prompt, binding, schema, spec):
         if schema and set(schema.get("properties", {})) == {"payload_json"}:
@@ -560,25 +663,48 @@ class AppServer:
         if event.get("threadId") != thread or event.get("turn", {}).get("id") != turn:
             raise Refusal("original interruption/end unknown; overlapping continuation prohibited")
         # The original may have completed concurrently with interrupt. Conserve that result.
-        if event["turn"]["status"] == "completed" and turn in peer.finals:
-            return decode_final(peer.finals.pop(turn))
-        return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+        if event["turn"]["status"] == "completed" and not event['turn'].get('error') and turn in peer.finals:
+            peer.completed_turns.add(turn)
+            peer.turn_history.append(event)
+            try:
+                result = peer.decode_turn(turn)
+            except FinalDecodeFailure as exc:
+                if not (schema and set(schema.get('properties', {})) == {'payload_json'}):
+                    raise
+                outcome['detail']['prior_final_decode_failure'] = exc.projection
+                outcome['error'] = str(exc)
+            else:
+                return await self.completed_result(peer, store, attempt, thread, turn, spec, binding, schema, outcome, result)
+        else:
+            peer.turn_history.append(event)
+        return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
 
-    async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema, clarification=None):
+    async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema, clarification=None, *, progress=None):
         state = await peer.rpc("thread/read", {"threadId": thread, "includeTurns": False})
         if state.get("thread", {}).get("id") != thread or state.get("thread", {}).get("status", {}).get("type") != "idle":
             raise Refusal("owned same-session continuation requires actual idle readback")
+        if progress is not None:
+            progress['state'] = 'idle-observed; not-submitted'
         store.authorize_launch(attempt)
         prompt = clarification or ("Continue this exact owned task after the collected interruption. Reconcile prior effects; "
                   "do not replay them. Complete only remaining authorized work, or return explicit UNKNOWN. "
                   "Use the original required JSON result contract. This is the single supported resume budget.")
         if not clarification and schema and set(schema.get('properties',{}))=={'payload_json'}:
             prompt+='\n'+task_result_instructions()
+        if progress is not None:
+            progress['state'] = 'start-requested; receipt unknown'
         next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
+        if progress is not None:
+            progress.update(state='owned-turn-observed; awaiting-completion', continuation_turn=next_turn)
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])
 
     async def teardown(self, child, peer, outcome):
+        if peer:
+            # Retain even if process collection or pipe closure subsequently
+            # fails. These lists also receive any bounded late observations.
+            outcome['detail'].update(final_returns=peer.final_returns, tool_observation_history=peer.tool_history,
+                turn_completion_history=peer.turn_history, capture_history=peer.capture_history)
         if child is None:
             proved = outcome["detail"].get("creation") in {"not-attempted", "proved-rejected"}
             outcome["detail"]["known_not_started"] = proved

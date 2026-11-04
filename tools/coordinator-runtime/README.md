@@ -385,6 +385,25 @@ human permission is supplied. Original pre-clarification arrays must remain verb
 prefixes, with original completion and specific issues retained. See
 templates/local-completion.md and tests; the outer provider wire is unchanged.
 
+The same one-continuation budget now supplies bounded completion observations to
+valid blocked PARTIAL and completed-but-undecodable task returns, including an
+interrupt-raced completion. Actual idle readback and current authorization still
+precede the next turn. The snapshot contains owned attempt/thread/turn and genuine
+protocol item identity/status/exit facts, with command correspondence explicitly
+unobserved; no command/output bodies are acquired to fill that gap. If correlation
+or continuation is unavailable, a precise question for Work and the original
+controller/collector remains in causal detail for the existing failure-delivery
+route. A returned clarification is not proof the observations were understood.
+An original parser failure remains an error/capture hold; later valid JSON is
+informative and cannot make it complete. All accepted bounded task-final texts,
+tool-observation revisions, matching turn completions and capture transitions
+remain separate history. Conflicting tool revisions retain the first completed
+row and hold capture. History exhaustion is explicit and unqualified, not a
+reason to drop an adverse result and claim completion. No general mid-turn RPC,
+new session, extra continuation, conflict promotion or historical recovery is
+added. See tests/test_completion_progress.py for in-memory controls and their
+scope; these do not qualify a deployed provider or real effect/publication path.
+
 All role tasks share one outer-result contract in contracts.py: the generated job/
 wire/clarification instructions, live diagnostics, publisher, final task collector
 and routine callback use it. Missing fields, unsupported fields (including an
