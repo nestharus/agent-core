@@ -149,6 +149,6 @@ class InputJournal:
                 "ORDER BY e.received,e.id LIMIT ?",(role,after,cursor['received'] if cursor else 0,after or '',limit+1))
         return {'role':role,'availability':'Durable records only; no native wake or processing proof',
             'inputs':rows[:limit],'more_inputs':len(rows)>limit,'next_after':rows[limit-1]['id'] if len(rows)>limit else None,
-            'recovery':self.rows("SELECT id,token,active_attempt,recovery_state,hold_reason FROM jobs WHERE role=? AND state='held' "
+            'recovery':self.rows("SELECT id,token,active_attempt,controller,recovery_owner,collection_handoff,recovery_state,hold_reason FROM jobs WHERE role=? AND state='held' "
                 "AND recovery_state IN ('diagnosing','awaiting-disposition','owner-deferred') ORDER BY created,id LIMIT ?",(role,limit)),
             'limit':limit,'paging':'Use exact input-show/recover-source references; a full page is not exhaustive'}

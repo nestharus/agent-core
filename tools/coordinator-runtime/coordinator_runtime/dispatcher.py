@@ -410,9 +410,10 @@ class Dispatcher:
                 self.authorize_roles(self.store.source_roles(job=job['id']))
                 if job['controller']!=self.store.controller:
                     if json.loads(request['receipt'])['mode']=='use-diagnosis':
-                        raise Refusal('retained diagnosis awaits its existing lawful collector; no automatic custody transfer')
-                    self.store.adopt_collected(job['id'])  # Existing proved closure-only transfer; never process collection.
-                current=self.store.consume_recovery_request(request['id'])
+                        if 'collector_continuity' not in json.loads(request['receipt']):
+                            raise Refusal('retained diagnosis awaits its existing lawful collector or explicit owner continuity; no automatic custody transfer')
+                    else:self.store.adopt_collected(job['id'])  # Existing proved closure-only transfer; never process collection.
+                current=self.store.consume_recovery_request(request['id'],dispatcher_continuity=True)
                 if not current:continue
                 if current['receipt']['mode']=='remaining-work':
                     self.spawn(self.recover(self.store.job(job['id'])))
@@ -448,6 +449,9 @@ class Dispatcher:
 
     def reconcile_collected(self, job):
         try:
+            if (job['state']=='held' and job['recovery_state']=='awaiting-disposition'
+                    and self.store.owner_remaining_selection(job['id'],job['active_attempt'])):
+                raise Refusal('held owner-selected remainder awaits explicit collector continuity or owner redisposition')
             if job["controller"] != self.store.controller:
                 board = self.boards.get(job["role"])
                 if board:
