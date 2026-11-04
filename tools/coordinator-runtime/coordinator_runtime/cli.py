@@ -99,6 +99,12 @@ def parser():
     enroll.add_argument("--authority", required=True)
     enroll.add_argument("--delivery", action="store_true", help="Explicit role-lifetime outgoing delegation and real service actor")
     enroll.add_argument('--completion', action='store_true', help='Explicit bounded routine collector/file completion delegation')
+    software = sub.add_parser('enroll-software', help='Actual Work/user grantor issues prospective delegation in a NEW journal; never native owner issuance')
+    software.add_argument('role')
+    software.add_argument('--authority', required=True)
+    revoke_software = sub.add_parser('revoke-software', help='Actual Work grantor revokes only its own prospective software grant')
+    revoke_software.add_argument('role')
+    revoke_software.add_argument('--grant', required=True)
     extend = sub.add_parser("delegate-delivery")
     extend.add_argument("role")
     extend.add_argument("--authority", required=True)
@@ -201,6 +207,16 @@ def operate(args, store):
         grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery, completion=args.completion)
         store.enroll(args.role, grant)
         return {"grant": grant, "legacy_hold": store.enrollment(args.role)["legacy_hold"]}
+    if args.command == 'enroll-software':
+        grant = Board(store.config, args.role).grant_software(store, args.authority)
+        store.enroll(args.role, grant)
+        return {'grant': grant, 'legacy_hold': store.enrollment(args.role)['legacy_hold'],
+                'native_owner_issuance': False, 'historical_duties': 'retained in their original authority epochs'}
+    if args.command == 'revoke-software':
+        receipt = Board(store.config, args.role).revoke_software(store, args.grant)
+        with store.tx():
+            store.db.execute('UPDATE enrollments SET intake=0 WHERE role=? AND grant_id=?', (args.role, args.grant))
+        return receipt
     if args.command == "delegate-delivery":
         return Board(store.config, args.role).extend_delivery(store, args.authority)
     if args.command == 'delegate-completion':

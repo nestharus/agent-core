@@ -274,6 +274,8 @@ class Dispatcher:
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
             task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
+            if self.config.get('software_delegation'):
+                self.boards[job['role']].bind_software_attempt(self.store, job, attempt)
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']
                 while True:
@@ -593,8 +595,10 @@ class Dispatcher:
             receipt = board.delivery_status(outbox["id"])
             if receipt["state"] in {"posted", "ambiguous"}:
                 receipt = board.transport_delivery(self.store, outbox)
+            software_owned = (hasattr(board, 'software_delivery')
+                              and board.software_delivery(self.store, outbox, self.boards))
             control_error=None
-            if hasattr(board,'automatic_control'):
+            if not software_owned and hasattr(board,'automatic_control'):
                 try:attempted=board.automatic_control(self.store,outbox,send=send_control)
                 except Exception as exc:
                     attempted=bool(getattr(exc,'control_budget_spent',False))

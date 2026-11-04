@@ -553,6 +553,16 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            if self.config.get('software_delegation'):
+                detail = json.loads(attempt['detail'])
+                tools = detail.get('tool_completion', {})
+                if (not detail.get('software_authority') or not tools.get('complete')
+                        or (not task.get('routine_completion') and (tools.get('nonzero_completions')
+                            or any(item.get('status') == 'failed' for item in tools.get('items', []))))):
+                    reason = 'Prospective software task lacks complete launch-authority/tool capture; retain original effects and custody'
+                    self.failure_delivery(row, attempt, task, reason)
+                    self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?", (reason, job))
+                    return None
             if task.get('routine_completion'):
                 from .readiness import assess
                 assess(self,attempt)  # Same local obligation contract as publisher and delegated collector.

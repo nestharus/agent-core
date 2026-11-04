@@ -46,6 +46,11 @@ class Completion:
         except Refusal:
             return None  # Existing external/undelegated duties stay actually owned.
         attempt = runtime.attempt(job['active_attempt'])
+        if self.config.get('software_delegation'):
+            from .software import clean_processing
+            self._software_job_grant(runtime, job)
+            if not clean_processing(runtime, job):
+                return None
         try:answer=collected_task_result(attempt)
         except Refusal:return None
         if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['error']
@@ -58,7 +63,8 @@ class Completion:
             try:local=assess(runtime,attempt)
             except Refusal:return None
         elif answer.get('failures') or answer.get('unknowns'):return None
-        proof = {'actor': self.config['actor'], 'delegated_by': grant['owner'], 'grant_id': grant['id'],
+        proof = {'actor': self.config['actor'], 'delegated_by': grant['issued_by'], 'grant_id': grant['id'],
+                 'role_owner': grant['owner'], 'authority': grant['authority'],
                  'recipient': grant['owner'], 'worker': attempt['session'], 'collector': attempt['controller'],
                  'evidence': {'attempt': attempt['id'], 'result_hash': digest(answer), 'effect_receipt': job['effect_receipt']},
                  'local_readiness':local,

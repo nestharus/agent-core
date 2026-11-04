@@ -22,6 +22,7 @@ from .board_delivery import BoardDelivery, SCHEMA as DELIVERY_SCHEMA
 from .completion import Completion
 from .routine import BOARD_SCHEMA as COMPLETION_SCHEMA
 from .owner_control import OwnerControl
+from .software import Software, BOARD_SCHEMA as SOFTWARE_SCHEMA
 
 EXTENSION = """
 CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
@@ -78,7 +79,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat()
 
 
-class Board(BoardDelivery, Completion, OwnerControl):
+class Board(BoardDelivery, Completion, OwnerControl, Software):
     def __init__(self, config, role):
         self.config, self.role = config, role
         self.selected = config["roles"][role]
@@ -151,21 +152,29 @@ class Board(BoardDelivery, Completion, OwnerControl):
 
     def grant(self, runtime, authority, *, delivery=False, completion=False):
         owner = self.store.acting_session(self.selected["owner"])
+        return self._issue_grant(runtime, authority, owner, delivery=delivery, completion=completion)
+
+    def _issue_grant(self, runtime, authority, issuer, *, delivery=False, completion=False, software=False):
+        owner = self.selected['owner']
         if not authority.strip():
             raise Refusal("actual user/role delegation authority reference required")
         stat = regular_path(str(runtime.path)).stat()
         with self.opened() as conn:
-            conn.executescript(EXTENSION + DELIVERY_SCHEMA + COMPLETION_SCHEMA)
+            conn.executescript(EXTENSION + DELIVERY_SCHEMA + COMPLETION_SCHEMA + SOFTWARE_SCHEMA)
             with self.store.write(conn):
                 route = conn.execute("SELECT route FROM sessions WHERE session=?", (owner,)).fetchone()[0]
                 if route != "managed":
                     raise Refusal("actual owner must select prospective managed delivery before delegation; old notice routes remain owned")
                 cutover = conn.execute("SELECT COALESCE(MAX(seq),0) FROM posts").fetchone()[0]
-                grant = {"id": ident(), "owner": owner, "actor": self.config["actor"], "cutover": cutover}
+                grant = {"id": ident(), "owner": owner, "actor": self.config["actor"], "cutover": cutover,
+                         "issued_by": issuer, "authority": authority}
                 conn.execute("INSERT INTO coordinator_grants_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
                              (grant["id"], self.selected["board_id"], self.role, owner,
                               self.selected["profile"], grant["actor"], str(runtime.path),
-                              stat.st_dev, stat.st_ino, cutover, owner, authority, utc()))
+                              stat.st_dev, stat.st_ino, cutover, issuer, authority, utc()))
+                if software:
+                    conn.execute('INSERT INTO coordinator_software_grants_v1 VALUES(?,?,?)',
+                                 (grant['id'], encode(self.software_policies()), digest(self.config)))
                 if delivery:
                     self.grant_delivery(conn, grant, authority, runtime)
                 if completion:
@@ -252,10 +261,11 @@ class Board(BoardDelivery, Completion, OwnerControl):
             rows = conn.execute("SELECT p.seq,n.notification_id FROM posts p LEFT JOIN notification_outbox n "
                 "ON n.post_seq=p.seq AND n.recipient=? WHERE p.seq>? AND "
                 "NOT EXISTS (SELECT 1 FROM coordinator_deliveries_v1 d WHERE d.post=p.seq AND d.actor=? "
-                "AND NOT (d.kind='work' AND d.recipient=? AND d.owner!=?)) AND "
+                "AND (? OR NOT (d.kind='work' AND d.recipient=? AND d.owner!=?))) AND "
                 "(n.notification_id IS NOT NULL OR (p.recipient=? AND NOT EXISTS "
                 "(SELECT 1 FROM thread_posts t WHERE t.post_seq=p.seq))) ORDER BY p.seq LIMIT ?",
-                (grant["owner"], max(after, grant["cutover"]), self.config["actor"], grant["owner"], grant["owner"], grant["owner"], limit)).fetchall()
+                (grant["owner"], max(after, grant["cutover"]), self.config["actor"], bool(self.config.get('software_delegation')),
+                 grant["owner"], grant["owner"], grant["owner"], limit)).fetchall()
             replies = conn.execute("SELECT p.seq,n.notification_id,d.id AS parent_delivery FROM posts p "
                 "JOIN thread_posts t ON t.post_seq=p.seq JOIN coordinator_deliveries_v1 d ON d.post=t.thread_id "
                 "LEFT JOIN notification_outbox n ON n.post_seq=p.seq AND n.recipient=? "
