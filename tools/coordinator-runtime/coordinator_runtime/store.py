@@ -118,9 +118,17 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         self.execution_pool = ExecutionPool(config)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
-        fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-        os.close(fd)
-        if self.path.stat().st_nlink != 1 or self.path.stat().st_mode & 0o077:
+        # Closing ANY raw descriptor for an existing SQLite file can release
+        # this process's POSIX locks held by other SQLite connections. Owner
+        # CLI opens must not invalidate the running collector's journal locks.
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(fd)
+        info=self.path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mode & 0o077:
             raise Refusal("private single-link runtime database required")
         self.db = sqlite3.connect(self.path, isolation_level=None, timeout=15)
         self.db.row_factory = sqlite3.Row
@@ -585,7 +593,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 published=self.rows("SELECT target FROM file_publications WHERE attempt=? AND state='published'",(attempt['id'],))
                 if (not run or run['state']!='reconciled' or
                         {p['target'] for p in published}!=set(task['routine_completion']['targets'])):
-                    raise Refusal('routine canonical publication remains incomplete; effect receipt cannot waive exact preimage/publication')
+                    from .publication import INCOMPLETE_HOLD
+                    raise Refusal(INCOMPLETE_HOLD)
             self.prepare_handoffs(row, attempt, task, result)
             if row["role"] == "Work" and result["category"] in {"scope", "blocker"}:
                 self.owner_question(row, attempt, "Work-owned consequential question stays with the actual Decider; no automatic self-loop")
@@ -707,26 +716,28 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             return self._handoff(job,diagnosis)
 
-    def _handoff(self,job,diagnosis,*,retained_request=None,dispatcher_continuity=False):
+    def _handoff(self,job,diagnosis,*,retained_request=None,dispatcher_continuity=False,publication_board=None):
         """Allocate once inside the caller's journal transaction, never start a model."""
         if not self.db.in_transaction:raise Refusal('handoff requires the owned journal write transaction')
         row=self.job(job)
         old,diag=self.attempt(row['active_attempt']),self.attempt(diagnosis)
         continuity=None
+        publication=None
         if retained_request:
             receipt=json.loads(retained_request['receipt'])
             if (retained_request['state']!='pending' or retained_request['job']!=job or retained_request['attempt']!=old['id']
                     or retained_request['actor']!=self.enrollment(row['role'])['owner']
                     or receipt['mode']!='use-diagnosis' or receipt['diagnosis']!=diagnosis):
                 raise Refusal('exact actual-owner request and lawful original disposition collector required')
-            witness=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'])
+            witness=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'],publication_board=publication_board)
+            publication=witness.get('publication_remainder')
             if json.loads(retained_request['result'])['retained_diagnosis']!=witness:
                 raise Refusal('retained qualified diagnosis/selection changed since owner reaffirmation')
             if 'collector_continuity' in receipt:
                 if not dispatcher_continuity:raise Refusal('collector continuity is consumed only by the corrected actual dispatcher')
                 handoff=self.transfer_retained_closure(row,old,retained_request)
                 row=self.job(job)
-                after=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'])
+                after=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'],publication_board=publication_board)
                 if {k:v for k,v in witness.items() if k!='closure_hash'}!={k:v for k,v in after.items() if k!='closure_hash'}:
                     raise Refusal('qualified currentness changed during authorized closure transfer')
                 continuity={'before_witness':witness,'after_witness':after,'handoff':handoff}
@@ -745,14 +756,16 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         selection=self.owner_remaining_selection(job,old['id'])
         if old['semantic']=='DONE' and not selection:
             raise Refusal('collected DONE needs disposition; completed work cannot be blindly relaunched')
-        if selection:self.remaining_work_fence(row,old)
-        self.require_recoverable_hold(row,old)
+        if publication is None:
+            if selection:self.remaining_work_fence(row,old)
+            self.require_recoverable_hold(row,old)
         attempt=self._attempt('task',None,job,task['binding'],choice['profile'])
         context={'prior_attempt':old['id'],'prior_session':old['session'],'prior_result':old['result'],
                  'prior_error':old['error'],'prior_job_hold':row['hold_reason'],'effect_receipt':row['effect_receipt'],
                  'choice':choice,'diagnosis':diagnosis,'native_resume':False,
                  'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])}
         if retained_request:context['retained_diagnosis_request']=retained_request
+        if publication is not None:context['publication_remainder']=publication
         if continuity:context['collector_continuity']=continuity
         context={**json.loads(self.attempt(attempt)['detail']),**context}
         self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(context),attempt))

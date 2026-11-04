@@ -1173,3 +1173,77 @@ above remain in force. Eventual retained revisits require sufficient completed
 passes in a stable process; this composition adds no wall-clock or migration
 atomicity guarantee. The combined offline witnesses are in
 `tests/test_receiving_integration.py`.
+
+### Owner-qualified canonical-publication remainder
+
+A held, collected routine writer can have reconciled effects while canonical
+publication is incomplete. `use-diagnosis` continues to reject unrelated holds.
+For this particular duty, the supported owner operation is an optional
+`publication_remainder` operand on that same request, retaining the exact
+consumed remaining-work selection and explicit diagnosis. It is never a new
+business target, fresh diagnosis, old-result redisposition or publication waiver.
+
+In the genuine owner's separately qualified context, read candidate operands:
+
+```sh
+coordinator --config /absolute/selected-config.json publication-remainder-basis JOB \
+  --token TOKEN --attempt ORIGINAL --diagnosis EXACT_DIAGNOSIS --selection CONSUMED_SELECTION
+```
+
+This reads the original delegated routine run/staging custody and current exact
+canonical peer witnesses under the selected cooperative snapshot lock. It
+returns no business bodies, allocates nothing and makes no purpose decision.
+The genuine owner must have lawfully read the retained target AND WHY, source
+and effect evidence, and judge that the exact original purpose remains current.
+The `purpose` hash binds the existing task, diagnosis choice and consumed owner
+selection representations; a hash does not establish semantic sameness.
+
+Include the returned object unchanged as `publication_remainder` alongside
+`mode:"use-diagnosis"`, exact `diagnosis`/`selection`, `remaining:null`, and the
+owner's authentic current `reason` and `evidence`. Use `request-recovery` with
+that receipt. If an owned restart is involved, the existing independently
+qualified `collector_continuity` operand is still required; neither a CLI Store
+nor an old controller ID supplies collector custody.
+
+Qualification requires the exact incomplete-publication hold, original
+incomplete delegated routine run and matching current completion policy/grant,
+local readiness, complete original staging custody, current source identity,
+reconciled owner effects with no unknowns, every related collected numeric END,
+all source/legacy fences, and current regular peer preimages. A missing original
+run cannot be invented retrospectively. An unresolved publication intent or
+uncertain partial write refuses even with an owner receipt. A known published
+subset is conserved only while its exact recorded effects still match peers.
+A fully published historical batch cannot use this capability for redisposition.
+An unrelated hold refuses even if the operand otherwise looks complete.
+
+The dispatcher rechecks the exact request witnesses and live role/source
+authority in the allocation path. Any closure continuity and allocation share
+its existing journal transaction: failure rolls that transfer back. At most
+one successor is permitted in the same job/token/members; no old result is
+reprocessed and no equivalent diagnosis is launched. Original results,
+selection, diagnosis, stages, publication rows, outboxes and collector history
+remain retained. The original hold and effect receipt accompany the successor;
+its effects become unknown until its own normal reconciliation.
+
+The successor takes a fresh staged snapshot only if the selected peer preimages
+and completion grant still match. Its own successful collected result, local
+readiness, artifact custody, exact-preimage publication and downstream delivery
+remain mandatory. A later peer change still refuses publication. A stale
+pending request remains pending, with its actual custodian; these operations
+provide no cancellation, receipt rewrite, blind retry or unknown-effect repair.
+
+These are cooperative boundary checks, not an OS sandbox, multi-file atomicity,
+noncooperating-writer CAS or proof of genuine business readiness. The capability
+alone supplies no deployment, adoption, real continuation, acceptance or full
+cutover qualification. Prospective effect/epoch changes must be coherently
+composed and observed separately before any actual use.
+
+Owner command concurrency also relies on retaining SQLite's existing process
+locks. Opening a journal now creates a missing database with `O_EXCL`; it checks
+an existing file without opening and closing an extra raw descriptor. Such a
+close can release POSIX locks held by another SQLite connection in the same
+process. A separate CLI-process fixture exposed journal corruption after
+multiple owner command connections; the retained failure is distinct from
+business publication. Existing path-type/link/mode checks still refuse unsafe
+journal files. This change does not repair a corrupted journal or qualify live
+journal health.

@@ -51,7 +51,8 @@ async def export(store, attempt, p, source):
     for item in files:
         target = root / item['path']
         target.parent.mkdir(parents=True, exist_ok=True)
-        argv = [p['git'], '--no-optional-locks', '-c', 'core.hooksPath=/dev/null', '-C', p['repository'], 'cat-file', 'blob', item['blob']]
+        argv = [p['git'], '--no-optional-locks', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
+                '-c', 'core.hooksPath=/dev/null', '-C', p['repository'], 'cat-file', 'blob', item['blob']]
         record = await tool(store, attempt, 'qa-source-blob', argv, p['repository'], p,
                             output_file=target, maximum=policy['max_bytes'])
         if record['exit'] != 0 or record['stdout_bytes'] != item['size']:
