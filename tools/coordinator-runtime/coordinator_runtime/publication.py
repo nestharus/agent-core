@@ -54,29 +54,33 @@ def remainder_basis(store, job, old, choice, selection, board):
         if digest(store.event(member['event'])) != member['hash']:
             raise Refusal('publication remainder source changed; no refreshed business purpose')
     task = store.config['tasks'][job['task']]
+    allocated = stages(store, old['id'])
+    publications = store.rows('SELECT p.* FROM file_publications p JOIN attempts a ON p.attempt=a.id WHERE a.job=?', (job['id'],))
+    # policy_for itself validates paths with metadata. Check every retained
+    # stage/target AND the raw policy targets before invoking that validator.
+    raw_policy = task.get('routine_completion')
+    targets = raw_policy.get('targets', []) if isinstance(raw_policy, dict) else []
+    paths = [*(targets if isinstance(targets, list) else []), *allocated,
+             *allocated.values(), *(p['target'] for p in publications)]
+    for name in paths:
+        if isinstance(name, str) and any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
+                                        for p in store.config.get('artifact_exclusions', [])):
+            raise Refusal('publication remainder path excluded before metadata')
     policy = policy_for(task)
     run = store.one('SELECT * FROM routine_runs WHERE attempt=?', (old['id'],))
     if (not policy or not run or run['task'] != job['task'] or run['grant_id'] != grant['id']
             or json.loads(run['policy']) != policy or run['state'] != 'prepared'):
         raise Refusal('publication remainder needs the original incomplete delegated routine run; no retrospective invention')
     local = assess(store, old)
-    allocated = stages(store, old['id'])
     before = json.loads(run['before_files'])
     if set(allocated) != set(policy['targets']) or set(before) != set(allocated):
         raise Refusal('publication remainder needs the complete original staging/preimage mapping')
-    publications = store.rows('SELECT p.* FROM file_publications p JOIN attempts a ON p.attempt=a.id WHERE a.job=?', (job['id'],))
     if any(p['state'] != 'published' or not p['witness'] for p in publications):
         raise Refusal('unknown/partial publication intent remains binding; no remainder replay')
     if len([p for p in publications if p['attempt'] == old['id']]) == len(allocated):
         raise Refusal('publication already complete; remainder cannot redispose historical publication')
     maximum = store.config['limits'].get('max_artifact_bytes', 33554432)
     held_stages = {}
-    # Exclusions are applied before stage/target metadata or body acquisition.
-    paths = [*allocated, *allocated.values(), *(p['target'] for p in publications)]
-    for name in paths:
-        if any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
-               for p in store.config.get('artifact_exclusions', [])):
-            raise Refusal('publication remainder path excluded before metadata')
     with snapshot_lock(store):
         for target, path in allocated.items():
             body, observed = read_file(safe_path(path, [str(store.home/'artifacts'/old['id']/'staged')]), maximum)

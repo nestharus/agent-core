@@ -78,6 +78,23 @@ def current(store, task, epoch=None):
     return {**row, 'selection': selection, 'policy': policy}
 
 
+def requires_authority(store, job):
+    """Retained prospective duties still need proof after revocation.
+
+    Determine applicability from original journal boundaries, independently of
+    the active attempt's possibly absent proof and the current config flag.
+    Older jobs/members and unrelated task policies retain their native path.
+    """
+    position = store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n']
+    members = json.loads(job['members'])
+    for row in store.rows('SELECT * FROM prospective_authorities WHERE job_boundary<?', (position,)):
+        if (job['task'] in json.loads(row['selection'])['tasks'] and members
+                and all(store.one('SELECT rowid AS n FROM events WHERE id=?', (m['event'],))['n']
+                        > row['event_boundary'] for m in members)):
+            return True
+    return False
+
+
 def for_job(store, job):
     attempt = store.attempt(job['active_attempt']) if job['active_attempt'] else None
     proof = json.loads(attempt['detail']).get('software_authority', {}) if attempt else {}

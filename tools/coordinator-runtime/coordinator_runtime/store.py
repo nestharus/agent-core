@@ -281,10 +281,15 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         self.require_active_sources(row["event"], row["job"])
         if self.launch_authorizer:
             self.launch_authorizer(self.source_roles(row["event"], row["job"]))
-        if self.config.get('software_delegation') and row['kind'] == 'task':
+        if row['kind'] != 'task':
+            return
+        job = self.job(row['job'])
+        if (self.config.get('software_delegation')
+                or 'software_authority' in json.loads(row['detail'])
+                or prospective.requires_authority(self, job)):
             if not self.task_launch_authorizer:
                 raise Refusal('software task launch requires its current authority checker')
-            if self.job(row['job'])['active_attempt'] != attempt:
+            if job['active_attempt'] != attempt:
                 raise Refusal('software launch is not the current owned task attempt')
             self.task_launch_authorizer(row)
 

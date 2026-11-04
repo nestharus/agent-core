@@ -202,7 +202,11 @@ class Dispatcher:
         try:
             events = board.scan(self.store)
             for event in events:
-                self.store.ingest(event, cursor=event["post"])
+                # A prospective handoff retains its original response identity
+                # and bytes on both delivery paths. Its board position belongs
+                # to source_delivery, not a rewritten top-level event.
+                post = event["post"] if "post" in event else event["source_delivery"]["post"]
+                self.store.ingest(event, cursor=post)
             self.runtime_errors.pop(role, None)
             self.store.clear_operational_error(role)
         except Exception as exc:
