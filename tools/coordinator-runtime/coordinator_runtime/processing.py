@@ -679,7 +679,8 @@ def control_return(runtime, event, attempt, result, resolution):
     _, selection = runtime.processing.current()
     routes = [name for name in selection['tasks'] if runtime.config['tasks'][name]['role'] == 'Work'
               and runtime.config['tasks'][name]['phase'] == 'proposer'
-              and runtime.config['tasks'][name]['effects'] == 'none']
+              and runtime.config['tasks'][name]['effects'] == 'none'
+              and not runtime.config['tasks'][name].get('require_package_scope')]
     if not routes:
         raise Refusal('meaningful control return needs a selected read-only Work proposer consumer')
     response = {'id': digest({'processing_control_return': event, 'attempt': attempt}),
@@ -689,7 +690,7 @@ def control_return(runtime, event, attempt, result, resolution):
                 'processing_control_return': {'source': event, 'attempt': attempt},
                 'body': {'source': runtime.event(event), 'actual_worker_return': result,
                          'software_resolution': resolution, 'native_owner_receipt': False}}
-    runtime.budget('events', len(encode(response).encode()) + 1024)
+    runtime.budget('events', 2 * len(encode(response).encode()) + 2048)
     runtime.db.execute('INSERT INTO processing_control_returns VALUES(?,?,?,?,?)',
                        (event, response['id'], attempt, encode(response), runtime.clock()))
     runtime.db.execute('INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)',
