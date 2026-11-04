@@ -67,6 +67,12 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    drain = sub.add_parser('retained-drain', help='Actual Work: one finite four-role retained software sweep, no intake or execution')
+    drain.add_argument('--authority', required=True)
+    drain.add_argument('--shared-rows', type=int, required=True)
+    drain.add_argument('--shared-payload-bytes', type=int, required=True)
+    drain.add_argument('--visits', type=int, choices=range(1, 4097), required=True, metavar='1..4096')
+    drain.add_argument('--seconds', type=int, choices=range(1, 3601), required=True, metavar='1..3600')
     for name in ('retained-basis', 'delegate-retained', 'revoke-retained', 'retained-step'):
         item = sub.add_parser(name, help='Explicit bounded retained software custody; normal revocation stays intact')
         item.add_argument('role')
@@ -225,6 +231,10 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command == 'retained-drain':
+        from .retained import drain
+        return drain(store, args.authority, args.shared_rows, args.shared_payload_bytes,
+                     args.visits, args.seconds, print_json)
     if args.command in {'retained-basis', 'delegate-retained', 'revoke-retained', 'retained-step'}:
         from .retained import RetainedBoard
         board = RetainedBoard(store.config, args.role)

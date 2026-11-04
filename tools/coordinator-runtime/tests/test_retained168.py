@@ -15,7 +15,7 @@ import unittest
 
 from coordinator_runtime.board_delivery import BoardDelivery
 from coordinator_runtime.contracts import Refusal, digest, encode
-from coordinator_runtime.retained import RetainedBoard, SCHEMA
+from coordinator_runtime.retained import RetainedBoard, SCHEMA, drain
 
 
 class Runtime:
@@ -315,6 +315,19 @@ class RetainedTests(unittest.TestCase):
         with self.assertRaises(Refusal):
             ordinary._insert_delivery(self.board.conn, {}, {}, self.runtime.one('SELECT * FROM outboxes'))
         self.assertEqual(self.board.conn.execute('SELECT COUNT(*) FROM posts').fetchone()[0], 0)
+
+    def test_finite_controller_emits_real_capability_and_stops_at_full_sweep(self):
+        emitted = []
+        result = drain(self.runtime, 'fictional continuing authority', 1024, 1048576, 8, 60,
+                       emitted.append, board_factory=lambda config, role: self.board)
+        self.assertEqual(len(emitted), 2)
+        cap = emitted[0]['capability']
+        self.assertTrue(self.board.retained_basis(self.runtime)['continuation']['id'] == cap)
+        self.assertEqual(result['roles'][0]['sources'], 2)
+        self.assertIsNone(self.runtime.one('SELECT processed_at FROM events')['processed_at'])
+        with self.assertRaises(Refusal):
+            drain(self.runtime, 'fictional continuing authority', 1024, 1048576, 8, 60,
+                  emitted.append, board_factory=lambda config, role: self.board)
 
 
 if __name__ == '__main__':

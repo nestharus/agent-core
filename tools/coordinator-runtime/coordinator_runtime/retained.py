@@ -95,8 +95,13 @@ class RetainedBoard(Board):
                 raise Refusal('retained original input payload/hash differs; preserve source for its owner')
             events.append({k: event[k] for k in ('id', 'hash')})
         outboxes = runtime.rows('SELECT id,producer,recipient,kind,required,payload FROM outboxes WHERE role=? ORDER BY id', (self.role,))
+        continuation = None
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_retained_caps_v1'").fetchone():
+            row = conn.execute('SELECT id,issuer,created,revoked,visits,cursor FROM coordinator_retained_caps_v1 '
+                               'WHERE source_grant=? AND revoked IS NULL', (grant['id'],)).fetchone()
+            continuation = dict(row) if row else None
         return {'configuration': digest(self.config), 'implementation': implementation(), 'binding': self._binding(grant),
-                'usage': self._usage(conn, grant), 'events': events,
+                'usage': self._usage(conn, grant), 'events': events, 'continuation': continuation,
                 'outboxes': [{'id': o['id'], 'hash': digest(o)} for o in outboxes],
                 'scope': 'existing retained sources only; no intake, execution, acceptance or cleanup'}
 
@@ -233,7 +238,8 @@ class RetainedBoard(Board):
                 with self.store.write(conn):
                     self._continued(conn, runtime)
                     conn.execute('UPDATE coordinator_retained_caps_v1 SET cursor=0 WHERE id=?', (capability,))
-        return {'capability': capability, 'handled': results, 'processing': 'unchanged; all original duties retained'}
+        return {'capability': capability, 'handled': results, 'sweep_complete': len(items) < 16,
+                'processing': 'unchanged; all original duties retained'}
 
     def _handle_input(self, runtime, source):
         event = runtime.one('SELECT id,role,hash,state,classification,classifier,ack,processed_at,hold,error FROM events WHERE id=?', (source,))
@@ -263,3 +269,35 @@ class RetainedBoard(Board):
         except (Refusal, OSError) as exc:
             result['delivery_error'] = type(exc).__name__ + ': ' + str(exc)[:1000]
         return result
+
+
+def drain(runtime, authority, shared_rows, shared_payload_bytes, visits, seconds, emit, board_factory=RetainedBoard):
+    """Finite actual software controller; no subprocess, native wake or models.
+
+    Emit each genuine capability before visiting it. Partial issuance/effects
+    stay with this original caller; an interrupted call must not be replayed.
+    Current-capability metadata is available via retained-basis for owner pickup.
+    """
+    if type(seconds) is not int or not 1 <= seconds <= 3600 or type(visits) is not int or not 1 <= visits <= 4096:
+        raise Refusal('finite original retained controller duration/visits required')
+    summary = []
+    expiry = runtime.clock() + seconds
+    for role in runtime.config['roles']:
+        board = board_factory(runtime.config, role)
+        policy = {'basis': board.retained_basis(runtime), 'authority': authority, 'expires': expiry,
+                  'max_shared_rows': shared_rows, 'max_shared_payload_bytes': shared_payload_bytes,
+                  'max_runtime_rows': runtime.config['limits'].get('max_board_deliveries', runtime.config['limits']['max_events']),
+                  'max_visits': visits}
+        cap = board.delegate_retained(runtime, policy)
+        emit({'role': role, 'phase': 'retained-authority', **cap})
+        for _ in range(visits):
+            result = board.retained_step(runtime, cap['capability'])
+            progress = {'role': role, 'phase': 'retained-handling', 'capability': cap['capability'],
+                        'sources': len(result['handled']), 'sweep_complete': result['sweep_complete'],
+                        'delivery_errors': [{k: item[k] for k in ('source', 'delivery_error')} for item in result['handled'] if 'delivery_error' in item],
+                        'processing': result['processing']}
+            emit(progress)
+            if result['sweep_complete']:
+                break
+        summary.append(progress)
+    return {'roles': summary, 'meaning': 'finite retained software sweep only; no full cutover, processing or hold clearance'}

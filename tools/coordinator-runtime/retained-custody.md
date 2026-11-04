@@ -56,6 +56,20 @@ checkout used for CLI operation must include `tools/direct-child/execution_pool.
 which is a normal import dependency; importing it does not select a task profile.
 No HOME or native identity substitution is appropriate.
 
+`retained-drain --authority REFERENCE --shared-rows N --shared-payload-bytes N
+--visits N --seconds N` is one finite foreground software controller for all
+configured roles. It obtains each role's current basis, issues that role's explicit
+retained capability, emits the returned capability immediately, and visits until
+a complete finite sweep or its visit limit. It has no subprocess/model/provider
+worker or persistent TUI dependency. It emits metadata progress and leaves exact
+triage records on the Board. A failure retains already-issued capabilities and
+all partial effects; it does not roll them back or retry issuance. After a lost
+reply, `retained-basis ROLE` exposes the exact current continuation's ID/issuer/
+created/revoked/visits/cursor metadata for genuine owner handling. Do not rerun
+an interrupted drain as a guessed new episode. A normal Source/consequence return
+and the actual caller's full original collection remain separate from this source
+interface; no activation is performed by writing it.
+
 Each step spends one explicit visit before effects, scans at most16 sources,
 and persists actual software triage receipts in additive Board tables. Stable
 finite pages include inputs without outboxes, so the Work integrator input is
