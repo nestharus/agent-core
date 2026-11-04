@@ -1,6 +1,7 @@
 """Derived actual-owner input decisions; original sources and attempts are immutable."""
 
 import json
+from contextlib import nullcontext
 
 from .contracts import Refusal, digest, encode, ident, required_text
 from . import windows
@@ -40,7 +41,7 @@ class InputJournal:
                 'package':selection['receipt']['package'],'owner_resolution':selection}
 
     def resolve_input(self,event,actor,receipt,*,processing_attempt=None):
-        with self.tx():
+        with (nullcontext() if self.db.in_transaction else self.tx()):
             row=self.one('SELECT * FROM events WHERE id=?',(event,))
             if not row:raise Refusal('exact existing input required')
             original=self.event(event)
@@ -125,7 +126,7 @@ class InputJournal:
                  and not selection['receipt']['remaining_obligations'])
         self.write_input_queue(event,answer,event['role'],'control','done' if settled else 'awaiting-owner')
         if settled or answer['task']=='@coalesce':return
-        if self.processing and self.processing.event(event):
+        if self.processing and self.processing.event(self.event(event['id'])):
             return  # The actual delegated control worker owns this input; no recursive question copies.
         payload={'event':event['id'],'source':self.event(event['id']),'classification':answer,
                  'owner_resolution':selection,'reason':'Actual input control/unresolved meaning requires its genuine coordinator.',

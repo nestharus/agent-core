@@ -32,6 +32,7 @@ Use the candidate `coordinator --config ORIGINAL_CONFIG` prefix throughout.
      "expires": 0,
      "retained_events": [],
      "recover_controls": {},
+     "owner_operations": [],
      "future_intake": false,
      "tasks": [],
      "max_starts": 32,
@@ -110,6 +111,64 @@ may operate independently of that hold; they cannot release it. No canonical,
 ref, QA, CI, Stage or acceptance authority is supplied by this capability.
 Actual original effects need their supported scoped owning-role disposition.
 
+## Exact original owner operations after revocation
+
+`owner_operations` optionally selects at most 32 exact request objects. Omission
+means none. Work selects scope; it cannot supply another role's consent. The
+actual original configured owner invokes `processing-owner-apply CAPABILITY
+--request REQUEST_FILE` from its own genuine native context. Ordinary grants
+remain revoked and intake flags stay zero. No owner identity is passed as argv.
+The request must exactly match an object in the current capability and contain
+only `kind`, `role`, `target`, `prior`, `receipt`.
+
+Genuine Work obtains a bounded current prior with `processing-owner-source
+CAPABILITY ROLE KIND TARGET`. For input meaning use the full
+`processing-source CAPABILITY EVENT` too. With no controller running, revoke the
+preparation capability explicitly, obtain a fresh `processing-basis`, and issue
+a new exact selection containing the completed requests. This is deliberate
+selection, never automatic renewal. Existing collectors must first actually end
+and be released. Supported requests:
+
+- `admit-package`: role `Branch`, target exact package, prior exact returned
+  admission row or null; receipt `{ "admission": ORIGINAL_BRANCH_RECEIPT,
+  "accepted": ACTUAL_ACCEPTED_RECEIPT_OR_NULL }`. Only actual Branch applies it.
+  Stale prior or any frozen job for that package refuses replacement. Absence of
+  acceptance remains absence; no QA/CI or review acceptance is fabricated.
+- `resolve-input`: role actual source owner, target exact selected event; prior
+  `{ "source_hash": ORIGINAL_HASH, "resolution": EXACT_PRIOR_OR_NULL }`;
+  receipt is the unchanged full input-resolution schema. Native owner applies
+  meaning/evidence; a fresh Luna must still classify it. All source bytes,
+  existing attempts and remaining obligations persist. Reserved/processed
+  originals cannot be replayed or rebound.
+- `legacy-disposition`: role and target original owning role, prior exact
+  original `legacy_hold`; receipt `{ "collector": ACTUAL_ORIGINAL_COLLECTOR,
+  "evidence": [ACTUAL_EVIDENCE], "remaining_holds": [REMAINING_HOLDS] }`.
+  Nonempty remaining holds record disposition and keep the exact original hold.
+  Empty remaining holds clear only that enrollment hold, after actual owner
+  application and only when local role jobs have known effects, all original
+  job attempts have ended/been collected, and publication intents are resolved.
+  No old job/effect/recovery/outbox is rewritten. `effect_jobs` from owner-source
+  identifies exact original jobs/tokens; existing `reconcile-effects JOB TOKEN
+  --receipt FILE` belongs to the genuine original owner and requires collected
+  originals and actual evidence with `unknown_effects: []`. It cannot waive an
+  incomplete publication. External legacy effects still require their actual
+  effect custodian's evidence; text or numeric END alone cannot supply that.
+
+Applications and attributed results are durably recorded in
+`processing_owner_operations` and exposed by `processing-status`. Exact repeated
+application returns the recorded result without reapplying it. A changed,
+expired or revoked capability refuses even repetition. These are cooperative
+authority checks, not authentication against an adversary changing the process
+environment. A capability does not grant canonical effects, new Reviews
+execution, new consent, or permission to erase unresolved debt.
+
+Receiving handoffs now carry their processing capability and are admitted only
+against the exact persisted source/delivery/receiver intent and current grant,
+transport and control bindings. Admission does not settle a delivery. A derived
+control classification validates the immutable stored input rather than hashing
+its augmented routing view. Controls share the original concurrent non-job
+worker ceiling; finite total starts are a separate bound.
+
 `future_intake=true` admits genuinely new posts after the recorded per-role
 frontier. The earlier original-cursor-to-frontier interval is **conserved
 unscanned debt**, not read/ACKed/processed. Earlier selected source IDs retain
@@ -128,7 +187,7 @@ processing+24h **and every** source/consumer/outbox/recovery/effect/privacy hold
 
 ## Verification boundary
 
-`tests/test_processing188.py` exercises fictional SQLite protocol and existing
+`tests/test_processing188.py` and `tests/test_processing194.py` exercise fictional SQLite protocol and existing
 engine scheduling under a kernel read-only source/dependency/controller mount.
 The engine schema is explicitly projected to nullable profile columns in the
 fixture so native profile/session/turn fields remain NULL. These tests do not

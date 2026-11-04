@@ -7,7 +7,7 @@ No timeout, PID, result file or semantic assertion releases a reservation.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import json
 import os
 from pathlib import Path
@@ -239,7 +239,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def admit(self, package, owner, receipt, accepted=None):
         if owner != self.config["roles"]["Branch"]["owner"] or not receipt:
             raise Refusal("QA package needs actual Branch admission owner and exact receipt")
-        with self.tx():
+        with (nullcontext() if self.db.in_transaction else self.tx()):
             self.db.execute("INSERT INTO admissions VALUES(?,?,?,?) ON CONFLICT(package) DO UPDATE "
                             "SET owner=excluded.owner,receipt=excluded.receipt,accepted=excluded.accepted",
                             (package, owner, encode(receipt), encode(accepted) if accepted else None))

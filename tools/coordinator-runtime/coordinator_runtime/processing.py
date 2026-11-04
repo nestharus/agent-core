@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS processing_runs(
 CREATE TABLE IF NOT EXISTS processing_controls(
  event TEXT PRIMARY KEY,capability TEXT NOT NULL,attempt TEXT NOT NULL,source_hash TEXT NOT NULL,
  resolution TEXT,error TEXT);
+CREATE TABLE IF NOT EXISTS processing_owner_operations(
+ capability TEXT NOT NULL,request_hash TEXT NOT NULL,actor TEXT NOT NULL,
+ receipt TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(capability,request_hash));
 """
 
 
@@ -39,10 +42,115 @@ def basis(runtime, boards):
             'current': runtime.rows('SELECT id,issuer,created,revoked,starts FROM processing_capabilities WHERE revoked IS NULL')}
 
 
+def owner_request(runtime, request):
+    """Validate an exact proposed operation, without borrowing the owner's consent."""
+    if not isinstance(request, dict) or set(request) != {'kind', 'role', 'target', 'prior', 'receipt'}:
+        raise Refusal('owner request needs exact kind/role/target/prior/receipt')
+    kind, role, target, receipt = (request[k] for k in ('kind', 'role', 'target', 'receipt'))
+    if role not in runtime.config['roles'] or not isinstance(receipt, dict):
+        raise Refusal('configured original role and structured owner receipt required')
+    required_text(target, 'exact owner operation target', 128)
+    if kind == 'admit-package':
+        if role != 'Branch' or set(receipt) != {'admission', 'accepted'} or not receipt['admission']:
+            raise Refusal('exact Branch admission and explicit accepted receipt/null required')
+        if not isinstance(receipt['admission'], dict) or receipt['accepted'] is not None and not isinstance(receipt['accepted'], dict):
+            raise Refusal('structured admission/acceptance receipts required')
+        current = runtime.one('SELECT * FROM admissions WHERE package=?', (target,))
+        if current != request['prior']:
+            raise Refusal('package admission changed; no replacement or automatic retry')
+        if runtime.one('SELECT id FROM jobs WHERE package=? LIMIT 1', (target,)):
+            raise Refusal('existing frozen job admission cannot be replaced')
+    elif kind == 'legacy-disposition':
+        current = runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))
+        if target != role or not current or not current['legacy_hold'] or current['legacy_hold'] != request['prior']:
+            raise Refusal('exact original role effect hold changed/absent')
+        if set(receipt) != {'collector', 'evidence', 'remaining_holds'}:
+            raise Refusal('original collector/evidence/remaining_holds required')
+        required_text(receipt['collector'], 'actual original collector', 4000)
+        for key in ('evidence', 'remaining_holds'):
+            if not isinstance(receipt[key], list) or len(receipt[key]) > 32 or key == 'evidence' and not receipt[key]:
+                raise Refusal('bounded explicit original evidence and remaining holds required')
+            for item in receipt[key]:
+                required_text(item, key, 4000)
+    elif kind == 'resolve-input':
+        event = runtime.one('SELECT role,hash FROM events WHERE id=?', (target,))
+        if not event or event['role'] != role or request['prior'] != {
+                'source_hash': event['hash'], 'resolution': runtime.input_resolution(target)}:
+            raise Refusal('exact owner input source/resolution changed')
+    else:
+        raise Refusal('unsupported scoped owner operation')
+    return role
+
+
+def owner_source(runtime, boards, key, role, kind, target):
+    if role not in boards:
+        raise Refusal('configured original owner role required')
+    runtime.processing = Access(runtime, key, boards)
+    runtime.processing.current()
+    boards[role].verify_authority(runtime)
+    if kind == 'admit-package' and role == 'Branch':
+        prior = runtime.one('SELECT * FROM admissions WHERE package=?', (target,))
+    elif kind == 'legacy-disposition' and target == role:
+        prior = runtime.enrollment(role)['legacy_hold']
+    elif kind == 'resolve-input' and runtime.event(target)['role'] == role and runtime.processing.event(runtime.event(target)):
+        prior = {'source_hash': digest(runtime.event(target)), 'resolution': runtime.input_resolution(target)}
+    else:
+        raise Refusal('unsupported original owner source target')
+    return {'kind': kind, 'role': role, 'target': target, 'prior': prior,
+            'effect_jobs': runtime.rows('SELECT id,token,active_attempt,state,effects,hold_reason FROM jobs WHERE role=? ORDER BY created,id', (role,))
+                           if kind == 'legacy-disposition' else [],
+            'meaning': 'basis only; exact Work selection AND actual owner application required'}
+
+
+def apply_owner(runtime, boards, key, request, actor):
+    """Actual owner applies one Work-selected exact request; ordinary grants stay revoked."""
+    runtime.processing = Access(runtime, key, boards)
+    _, selection = runtime.processing.current()
+    if request not in selection.get('owner_operations', []):
+        raise Refusal('operation not explicitly selected by genuine Work issuer')
+    role = request['role']
+    if actor != runtime.config['roles'][role]['owner']:
+        raise Refusal('actual original owning role required; Work selection is not owner consent')
+    boards[role].verify_authority(runtime)
+    with runtime.tx():
+        runtime.processing.current()
+        prior = runtime.one('SELECT * FROM processing_owner_operations WHERE capability=? AND request_hash=?', (key, digest(request)))
+        if prior:
+            return {**json.loads(prior['receipt']), 'already_recorded': True}
+        owner_request(runtime, request)
+        kind, target, receipt = request['kind'], request['target'], request['receipt']
+        runtime.budget(None, len(encode(request).encode()) + 2048)
+        if kind == 'admit-package':
+            runtime.admit(target, actor, receipt['admission'], receipt['accepted'])
+            result = {'kind': kind, 'package': target, 'actor': actor, 'acceptance_inferred': False}
+        elif kind == 'legacy-disposition':
+            # Nonempty remaining holds record useful owner disposition without
+            # clearing the original hold or touching any old job/effect.
+            cleared = not receipt['remaining_holds']
+            if cleared and (runtime.one("SELECT id FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled') LIMIT 1", (role,))
+                    or runtime.one('SELECT a.id FROM attempts a JOIN jobs j ON j.id=a.job WHERE j.role=? AND (a.collected IS NULL OR a.ended IS NULL) LIMIT 1', (role,))
+                    or runtime.one("SELECT p.target FROM file_publications p JOIN attempts a ON a.id=p.attempt JOIN jobs j ON j.id=a.job WHERE j.role=? AND p.state!='published' LIMIT 1", (role,))):
+                raise Refusal('original local job/collector/publication effects remain unresolved; exact owner recovery required')
+            runtime.db.execute('UPDATE enrollments SET legacy_hold=?,reconciliation=? WHERE role=?',
+                               (None if cleared else request['prior'], encode({'actor': actor, 'capability': key,
+                                'original_hold': request['prior'], **receipt}), role))
+            result = {'kind': kind, 'role': role, 'actor': actor, 'hold_cleared': cleared,
+                      'original_job_effects': 'unchanged; actual collector evidence remains required'}
+        else:
+            if not runtime.processing.event(runtime.event(target)):
+                raise Refusal('owner input outside selected retained/future sources')
+            resolution = runtime.resolve_input(target, actor, receipt)
+            result = {'kind': kind, 'event': target, 'actor': actor, 'resolution': resolution,
+                      'fresh_classification_required': True}
+        runtime.db.execute('INSERT INTO processing_owner_operations VALUES(?,?,?,?,?)',
+                           (key, digest(request), actor, encode(result), runtime.clock()))
+        return result
+
+
 def select(runtime, boards, selection):
     keys = {'basis', 'authority', 'expires', 'retained_events', 'recover_controls', 'future_intake', 'tasks',
             'max_starts', 'max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'}
-    if not isinstance(selection, dict) or set(selection) != keys:
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
@@ -65,6 +173,11 @@ def select(runtime, boards, selection):
         raise Refusal('explicit unique unchanged task allowlist required')
     if set(selection['tasks']) - set(runtime.config['tasks']):
         raise Refusal('processing task is not in original configuration')
+    operations = selection.get('owner_operations', [])
+    if not isinstance(operations, list) or len(operations) > 32:
+        raise Refusal('bounded exact owner operations required')
+    for request in operations:
+        owner_request(runtime, request)
     for event in events:
         if not runtime.one('SELECT id FROM events WHERE id=?', (event,)):
             raise Refusal('retained processing needs an exact existing event')
@@ -104,8 +217,8 @@ def select(runtime, boards, selection):
 
 
 class Access:
-    def __init__(self, runtime, key):
-        self.runtime, self.key = runtime, key
+    def __init__(self, runtime, key, boards=None):
+        self.runtime, self.key, self.boards = runtime, key, boards
 
     def current(self):
         row = self.runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (self.key,))
@@ -130,7 +243,8 @@ class Access:
                 raise Refusal('retained processing source differs from its original hash')
             return True
         if event.get('processing_capability') == self.key:
-            return True  # Addressed exact delivery intent, validated by ProcessingBoard.
+            board = (self.boards or {}).get(event['role']) or ProcessingBoard(self.runtime.config, event['role'])
+            return board.receiving_intent(self.runtime, event)
         if event.get('source_job'):
             job = self.runtime.job(event['source_job'])
             proof = json.loads(self.runtime.attempt(job['active_attempt'])['detail']).get('processing_capability')
@@ -190,6 +304,45 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def receiving_intent(self, runtime, event):
+        """A marker alone grants nothing: require the exact durable delivery intent."""
+        delivery = event.get('source_delivery', {})
+        with self.opened(settlement=True) as conn:
+            receiver = self._grant(conn, runtime)
+            intent = conn.execute('SELECT * FROM coordinator_software_deliveries_v1 WHERE delivery=?',
+                                  (delivery.get('id'),)).fetchone()
+            row = conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?', (delivery.get('id'),)).fetchone()
+            outbox = runtime.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
+            if (not intent or not row or not outbox or json.loads(intent['payload']) != event
+                    or intent['event'] != event['id'] or intent['receiver_grant'] != receiver['id']
+                    or intent['source_grant'] != row['grant_id']
+                    or delivery.get('source_grant') != row['grant_id']
+                    or delivery.get('receiver_grant') != receiver['id']
+                    or delivery.get('source_hash') != digest(json.loads(outbox['payload']))
+                    or row['payload'] != outbox['payload'] or row['producer'] != outbox['producer']
+                    or row['actor'] != self.config['actor'] or row['recipient'] != receiver['owner']
+                    or event['recipient'] != receiver['owner'] or outbox['recipient'] != self.role):
+                raise Refusal('processing receiver requires its exact persisted source/delivery/grant intent')
+            source_role = outbox['role']
+            expected = runtime.processing.current()[1]['basis']['roles'].get(source_role, {}).get('original', {}).get('binding', {})
+            if row['grant_id'] != expected.get('id'):
+                raise Refusal('delivery source grant outside processing binding')
+            source_board = (runtime.processing.boards or {}).get(source_role) or ProcessingBoard(self.config, source_role)
+            if source_board.identity != self.identity or source_board._grant(conn, runtime)['id'] != row['grant_id']:
+                raise Refusal('original source/receiving board or grant binding changed')
+            notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
+            if (not notice or notice['route'] != 'managed' or notice['delivery_state'] in {'sending', 'ambiguous'}
+                    or row['transport_started'] or self.control_receipt_status(conn, row)['pending']):
+                raise Refusal('original transport/control uncertainty remains with its custodian')
+            if outbox['kind'] in {'work', 'result'}:
+                job = runtime.job(outbox['job'])
+                attempt = runtime.attempt(job['active_attempt'])
+                if json.loads(attempt['detail']).get('processing_capability') != runtime.processing.key:
+                    raise Refusal('handoff source is not this processing capability')
+            elif outbox['kind'] not in {'alert', 'question', 'effect-request'}:
+                raise Refusal('unsupported processing delivery kind')
+        return True
+
     def future_frontier(self):
         with self.opened(settlement=True) as conn:
             return conn.execute('SELECT COALESCE(MAX(seq),0) FROM posts').fetchone()[0]
@@ -322,6 +475,7 @@ def status(runtime, key):
     return {**row, 'selection': json.loads(row['selection']),
             'runs': runtime.rows('SELECT * FROM processing_runs WHERE capability=?', (key,)),
             'controls': runtime.rows('SELECT * FROM processing_controls WHERE capability=?', (key,)),
+            'owner_operations': runtime.rows('SELECT * FROM processing_owner_operations WHERE capability=?', (key,)),
             'meaning': 'custody/status only; real worker return and original END required'}
 
 
@@ -385,7 +539,13 @@ class ProcessingDispatcher(Dispatcher):
                 continue
             if self.store.one('SELECT event FROM processing_controls WHERE event=?', (row['id'],)):
                 continue  # Failures and unknown originals never automatically replay.
+            source = self.store.one('SELECT state,classifier FROM events WHERE id=?', (row['id'],))
+            if source['state'] not in {'queued', 'classification-held'} or (source['classifier']
+                    and self.store.attempt(source['classifier'])['collected'] is None):
+                continue  # The actual original classifier still owns its result.
             with self.store.tx():
+                if not self.store._classification_available():
+                    return  # Controls share the existing concurrent non-job worker ceiling.
                 attempt = self.store._attempt('input-control', row['id'], None, SOL, self.config['classifier']['profile'])
                 self.store.db.execute('INSERT INTO processing_controls VALUES(?,?,?,?,NULL,NULL)',
                                       (row['id'], self.store.processing.key, attempt, digest(self.store.event(row['id']))))
@@ -456,7 +616,7 @@ def release(runtime, boards, key, controller, receipt):
 async def run(runtime, boards, key, seconds, emit):
     import asyncio
     import signal
-    runtime.processing = Access(runtime, key)
+    runtime.processing = Access(runtime, key, boards)
     _, selection = runtime.processing.current()
     if type(seconds) is not int or not 1 <= seconds <= 3600:
         raise Refusal('bounded processing controller seconds required')

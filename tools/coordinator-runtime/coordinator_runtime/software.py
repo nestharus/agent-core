@@ -239,6 +239,11 @@ class Software:
                                  'source_delivery': {'id': row['id'], 'post': row['post'], 'notice': row['notice'],
                                                      'source_grant': grant['id'], 'receiver_grant': receive_grant['id'],
                                                      'source_hash': digest(payload)}}
+                    if (runtime.processing and event.get('source_delivery')
+                            and not runtime.one('SELECT id FROM events WHERE id=?', (event['id'],))):
+                        # Mark only a newly constructed receiving source. A
+                        # retained published response keeps its original bytes.
+                        event = {**event, 'processing_capability': runtime.processing.key}
                     conn.execute('INSERT INTO coordinator_software_deliveries_v1 VALUES(?,?,?,?,?)',
                                  (row['id'], grant['id'], receive_grant['id'], event['id'], encode(event)))
         runtime.ingest(event)  # Exact intent retries only; never re-execute a result.

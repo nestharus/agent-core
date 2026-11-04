@@ -70,6 +70,14 @@ def parser():
     sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     issue_processing = sub.add_parser('delegate-processing')
     issue_processing.add_argument('--selection', required=True)
+    owner_processing = sub.add_parser('processing-owner-apply', help='Actual original owner applies one exact Work-selected operation')
+    owner_processing.add_argument('capability')
+    owner_processing.add_argument('--request', required=True)
+    owner_source = sub.add_parser('processing-owner-source', help='Genuine Work: bounded original owner-operation basis')
+    owner_source.add_argument('capability')
+    owner_source.add_argument('role')
+    owner_source.add_argument('kind', choices=['admit-package', 'legacy-disposition', 'resolve-input'])
+    owner_source.add_argument('target')
     for name in ('processing-status', 'revoke-processing', 'processing-run', 'processing-source', 'processing-apply-control', 'processing-release'):
         item = sub.add_parser(name, help='Explicit software capability; no ordinary grant reactivation or native-owner claim')
         item.add_argument('capability')
@@ -247,8 +255,17 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command == 'processing-owner-apply':
+        from . import processing
+        request = read_record(args.request)
+        role = request.get('role')
+        if role not in store.config['roles']:
+            raise Refusal('configured original owning role required')
+        actor = actual_actor(store.config['roles'][role]['owner'])
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        return processing.apply_owner(store, boards, args.capability, request, actor)
     if args.command in {'processing-basis', 'delegate-processing', 'processing-status', 'revoke-processing',
-                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release'}:
+                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-owner-source'}:
         from . import processing
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
@@ -262,8 +279,10 @@ def operate(args, store):
             return processing.revoke(store, boards, args.capability)
         if args.command == 'processing-release':
             return processing.release(store, boards, args.capability, args.controller, read_record(args.receipt))
-        store.processing = processing.Access(store, args.capability)
+        store.processing = processing.Access(store, args.capability, boards)
         store.processing.current()
+        if args.command == 'processing-owner-source':
+            return processing.owner_source(store, boards, args.capability, args.role, args.kind, args.target)
         if args.command in {'processing-source', 'processing-apply-control'}:
             if not store.processing.event(store.event(args.event)):
                 raise Refusal('source outside exact software processing selection')
