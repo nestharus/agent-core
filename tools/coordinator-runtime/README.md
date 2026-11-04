@@ -1,5 +1,11 @@
 # Opt-in coordinator runtime
 
+The [prospective ordinary-effects procedure](ordinary-effects.md) describes
+explicit future authority in the unchanged existing journal, service-owned
+Branch/QA tool execution/readback and independent semantic acceptance. It is a
+source capability; actual package selection, consequence examination and live
+deployment remain the operating owner's work.
+
 This candidate dispatches actual bounded Work, Branch, Reviews and QA tasks.
 Fresh Luna6 LOW sessions classify each incoming message and each model response;
 validated classification and queued responsibility commit before delegated ACK.

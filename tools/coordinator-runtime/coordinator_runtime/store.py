@@ -25,6 +25,7 @@ from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
+from . import prospective, ordinary
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -130,7 +131,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -560,6 +561,16 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            if self.config.get('software_delegation') or json.loads(attempt['detail']).get('software_authority'):
+                detail = json.loads(attempt['detail'])
+                tools = detail.get('tool_completion', {})
+                if (not detail.get('software_authority') or not tools.get('complete')
+                        or (not task.get('routine_completion') and (tools.get('nonzero_completions')
+                            or any(item.get('status') == 'failed' for item in tools.get('items', []))))):
+                    reason = 'Prospective software task lacks complete launch-authority/tool capture; retain original effects and custody'
+                    self.failure_delivery(row, attempt, task, reason)
+                    self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?", (reason, job))
+                    return None
             if task.get('routine_completion'):
                 from .readiness import assess
                 assess(self,attempt)  # Same local obligation contract as publisher and delegated collector.
@@ -606,7 +617,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             return response_id
         if task["role"] == "QA" and task["phase"] == "cleanup" and result["category"] == "qualification":
             admitted = self.one("SELECT accepted FROM admissions WHERE package=?", (job["package"],))
-            if not admitted or not admitted["accepted"]:
+            new_effects = ordinary.needs_acceptance(self, job['package'])
+            if (new_effects and not ordinary.qualification_current(self, job)) or (not new_effects and (not admitted or not admitted['accepted'])):
                 raise Refusal("QA qualification awaits actual accepted package evidence")
         members = json.loads(job["members"])
         destination = self.config["tasks"][choices[0]]["role"]
@@ -616,6 +628,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             "id": response_id, "role": destination,
             "recipient": self.enrollment(destination)["owner"], "author": attempt["session"],
             "source_role": job["role"], "source_attempt": attempt["id"], "source_job": job["id"],
+            "effect_observation": json.loads(job['effect_receipt']) if job['effect_receipt'] else None,
             "source_members": members, "package": job["package"], "parent": members[0]["event"],
             "artifact_witnesses": witnesses(self, attempt["id"]) or self.rows("SELECT path,dev,ino,size,mtime,sha256 FROM artifacts WHERE attempt=?", (attempt["id"],)),
             "allowed_tasks": choices, "notice": None, "board_id": None,

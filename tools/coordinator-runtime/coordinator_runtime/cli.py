@@ -17,6 +17,7 @@ from .cleanup import conserve, sweep
 from .contracts import Refusal, canonical_uuid, encode, load_config, parse_json, regular_path
 from .dispatcher import Dispatcher
 from .store import Store, private_directory
+from . import prospective, ordinary
 
 
 def print_json(value):
@@ -66,6 +67,14 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    boundary = sub.add_parser('authorize-prospective', help='Actual Work explicitly authorizes future work in unchanged original journal')
+    boundary.add_argument('--selection', required=True)
+    revoke_boundary = sub.add_parser('revoke-prospective')
+    revoke_boundary.add_argument('epoch')
+    semantic = sub.add_parser('ordinary-acceptance', help='Independent admitted actor decides exact current execution, distinct from reporting')
+    semantic.add_argument('attempt')
+    semantic.add_argument('--decision', choices=['accepted', 'rejected'], required=True)
+    semantic.add_argument('--receipt', required=True)
     sub.add_parser('execution-pool', help='Inspect shared new-execution membership and next unreserved turn; no account probing')
     automatic=sub.add_parser('delegate-control',help='Actual source owner explicitly delegates prospective service control')
     automatic.add_argument('role')
@@ -100,6 +109,12 @@ def parser():
     enroll.add_argument("--authority", required=True)
     enroll.add_argument("--delivery", action="store_true", help="Explicit role-lifetime outgoing delegation and real service actor")
     enroll.add_argument('--completion', action='store_true', help='Explicit bounded routine collector/file completion delegation')
+    software = sub.add_parser('enroll-software', help='Actual Work/user grantor issues prospective delegation in a NEW journal; never native owner issuance')
+    software.add_argument('role')
+    software.add_argument('--authority', required=True)
+    revoke_software = sub.add_parser('revoke-software', help='Actual Work grantor revokes only its own prospective software grant')
+    revoke_software.add_argument('role')
+    revoke_software.add_argument('--grant', required=True)
     extend = sub.add_parser("delegate-delivery")
     extend.add_argument("role")
     extend.add_argument("--authority", required=True)
@@ -181,6 +196,14 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'authorize-prospective', 'revoke-prospective'}:
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        if args.command == 'authorize-prospective':
+            return prospective.select(store, actor, read_record(args.selection))
+        return prospective.revoke(store, actor, args.epoch)
+    if args.command == 'ordinary-acceptance':
+        actor = canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
+        return asyncio.run(ordinary.accept(store, actor, args.attempt, args.decision, read_record(args.receipt)))
     if args.command == 'execution-pool':
         return store.execution_pool.status()
     if args.command in {"init", "status"}:
@@ -204,6 +227,16 @@ def operate(args, store):
         grant = Board(store.config, args.role).grant(store, args.authority, delivery=args.delivery, completion=args.completion)
         store.enroll(args.role, grant)
         return {"grant": grant, "legacy_hold": store.enrollment(args.role)["legacy_hold"]}
+    if args.command == 'enroll-software':
+        grant = Board(store.config, args.role).grant_software(store, args.authority)
+        store.enroll(args.role, grant)
+        return {'grant': grant, 'legacy_hold': store.enrollment(args.role)['legacy_hold'],
+                'native_owner_issuance': False, 'historical_duties': 'retained in their original authority epochs'}
+    if args.command == 'revoke-software':
+        receipt = Board(store.config, args.role).revoke_software(store, args.grant)
+        with store.tx():
+            store.db.execute('UPDATE enrollments SET intake=0 WHERE role=? AND grant_id=?', (args.role, args.grant))
+        return receipt
     if args.command == "delegate-delivery":
         return Board(store.config, args.role).extend_delivery(store, args.authority)
     if args.command == 'delegate-completion':

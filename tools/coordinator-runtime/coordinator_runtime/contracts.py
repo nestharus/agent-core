@@ -120,6 +120,15 @@ def validate_config(config):
         raise Refusal("runtime state cannot be inside or encompass profile/session stores")
     for role, selected in config["roles"].items():
         validate_role(role, selected, profiles)
+    software = config.get('software_delegation')
+    if software is not None:
+        if (not isinstance(software, dict) or set(software) != {'grantor', 'authority', 'boundary'}
+                or software['boundary'] != 'new-journal-only'):
+            raise Refusal('software delegation requires explicit grantor/authority and a new journal boundary')
+        canonical_uuid(software['grantor'])
+        if 'Work' not in config['roles'] or software['grantor'] != config['roles']['Work']['owner']:
+            raise Refusal('prospective rollout delegation retains actual Work grantor provenance')
+        required_text(software['authority'], 'user/Work software delegation authority', 4000)
     for name, task in config["tasks"].items():
         validate_task(name, task, config)
         if task.get('routine_completion'):
@@ -152,6 +161,15 @@ def validate_config(config):
             raise Refusal("task handoffs exceed selected recipients")
         if task.get("require_package_scope") and not task.get("scope_roots"):
             raise Refusal("package effects need explicit admitted scope roots")
+        handoffs = task.get('software_handoffs', {})
+        if not isinstance(handoffs, dict) or (handoffs and not software):
+            raise Refusal('software handoffs need explicit prospective delegation')
+        for role, routes in handoffs.items():
+            if (role not in config['roles'] or role not in task.get('allowed_handoffs', [])
+                    or not isinstance(routes, list) or not routes or len(routes) != len(set(routes))
+                    or any(route not in config['roles'][role]['routes']
+                           or config['tasks'][route]['role'] != role for route in routes)):
+                raise Refusal('software handoff routes must name exact enrolled recipient tasks')
     for key in ("max_events", "max_attempts", "max_jobs", "max_bytes", "max_alerts", "max_result_bytes"):
         if type(config["limits"].get(key)) is not int or config["limits"][key] <= 0:
             raise Refusal(f"positive cumulative limit required: {key}")

@@ -3,6 +3,7 @@ import json
 
 from .contracts import Refusal, encode, digest, collected_task_result
 from .routine import BOARD_SCHEMA, policy_for
+from . import prospective
 
 
 class Completion:
@@ -41,11 +42,17 @@ class Completion:
         job = runtime.job(outbox['job'])
         if job['role'] != self.role or not job['active_attempt']:
             return None
+        attempt = runtime.attempt(job['active_attempt'])
+        proof = json.loads(attempt['detail']).get('software_authority', {})
         try:
-            grant = self.completion_authority(runtime, job['task'])
+            grant = self._software_job_grant(runtime, job) if proof.get('prospective_epoch') else self.completion_authority(runtime, job['task'])
         except Refusal:
             return None  # Existing external/undelegated duties stay actually owned.
-        attempt = runtime.attempt(job['active_attempt'])
+        if self.config.get('software_delegation') or json.loads(attempt['detail']).get('software_authority'):
+            from .software import clean_processing
+            self._software_job_grant(runtime, job)
+            if not clean_processing(runtime, job):
+                return None
         try:answer=collected_task_result(attempt)
         except Refusal:return None
         if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['error']
@@ -57,8 +64,12 @@ class Completion:
         if runtime.config['tasks'][job['task']].get('routine_completion'):
             try:local=assess(runtime,attempt)
             except Refusal:return None
-        elif answer.get('failures') or answer.get('unknowns'):return None
-        proof = {'actor': self.config['actor'], 'delegated_by': grant['owner'], 'grant_id': grant['id'],
+        elif (answer.get('failures') or answer.get('unknowns')) and not runtime.one(
+                "SELECT attempt FROM ordinary_runs WHERE attempt=? AND state='reconciled'", (attempt['id'],)):return None
+        proof = {'actor': self.config['actor'], 'delegated_by': grant.get('delegated_by', grant['issued_by']), 'grant_id': grant['id'],
+                 'role_owner': grant['owner'], 'authority': grant.get('delegation_authority', grant['authority']),
+                 'native_grant_issued_by': grant['issued_by'], 'native_grant_authority': grant['authority'],
+                 'prospective_epoch': grant.get('prospective_epoch'),
                  'recipient': grant['owner'], 'worker': attempt['session'], 'collector': attempt['controller'],
                  'evidence': {'attempt': attempt['id'], 'result_hash': digest(answer), 'effect_receipt': job['effect_receipt']},
                  'local_readiness':local,
@@ -75,7 +86,8 @@ class Completion:
                 if row['actor']!=self.config['actor'] or row['owner']!=grant['owner'] or row['grant_id']!=grant['id'] or row['payload']!=outbox['payload']:
                     raise Refusal('routine callback must retain the exact service/role/source grant')
                 notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
-                if notice['route'] != 'managed' or notice['delivery_state'] == 'sending':
+                if (notice['route'] != 'managed' or notice['delivery_state'] == 'sending'
+                        or (proof.get('prospective_epoch') and (notice['delivery_state'] == 'ambiguous' or row['transport_started']))):
                     raise Refusal('routine callback cannot claim another transport consumer or an unsettled send')
                 for column, stage in [('pickup','picked-up'),('processing','processed'),('settlement','settled')]:
                     if not row[column]:

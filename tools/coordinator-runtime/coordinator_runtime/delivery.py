@@ -8,6 +8,7 @@ import json
 
 from .contracts import Refusal, digest, encode, ident, required_text, handoff_delivery_kind
 from .custody import witnesses
+from . import ordinary
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS outboxes(
@@ -106,6 +107,7 @@ class DeliveryJournal:
             event = {"id": response_id, "role": job["role"], "recipient": self.config["roles"][job["role"]]["owner"],
                      "author": attempt["session"], "kind": "outgoing-response", "body": result,
                      "source_attempt": attempt["id"], "source_job": job["id"], "source_members": members,
+                     "effect_observation": json.loads(job['effect_receipt']) if job['effect_receipt'] else None,
                      "delivery_plan": [{"id": r["id"], "recipient": r["recipient"], "kind": r["kind"]} for r in rows],
                      "artifact_witnesses": witnesses(self, attempt['id']),
                      "package": job["package"], "parent": members[0]["event"], "allowed_tasks": ["@delivery"],
@@ -124,6 +126,7 @@ class DeliveryJournal:
         existing = self.one("SELECT id FROM outboxes WHERE job=? AND recipient=?", (job["id"], job["role"]))
         if not existing:
             self._outbox(job["role"], job["role"], "result", {"job": job["id"], "attempt": attempt["id"],
+                         "effect_observation": json.loads(job['effect_receipt']) if job['effect_receipt'] else None,
                          "result": result, "artifact_witnesses":witnesses(self,attempt['id']), "source_members": json.loads(job["members"])}, job=job["id"], producer=attempt["session"],
                          key=digest({"owner_report": attempt["id"]}))
 
@@ -136,10 +139,12 @@ class DeliveryJournal:
             raise Refusal("Reviews consolidated results/questions return to Work")
         if job["role"] == "QA" and result["category"] == "qualification" and delivery_kind!='question' and not informative:
             accepted = self.one("SELECT accepted FROM admissions WHERE package=?", (job["package"],))
-            if target != "Branch" or not accepted or not accepted["accepted"]:
+            qualified = ordinary.qualification_current(self, job) if ordinary.needs_acceptance(self, job['package']) else bool(accepted and accepted['accepted'])
+            if target != "Branch" or not qualified:
                 raise Refusal("actual accepted QA package alone can qualify to Branch")
         required_text(handoff["text"], "handoff meaning", self.config["limits"]["max_result_bytes"])
         payload = {"job": job["id"], "attempt": attempt["id"], "package": job["package"],
+                   "effect_observation": json.loads(job['effect_receipt']) if job['effect_receipt'] else None,
                    "artifact_witnesses":witnesses(self,attempt['id']),
                    "source_members": json.loads(job["members"]), "source_result": result,
                    "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"],

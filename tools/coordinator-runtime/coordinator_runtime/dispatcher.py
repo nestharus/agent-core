@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness
+from . import custody, routine, publication, readiness, prospective, ordinary
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
 from .inputs import input_routes
 
@@ -107,6 +107,10 @@ def job_prompt(store, job, task=None):
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
+            + ("ORDINARY PREPARATION ONLY: read the admitted procedure/source and report findings. "
+               "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "
+               "the exact admitted adapter after your original is collected; DONE is preparation, never acceptance. "
+               if task.get('ordinary_preparation') else '') +
             "Read applicable AGENTS and supplied current method. No child/AI launches. No private "
             "profiles/history/credentials, foreign handles, global route changes or background effects. "
             "Current ordinary source access in the explicit task authority is allowed; obsolete source "
@@ -277,6 +281,12 @@ class Dispatcher:
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
             task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
+            epoch = prospective.for_job(self.store, job)
+            if self.config.get('software_delegation') or epoch:
+                self.boards[job['role']].bind_software_attempt(self.store, job, attempt)
+            if epoch and epoch['policy']['ordinary_effects']:
+                ordinary.policy_for(self.store, job)  # Refuse missing/expired scope before worker launch.
+                task = {**task, 'ordinary_preparation': True}
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']
                 while True:
@@ -302,6 +312,13 @@ class Dispatcher:
             with self.store.tx():
                 self.store.db.execute("UPDATE jobs SET effects='none' WHERE id=? AND active_attempt=?",
                                       (job_id, attempt))
+        try:
+            await ordinary.perform(self.store, self.boards[job['role']], self.store.job(job_id))
+            if (ordinary.needs_acceptance(self.store, job['package'])
+                    and isinstance(outcome.get('result'), dict) and outcome['result'].get('category') == 'qualification'):
+                await ordinary.qualification(self.store, self.store.job(job_id))
+        except (Refusal, OSError, ValueError) as exc:
+            self.store.hold_job(job_id, 'Ordinary original effect/collection needs accountable disposition: ' + str(exc))
         self.try_finish(job_id)
 
     def inventory_artifacts(self, attempt, outcome, task=None):
@@ -596,8 +613,10 @@ class Dispatcher:
             receipt = board.delivery_status(outbox["id"])
             if receipt["state"] in {"posted", "ambiguous"}:
                 receipt = board.transport_delivery(self.store, outbox)
+            software_owned = (hasattr(board, 'software_delivery')
+                              and board.software_delivery(self.store, outbox, self.boards))
             control_error=None
-            if hasattr(board,'automatic_control'):
+            if not software_owned and hasattr(board,'automatic_control'):
                 try:attempted=board.automatic_control(self.store,outbox,send=send_control)
                 except Exception as exc:
                     attempted=bool(getattr(exc,'control_budget_spent',False))
@@ -635,6 +654,9 @@ class Dispatcher:
 
 
 def execution_spec(task, directory):
+    if task.get('ordinary_preparation'):
+        return {**task, 'network': False, 'sandbox': 'read-only',
+                'effect_authority': {**task['effect_authority'], 'write_roots': []}}
     if task["effects"] == "none":
         return task
     authority = {**task["effect_authority"], "write_roots": [*task["effect_authority"]["write_roots"], str(directory)]}
