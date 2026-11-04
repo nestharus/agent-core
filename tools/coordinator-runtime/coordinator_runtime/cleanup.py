@@ -83,6 +83,11 @@ def conserve(store, path, actor, receipt):
 
 
 def eligible_event(store, event):
+    if store.one('SELECT c.attempt FROM review_calls c JOIN review_contexts r ON r.component=c.component '
+                 'JOIN attempts a ON a.id=c.attempt LEFT JOIN queue q ON q.job=a.job '
+                 'WHERE (a.event=? OR q.event=?) AND (r.closed_at IS NULL OR r.closed_at>?) LIMIT 1',
+                 (event['id'], event['id'], store.clock()-RETENTION)):
+        return False
     if store.withdrawn_integration_hold(event["id"]):
         return False
     if store.one("SELECT p.target FROM file_publications p JOIN attempts a ON a.id=p.attempt JOIN queue q ON q.job=a.job WHERE q.event=? AND p.state!='published'",(event['id'],)):

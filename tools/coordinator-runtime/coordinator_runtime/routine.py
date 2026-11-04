@@ -79,7 +79,8 @@ def reconcile(store, board, job):
     if not run:
         return False  # No retrospective invention of a before-state or delegation.
     grant = board.completion_authority(store, job['task'])
-    if grant['id'] != run['grant_id'] or store.enrollment(job['role'])['legacy_hold'] or job['hold_reason']:
+    from .resource_scopes import blocked
+    if grant['id'] != run['grant_id'] or blocked(store, job) or job['hold_reason']:
         return False
     answer = collected_task_result(attempt)
     if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['capture'] != 'complete'

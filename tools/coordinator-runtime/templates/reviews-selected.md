@@ -29,7 +29,15 @@ Missing procedure, reply, supported execution or required work remains explicit
 PARTIAL/UNKNOWN and is returned to Work. This owner path is inactive until its
 actual grant and handoff are acquired; a config does not establish adoption.
 
-The current processing adapter cannot execute this owner task. Its disposable
+The finite processing adapter cannot execute this owner task. The separately
+selected continuing-service path implements an ordinary native live-root
+executor with pinned material/history/correction inputs and original collected
+returns; see ../continuing-service.md for its exact contract and remaining gaps.
+It is opt-in construction, not deployment or live qualification. Its source
+read facade is the sole allowed native Bash command, including on corrections.
+Its dead-collector/interrupted-root and shared canonical custody gaps remain
+outstanding. No generic owner task silently inherits that selected authority.
+The finite adapter's disposable
 app-server turns do not supply the selected native live-context interface.
 Keep this exact execution/continuity dependency visible; intake proposals and
 the report integrator cannot stand in for Source. Actual material/origin/base/

@@ -150,6 +150,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
+        from .reviews import SCHEMA as REVIEW_SCHEMA
+        from .service import SCHEMA as SERVICE_SCHEMA
+        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA)
 
     def _bind_config(self):
         with self.tx():
@@ -264,6 +267,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.budget("events", len(content.encode()), event=event['id'])
                 self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                                 (event["id"], role, content, digest(event), self.clock(), event.get("parent")))
+                from .processing import note_source
+                note_source(self, event['id'])
             if cursor is not None:
                 self.db.execute("UPDATE cursors SET seq=MAX(seq,?) WHERE role=?", (cursor, role))
         return not bool(old)
@@ -272,21 +277,34 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         row = self.one("SELECT * FROM events WHERE id=?", (event_id,))
         if not row:
             raise Refusal("unknown event")
-        return json.loads(row["payload"])
+        payload = json.loads(row['payload'])
+        if payload == {}:
+            custody = self.one("SELECT binding FROM source_custody WHERE event=? AND basis='result'", (event_id,))
+            if custody:
+                binding = json.loads(custody['binding'])
+                source = self.one('SELECT result FROM results WHERE attempt=?', (binding['attempt'],))
+                if not source:
+                    raise Refusal('original result-backed source custody unavailable')
+                payload = {**binding['header'], 'body': json.loads(source['result'])}
+                if digest(payload) != row['hash']:
+                    raise Refusal('relocated original source no longer matches its hash')
+        return payload
 
-    def _attempt(self, kind, event, job, binding, profile):
+    def _attempt(self, kind, event, job, binding, profile, *, continuing=None):
         if job:
             self.require_execution_open(job)
         self.require_active_sources(event, job)
         self.budget("attempts", event=event, job=job)
         if profile not in self.config['profiles']:
             raise Refusal('profile advice outside runtime account authorization')
-        allocation = self.execution_pool.allocate()
+        allocation = ({'profile': continuing['profile'], 'existing_context': continuing['component'],
+                       'actual_run': continuing['run'], 'collector': continuing['collector']}
+                      if continuing else self.execution_pool.allocate())
         attempt = ident()
         self.db.execute("INSERT INTO attempts(id,kind,event,job,controller,profile,binding,created) "
                         "VALUES(?,?,?,?,?,?,?,?)", (attempt, kind, event, job, self.controller,
                                                   allocation['profile'], encode(binding), self.clock()))
-        provenance = {"selection_reason": 'ordinary rotation over current shared enabled execution pool',
+        provenance = {"selection_reason": ('existing observed continuing context/account' if continuing else 'ordinary rotation over current shared enabled execution pool'),
                       'configured_dispatch_authority': self.config.get('dispatch_authority'),
                       "configuration_sha256": digest(self.config),
                       "profile_advice": profile, "execution_pool_allocation": allocation}
@@ -342,8 +360,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return attempt, self.routing_event(row["id"])
 
     def _classification_available(self):
+        service = self.processing and 'service' in self.processing.current()[1]
         active = self.db.execute("SELECT COUNT(*) FROM attempts WHERE job IS NULL "
-                                 "AND state IN ('reserved','running','unknown')").fetchone()[0]
+                                 "AND state IN ('reserved','running','unknown')" + (' AND controller=?' if service else ''),
+                                 (self.controller,) if service else ()).fetchone()[0]
         return active < self.config.get("classification_capacity", 5)
 
     def claim_classification_recovery(self):
@@ -499,11 +519,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
         enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
         held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
-        independent_proposal = self.processing and phase == 'proposer' and task['effects'] == 'none'
+        from .resource_scopes import blocked
         if (not enrollment or not self.role_enabled(role)
                 or self.processing and not self.processing.task(row)
-                or self.processing and task.get('execution') == 'owner'
-                or enrollment["legacy_hold"] and phase in held_phases and not independent_proposal):
+                or self.processing and task.get('execution') == 'owner' and not self.processing.review_task(row['task'])
+                or enrollment["legacy_hold"] and phase in held_phases and blocked(self, row)):
             return None
         if task.get("active") is False:
             return None
@@ -579,7 +599,18 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("only original reservation controller may launch once")
             task = self.config["tasks"][row["task"]]
-            attempt = self._attempt("task", None, job, task["binding"], profile or task["profile"])
+            context = None
+            if self.processing and self.processing.review_task(row['task']):
+                from .reviews import BINDING
+                task = {**task, 'binding': BINDING}
+                member = json.loads(row['members'])[0]
+                source = self.event(member['event'])
+                component = source.get('body', {}).get('review', {}).get('component') if isinstance(source.get('body'), dict) else None
+                context = self.one('SELECT * FROM review_contexts WHERE component=?', (component,))
+                if context and (context['state'] != 'live' or context['collector'] != self.controller
+                                or context['capability'] != self.processing.key):
+                    raise Refusal('original continuing reviewer unavailable; disclose recovery instead of new allocation')
+            attempt = self._attempt("task", None, job, task["binding"], profile or task["profile"], continuing=context)
             window = self.integration_context(job)
             if window:
                 detail = {**json.loads(self.attempt(attempt)['detail']), 'integration_window': window}
@@ -652,7 +683,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if self.config.get('software_delegation') or json.loads(attempt['detail']).get('software_authority'):
                 detail = json.loads(attempt['detail'])
                 tools = detail.get('tool_completion', {})
-                if (not detail.get('software_authority') or not tools.get('complete')
+                from .reviews import collected_proof
+                reviewed = collected_proof(self, row, attempt)
+                if (not detail.get('software_authority') or not (reviewed or tools.get('complete'))
                         or (not task.get('routine_completion') and (tools.get('nonzero_completions')
                             or any(item.get('status') == 'failed' for item in tools.get('items', []))))):
                     reason = 'Prospective software task lacks complete launch-authority/tool capture; retain original effects and custody'

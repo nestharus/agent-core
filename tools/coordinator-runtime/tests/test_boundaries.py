@@ -90,7 +90,9 @@ class Retention(unittest.TestCase):
         self.assertIsNotNone(self.store.one("SELECT * FROM alerts WHERE id=?", (alert["id"],)))
         self.now += 1
         sweep(self.store)
-        self.assertIsNone(self.store.one("SELECT * FROM alerts WHERE id=?", (alert["id"],)))
+        # A processed timestamp and elapsed time are necessary, not sufficient.
+        # Explicit current source/consumer/all-hold retirement owns deletion.
+        self.assertIsNotNone(self.store.one("SELECT * FROM alerts WHERE id=?", (alert["id"],)))
 
     def test_A08_QA_qualification_requires_actual_accepted_package(self):
         package = "per-package-admission"

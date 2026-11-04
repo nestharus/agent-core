@@ -23,12 +23,15 @@ def clean_processing(runtime, job):
             or job['hold_reason'] or job['effects'] not in {'none', 'reconciled'}):
         return None
     attempt = runtime.attempt(job['active_attempt'])
-    canonical_uuid(attempt['session'])
+    from .reviews import collected_proof
+    reviewed = collected_proof(runtime, job, attempt)
+    if not reviewed:
+        canonical_uuid(attempt['session'])
     answer = collected_task_result(attempt)
     tools = json.loads(attempt['detail']).get('tool_completion', {})
     if (attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
             or attempt['exit'] != 0 or attempt['capture'] != 'complete' or attempt['error']
-            or answer['semantic'] != 'DONE' or not tools.get('complete')):
+            or answer['semantic'] != 'DONE' or not (reviewed or tools.get('complete'))):
         return None
     members = json.loads(job['members'])
     if any(runtime.one('SELECT hold FROM events WHERE id=?', (m['event'],))['hold']
@@ -43,7 +46,7 @@ def clean_processing(runtime, job):
         return None
     return {'attempt': attempt['id'], 'worker': attempt['session'], 'collector': attempt['controller'],
             'actual_end': attempt['exit'], 'result_hash': digest(answer),
-            'effect_receipt': job['effect_receipt'], 'tool_completion': tools,
+            'effect_receipt': job['effect_receipt'], 'tool_completion': tools, 'selected_review': reviewed,
             'meaning': 'actual local processing; downstream duties and acceptance remain separate'}
 
 
@@ -247,6 +250,12 @@ class Software:
                     conn.execute('INSERT INTO coordinator_software_deliveries_v1 VALUES(?,?,?,?,?)',
                                  (row['id'], grant['id'], receive_grant['id'], event['id'], encode(event)))
         runtime.ingest(event)  # Exact intent retries only; never re-execute a result.
+        if runtime.processing:
+            with runtime.tx():
+                link = runtime.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (outbox['id'],))
+                if link and link['event'] != event['id']:
+                    raise Refusal('original delivery already belongs to a different whole consumer')
+                runtime.db.execute('INSERT OR IGNORE INTO processing_delivery_links VALUES(?,?)', (outbox['id'], event['id']))
         state = runtime.one('SELECT * FROM events WHERE id=?', (event['id'],))
         queue = runtime.one('SELECT * FROM queue WHERE event=?', (event['id'],))
         if not state['classification'] or not queue or state['hold']:
@@ -271,6 +280,8 @@ class Software:
                                                         for m in json.loads(consumer['members'])):
                 raise Refusal('receiver did not process this exact frozen source under the selected route')
             processed = clean_processing(runtime, consumer)
+            if processed and runtime.processing and (state['processed_at'] is None or runtime.dependency_hold(event['id'])):
+                processed = None  # Delivery cannot outrun the whole receiving chain.
             if processed:
                 proof.update(consumer_job=consumer['id'], processing=processed)
         with self.opened() as conn:

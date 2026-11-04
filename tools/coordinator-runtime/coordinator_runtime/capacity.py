@@ -169,7 +169,9 @@ def retirement_basis(store, occurrence):
     outbox = outboxes[0]
     if outbox['kind'] != 'alert' or outbox['event'] is not None or outbox['job'] is not None:
         raise Refusal('job/event/other-kind lifecycle is outside standalone alert retirement')
-    return alert, outbox, digest({'configuration': digest(store.config), 'alert': alert, 'outbox': outbox})
+    from .frontier import delivery
+    return alert, outbox, digest({'configuration': digest(store.config), 'alert': alert, 'outbox': outbox,
+                                  'whole_consumer': delivery(store, outbox['id'])})
 
 
 def retire(store, occurrence, actor, receipt, current_delivery):
@@ -180,6 +182,8 @@ def retire(store, occurrence, actor, receipt, current_delivery):
     """
     with store.tx():
         alert, outbox, basis = retirement_basis(store, occurrence)
+        from .frontier import require_aged
+        require_aged(store, outbox['id'], RETENTION)
         role = outbox['role']
         owner = store.enrollment(role)['owner']
         recipient = store.config['delivery']['recipients'][outbox['recipient']]['session']

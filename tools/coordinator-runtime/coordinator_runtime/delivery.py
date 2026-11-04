@@ -187,11 +187,16 @@ class DeliveryJournal:
             row = self.one("SELECT * FROM outboxes WHERE id=?", (delivery,))
             if not row or receipt["id"] != delivery:
                 raise Refusal("unbound delivery receipt")
+            from .frontier import delivery as whole_delivery
+            chain = whole_delivery(self, delivery)
+            completed = receipt.get('processed_at') if chain['complete'] else None
+            if completed is not None and chain['processed_at'] is not None:
+                completed = max(completed, chain['processed_at'])
             self.db.execute("UPDATE outboxes SET state=?,board_receipt=?,error=NULL,processed_at=? WHERE id=?",
-                            (receipt["state"], encode(receipt), receipt.get("processed_at"), delivery))
-            if row["alert"] and receipt.get("processed_at") is not None:
+                            (receipt["state"], encode(receipt), completed, delivery))
+            if row["alert"] and completed is not None:
                 self.db.execute("UPDATE alerts SET processed_at=MAX(COALESCE(processed_at,?),?) WHERE id=?",
-                                (receipt["processed_at"], receipt["processed_at"], row["alert"]))
+                                (completed, completed, row["alert"]))
             self._owner_settlement(row, receipt)
             if row["event"] and not self.one("SELECT id FROM outboxes WHERE event=? AND (state!='settled' OR hold IS NOT NULL OR processed_at IS NULL)", (row["event"],)):
                 self.db.execute("UPDATE queue SET state='done' WHERE event=? AND phase='delivery'", (row["event"],))
@@ -314,7 +319,7 @@ class DeliveryJournal:
         if payload.get("kind") == "response" and payload.get("source_attempt"):
             source = self.one("SELECT result FROM results WHERE attempt=?", (payload["source_attempt"],))
             header = {k: v for k, v in payload.items() if k != "body"}
-            if source and digest({**header, "body": json.loads(source["result"])}) == event["hash"]:
+            if source and source['result'] is not None and digest({**header, "body": json.loads(source["result"])}) == event["hash"]:
                 basis, binding, replacement = "result", {"attempt": payload["source_attempt"], "header": header, "hash": event["hash"]}, "{}"
         owner = self.config["roles"][event["role"]]["owner"]
         self.db.execute("INSERT OR REPLACE INTO source_custody VALUES(?,?,?,?)", (event["id"], basis, owner, encode(binding)))

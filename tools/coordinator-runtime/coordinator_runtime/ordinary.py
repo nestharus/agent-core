@@ -278,7 +278,8 @@ async def perform(store, board, job):
             or not tools.get('complete') or tools.get('nonzero_completions')
             or any(item.get('status') == 'failed' for item in tools.get('items', []))):
         raise Refusal('original fully collected worker and known preparation required')
-    if job['hold_reason'] or store.enrollment(job['role'])['legacy_hold']:
+    from .resource_scopes import blocked
+    if job['hold_reason'] or blocked(store, job):
         raise Refusal('existing job/legacy hold cannot be released by ordinary automation')
     task, p = policy_for(store, job)
     admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))

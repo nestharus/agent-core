@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS processing_control_returns(
 CREATE TABLE IF NOT EXISTS processing_admissions(
  package TEXT PRIMARY KEY,capability TEXT NOT NULL,event TEXT NOT NULL UNIQUE,
  scope TEXT NOT NULL,receipt TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_delivery_links(
+ delivery TEXT PRIMARY KEY,event TEXT NOT NULL UNIQUE REFERENCES events(id));
+CREATE TABLE IF NOT EXISTS processing_source_positions(
+ position INTEGER PRIMARY KEY AUTOINCREMENT,event TEXT NOT NULL UNIQUE);
 """
 
 
@@ -44,8 +48,21 @@ def basis(runtime, boards):
                           'future_after': b.future_frontier(),
                           'original_cursor': runtime.one('SELECT seq FROM cursors WHERE role=?', (r,))['seq']}
                       for r, b in boards.items()},
-            'event_boundary': runtime.one('SELECT COALESCE(MAX(rowid),0) AS n FROM events')['n'],
+            'event_boundary': source_boundary(runtime),
             'current': runtime.rows('SELECT id,issuer,created,revoked,starts FROM processing_capabilities WHERE revoked IS NULL')}
+
+
+def source_boundary(runtime):
+    rows = runtime.one('SELECT COALESCE(MAX(rowid),0) AS n FROM events')['n']
+    sequence = runtime.one("SELECT seq FROM sqlite_sequence WHERE name='processing_source_positions'")
+    return max(rows, sequence['seq'] if sequence else 0)
+
+
+def note_source(runtime, event):
+    # The actual admitted-source counter survives row recycling; it is never
+    # renewed/reset to make an old input look prospective.
+    runtime.db.execute('INSERT INTO processing_source_positions(position,event) VALUES(?,?)',
+                       (source_boundary(runtime) + 1, event))
 
 
 def owner_request(runtime, request):
@@ -156,17 +173,20 @@ def apply_owner(runtime, boards, key, request, actor):
 def select(runtime, boards, selection):
     keys = {'basis', 'authority', 'expires', 'retained_events', 'recover_controls', 'future_intake', 'tasks',
             'max_starts', 'max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'}
-    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission'} != keys:
+    continuing = isinstance(selection, dict) and 'service' in selection
+    if continuing:
+        keys = keys - {'expires', 'max_starts'}
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'service'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
-    if (type(selection['expires']) not in {int, float} or not math.isfinite(selection['expires'])
+    if not continuing and (type(selection['expires']) not in {int, float} or not math.isfinite(selection['expires'])
             or not runtime.clock() < selection['expires'] <= runtime.clock() + 3600):
         raise Refusal('processing selection must expire within one hour')
-    for key in ('max_starts', 'max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'):
+    for key in (('max_starts',) if not continuing else ()) + ('max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'):
         if type(selection[key]) is not int or selection[key] <= 0:
             raise Refusal('positive finite processing limit required: ' + key)
-    if selection['max_starts'] > 4096 or selection['max_runtime_rows'] > runtime.config['limits'].get('max_board_deliveries', runtime.config['limits']['max_events']):
+    if (not continuing and selection['max_starts'] > 4096) or selection['max_runtime_rows'] > runtime.config['limits'].get('max_board_deliveries', runtime.config['limits']['max_events']):
         raise Refusal('processing cannot expand original logical entitlement')
     if type(selection['future_intake']) is not bool:
         raise Refusal('future intake must be an explicit boolean, separate from retained input selection')
@@ -201,6 +221,9 @@ def select(runtime, boards, selection):
         validate_recognition(runtime, event, recover[event], recognition)
     from . import processing_admission
     processing_admission.validate(runtime, selection)
+    if continuing:
+        from .service import validate
+        validate(runtime, selection)
     current = basis(runtime, boards)
     if selection['basis'] != current:
         raise Refusal('processing source/capacity/frontier basis changed; no automatic retry')
@@ -238,7 +261,7 @@ class Access:
         if not row:
             raise Refusal('exact processing capability absent')
         selection = json.loads(row['selection'])
-        if (row['revoked'] is not None or self.runtime.clock() >= selection['expires']
+        if (row['revoked'] is not None or ('service' not in selection and self.runtime.clock() >= selection['expires'])
                 or selection['basis']['configuration'] != digest(self.runtime.config)
                 or selection['basis']['implementation'] != implementation()):
             raise Refusal('processing capability expired/revoked or source/configuration changed; duties retained')
@@ -247,6 +270,9 @@ class Access:
     def role(self, role):
         _, selection = self.current()
         return role in selection['basis']['roles']
+
+    def review_task(self, name):
+        return name in self.current()[1].get('service', {}).get('reviews', {})
 
     def event(self, event):
         _, selection = self.current()
@@ -284,7 +310,11 @@ class Access:
 
     def reserve(self, attempt, event, job):
         row, selection = self.current()
-        if row['starts'] >= selection['max_starts']:
+        if 'service' in selection:
+            active = self.runtime.one("SELECT COUNT(*) AS n FROM attempts WHERE collected IS NULL AND controller=?", (self.runtime.controller,))['n']
+            if active > selection['service']['max_inflight']:
+                raise Refusal('continuing service inflight capacity held; no original displaced')
+        elif row['starts'] >= selection['max_starts']:
             raise Refusal('finite processing start budget exhausted; original duties retained')
         if event and not self.event(self.runtime.event(event)):
             raise Refusal('input outside exact retained/future processing selection')
@@ -431,6 +461,11 @@ class ProcessingBoard(RetainedBoard):
                     conn.execute('INSERT INTO coordinator_software_deliveries_v1 VALUES(?,?,?,?,?)',
                                  (row['id'], source['id'], receive['id'], event['id'], encode(event)))
         runtime.ingest(event)  # Exact persisted intent recovery, never a fresh business replay.
+        with runtime.tx():
+            prior_link = runtime.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (outbox['id'],))
+            if prior_link and prior_link['event'] != event['id']:
+                raise Refusal('delivery already belongs to a different whole consumer chain')
+            runtime.db.execute('INSERT OR IGNORE INTO processing_delivery_links VALUES(?,?)', (outbox['id'], event['id']))
         record = runtime.one('SELECT * FROM processing_controls WHERE event=?', (event['id'],))
         if not record or not record['resolution']:
             return True
@@ -441,7 +476,8 @@ class ProcessingBoard(RetainedBoard):
         proof = runtime.processing.control_proof(event['id'], record['attempt'], resolution['receipt'])
         state = runtime.one('SELECT * FROM events WHERE id=?', (event['id'],))
         queue = runtime.one('SELECT * FROM queue WHERE event=?', (event['id'],))
-        if state['hold'] or state['ack'] not in {'done', 'plain'} or not queue or queue['state'] != 'done':
+        if (state['hold'] or state['ack'] not in {'done', 'plain'} or not queue or queue['state'] != 'done'
+                or state['processed_at'] is None or runtime.dependency_hold(event['id'])):
             return True
         # This is explicit software processing, never a native owner's full-read
         # claim, acceptance or reconciliation of the original business effect.
@@ -593,9 +629,10 @@ class ProcessingDispatcher(Dispatcher):
             if not self.store.processing.task(pending):
                 continue
             task = self.config['tasks'][pending['task']]
-            if task.get('execution') == 'owner':
+            if task.get('execution') == 'owner' and not self.store.processing.review_task(pending['task']):
                 self.store.record_operational_error(pending['event'], {'dependency': 'actual selected opaque procedure holder', 'task': pending['task']}, pending['role'], 'processing-dependency')
-            if pending['legacy_hold'] and task['phase'] != 'proposer':
+            from .resource_scopes import blocked
+            if pending['legacy_hold'] and blocked(self.store, pending):
                 self.store.record_operational_error(pending['event'], {'dependency': 'supported scoped original effect-owner disposition', 'hold': pending['legacy_hold']}, pending['role'], 'processing-dependency')
         super().schedule_job()
 

@@ -1,5 +1,10 @@
 # Prospective software admissions and conserved control returns
 
+See [continuing-service.md](continuing-service.md) for the separately selected
+continuing capability and actual-source Reviews executor. Its known recovery and
+shared-custody gaps remain explicit. The finite prospective adapter below keeps
+its own bounds and does not establish continuing cutover.
+
 This is an extension of the existing finite `processing-*` adapter in the same
 journal. It is usable source for bounded parent operation, subject to actual
 qualification and adoption. It does not complete the continuing first-four

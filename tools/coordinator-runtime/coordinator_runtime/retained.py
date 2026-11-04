@@ -91,7 +91,7 @@ class RetainedBoard(Board):
         # Streaming only this role's source hashes, never foreign payloads.
         events = []
         for event in runtime.rows('SELECT id,hash,payload FROM events WHERE role=? ORDER BY id', (self.role,)):
-            if digest(json.loads(event['payload'])) != event['hash']:
+            if digest(runtime.event(event['id'])) != event['hash']:
                 raise Refusal('retained original input payload/hash differs; preserve source for its owner')
             events.append({k: event[k] for k in ('id', 'hash')})
         outboxes = runtime.rows('SELECT id,producer,recipient,kind,required,payload FROM outboxes WHERE role=? ORDER BY id', (self.role,))

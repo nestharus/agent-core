@@ -1,5 +1,10 @@
 # Explicit software owner processing
 
+The opt-in continuing source, original collector endpoint, selected ordinary
+Reviews material facade, whole-chain retirement and remaining gaps are described
+in [continuing-service.md](continuing-service.md). The finite interface below
+retains its original scope; it is not implicitly renewed or deployed.
+
 The `processing-*` surface lets the genuine original Work issuer delegate
 routine consumption in the **unchanged original software journal** after its
 ordinary grants and intake have stopped. It uses the existing dispatcher,

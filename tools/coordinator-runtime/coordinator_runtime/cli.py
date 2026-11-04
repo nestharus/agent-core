@@ -68,6 +68,19 @@ def parser():
     sub.add_parser("init")
     sub.add_parser("status")
     sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    service = sub.add_parser('processing-service', help='Continuing original collector; foreground, no finite-grant extension')
+    service.add_argument('capability')
+    service.add_argument('--enable-models', action='store_true')
+    control = sub.add_parser('processing-service-control')
+    control.add_argument('capability')
+    control.add_argument('operation', choices=['status', 'recover', 'stop', 'close-review'])
+    control.add_argument('--component')
+    for command in ('processing-retirement-basis', 'processing-retire'):
+        item = sub.add_parser(command)
+        item.add_argument('capability')
+        item.add_argument('event')
+        if command == 'processing-retire':
+            item.add_argument('--receipt', required=True)
     issue_processing = sub.add_parser('delegate-processing')
     issue_processing.add_argument('--selection', required=True)
     owner_processing = sub.add_parser('processing-owner-apply', help='Actual original owner applies one exact Work-selected operation')
@@ -255,6 +268,26 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'processing-service', 'processing-service-control', 'processing-retirement-basis', 'processing-retire'}:
+        from . import processing, service, retirement
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        actor = boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
+        store.processing = processing.Access(store, args.capability, boards)
+        _, selection = store.processing.current()
+        if 'service' not in selection:
+            raise Refusal('a finite/expired capability cannot become a continuing service')
+        if args.command == 'processing-service-control':
+            return asyncio.run(service.control(store, args.capability, args.operation, args.component))
+        if args.command == 'processing-retirement-basis':
+            return retirement.basis(store, args.event)
+        if args.command == 'processing-retire':
+            return retirement.apply(store, args.event, actor, read_record(args.receipt))
+        if not args.enable_models or store.config.get('enabled') is not True:
+            raise Refusal('continuing service needs explicit --enable-models and unchanged enabled configuration')
+        qualified = read_record(store.config['protocol_qualification'])
+        if qualified['cli_version'] != store.config['protocol_cli_version']:
+            raise Refusal('offline protocol qualification differs from configured CLI')
+        return asyncio.run(service.serve(store, boards, args.capability, print_json))
     if args.command == 'processing-owner-apply':
         from . import processing
         request = read_record(args.request)

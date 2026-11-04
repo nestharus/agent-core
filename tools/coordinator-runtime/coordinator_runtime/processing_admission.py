@@ -57,7 +57,8 @@ def admit(runtime, event_id):
         if event['role'] not in boards:
             raise Refusal('prospective admission needs the actual original role/grant checker')
         boards[event['role']].verify_authority(runtime)
-        row = runtime.one('SELECT rowid AS position,hold,hash FROM events WHERE id=?', (event_id,))
+        row = runtime.one('SELECT COALESCE(p.position,e.rowid) AS position,e.hold,e.hash FROM events e '
+                          'LEFT JOIN processing_source_positions p ON p.event=e.id WHERE e.id=?', (event_id,))
         boundary = selection['basis'].get('event_boundary')
         role = selection['basis']['roles'].get(event['role'])
         body = event.get('body')
