@@ -185,6 +185,12 @@ def parser():
     alert = sub.add_parser("ack-alert")
     alert.add_argument("occurrence")
     alert.add_argument("--receipt", required=True)
+    basis = sub.add_parser('alert-retirement-basis', help='Exact source binding only; no eligibility or processing claim')
+    basis.add_argument('occurrence')
+    retirement = sub.add_parser('retire-alert', help='Genuine same source/consumer owner, processing+24h and every hold')
+    retirement.add_argument('role')
+    retirement.add_argument('occurrence')
+    retirement.add_argument('--receipt', required=True)
     run = sub.add_parser("run")
     run.add_argument("--enable-models", action="store_true")
     return p
@@ -331,6 +337,12 @@ def operate(args, store):
         actor = canonical_uuid(os.environ.get("CODEX_SESSION_ID"))
         store.process_alert(args.occurrence, actor, read_record(args.receipt))
         return {"alert_processed": args.occurrence}
+    if args.command == 'alert-retirement-basis':
+        from .capacity import retirement_basis
+        alert, outbox, basis = retirement_basis(store, args.occurrence)
+        return {'alert': alert['id'], 'delivery': outbox['id'], 'basis': basis, 'eligibility': 'not established'}
+    if args.command == 'retire-alert':
+        return Board(store.config, args.role).retire_alert(store, args.occurrence, read_record(args.receipt))
     if args.command == "run":
         return run_selected(args, store)
     raise Refusal("unknown operator command")

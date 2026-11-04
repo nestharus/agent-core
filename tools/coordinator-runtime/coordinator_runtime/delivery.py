@@ -6,7 +6,7 @@ ACK is never evidence that a recipient's Codex submission queue was processed.
 
 import json
 
-from .contracts import Refusal, digest, encode, ident, required_text, handoff_delivery_kind
+from .contracts import Backpressure, Refusal, digest, encode, ident, required_text, handoff_delivery_kind
 from .custody import witnesses
 from . import ordinary
 
@@ -44,7 +44,7 @@ class DeliveryJournal:
         if old:
             return key
         if self.db.execute("SELECT COUNT(*) FROM outboxes").fetchone()[0] >= self.config["limits"].get("max_outboxes", self.config["limits"]["max_events"]):
-            raise Refusal("outbox capacity held; no responsibility discarded")
+            raise Backpressure("outbox capacity held; no responsibility discarded")
         if required not in {"acknowledged", "picked-up", "processed", "settled"}:
             raise Refusal("unknown required delivery frontier")
         if recipient not in self.config.get("delivery", {}).get("recipients", self.config["roles"]):

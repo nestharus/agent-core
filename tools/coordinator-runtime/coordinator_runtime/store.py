@@ -25,7 +25,7 @@ from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
-from . import prospective, ordinary
+from . import prospective, ordinary, capacity
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -140,7 +140,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -184,7 +184,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def budget(self, kind, incoming=0):
         usage, limits = self.usage(), self.config["limits"]
-        if usage["bytes"] + incoming >= limits["max_bytes"]:
+        if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
         if kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
@@ -842,19 +842,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         return None
 
     def emit_alerts(self):
-        with self.tx():
-            emitted = []
-            for violation in self.violations():
-                self.budget("alerts")
-                occurrence = {"id": ident(), "created": self.clock(), **violation}
-                self.db.execute("INSERT INTO alerts VALUES(?,?,?,?,?,NULL)",
-                                (occurrence["id"], occurrence["subject"], occurrence["kind"],
-                                 occurrence["created"], encode(occurrence)))
-                alert_role = self.config.get("delivery", {}).get("alert_role", "Work")
-                if self.config.get("delivery"):
-                    self._outbox(alert_role, self.config.get("delivery", {}).get("alert_recipient", "Work"),
-                                 "alert", occurrence, alert=occurrence["id"], key=digest({"alert": occurrence["id"]}))
-                emitted.append(occurrence)
+        emitted = capacity.capture(self)
+        capacity.deliver_pending(self)
         return emitted
 
     def process_alert(self, occurrence, actor, receipt):
@@ -880,6 +869,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 "outboxes": self.rows("SELECT id,role,job,event,recipient,kind,required,state,hold,error,created,processed_at FROM outboxes"),
                 "control_receive": {'declared':self.config.get('control_receive',{}),
                     'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
+                "alert_service": capacity.service(self),
+                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),

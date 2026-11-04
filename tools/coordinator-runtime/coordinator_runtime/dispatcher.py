@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness, prospective, ordinary
+from . import custody, routine, publication, readiness, prospective, ordinary, capacity
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
 from .inputs import input_routes
 
@@ -492,14 +492,19 @@ class Dispatcher:
             self.runtime_errors[job["id"]] = str(exc)
 
     async def tick(self):
-        self.intake()
-        self.receipts()
-        self.reconcile_completed()
-        self.schedule_classifications()
-        self.schedule_classification_recovery()
-        self.schedule_job()
-        self.schedule_recovery()
-        self.automatic_cleanup()
+        # One held phase must not prevent independent already-owed progress.
+        # Each failure stays separately owned; successful phases clear only
+        # their own current error. This does not declare any duty processed.
+        for operation in (self.receipts, self.reconcile_completed, self.intake,
+                          self.schedule_classifications, self.schedule_classification_recovery,
+                          self.schedule_job, self.schedule_recovery, self.automatic_cleanup):
+            subject = 'dispatcher-phase:' + operation.__name__
+            try:
+                operation()
+                self.store.clear_operational_error(subject)
+            except Exception as exc:
+                self.store.record_operational_error(subject, {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
+        capacity.deliver_pending(self.store)
         await asyncio.sleep(0)
         await self.pump_deliveries_async()
 
@@ -525,10 +530,15 @@ class Dispatcher:
         try:
             await self.tick()
             self.store.clear_operational_error("dispatcher")
-            await self.alerts(emit)
         except Exception as exc:
             self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
+        try:
             await self.alerts(emit)
+        except Exception as exc:
+            self.store.record_operational_error('alert-reporting', {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
+            # The exception is retained, not retried as another alert cohort.
+            # Existing delivery progress is independent of reporting capacity.
+            await self.pump_deliveries_async()
 
     async def alerts(self, emit):
         if self.store.clock()-self.last_alert < self.config["deadlines"]["alert_interval"]:
