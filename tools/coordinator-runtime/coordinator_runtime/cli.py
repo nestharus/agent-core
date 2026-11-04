@@ -67,6 +67,13 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    for name in ('retained-basis', 'delegate-retained', 'revoke-retained', 'retained-step'):
+        item = sub.add_parser(name, help='Explicit bounded retained software custody; normal revocation stays intact')
+        item.add_argument('role')
+        if name == 'delegate-retained':
+            item.add_argument('--policy', required=True)
+        if name in {'revoke-retained', 'retained-step'}:
+            item.add_argument('capability')
     sub.add_parser('window-basis', help='Current retained journal binding; no processing or hold waiver')
     advance = sub.add_parser('advance-window', help='Actual Work continues allocations and conserved duties')
     advance.add_argument('--receipt', required=True)
@@ -218,6 +225,16 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'retained-basis', 'delegate-retained', 'revoke-retained', 'retained-step'}:
+        from .retained import RetainedBoard
+        board = RetainedBoard(store.config, args.role)
+        if args.command == 'retained-basis':
+            return board.retained_basis(store)
+        if args.command == 'delegate-retained':
+            return board.delegate_retained(store, read_record(args.policy))
+        if args.command == 'revoke-retained':
+            return board.revoke_retained(store, args.capability)
+        return board.retained_step(store, args.capability)
     if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start'}:
         actor = actual_actor(store.enrollment('Work')['owner'])
         Board(store.config, 'Work').verify_authority(store)

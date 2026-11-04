@@ -92,6 +92,7 @@ class BoardDelivery:
             return self._delivery_record(conn, dict(row))
 
     def _insert_delivery(self, conn, grant, target, outbox):
+        self._delivery_capacity(conn, outbox)
         title = "Coordinator " + outbox["kind"] + " " + outbox["id"][:12]
         payload = json.loads(outbox["payload"])
         summary = payload.get("text") or payload.get("reason") or payload.get("kind") or "Collected result and owned responsibility"
@@ -118,12 +119,16 @@ class BoardDelivery:
         conn.executemany("INSERT INTO subscriptions VALUES(?,?,?)", [(seq, actor, stamp) for actor in {self.config["actor"], target["session"]}])
         self.store.notify(conn, {target["session"]}, seq, seq, "open", title, self.config["actor"], push=False)
         notice = conn.execute("SELECT notification_id FROM notification_outbox WHERE post_seq=? AND recipient=?", (seq, target["session"])).fetchone()[0]
-        limit = self.config["limits"].get("max_board_deliveries", self.config["limits"]["max_events"])
-        if conn.execute("SELECT COUNT(*) FROM coordinator_deliveries_v1").fetchone()[0] >= limit:
-            raise Refusal("bounded board delivery custody full; do not discard held work")
         conn.execute("INSERT INTO coordinator_deliveries_v1(id,grant_id,owner,actor,producer,recipient,kind,required,payload,post,notice,state,created) "
                      "VALUES(?,?,?,?,?,?,?,?,?,?,?,'posted',?)", (outbox["id"], grant["id"], grant["owner"], self.config["actor"],
                      outbox["producer"], target["session"], outbox["kind"], outbox["required"], outbox["payload"], seq, notice, stamp))
+
+    def _delivery_capacity(self, conn, outbox):
+        # Ordinary grants retain their original shared-count contract. Explicit
+        # retained authority supplies a separate residency/allocation check.
+        limit = self.config["limits"].get("max_board_deliveries", self.config["limits"]["max_events"])
+        if conn.execute("SELECT COUNT(*) FROM coordinator_deliveries_v1").fetchone()[0] >= limit:
+            raise Refusal("bounded board delivery custody full; do not discard held work")
 
     def transport_delivery(self, runtime, outbox):
         with self.opened(settlement=True, owner_required=False) as conn:
