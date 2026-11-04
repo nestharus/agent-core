@@ -133,8 +133,12 @@ class RetainedDiagnosis(unittest.IsolatedAsyncioTestCase):
         original=self.store.attempt(self.original);diagnosis=self.store.attempt(self.diagnosis)
         selection=self.store.one('SELECT * FROM recovery_requests WHERE id=?',(self.selection['id'],))
         closure=self.store.job(self.job['id'])['collection_handoff']
+        # The retained profile3 suggestion is advice. Even this already-qualified
+        # successor allocation must obey changed NEW-execution membership.
+        self.store.execution_pool.pool.set(['.codex2'])
         request=self.reaffirm();self.assertEqual(self.reaffirm(),request)
         result=self.store.consume_recovery_request(request['id']);new=result['successor']
+        self.assertEqual(self.store.attempt(new)['profile'], '.codex2')
         self.assertIsNone(self.store.consume_recovery_request(request['id']))
         self.assertEqual(self.store.attempt(self.original),original);self.assertEqual(self.store.attempt(self.diagnosis),diagnosis)
         self.assertIsNone(diagnosis['semantic']);self.assertEqual(diagnosis['exit'],0)

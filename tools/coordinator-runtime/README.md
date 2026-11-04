@@ -4,8 +4,8 @@ This candidate dispatches actual bounded Work, Branch, Reviews and QA tasks.
 Fresh Luna6 LOW sessions classify each incoming message and each model response;
 validated classification and queued responsibility commit before delegated ACK.
 Frozen batches, reservations and outgoing responsibilities live in SQLite
-WAL/FULL. Work and all integrators use Sol6.1 XHIGH. New disposable jobs prefer
-`.codex3`; actual role-owner accounts remain unchanged.
+WAL/FULL. Work and all integrators use Sol6.1 XHIGH. New execution rotates over
+the shared enabled pool; actual role-owner accounts remain unchanged.
 
 **No service, role enrollment, actual model success, adoption or session-store
 reclamation is established by fixture tests or publication.** Parent separately
@@ -61,6 +61,71 @@ responsibility handoff. Never discard an existing journal to escape holds.
 python3 "$RUNTIME" --config /absolute/private/config.json init
 python3 "$RUNTIME" --config /absolute/private/config.json status
 ```
+
+## New execution pool
+
+The runtime reads `~/ai/tools/direct-child/routes.toml`, `providers.codex.pool`,
+for every NEW classifier, classifier recovery, task, diagnosis and remaining-work
+successor. This is separate from `profiles` (account authorization), role receive
+addresses and delivery recipients. Existing config profile pins and a diagnosis's
+profile suggestion remain recorded advice; they do not bypass ordinary rotation.
+No config/grant digest migration is needed when the existing authorization covers
+the shared pool. An explicit `execution_pool_routes` absolute path selects another
+public control file for an isolated installation/fixture; adding/changing that
+config field requires the existing offline config reconciliation.
+
+After separate adoption, inspect or change the ordered shared membership with:
+
+```sh
+python3 "$RUNTIME" --config /absolute/private/config.json execution-pool
+python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py status
+python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py set .codex2 .codex3 .codex5
+# No names means an explicitly empty pool: NEW execution cannot proceed.
+python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py set
+```
+
+The public control tool accepts `--routes /absolute/public/routes.toml` before
+the subcommand. Use the same routes file in the parent dispatcher (`--config`).
+It changes only pool membership, preserving other settings. Empty/invalid,
+missing, malformed-counter and authorization-incompatible states stay visible;
+there is no private capacity probe, automatic borrowing or retry on another
+account. Runtime `status` includes current membership and each attempt's actual
+choice, advice, reservation turn and admission witness. A preview reserves nothing.
+
+Runtime and parent automatic workers share `rotation.state_dir/codex.counter`.
+Turns advance under flock and fsync, including singleton pools, and are never
+refunded after failed preflight, aborted reservation or journal rollback. With
+stable membership, consecutive reservation turns cycle evenly; restart retains
+the counter. This is reservation fairness, not equal tokens, completions or known
+account availability. Updates preserve the counter and use its current turn modulo
+the new ordered membership; they do not restart a cycle. Empty existing counter
+state is refused, never reset. There is no cross-file crash transaction joining
+the counter to SQLite, and no power-loss atomicity claim for the counter write.
+
+Cooperating updates and process admission share a short control/counter lock,
+held through runtime process creation and BEGIN. An update that returns before
+admission applies to it; an update waiting behind an admission applies afterward.
+A disabled reserved attempt stays on its original profile and is known unstarted
+when no process was created; it is never silently reallocated. A frozen job with
+no attempt can retry allocation under its original controller after pool recovery.
+Busy runtime allocation stays visible and retries that untouched reservation;
+busy admission waits within the existing bind budget. Existing running/unknown
+calls keep original handles, profile and custody. Accepted effects are not replayed.
+
+Parent automatic direct Codex launches recheck after preflight immediately before
+`codex exec`; native launches recheck immediately before creating the local native
+caller. An already admitted native call may reach its adapter later on its original
+account. No provider-side cancellation/revocation is claimed. Parent workers with
+retained advice use `--profile-advice .codex3` and omit `--profile`. Explicit
+standalone `--profile ... --override-reason ...` retains manual authorization,
+including outside the automatic pool; enforcing it globally needs separate scope.
+
+Deploy the matching runtime, `direct-child/execution_pool.py`, dispatcher and
+`direct-codex-child/launch.sh` together, retaining the directory layout. Older
+callers/manual file edits do not participate in the full admission/update protocol.
+Do not change `rotation.state_dir`, replace lock/counter inodes or reset counters
+while callers run; those need a separately reconciled cutover. Locks coordinate
+cooperating local callers only, not noncooperating editors or other machines.
 
 ## Actual owner enrollment and delivery
 

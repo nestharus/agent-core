@@ -189,13 +189,33 @@ Children have no installed or model witness yet: the first ordinary opted-in Lun
 
 ## Profiles
 
-- Sol and Luna share one Codex counter, on both transports, for the automatic pool `.codex2`, `.codex4`, `.codex5`. Each real automatic launch takes the next profile under an exclusive `flock`, so allocation is atomic and cycles evenly. The counter lives at `~/.local/state/direct-child/codex.counter`.
+- Sol and Luna share one Codex counter, on both transports, for the current automatic pool `.codex2`, `.codex3`, `.codex5`. Each real automatic reservation takes the next profile under an exclusive `flock`; stable membership cycles evenly. The counter lives at `~/.local/state/direct-child/codex.counter` and survives restart. The coordinator runtime uses this same public pool and counter.
 - Configured Codex profiles must be `.codex`, `.codex2`, `.codex3`, `.codex4`, or `.codex5`; unsupported names are refused before dry-run or allocation.
 - Allocation happens before the MCP preflight, so a refused preflight still uses its turn.
 - Rotation spreads starts across accounts. It knows nothing about rate limits or token health, and runs no health probe.
 - **No profile lock.** Concurrent launches on one profile run side by side. ROOT's [U496 decision](/home/nes/projects/agent-runner/planning/context-routing-20260929/age353-next-operation-prep/per-root-runtime/e3-u496-remove-codex-profile-locks/root-decisions.md) retired the earlier whole-run local launcher profile lock, which serialized our own launches per profile as a precaution against concurrent Codex login refreshes and blocked later work. No refresh-caused outage was observed. Concurrent refresh or authentication conflicts on one profile are an accepted stress-testing risk, with no replacement lock, queue, copies or auth handling. An existing `<profile>/.oulipoly-direct-child.lease`, possibly still locked by a launch from before the retirement, is neither read, locked, created nor removed; a leftover `[lease]` table in a config is ignored.
-- To pick a profile yourself, pass `--profile` with `--override-reason`. Selecting an explicit profile does not advance the allocation counter. `.codex` and `.codex3` retain manual parser allowance and native mappings but are outside current automatic usage; the automatic pool is `.codex2`, `.codex4`, `.codex5`.
+- To pick a profile yourself, pass `--profile` with `--override-reason`. This is explicit standalone manual authorization outside automatic controls and does not advance the counter. `.codex` and `.codex4` retain that parser allowance and native mappings outside current automatic usage. A parent worker retaining an earlier profile suggestion uses `--profile-advice .codex3` instead: the advice is recorded while ordinary automatic rotation chooses the actual new profile. The two flags are incompatible.
 - Direct Claude runs only through the `claude5` wrapper, which sets `CLAUDE_CONFIG_DIR=~/.claude5`. Native Claude names the same store through its site route and does not use the wrapper. Rotation applies to Codex profiles only.
+
+[`execution_pool.py`](execution_pool.py) exposes `status` and `set PROFILE...`
+with optional `--routes ABSOLUTE_PUBLIC_ROUTES` before the subcommand. Without
+names, `set` explicitly disables new automatic execution. Only
+`providers.codex.pool` changes. Each result includes current membership, source
+hash and the next unreserved turn; availability is unprobed. Updates preserve
+the counter. Singleton reservations also advance it. Failed/aborted reservations
+consume a turn; no hidden fallback, counter reset or work replay follows.
+
+Automatic direct launches recheck membership after MCP preflight at `codex exec`;
+native launches check at local caller creation. `pool-admission.json` records
+the effective choice or a known unstarted refusal. Cooperating updates lock
+through this boundary, not through model execution. An already admitted native
+call keeps its original account even if its adapter starts later. Reserved
+attempts disabled before admission are refused without reassignment. An empty,
+invalid, missing or unavailable pool cannot launch automatically. This does not
+move running calls or receiving identities. Adopt matching dispatcher, pool module
+and direct launcher together; old callers/direct edits do not implement the full
+protocol. See [runtime pool semantics](../coordinator-runtime/README.md#new-execution-pool)
+for reservation fairness, restart, counter/crash limits and compatibility cutover.
 
 ## Example
 

@@ -22,6 +22,7 @@ import tomllib
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import profile_lease  # noqa: E402  (sibling module with CatchSignals; also via runpy)
+import execution_pool
 
 DEFAULT_CONFIG = HERE / "routes.toml"
 CODEX_LAUNCHER = HERE.parent / "direct-codex-child" / "launch.sh"
@@ -78,6 +79,8 @@ def parse_args(argv):
     parser.add_argument("--native-child-max-starts", action=Once, type=int, metavar="N")
     parser.add_argument("--native-child-max-concurrent", action=Once, type=int, metavar="N")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument('--profile-advice', action=Once,
+                        help='record earlier Codex profile advice while using ordinary automatic pool rotation; incompatible with --profile')
     return parser.parse_args(argv)
 
 
@@ -133,7 +136,9 @@ def validate_config(config):
     for name, provider in providers.items():
         if name not in PROVIDERS or not isinstance(provider, dict):
             raise Refusal(f"config: unsupported provider {name!r}")
-        pool = _strings(provider.get("pool"), f"providers.{name}.pool")
+        pool = provider.get('pool')
+        if not (name == 'codex' and pool == []):
+            pool = _strings(pool, f"providers.{name}.pool")
         manual = _strings(provider.get("manual_profiles"), f"providers.{name}.manual_profiles")
         if not set(pool) <= set(manual):
             raise Refusal(f"config: providers.{name}.pool must be within manual_profiles")
@@ -337,6 +342,10 @@ def resolve(config, args):
         raise Refusal(f"effort {effort!r} is not a configured {provider} effort")
     if args.profile is not None and args.profile not in config["providers"][provider]["manual_profiles"]:
         raise Refusal(f"profile {args.profile!r} is not a {provider} profile")
+    advice = getattr(args, 'profile_advice', None)
+    if advice is not None and (provider != 'codex' or args.profile is not None
+                               or advice not in config['providers']['codex']['manual_profiles']):
+        raise Refusal('--profile-advice requires an authorized Codex name and automatic allocation (no --profile)')
     if kind_route is not None:
         want = routes[kind_route]
         if (provider, binding["model"], effort) != (want["provider"], want["model"], want["effort"]):
@@ -354,6 +363,7 @@ def resolve(config, args):
         "rule": rule, "route": route_name, "model_alias": model_alias,
         "provider": provider, "model": binding["model"], "effort": effort,
         "overrides": overrides, "override_reason": args.override_reason,
+        "profile_advice": advice,
     }
 
 
@@ -441,6 +451,8 @@ def _read_counter(text, path):
 def preview_profile(config, provider):
     """Next pool profile without locking, creating, or advancing anything."""
     pool = config["providers"][provider]["pool"]
+    if not pool:
+        raise Refusal('execution pool empty; no automatic allocation/fallback')
     if len(pool) == 1:
         return pool[0], "fixed"
     path = counter_path(config, provider)
@@ -451,8 +463,16 @@ def preview_profile(config, provider):
     return pool[count % len(pool)], f"rotation-preview:{count} (not reserved)"
 
 
-def allocate_profile(config, provider):
+def allocate_profile(config, provider, config_path=None):
     """Atomically take the next pool profile under an exclusive flock."""
+    if provider == 'codex' and config_path is None:
+        raise Refusal('Codex allocation requires its current public routes path')
+    if provider == 'codex' and config_path is not None:
+        try:
+            choice = execution_pool.Pool(config_path).allocate()
+            return choice['profile'], f"rotation:{choice['turn']}"
+        except execution_pool.PoolError as exc:
+            raise Refusal(str(exc)) from exc
     pool = config["providers"][provider]["pool"]
     if len(pool) == 1:
         return pool[0], "fixed"
@@ -479,6 +499,8 @@ def codex_command(args, record, profile, config, route_json=None):
     command = [str(CODEX_LAUNCHER), "--profile", profile, "--cwd", args.cwd,
                "--prompt", args.prompt, "--runs-dir", args.runs_dir, "--id", args.id,
                "--model", record["model"], "--effort", record["effort"]]
+    if record.get('profile_source') != 'explicit':
+        command += ['--execution-pool-routes', record['config']]
     return command + (["--route-json", route_json] if route_json is not None else [])
 
 
@@ -887,7 +909,7 @@ def run_collect(record, command, attempt, out, paths, state, interrupts):
     if interrupts.received is not None:
         return native_refused(state, 128 + interrupts.received, "native_task=not-started\n")
     append_state(state, f"native_command={shlex.join(command)}\nnative_start_utc={utc_now()}\n")
-    caller_rc, launch_error = run_foreground(command, attempt, interrupts)
+    caller_rc, launch_error = run_foreground(command, attempt, interrupts, record)
     state_error = append_state(state, f"native_caller_exit={'none' if caller_rc is None else caller_rc}\n")
     result, result_status = read_native_result(out / "result.json")
     text, text_error = "", None
@@ -942,14 +964,21 @@ def native_refused(state, code, text):
     return code
 
 
-def run_foreground(command, cwd, interrupts):
+def run_foreground(command, cwd, interrupts, record=None):
     """The caller in the foreground; SIGINT/SIGTERM/SIGHUP are passed on as its
     own cancel and the wait continues (the caller bounds its collection)."""
     if interrupts.received is not None:
         return None, "interrupted-before-launch"
     try:
-        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, cwd=cwd)
-    except OSError as error:
+        if record and record['provider'] == 'codex' and record['profile_source'] != 'explicit':
+            with execution_pool.Pool(record['config']).admission(record['profile']) as admission:
+                (Path(cwd)/'pool-admission.json').write_text(json.dumps(admission)+'\n')
+                process = subprocess.Popen(command, stdin=subprocess.DEVNULL, cwd=cwd)
+        else:
+            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, cwd=cwd)
+    except (OSError, execution_pool.PoolError) as error:
+        if isinstance(error, execution_pool.PoolError):
+            (Path(cwd)/'pool-admission.json').write_text(json.dumps({'state':'not-started','error':str(error)})+'\n')
         return None, f"{type(error).__name__}"
     interrupts.collect(process)
     try:
@@ -1004,7 +1033,7 @@ def main(argv):
     args = parse_args(argv)
     args.pass_ = getattr(args, "pass")
     try:
-        config_path = Path(args.config) if args.config else DEFAULT_CONFIG
+        config_path = (Path(args.config) if args.config else DEFAULT_CONFIG).resolve()
         config, digest = load_config(config_path)
         record = resolve(config, args)
         record.update(config=str(config_path.resolve()), config_sha256=digest)
@@ -1019,8 +1048,15 @@ def main(argv):
             profile, source = args.profile, "explicit"
         elif args.dry_run:
             profile, source = preview_profile(config, provider)
+        elif provider == 'codex':
+            try:
+                choice = execution_pool.Pool(config_path).allocate()
+            except execution_pool.PoolError as exc:
+                raise Refusal(str(exc)) from exc
+            profile, source = choice['profile'], f"rotation:{choice['turn']}"
+            record['execution_pool_allocation'] = choice
         else:
-            profile, source = allocate_profile(config, provider)
+            profile, source = allocate_profile(config, provider, config_path)
         record.update(profile=profile, profile_source=source)
         if record["transport"] == "native":
             # Every pool profile is mapped (config check), and an unmapped

@@ -25,7 +25,7 @@ CONFIG = HERE / "routes.toml"
 # hold it, and new launches must neither wait on it nor create it.
 LEASE = ".oulipoly-direct-child.lease"
 PROFILES = (".codex", ".codex2", ".codex3", ".codex4", ".codex5")
-POOL = (".codex2", ".codex4", ".codex5")
+POOL = (".codex2", ".codex3", ".codex5")
 # A second Claude store the dispatcher accepts, which no native binding names.
 TWO_STORES = ('manual_profiles = ["claude5"]', 'manual_profiles = ["claude5", "claude6"]')
 # ROOT's selected package target path: installation selection, not a
@@ -373,7 +373,7 @@ class NativeTest(unittest.TestCase):
         sol = '[[native.bindings]]\nprovider = "codex"\nmodel = "gpt-6.1-sol"\neffort = "high"\n'
         claude = ('[[native.bindings]]\nprovider = "claude"\nmodel = "claude-opus-5-5"\n'
                   'effort = "medium"\nprofile = "claude5"\n')
-        cases = (([('".codex4" = "sol-high-codex4"\n', '')], "must map every Codex pool profile"),
+        cases = (([('".codex3" = "sol-high-codex3"\n', '')], "must map every Codex pool profile"),
                  ([('".codex3" = "sol-high-codex3"\n', '".codex3" = "sol-high-codex3"\n".codex9" = "x"\n')],
                   "only configured Codex profiles"),
                  ([(sol, sol + 'site_route = "sol-high"\n')], "site_routes for a Codex binding"),
@@ -408,8 +408,8 @@ class NativeTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.counter(), "13")
         calls = self.calls_of("native-call")
-        expected = [(".codex4", "luna-max-codex4"), (".codex5", "sol-high-codex5"),
-                    (".codex2", "luna-max-codex2"), (".codex4", "sol-high-codex4"),
+        expected = [(".codex3", "luna-max-codex3"), (".codex5", "sol-high-codex5"),
+                    (".codex2", "luna-max-codex2"), (".codex3", "sol-high-codex3"),
                     (".codex5", "luna-max-codex5"), (".codex2", "sol-high-codex2")]
         self.assertEqual([call["args"][call["args"].index("--route") + 1] for call in calls],
                          [route for _, route in expected])
@@ -430,7 +430,7 @@ class NativeTest(unittest.TestCase):
                 for key in ("renewal", "issuer_contact", "credential_need_s", "credential_snapshot_removed"):
                     self.assertNotIn(key, state)
                 self.assertEqual(sorted(p.name for p in attempt.iterdir()),
-                                 ["final.md", "native", "prompt.md", "route.json", "state.txt"])
+                                 ["final.md", "native", "pool-admission.json", "prompt.md", "route.json", "state.txt"])
                 route_json = json.loads((attempt / "route.json").read_text())
                 self.assertEqual((route_json["site_route"], route_json["profile"],
                                   route_json["native_credential"], route_json["profile_source"]),

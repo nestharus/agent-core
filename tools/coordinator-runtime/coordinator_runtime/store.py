@@ -24,6 +24,7 @@ from .storage import SCHEMA as STORAGE_SCHEMA
 from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
+from .execution_pool import ExecutionPool
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -112,6 +113,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
+        self.execution_pool = ExecutionPool(config)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -239,12 +241,17 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def _attempt(self, kind, event, job, binding, profile):
         self.require_active_sources(event, job)
         self.budget("attempts")
+        if profile not in self.config['profiles']:
+            raise Refusal('profile advice outside runtime account authorization')
+        allocation = self.execution_pool.allocate()
         attempt = ident()
         self.db.execute("INSERT INTO attempts(id,kind,event,job,controller,profile,binding,created) "
                         "VALUES(?,?,?,?,?,?,?,?)", (attempt, kind, event, job, self.controller,
-                                                  profile, encode(binding), self.clock()))
-        provenance = {"selection_reason": self.config.get("dispatch_authority", "explicit per-task runtime configuration"),
-                      "configuration_sha256": digest(self.config)}
+                                                  allocation['profile'], encode(binding), self.clock()))
+        provenance = {"selection_reason": 'ordinary rotation over current shared enabled execution pool',
+                      'configured_dispatch_authority': self.config.get('dispatch_authority'),
+                      "configuration_sha256": digest(self.config),
+                      "profile_advice": profile, "execution_pool_allocation": allocation}
         self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(provenance), attempt))
         return attempt
 
@@ -820,6 +827,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def status(self):
         return {"controller": self.controller, "usage": self.usage(),
+                'execution_pool': self.execution_pool.status(),
                 "enrollments": self.rows("SELECT * FROM enrollments"),
                 "events": self.rows("SELECT id,role,state,ack,received,processed_at,hold,error FROM events"),
                 "slots": [{**job, "execution_slot_held": not self.execution_complete(job)}
