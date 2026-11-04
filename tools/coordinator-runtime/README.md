@@ -939,9 +939,9 @@ input/count bounds remain, without a new aggregate-capacity qualification.
 
 This expresses the held Work928 relationship without requesting an equivalent
 Luna diagnosis. The genuine owner queues it through the existing actual-owner
-command; acceptance starts no model. Only the existing lawful disposition collector
-consumes it. This mode performs no automatic custody adoption and does not ask an
-operator to borrow a controller ID. The actual owner reaffirmation is recorded
+command; acceptance starts no model. Without the explicit restart option below,
+only the existing lawful disposition collector consumes it. There is no automatic
+foreign adoption or instruction to borrow a controller ID. Owner reaffirmation is recorded
 within existing authority; it is not another blanket human/Source/CI permission gate.
 
 Predicates are explicit: same active held task/reservation in awaiting-disposition;
@@ -954,7 +954,7 @@ owner choice, successor or mismatched lineage remains binding. The existing orig
 closure/effects/resume/source/legacy/resource/publication/hold gates all remain.
 
 The request captures bounded hashes of qualified diagnosis, original task source,
-closure and selected owner purpose. Consumption rechecks those exact witnesses,
+closure, reservation/token/members and selected owner purpose. Consumption rechecks those exact witnesses,
 currentness, existing collector and fences in its allocation transaction. It
 allocates at most one remaining task attempt within the SAME job/token/members,
 consumes that request atomically and preserves original records. It never changes
@@ -971,3 +971,70 @@ new diagnosis, stage replay, second integrator or generic unknown-effect waiver 
 used to make the transition succeed. Existing per-job request and finite storage
 bounds still apply. Source presence and fixture success establish no live Work928
 successor, canonical publication, receiver arrival, rollout admission or acceptance.
+
+### Explicit closure continuity after an owned ordinary service restart
+
+A fresh normal `run` constructs its own Store controller. Merely replacing source
+files, or constructing a Store with the prior controller UUID, does not provide a
+collector transition. For this already-collected, held same-purpose remainder,
+the genuine enrolled role owner can add exactly this optional field to the
+`use-diagnosis` receipt above:
+
+```json
+"collector_continuity": {
+  "scope": "closure-only-after-owned-restart",
+  "from_controller": "EXACT-RETAINED-JOB-CONTROLLER-UUID",
+  "service_actor": "EXACT-CONFIGURED-SERVICE-ACTOR-UUID",
+  "service_end": 0,
+  "service_collected": true,
+  "evidence": ["Actual owned old service END/collection reference and restart scope"]
+}
+```
+
+`service_end` must be the actual numeric old service END (zero above is illustrative),
+not the status of a stop request, an inferred timeout or the task/diagnosis END.
+This is an explicit cooperative owner attestation, not independent authentication
+or proof that a process stopped. The caller still collects the actual owned service
+and selects receiving/restart authority separately. No foreign process is adopted.
+
+Supported sequence, only within that separate operational authority:
+
+1. Retain the old owned service's actual drain/END/full collection and original
+   task/diagnosis closure evidence. Select compatible corrected owner CLI and service
+   code on the same configured journal, actor, enrolled owners and grants. Do not
+   alter the configuration hash, borrow a controller or operate a second service.
+2. From the genuine enrolled owner context, run `owner-controls ROLE --limit 100`.
+   Its recovery entry now exposes the **retained job** controller, recovery owner
+   and closure chain. A transient CLI/status Store identity is not that controller.
+   Preserve the exact current held job/token/active task, qualified diagnosis,
+   consumed owner selection and same target/WHY. Do not request `remaining-work`.
+3. Submit the complete receipt using `request-recovery JOB --token TOKEN --attempt
+   ORIGINAL_TASK --receipt FILE`. Supply the old service END/evidence and retained
+   job controller; there is no caller-supplied fresh controller. This owner command
+   only queues a bounded request. It may precede the normal fresh service start or
+   be read by an already-corrected fresh service; it never starts the service.
+4. The corrected fresh dispatcher's ordinary reconciliation consumes the request.
+   It validates current source authority and all existing diagnosis/purpose/fence
+   checks, then appends a closure-only handoff and allocates one same-job successor
+   in the same journal transaction. Allocation refusal rolls back the handoff too.
+
+The dispatcher refuses a non-distinct controller, any related live/unknown attempt,
+unreconciled effects or an invalid prior closure chain. It preserves every original
+task/diagnosis/selection record, original task collector/actual END, diagnosis
+recovery owner and raw prior handoff. The request and successor retain before/after
+witnesses: only the closure hash changes during the transfer. Reservation and all
+other qualified currentness witnesses must match. Repeated reconciliation cannot
+allocate another successor or equivalent diagnosis. Ordinary held reconciliation
+also waits for explicit disposition of an owner-selected remainder, so a refused
+request cannot fall through to processing the old result. Explicit redisposition
+remains available through its existing path.
+
+An already-pending request is immutable: this option cannot edit it, bypass its
+budget or silently upgrade an old witness. A pending request without continuity
+still cannot be consumed by a foreign controller. Changed evidence, a newer choice,
+defer/question/disposition, successor, source/legacy/resource/effect/publication or
+unrelated hold remains binding; retain the precise refusal for the actual owner.
+Existing finite request/storage limits apply. A reserved successor is not started,
+processed, published or accepted work. Normal launch/collection, peer preimages,
+source/outbox/control/consumer duties and processing+24h **and every hold** remain.
+This software contract supplies no live restart, Work928 continuation or adoption proof.

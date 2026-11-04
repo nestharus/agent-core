@@ -1,8 +1,8 @@
-"""Actual-owner requests, consumed by the existing collector, never a replay CLI."""
+"""Actual-owner requests and explicit collected-closure continuity, never a replay CLI."""
 
 import json
 
-from .contracts import LUNA, Refusal, digest, encode, required_text
+from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, required_text
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recovery_requests(
@@ -35,7 +35,9 @@ class RecoveryJournal:
                     raise Refusal('existing recovery must be collected; exact current diagnosis/END evidence missing; actual collector retains custody')
             keys={'mode','reason','evidence','remaining'}
             reuse=isinstance(receipt,dict) and receipt.get('mode')=='use-diagnosis'
-            if not isinstance(receipt,dict) or set(receipt)!=(keys|{'diagnosis','selection'} if reuse else keys):
+            expected=keys|{'diagnosis','selection'} if reuse else keys
+            if reuse and 'collector_continuity' in receipt:expected|={'collector_continuity'}
+            if not isinstance(receipt,dict) or set(receipt)!=expected:
                 raise Refusal('recovery receipt needs mode/reason/evidence/remaining')
             mode=receipt['mode']
             if mode not in {'redispose','remaining-work','defer','use-diagnosis'}:raise Refusal('unknown recovery mode')
@@ -59,6 +61,7 @@ class RecoveryJournal:
             if count>=self.config['limits'].get('max_owner_corrections',4):
                 raise Refusal('bounded owner recovery requests exhausted; original duties retained')
             witness=self.retained_diagnosis_witness(row,receipt) if reuse else None
+            if reuse and 'collector_continuity' in receipt:self.validate_collector_continuity(row,receipt['collector_continuity'])
             self.budget(None,len(encode(receipt).encode())+1024)
             self.db.execute('INSERT INTO recovery_requests VALUES(?,?,?,?,?,\'pending\',?,?)',
                             (key,job,attempt,actor,encode(receipt),self.clock(),encode({'retained_diagnosis':witness}) if reuse else None))
@@ -83,24 +86,28 @@ class RecoveryJournal:
         if row['hold_reason']!=old['error'] and (not error or json.loads(error['detail']).get('error')!=row['hold_reason']):
             raise Refusal('unrelated job hold remains binding; recovery cannot discard it')
 
-    def consume_recovery_request(self,request):
-        """Only the current lawful reservation collector can act on a request."""
+    def consume_recovery_request(self,request,*,dispatcher_continuity=False):
+        """Lawful disposition collector; only dispatcher may consume explicit continuity."""
         with self.tx():
             current=self.one('SELECT * FROM recovery_requests WHERE id=?',(request,))
             if not current or current['state']!='pending':return None
             row=self.job(current['job'])
             old=self.attempt(current['attempt'])
             self.require_active_sources(job=row['id'])
-            if not self.owns_disposition(row,old):
+            receipt=json.loads(current['receipt'])
+            continuity=receipt['mode']=='use-diagnosis' and 'collector_continuity' in receipt
+            if not self.owns_disposition(row,old) and not (continuity and dispatcher_continuity):
                 raise Refusal('request awaits actual original collector; no custody transfer')
             if row['active_attempt']!=old['id'] or row['state']!='held':
                 raise Refusal('request stale; no replacement or replay')
-            receipt=json.loads(current['receipt'])
             if receipt['mode']=='use-diagnosis':
-                successor=self._handoff(row['id'],receipt['diagnosis'],retained_request=current)
+                successor=self._handoff(row['id'],receipt['diagnosis'],retained_request=current,
+                                        dispatcher_continuity=dispatcher_continuity)
+                transfer=json.loads(self.attempt(successor)['detail']).get('collector_continuity')
                 self.db.execute("UPDATE recovery_requests SET state='consumed',result=? WHERE id=?",
                     (encode({'collector':self.controller,'at':self.clock(),'prior_job':row,
                              'retained_diagnosis':json.loads(current['result'])['retained_diagnosis'],'successor':successor,
+                             'collector_continuity':transfer,
                              'meaning':'one remaining attempt allocated in same job; no diagnosis/model start/publication/acceptance claim'}),request))
                 return {**current,'receipt':receipt,'successor':successor}
             if row['recovery_state'] in {'claimed','diagnosing'}:
@@ -119,6 +126,44 @@ class RecoveryJournal:
                             (encode({'collector':self.controller,'at':self.clock(),
                                      'prior_job':row,'prior_capture':old['capture'],'prior_error':old['error']}),request))
         return {**current,'receipt':receipt}
+
+    def validate_collector_continuity(self,row,continuity):
+        keys={'scope','from_controller','service_actor','service_end','service_collected','evidence'}
+        if not isinstance(continuity,dict) or set(continuity)!=keys:
+            raise Refusal('complete owner-selected collector continuity evidence required')
+        canonical_uuid(continuity['from_controller']);canonical_uuid(continuity['service_actor'])
+        if (continuity['scope']!='closure-only-after-owned-restart' or continuity['from_controller']!=row['controller']
+                or continuity['service_actor']!=self.config['actor'] or type(continuity['service_end']) is not int
+                or continuity['service_collected'] is not True):
+            raise Refusal('exact prior job collector/service actor and actual owned service END/collection required; no identity borrowing')
+        evidence=continuity['evidence']
+        if not isinstance(evidence,list) or not 1<=len(evidence)<=16:raise Refusal('bounded actual owned restart/collection evidence required')
+        for item in evidence:required_text(item,'owned restart evidence',2000)
+
+    def transfer_retained_closure(self,row,old,request):
+        """Called only in the dispatcher's allocation transaction, after witness checks."""
+        if not self.db.in_transaction:raise Refusal('collector continuity requires owned write transaction')
+        continuity=json.loads(request['receipt'])['collector_continuity']
+        self.validate_collector_continuity(row,continuity)
+        if self.controller==row['controller']:raise Refusal('owned restart requires the dispatcher own distinct fresh controller identity')
+        if self.one('SELECT id FROM attempts WHERE job=? AND (ended IS NULL OR collected IS NULL OR exit IS NULL)',(row['id'],)):
+            raise Refusal('live/unknown related attempt retains its actual collector; no process adoption')
+        if self.config['tasks'][row['task']]['effects']=='owner-reconcile' and row['effects']!='reconciled':
+            raise Refusal('actual effect owner reconciliation required for closure transfer')
+        previous=json.loads(row['collection_handoff']) if row['collection_handoff'] else {}
+        if row['controller']!=old['controller'] and not (
+                previous.get('to_controller')==row['controller'] and previous.get('original_collector')==old['controller']
+                and previous.get('original_attempt')==old['id'] and previous.get('actual_exit')==old['exit']
+                and previous.get('actual_collected_at')==old['collected']):
+            raise Refusal('prior closure chain does not prove original task/collector/END; no manufactured history')
+        handoff={'from_controller':row['controller'],'to_controller':self.controller,'original_collector':old['controller'],
+            'original_attempt':old['id'],'actual_exit':old['exit'],'actual_collected_at':old['collected'],
+            'prior_handoff':row['collection_handoff'],'request':request['id'],'owner':request['actor'],
+            'service_actor':self.config['actor'],'owned_restart':continuity,
+            'authority':'explicit actual-owner closure/disposition continuity only; no process adoption', 'at':self.clock()}
+        self.db.execute('UPDATE jobs SET controller=?,collection_handoff=? WHERE id=?',
+                        (self.controller,encode(handoff),row['id']))
+        return handoff
 
     def retained_diagnosis_witness(self,row,receipt,*,request=None):
         """Reaffirm qualified same-purpose evidence, not a fresh diagnosis or forced state."""
@@ -154,6 +199,7 @@ class RecoveryJournal:
                 'diagnosis_hash':digest({**{k:diag[k] for k in fields},'identity':identity}),
                 'original_task_hash':digest({k:old[k] for k in ['id','job','controller','ended','exit','collected','semantic','capture','error','result']}),
                 'closure_hash':digest(row['collection_handoff']),
+                'reservation_hash':digest({k:row[k] for k in ['token','members','role','phase','task','package']}),
                 'selection_hash':digest({k:selection[k] for k in ['id','job','attempt','actor','receipt','state','created']}),
                 'basis':'actual owner reaffirmation of retained qualified same-purpose diagnosis; no source/history/END rewrite'}
 

@@ -680,21 +680,30 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             return self._handoff(job,diagnosis)
 
-    def _handoff(self,job,diagnosis,*,retained_request=None):
+    def _handoff(self,job,diagnosis,*,retained_request=None,dispatcher_continuity=False):
         """Allocate once inside the caller's journal transaction, never start a model."""
         if not self.db.in_transaction:raise Refusal('handoff requires the owned journal write transaction')
         row=self.job(job)
         old,diag=self.attempt(row['active_attempt']),self.attempt(diagnosis)
+        continuity=None
         if retained_request:
             receipt=json.loads(retained_request['receipt'])
             if (retained_request['state']!='pending' or retained_request['job']!=job or retained_request['attempt']!=old['id']
                     or retained_request['actor']!=self.enrollment(row['role'])['owner']
-                    or receipt['mode']!='use-diagnosis' or receipt['diagnosis']!=diagnosis
-                    or not self.owns_disposition(row,old)):
+                    or receipt['mode']!='use-diagnosis' or receipt['diagnosis']!=diagnosis):
                 raise Refusal('exact actual-owner request and lawful original disposition collector required')
             witness=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'])
             if json.loads(retained_request['result'])['retained_diagnosis']!=witness:
                 raise Refusal('retained qualified diagnosis/selection changed since owner reaffirmation')
+            if 'collector_continuity' in receipt:
+                if not dispatcher_continuity:raise Refusal('collector continuity is consumed only by the corrected actual dispatcher')
+                handoff=self.transfer_retained_closure(row,old,retained_request)
+                row=self.job(job)
+                after=self.retained_diagnosis_witness(row,receipt,request=retained_request['id'])
+                if {k:v for k,v in witness.items() if k!='closure_hash'}!={k:v for k,v in after.items() if k!='closure_hash'}:
+                    raise Refusal('qualified currentness changed during authorized closure transfer')
+                continuity={'before_witness':witness,'after_witness':after,'handoff':handoff}
+            if not self.owns_disposition(row,old):raise Refusal('exact lawful disposition collector required; no automatic foreign adoption')
         elif row['recovery_owner']!=self.controller or row['recovery_state']!='diagnosing':
             raise Refusal('recovery fence differs')
         selected=self.current_diagnosis(row)
@@ -717,6 +726,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                  'choice':choice,'diagnosis':diagnosis,'native_resume':False,
                  'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])}
         if retained_request:context['retained_diagnosis_request']=retained_request
+        if continuity:context['collector_continuity']=continuity
         context={**json.loads(self.attempt(attempt)['detail']),**context}
         self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(context),attempt))
         self.db.execute("UPDATE jobs SET active_attempt=?,controller=?,effects='unknown',state='running',"
