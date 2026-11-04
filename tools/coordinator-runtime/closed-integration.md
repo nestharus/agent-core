@@ -7,7 +7,7 @@ Retiring that execution fences it permanently. It does not complete its job,
 process its frozen input, transfer custody, settle delivery, promote its result,
 clear a hold, reconcile an effect or authorize another execution by itself.
 
-Only the actual enrolled Work owner can use the four CLI entrypoints below;
+Only the actual enrolled Work owner can use the CLI entrypoints below;
 they check the existing current Board authority. Journal methods follow the
 same trusted caller convention as existing owner methods. Plain receipt text
 does not authenticate a collector or establish actual process closure. The
@@ -75,10 +75,37 @@ job remains held. Later Work integration requires a fresh bounded selection:
 
 Each later window requires its own selection while retired debt exists. A
 stale or already consumed selection cannot become a new job. Staleness after
-reservation retains the reservation for actual owner disposition; this module
-does not invent an automatic refresh, cancellation, replacement or retry.
+reservation retains the reservation for actual owner disposition as below.
 Retired original execution cannot resume through this API. Genuine remaining
 work needs separately authorized new scope while retaining the original debt.
+
+`integration-prestart-basis JOB --token TOKEN` supplies a separate disposition
+for an exact selected Work reservation with **no allocated attempt at all**.
+`withdraw-integration-prestart JOB --token TOKEN --receipt ABSOLUTE_FILE`
+requires that exact `basis` object, a nonempty `reason`, and bounded
+`no_launch_evidence` strings attributed to the current Work owner. The owner
+must establish that no unrepresented launch/writer exists; journal absence is
+not an external process census. No process END is asserted on this route.
+Foreign owner/token, changed basis, any allocated attempt (even unbegun),
+recovery lineage, or inconsistent queue ownership refuses without release.
+
+Withdrawal serializes against start under the journal write lock. It inserts
+a permanent execution fence, holds the old reservation, and returns precisely
+its reserved queue rows to pending without changing input/hold/ACK/processing
+or source/custody/result/publication/outbox state. The original consumed window
+and frozen members stay intact. The disposition and current duties join the
+conserved debt of every subsequent window; withdrawal alone authorizes no new
+execution. Current source, enrollment, peer/conflict and custodian evidence
+must support a fresh owner-selected batch, including any returned inputs.
+The old execution cannot start or recover later. This does not handle an
+allocated-but-unbegun attempt or recycle lifetime job/window capacity.
+
+Initial, diagnosis and recovered successor prompts load the authoritative
+integration-window receipt from the journal. Handoff also records it in the
+new attempt detail. The selected target/WHY and original obligations therefore
+remain available even when a diagnosis omits them or the prior detail lacks
+them. Existing owner remaining-work selections are carried alongside that
+original selection; they do not erase it or waive currentness/effect gates.
 
 All records have the existing journal byte/job/result bounds. Window selections
 also have a lifetime count bound equal to `max_jobs`; hitting a bound refuses

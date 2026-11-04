@@ -140,11 +140,11 @@ def parser():
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
     recovery.add_argument('--receipt',required=True,help='use-diagnosis: exact diagnosis/selection with remaining:null; optional qualified publication_remainder basis and collector_continuity; remaining-work requests fresh diagnosis')
-    for command in ('integration-closure-basis', 'retire-integration'):
+    for command in ('integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart'):
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
         integration.add_argument('--token', required=True)
-        if command == 'retire-integration':integration.add_argument('--receipt', required=True)
+        if command in {'retire-integration', 'withdraw-integration-prestart'}:integration.add_argument('--receipt', required=True)
     window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
     window.add_argument('task')
     window.add_argument('--events', nargs='+', required=True)
@@ -209,9 +209,11 @@ async def serve(store):
 
 
 def operate(args, store):
-    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window'}:
+    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart'}:
         actor = actual_actor(store.enrollment('Work')['owner'])
         Board(store.config, 'Work').verify_authority(store)
+        if args.command == 'integration-prestart-basis':return store.integration_prestart_basis(args.job, args.token)
+        if args.command == 'withdraw-integration-prestart':return store.withdraw_integration_prestart(args.job, args.token, actor, read_record(args.receipt))
         if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
         if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, read_record(args.receipt))
         if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)

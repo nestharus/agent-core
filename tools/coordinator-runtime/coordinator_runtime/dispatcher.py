@@ -57,7 +57,8 @@ def recovery_prompt(store,job):
         'use profile="@owner" and explain the exact missing decision/evidence in remaining/rationale; '
         'the controller retains a public owner next disposition, never a forced writer. '
         'Return profile/remaining/rationale JSON.\n'+encode({'job':job,'prior_attempt':old,
-        'owner_remaining_selection':selection,'profiles':store.config['profiles']}))
+        'owner_remaining_selection':selection,'integration_window':store.integration_context(job['id']),
+        'profiles':store.config['profiles']}))
 
 
 def classifier_prompt(event, config):
@@ -104,6 +105,7 @@ def job_prompt(store, job, task=None):
                "effect_policy": task["effects"], "members": members, "events": events,
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
+               "integration_window": store.integration_context(job['id']),
                "conserved_integration_debt": store.integration_debt() if job['role']=='Work' and job['phase']=='integrator' else [],
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}

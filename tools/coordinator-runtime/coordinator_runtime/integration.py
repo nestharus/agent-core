@@ -15,12 +15,18 @@ CREATE TABLE IF NOT EXISTS integration_retirements(
 CREATE TABLE IF NOT EXISTS integration_windows(
  id TEXT PRIMARY KEY,actor TEXT NOT NULL,basis TEXT NOT NULL,
  receipt TEXT NOT NULL,created REAL NOT NULL,job TEXT UNIQUE);
+CREATE TABLE IF NOT EXISTS integration_prestart_dispositions(
+ job TEXT PRIMARY KEY,actor TEXT NOT NULL,basis TEXT NOT NULL,
+ receipt TEXT NOT NULL,created REAL NOT NULL);
 """
 
 
 class IntegrationJournal:
     def integration_retired(self, job):
-        return self.one('SELECT * FROM integration_retirements WHERE job=?', (job,))
+        # Both are permanent execution fences. A prestart withdrawal asserts no
+        # attempt allocation, never a fabricated process END or processing.
+        return (self.one('SELECT * FROM integration_retirements WHERE job=?', (job,))
+                or self.one('SELECT * FROM integration_prestart_dispositions WHERE job=?', (job,)))
 
     def require_execution_open(self, job):
         if self.integration_retired(job):
@@ -40,6 +46,63 @@ class IntegrationJournal:
             raise Refusal('bounded applicable evidence required')
         for item in evidence:
             required_text(item, 'integration evidence', 2000)
+
+    def integration_prestart_basis(self, job, token):
+        self.require_execution_open(job)
+        row = self.job(job, token)
+        if (row['role'] != 'Work' or row['phase'] != 'integrator'
+                or row['state'] not in {'reserved', 'held'} or row['active_attempt'] is not None
+                or self.one('SELECT id FROM attempts WHERE job=?', (job,))
+                or row['effects'] != 'unknown' or row['effect_receipt'] is not None
+                or row['response'] is not None or row['closed_at'] is not None
+                or row['recovery_owner'] is not None or row['recovery_state'] is not None
+                or row['recovery_count'] != 0 or row['collection_handoff'] is not None
+                or self.one('SELECT id FROM recovery_requests WHERE job=?', (job,))):
+            raise Refusal('only never-allocated Work integration reservations may be withdrawn')
+        window = self.one('SELECT * FROM integration_windows WHERE job=?', (job,))
+        if not window or json.loads(window['basis'])['members'] != json.loads(row['members']):
+            raise Refusal('exact consumed integration window and frozen members required')
+        queues = self.rows('SELECT * FROM queue WHERE job=? ORDER BY rowid', (job,))
+        members = json.loads(row['members'])
+        if (len(queues) != len(members) or {q['id'] for q in queues} != {m['queue'] for m in members}
+                or any(q['state'] != 'reserved' or q['role'] != 'Work'
+                       or q['phase'] != 'integrator' or q['task'] != row['task']
+                       or not any(m['queue'] == q['id'] and m['event'] == q['event']
+                                  and m['package'] == q['package'] for m in members) for q in queues)):
+            raise Refusal('exact pending queue ownership required; no partial release')
+        return self._integration_bounded({'job': row, 'window': window, 'queue': queues,
+            'inputs': [self.one('SELECT * FROM events WHERE id=?', (m['event'],)) for m in members],
+            'debt': self.integration_debt(), 'enrollment': self.enrollment('Work')})
+
+    def withdraw_integration_prestart(self, job, token, actor, receipt):
+        """Owner disposition, serialized against allocation; inputs remain pending.
+
+        The consumed selection and frozen reservation remain immutable evidence.
+        A new, exact owner selection must account for them before any new launch.
+        Evidence is attributed caller testimony, not external process discovery.
+        """
+        with self.tx():
+            self._integration_owner(actor)
+            basis = self.integration_prestart_basis(job, token)
+            if not isinstance(receipt, dict) or set(receipt) != {'basis', 'reason', 'no_launch_evidence'}:
+                raise Refusal('exact prestart basis, reason and scoped no-launch evidence required')
+            if receipt['basis'] != basis:
+                raise Refusal('prestart disposition basis changed; fresh owner decision required')
+            required_text(receipt['reason'], 'prestart withdrawal reason', 4000)
+            self._integration_evidence(receipt['no_launch_evidence'])
+            self._integration_bounded(receipt)
+            self.budget(None, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            self.db.execute('INSERT INTO integration_prestart_dispositions VALUES(?,?,?,?,?)',
+                (job, actor, encode(basis), encode(receipt), self.clock()))
+            self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?",
+                ('owner withdrew never-allocated execution; pending duties conserved', job))
+            self.db.execute("UPDATE queue SET state='queued',job=NULL WHERE job=?", (job,))
+        return self.integration_retired(job)
+
+    def integration_context(self, job):
+        """Authoritative selection for initial, diagnosed and recovered attempts."""
+        window = self.one('SELECT receipt FROM integration_windows WHERE job=?', (job,))
+        return json.loads(window['receipt']) if window else None
 
     def integration_closure_basis(self, job, token):
         row = self.job(job, token)
@@ -94,11 +157,13 @@ class IntegrationJournal:
     def integration_debt(self):
         """Current attributed debt, including later adverse delivery/custody state."""
         result = []
-        for retired in self.rows('SELECT * FROM integration_retirements ORDER BY rowid'):
+        fences = [(r, 'retirement') for r in self.rows('SELECT * FROM integration_retirements ORDER BY rowid')]
+        fences += [(r, 'prestart_disposition') for r in self.rows('SELECT * FROM integration_prestart_dispositions ORDER BY rowid')]
+        for retired, kind in fences:
             job = retired['job']
             row = self.job(job)
             members = json.loads(row['members'])
-            result.append({'retirement': retired, 'current_job': row,
+            result.append({kind: retired, 'current_job': row,
                 'attempts': self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,)),
                 'outboxes': self.rows('SELECT * FROM outboxes WHERE job=? ORDER BY rowid', (job,)),
                 'inputs': [self.one('SELECT * FROM events WHERE id=?', (m['event'],)) for m in members],

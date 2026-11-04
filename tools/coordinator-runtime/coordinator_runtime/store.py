@@ -532,9 +532,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("only original reservation controller may launch once")
             task = self.config["tasks"][row["task"]]
             attempt = self._attempt("task", None, job, task["binding"], profile or task["profile"])
-            window = self.one('SELECT receipt FROM integration_windows WHERE job=?', (job,))
+            window = self.integration_context(job)
             if window:
-                detail = {**json.loads(self.attempt(attempt)['detail']), 'integration_window': json.loads(window['receipt'])}
+                detail = {**json.loads(self.attempt(attempt)['detail']), 'integration_window': window}
                 self.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt))
             self.db.execute("UPDATE jobs SET active_attempt=?,state='running' WHERE id=?", (attempt, job))
         return attempt
@@ -700,10 +700,15 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
                     "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "
                     "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
+                    "AND NOT EXISTS (SELECT 1 FROM outboxes o JOIN integration_prestart_dispositions d ON d.job=o.job "
+                    "JOIN jobs w ON w.id=d.job,json_each(w.members) wm "
+                    "WHERE json_extract(wm.value,'$.event')=events.id "
+                    "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
                     "AND NOT EXISTS (SELECT 1 FROM events child WHERE child.parent=events.id "
                     "AND child.processed_at IS NULL) "
                     "AND NOT EXISTS (SELECT 1 FROM jobs j,json_each(j.members) m "
                     "WHERE json_extract(m.value,'$.event')=events.id AND "
+                    "NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=j.id) AND "
                     "(j.state!='closed' OR (j.response IS NOT NULL AND NOT EXISTS "
                     "(SELECT 1 FROM events r WHERE r.id=j.response AND r.processed_at IS NOT NULL))))",
                     (self.clock(),))
@@ -793,6 +798,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                  'prior_error':old['error'],'prior_job_hold':row['hold_reason'],'effect_receipt':row['effect_receipt'],
                  'choice':choice,'diagnosis':diagnosis,'native_resume':False,
                  'owner_remaining_selection':selection,'prior_artifact_witnesses':witnesses(self,old['id'])}
+        window = self.integration_context(job)
+        if window is not None:context['integration_window'] = window
         if retained_request:context['retained_diagnosis_request']=retained_request
         if publication is not None:context['publication_remainder']=publication
         if continuity:context['collector_continuity']=continuity
