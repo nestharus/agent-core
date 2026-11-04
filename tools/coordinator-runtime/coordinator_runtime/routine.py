@@ -70,6 +70,7 @@ def prepare(store, board, job, attempt, task):
 
 
 def reconcile(store, board, job):
+    store.require_execution_open(job['id'])
     task = store.config['tasks'][job['task']]
     if not policy_for(task) or job['effects'] == 'reconciled':
         return False

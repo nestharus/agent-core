@@ -25,6 +25,7 @@ from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
+from .integration import IntegrationJournal, SCHEMA as INTEGRATION_SCHEMA
 from . import prospective, ordinary
 
 SCHEMA = """
@@ -110,7 +111,7 @@ def private_directory(path):
     return path
 
 
-class Store(DeliveryJournal, RecoveryJournal, InputJournal):
+class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
@@ -140,7 +141,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -249,6 +250,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         return json.loads(row["payload"])
 
     def _attempt(self, kind, event, job, binding, profile):
+        if job:
+            self.require_execution_open(job)
         self.require_active_sources(event, job)
         self.budget("attempts")
         if profile not in self.config['profiles']:
@@ -278,12 +281,15 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def authorize_launch(self, attempt):
         row = self.attempt(attempt)
+        if row['job']:
+            self.require_execution_open(row['job'])
         self.require_active_sources(row["event"], row["job"])
         if self.launch_authorizer:
             self.launch_authorizer(self.source_roles(row["event"], row["job"]))
         if row['kind'] != 'task':
             return
         job = self.job(row['job'])
+        self.integration_launch_current(job)
         if (self.config.get('software_delegation')
                 or 'software_authority' in json.loads(row['detail'])
                 or prospective.requires_authority(self, job)):
@@ -481,7 +487,11 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             return None
         if prior and any(self.dependency_hold(m["event"]) for m in json.loads(self.job(prior["job"])["members"])):
             return None
-        members = self._members(row)
+        try:
+            window = self.integration_window(row)
+        except Refusal:
+            return None
+        members = json.loads(window['basis'])['members'] if window else self._members(row)
         packages = {member["package"] for member in members}
         package = next(iter(packages)) if len(packages) == 1 else None
         self.budget("jobs")
@@ -494,6 +504,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         for member in members:
             self.db.execute("UPDATE queue SET state='reserved',job=? WHERE id=? AND state='queued'",
                             (job, member["queue"]))
+        if window:
+            self.db.execute('UPDATE integration_windows SET job=? WHERE id=? AND job IS NULL', (job, window['id']))
         return self.one("SELECT * FROM jobs WHERE id=?", (job,))
 
     def _members(self, row):
@@ -515,15 +527,22 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def start_job(self, job, token, profile=None):
         with self.tx():
             row = self.job(job, token)
+            self.integration_launch_current(row)
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("only original reservation controller may launch once")
             task = self.config["tasks"][row["task"]]
             attempt = self._attempt("task", None, job, task["binding"], profile or task["profile"])
+            window = self.one('SELECT receipt FROM integration_windows WHERE job=?', (job,))
+            if window:
+                detail = {**json.loads(self.attempt(attempt)['detail']), 'integration_window': json.loads(window['receipt'])}
+                self.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt))
             self.db.execute("UPDATE jobs SET active_attempt=?,state='running' WHERE id=?", (attempt, job))
         return attempt
 
     def execution_complete(self, job):
         """Release only execution capacity; delivery, queue and source stay owned."""
+        if self.integration_retired(job['id']):
+            return True
         if job["state"] != "awaiting-delivery" or job["effects"] not in {"none", "reconciled"} or job["hold_reason"]:
             return False
         attempt = self.attempt(job["active_attempt"]) if job["active_attempt"] else None
@@ -556,6 +575,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def finish_job(self, job, token):
         with self.tx():
             row = self.job(job, token)
+            self.require_execution_open(job)
             if row["controller"] != self.controller:
                 raise Refusal("stale/foreign controller cannot close a successor reservation")
             if row["state"] == "closed":
@@ -691,6 +711,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def claim_recovery(self, job):
         with self.tx():
+            if self.integration_retired(job):
+                return None
             row = self.job(job)
             self.require_active_sources(job=job)
             old=self.attempt(row['active_attempt'])
@@ -705,6 +727,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def diagnosis_attempt(self, job):
         with self.tx():
+            self.require_execution_open(job)
             row = self.job(job)
             if row["recovery_owner"] != self.controller or row["recovery_state"] != "claimed":
                 raise Refusal("recovery is exclusively owned or already attempted")
@@ -724,6 +747,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def _handoff(self,job,diagnosis,*,retained_request=None,dispatcher_continuity=False,publication_board=None):
         """Allocate once inside the caller's journal transaction, never start a model."""
         if not self.db.in_transaction:raise Refusal('handoff requires the owned journal write transaction')
+        self.require_execution_open(job)
         row=self.job(job)
         old,diag=self.attempt(row['active_attempt']),self.attempt(diagnosis)
         continuity=None
@@ -792,6 +816,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def adopt_collected(self, job):
         """Transfer closure work only, never an active process handle or unknown attempt."""
         with self.tx():
+            self.require_execution_open(job)
             row = self.job(job)
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
@@ -888,6 +913,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),
+                "integration_retirements":self.rows('SELECT * FROM integration_retirements'),
+                "integration_windows":self.rows('SELECT * FROM integration_windows'),
                 "input_resolutions":self.rows('SELECT event,version,source_hash,actor,receipt,created FROM input_resolutions'),
                 "source_custody": self.rows("SELECT event,basis,owner FROM source_custody"),
                 "artifact_custody": [{**r,'source_context':r['attempt'],'attempt':None if r['attempt'].startswith('owner:') else r['attempt']}

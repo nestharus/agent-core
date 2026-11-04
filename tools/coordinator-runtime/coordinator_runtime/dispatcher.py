@@ -104,6 +104,7 @@ def job_prompt(store, job, task=None):
                "effect_policy": task["effects"], "members": members, "events": events,
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
+               "conserved_integration_debt": store.integration_debt() if job['role']=='Work' and job['phase']=='integrator' else [],
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
@@ -121,6 +122,8 @@ def job_prompt(store, job, task=None):
             "the original canonical path may have changed since that report. Preserve every required artifact path. "
             "A final/DONE does not establish process exit, acceptance, effect reconciliation or publication. "
             "An owner_remaining_selection authorizes only its bounded remaining target and rationale. "
+            "Conserved integration debt is enduring original custody, not part of this new batch or permission "
+            "to replay, settle or publish it. Preserve UNKNOWNs and act only within the current selected window. "
             "Use prior_owned_artifact_inputs for conserved old reports/stages; reconcile with current peer bytes "
             "in the NEW staged mapping. Never copy an old stage over peer updates or replay accepted effects. "
             "Return handoffs as {recipient,kind,text,ref,required} within the task's allowed recipients; "
@@ -349,6 +352,7 @@ class Dispatcher:
 
     def try_finish(self, job_id):
         job = self.store.job(job_id)
+        if self.store.integration_retired(job_id):return
         try:
             if self.config['tasks'][job['task']].get('routine_completion'):
                 routine.reconcile(self.store, self.boards[job['role']], job)
@@ -385,6 +389,7 @@ class Dispatcher:
         if self.stopping.is_set():
             return
         job=self.store.job(job_id)
+        if self.store.integration_retired(job_id):return
         if job['recovery_state']!='diagnosing':return
         old=self.store.attempt(job['active_attempt'])
         current=self.store.current_diagnosis(job)
@@ -482,6 +487,7 @@ class Dispatcher:
             self.store.classification_failed(attempt, exc)
 
     def reconcile_collected(self, job):
+        if self.store.integration_retired(job['id']):return
         try:
             if (job['state']=='held' and job['recovery_state']=='awaiting-disposition'
                     and self.store.owner_remaining_selection(job['id'],job['active_attempt'])):

@@ -255,6 +255,7 @@ async def source(store, attempt, p, task):
 
 
 async def perform(store, board, job):
+    store.require_execution_open(job['id'])
     epoch = selected(store, job)
     if not epoch:
         return False

@@ -1,5 +1,10 @@
 # Opt-in coordinator runtime
 
+The [closed integration lifecycle](closed-integration.md) separates genuinely
+closed Work execution from unresolved original responsibilities. It provides
+explicit retirement and one-use next-window selection without promoting held
+results, waiving UNKNOWN effects or replaying old inputs.
+
 The [prospective ordinary-effects procedure](ordinary-effects.md) describes
 explicit future authority in the unchanged existing journal, service-owned
 Branch/QA tool execution/readback and independent semantic acceptance. It is a

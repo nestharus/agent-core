@@ -154,6 +154,7 @@ def snapshot_lock(store):
 
 
 def publish(store, board, job, attempt, run, task):
+    store.require_execution_open(job['id'])
     with snapshot_lock(store):
         return locked_publish(store,board,job,attempt,run,task)
 
@@ -168,6 +169,7 @@ def write_same_inode(fd, body):
 
 
 def locked_publish(store, board, job, attempt, run, task):
+    store.require_execution_open(job['id'])
     if job['controller']!=store.controller or attempt['controller']!=store.controller:
         raise Refusal('only original owned collector publishes its staged effects')
     def fence():

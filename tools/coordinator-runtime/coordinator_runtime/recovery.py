@@ -18,6 +18,7 @@ class RecoveryJournal:
     def request_recovery(self,job,token,attempt,actor,receipt,*,publication_board=None):
         """Queue one exact, bounded owner decision; launch/collection stay outside."""
         with self.tx():
+            self.require_execution_open(job)
             row=self.job(job,token)
             old=self.attempt(attempt)
             self.require_active_sources(job=job)
@@ -95,6 +96,7 @@ class RecoveryJournal:
         with self.tx():
             current=self.one('SELECT * FROM recovery_requests WHERE id=?',(request,))
             if not current or current['state']!='pending':return None
+            self.require_execution_open(current['job'])
             row=self.job(current['job'])
             old=self.attempt(current['attempt'])
             self.require_active_sources(job=row['id'])
@@ -293,6 +295,7 @@ class RecoveryJournal:
 
     def retain_recovery_disposition(self,job,diag,reason):
         """Collected diagnosis is evidence for a next owner decision, never success."""
+        self.require_execution_open(job['id'])
         current=self.job(job['id'])
         if current['active_attempt']!=job['active_attempt'] or current['recovery_state']!='diagnosing':
             raise Refusal('stale diagnosis cannot change a successor recovery reservation')

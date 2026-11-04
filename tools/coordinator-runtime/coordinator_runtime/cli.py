@@ -140,6 +140,16 @@ def parser():
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
     recovery.add_argument('--receipt',required=True,help='use-diagnosis: exact diagnosis/selection with remaining:null; optional qualified publication_remainder basis and collector_continuity; remaining-work requests fresh diagnosis')
+    for command in ('integration-closure-basis', 'retire-integration'):
+        integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
+        integration.add_argument('job')
+        integration.add_argument('--token', required=True)
+        if command == 'retire-integration':integration.add_argument('--receipt', required=True)
+    window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
+    window.add_argument('task')
+    window.add_argument('--events', nargs='+', required=True)
+    window = sub.add_parser('select-integration-window', help='Actual Work selects one bounded future batch with peer/custodian evidence')
+    window.add_argument('--receipt', required=True)
     basis=sub.add_parser('publication-remainder-basis',help='Actual owner reads qualified publication operands; no request, new purpose, publication or launch')
     basis.add_argument('job')
     for name in ['token','attempt','diagnosis','selection']:basis.add_argument('--'+name,required=True)
@@ -199,6 +209,13 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window'}:
+        actor = actual_actor(store.enrollment('Work')['owner'])
+        Board(store.config, 'Work').verify_authority(store)
+        if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
+        if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, read_record(args.receipt))
+        if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
+        return store.select_integration_window(actor, read_record(args.receipt))
     if args.command in {'authorize-prospective', 'revoke-prospective'}:
         actor = actual_actor(store.config['roles']['Work']['owner'])
         if args.command == 'authorize-prospective':
