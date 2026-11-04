@@ -100,7 +100,7 @@ class BoardDelivery:
         cli = self.config.get("operator_cli", str(Path(__file__).resolve().parents[1]/"coordinator"))
         prefix = shlex.join([cli, "--config", operator])
         text = (f"{summary}\nDelivery={outbox['id']} required={outbox['required']}. "
-                f"Real automation actor={self.config['actor']}; authorizing role owner={grant['owner']}; "
+                f"Real automation actor={self.config['actor']}; grantor={grant['issued_by']}; role owner={grant['owner']}; "
                 f"original producer={outbox['producer']}. Receipt is not pickup, processing or settlement. "
                 "Root code workers retain commit AND push.\n"
                 f"Read complete payload: {prefix} delivery-show {self.role} {outbox['id']}\n"

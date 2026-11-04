@@ -97,7 +97,8 @@ def reconcile(store, board, job):
     before = json.loads(run['before_files'])
     if any(after[p] != before[p] for p in after) and not tools['items']:
         return False
-    receipt = {'actor': store.config['actor'], 'delegated_by': grant['owner'], 'grant_id': grant['id'],
+    receipt = {'actor': store.config['actor'], 'delegated_by': grant['issued_by'], 'grant_id': grant['id'],
+               'role_owner': grant['owner'], 'authority': grant['authority'],
                'collector': attempt['controller'], 'worker': attempt['session'], 'attempt': attempt['id'],
                'basis': 'role-granted staged model writer and exact service publication; bounded pre/post custody and tool completion',
                'before': before, 'after': after, 'publication':published,

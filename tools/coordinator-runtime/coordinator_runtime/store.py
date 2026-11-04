@@ -113,6 +113,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
+        self.task_launch_authorizer = None
         self.execution_pool = ExecutionPool(config)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
@@ -271,6 +272,12 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         self.require_active_sources(row["event"], row["job"])
         if self.launch_authorizer:
             self.launch_authorizer(self.source_roles(row["event"], row["job"]))
+        if self.config.get('software_delegation') and row['kind'] == 'task':
+            if not self.task_launch_authorizer:
+                raise Refusal('software task launch requires its current authority checker')
+            if self.job(row['job'])['active_attempt'] != attempt:
+                raise Refusal('software launch is not the current owned task attempt')
+            self.task_launch_authorizer(row)
 
     def claim_classification(self):
         with self.tx():
@@ -560,6 +567,16 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            if self.config.get('software_delegation'):
+                detail = json.loads(attempt['detail'])
+                tools = detail.get('tool_completion', {})
+                if (not detail.get('software_authority') or not tools.get('complete')
+                        or (not task.get('routine_completion') and (tools.get('nonzero_completions')
+                            or any(item.get('status') == 'failed' for item in tools.get('items', []))))):
+                    reason = 'Prospective software task lacks complete launch-authority/tool capture; retain original effects and custody'
+                    self.failure_delivery(row, attempt, task, reason)
+                    self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?", (reason, job))
+                    return None
             if task.get('routine_completion'):
                 from .readiness import assess
                 assess(self,attempt)  # Same local obligation contract as publisher and delegated collector.

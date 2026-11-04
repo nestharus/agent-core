@@ -364,6 +364,7 @@ class AppServer:
             'automatic_store_deletion':False, 'known_thread':None}
         child = peer = watcher = None
         try:
+            store.authorize_launch(attempt)
             async with store.execution_pool.admission(profile):
                 pass  # Refuse an already disabled reservation before provider preflight too.
             owned_storage = storage.prepare(store, attempt)
@@ -372,6 +373,9 @@ class AppServer:
             # Admission and BEGIN share the operator-update lock. It is released
             # before model work; exclusion never touches a running original call.
             async with store.execution_pool.admission(profile) as admission:
+                # Pool admission may have awaited a cooperating update. Recheck
+                # the exact task admission after that wait, before creation.
+                store.authorize_launch(attempt)
                 outcome["detail"]["creation"] = "uncertain"
                 child = await asyncio.create_subprocess_exec(*argv, cwd=spec["cwd"], env=environment(profile),
                     stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
@@ -434,6 +438,7 @@ class AppServer:
             storage.verify(store, attempt, peer.owned_storage, readback)
             outcome['detail']['producer_settings'] = {'effective':peer.owned_storage,
                 'scope':'capture controls only; account stores remain shared/unqualified'}
+        store.authorize_launch(attempt)
         outcome['detail']['thread_start']='requested-uncertain'
         created = await peer.rpc("thread/start", {
             "model": binding["model"], "modelProvider": binding["provider"],
