@@ -29,6 +29,15 @@ class PoolBusy(PoolError):
     pass
 
 
+def counter_value(value):
+    if not value or not value.isascii() or not value.isdigit():
+        raise PoolError('empty/malformed existing rotation counter; no reset/fallback')
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise PoolError('rotation counter exceeds supported integer conversion; no reset/fallback') from exc
+
+
 class Pool:
     def __init__(self, routes=DEFAULT_ROUTES):
         self.routes = Path(routes)
@@ -82,9 +91,7 @@ class Pool:
                         handle.write('0\n')
                         handle.flush()
                         os.fsync(handle.fileno())
-                    if value and (not value.isascii() or not value.isdigit()):
-                        raise PoolError('malformed rotation counter; no reset/fallback')
-                    yield handle, raw, pool, int(value or '0')
+                    yield handle, raw, pool, counter_value(value or '0')
         except (OSError, UnicodeError) as exc:
             raise PoolError('public execution pool lock/state unavailable: ' + str(exc)) from exc
 
@@ -129,9 +136,7 @@ class Pool:
                         raise PoolError('rotation state path changed; explicit cutover required')
                     self.eligible(pool)
                     value = handle.read().strip()
-                    if not value or not value.isascii() or not value.isdigit():
-                        raise PoolError('empty/malformed existing rotation counter; no reset/fallback')
-                    count = int(value)
+                    count = counter_value(value)
             except OSError as exc:
                 raise PoolError('public execution pool preview unavailable: ' + str(exc)) from exc
         return {**self.witness(raw, pool, count), 'state': 'enabled',
@@ -141,8 +146,12 @@ class Pool:
         with self.locked(blocking) as (handle, raw, pool, count):
             self.eligible(pool, authorized)
             chosen = self.witness(raw, pool, count)
+            try:
+                next_value = str(count + 1) + '\n'
+            except ValueError as exc:
+                raise PoolError('next rotation counter exceeds supported integer conversion; no reset/fallback') from exc
             handle.seek(0)
-            handle.write(str(count + 1) + '\n')
+            handle.write(next_value)
             handle.flush()
             os.fsync(handle.fileno())
             handle.truncate()

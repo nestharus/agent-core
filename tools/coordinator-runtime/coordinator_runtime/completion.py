@@ -86,8 +86,8 @@ class Completion:
                 if row['actor']!=self.config['actor'] or row['owner']!=grant['owner'] or row['grant_id']!=grant['id'] or row['payload']!=outbox['payload']:
                     raise Refusal('routine callback must retain the exact service/role/source grant')
                 notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
-                if (notice['route'] != 'managed' or notice['delivery_state'] == 'sending'
-                        or (proof.get('prospective_epoch') and (notice['delivery_state'] == 'ambiguous' or row['transport_started']))):
+                if (notice['route'] != 'managed' or notice['delivery_state'] in {'sending', 'ambiguous'}
+                        or row['transport_started']):
                     raise Refusal('routine callback cannot claim another transport consumer or an unsettled send')
                 for column, stage in [('pickup','picked-up'),('processing','processed'),('settlement','settled')]:
                     if not row[column]:

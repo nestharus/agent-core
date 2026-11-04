@@ -161,6 +161,14 @@ class Dispatcher:
         self.delivery_cycle_end = frontier
         self.delivery_old_first = False
         self.store.launch_authorizer = self.authorize_roles
+        self.store.task_launch_authorizer = self.authorize_task
+
+    def authorize_task(self, attempt):
+        job = self.store.job(attempt['job'])
+        board = self.boards.get(job['role'])
+        if not board:
+            raise Refusal('software task has no admitted role authority checker')
+        board._software_job_grant(self.store, job)
 
     def authorize_roles(self, roles):
         if self.stopping.is_set():
@@ -280,12 +288,13 @@ class Dispatcher:
         directory = self.store.home / "artifacts" / attempt
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
-            task = scoped_task(job["task"], task, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
+            admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))
+            task = scoped_task(job["task"], task, admission)
             epoch = prospective.for_job(self.store, job)
             if self.config.get('software_delegation') or epoch:
-                self.boards[job['role']].bind_software_attempt(self.store, job, attempt)
+                self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
             if epoch and epoch['policy']['ordinary_effects']:
-                ordinary.policy_for(self.store, job)  # Refuse missing/expired scope before worker launch.
+                ordinary.policy_for(self.store, job)
                 task = {**task, 'ordinary_preparation': True}
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']

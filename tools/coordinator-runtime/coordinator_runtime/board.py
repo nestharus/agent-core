@@ -272,9 +272,9 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
                 "WHERE p.seq>? AND p.recipient=? AND d.owner=? AND p.author!=? ORDER BY p.seq LIMIT ?",
                 (self.config["actor"], max(after, grant["cutover"]), self.config["actor"], grant["owner"], self.config["actor"], limit)).fetchall()
             selected = sorted([*rows, *replies], key=lambda r: r["seq"])[:limit]
-            return [self._event(conn, row, grant) for row in selected]
+            return [self._event(conn, row, grant, runtime) for row in selected]
 
-    def _event(self, conn, row, grant):
+    def _event(self, conn, row, grant, runtime=None):
         service_reply = "parent_delivery" in row.keys()
         if service_reply and not conn.execute("SELECT 1 FROM coordinator_delivery_grants_v1 WHERE grant_id=?", (grant["id"],)).fetchone():
             raise Refusal("service reply body requires the explicit delivery/delegation grant")
@@ -289,6 +289,9 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
         owned_work = conn.execute("SELECT * FROM coordinator_deliveries_v1 WHERE post=? AND recipient=? AND kind='work'",
                                   (row["seq"], grant["owner"])).fetchone()
         if owned_work:
+            future = self.prospective_handoff_event(runtime, owned_work) if runtime is not None else None
+            if future is not None:
+                return future
             material = json.loads(owned_work["payload"])
             body = {**body, "delivery": material, "original_producer": owned_work["producer"]}
             package = material.get("package") or material.get("ref")

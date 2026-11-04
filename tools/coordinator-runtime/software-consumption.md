@@ -25,7 +25,11 @@ questions, alerts and unresolved effects keep their actual exception routes.
 Root remains external. Cross-board automatic consumption is refused.
 
 The launcher binds each new instance to its exact grant, task and package
-admission before launch. Changes/revocation are refused. The sender must have
+admission used to scope that instance. The final operation guard rechecks that
+proof before process creation (including after a pool-lock wait), thread creation,
+every initial turn and supported same-session continuation. Changed admission,
+missing proof/checker or revocation refuses; a later processing receipt is not a
+substitute for current launch authority. The sender must have
 collected successful local processing, complete tool metadata and known effects;
 file tasks also retain their full readiness and preimage/publication checks.
 This does not establish independent semantic acceptance.
@@ -51,8 +55,12 @@ processing still waits for the existing descendant/outbox barriers.
 
 New clean software callbacks do not create independent native receive duties.
 Any existing requirement, unknown/inflight control or foreign transport attempt
-remains intact and can still mask processing/delivery satisfaction. Original
-grants, collectors, authority epochs and source/custody are never migrated here.
+remains intact and can still mask processing/delivery satisfaction. Own-result
+callbacks and both cross-role receipt checks refuse ambiguous/sending
+notices and transport-started rows without changing their custody or replaying.
+Normal reachability of the inherited mixed-transport state remains unestablished;
+this protection does not claim an actual transport loss.
+Original grants, collectors, authority epochs and source/custody are never migrated here.
 Changing an existing journal's configuration still refuses. A new journal is
 not automatic migration or release of old scoped resource holds; those require
 parent-owned conservation and explicit resource-owner disposition before use.
@@ -64,10 +72,13 @@ manual launches; this runtime's app-server adapter disables delegation. No
 substitute binding or hypothetical executable is supplied. Work must collect
 that material interface question together with this partial source return.
 
-Offline verification uses `tests/test_software_consumption.py` explicitly, with
-`COORDINATOR_NORMAL_PATH_FIXTURES`, HOME and TMPDIR all under an owned absolute
-`normal-path27-act` fixture area. It retains every output and runs only owned
-fake-server processes. Four role-labelled consumer seams and seven-file Work
-publication do not establish genuine review, ref operations, CI or live adoption.
+Contained boundary verification uses `tests/test_coherent_cutover.py` with
+`COORDINATOR_COHERENT_FIXTURES` naming an owned absolute retained witness directory.
+It does not reassign HOME or session/account identity. Policy, collection and
+membership fixtures are synthetic, with owned SQLite and Python subprocesses.
+The inherited `test_software_consumption.py` setup requires HOME substitution;
+do not run that setup under the no-HOME bound. Its prior adverse evidence remains
+with the original custodian. These fixtures do not establish genuine review,
+ref operations, CI, semantic acceptance or live adoption.
 Retain queued/output material through actual processing +24h AND every source,
 consumer, outbox, resource, recovery and effect-uncertainty hold. No cleanup.

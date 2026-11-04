@@ -93,9 +93,7 @@ class Software:
                 conn.execute('UPDATE coordinator_grants_v1 SET revoked=? WHERE id=?', (self.store.utc_now(), grant_id))
         return {'revoked': grant_id, 'issued_by': issuer, 'existing_responsibilities': 'retained; no replay or receipt waiver'}
 
-    def bind_software_attempt(self, runtime, job, attempt):
-        grant = self.software_authority(runtime, job['task'])
-        admission = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+    def _software_proof(self, runtime, grant, job, admission):
         proof = {'grant_id': grant['id'], 'issued_by': grant['issued_by'], 'authority': grant['authority'],
                  'role_owner': grant['owner'], 'task_hash': digest(self.config['tasks'][job['task']]),
                  'admission_hash': digest(admission) if admission else None}
@@ -103,10 +101,18 @@ class Software:
             epoch = prospective.for_job(runtime, job)
             if not epoch or epoch['id'] != grant['prospective_epoch']:
                 raise Refusal('historical jobs/members cannot inherit future authority')
-            proof['prospective_epoch'] = epoch['id']
-            proof['delegated_by'] = grant['delegated_by']
-            proof['delegation_authority'] = grant['delegation_authority']
+            proof.update(prospective_epoch=epoch['id'], delegated_by=grant['delegated_by'],
+                         delegation_authority=grant['delegation_authority'])
+        return proof
+
+    def bind_software_attempt(self, runtime, job, attempt, admission):
+        # Bind the very admission used by scoped_task, not a later replacement.
         with runtime.tx():
+            grant = self.software_authority(runtime, job['task'])
+            current = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+            if current != admission:
+                raise Refusal('software admission changed while scoping the task; no launch')
+            proof = self._software_proof(runtime, grant, job, admission)
             row = runtime.attempt(attempt)
             if row['controller'] != runtime.controller or row['state'] != 'reserved' or row['job'] != job['id']:
                 raise Refusal('only the actual unstarted task collector can bind prospective authority')
@@ -122,17 +128,41 @@ class Software:
             raise Refusal('software processing has no actual attempt')
         proof = json.loads(runtime.attempt(job['active_attempt'])['detail']).get('software_authority', {})
         admission = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
-        if grant.get('prospective_epoch'):
-            epoch = prospective.for_job(runtime, job)
-            if (not epoch or proof.get('prospective_epoch') != epoch['id']
-                    or proof.get('delegated_by') != grant['delegated_by']
-                    or proof.get('delegation_authority') != grant['delegation_authority']):
-                raise Refusal('original prospective authority cannot be replaced or applied to old work')
-        if (proof.get('grant_id') != grant['id'] or proof.get('issued_by') != grant['issued_by']
-                or proof.get('task_hash') != digest(self.config['tasks'][job['task']])
-                or proof.get('admission_hash') != (digest(admission) if admission else None)):
+        if proof != self._software_proof(runtime, grant, job, admission):
             raise Refusal('software task authority/admission differs from its actual launch')
         return grant
+
+    def prospective_handoff_event(self, runtime, delivery):
+        """One future handoff identity, independent of which receiver sees it first.
+
+        Existing native/queued events are not relabelled. This constructs intake
+        only; original delivery grants, collection and settlement still apply.
+        """
+        if delivery['kind'] != 'work' or delivery['actor'] != self.config['actor']:
+            return None
+        outbox = runtime.one('SELECT * FROM outboxes WHERE id=?', (delivery['id'],))
+        if not outbox or not outbox['job']:
+            return None
+        job = runtime.job(outbox['job'])
+        epoch = prospective.for_job(runtime, job)
+        if not epoch:
+            return None
+        proof = json.loads(runtime.attempt(job['active_attempt'])['detail']).get('software_authority', {})
+        routes = epoch['policy']['software_handoffs'].get(self.role)
+        if not routes or proof.get('prospective_epoch') != epoch['id']:
+            return None
+        grant = self.software_authority(runtime, routes[0])
+        if (delivery['payload'] != outbox['payload'] or delivery['grant_id'] != proof.get('grant_id')
+                or delivery['recipient'] != grant['owner'] or outbox['recipient'] != self.role):
+            raise Refusal('prospective handoff must retain exact source delivery and receiver')
+        payload = json.loads(outbox['payload'])
+        return {'id': digest({'software_delivery': delivery['id'], 'receiver_grant': grant['id']}),
+                'role': self.role, 'recipient': grant['owner'], 'kind': 'response',
+                'author': outbox['producer'], 'body': payload, 'package': payload.get('package') or payload.get('ref'),
+                'allowed_tasks': routes, 'parent': outbox['event'], 'notice': None, 'board_id': None, 'grant': None,
+                'source_delivery': {'id': delivery['id'], 'post': delivery['post'], 'notice': delivery['notice'],
+                                    'source_grant': delivery['grant_id'], 'receiver_grant': grant['id'],
+                                    'source_hash': digest(payload)}}
 
     def software_delivery(self, runtime, outbox, boards):
         """Return True only for a prospectively delegated routine software duty.
@@ -197,6 +227,10 @@ class Software:
                         event = runtime.event(payload['id'])
                         if event != payload or event['role'] != receiver.role or set(event['allowed_tasks']) - set(routes):
                             raise Refusal('published response differs from selected receiver routes/source')
+                    elif epoch and outbox['kind'] == 'work':
+                        event = receiver.prospective_handoff_event(runtime, row)
+                        if event is None:
+                            raise Refusal('prospective handoff identity unavailable; retain original duty')
                     else:
                         event = {'id': digest({'software_delivery': row['id'], 'receiver_grant': receive_grant['id']}),
                                  'role': receiver.role, 'recipient': receive_grant['owner'], 'kind': 'response',
@@ -241,7 +275,8 @@ class Software:
                     raise Refusal('receiver grant changed before software receipt')
                 row = conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?', (outbox['id'],)).fetchone()
                 notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
-                if notice['route'] != 'managed' or notice['delivery_state'] in {'sending', 'ambiguous'}:
+                if (notice['route'] != 'managed' or notice['delivery_state'] in {'sending', 'ambiguous'}
+                        or row['transport_started']):
                     raise Refusal('software receipt cannot replace an attempted foreign send')
                 if not row['pickup']:
                     conn.execute("UPDATE coordinator_deliveries_v1 SET pickup=?,state='picked-up' WHERE id=?", (encode(proof), row['id']))

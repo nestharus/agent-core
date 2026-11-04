@@ -70,13 +70,13 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
                 args = substrate.parser().parse_args(['register', '--session', selected['owner'], '--role', selected['board_role'],
                     '--route', 'managed', '--profile', selected['profile']])
                 # Identity API seam only, never a real owner/authentication claim.
-                with patch.dict(os.environ, {'CODEX_SESSION_ID': selected['owner']}):
+                with patch.object(substrate, 'acting_session', side_effect=lambda expected: expected):
                     substrate.register(conn, args)
         self.store = Store(self.config, clock=lambda: self.now)
         self.addCleanup(self.store.close)
         self.boards = {r: Board(self.config, r) for r in self.config['roles']}
         for role, board in self.boards.items():
-            with patch.dict(os.environ, {'CODEX_SESSION_ID': self.config['roles'][role]['owner']}):
+            with patch.object(board.store, 'acting_session', side_effect=lambda expected: expected):
                 grant = board.grant(self.store, 'Synthetic native fixture authority', delivery=True)
             self.store.enroll(role, grant)
             self.store.reconcile_legacy(role, self.config['roles'][role]['owner'],
@@ -86,9 +86,11 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         self.procedure.write_text('Independent fixture intent: advance only destination to source; QA exit1 is known failure, not acceptance.\n')
 
     def git(self, *args):
-        command = ['/usr/bin/git', '-C', str(self.repo), *args]
+        command = ['/usr/bin/git', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-C', str(self.repo), *args]
         completed = subprocess.run(command, capture_output=True, text=True,
             env={**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'})
+        with (self.area / 'fixture-git-ends.jsonl').open('a') as ledger:
+            ledger.write(encode({'argv': command, 'end': completed.returncode, 'stdout': completed.stdout, 'stderr': completed.stderr}) + '\n')
         self.assertEqual(completed.returncode, 0, completed.stderr)
         return completed.stdout.strip()
 
@@ -108,15 +110,17 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         if kind == 'local-ref':
             p.update(ref='refs/heads/destination', before=self.old, target=self.head)
         else:
+            output = self.area / 'qa-output'
+            output.mkdir(exist_ok=True)
             runner, readback = self.area / 'runner', self.area / 'readback'
-            runner.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nPath("actual-run.txt").write_text("actually executed")\nraise SystemExit('+str(code)+')\n')
-            readback.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path("actual-run.txt").read_text() == "actually executed"\nprint("SETTLED")\n')
+            runner.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nPath('+repr(str(output / 'actual-run.txt'))+').write_text("actually executed")\nraise SystemExit('+str(code)+')\n')
+            readback.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path('+repr(str(output / 'actual-run.txt'))+').read_text() == "actually executed"\nprint("SETTLED")\n')
             runner.chmod(0o700)
             readback.chmod(0o700)
             p.update(command={'argv': [str(runner)], 'executable_sha256': sha(runner), 'stdout': None},
-                readback={'argv': [str(readback)], 'executable_sha256': sha(readback), 'stdout': 'SETTLED\n' if readback_ok else 'wrong\n'}, known_exits=[0, 1])
+                readback={'argv': [str(readback)], 'executable_sha256': sha(readback), 'stdout': 'SETTLED\n' if readback_ok else 'wrong\n'}, known_exits=[0, 1], source_capture={'bwrap': '/usr/bin/bwrap', 'sha256': sha('/usr/bin/bwrap'), 'max_bytes': 1048576, 'max_files': 100})
         task = 'branch-integrator' if kind == 'local-ref' else 'qa-execution'
-        scope = {'cwd': str(self.repo), 'read_roots': [str(self.area)], 'write_roots': [str(self.repo)], 'network': False,
+        scope = {'cwd': str(self.repo), 'read_roots': [str(self.area)], 'write_roots': [str(self.repo)] + ([str(output)] if kind == 'local-qa' else []), 'network': False,
                  'procedure': str(self.procedure), 'resource_evidence': ['owned fixture lease/oracle, no actual resource authority'], 'ordinary_effects': p}
         self.store.admit(package, self.config['roles']['Branch']['owner'], {'task_scopes': {task: scope}})
         return p
@@ -128,7 +132,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(job)
         attempt = self.store.start_job(job['id'], job['token'])
         job = self.store.job(job['id'])
-        self.boards[role].bind_software_attempt(self.store, job, attempt)
+        self.boards[role].bind_software_attempt(self.store, job, attempt, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
         collect(self.store, attempt, answer or result(), tool_completion={'complete': True, 'items': [], 'nonzero_completions': []})
         return self.store.job(job['id']), attempt
 
@@ -163,7 +167,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         await ordinary.perform(self.store, self.boards['QA'], job)
         receipt = json.loads(self.store.job(job['id'])['effect_receipt'])
         self.assertEqual(receipt['outcome']['status'], 'failed')
-        self.assertTrue((self.repo / 'actual-run.txt').is_file())
+        self.assertTrue((self.area / 'qa-output/actual-run.txt').is_file())
         evidence = {'execution_hash': digest(receipt), 'rationale': 'Actual failed oracle requires correction', 'unknowns': []}
         with self.assertRaises(Refusal):
             await ordinary.accept(self.store, self.acceptor, attempt, 'accepted', evidence)
@@ -266,7 +270,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         job = self.store.reserve()
         a = self.store.start_job(job['id'], job['token'])
         with self.assertRaises(Refusal):
-            self.boards['Branch'].bind_software_attempt(self.store, self.store.job(job['id']), a)
+            self.boards['Branch'].bind_software_attempt(self.store, self.store.job(job['id']), a, self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],)))
         self.assertEqual(len(json.loads(job['members'])), 2)
 
     async def test_QA_five_plus_one_and_recurring_alerts_remain(self):
@@ -320,7 +324,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         self.procedure.write_text('changed procedure')
         with self.assertRaises(Refusal):
             await ordinary.perform(self.store, self.boards['QA'], job)
-        self.assertFalse((self.repo / 'actual-run.txt').exists())
+        self.assertFalse((self.area / 'qa-output/actual-run.txt').exists())
         self.assertEqual(self.store.rows('SELECT * FROM ordinary_runs'), [])
 
     def github_fixture(self, event_name='pull_request', status='completed'):
@@ -331,7 +335,7 @@ class OrdinaryEffects(unittest.IsolatedAsyncioTestCase):
         admission = json.loads(row['receipt'])
         scope = admission['task_scopes']['qa-execution']
         p = scope['ordinary_effects']
-        for key in ['command', 'readback', 'known_exits']:
+        for key in ['command', 'readback', 'known_exits', 'source_capture']:
             del p[key]
         executable = self.area / 'synthetic-gh'
         run = {'id': 42, 'run_attempt': 2, 'head_sha': self.head, 'event': event_name,

@@ -78,7 +78,8 @@ This adapter does not push remote refs, create wrapper PRs, linearize arbitrary
 stacks or approve a package. Those operations need their actual selected procedure
 and a compatible adapter; no generic shell/ref bypass is provided.
 
-`local-qa` adds `command`, `readback`, and `known_exits: [0,1]`. Each command is
+`local-qa` adds `command`, `readback`, `known_exits: [0,1]`, and
+`source_capture: {bwrap:"/usr/bin/bwrap",sha256:TOOL_SHA256,max_bytes:INTEGER,max_files:INTEGER}`. Each command is
 `{argv:[ABSOLUTE_EXECUTABLE,...],executable_sha256:SHA256,stdout:EXPECTED_OR_NULL}`.
 Executable bytes must be in the admitted roots. `readback.stdout` must be a
 nonempty exact independent procedure-specific completion/resource oracle. The
@@ -87,10 +88,34 @@ only when the readback succeeds. Other exits, changed source, incomplete capture
 failed/incorrect readback, stale authority or expired lease stay unknown and held.
 The readback must be sufficient for the *actual* runner/resources: an arbitrary
 echo or model JSON is not an admissible real resource oracle. Package/procedure
-owners own that semantic applicability. Network is false. This controller does
-not provide an OS sandbox, exact read isolation, descendant containment, or proof
-that an arbitrary runner cannot escape its declared roots. Select only a genuinely
-bounded authorized runner, its independent oracle and the applicable containment.
+owners own that semantic applicability. Network is false.
+
+Local QA exports the admitted commit's exact ordinary tracked Git blobs into a
+fresh retained execution directory and runs both command and readback with that
+export mounted read-only at the admitted repository cwd. The old checkout is not
+mutated. Both absolute candidate paths are protected in the namespace. A separate
+admitted harness, dependencies and generated inputs remain possible through the
+explicit read roots; generated outputs use write roots outside the repository
+and outside ancestors of the retained export. The namespace has a clear environment
+with HOME unset, an isolated network, system /usr, private /tmp, proc and dev.
+The candidate is available before the runner starts; checking a ref label alone
+never supplies this association.
+
+Export is bounded to at most5000 files/128MiB total and4MiB per file, further
+restricted by the selected policy and ordinary listing/capture/journal budgets.
+Symlinks and submodules refuse explicitly; no export attributes, ignored checkout
+files or local modifications substitute for tracked candidate bytes. The original
+runner record and exported blob/hash manifest accompany the receipt. Reconciliation,
+independent acceptance and fresh cleanup qualification validate that association.
+Older local-QA receipts without actual candidate execution evidence cannot become
+accepted qualification. They are not rewritten or automatically re-executed.
+
+This capability does not prove that an arbitrary authorized harness exercises the
+intended behavior, authenticate fixture acceptors, make externally generated inputs
+part of the candidate tree, contain arbitrary descendants, or exclude privileged or
+noncooperating host writers. Independent procedure/oracle/resource selection and
+semantic acceptance remain necessary. There is no universal persistent-owner gate.
+
 
 `github-run` adds `gh`, `gh_sha256`, `repository_slug`, `run_id`, `run_attempt`,
 `event`, `workflow` (the API run `path`), and exact `job_ids`. Network must be
@@ -123,8 +148,7 @@ result. Local collection/reporting, effect reconciliation, downstream settlement
 and semantic acceptance are different records. Unknown effects retain slots and
 custody; they do not become hidden retries or releases. The prospective own-result
 callback consumes only its exact bound job and known collected effects. Old native
-callbacks and uncertainty retain their existing procedures, including separate
-source31 correction requirements.
+callbacks and uncertainty retain their existing procedures, with source31 exact-admission, callback and counter corrections preserved in the composition.
 
 `ordinary-acceptance ATTEMPT --decision accepted|rejected --receipt FILE` requires
 the actual independently admitted acceptor, distinct from worker/service/collector.
@@ -148,3 +172,14 @@ source/consumer/outbox/publication/resource/recovery/uncertainty hold. No cleanu
 or older-source rollback/replay is implied. Do not run an older executable against
 an active prospective authority; disposition/revocation and all conserved work
 must be handled by the actual owner first.
+
+Future capture overflow, timeout, cancellation or decoding errors retain a terminal
+record when an actual wait obtains its numeric END. Capture stays incomplete and
+intent/resource/effect uncertainty stays held. Bounded pipe draining can still leave
+END unknown; no historical missing END is reconstructed. Separate terminal and
+capture fields never authorize replay, effect settlement or legacy hold release.
+
+Future same-journal software handoffs and scanner intake share the exact source
+handoff identity in either observation order. Distinct handoffs, historical native
+or queued duties and recurring alerts keep their separate responsibilities. No
+configuration-flag migration, retrospective queue deletion or content dedup occurs.

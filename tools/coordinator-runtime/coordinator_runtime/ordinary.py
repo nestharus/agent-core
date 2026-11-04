@@ -13,7 +13,7 @@ import re
 
 from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode, scoped_task
 from .custody import safe_path, read_file
-from . import prospective
+from . import prospective, qa_source
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ordinary_runs(
@@ -54,7 +54,7 @@ def policy_for(store, job):
     p = scope.get('ordinary_effects', {})
     common = {'kind', 'git', 'git_sha256', 'repository', 'source_ref', 'source_head',
               'procedure_sha256', 'resources', 'acceptor', 'acceptance_authority', 'timeout', 'max_output'}
-    extra = {'local-ref': {'ref', 'before', 'target'}, 'local-qa': {'command', 'readback', 'known_exits'},
+    extra = {'local-ref': {'ref', 'before', 'target'}, 'local-qa': {'command', 'readback', 'known_exits', 'source_capture'},
              'github-run': {'gh', 'gh_sha256', 'repository_slug', 'run_id', 'run_attempt', 'event', 'workflow', 'job_ids'}}
     if p.get('kind') not in extra or set(p) != common | extra.get(p.get('kind'), set()):
         raise Refusal('explicit supported ordinary procedure and complete exact operands required')
@@ -110,6 +110,7 @@ def validate_adapter(store, task, p, roots):
             raise Refusal('exact existing destination ref/preimage required')
         scoped_path(store, p['repository'], task['effect_authority']['write_roots'])
     elif p['kind'] == 'local-qa':
+        qa_source.validate(store, p)
         if task['network'] or p['known_exits'] != [0, 1]:
             raise Refusal('local QA supports admitted runner success/known failure only, no network')
         command_policy(store, p['command'], roots)
@@ -126,7 +127,7 @@ def validate_adapter(store, task, p, roots):
         frozen_file(store, p['gh'], [p['gh']], p['gh_sha256'])
 
 
-async def tool(store, attempt, label, argv, cwd, p):
+async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum=None):
     """Original subprocess and complete bounded capture, never caller JSON."""
     current_run = store.one('SELECT * FROM ordinary_runs WHERE attempt=?', (attempt,))
     current_job = store.job(current_run['job'])
@@ -148,20 +149,57 @@ async def tool(store, attempt, label, argv, cwd, p):
               'started': store.clock(), 'exit': None, 'complete': False}
     append_tool(store, attempt, record)
     try:
-        stdout, stderr = await asyncio.wait_for(capture_process(process, p['max_output']), p['timeout'])
-    except (asyncio.TimeoutError, asyncio.CancelledError, Refusal):
-        if process.returncode is None:
-            process.kill()
-        await process.wait()
-        raise Refusal('ordinary tool interrupted; original intent/resources retained, no automatic retry')
-    record.update(ended=store.clock(), exit=process.returncode)
-    if len(stdout) + len(stderr) > p['max_output']:
-        record.update(stdout_sha256=hashlib.sha256(stdout).hexdigest(), stderr_sha256=hashlib.sha256(stderr).hexdigest())
+        bound = p['max_output'] if maximum is None else maximum
+        stdout, stderr = await asyncio.wait_for(capture_process(process, bound), p['timeout'])
+        record.update(ended=store.clock(), exit=process.returncode)
+        if len(stdout) + len(stderr) > bound:
+            raise Refusal('ordinary capture exceeded bound')
+        if output_file is not None:
+            with Path(output_file).open('xb') as target:
+                target.write(stdout)
+            record.update(stdout_file=str(output_file), stdout_sha256=hashlib.sha256(stdout).hexdigest(),
+                          stdout_bytes=len(stdout), stderr=stderr.decode('utf-8', 'strict'), complete=True)
+        else:
+            record.update(stdout=stdout.decode('utf-8', 'strict'), stderr=stderr.decode('utf-8', 'strict'), complete=True)
+    except BaseException as exc:
+        # The runner's observed END, capture completeness and effect settlement
+        # are independent. Never fill an earlier missing END or replay an intent.
+        settle = asyncio.create_task(stop_and_wait(process))
+        try:
+            code = await asyncio.shield(settle)
+        except asyncio.CancelledError:
+            code = await settle
+        code = record['exit'] if record['exit'] is not None else code
+        record.update(exit=code, complete=False, capture_error=type(exc).__name__ + ': ' + str(exc))
+        if code is not None:
+            record['ended'] = store.clock()
         append_tool(store, attempt, record)
-        raise Refusal('ordinary capture exceeded bound; retained unknown effects, no release')
-    record.update(stdout=stdout.decode('utf-8', 'strict'), stderr=stderr.decode('utf-8', 'strict'), complete=True)
+        if isinstance(exc, asyncio.CancelledError):
+            raise
+        raise Refusal('ordinary tool/capture interrupted; original intent/resources retained, no automatic retry') from exc
     append_tool(store, attempt, record)
     return record
+
+
+async def stop_and_wait(process):
+    if process.returncode is None:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    async def discard(stream):
+        while await stream.read(65536):
+            pass
+    drains = [asyncio.create_task(discard(stream)) for stream in (process.stdout, process.stderr)]
+    try:
+        await asyncio.wait_for(asyncio.gather(*drains), 5)
+        return await asyncio.wait_for(process.wait(), 5)
+    except (asyncio.TimeoutError, OSError):
+        return None  # Descendant-held pipes or unavailable terminal observation.
+    finally:
+        for task in drains:
+            task.cancel()
+        await asyncio.gather(*drains, return_exceptions=True)
 
 
 async def bounded_stream(stream, maximum):
@@ -176,9 +214,15 @@ async def bounded_stream(stream, maximum):
 
 
 async def capture_process(process, maximum):
-    stdout, stderr = await asyncio.gather(bounded_stream(process.stdout, maximum), bounded_stream(process.stderr, maximum))
-    await process.wait()
-    return stdout, stderr
+    readers = [asyncio.create_task(bounded_stream(stream, maximum)) for stream in (process.stdout, process.stderr)]
+    try:
+        stdout, stderr = await asyncio.gather(*readers)
+        await process.wait()
+        return stdout, stderr
+    finally:
+        for reader in readers:
+            reader.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
 
 
 def append_tool(store, attempt, record):
@@ -188,7 +232,7 @@ def append_tool(store, attempt, record):
 
 
 async def git(store, attempt, p, *args):
-    argv = [p['git'], '--no-optional-locks', '-c', 'core.hooksPath=/dev/null', '-C', p['repository'], *args]
+    argv = [p['git'], '--no-optional-locks', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.hooksPath=/dev/null', '-C', p['repository'], *args]
     record = await tool(store, attempt, 'git', argv, p['repository'], p)
     if record['exit'] != 0:
         raise Refusal('actual git command failed; retain intent and original readback')
@@ -254,7 +298,8 @@ async def perform(store, board, job):
             if store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (resource_key,)):
                 raise Refusal('actual common Git ref remains owned by an original effect')
             store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (resource_key, attempt['id']))
-    outcome = await adapter(store, attempt['id'], p)
+    association = await qa_source.export(store, attempt['id'], p, before) if p['kind'] == 'local-qa' else None
+    outcome = await adapter(store, attempt['id'], p, task=task, association=association)
     after = await source(store, attempt['id'], p, task)
     board._software_job_grant(store, store.job(job['id']))
     policy_for(store, store.job(job['id']))  # Lease/procedure/executable/admission current after tool collection.
@@ -264,13 +309,15 @@ async def perform(store, board, job):
         receipt = json.loads(store.one('SELECT receipt FROM ordinary_runs WHERE attempt=?', (attempt['id'],))['receipt'])
         receipt['tools'] = [json.loads(r['record']) for r in store.rows('SELECT record FROM ordinary_tool_records WHERE attempt=? ORDER BY seq', (attempt['id'],))]
         receipt.update(before=before, after=after, outcome=outcome, unknown_effects=[], meaning='known actual effects; local reporting is separate from semantic acceptance')
+        if p['kind'] == 'local-qa':
+            qa_source.verify(store, attempt['id'], p, receipt)
         store.db.execute("UPDATE ordinary_runs SET state='reconciled',receipt=? WHERE attempt=?", (encode(receipt), attempt['id']))
         store.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=? AND active_attempt=?", (encode(receipt), job['id'], attempt['id']))
         store.db.execute('DELETE FROM ordinary_resources WHERE attempt=?', (attempt['id'],))
     return True
 
 
-async def adapter(store, attempt, p):
+async def adapter(store, attempt, p, *, task=None, association=None):
     if p['kind'] == 'local-ref':
         before = await git(store, attempt, p, 'rev-parse', '--verify', p['ref'] + '^{commit}')
         if before != p['before']:
@@ -282,12 +329,13 @@ async def adapter(store, attempt, p):
         return {'status': 'success', 'ref': p['ref'], 'before': before, 'after': after}
     if p['kind'] == 'github-run':
         return await github(store, attempt, p)
-    run = await tool(store, attempt, 'qa-runner', p['command']['argv'], p['repository'], p)
-    readback = await tool(store, attempt, 'qa-effect-resource-readback', p['readback']['argv'], p['repository'], p)
+    run = await tool(store, attempt, 'qa-runner', qa_source.command(store, task, p, association, p['command']), p['repository'], p)
+    readback = await tool(store, attempt, 'qa-effect-resource-readback', qa_source.command(store, task, p, association, p['readback']), p['repository'], p)
+    association = {**association, 'runner_record': digest(run)}
     if run['exit'] not in p['known_exits'] or readback['exit'] != 0 or readback['stdout'] != p['readback']['stdout']:
         raise Refusal('QA exit/effect/resource readback unknown; retain original custody')
     return {'status': 'success' if run['exit'] == 0 else 'failed', 'actual_exit': run['exit'],
-            'selection': p['command']['argv'], 'readback': readback}
+            'selection': p['command']['argv'], 'readback': readback, 'source_execution': association}
 
 
 async def github(store, attempt, p):
@@ -329,6 +377,8 @@ async def accept(store, actor, attempt_id, decision, evidence):
         raise Refusal('semantic decision needs exact execution digest, rationale and known scope')
     if decision == 'accepted' and receipt['outcome']['status'] != 'success':
         raise Refusal('known failed/rejected/skipped CI is not accepted qualification')
+    if p['kind'] == 'local-qa':
+        qa_source.verify(store, attempt_id, p, receipt)
     # Currentness observation has its own actual tool records in this run.
     await source(store, attempt_id, p, task)
     if p['kind'] == 'local-ref' and await git(store, attempt_id, p, 'rev-parse', '--verify', p['ref'] + '^{commit}') != p['target']:
@@ -355,6 +405,8 @@ def accepted_runs(store, package):
     matching = [r for r in rows if r['admission'] == digest(admission['receipt']) and r['state'] == 'reconciled'
                 and json.loads(r['receipt'])['outcome']['status'] == 'success'
                 and json.loads(r['acceptance'])['execution_hash'] == digest(json.loads(r['receipt']))]
+    matching = [r for r in matching if json.loads(r['policy'])['kind'] != 'local-qa'
+                or json.loads(r['receipt'])['outcome'].get('source_execution', {}).get('method') == 'git-blobs-readonly-namespace-v1']
     return matching if required and required == {r['task'] for r in matching} else []
 
 
@@ -383,6 +435,8 @@ async def qualification(store, job):
         from .board import Board
         Board(store.config, original['role'])._software_job_grant(store, original)
         task, p = policy_for(store, original)
+        if p['kind'] == 'local-qa':
+            qa_source.verify(store, row['attempt'], p, json.loads(row['receipt']))
         await source(store, row['attempt'], p, task)
         if p['kind'] == 'local-ref' and await git(store, row['attempt'], p, 'rev-parse', '--verify', p['ref'] + '^{commit}') != p['target']:
             raise Refusal('qualified ref no longer current')

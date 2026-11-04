@@ -114,6 +114,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
     def __init__(self, config, controller=None, clock=time.time):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
+        self.task_launch_authorizer = None
         self.execution_pool = ExecutionPool(config)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
@@ -272,6 +273,12 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         self.require_active_sources(row["event"], row["job"])
         if self.launch_authorizer:
             self.launch_authorizer(self.source_roles(row["event"], row["job"]))
+        if self.config.get('software_delegation') and row['kind'] == 'task':
+            if not self.task_launch_authorizer:
+                raise Refusal('software task launch requires its current authority checker')
+            if self.job(row['job'])['active_attempt'] != attempt:
+                raise Refusal('software launch is not the current owned task attempt')
+            self.task_launch_authorizer(row)
 
     def claim_classification(self):
         with self.tx():

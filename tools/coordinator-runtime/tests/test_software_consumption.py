@@ -4,6 +4,7 @@ Every process is the owned fake app-server. It is NOT Luna/Sol, the opaque
 selected-review launcher, Branch ref execution or QA CI. No deletion is run.
 Require an explicitly owned absolute fixture root; retain all outputs.
 """
+from contextlib import contextmanager
 import asyncio
 import copy
 import json
@@ -21,13 +22,24 @@ from coordinator_runtime.dispatcher import Dispatcher, CLASSIFICATION_SCHEMA, cl
 from coordinator_runtime.store import Store
 
 
+@contextmanager
+def fixture_actor(substrate, actor):
+    """Explicit synthetic authentication seam, never a session environment."""
+    def acting(expected):
+        if expected != actor:
+            raise substrate.UserError('fictional actor differs from requested fixture authority')
+        return actor
+    with patch.object(substrate, 'acting_session', side_effect=acting):
+        yield
+
+
 class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         base = Path(os.environ['COORDINATOR_NORMAL_PATH_FIXTURES'])
         if (not base.is_absolute() or 'normal-path27-act' not in base.parts
-                or base.is_symlink() or not Path(os.environ['HOME']).is_relative_to(base)
+                or base.is_symlink()
                 or not Path(os.environ['TMPDIR']).is_relative_to(base)):
-            raise AssertionError('owned absolute normal-path27-act fixture HOME/TMPDIR required')
+            raise AssertionError('owned absolute normal-path27-act fixture root/TMPDIR required')
         self.area = base / self._testMethodName / ident()
         self.area.mkdir(parents=True, mode=0o700)
         self.config = config_at(str(self.area))
@@ -59,13 +71,13 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
             for selected in self.config['roles'].values():
                 args = self.substrate.parser().parse_args(['register', '--session', selected['owner'],
                     '--role', selected['board_role'], '--route', 'managed', '--profile', selected['profile']])
-                with patch.dict(os.environ, {'CODEX_SESSION_ID': selected['owner']}):
+                with fixture_actor(self.substrate, selected['owner']):
                     self.substrate.register(conn, args)
         self.store = Store(self.config)
         self.addCleanup(self.store.close)  # Close only; all fixture evidence retained.
         self.boards = {role: Board(self.config, role) for role in self.config['roles']}
         for role, board in self.boards.items():
-            with patch.dict(os.environ, {'CODEX_SESSION_ID': self.config['software_delegation']['grantor']}):
+            with fixture_actor(board.store, self.config['software_delegation']['grantor']):
                 grant = board.grant_software(self.store, self.config['software_delegation']['authority'])
             self.store.enroll(role, grant)
             self.store.reconcile_legacy(role, self.config['roles'][role]['owner'],
@@ -178,7 +190,7 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
         self.store = Store(validate_config(self.config))
         self.addCleanup(self.store.close)
         for role, board in self.boards.items():
-            with patch.dict(os.environ, {'CODEX_SESSION_ID': self.config['roles']['Work']['owner']}):
+            with fixture_actor(board.store, self.config['roles']['Work']['owner']):
                 grant = board.grant_software(self.store, self.config['software_delegation']['authority'])
             self.store.enroll(role, grant)
             self.store.reconcile_legacy(role, self.config['roles'][role]['owner'],
@@ -328,7 +340,7 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
     async def test_revoked_receiver_grant_retains_sender_source_and_pending_delivery(self):
         source, sender, outgoing = await self.sender('Work', 'Branch')
         board = self.boards['Branch']
-        with patch.dict(os.environ, {'CODEX_SESSION_ID': self.config['roles']['Branch']['owner']}):
+        with fixture_actor(board.store, self.config['roles']['Branch']['owner']):
             board.revoke(self.store.enrollment('Branch')['grant_id'])
         self.runtime.pump_deliveries()
         self.assertIn('revoked', self.store.one('SELECT error FROM outboxes WHERE id=?', (outgoing['id'],))['error'])
@@ -338,7 +350,7 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
     async def test_actual_work_can_revoke_its_software_capability_without_native_impersonation(self):
         board = self.boards['Branch']
         grant = self.store.enrollment('Branch')['grant_id']
-        with patch.dict(os.environ, {'CODEX_SESSION_ID': self.config['roles']['Work']['owner']}):
+        with fixture_actor(board.store, self.config['roles']['Work']['owner']):
             receipt = board.revoke_software(self.store, grant)
         self.assertEqual(receipt['issued_by'], self.config['roles']['Work']['owner'])
         with self.assertRaisesRegex(Refusal, 'revoked'):
@@ -385,10 +397,10 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(grant['issued_by'], self.config['roles']['Work']['owner'])
         self.assertEqual(grant['owner'], self.config['roles']['Branch']['owner'])
         self.assertNotEqual(grant['owner'], grant['issued_by'])
-        with patch.dict(os.environ, {'CODEX_SESSION_ID': grant['owner']}):
+        with fixture_actor(board.store, grant['owner']):
             with self.assertRaises(Exception):
                 board.grant_software(self.store, self.config['software_delegation']['authority'])
-        with patch.dict(os.environ, {'CODEX_SESSION_ID': grant['issued_by']}):
+        with fixture_actor(board.store, grant['issued_by']):
             with self.assertRaisesRegex(Refusal, 'unused journal'):
                 board.grant_software(self.store, self.config['software_delegation']['authority'])
 
@@ -403,7 +415,7 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(old.close)
         native = Board(old_config, 'Reviews')
         owner = old_config['roles']['Reviews']['owner']
-        with patch.dict(os.environ, {'CODEX_SESSION_ID': owner}):
+        with fixture_actor(native.store, owner):
             grant = native.grant(old, 'Synthetic old native owner authority', delivery=True, completion=True)
         old.enroll('Reviews', grant)
         old.ingest(event(old_config, ident(), role='Reviews', task='reviews-proposer'))
