@@ -15,6 +15,17 @@ CREATE TABLE IF NOT EXISTS outboxes(
  recipient TEXT NOT NULL,kind TEXT NOT NULL,required TEXT NOT NULL,payload TEXT NOT NULL,
  state TEXT NOT NULL DEFAULT 'pending',board_receipt TEXT,hold TEXT,error TEXT,
  created REAL NOT NULL,processed_at REAL);
+-- One scheduling hint per delivery, independent of its duties/receipts. A
+-- classification release gets a fresh sequence even if insertion was scanned.
+CREATE TABLE IF NOT EXISTS delivery_wakeups(
+ seq INTEGER PRIMARY KEY AUTOINCREMENT,delivery TEXT NOT NULL UNIQUE REFERENCES outboxes(id));
+CREATE TRIGGER IF NOT EXISTS delivery_insert_wakeup AFTER INSERT ON outboxes BEGIN
+ INSERT OR REPLACE INTO delivery_wakeups(delivery) VALUES(NEW.id);
+END;
+CREATE TRIGGER IF NOT EXISTS delivery_classified_wakeup AFTER UPDATE OF state ON outboxes
+ WHEN OLD.state='classification-pending' AND NEW.state!='classification-pending' BEGIN
+ INSERT OR REPLACE INTO delivery_wakeups(delivery) VALUES(NEW.id);
+END;
 CREATE TABLE IF NOT EXISTS operational_errors(
  subject TEXT PRIMARY KEY,role TEXT NOT NULL,kind TEXT NOT NULL,detail TEXT NOT NULL,
  active INTEGER NOT NULL,observed REAL NOT NULL);

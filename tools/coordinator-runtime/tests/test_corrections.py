@@ -354,7 +354,7 @@ class DeliveryCorrections(unittest.TestCase):
     def test_O09_errors_recur_durably_and_really_post_to_the_consumer(self):
         self.runtime.runtime_errors["intake fixture"] = "catalog identity changed: safe causal detail"
         emitted = []
-        self.runtime.alerts(emitted.append)
+        asyncio.run(self.runtime.alerts(emitted.append))
         self.assertTrue(self.store.status()["operational_errors"])
         alerts = self.store.rows("SELECT * FROM alerts")
         self.assertTrue(alerts)
@@ -362,7 +362,7 @@ class DeliveryCorrections(unittest.TestCase):
             self.assertGreater(conn.execute("SELECT COUNT(*) FROM posts WHERE recipient=?", (self.owner,)).fetchone()[0], 0)
         old_ids = {a["id"] for a in alerts}
         self.runtime.last_alert = 0
-        self.runtime.alerts(emitted.append)
+        asyncio.run(self.runtime.alerts(emitted.append))
         new_ids = {a["id"] for a in self.store.rows("SELECT * FROM alerts")}
         self.assertGreater(len(new_ids-old_ids), 0)
         self.assertTrue(any("catalog identity" in a["payload"] for a in self.store.rows("SELECT * FROM alerts")))

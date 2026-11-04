@@ -830,6 +830,40 @@ passes progress other deliveries. Accepted/unknown/inflight intents never retry.
 Fresh unchanged interval alerts remain distinct deliveries, not deduplicated by
 the intent key. Source classification gates and delegated ACK remain unchanged.
 
+Delivery pumping examines at most two pages of 16 journal rows per pass, including
+currently ineligible rows. SQLite sequence range queries bound the scan itself;
+filtering eligible rows before a LIMIT would still scan an unbounded settled tail.
+One cursor follows inserts and classification releases after dispatcher construction.
+An additive `delivery_wakeups` table retains one scheduling hint per outbox;
+insert/release triggers give that hint a fresh sequence without changing custody.
+This prevents a fresh row scanned before classification from waiting for the old
+sweep when its classification commits. A second cursor rotates
+through all retained rows up to a fixed cycle frontier, then starts another cycle
+with the current frontier. Existing rows that later become eligible, owner return
+corrections and settled rows with outstanding receipt duties remain discoverable.
+Neither cursor changes delivery, processing, hold or source state.
+
+The lanes alternate first access to the existing one-helper-call budget. If that
+budget is spent, fresh traversal pauses until a later pass rather than advancing
+unsent fresh controls into the history sweep. Old rechecks still get a page each
+pass. New interval alerts retain their own occurrence/delivery/intent identities.
+Both runtime pump callers (`tick` and `alerts`) await a cooperative pass that
+yields between individual rows and checks stop before the next row. Intake,
+durable receipt handling, reconciliation and scheduling precede tick pumping.
+The synchronous `pump_deliveries` entry remains bounded for non-loop callers;
+`alerts` is now an internal coroutine and its callers must await it.
+
+Existing version-1 journals gain the empty hint table and triggers when opened;
+existing outboxes are not backfilled or rewritten. Configuration digests/defaults,
+schema version, capabilities and receipt contracts remain unchanged. The new
+internal page policy is 16 examined rows per lane. Cursors are process-local
+scheduling hints and reset on restart;
+retained duties are revisited from the beginning, not acknowledged or released.
+The bound is examined rows, not wall time: an individual board/helper operation,
+other dispatcher phases, sustained arrivals exceeding throughput or unavailable
+authority can still delay progress. It establishes neither runtime health nor a
+native latency guarantee. No queue/history removal or provider retry is added.
+
 This adds **no live capability by installing code**. Deployment must separately
 select source/helper pins/mode/context authority and actual owner delegation.
 Installed queue_notice(resume=True) compatibility is expressible at the configured

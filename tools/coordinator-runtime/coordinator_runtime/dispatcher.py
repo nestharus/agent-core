@@ -37,6 +37,10 @@ DIAGNOSIS_SCHEMA = {
     "required": ["profile", "remaining", "rationale"],
 }
 
+# Bound examined rows, including rows whose current state needs no delivery work.
+# Filtering before LIMIT could still traverse an arbitrarily large settled tail.
+DELIVERY_PAGE = 16
+
 
 def recovery_prompt(store,job):
     old=store.attempt(job['active_attempt'])
@@ -147,6 +151,11 @@ class Dispatcher:
         self.last_alert = 0
         self.last_cleanup = 0
         self.runtime_errors = {}
+        frontier = self.store.one("SELECT COALESCE(MAX(rowid),0) AS seq FROM outboxes")["seq"]
+        self.delivery_fresh = self.store.one("SELECT COALESCE(MAX(seq),0) AS seq FROM delivery_wakeups")["seq"]
+        self.delivery_revisit = 0
+        self.delivery_cycle_end = frontier
+        self.delivery_old_first = False
         self.store.launch_authorizer = self.authorize_roles
 
     def authorize_roles(self, roles):
@@ -451,7 +460,6 @@ class Dispatcher:
     async def tick(self):
         self.intake()
         self.receipts()
-        self.pump_deliveries()
         self.reconcile_completed()
         self.schedule_classifications()
         self.schedule_classification_recovery()
@@ -459,6 +467,7 @@ class Dispatcher:
         self.schedule_recovery()
         self.automatic_cleanup()
         await asyncio.sleep(0)
+        await self.pump_deliveries_async()
 
     def automatic_cleanup(self):
         if self.store.clock()-self.last_cleanup < 60:
@@ -482,20 +491,20 @@ class Dispatcher:
         try:
             await self.tick()
             self.store.clear_operational_error("dispatcher")
-            self.alerts(emit)
+            await self.alerts(emit)
         except Exception as exc:
             self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
-            self.alerts(emit)
+            await self.alerts(emit)
 
-    def alerts(self, emit):
+    async def alerts(self, emit):
         if self.store.clock()-self.last_alert < self.config["deadlines"]["alert_interval"]:
             return
         for subject, error in self.runtime_errors.items():
             self.store.record_operational_error(subject, {"error": error})
         for occurrence in self.store.emit_alerts():
             emit(occurrence)
-        self.pump_deliveries()
         self.last_alert = self.store.clock()
+        await self.pump_deliveries_async()
 
     async def run_model(self, attempt, prompt, spec, schema):
         try:
@@ -507,11 +516,63 @@ class Dispatcher:
         return await self.models.run(self.store, attempt, prompt, spec, schema)
 
     def pump_deliveries(self):
+        """Synchronous bounded pass for callers without an event loop."""
+        for _ in self.delivery_steps():
+            pass
+
+    async def pump_deliveries_async(self):
+        for _ in self.delivery_steps():
+            # Let classifier ACKs, owned model deadlines and stop signals run
+            # between individual delivery operations, not after all history.
+            await asyncio.sleep(0)
+
+    def delivery_steps(self):
+        """Two bounded sequence lanes; cursors are scheduling hints only.
+
+        Fresh inserts/releases do not queue behind a retained-history sweep. Each revisit
+        cycle has a fixed frontier so continuing appends cannot extend it forever.
+        Alternate first access to the control budget so neither lane monopolizes
+        new helper calls. No delivery, receipt or custody state is rewritten here.
+        """
+        frontier = self.store.one("SELECT COALESCE(MAX(rowid),0) AS seq FROM outboxes")["seq"]
+        fresh_end = self.store.one("SELECT COALESCE(MAX(seq),0) AS seq FROM delivery_wakeups")["seq"]
+        lanes = ("revisit", "fresh") if self.delivery_old_first else ("fresh", "revisit")
+        self.delivery_old_first = not self.delivery_old_first
         controls_left=1  # One bounded new helper call per pass; held outcomes never consume another call.
-        for outbox in self.store.rows("SELECT * FROM outboxes WHERE state NOT IN ('settled','classification-pending') "
-                                      "OR (state='settled' AND (error IS NOT NULL OR json_extract(board_receipt,'$.control_receipt.pending')=1 "
-                                      "OR json_type(board_receipt,'$.control_receipt') IS NULL)) ORDER BY created,id"):
-            controls_left-=bool(self.pump_delivery(outbox,send_control=controls_left>0))
+        seen = set()
+        for lane in lanes:
+            if self.stopping.is_set():
+                return
+            if lane == "fresh" and not controls_left:
+                continue  # Keep fresh prepared controls near their next send opportunity.
+            if lane == "revisit" and self.delivery_revisit >= self.delivery_cycle_end:
+                self.delivery_revisit = 0
+                self.delivery_cycle_end = frontier
+            cursor = getattr(self, "delivery_" + lane)
+            end = self.delivery_cycle_end if lane == "revisit" else fresh_end
+            source = "outboxes" if lane == "revisit" else "delivery_wakeups w JOIN outboxes ON outboxes.id=w.delivery"
+            sequence = "outboxes.rowid" if lane == "revisit" else "w.seq"
+            page = self.store.rows(
+                "SELECT outboxes.*," + sequence + " AS delivery_seq, "
+                "(state NOT IN ('settled','classification-pending') OR "
+                "(state='settled' AND (error IS NOT NULL OR json_extract(board_receipt,'$.control_receipt.pending')=1 "
+                "OR json_type(board_receipt,'$.control_receipt') IS NULL))) AS delivery_due "
+                "FROM " + source + " WHERE " + sequence + ">? AND " + sequence + "<=? ORDER BY " + sequence + " LIMIT ?",
+                (cursor, end, DELIVERY_PAGE))
+            for outbox in page:
+                if self.stopping.is_set():
+                    return
+                setattr(self, "delivery_" + lane, outbox.pop("delivery_seq"))
+                due = outbox.pop("delivery_due")
+                if due and outbox["id"] not in seen:
+                    seen.add(outbox["id"])
+                    controls_left -= bool(self.pump_delivery(outbox, send_control=controls_left > 0))
+                yield
+                if lane == "fresh" and not controls_left:
+                    break
+            else:
+                if len(page) < DELIVERY_PAGE:
+                    setattr(self, "delivery_" + lane, end)
 
     def pump_delivery(self, outbox,*,send_control=True):
         board = self.boards.get(outbox["role"])
