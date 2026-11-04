@@ -25,7 +25,7 @@ from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
-from . import prospective, ordinary, capacity, admitted
+from . import prospective, ordinary, capacity, admitted, windows, custodian_service
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -141,7 +141,9 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         admitted.policy(config)
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA)
+        windows.policy(config)
+        custodian_service.policy(config)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -153,6 +155,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("configuration differs from this journal; reconcile/migrate offline")
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('configuration',?)", (expected,))
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('actor',?)", (self.config["actor"],))
+            windows.initialize(self)
 
     def close(self):
         self.db.close()
@@ -180,6 +183,9 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
         counts['publication_reserved_bytes']=self.db.execute("SELECT COALESCE(SUM(length(b.body)),0) FROM file_publications p JOIN artifact_blobs b ON b.sha256=p.proposed_sha WHERE p.state!='published'").fetchone()[0]
         counts['bytes']+=counts['publication_reserved_bytes']
+        counts['custodian_reserved_bytes'] = self.one(
+            "SELECT COUNT(*) AS n FROM custodian_visits WHERE state IN ('prepared','running')")['n'] * (3 * custodian_service.CAPTURE + 4096)
+        counts['bytes'] += counts['custodian_reserved_bytes']
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
@@ -191,7 +197,9 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
-        if kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
+        if self.config.get('window_service') and kind in windows.KINDS:
+            windows.charge(self, kind)
+        elif kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
         admitted.check(self, usage, kind)
 
@@ -241,6 +249,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             if old and old["hash"] != digest(event):
                 raise Refusal("same event identity has different immutable content")
             if not old:
+                windows.charge(self, None, new_input=True)
                 admitted.admit(self, event)
                 self.budget("events", len(content.encode()), event=event['id'])
                 self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
@@ -474,6 +483,11 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             return None  # Unsettled responsibility in the same admitted scope stays fenced.
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
+        if role == 'QA' and self.config.get('window_service'):
+            other = 'cleanup' if phase == 'execution' else 'execution'
+            if any(not self.execution_complete(j) for j in self.rows(
+                    "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
+                return None  # First phase (<=5 separate packages), then one consolidation slot.
         if role == "QA" and phase == "execution" and self.one(
                 "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
             return None
@@ -506,6 +520,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                          (row["role"], row["task"]))
         if self.config["tasks"][row["task"]].get("require_package_scope"):
             rows = [r for r in rows if r["package"] == row["package"]]
+        if self.config.get('window_service'):
+            rows = rows[:self.config['window_service']['batch_size']]
         return [self._input_member(r) for r in rows]
 
     def _input_member(self,row):
@@ -879,6 +895,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 "alert_service": capacity.service(self),
                 "admitted_duty_accounts": self.rows('SELECT * FROM duty_accounts'),
                 "admitted_count_credits": admitted.reserved(self),
+                "allocation_window": windows.current(self) if self.config.get('window_service') else None,
                 "custodian_progress": self.one("SELECT value FROM meta WHERE key='custodian-progress'"),
                 "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),

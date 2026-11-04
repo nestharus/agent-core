@@ -39,6 +39,14 @@ def correspondence(config):
     In particular, a task's eligibility does not prove that its role's complete
     input choices fit. Do not follow any configuration path to build this report.
     """
+    if config.get('window_service'):
+        selected = config['window_service']
+        return {'mode': 'recurring-selected', 'population_semantics': 'accountable allocation windows; all rows/holds retained',
+                'tasks': {n: {k: t.get(k) for k in ('role', 'phase', 'execution', 'effects', 'responses',
+                    'require_package_scope', 'routine_completion', 'allowed_handoffs')} for n, t in config['tasks'].items()},
+                'roles': {r: {'routes': v['routes']} for r, v in config['roles'].items()},
+                'window': selected,
+                'boundary': 'source shape support; no actual owner/grant/custodian/processing or operating-fit evidence'}
     selected = config.get('finite_service') or {}
     names = selected.get('tasks', [])
     tasks = {name: {'role': task.get('role'), 'phase': task.get('phase'),
@@ -58,6 +66,8 @@ def correspondence(config):
 
 
 def policy(config):
+    if config.get('window_service') is not None and config.get('finite_service') is not None:
+        raise Refusal('terminal lifetime and recurring windows are separate modes')
     selected = config.get('finite_service')
     if selected is None:
         return None
@@ -163,6 +173,8 @@ def charge(store, kind, *, event=None, job=None):
 
 
 def check(store, usage, kind):
+    if store.config.get('window_service'):
+        return  # Recurring allocations are charged atomically by windows.charge.
     if kind not in KINDS:
         return
     cap = store.config['limits'].get('max_' + kind, store.config['limits']['max_events'])

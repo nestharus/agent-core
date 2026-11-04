@@ -43,7 +43,7 @@ class DeliveryJournal:
         old = self.one("SELECT * FROM outboxes WHERE id=?", (key,))
         if old:
             return key
-        if self.db.execute("SELECT COUNT(*) FROM outboxes").fetchone()[0] >= self.config["limits"].get("max_outboxes", self.config["limits"]["max_events"]):
+        if not self.config.get('window_service') and self.db.execute("SELECT COUNT(*) FROM outboxes").fetchone()[0] >= self.config["limits"].get("max_outboxes", self.config["limits"]["max_events"]):
             raise Backpressure("outbox capacity held; no responsibility discarded")
         if required not in {"acknowledged", "picked-up", "processed", "settled"}:
             raise Refusal("unknown required delivery frontier")

@@ -17,7 +17,7 @@ from .cleanup import conserve, sweep
 from .contracts import Refusal, canonical_uuid, encode, load_config, parse_json, regular_path
 from .dispatcher import Dispatcher
 from .store import Store, private_directory
-from . import prospective, ordinary
+from . import prospective, ordinary, windows
 
 
 def print_json(value):
@@ -67,6 +67,9 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    sub.add_parser('window-basis', help='Current retained journal binding; no processing or hold waiver')
+    advance = sub.add_parser('advance-window', help='Actual Work continues allocations and conserved duties')
+    advance.add_argument('--receipt', required=True)
     boundary = sub.add_parser('authorize-prospective', help='Actual Work explicitly authorizes future work in unchanged original journal')
     boundary.add_argument('--selection', required=True)
     revoke_boundary = sub.add_parser('revoke-prospective')
@@ -205,6 +208,15 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'window-basis', 'advance-window'}:
+        actor = actual_actor(store.enrollment('Work')['owner'])
+        Board(store.config, 'Work').verify_authority(store)
+        if args.command == 'advance-window':
+            return windows.advance(store, actor, read_record(args.receipt))
+        if not store.config.get('window_service'):
+            raise Refusal('recurring allocation windows not selected')
+        with store.tx():
+            return windows.basis(store)
     if args.command in {'authorize-prospective', 'revoke-prospective'}:
         actor = actual_actor(store.config['roles']['Work']['owner'])
         if args.command == 'authorize-prospective':

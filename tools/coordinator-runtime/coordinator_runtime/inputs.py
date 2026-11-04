@@ -3,6 +3,7 @@
 import json
 
 from .contracts import Refusal, digest, encode, ident, required_text
+from . import windows
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS input_resolutions(
@@ -68,8 +69,9 @@ class InputJournal:
                 raise Refusal('existing unknown/live classifier remains with its actual collector')
             self.validate_input_selection(original,receipt)
             version=previous['version']+1 if previous else 1
-            if version>self.config['limits'].get('max_owner_corrections',4):
+            if not self.config.get('window_service') and version>self.config['limits'].get('max_owner_corrections',4):
                 raise Refusal('bounded input decisions exhausted; owner obligations retained')
+            windows.charge(self, 'decisions')
             prior={'state':row['state'],'classification':row['classification'],'classifier':row['classifier'],
                    'error':row['error'],'queue':queue,'ack':row['ack'],'ack_receipt':row['ack_receipt']}
             self.budget(None,len(encode(receipt).encode())+len(encode(prior).encode())+1024)

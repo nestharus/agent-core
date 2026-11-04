@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS alert_service(
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),last_observed REAL NOT NULL,
  gap_since REAL,gap_through REAL,custodian TEXT NOT NULL,reason TEXT,
  scope TEXT,unrepresented INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS alert_debt(
+ id TEXT PRIMARY KEY,subject TEXT NOT NULL,kind TEXT NOT NULL,created REAL NOT NULL,
+ payload TEXT NOT NULL,represented INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS alert_cadence(
+ subject TEXT NOT NULL,kind TEXT NOT NULL,last_created REAL NOT NULL,PRIMARY KEY(subject,kind));
 """
 
 
@@ -49,12 +54,18 @@ def capture(store):
         elif now >= previous['last_observed'] + 2 * interval:
             gap(store, previous['last_observed'] + interval, now,
                 'unobserved cadence interval; historical population unknown', None, 0)
-        violations = store.violations()
+        violations = []
+        for violation in store.violations():
+            cadence = store.config.get('alert_cadences', {}).get(violation['kind'], interval)
+            prior = store.one('SELECT last_created FROM alert_cadence WHERE subject=? AND kind=?',
+                              (violation['subject'], violation['kind']))
+            if not prior or now >= prior['last_created'] + cadence:
+                violations.append(violation)
+        occurrences = [{'id': ident(), 'created': now, **v} for v in violations]
         try:
             store.db.execute('SAVEPOINT alert_cohort')
             emitted = []
-            for violation in violations:
-                occurrence = {'id': ident(), 'created': now, **violation}
+            for occurrence in occurrences:
                 store.budget('alerts', len(encode(occurrence).encode()) + 1024)
                 store.db.execute('INSERT INTO alerts VALUES(?,?,?,?,?,NULL)',
                                  (occurrence['id'], occurrence['subject'], occurrence['kind'], now, encode(occurrence)))
@@ -65,7 +76,22 @@ def capture(store):
             store.db.execute('RELEASE alert_cohort')
             gap(store, now, now, 'due cohort not represented: alert count/byte pressure',
                 digest({'observed_at': now, 'violations': violations}), len(violations))
+            # Keep exact original occurrences, not just an interval/digest. A
+            # later representation keeps its original ID/time and does not
+            # claim that the missed delivery/cadence was fulfilled on time.
+            pending = store.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=0')['n']
+            maximum = store.config['limits'].get('max_alert_debt', store.config['limits']['max_alerts'])
+            if pending + len(occurrences) > maximum:
+                raise Backpressure('exact alert debt capacity exhausted; observation unavailable, causes remain held')
+            for occurrence in occurrences:
+                store.budget(None, len(encode(occurrence).encode()) + 1024)
+                store.db.execute('INSERT INTO alert_debt VALUES(?,?,?,?,?,0)',
+                    (occurrence['id'], occurrence['subject'], occurrence['kind'], now, encode(occurrence)))
             emitted = []
+        for occurrence in occurrences:
+            store.db.execute('INSERT INTO alert_cadence VALUES(?,?,?) ON CONFLICT(subject,kind) '
+                             'DO UPDATE SET last_created=excluded.last_created',
+                             (occurrence['subject'], occurrence['kind'], now))
         store.db.execute('UPDATE alert_service SET last_observed=? WHERE singleton=1', (now,))
     return emitted
 
@@ -80,6 +106,15 @@ def deliver_pending(store, limit=32):
     """Allocate each original occurrence once; pressure does not erase its ID."""
     if not store.config.get('delivery'):
         return 0
+    for row in store.rows('SELECT * FROM alert_debt WHERE represented=0 ORDER BY created,id LIMIT ?', (limit,)):
+        try:
+            with store.tx():
+                store.budget('alerts', len(row['payload'].encode()) + 1024)
+                store.db.execute('INSERT INTO alerts VALUES(?,?,?,?,?,NULL)',
+                                 (row['id'], row['subject'], row['kind'], row['created'], row['payload']))
+                store.db.execute('UPDATE alert_debt SET represented=1 WHERE id=?', (row['id'],))
+        except Backpressure:
+            break
     role = store.config['delivery'].get('alert_role', 'Work')
     recipient = store.config['delivery'].get('alert_recipient', 'Work')
     rows = store.rows('SELECT a.* FROM alerts a WHERE NOT EXISTS '

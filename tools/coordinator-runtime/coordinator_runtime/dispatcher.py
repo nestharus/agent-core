@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress
+from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
 from .inputs import input_routes
 
@@ -163,6 +163,7 @@ class Dispatcher:
         self.delivery_old_first = False
         self.store.launch_authorizer = self.authorize_roles
         self.store.task_launch_authorizer = self.authorize_task
+        self.custodian_service = custodian_service.Service(store, self.authorize_roles)
 
     def authorize_task(self, attempt):
         job = self.store.job(attempt['job'])
@@ -510,6 +511,8 @@ class Dispatcher:
         await self.pump_deliveries_async()
 
     def custodian_progress(self):
+        if self.config.get('window_service') or self.config.get('custodian_service'):
+            return self.custodian_service.schedule()
         return progress.step(self.store, self.custodians)
 
     def automatic_cleanup(self):
@@ -524,6 +527,7 @@ class Dispatcher:
         finally:
             # Tasks own their processes and collect those exact exits. No detach or foreign wait.
             await asyncio.gather(*self.active, return_exceptions=True)
+            await self.custodian_service.close()
 
     async def loop(self, emit):
         while not self.stopping.is_set():
