@@ -45,6 +45,14 @@ class FinalDecodeFailure(Refusal):
         super().__init__("owned final decode failed: " + type(error).__name__)
 
 
+class CompletionRefusal(Refusal):
+    """A refused terminal projection, never an alternate completion candidate."""
+    def __init__(self, message, reason, thread, turn, terminal):
+        self.reason, self.thread, self.turn = reason, thread, turn
+        self.terminal = terminal  # Peer.terminal's bounded, body-safe projection.
+        super().__init__(message)
+
+
 class MetadataFailure(Refusal):
     """Actual metadata child exit, never a model/task END or provider capacity."""
     def __init__(self, code, command):
@@ -480,14 +488,16 @@ class Peer:
                 or event.get('admission') != 'owned-start-reply' or not self.entitled(thread, turn)):
             event['collection'] = 'foreign-or-stale-refused'
             self.capture = 'foreign-or-stale-terminal-refused'
-            raise Refusal("foreign or stale completion cannot satisfy this owned turn")
+            raise CompletionRefusal("foreign or stale completion cannot satisfy this owned turn",
+                                    'foreign-or-stale', thread, turn, event)
         if event["turn"]["status"] != "completed" or event["turn"]["error"]:
             event['collection'] = 'matched-adverse'
             raise TurnFailure(event["turn"]["error"] or {"capacity": False})
         if turn not in self.finals:
             event['collection'] = 'missing-final-refused'
             self.capture = 'completed-without-final'
-            raise Refusal("completed turn has no final answer")
+            raise CompletionRefusal("completed turn has no final answer",
+                                    'missing-final', thread, turn, event)
         self.completed_turns.add(turn)
         event['collection'] = 'matched-completed'
         return self.decode_turn(turn)
@@ -543,6 +553,10 @@ class AppServer:
                 watcher=asyncio.create_task(storage.guard(store,child,outcome))
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
         except Exception as exc:
+            if isinstance(exc, CompletionRefusal) and peer is not None:
+                # Also covers refusal in the one existing continuation. The
+                # original progress question, if any, stays separately intact.
+                self.refusal_handoff(peer, attempt, exc, outcome)
             if isinstance(exc, OSError) and exc.errno in {errno.ENOENT, errno.EACCES} and child is None:
                 outcome["detail"]["creation"] = "proved-rejected"
             outcome["error"] = outcome['error'] or (str(exc)[:1000] if isinstance(exc, Refusal) else f"adapter error: {type(exc).__name__}")
@@ -678,7 +692,44 @@ class AppServer:
             outcome['error'] = str(exc)
             outcome['detail']['resume_disposition'] = 'attempted-after-final-decode-failure'
             return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
+        except CompletionRefusal as exc:
+            self.refusal_handoff(peer, attempt, exc, outcome)
+            raise  # Keep the refusal and uncollected evidence; no stale selection.
         return await self.completed_result(peer, store, attempt, thread, turn, spec, binding, schema, outcome, result)
+
+    @staticmethod
+    def refusal_handoff(peer, attempt, exc, outcome):
+        """Record the concrete missing question before unsubscribe/owner teardown.
+
+        This snapshot neither collects another terminal nor submits a turn. Late
+        drain observations keep their original collector and qualification holds.
+        """
+        if 'completion_refusal_handoff' in outcome['detail']:
+            return
+        terminal = parse_json(encode(exc.terminal))
+        missing = ('The matching completed terminal has no admitted final. Can the entitled original '
+                   'controller supply the missing final or establish the applicable final discriminator?'
+                   if exc.reason == 'missing-final' else
+                   'The observed terminal cannot satisfy the requested owned turn. Can the original '
+                   'collector reconcile this rejected terminal and any conserved uncollected requested-turn '
+                   'evidence without automatically selecting a later final or terminal?')
+        question = ('Actual Work owner and original controller/collector: for attempt '+attempt+
+            ', owned thread '+exc.thread+', requested turn '+exc.turn+'. '+missing+
+            ' Observed terminal thread='+str(terminal['threadId'])+', turn='+str(terminal['turn']['id'])+
+            ', status='+str(terminal['turn']['status'])+', collection='+terminal['collection']+'. '
+            'Resolve applicable reply ordering, turn/thread admission identity and final discriminator '
+            'compatibility from entitled evidence; these guarantees remain unknown. Otherwise retain a '
+            'truthful scoped blocked handback with the actual effect/artifact/delivery custodian. Preserve '
+            'the original refusal, adverse evidence and uncollected returns. Never invent command/tool '
+            'correspondence or infer completion from counts, order, a later zero or model DONE. '
+            'No completion, publication, acceptance or hold release is implied.')
+        outcome['detail']['completion_refusal_handoff'] = {
+            'attempt': attempt, 'thread': exc.thread, 'requested_turn': exc.turn,
+            'state': 'blocked; original refusal retained', 'reason': exc.reason,
+            'refusal': str(exc), 'terminal': terminal, 'capture': peer.capture,
+            'capture_history': list(peer.capture_history), 'owner_question': question,
+            'scope': 'pre-teardown snapshot; later drain evidence remains with original collector'}
+        outcome['error'] = outcome.get('error') or str(exc)
 
     async def completed_result(self, peer, store, attempt, thread, turn, spec, binding, schema, outcome, result):
         """Normal and interrupt-raced completions have the same progress contract."""

@@ -428,6 +428,22 @@ earlier successful result and process exit0. These projections conserve meaning,
 not unlimited raw notifications, downstream receipt, processing or acceptance.
 See tests/test_owned_completion.py for standalone fictional protocol controls.
 
+Completed-without-final and foreign/stale terminal refusals now also leave
+`detail.completion_refusal_handoff` before unsubscribe/teardown. It names the
+owned attempt/thread/requested turn, the bounded refused terminal projection,
+the original refusal and a precise question for actual Work and the original
+controller/collector, with the effect/artifact/delivery custodian retaining any
+blocked duty. The original exception still propagates; no later queued final or
+terminal is selected, no result is invented and no extra continuation is started.
+An existing progress question or prior error remains intact. This is a local
+handback record for the existing failure-delivery route, not receipt or processing
+by that owner. Its pre-teardown snapshot cannot predict later drain observations;
+those remain in the collector's bounded histories and qualification holds.
+Applicable start-reply ordering, turn/thread admission identity and a compatible
+final discriminator when phase is optional remain public-interface unknowns.
+See tests/test_refusal_handoff.py for fictional pre-teardown and conservation
+controls; these do not qualify actual server compatibility or semantic completion.
+
 All role tasks share one outer-result contract in contracts.py: the generated job/
 wire/clarification instructions, live diagnostics, publisher, final task collector
 and routine callback use it. Missing fields, unsupported fields (including an
