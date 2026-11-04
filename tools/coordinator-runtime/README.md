@@ -396,13 +396,37 @@ controller/collector remains in causal detail for the existing failure-delivery
 route. A returned clarification is not proof the observations were understood.
 An original parser failure remains an error/capture hold; later valid JSON is
 informative and cannot make it complete. All accepted bounded task-final texts,
-tool-observation revisions, matching turn completions and capture transitions
+tool-observation revisions, terminal observation projections and capture transitions
 remain separate history. Conflicting tool revisions retain the first completed
 row and hold capture. History exhaustion is explicit and unqualified, not a
 reason to drop an adverse result and claim completion. No general mid-turn RPC,
 new session, extra continuation, conflict promotion or historical recovery is
 added. See tests/test_completion_progress.py for in-memory controls and their
 scope; these do not qualify a deployed provider or real effect/publication path.
+
+Final and tool evidence is admitted only after the owned root passes the existing
+binding, sandbox and ephemeral readbacks and a turn identity arrives in the reply
+to this peer's own turn/start request. The reader registers that identity before
+it dispatches following notifications; it does not infer a turn from unsolicited
+frames. Final records carry attempt, thread, turn and item attribution. Pre-root,
+foreign and unrequested-turn bodies are not retained or decoded as owned evidence.
+Only body-free bounded identity/refusal projections survive rejection. This is a
+local admission policy, not proof of server routing exclusivity, account ownership
+or a historical foreign encounter. A frame arriving before its correlated start
+reply is refused, even if a later reply would name its turn. Actual compatibility
+with that ordering requires applicable public protocol evidence or an entitled
+controller answer; no private history acquisition or fallback is implied.
+
+Terminal observation history is recorded on receipt, before collection or missing-
+final refusal, and remains attached through owned process wait and reader drain.
+It includes late failures and foreign/stale rejection projections; unentitled error
+and embedded final bodies are excluded. The 64-event history and 8-event collection
+queue have explicit observed/omitted/adverse/rejected/overflow totals. Queue overflow
+does not stop the reader. Reader failure or closure timeout is explicitly incomplete.
+Adverse terminal or error observations retain an error/capture hold even after an
+earlier successful result and process exit0. These projections conserve meaning,
+not unlimited raw notifications, downstream receipt, processing or acceptance.
+See tests/test_owned_completion.py for standalone fictional protocol controls.
 
 All role tasks share one outer-result contract in contracts.py: the generated job/
 wire/clarification instructions, live diagnostics, publisher, final task collector

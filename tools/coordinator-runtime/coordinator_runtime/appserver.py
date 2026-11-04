@@ -201,9 +201,14 @@ def feature_names(text, require_false=False):
 
 
 class Peer:
-    def __init__(self, child, limit):
-        self.child, self.limit = child, limit
+    def __init__(self, child, limit, attempt=None):
+        self.child, self.limit, self.attempt = child, limit, attempt
         self.pending, self.finals = {}, {}
+        self.pending_starts, self.owned_turns = {}, set()
+        self.rejected_observations = []
+        self.rejection_summary = {'observed': 0, 'omitted': 0}
+        self.terminal_summary = {'observed': 0, 'omitted': 0, 'adverse': 0,
+                                 'rejected': 0, 'queue_overflow': 0, 'complete': True, 'stream': 'open'}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
         self.final_returns, self.tool_history, self.turn_history = [], [], []
         self.capture_history = []
@@ -231,15 +236,23 @@ class Peer:
         await self.child.stdin.drain()
 
     async def rpc(self, method, params, timeout=20):
+        if method == 'turn/start':
+            if not self.thread or params.get('threadId') != self.thread:
+                raise Refusal('turn start requires the validated owned root')
+            if len(self.owned_turns) >= 2 or self.pending_starts:
+                raise Refusal('owned turn start budget exhausted or start still pending')
         self.sequence += 1
         number = self.sequence
         future = asyncio.get_running_loop().create_future()
         self.pending[number] = future
+        if method == 'turn/start':
+            self.pending_starts[number] = self.thread
         try:
             await self.send({"id": number, "method": method, "params": params})
             response = await asyncio.wait_for(future, timeout)
         finally:
             self.pending.pop(number, None)
+            self.pending_starts.pop(number, None)
         if "error" in response:
             raise RpcFailure(method, response["error"])
         if not isinstance(response.get("result"), dict):
@@ -249,10 +262,17 @@ class Peer:
     async def read(self):
         try:
             await self.read_frames()
+        except asyncio.CancelledError:
+            self.terminal_summary.update(complete=False, stream='cancelled-incomplete')
+            self.capture = 'incomplete-owned-pipe-closure'
+            raise
         except Exception as exc:
+            self.terminal_summary.update(complete=False, stream='reader-failed-incomplete')
             self.capture = "incomplete"
             self.fail_pending(Refusal(f"protocol reader failed: {type(exc).__name__}"))
         finally:
+            if self.terminal_summary['stream'] == 'open':
+                self.terminal_summary['stream'] = 'eof-observed'
             self.fail_pending(Refusal("owned app-server stream ended before RPC collection"))
             with suppress(asyncio.QueueFull):
                 self.events.put_nowait({"method": "owner/EOF"})
@@ -271,6 +291,18 @@ class Peer:
         if "id" in value and "method" not in value:
             future = self.pending.get(value["id"])
             if future and not future.done():
+                if value['id'] in self.pending_starts and 'error' not in value:
+                    # Admit from this exact request's reply before the reader
+                    # can dispatch the next notification in the same interval.
+                    try:
+                        turn = canonical_uuid(value.get('result', {}).get('turn', {}).get('id'))
+                        if self.pending_starts[value['id']] != self.thread or turn in self.owned_turns:
+                            raise Refusal('turn start reply has changed root or reused identity')
+                    except (Refusal, AttributeError) as exc:
+                        self.capture = 'unbound-turn-start-reply'
+                        future.set_exception(Refusal(str(exc)))
+                        return
+                    self.owned_turns.add(turn)
                 future.set_result(value)
             return
         if "id" in value:
@@ -279,30 +311,94 @@ class Peer:
             return
         self.notification(value)
 
+    @staticmethod
+    def identity(value):
+        return value if isinstance(value, str) and 1 <= len(value) <= 128 else None
+
+    def entitled(self, thread, turn):
+        return bool(self.thread and thread == self.thread and isinstance(turn, str) and turn in self.owned_turns)
+
+    def reject_observation(self, method, thread, turn):
+        # No final, error, command or output body is acquired for this record.
+        self.rejection_summary['observed'] += 1
+        if len(self.rejected_observations) < 64:
+            self.rejected_observations.append({'method': method, 'attempt': self.attempt,
+                'thread': self.identity(thread), 'turn': self.identity(turn),
+                'admission': 'rejected-unbound-root' if not self.thread else 'rejected-foreign-or-unbound-turn'})
+        else:
+            self.rejection_summary['omitted'] += 1
+        self.capture = 'unentitled-observation-rejected'
+
+    def terminal(self, params):
+        turn = params.get('turn', {})
+        thread, identity = params.get('threadId'), turn.get('id')
+        entitled = self.entitled(thread, identity)
+        status = turn.get('status')
+        status = status if status in ('completed', 'failed', 'interrupted') else None
+        error = safe_error(turn.get('error')) if entitled else None
+        event = {'method': 'turn/completed', 'attempt': self.attempt,
+            'threadId': self.identity(thread), 'turn': {'id': self.identity(identity), 'status': status, 'error': error},
+            'admission': 'owned-start-reply' if entitled else 'rejected-foreign-or-unbound',
+            'collection': 'uncollected', 'error_body': 'safe-projection' if entitled else 'not-acquired'}
+        summary = self.terminal_summary
+        summary['observed'] += 1
+        if status in ('failed', 'interrupted') or error:
+            summary['adverse'] += 1
+            self.capture = 'observed-adverse-terminal'
+        if not entitled:
+            summary['rejected'] += 1
+            self.reject_observation('turn/completed', thread, identity)
+        if status is None:
+            summary['complete'] = False
+            self.capture = 'unknown-terminal-status'
+        if len(self.turn_history) < 64:
+            self.turn_history.append(event)
+        else:
+            summary['omitted'] += 1
+            summary['complete'] = False
+            self.capture = 'terminal-history-exceeded-bound'
+        # Rejected embedded bodies are never visited. Only the bounded terminal
+        # projection can reach the collector/refusal path.
+        if entitled:
+            for item in turn.get('items', []):
+                self.final_item(identity, item, thread=thread)
+        event['final_state'] = ('retained' if identity in self.finals else
+                                'previously-consumed' if identity in self.completed_turns else 'unobserved') if entitled else 'not-acquired'
+        if entitled and status == 'completed' and event['final_state'] == 'unobserved':
+            self.capture = 'completed-without-final'
+        try:
+            self.events.put_nowait(event)
+        except asyncio.QueueFull:
+            summary['queue_overflow'] += 1
+            summary['complete'] = False
+            self.capture = 'terminal-queue-exceeded-bound'
+
     def notification(self, value):
-        method, params = value.get("method"), value.get("params", {})
+        method, params = value.get('method'), value.get('params', {})
+        if method == 'turn/completed':
+            self.terminal(params)
+            return
         if method in {'item/started', 'item/completed'}:
+            thread, turn = params.get('threadId'), params.get('turnId')
+            if not self.entitled(thread, turn):
+                self.reject_observation(method, thread, turn)
+                return
             item = params.get('item', {})
             kind = item.get('type')
-            if kind in {'commandExecution','fileChange'}:
-                if self.thread and params.get('threadId') != self.thread:
-                    self.capture = 'foreign-tool-completion'
-                elif not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=128:
+            if kind in {'commandExecution', 'fileChange'}:
+                if not isinstance(item.get('id'), str) or not 1 <= len(item['id']) <= 128:
                     self.capture = 'invalid-tool-item-identity'
                 elif len(self.tools) < 128 or item.get('id') in self.tools:
                     if len(self.tool_history) >= 256:
                         self.capture = 'tool-history-exceeded-bound'
                         raise Refusal('bounded tool observation history exhausted')
-                    observed_turn = params.get('turnId')
-                    if not isinstance(observed_turn, str) or not 1 <= len(observed_turn) <= 128:
-                        self.capture = 'invalid-tool-turn-identity'
-                        return
-                    row = {'id': item.get('id'), 'type': kind, 'turn': observed_turn,
+                    row = {'id': item.get('id'), 'type': kind, 'turn': turn,
+                        'attempt': self.attempt, 'thread': thread,
                         'status': item.get('status') if item.get('status') in ('inProgress', 'completed', 'failed', 'declined') else None,
                         'completed_notification': method == 'item/completed',
                         'exit_code': item.get('exitCode') if type(item.get('exitCode')) is int else None,
                         'duration_ms': item.get('durationMs') if type(item.get('durationMs')) is int else None,
-                        'provider_process_id': item.get('processId')[:128] if isinstance(item.get('processId'),str) else None,
+                        'provider_process_id': item.get('processId')[:128] if isinstance(item.get('processId'), str) else None,
                         'OS_handle_owned': False}
                     self.tool_history.append(row)
                     prior = self.tools.get(item['id'])
@@ -312,25 +408,26 @@ class Peer:
                         self.tools[item['id']] = row
                 else:
                     self.capture = 'tool-metadata-count-bound'
-            elif kind not in {'agentMessage','userMessage','reasoning','plan','contextCompaction'}:
+            elif kind not in {'agentMessage', 'userMessage', 'reasoning', 'plan', 'contextCompaction'}:
                 self.unknown_tools.add(str(kind)[:100])
-        if method == "error" and len(self.errors) < 8:
-            self.errors.append(safe_error(params.get("error", params)))
-        if method == "item/completed":
-            self.final_item(params.get("turnId"), params.get("item", {}))
-        if method == "turn/completed":
-            turn = params.get("turn", {})
-            for item in turn.get("items", []):
-                self.final_item(turn.get("id"), item)
-            self.events.put_nowait({"method": method, "threadId": params.get("threadId"),
-                                   "turn": {"id": turn.get("id"), "status": turn.get("status"),
-                                            "error": safe_error(turn.get("error"))}})
-        if method in {"item/started", "item/completed"}:
-            kind = params.get("item", {}).get("type", "")
-            if re.search(r"collab|subAgent", kind):
-                self.capture = "unexpected-delegation-observed"
+            if method == 'item/completed':
+                self.final_item(turn, item, thread=thread)
+            if re.search(r'collab|subAgent', kind or ''):
+                self.capture = 'unexpected-delegation-observed'
+        if method == 'error':
+            if not self.entitled(params.get('threadId'), params.get('turnId')):
+                self.reject_observation(method, params.get('threadId'), params.get('turnId'))
+            elif len(self.errors) < 8:
+                self.errors.append({'attempt': self.attempt, 'thread': self.thread,
+                    'turn': params.get('turnId'), 'error': safe_error(params.get('error', params))})
+                self.capture = 'observed-protocol-error'
+            else:
+                self.capture = 'protocol-error-count-exceeded-bound'
 
-    def final_item(self, turn, item):
+    def final_item(self, turn, item, *, thread=None):
+        if not self.entitled(thread, turn):
+            self.reject_observation('final-item', thread, turn)
+            return
         if item.get("type") != "agentMessage" or item.get("phase") != "final_answer":
             return
         text = item.get("text", "")
@@ -351,7 +448,7 @@ class Peer:
         # Final task returns only: never command/output/reasoning bodies. Keep
         # exact undecodable and conflicting returns as evidence, not candidates
         # to select by lastness. The existing per-return/count ceilings apply.
-        self.final_returns.append({'turn': turn, 'item': item_id, 'text': text})
+        self.final_returns.append({'attempt': self.attempt, 'thread': thread, 'turn': turn, 'item': item_id, 'text': text})
         if turn in self.completed_turns:
             self.preserve_late(turn, text)
             self.capture = "late-final-needs-reconciliation"
@@ -379,15 +476,20 @@ class Peer:
         event = await asyncio.wait_for(self.events.get(), timeout)
         if event["method"] == "owner/EOF":
             raise Refusal("process stream ended before matching turn completion")
-        if event["threadId"] != thread or event["turn"]["id"] != turn:
+        if (event["threadId"] != thread or event["turn"]["id"] != turn
+                or event.get('admission') != 'owned-start-reply' or not self.entitled(thread, turn)):
+            event['collection'] = 'foreign-or-stale-refused'
+            self.capture = 'foreign-or-stale-terminal-refused'
             raise Refusal("foreign or stale completion cannot satisfy this owned turn")
         if event["turn"]["status"] != "completed" or event["turn"]["error"]:
-            self.turn_history.append(event)
+            event['collection'] = 'matched-adverse'
             raise TurnFailure(event["turn"]["error"] or {"capacity": False})
         if turn not in self.finals:
+            event['collection'] = 'missing-final-refused'
+            self.capture = 'completed-without-final'
             raise Refusal("completed turn has no final answer")
         self.completed_turns.add(turn)
-        self.turn_history.append(event)
+        event['collection'] = 'matched-completed'
         return self.decode_turn(turn)
 
     def decode_turn(self, turn):
@@ -435,7 +537,7 @@ class AppServer:
                 outcome["detail"]["creation"] = "owned"
                 store.begin(attempt, {**preflight_result, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
-            peer = Peer(child, self.config["limits"]["max_result_bytes"])
+            peer = Peer(child, self.config["limits"]["max_result_bytes"], attempt=attempt)
             peer.owned_storage = owned_storage
             if owned_storage:
                 watcher=asyncio.create_task(storage.guard(store,child,outcome))
@@ -503,7 +605,6 @@ class AppServer:
                 "Do not inspect profile/history/credentials or change global routes. Return typed honest partials."})
         thread = created.get("thread", {})
         session = canonical_uuid(thread.get("id"))
-        peer.thread = session
         outcome['detail']['session_residuals']['known_thread']=session
         store.session(attempt,session,detail={'root_identity_observed':True})
         outcome['detail']['thread_start']='owned-root-observed'
@@ -512,6 +613,7 @@ class AppServer:
                                               "sandbox_readback": self.sandbox(created, spec)})
         if thread.get("ephemeral") is not True or thread.get("sessionId") != session or thread.get("path") is not None:
             raise Refusal("owned ephemeral root/path readback did not match; no persistent fallback")
+        peer.thread = session  # Admit only after all owned-root readbacks above.
         outcome["detail"].update({"ephemeral": True, "resume_disposition": "available-while-owner-alive"})
         result = await self.turn(peer, store, attempt, session, prompt, spec, binding, schema, outcome)
         outcome["result"] = result
@@ -660,12 +762,15 @@ class AppServer:
         outcome["detail"]["resume_disposition"] = "attempted-owned-interrupt-and-same-session-continuation"
         await peer.rpc("turn/interrupt", {"threadId": thread, "turnId": turn})
         event = await asyncio.wait_for(peer.events.get(), self.config["deadlines"]["interrupt"])
-        if event.get("threadId") != thread or event.get("turn", {}).get("id") != turn:
+        if (event.get("threadId") != thread or event.get("turn", {}).get("id") != turn
+                or event.get('admission') != 'owned-start-reply' or not peer.entitled(thread, turn)):
+            event['collection'] = 'interrupt-identity-refused'
+            peer.capture = 'foreign-or-stale-terminal-refused'
             raise Refusal("original interruption/end unknown; overlapping continuation prohibited")
         # The original may have completed concurrently with interrupt. Conserve that result.
         if event["turn"]["status"] == "completed" and not event['turn'].get('error') and turn in peer.finals:
             peer.completed_turns.add(turn)
-            peer.turn_history.append(event)
+            event['collection'] = 'interrupt-raced-completed'
             try:
                 result = peer.decode_turn(turn)
             except FinalDecodeFailure as exc:
@@ -676,7 +781,9 @@ class AppServer:
             else:
                 return await self.completed_result(peer, store, attempt, thread, turn, spec, binding, schema, outcome, result)
         else:
-            peer.turn_history.append(event)
+            event['collection'] = 'interrupt-end-collected'
+            if event['turn']['status'] == 'completed':
+                peer.capture = 'completed-without-final'
         return await self.progress(peer, store, attempt, thread, turn, spec, binding, schema, outcome)
 
     async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema, clarification=None, *, progress=None):
@@ -704,7 +811,13 @@ class AppServer:
             # Retain even if process collection or pipe closure subsequently
             # fails. These lists also receive any bounded late observations.
             outcome['detail'].update(final_returns=peer.final_returns, tool_observation_history=peer.tool_history,
-                turn_completion_history=peer.turn_history, capture_history=peer.capture_history)
+                turn_completion_history=peer.turn_history, capture_history=peer.capture_history,
+                terminal_observations=peer.terminal_summary, rejected_observations=peer.rejected_observations,
+                rejection_summary=peer.rejection_summary, protocol_failures=peer.errors,
+                late_or_conflicting_returns=peer.late_finals,
+                observation_admission={'attempt': peer.attempt, 'thread': peer.thread,
+                    'turns': sorted(peer.owned_turns), 'basis': 'validated root and exact owned start replies',
+                    'server_routing_exclusivity': 'not-established'})
         if child is None:
             proved = outcome["detail"].get("creation") in {"not-attempted", "proved-rejected"}
             outcome["detail"]["known_not_started"] = proved
@@ -719,6 +832,8 @@ class AppServer:
             except asyncio.TimeoutError:
                 peer.capture = "incomplete-owned-pipe-closure"
             outcome["capture"] = peer.capture
+            if peer.terminal_summary['adverse'] or peer.errors:
+                outcome['error'] = outcome.get('error') or 'observed adverse terminal; owned collector reconciliation required'
             if peer.late_finals:
                 outcome["detail"]["late_or_conflicting_returns"] = peer.late_finals
             if peer.errors:
