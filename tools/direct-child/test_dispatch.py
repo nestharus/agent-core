@@ -448,7 +448,7 @@ class DispatchTest(unittest.TestCase):
                                        .replace('#new-foundation = "direction"\n', ''),
             "unknown basis": base.replace('[classes.unknown]\nrequires_basis = false',
                                           '[classes.unknown]\nrequires_basis = true'),
-            "pool outside manual": base.replace('pool = [".codex2", ".codex4", ".codex5"]',
+            "pool outside manual": base.replace('pool = [".codex2", ".codex3", ".codex5"]',
                                                 'pool = [".codex", ".codex7"]'),
             "bad provider": base.replace('[routes.explore]\nprovider = "codex"',
                                          '[routes.explore]\nprovider = "gemini"'),
@@ -477,7 +477,7 @@ class DispatchTest(unittest.TestCase):
                    for attempt in self.runs.iterdir()]
         self.assertEqual(sorted(r["profile_source"] for r in records),
                          sorted(f"rotation:{n}" for n in range(7, 19)))
-        expected_pool = (".codex2", ".codex4", ".codex5")
+        expected_pool = (".codex2", ".codex3", ".codex5")
         self.assertEqual({r["profile"] for r in records}, set(expected_pool))
         for profile in expected_pool:
             self.assertEqual(sum(r["profile"] == profile for r in records), 4, profile)
@@ -491,7 +491,7 @@ class DispatchTest(unittest.TestCase):
 
         dry = self.resolved()
         self.assertEqual((dry["profile"], dry["profile_source"]),
-                         (".codex4", "rotation-preview:19 (not reserved)"))
+                         (".codex3", "rotation-preview:19 (not reserved)"))
         explicit_preview = self.resolved("--profile", ".codex",
                                          "--override-reason", "manual history")
         self.assertEqual((explicit_preview["profile"], explicit_preview["profile_source"]),

@@ -14,6 +14,10 @@ from coordinator_runtime.store import Store
 
 def config_at(directory):
     home = Path(directory)
+    pool_routes = home / 'pool-routes.toml'
+    pool_routes.write_text('[rotation]\nstate_dir = '+json.dumps(str(home/'pool-state'))+
+        '\n[providers.codex]\npool = [".codex2", ".codex3", ".codex5"]\n'+
+        'manual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]\n')
     template = home / "fixture-template.md"
     template.write_text("Perform the bounded actual role task; retain failures/UNKNOWNs. No descendants.\n")
     roles = {r: {"owner": ident(), "profile": ".codex5" if r in {"Branch", "QA"} else ".codex",
@@ -40,6 +44,7 @@ def config_at(directory):
     for task in tasks.values():
         task["responses"].update({"blocker": ["work-proposer"], "scope": ["work-proposer"]})
     value = {"version": 1, "enabled": False, "actor": ident(), "state_dir": str(home / "state"),
+             "execution_pool_routes": str(pool_routes),
              "canonical_publication": {"method":"retention-same-inode-v1","library":str(Path(__file__).parent.resolve()/"fixture_snapshot")},
              "board_home": str(home / "boards"), "board_library": os.environ.get("COORDINATOR_TEST_BOARD_LIBRARY", str(Path(__file__).resolve().parents[2] / "message-board")),
              "profiles": [".codex", ".codex2", ".codex3", ".codex4", ".codex5"],

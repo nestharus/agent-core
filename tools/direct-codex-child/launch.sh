@@ -27,10 +27,10 @@ EOF
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
-model='' effort='' route_json='' ephemeral=false log_max_bytes=''
+model='' effort='' route_json='' ephemeral=false log_max_bytes='' execution_pool_routes=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes|--execution-pool-routes)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
@@ -41,6 +41,7 @@ while (($#)); do
         --model) [[ -z $model ]] || die 'duplicate --model'; model=$2 ;;
         --effort) [[ -z $effort ]] || die 'duplicate --effort'; effort=$2 ;;
         --route-json) [[ -z $route_json ]] || die 'duplicate --route-json'; route_json=$2 ;;
+        --execution-pool-routes) [[ -z $execution_pool_routes ]] || die 'duplicate --execution-pool-routes'; execution_pool_routes=$2 ;;
         --log-max-bytes) [[ -z $log_max_bytes ]] || die 'duplicate --log-max-bytes'; log_max_bytes=$2 ;;
         --lease-wait) ;;  # retired with the profile lock; accepted and ignored
       esac
@@ -64,6 +65,8 @@ effort=${effort:-high}
 [[ -z $log_max_bytes || $log_max_bytes =~ ^[1-9][0-9]{0,11}$ ]] \
   || die 'log-max-bytes must be a positive decimal integer of at most 12 digits'
 [[ $route_json != *$'\n'* ]] || die 'route-json must be a single line'
+[[ -z $execution_pool_routes || ( $execution_pool_routes == /* && $execution_pool_routes != *$'\n'* ) ]] \
+  || die 'execution-pool-routes must be an absolute public control path'
 [[ $child_id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'id must use letters, digits, dot, underscore, or hyphen'
 for value in "$cwd" "$prompt" "$runs_dir"; do
   [[ $value == /* && $value != *$'\n'* ]] || die 'cwd, prompt, and runs-dir must be absolute paths without newlines'
@@ -245,7 +248,12 @@ cd -- "$cwd" || die "cannot enter cwd: $cwd"
 session_flags=()
 [[ $ephemeral == false ]] || session_flags+=(--ephemeral)
 run_child() {
-  CODEX_HOME="$profile_home" codex exec --dangerously-bypass-approvals-and-sandbox \
+  local admission=()
+  if [[ -n $execution_pool_routes ]]; then
+    admission=(python3 "$launcher_dir/../direct-child/execution_pool.py" --routes "$execution_pool_routes" \
+      exec --profile "$profile" --receipt "$attempt/pool-admission.json" --)
+  fi
+  CODEX_HOME="$profile_home" "${admission[@]}" codex exec --dangerously-bypass-approvals-and-sandbox \
     -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
     "${session_flags[@]}" -C "$cwd" --color never -o "$final_path" -
 }

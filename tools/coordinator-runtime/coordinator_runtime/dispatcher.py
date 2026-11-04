@@ -251,7 +251,10 @@ class Dispatcher:
             self.spawn(self.classify(*claimed))
 
     def schedule_job(self):
-        job = self.store.reserve()
+        # A failed pool allocation leaves the frozen unstarted job intact.
+        # Retry only this controller's reservation, never an existing attempt.
+        job = self.store.one("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id LIMIT 1",
+                             (self.store.controller,)) or self.store.reserve()
         if not job:
             return
         board = self.boards.get(job["role"])

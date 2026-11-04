@@ -8,8 +8,8 @@
 state_dir = "~/.local/state/direct-child"
 
 [providers.codex]
-# Automatic allocation pool. .codex and .codex3 stay manual-only via --profile.
-pool = [".codex2", ".codex4", ".codex5"]
+# Automatic allocation pool; operator changes affect new admissions only.
+pool = [".codex2", ".codex3", ".codex5"]
 manual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]
 efforts = ["minimal", "low", "medium", "high", "xhigh", "max"]
 

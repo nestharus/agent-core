@@ -66,6 +66,7 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    sub.add_parser('execution-pool', help='Inspect shared new-execution membership and next unreserved turn; no account probing')
     automatic=sub.add_parser('delegate-control',help='Actual source owner explicitly delegates prospective service control')
     automatic.add_argument('role')
     automatic.add_argument('--policy',required=True)
@@ -180,6 +181,8 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command == 'execution-pool':
+        return store.execution_pool.status()
     if args.command in {"init", "status"}:
         return store.status()
     if args.command=='delegate-control':
@@ -321,7 +324,10 @@ def main(argv=None):
             return 0
         store = Store(config)
         try:
-            print_json(operate(args, store))
+            value = operate(args, store)
+            print_json(value)
+            if args.command == 'execution-pool' and value.get('state') == 'held':
+                return 2
         finally:
             store.close()
         return 0

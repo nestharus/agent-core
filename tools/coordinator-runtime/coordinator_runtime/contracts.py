@@ -102,6 +102,9 @@ def validate_config(config):
         raise Refusal("only explicitly selected Work/Branch/Reviews/QA roles are supported")
     if not Path(config["state_dir"]).is_absolute():
         raise Refusal("absolute state_dir required")
+    if 'execution_pool_routes' in config and (not isinstance(config['execution_pool_routes'], str)
+                                             or not Path(config['execution_pool_routes']).is_absolute()):
+        raise Refusal('execution_pool_routes must name an absolute public control file')
     if config["classifier"]["binding"] != LUNA or config["diagnosis"]["binding"] != LUNA:
         raise Refusal("classification and diagnosis require fresh gpt-6-luna low")
     profiles = config["profiles"]
