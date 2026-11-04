@@ -12,6 +12,7 @@ import shlex
 import time
 
 from .contracts import Refusal, canonical_uuid, digest, encode, ident, regular_path, required_text
+from .automatic_control import AutomaticControl, SCHEMA as AUTOMATIC_SCHEMA
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS coordinator_controls_v1(
@@ -22,7 +23,7 @@ CREATE TABLE IF NOT EXISTS coordinator_controls_v1(
 CREATE TABLE IF NOT EXISTS coordinator_control_steps_v1(
  intent TEXT NOT NULL,ordinal INTEGER NOT NULL,phase TEXT NOT NULL,turn TEXT,rpc_id TEXT,
  created REAL NOT NULL,PRIMARY KEY(intent,ordinal));
-"""
+""" + AUTOMATIC_SCHEMA
 MODES={'queue-existing','queue-resume-existing','active-only-steer'}
 
 
@@ -61,8 +62,8 @@ def load_helper(board,selection):
     return helper
 
 
-class OwnerControl:
-    def _control_binding(self,conn,runtime,delivery,selection):
+class OwnerControl(AutomaticControl):
+    def _control_binding(self,conn,runtime,delivery,selection,*,service=False):
         self._control_selection(selection)  # Recheck freshness at each pre-effect fence.
         row=conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?',(delivery,)).fetchone()
         if not row:raise Refusal('exact runtime delivery required; post/notice IDs are not control intents')
@@ -72,7 +73,10 @@ class OwnerControl:
         if row['kind'] not in {'question','alert','effect-request','result'}:
             raise Refusal('control pointers cannot dispatch executable work')
         grant,target=self._delivery_grant(conn,runtime,outbox)
-        control_actor(grant['owner'])
+        if service:self.verify_control_delegation(conn,runtime,outbox,selection,grant)
+        else:
+            if 'delegation' in selection:raise Refusal('service capability is for the actual dispatcher, not a source-owner CLI impersonation')
+            control_actor(grant['owner'])
         if (row['grant_id']!=grant['id'] or row['owner']!=grant['owner'] or row['actor']!=self.config['actor']
                 or row['recipient']!=target['session'] or row['kind']!=outbox['kind'] or row['required']!=outbox['required']):
             raise Refusal('original delivery identity/scope differs from current exact grant; no custody transfer')
@@ -103,7 +107,8 @@ class OwnerControl:
     @staticmethod
     def _control_selection(selection):
         keys={'intent','mode','recipient','profile','scope','evidence','binding','helper_sources'}
-        if not isinstance(selection,dict) or set(selection)!=keys:raise Refusal('complete explicit control selection required')
+        if not isinstance(selection,dict) or set(selection) not in (keys,keys|{'delegation'}):raise Refusal('complete explicit control selection required')
+        if 'delegation' in selection:canonical_uuid(selection['delegation'])
         canonical_uuid(selection['intent']);canonical_uuid(selection['recipient'])
         if not isinstance(selection['mode'],str) or selection['mode'] not in MODES or selection['scope']!='delivery-control-only':
             raise Refusal('explicit supported channel and delivery-control-only scope required')
@@ -117,25 +122,28 @@ class OwnerControl:
         if selection['mode']=='active-only-steer':
             if binding['state']!='active':raise Refusal('active-only steer refuses idle/unloaded/unknown; no fallback')
             canonical_uuid(binding['turn'])
-        elif binding['state'] not in {'active','idle'} or binding['turn'] is not None:
-            raise Refusal('existing-context queue requires explicit active/idle binding, no guessed turn/unloaded fallback')
+        elif binding['state'] not in {'active','idle','unknown'} or binding['turn'] is not None:
+            raise Refusal('existing-context queue requires explicit applicability including honest unknown, no guessed turn/unloaded fallback')
         for evidence in [selection['evidence'],binding['evidence']]:
             if not isinstance(evidence,list) or not 1<=len(evidence)<=16:raise Refusal('actual authority/binding evidence required')
             for item in evidence:required_text(item,'control evidence',2000)
         if len(encode(selection).encode())>16000:raise Refusal('bounded control selection required')
 
-    def control_prepare(self,runtime,delivery,selection):
+    def control_prepare(self,runtime,delivery,selection,*,service=False):
         self._control_selection(selection)
         with self.opened() as conn:
             conn.executescript(SCHEMA)
             with self.store.write(conn):
-                row,grant=self._control_binding(conn,runtime,delivery,selection)
+                row,grant=self._control_binding(conn,runtime,delivery,selection,service=service)
+                caller=self.config['actor'] if service else grant['owner']
                 old=conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(selection['intent'],)).fetchone()
                 if old:
-                    if old['delivery']!=delivery or old['caller']!=grant['owner'] or old['selection']!=encode(selection):
+                    if old['delivery']!=delivery or old['caller']!=caller or old['selection']!=encode(selection):
                         raise Refusal('same control intent already binds different meaning/channel')
                     return self._control_record(conn,old)
-                if row['processed_at'] is not None:raise Refusal('already processed delivery cannot be replayed')
+                status=self.control_receipt_status(conn,row)
+                if status['required'] and not status['pending']:raise Refusal('control already actually processed; no pointer replay')
+                if row['processed_at'] is not None and not status['pending']:raise Refusal('already processed delivery cannot be replayed')
                 previous=conn.execute('SELECT * FROM coordinator_controls_v1 WHERE delivery=?',(delivery,)).fetchall()
                 meaning={k:v for k,v in selection.items() if k!='intent'}
                 if any(p['state']!='refused' or {k:v for k,v in json.loads(p['selection']).items() if k!='intent'}==meaning for p in previous):
@@ -150,8 +158,9 @@ class OwnerControl:
                     'No original input ACK/replay, new execution, publication or acceptance authority.')
                 if len(pointer)>700:raise Refusal('complete control pointer exceeds public helper bound; no truncation')
                 conn.execute('INSERT INTO coordinator_controls_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)',
-                    (selection['intent'],delivery,grant['owner'],row['recipient'],selection['profile'],selection['mode'],
+                    (selection['intent'],delivery,caller,row['recipient'],selection['profile'],selection['mode'],
                      digest(json.loads(row['payload'])),encode(selection),attempt,message,pointer,'prepared',time.time()))
+                self.require_control(conn,delivery)
                 return self._control_record(conn,conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(selection['intent'],)).fetchone())
 
     def _control_budget(self,conn,incoming,*,new_intent=True):
@@ -172,7 +181,8 @@ class OwnerControl:
         actor=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
         with self.opened(settlement=True,owner_required=False) as conn:
             row=self._control_lookup(conn,intent)
-            if not row or actor not in {row['caller'],row['recipient']}:raise Refusal('control visible only to its actual caller/recipient')
+            source=conn.execute('SELECT owner FROM coordinator_deliveries_v1 WHERE id=?',(row['delivery'],)).fetchone() if row else None
+            if not row or actor not in {row['caller'],row['recipient'],source['owner']}:raise Refusal('control visible only to its actual caller/recipient/delegator')
             return self._control_record(conn,row)
 
     def control_cancel(self,intent):
@@ -188,15 +198,20 @@ class OwnerControl:
                         (encode({'helper_status':'not-called','queue_message_id':None,'reason':'caller-withdrew-before-effect'}),intent))
                 return self._control_record(conn,conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(intent,)).fetchone())
 
-    def control_send(self,runtime,intent):
+    def control_send(self,runtime,intent,*,service=False):
         with self.opened() as conn:
             row=self._control_lookup(conn,intent)
             if not row:raise Refusal('prepared exact control intent required')
-            control_actor(row['caller'])
+            if service:
+                if row['caller']!=self.config['actor'] or 'delegation' not in json.loads(row['selection']):
+                    raise Refusal('dispatcher cannot adopt a manual/foreign control intent')
+            else:control_actor(row['caller'])
             if row['state']!='prepared':return self._control_record(conn,row)  # Never replay even an unknown/failed attempt.
+            if not self.control_receipt_status(conn,{'id':row['delivery']})['pending']:
+                raise Refusal('independent control already actually processed; no native send')
             selection=json.loads(row['selection']);self._control_selection(selection)
-            delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection)
-            if delivery['processed_at'] is not None or digest(json.loads(delivery['payload']))!=row['payload_hash']:
+            delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection,service=service)
+            if (delivery['processed_at'] is not None and not self.control_receipt_status(conn,delivery)['pending']) or digest(json.loads(delivery['payload']))!=row['payload_hash']:
                 raise Refusal('current delivery processed or source changed')
         # Public source/API preflight only, before the durable one-shot claim.
         try:helper=load_helper(self,selection)
@@ -208,8 +223,8 @@ class OwnerControl:
             raise Refusal(str(exc)) from exc
         with self.opened() as conn:
             with self.store.write(conn):
-                delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection)
-                if delivery['processed_at'] is not None:raise Refusal('delivery processed before control effect')
+                delivery,grant=self._control_binding(conn,runtime,row['delivery'],selection,service=service)
+                if delivery['processed_at'] is not None and not self.control_receipt_status(conn,delivery)['pending']:raise Refusal('delivery processed before control effect')
                 changed=conn.execute("UPDATE coordinator_controls_v1 SET state='inflight' WHERE id=? AND state='prepared'",(intent,)).rowcount
                 if not changed:return self._control_record(conn,conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(intent,)).fetchone())
         def record(phase,turn,rpc_id):
@@ -217,7 +232,7 @@ class OwnerControl:
                 raise Refusal('native turn/phase differs from selected applicability; no effect permitted')
             with self.opened(settlement=phase!='STEER_INTENT',owner_required=phase=='STEER_INTENT') as conn:
                 with self.store.write(conn):
-                    if phase=='STEER_INTENT':self._control_binding(conn,runtime,row['delivery'],selection)
+                    if phase=='STEER_INTENT':self._control_binding(conn,runtime,row['delivery'],selection,service=service)
                     count=conn.execute('SELECT COUNT(*) FROM coordinator_control_steps_v1 WHERE intent=?',(intent,)).fetchone()[0]
                     if (phase,count) not in {('STEER_INTENT',0),('STEER_ACCEPTED',1)}:
                         raise Refusal('native correlation phases must preserve one exact attempt order')
@@ -255,11 +270,49 @@ class OwnerControl:
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_controls_v1'").fetchone():return None
         return conn.execute('SELECT * FROM coordinator_controls_v1 WHERE id=?',(intent,)).fetchone()
 
+    def control_processing_proof(self,conn,row,actor,receipt):
+        """Independent control evidence; substantive callback receipts stay immutable."""
+        if not self.control_receipt_status(conn,row)['required']:return
+        if len(encode(receipt).encode())>self.config['limits']['max_result_bytes']:raise Refusal('bounded independent control receipt required')
+        for sql in AUTOMATIC_SCHEMA.split(';'):
+            if sql.strip():conn.execute(sql)  # Compatible additive tables, inside caller's existing write transaction.
+        control=conn.execute('SELECT * FROM coordinator_controls_v1 WHERE delivery=? ORDER BY created DESC,rowid DESC LIMIT 1',(row['id'],)).fetchone()
+        if not control:raise Refusal('required control has no bound intent; actual caller disposition needed')
+        if digest(json.loads(row['payload']))!=control['payload_hash']:raise Refusal('control receipt must preserve exact full source meaning')
+        proof=receipt.get('control',{})
+        direct=isinstance(proof,dict) and proof.get('kind')=='owner-control-disposition'
+        if direct:
+            if set(proof)!={'kind','intent','full_read','disposition','evidence'} or proof['intent']!=control['id'] or proof['full_read']!=control['payload_hash']:
+                raise Refusal('exact genuine full-read/disposition of this control required')
+            if control['state'] not in {'prepared','refused'}:raise Refusal('direct disposition cannot waive attempted native queue/collector uncertainty')
+            required_text(proof['disposition'],'actual direct control disposition',4000)
+            if not isinstance(proof['evidence'],list) or not 1<=len(proof['evidence'])<=16:raise Refusal('actual direct control evidence required')
+            for item in proof['evidence']:required_text(item,'actual direct control evidence',2000)
+        else:self._native_control_proof(conn,row,actor,receipt)
+        record={'actor':actor,'control':proof if direct else receipt.get('control'),
+                'transport':receipt.get('transport'),'native_receipt_claimed':not direct,'meaning':'actual independent control processing only; no business/effect/publication waiver'}
+        encoded=encode(record)
+        prior=conn.execute('SELECT * FROM coordinator_control_receipts_v1 WHERE delivery=?',(row['id'],)).fetchone()
+        if prior:
+            if prior['receipt']!=encoded:raise Refusal('completed independent control receipt is immutable')
+        else:conn.execute('INSERT INTO coordinator_control_receipts_v1 VALUES(?,?,?,?)',(row['id'],control['id'],encoded,time.time()))
+
+    def control_receipt(self,delivery,receipt):
+        actor=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
+        if not isinstance(receipt,dict) or not receipt.get('evidence'):raise Refusal('actual independent control receipt evidence required')
+        with self.opened(settlement=True,owner_required=False) as conn:
+            with self.store.write(conn):
+                row=conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?',(delivery,)).fetchone()
+                if not row or actor!=row['recipient']:raise Refusal('only genuine exact recipient may process control')
+                if not self.control_receipt_status(conn,row)['required']:raise Refusal('no selected independent control duty')
+                self.control_processing_proof(conn,row,actor,receipt)
+                return self._delivery_record(conn,dict(row))
+
     @staticmethod
-    def control_processing_proof(conn,row,actor,receipt):
+    def _native_control_proof(conn,row,actor,receipt):
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_controls_v1'").fetchone():return
-        control=conn.execute("SELECT * FROM coordinator_controls_v1 WHERE delivery=? AND state IN ('inflight','accepted','unknown') ORDER BY created DESC LIMIT 1",(row['id'],)).fetchone()
-        if not control:return
+        control=conn.execute("SELECT * FROM coordinator_controls_v1 WHERE delivery=? ORDER BY created DESC,rowid DESC LIMIT 1",(row['id'],)).fetchone()
+        if not control:raise Refusal('no actual native control intent')
         if digest(json.loads(row['payload']))!=control['payload_hash']:
             raise Refusal('control proof cannot replace changed original delivery meaning')
         if control['state']=='inflight':raise Refusal('actual control sender still owns an uncollected attempt')

@@ -178,8 +178,13 @@ class BoardDelivery:
                 "SELECT * FROM coordinator_owner_corrections_v1 WHERE delivery=? ORDER BY revision", (row["id"],))]
         original = json.loads(row["settlement"]) if row["settlement"] else None
         settlement = corrections[-1]["receipt"] if corrections else original
+        control=self.control_receipt_status(conn,row)
+        processed=row['processed_at']
+        if control['pending']:processed=None
+        elif control['required'] and processed is not None:processed=max(processed,control['processed_at'])
         return {"id": row["id"], "state": state, "post": row["post"], "notice": row["notice"], "recipient": row["recipient"],
-                "actor": row["actor"], "producer": row["producer"], "processed_at": row["processed_at"],
+                "actor": row["actor"], "producer": row["producer"], "processed_at": processed,
+                "substantive_processed_at":row['processed_at'],"control_receipt":control,
                 "pickup": json.loads(row["pickup"]) if row["pickup"] else None,
                 "processing": json.loads(row["processing"]) if row["processing"] else None,
                 "settlement": settlement, "settlement_version": digest(settlement) if settlement else None,

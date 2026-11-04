@@ -345,6 +345,10 @@ class Dispatcher:
         job=self.store.job(job_id)
         if job['recovery_state']!='diagnosing':return
         old=self.store.attempt(job['active_attempt'])
+        current=self.store.current_diagnosis(job)
+        if current and current['id']==diagnosis and current.get('legacy_lineage'):
+            with self.store.tx():self.store.retain_recovery_disposition(job,current,'Legacy collected diagnosis recognized; actual owner disposition remains required, no task replay/effect waiver')
+            return
         if old['semantic']=='DONE' and not self.store.owner_remaining_selection(job_id,old['id']):
             diag=self.store.attempt(diagnosis)
             if not diag['collected']:return
@@ -379,14 +383,13 @@ class Dispatcher:
                                     "AND a.collected IS NOT NULL")
         for job in collected:
             self.reconcile_collected(job)
-        ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing' "
-                                "AND effects IN ('none','reconciled')", (self.store.controller,))
+        ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing'", (self.store.controller,))
         for job in ready:
-            diagnosis = self.store.one("SELECT id FROM attempts WHERE job=? AND kind='diagnosis' AND collected IS NOT NULL "
-                                       "AND json_extract(detail,'$.prior_task_attempt')=? ORDER BY created DESC LIMIT 1",
-                                       (job["id"],job['active_attempt']))
-            if diagnosis:
-                self.advance_recovery(job["id"], diagnosis["id"])
+            try:
+                diagnosis=self.store.current_diagnosis(job)
+                if diagnosis and diagnosis['collected'] is not None:self.advance_recovery(job['id'],diagnosis['id'])
+            except Refusal as exc:
+                self.store.record_operational_error(job['id'],{'error':str(exc)},job['role'],'recovery-lineage-question')
         self.store.complete_events()
 
     def reconcile_recovery_requests(self):
@@ -499,16 +502,19 @@ class Dispatcher:
         return await self.models.run(self.store, attempt, prompt, spec, schema)
 
     def pump_deliveries(self):
+        controls_left=1  # One bounded new helper call per pass; held outcomes never consume another call.
         for outbox in self.store.rows("SELECT * FROM outboxes WHERE state NOT IN ('settled','classification-pending') "
-                                      "OR (state='settled' AND error IS NOT NULL)"):
-            self.pump_delivery(outbox)
+                                      "OR (state='settled' AND (error IS NOT NULL OR json_extract(board_receipt,'$.control_receipt.pending')=1 "
+                                      "OR json_type(board_receipt,'$.control_receipt') IS NULL)) ORDER BY created,id"):
+            controls_left-=bool(self.pump_delivery(outbox,send_control=controls_left>0))
 
-    def pump_delivery(self, outbox):
+    def pump_delivery(self, outbox,*,send_control=True):
         board = self.boards.get(outbox["role"])
         if not board or not hasattr(board, "post_delivery"):
             return
         job = self.store.job(outbox["job"]) if outbox["job"] else None
         owner_procedure = job and self.config["tasks"][job["task"]].get("execution") == "owner"
+        attempted=False
         try:
             if not outbox["board_receipt"]:
                 receipt = board.reconcile_delivery(self.store, outbox) or board.post_delivery(self.store, outbox)
@@ -517,12 +523,20 @@ class Dispatcher:
             receipt = board.delivery_status(outbox["id"])
             if receipt["state"] in {"posted", "ambiguous"}:
                 receipt = board.transport_delivery(self.store, outbox)
+            control_error=None
+            if hasattr(board,'automatic_control'):
+                try:attempted=board.automatic_control(self.store,outbox,send=send_control)
+                except Exception as exc:
+                    attempted=bool(getattr(exc,'control_budget_spent',False))
+                    control_error=str(exc)[:1000]
             if receipt['state'] != 'settled' and hasattr(board, 'complete_own_delivery'):
                 receipt = board.complete_own_delivery(self.store, outbox) or receipt
+            receipt=board.delivery_status(outbox['id'])
             if owner_procedure and receipt["state"] == "settled":
                 board.collect_owner_return(self.store, outbox)
             else:
                 self.store.delivery_observed(outbox["id"], receipt)
+            if control_error:raise Refusal('automatic control remains owned: '+control_error)
             self.store.clear_operational_error(outbox["id"])
             if outbox["kind"] == "alert" and not self.store.one("SELECT id FROM outboxes WHERE role=? AND kind='alert' AND error IS NOT NULL", (outbox["role"],)):
                 self.store.clear_operational_error("alert-channel:"+outbox["role"])
@@ -538,6 +552,7 @@ class Dispatcher:
                 with self.store.tx():
                     self.store.db.execute("UPDATE operational_errors SET active=0 WHERE kind='delivery-error' "
                                           "AND subject IN (SELECT id FROM outboxes WHERE role=? AND kind='alert')", (outbox["role"],))
+        return attempted
 
     async def pause(self):
         try:

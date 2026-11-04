@@ -5,7 +5,7 @@ its current context, never a disposable worker or replacement managed_owner. Kee
 its active RFQ backlog Goal and actual actors/collectors. This is ongoing agreed
 role duty, not a human approval gate for every task. Root is an external recipient;
 Dispatcher and Cloud remain unenrolled. Native unattended/idle/in-flight wake is
-not supplied or inferred. Selected Reviews uses its actual opaque gpt-xhigh
+not inferred from capability selection or queue acceptance. Selected Reviews uses its actual opaque gpt-xhigh
 procedure, original contexts, coverage frontier and collectors, never a generic
 Sol replacement or replay merely to manufacture receipt evidence.
 
@@ -124,7 +124,7 @@ and required duties; use actual delivery-stage evidence separately. A stored
 managed_pending, --steer request or this list is not native wake or processing.
 
 An explicitly selected existing-context CONTROL pointer may refer to an exact
-runtime delivery UUID and a separately retained control intent. Read it with
+runtime delivery ID (UUID or digest key) and a separately retained control intent. Read it with
 control-show SOURCE_ROLE INTENT_ID, then delivery-show SOURCE_ROLE DELIVERY_ID.
 Keep source role, original author/recipient/required duty and actual collectors;
 never treat a source post/notice number or an old ACKed input as a new intent.
@@ -141,6 +141,23 @@ business work. Unknown arrival/processing retains the original duties and holds.
 This optional adapter supplies no existing-role adoption or native availability
 guarantee; its actual future caller operation needs separately selected scope and
 current applicability evidence, not an inferred permission from these instructions.
+
+An explicitly delegated service may automatically send prospective controls under
+its own distinct actor, selected queue/resume mode, pins and genuine target scope.
+This does not impersonate a source owner, acquire a native owner grant or enroll
+Reviews. Native availability may remain UNKNOWN. A legitimate routine callback
+can finish substantive collection while control_receipt.pending remains true;
+that callback is not your full-read/native receipt. After actual independent
+processing, use control-receipt SOURCE_ROLE DELIVERY_ID --receipt OWN_JSON with
+the README queue/steer proof. It adds a separate receipt without rewriting the
+callback's original stages. Never waive an unknown queue/inflight collector via
+direct disposition or settle independent effect/source duties from receipt.
+
+Legacy diagnosis compatibility derives exact retained job/task/collector closure
+for a new owner disposition; it does not fill missing historical linkage or permit
+old work replay. Multiple candidates/missing END/wrong collector stay precise
+questions. Preserve original incomplete capture, semantic UNKNOWN, handoff/inventory
+errors, unknown effects and the actual collector; do not clear slots or widen roots.
 
 Recovery exceptions appear in owner-controls too. After collected failed/invalid
 diagnosis, request-recovery can select redispose, authentic remaining target/WHY/

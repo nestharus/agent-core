@@ -163,7 +163,8 @@ class DeliveryJournal:
     def delivery_satisfied(row):
         order = {"pending": 0, "posted": 1, "ambiguous": 1, "acknowledged": 2,
                  "picked-up": 3, "processed": 4, "settled": 5}
-        return not row["hold"] and order.get(row["state"], 0) >= order[row["required"]]
+        board=json.loads(row['board_receipt']) if row['board_receipt'] else {}
+        return not row["hold"] and not board.get('control_receipt',{}).get('pending') and order.get(row["state"], 0) >= order[row["required"]]
 
     def delivery_observed(self, delivery, receipt):
         with self.tx():

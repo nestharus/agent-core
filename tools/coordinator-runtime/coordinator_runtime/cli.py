@@ -66,6 +66,17 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    automatic=sub.add_parser('delegate-control',help='Actual source owner explicitly delegates prospective service control')
+    automatic.add_argument('role')
+    automatic.add_argument('--policy',required=True)
+    automatic.add_argument('--authority',required=True)
+    revoke_control=sub.add_parser('revoke-control')
+    revoke_control.add_argument('role')
+    revoke_control.add_argument('delegation')
+    control_receipt=sub.add_parser('control-receipt',help='Actual recipient processes independent control duty, not business settlement')
+    control_receipt.add_argument('role')
+    control_receipt.add_argument('delivery')
+    control_receipt.add_argument('--receipt',required=True)
     prepare=sub.add_parser('control-prepare',help='Prepare a bounded existing-owner delivery pointer; no native effect')
     prepare.add_argument('role')
     prepare.add_argument('delivery')
@@ -171,6 +182,12 @@ async def serve(store):
 def operate(args, store):
     if args.command in {"init", "status"}:
         return store.status()
+    if args.command=='delegate-control':
+        return Board(store.config,args.role).delegate_control(store,parse_json(regular_path(args.policy).read_text()),args.authority)
+    if args.command=='revoke-control':
+        return Board(store.config,args.role).revoke_control(store,args.delegation)
+    if args.command=='control-receipt':
+        return Board(store.config,args.role).control_receipt(args.delivery,read_record(args.receipt))
     if args.command=='control-prepare':
         return Board(store.config,args.role).control_prepare(store,args.delivery,parse_json(regular_path(args.selection).read_text()))
     if args.command=='control-show':

@@ -62,6 +62,7 @@ class Completion:
                  'recipient': grant['owner'], 'worker': attempt['session'], 'collector': attempt['controller'],
                  'evidence': {'attempt': attempt['id'], 'result_hash': digest(answer), 'effect_receipt': job['effect_receipt']},
                  'local_readiness':local,
+                 'native_receipt':False,'genuine_owner_full_read':False,
                  'meaning': 'actual delegated collector consumed routine handback; other outboxes remain owned'}
         if outbox['kind'] == 'effect-request':
             proof['effects'] = {'evidence': [job['effect_receipt']], 'unknown_effects': []}

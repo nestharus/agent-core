@@ -30,7 +30,9 @@ class RecoveryJournal:
             self.finish_invalid_diagnosis(row)
             row=self.job(job,token)
             if row['recovery_state'] in {'claimed','diagnosing'}:
-                raise Refusal('existing recovery must be collected; no competing request')
+                diag=self.current_diagnosis(row)
+                if not diag or diag['collected'] is None or diag['ended'] is None or type(diag['exit']) is not int:
+                    raise Refusal('existing recovery must be collected; exact current diagnosis/END evidence missing; actual collector retains custody')
             if not isinstance(receipt,dict) or set(receipt)!={'mode','reason','evidence','remaining'}:
                 raise Refusal('recovery receipt needs mode/reason/evidence/remaining')
             mode=receipt['mode']
@@ -91,7 +93,9 @@ class RecoveryJournal:
             if row['active_attempt']!=old['id'] or row['state']!='held':
                 raise Refusal('request stale; no replacement or replay')
             if row['recovery_state'] in {'claimed','diagnosing'}:
-                raise Refusal('existing recovery must finish before consuming an owner request')
+                diag=self.current_diagnosis(row)
+                self.retain_recovery_disposition(row,diag,'Actual owner request selects a new disposition of the collected diagnosis; no replay or effect waiver')
+                row=self.job(row['id'])
             receipt=json.loads(current['receipt'])
             if receipt['mode']=='remaining-work':
                 self.remaining_work_fence(row,old)
@@ -112,11 +116,40 @@ class RecoveryJournal:
         return row
 
     def current_diagnosis(self,job):
-        return self.one("SELECT * FROM attempts WHERE job=? AND kind='diagnosis' "
+        explicit=self.one("SELECT * FROM attempts WHERE job=? AND kind='diagnosis' "
                         "AND json_extract(detail,'$.prior_task_attempt')=? ORDER BY created DESC,rowid DESC LIMIT 1",
                         (job['id'],job['active_attempt']))
+        if explicit:return explicit
+        old=self.attempt(job['active_attempt'])
+        candidates=self.rows("SELECT * FROM attempts WHERE job=? AND kind='diagnosis' "
+            "AND json_extract(detail,'$.prior_task_attempt') IS NULL AND created>=? ORDER BY created,rowid",
+            (job['id'],old['collected'] if old['collected'] is not None else old['created']))
+        if not candidates:return None
+        if len(candidates)!=1:
+            raise Refusal('ambiguous legacy diagnosis lineage for task '+old['id']+': '+','.join(d['id'] for d in candidates)+'; actual collector must identify the exact retained diagnosis; no inferred closure')
+        diag=candidates[0]
+        lineage=self.legacy_diagnosis_lineage(job,diag)
+        return {**diag,'legacy_lineage':lineage}  # Derived view only; original detail/history untouched.
+
+    def legacy_diagnosis_lineage(self,job,diag):
+        old=self.attempt(job['active_attempt'])
+        if (diag['kind']!='diagnosis' or diag['job']!=job['id'] or old['kind']!='task' or old['job']!=job['id']
+                or json.loads(diag['detail']).get('prior_task_attempt') is not None
+                or diag['controller']!=old['controller'] or diag['controller']!=job['recovery_owner']
+                or any(a['state']!='collected' or a['ended'] is None or a['collected'] is None or type(a['exit']) is not int for a in [old,diag])
+                or not old['created']<=old['ended']<=old['collected']<=diag['created']<=diag['ended']<=diag['collected']
+                or self.db.execute("SELECT COUNT(*) FROM attempts WHERE job=? AND kind='diagnosis' AND json_extract(detail,'$.prior_task_attempt') IS NULL AND created>=?",
+                                   (job['id'],old['collected'])).fetchone()[0]!=1
+                or self.one("SELECT id FROM attempts WHERE job=? AND kind='task' AND id!=? AND created>=?",
+                            (job['id'],old['id'],old['created']))):
+            raise Refusal('legacy diagnosis '+diag['id']+' cannot bind exact task '+old['id']+' and actual collected END/controller chronology; actual collector evidence/disposition required')
+        return {'basis':'unique retained job/task/collector chronology; disposition only, no semantic/handoff success',
+                'job':job['id'],'task':old['id'],'diagnosis':diag['id'],'collector':diag['controller'],
+                'task_exit':old['exit'],'task_collected':old['collected'],'diagnosis_exit':diag['exit'],'diagnosis_collected':diag['collected']}
 
     def diagnosis_choice(self,job,diag):
+        if diag and diag.get('legacy_lineage'):
+            raise Refusal('legacy collected diagnosis recognized for actual owner disposition only; missing historical linkage/selection is not automatic replacement authority')
         if (not diag or diag['kind']!='diagnosis' or diag['job']!=job['id'] or
                 json.loads(diag['detail']).get('prior_task_attempt')!=job['active_attempt'] or
                 diag['exit']!=0 or diag['error'] or diag['collected'] is None or diag['capture']!='complete'):
@@ -145,13 +178,18 @@ class RecoveryJournal:
             raise Refusal('stale diagnosis cannot change a successor recovery reservation')
         if not diag or diag['collected'] is None or (diag['ended'] is None and diag['state']!='not-started'):
             raise Refusal('unknown diagnosis remains with its actual collector')
-        if json.loads(diag['detail']).get('prior_task_attempt')!=job['active_attempt']:
+        if not self.owns_disposition(current,self.attempt(job['active_attempt'])):
+            raise Refusal('recovery disposition remains with the actual original collector; no custody transfer')
+        lineage=diag.get('legacy_lineage')
+        if lineage:self.legacy_diagnosis_lineage(job,diag)
+        elif json.loads(diag['detail']).get('prior_task_attempt')!=job['active_attempt']:
             raise Refusal('stale diagnosis cannot change current recovery disposition')
         self.db.execute('INSERT OR IGNORE INTO recovery_dispositions VALUES(?,?,?,?,?,?)',
                         (diag['id'],job['id'],job['active_attempt'],str(reason),self.controller,self.clock()))
         self.db.execute("UPDATE jobs SET recovery_state='awaiting-disposition' WHERE id=?",(job['id'],))
         payload={'job':job['id'],'attempt':job['active_attempt'],'reservation':job['token'],
             'reason':str(reason),'diagnosis':diag,'owner_remaining_selection':self.owner_remaining_selection(job['id'],job['active_attempt']),
+            'diagnosis_lineage':lineage,
             'next':'Actual role owner: request-recovery redispose, remaining-work with target/WHY/evidence, or defer. No forced profile, replay or effect waiver.',
             'original_result':self.attempt(job['active_attempt'])['result'],
             'source_members':json.loads(job['members'])}
@@ -162,6 +200,7 @@ class RecoveryJournal:
     def finish_invalid_diagnosis(self,job):
         """Also exposes the public next step for already-collected old bad diagnoses."""
         if job['recovery_state']!='diagnosing':return
+        if not self.owns_disposition(job,self.attempt(job['active_attempt'])):return
         diag=self.current_diagnosis(job)
         if not diag or diag['collected'] is None:return
         try:self.diagnosis_choice(job,diag)

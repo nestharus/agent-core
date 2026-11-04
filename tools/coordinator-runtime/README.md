@@ -635,7 +635,7 @@ Dispatcher/Cloud unenrolled; Reviews preserves actual opaque method/collectors.
 
 ### Explicit existing-context control pointer
 
-Decision13 adds an optional one-shot adapter for a **runtime delivery UUID** of
+Decision13 adds an optional one-shot adapter for an **exact runtime delivery ID** of
 kind question, alert, effect-request or result. It sends a bounded pointer to the
 full unchanged delivery; it cannot dispatch work. The genuine source role owner
 prepares/sends it from its current actor context. Its recipient must already have
@@ -646,16 +646,18 @@ normal intake, classification or delegated ACK change is supplied.
 
 | Selected mode | Required applicability | Effect and dependency |
 | --- | --- | --- |
-| `queue-existing` | Evidence of this existing context/profile, active or idle | Plain queue helper, no resume; true queue ID required for processing proof |
-| `queue-resume-existing` | Same explicit binding, active or idle | Explicit `resume=True` public helper interface required; no fallback |
+| `queue-existing` | Evidence of this existing context/profile; native availability can be unknown | Plain queue helper, no resume; true queue ID required for processing proof |
+| `queue-resume-existing` | Same explicit binding; native availability can be unknown | Explicit `resume=True` public helper interface required; no fallback |
 | `active-only-steer` | Active context and exact in-progress turn | Public steer/RPC helpers; expected turn and client message recorded before mutating RPC; no queue ID |
 
-Unloaded/unknown contexts are refused. The inspected base43f includes the plain
+Active-only steer refuses unloaded/unknown contexts. The inspected base43f includes the plain
 queue helper, but **does not include active_transport.py/active_rpc.py or the queue
 resume interface** present in a different other-owned shared checkout. Those
-optional modes refuse before calling transport until compatible public sources
-are received and selected separately. This code neither copies nor qualifies
-that other checkout. Pins identify bytes, not source authority or daemon/native
+optional modes refuse before calling transport unless compatible public sources
+are selected at board_library. The independently inspected installed shared
+helpers already express these interfaces and can be explicitly pinned there;
+baseline absence does not require copying their other-owned changes. This code
+neither copies nor qualifies that checkout. Pins identify bytes, not source authority or daemon/native
 compatibility. Active steer additionally checks the actual public helper's active
 metadata/turn and uses its expectedTurnId precondition; a changed turn cannot be
 silently substituted. The queue interface cannot independently establish native
@@ -695,7 +697,7 @@ The selection JSON has exactly these keys (uppercase values are placeholders):
 ```
 
 Use a fresh finite future epoch less than one hour away for valid_until. Queue
-modes use turn:null, state active/idle and only queue_transport.py in helper_sources.
+modes use turn:null, state active/idle/unknown and only queue_transport.py in helper_sources.
 Sources are exact regular files in the configured board_library, loaded with
 isolated pinned dependencies. Evidence lists contain 1–16 nonempty strings of at
 most 2000 UTF8 bytes; the entire selection is at most 16000 UTF8 bytes. The complete
@@ -769,3 +771,123 @@ max_bytes UTF8 accounting, with backpressure instead of discarding held records.
 There is no automatic deletion/retirement for these records. Retain them and their
 sources until actual processing completion +24h **and every hold**, including any
 uncollected send/consumer uncertainty. No platform physical cleanup is claimed.
+
+### Automatic service control and independent receiving duty
+
+Decision16 adds a prospective service capability under an already selected source
+role's outgoing delegation. The actual source owner issues it from its genuine
+context. It authorizes the distinct configured service actor, never an impersonated
+source owner or a native owner grant. Existing recipient enrollment, membership,
+profile, board/runtime identity, kind and exact source grant are rechecked before
+effect. Root is external and cannot be selected here; Reviews without genuine
+enrollment remains unavailable. No automatic enrollment or grant acquisition occurs.
+
+The new policy has exactly these keys; all identities/epochs/hashes below are
+placeholders, not current live bindings:
+
+```json
+{
+  "scope": "delivery-control-only",
+  "recipients": {
+    "Branch": {
+      "context": "GENUINE-EXISTING-OWNER-UUID",
+      "profile": ".codexN",
+      "mode": "queue-resume-existing",
+      "availability": "unknown",
+      "evidence": ["Actual selected existing context/profile/mode authority; activity unobserved"]
+    }
+  },
+  "kinds": ["question", "alert", "effect-request", "result"],
+  "helper_sources": {"queue_transport.py": "SELECTED-SHA256"},
+  "valid_until": 0,
+  "evidence": ["Actual source owner delegation, scope, rationale and dependency selection"]
+}
+```
+
+Select an actual finite future expiry, exact configured enrolled recipients and
+queue-existing or queue-resume-existing. Automatic policy deliberately states
+native availability unknown; it does not invent active/idle/turn evidence or choose
+steer as fallback. The role's scoped/revocable capability serves subsequent controls
+without per-message owner approval. Each evidence list is 1–16 strings <=2000 UTF8
+bytes, policy <=16000 bytes. Existing max_events/max_bytes bound retained policies
+and intents, with backpressure. No held record is discarded to renew a capability.
+
+```sh
+# Prospective actual-owner operations after separately selected deployment/scope:
+python3 "$RUNTIME" --config "$CONFIG" delegate-control "$SOURCE_ROLE" \
+  --policy /absolute/own/service-control.json --authority /absolute/actual/selection.json
+python3 "$RUNTIME" --config "$CONFIG" revoke-control "$SOURCE_ROLE" "$DELEGATION_ID"
+```
+
+Delegation captures the current board post frontier. Only exact new runtime
+deliveries after that cutover and within its selected kinds/recipients are eligible;
+old notices/native queues/ACKed inputs are not imported. Replacing a policy revokes
+the prior capability prospectively and keeps its old intents/duties. Automatic
+dispatch prepares a deterministic UUID intent per capability/delivery ID, including
+real digest-keyed failure deliveries. There is at most one new bounded helper call
+per pump pass (including a conservatively counted preflight refusal); subsequent
+passes progress other deliveries. Accepted/unknown/inflight intents never retry.
+Fresh unchanged interval alerts remain distinct deliveries, not deduplicated by
+the intent key. Source classification gates and delegated ACK remain unchanged.
+
+This adds **no live capability by installing code**. Deployment must separately
+select source/helper pins/mode/context authority and actual owner delegation.
+Installed queue_notice(resume=True) compatibility is expressible at the configured
+library without copying foreign source. Static grammar/pins, synthetic calls and
+one manual Branch receipt do not establish automatic daemon/receiver health.
+
+Control receiving is independent of substantive routine completion. A legitimate
+same-owner result/effect-request callback still performs its delegated collection
+under the original successful DONE/source/completion/effect fences. Its proof
+explicitly claims neither native receipt nor genuine-owner full-read. A separately
+required control remains control_receipt.pending, even if substantive state is
+settled. delivery_satisfied stays false and the combined processed_at stays null;
+after both duties, the processing clock is the later actual completion. Sources,
+jobs/outboxes and retirement holds therefore do not settle from callback/acceptance.
+Pending settled deliveries are revisited without resending; cached pre-upgrade
+receipts are refreshed once. Retained093 intents imply an outstanding duty even
+without the new additive tables. Original callback stages/history are not rewritten.
+Status exposes the retained intent/transport outcome, or not-prepared when authority
+expired/refused before construction. That gap stays pending even after substantive
+completion. The actual source owner can explicitly prepare that exact outstanding
+control under fresh scope/binding; no automatic renewal or business replay follows.
+
+The genuine recipient can record the independent duty without replacing a completed
+callback stage:
+
+```sh
+python3 "$RUNTIME" --config "$CONFIG" control-receipt "$SOURCE_ROLE" "$DELIVERY_ID" \
+  --receipt /absolute/own/control-processing.json
+```
+
+Use top-level evidence plus the exact existing transport proof for queues or
+receipt.control steer proof above. Same checks also apply to direct delivery-stage;
+neither path invents native arrival/full-read. For a prepared/refused unattempted
+control, genuine direct full-read/disposition may instead supply receipt.control:
+`{kind:"owner-control-disposition",intent,full_read,disposition,evidence}`. This
+records native_receipt_claimed:false. It cannot waive an attempted unknown queue,
+inflight collector, effect or other consumer duty. An uncollected/unknown attempt
+still requires its real collector/consumer evidence; no generic clearing/retry is
+supplied. Receipts are bounded, attributed and immutable; they are cooperative
+evidence rather than independent authentication or semantic verification.
+
+### Legacy collected recovery diagnosis
+
+Pre-linkage diagnoses with missing/null prior_task_attempt can be recognized from
+retained exact job/active task/collector evidence: one legacy diagnosis after that
+task's collected end, actual numeric ENDs/collection on both, ordered chronology,
+matching original recovery collector and no successor task. The derived view names
+its basis; no attempt detail, old result or missing field is rewritten. Recognition
+permits an owner-disposition question only, never automatic profile handoff/replay.
+Semantic UNKNOWN/null, incomplete capture, original handoff/inventory errors,
+effects/hold_reason and all five Branch business-slot obligations remain independent.
+
+The existing request-recovery redispose/defer/remaining-work interface now recognizes
+that closure. A genuine role owner may queue its exact request; only the lawful
+original disposition collector consumes it. A foreign status Store identity is not
+custody transfer. Remaining-work still needs original closure, reconciled effects,
+explicit resume disposition, source/legacy/publication/resource fences and fresh
+diagnosis with the authentic new selection. Ambiguous/multiple diagnoses, missing
+numeric END, wrong collector or successor evidence return a precise remaining
+question with exact IDs. No raw-history search, foreign wait, force-release, source
+root widening, handoff deletion or task launch is used to make compatibility pass.
