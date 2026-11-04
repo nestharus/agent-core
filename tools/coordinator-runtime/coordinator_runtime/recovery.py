@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS recovery_dispositions(
 
 
 class RecoveryJournal:
-    def request_recovery(self,job,token,attempt,actor,receipt):
+    def request_recovery(self,job,token,attempt,actor,receipt,*,publication_board=None):
         """Queue one exact, bounded owner decision; launch/collection stay outside."""
         with self.tx():
             row=self.job(job,token)
@@ -37,6 +37,7 @@ class RecoveryJournal:
             reuse=isinstance(receipt,dict) and receipt.get('mode')=='use-diagnosis'
             expected=keys|{'diagnosis','selection'} if reuse else keys
             if reuse and 'collector_continuity' in receipt:expected|={'collector_continuity'}
+            if reuse and 'publication_remainder' in receipt:expected|={'publication_remainder'}
             if not isinstance(receipt,dict) or set(receipt)!=expected:
                 raise Refusal('recovery receipt needs mode/reason/evidence/remaining')
             mode=receipt['mode']
@@ -60,7 +61,7 @@ class RecoveryJournal:
             count=self.db.execute('SELECT COUNT(*) FROM recovery_requests WHERE job=?',(job,)).fetchone()[0]
             if count>=self.config['limits'].get('max_owner_corrections',4):
                 raise Refusal('bounded owner recovery requests exhausted; original duties retained')
-            witness=self.retained_diagnosis_witness(row,receipt) if reuse else None
+            witness=self.retained_diagnosis_witness(row,receipt,publication_board=publication_board) if reuse else None
             if reuse and 'collector_continuity' in receipt:self.validate_collector_continuity(row,receipt['collector_continuity'])
             self.budget(None,len(encode(receipt).encode())+1024)
             self.db.execute('INSERT INTO recovery_requests VALUES(?,?,?,?,?,\'pending\',?,?)',
@@ -68,13 +69,16 @@ class RecoveryJournal:
         return self.one('SELECT * FROM recovery_requests WHERE id=?',(key,))
 
     def remaining_work_fence(self,row,old):
+        self.remaining_work_conditions(row,old)
+        self.require_recoverable_hold(row,old)
+
+    def remaining_work_conditions(self,row,old):
         if old['ended'] is None or old['collected'] is None or row['effects'] not in {'none','reconciled'}:
             raise Refusal('actual collected end and reconciled effects required for remaining work')
         if self.one("SELECT target FROM file_publications WHERE attempt=? AND state!='published'",(old['id'],)):
             raise Refusal('unresolved publication intent cannot be bypassed by remaining work')
         if not json.loads(old['detail']).get('resume_disposition'):
             raise Refusal('same-session continuation disposition must remain explicit')
-        self.require_recoverable_hold(row,old)
         if self.enrollment(row['role'])['legacy_hold'] or any(
                 self.one('SELECT hold FROM events WHERE id=?',(m['event'],))['hold']
                 for m in json.loads(row['members'])):
@@ -86,7 +90,7 @@ class RecoveryJournal:
         if row['hold_reason']!=old['error'] and (not error or json.loads(error['detail']).get('error')!=row['hold_reason']):
             raise Refusal('unrelated job hold remains binding; recovery cannot discard it')
 
-    def consume_recovery_request(self,request,*,dispatcher_continuity=False):
+    def consume_recovery_request(self,request,*,dispatcher_continuity=False,publication_board=None):
         """Lawful disposition collector; only dispatcher may consume explicit continuity."""
         with self.tx():
             current=self.one('SELECT * FROM recovery_requests WHERE id=?',(request,))
@@ -102,7 +106,7 @@ class RecoveryJournal:
                 raise Refusal('request stale; no replacement or replay')
             if receipt['mode']=='use-diagnosis':
                 successor=self._handoff(row['id'],receipt['diagnosis'],retained_request=current,
-                                        dispatcher_continuity=dispatcher_continuity)
+                                        dispatcher_continuity=dispatcher_continuity,publication_board=publication_board)
                 transfer=json.loads(self.attempt(successor)['detail']).get('collector_continuity')
                 self.db.execute("UPDATE recovery_requests SET state='consumed',result=? WHERE id=?",
                     (encode({'collector':self.controller,'at':self.clock(),'prior_job':row,
@@ -165,13 +169,14 @@ class RecoveryJournal:
                         (self.controller,encode(handoff),row['id']))
         return handoff
 
-    def retained_diagnosis_witness(self,row,receipt,*,request=None):
+    def retained_diagnosis_witness(self,row,receipt,*,request=None,publication_board=None):
         """Reaffirm qualified same-purpose evidence, not a fresh diagnosis or forced state."""
         if row['state']!='held' or row['recovery_state']!='awaiting-disposition':
             raise Refusal('retained diagnosis use requires the exact held awaiting-disposition job; defer/successor/current recovery remains binding')
         old=self.attempt(row['active_attempt'])
         self.require_active_sources(job=row['id'])
-        self.remaining_work_fence(row,old)
+        if 'publication_remainder' in receipt:self.remaining_work_conditions(row,old)
+        else:self.remaining_work_fence(row,old)
         for field in ['diagnosis','selection']:required_text(receipt[field],'exact retained '+field,128)
         diag=self.current_diagnosis(row)
         if not diag or diag['id']!=receipt['diagnosis'] or diag.get('legacy_lineage'):
@@ -192,16 +197,38 @@ class RecoveryJournal:
         newer=self.one('SELECT id FROM recovery_requests WHERE job=? AND attempt=? AND rowid>? AND id!=?',
                        (row['id'],old['id'],choice_order,request or ''))
         if newer:raise Refusal('newer owner choice '+newer['id']+' remains binding; retained selection is not current')
-        self.diagnosis_choice(row,diag)  # Preserves @owner, profile, target/WHY and authentic selection checks.
+        choice=self.diagnosis_choice(row,diag)  # Preserves @owner, profile, target/WHY and authentic selection checks.
+        publication=None
+        if 'publication_remainder' in receipt:
+            from .publication import remainder_basis
+            publication=remainder_basis(self,row,old,choice,selection,publication_board)
+            if receipt['publication_remainder']!=publication:
+                raise Refusal('publication remainder basis changed or incomplete; owner must qualify current purpose/grant/source/peers')
         fields=('id','job','kind','controller','profile','binding','state','ended','exit','collected','capture','error','semantic','result')
         identity={k:detail.get(k) for k in ['prior_task_attempt','owner_selection','binding_readback','root_identity_observed']}
-        return {'diagnosis':diag['id'],'selection':selection['id'],'prior_task':old['id'],
+        witness={'diagnosis':diag['id'],'selection':selection['id'],'prior_task':old['id'],
                 'diagnosis_hash':digest({**{k:diag[k] for k in fields},'identity':identity}),
                 'original_task_hash':digest({k:old[k] for k in ['id','job','controller','ended','exit','collected','semantic','capture','error','result']}),
                 'closure_hash':digest(row['collection_handoff']),
                 'reservation_hash':digest({k:row[k] for k in ['token','members','role','phase','task','package']}),
                 'selection_hash':digest({k:selection[k] for k in ['id','job','attempt','actor','receipt','state','created']}),
                 'basis':'actual owner reaffirmation of retained qualified same-purpose diagnosis; no source/history/END rewrite'}
+        if publication is not None:witness['publication_remainder']=publication
+        return witness
+
+    def publication_remainder_basis(self,job,token,attempt,diagnosis,selection,board):
+        """Read-only candidate operands. The genuine owner still judges purpose/WHY."""
+        from .publication import remainder_basis
+        with self.tx():
+            row=self.job(job,token)
+            if row['active_attempt']!=attempt:raise Refusal('publication basis needs exact active original')
+            diag=self.current_diagnosis(row)
+            if not diag or diag['id']!=diagnosis:raise Refusal('publication basis needs exact retained diagnosis')
+            selected=self.owner_remaining_selection(job,attempt)
+            if not selected or selected['id']!=selection:raise Refusal('publication basis needs exact consumed selection')
+            basis=remainder_basis(self,row,self.attempt(attempt),self.diagnosis_choice(row,diag),selected,board)
+            self.retained_diagnosis_witness(row,{'diagnosis':diagnosis,'selection':selection,'publication_remainder':basis},publication_board=board)
+            return basis
 
     def owner_remaining_selection(self,job,attempt):
         row=self.one("SELECT * FROM recovery_requests WHERE job=? AND attempt=? AND state='consumed' "

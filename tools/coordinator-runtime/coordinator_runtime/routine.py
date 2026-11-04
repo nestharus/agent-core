@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from .contracts import Refusal, encode, collected_task_result
+from .contracts import Refusal, encode, collected_task_result, digest
 from .custody import safe_path, read_file
 from . import publication, readiness
 
@@ -57,7 +57,11 @@ def prepare(store, board, job, attempt, task):
     if not policy:
         return
     grant = board.completion_authority(store, job['task'])
-    with publication.snapshot_lock(store):before = snapshot(store, policy['targets'])
+    with publication.snapshot_lock(store):
+        before = snapshot(store, policy['targets'])
+        remainder=json.loads(store.attempt(attempt)['detail']).get('publication_remainder')
+        if remainder and (before!=remainder['peers'] or digest(grant)!=remainder['grant']):
+            raise Refusal('publication remainder peer preimages/grant changed before fresh staging; no replay')
     if not all(v['exists'] for v in before.values()):raise Refusal('same-inode method requires existing regular canonical files')
     with store.tx():
         store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',

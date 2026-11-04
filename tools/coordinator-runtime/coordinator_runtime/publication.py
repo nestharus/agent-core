@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 from contextlib import contextmanager, ExitStack
 
-from .contracts import Refusal, encode, artifact_paths
+from .contracts import Refusal, encode, artifact_paths, digest
 from .custody import capture, read_file, safe_path
 from .cleanup import open_parent
 
@@ -21,6 +21,80 @@ CREATE TABLE IF NOT EXISTS file_publications(
  PRIMARY KEY(attempt,target));
 CREATE TABLE IF NOT EXISTS canonical_backups(attempt TEXT,target TEXT,path TEXT,preimage TEXT,PRIMARY KEY(attempt,target));
 """
+
+INCOMPLETE_HOLD = 'routine canonical publication remains incomplete; effect receipt cannot waive exact preimage/publication'
+
+
+def remainder_basis(store, job, old, choice, selection, board):
+    """A qualified publication duty, never an owner flag for arbitrary holds.
+
+    The owner must separately judge same purpose/WHY. Hashes bind that judgment
+    to retained representations; this function does not make it for the owner.
+    No historical run, stage, publication or business result is redisposed here.
+    """
+    from .routine import policy_for
+    from .readiness import assess
+    if job['hold_reason'] != INCOMPLETE_HOLD:
+        raise Refusal('publication remainder cannot waive an unrelated job hold')
+    if store.db.execute("SELECT COUNT(*) FROM attempts WHERE job=? AND kind='task'", (job['id'],)).fetchone()[0] != 1:
+        raise Refusal('publication remainder permits at most one successor; prior task history remains binding')
+    if board is None or board.role != job['role']:
+        raise Refusal('publication remainder needs the current role completion authority')
+    grant = board.completion_authority(store, job['task'])
+    if (grant['id'] != store.enrollment(job['role'])['grant_id']
+            or grant['owner'] != store.enrollment(job['role'])['owner']):
+        raise Refusal('publication remainder grant/owner differs from the retained enrollment')
+    effects=json.loads(job['effect_receipt']) if job['effect_receipt'] else {}
+    if (job['effects'] != 'reconciled' or effects.get('actor') != grant['owner']
+            or not effects.get('evidence') or effects.get('unknown_effects') != []):
+        raise Refusal('publication remainder requires actual known reconciled effects')
+    if store.one('SELECT id FROM attempts WHERE job=? AND (ended IS NULL OR collected IS NULL OR exit IS NULL)', (job['id'],)):
+        raise Refusal('publication remainder requires every related actual collected END; unknown closure stays owned')
+    for member in json.loads(job['members']):
+        if digest(store.event(member['event'])) != member['hash']:
+            raise Refusal('publication remainder source changed; no refreshed business purpose')
+    task = store.config['tasks'][job['task']]
+    policy = policy_for(task)
+    run = store.one('SELECT * FROM routine_runs WHERE attempt=?', (old['id'],))
+    if (not policy or not run or run['task'] != job['task'] or run['grant_id'] != grant['id']
+            or json.loads(run['policy']) != policy or run['state'] != 'prepared'):
+        raise Refusal('publication remainder needs the original incomplete delegated routine run; no retrospective invention')
+    local = assess(store, old)
+    allocated = stages(store, old['id'])
+    before = json.loads(run['before_files'])
+    if set(allocated) != set(policy['targets']) or set(before) != set(allocated):
+        raise Refusal('publication remainder needs the complete original staging/preimage mapping')
+    publications = store.rows('SELECT p.* FROM file_publications p JOIN attempts a ON p.attempt=a.id WHERE a.job=?', (job['id'],))
+    if any(p['state'] != 'published' or not p['witness'] for p in publications):
+        raise Refusal('unknown/partial publication intent remains binding; no remainder replay')
+    if len([p for p in publications if p['attempt'] == old['id']]) == len(allocated):
+        raise Refusal('publication already complete; remainder cannot redispose historical publication')
+    maximum = store.config['limits'].get('max_artifact_bytes', 33554432)
+    held_stages = {}
+    # Exclusions are applied before stage/target metadata or body acquisition.
+    paths = [*allocated, *allocated.values(), *(p['target'] for p in publications)]
+    for name in paths:
+        if any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
+               for p in store.config.get('artifact_exclusions', [])):
+            raise Refusal('publication remainder path excluded before metadata')
+    with snapshot_lock(store):
+        for target, path in allocated.items():
+            body, observed = read_file(safe_path(path, [str(store.home/'artifacts'/old['id']/'staged')]), maximum)
+            held = store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?', (old['id'], path))
+            if not held or held['sha256'] != observed['sha256']:
+                raise Refusal('publication remainder lacks exact original durable staging custody')
+            held_stages[target] = observed
+        peers = {target: current(safe_path(target, policy['targets']), maximum) for target in policy['targets']}
+        if not all(p['exists'] for p in peers.values()):
+            raise Refusal('publication remainder needs existing regular current peers')
+        for published in publications:
+            if published['target'] not in peers or peers[published['target']] != json.loads(published['witness']):
+                raise Refusal('prior published effects changed; actual source/effect qualification required')
+    return {'version': 1, 'hold': job['hold_reason'],
+            'purpose': digest({'task': task, 'choice': choice, 'selection': selection['receipt']}),
+            'peers': peers, 'grant': digest(grant), 'run': digest(run),
+            'stages': held_stages, 'publications': digest(publications),
+            'effects': digest(job['effect_receipt']), 'readiness': digest(local)}
 
 
 def stages(store, attempt):
