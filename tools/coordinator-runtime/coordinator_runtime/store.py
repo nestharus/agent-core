@@ -344,6 +344,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def begin(self, attempt, detail):
         with self.tx():
             row = self.attempt(attempt)
+            if row['job']:
+                self.require_execution_open(row['job'])
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("begin requires this controller's unstarted reservation")
             self.db.execute("UPDATE attempts SET begin=?,state='running',detail=? WHERE id=?",
@@ -352,6 +354,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def session(self, attempt, session, turn=None, detail=None):
         with self.tx():
             row = self.attempt(attempt)
+            if row['job']:
+                self.require_execution_open(row['job'])
             if row["controller"] != self.controller or row["ended"] is not None:
                 raise Refusal("foreign or ended attempt cannot bind a session")
             merged = {**json.loads(row["detail"]), **(detail or {})}
@@ -361,6 +365,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def observe_semantic(self, attempt, semantic):
         with self.tx():
             row = self.attempt(attempt)
+            if row['job']:
+                self.require_execution_open(row['job'])
             if row["controller"] != self.controller or row["ended"] is not None:
                 raise Refusal("semantic observation belongs to the live original collector")
             self.db.execute("UPDATE attempts SET semantic=? WHERE id=?", (semantic, attempt))
@@ -700,6 +706,13 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
                     "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "
                     "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
+                    "AND NOT EXISTS (SELECT 1 FROM file_publications p JOIN attempts a ON a.id=p.attempt "
+                    "JOIN integration_prestart_dispositions d ON d.job=a.job JOIN jobs w ON w.id=d.job,json_each(w.members) wm "
+                    "WHERE json_extract(wm.value,'$.event')=events.id AND p.state!='published') "
+                    "AND NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d JOIN jobs w ON w.id=d.job,json_each(w.members) wm "
+                    "WHERE json_extract(wm.value,'$.event')=events.id AND EXISTS (SELECT 1 FROM attempts a WHERE a.job=w.id) "
+                    "AND (w.effects NOT IN ('none','reconciled') OR EXISTS (SELECT 1 FROM attempts a WHERE a.job=w.id "
+                    "AND a.cleanup NOT IN ('done','owned-ephemeral-lifecycle-observed','no-session-created')))) "
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o JOIN integration_prestart_dispositions d ON d.job=o.job "
                     "JOIN jobs w ON w.id=d.job,json_each(w.members) wm "
                     "WHERE json_extract(wm.value,'$.event')=events.id "

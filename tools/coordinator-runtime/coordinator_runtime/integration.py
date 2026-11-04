@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS integration_prestart_dispositions(
 class IntegrationJournal:
     def integration_retired(self, job):
         # Both are permanent execution fences. A prestart withdrawal asserts no
-        # attempt allocation, never a fabricated process END or processing.
+        # attempt launch (or no allocation), never a fabricated END or processing.
         return (self.one('SELECT * FROM integration_retirements WHERE job=?', (job,))
                 or self.one('SELECT * FROM integration_prestart_dispositions WHERE job=?', (job,)))
 
@@ -59,6 +59,10 @@ class IntegrationJournal:
                 or row['recovery_count'] != 0 or row['collection_handoff'] is not None
                 or self.one('SELECT id FROM recovery_requests WHERE job=?', (job,))):
             raise Refusal('only never-allocated Work integration reservations may be withdrawn')
+        return self._integration_reservation_basis(row)
+
+    def _integration_reservation_basis(self, row):
+        job = row['id']
         window = self.one('SELECT * FROM integration_windows WHERE job=?', (job,))
         if not window or json.loads(window['basis'])['members'] != json.loads(row['members']):
             raise Refusal('exact consumed integration window and frozen members required')
@@ -98,6 +102,102 @@ class IntegrationJournal:
                 ('owner withdrew never-allocated execution; pending duties conserved', job))
             self.db.execute("UPDATE queue SET state='queued',job=NULL WHERE job=?", (job,))
         return self.integration_retired(job)
+
+    def integration_no_start_basis(self, job, token):
+        """Collected task no-start with closed diagnoses; absence of begin is insufficient.
+
+        A caller must additionally close every controller capable of launching.
+        No stale window refresh, fabricated END or effect reconciliation occurs.
+        """
+        self.require_execution_open(job)
+        row = self.job(job, token)
+        if (row['role'] != 'Work' or row['phase'] != 'integrator'
+                or row['state'] not in {'running', 'held'} or not row['active_attempt']
+                or row['response'] is not None or row['closed_at'] is not None):
+            raise Refusal('exact allocated open Work integrator required')
+        attempts = self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,))
+        if (not attempts or not any(a['id'] == row['active_attempt'] and a['kind'] == 'task' for a in attempts)
+                or any(not self._integration_no_start_attempt(a) for a in attempts)):
+            raise Refusal('all tasks require collected no-start and diagnoses require real closure; missing begin/END is not proof')
+        if self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'", (job,)):
+            raise Refusal('pending owner recovery selection must retain its disposition')
+        basis = self._integration_reservation_basis(row)
+        basis.update({'attempts': attempts,
+            'source_custody': [self.one('SELECT * FROM source_custody WHERE event=?', (m['event'],))
+                for m in json.loads(row['members'])],
+            'input_resolutions': [self.rows('SELECT * FROM input_resolutions WHERE event=? ORDER BY version', (m['event'],))
+                for m in json.loads(row['members'])],
+            'results': self.rows('SELECT * FROM results WHERE job=? ORDER BY rowid', (job,)),
+            'controllers': sorted({row['controller'], *[a['controller'] for a in attempts]}
+                | ({row['recovery_owner']} if row['recovery_owner'] else set())),
+            'outboxes': self.rows('SELECT * FROM outboxes WHERE job=? ORDER BY rowid', (job,)),
+            'publication': self.rows('SELECT p.* FROM file_publications p JOIN attempts a ON a.id=p.attempt WHERE a.job=? ORDER BY p.rowid', (job,)),
+            'custody': self.rows('SELECT c.* FROM artifact_custody c JOIN attempts a ON a.id=c.attempt WHERE a.job=? ORDER BY c.rowid', (job,)),
+            'recovery_requests': self.rows('SELECT * FROM recovery_requests WHERE job=? ORDER BY rowid', (job,)),
+            'recovery_dispositions': self.rows('SELECT * FROM recovery_dispositions WHERE job=? ORDER BY rowid', (job,))})
+        return self._integration_bounded(basis)
+
+    def _integration_no_start_attempt(self, attempt):
+        if attempt['kind'] not in {'task', 'diagnosis'} or attempt['collected'] is None:
+            return False
+        if attempt['kind'] == 'diagnosis' and attempt['state'] == 'collected':
+            # Read-only recovery can have really run; retain its genuine numeric
+            # closure rather than inventing an END for the unlaunched tasks.
+            return (attempt['begin'] is not None and attempt['ended'] is not None
+                    and type(attempt['exit']) is int)
+        return (attempt['state'] == 'not-started'
+                and all(attempt[k] is None for k in ('begin', 'ended', 'exit', 'session', 'turn', 'semantic', 'result'))
+                and json.loads(attempt['detail']).get('known_not_started') is True
+                and bool(json.loads(attempt['detail']).get('resume_disposition')))
+
+    def withdraw_integration_no_start(self, job, token, actor, receipt):
+        """Permanent launch fence and pending-input return; all duties survive.
+
+        Controller closure/task-no-launch testimony is an accountable external premise,
+        not authenticated by SQLite. The authority-checked CLI supplies the owner.
+        Cooperating begin/allocation and this disposition serialize in one tx.
+        """
+        with self.tx():
+            self._integration_owner(actor)
+            basis = self.integration_no_start_basis(job, token)
+            if not isinstance(receipt, dict) or set(receipt) != {'basis', 'reason', 'controllers'}:
+                raise Refusal('exact no-start basis, reason and controller closures required')
+            if receipt['basis'] != basis:
+                raise Refusal('no-start disposition basis changed; fresh owner decision required')
+            required_text(receipt['reason'], 'allocated no-start withdrawal reason', 4000)
+            closures = receipt['controllers']
+            if not isinstance(closures, list) or len(closures) != len(basis['controllers']):
+                raise Refusal('every launch-capable controller needs explicit no-start closure')
+            found = []
+            for item in closures:
+                if not isinstance(item, dict) or set(item) != {'controller', 'collector', 'writers_closed', 'no_launch', 'evidence'}:
+                    raise Refusal('exact scoped controller/collector no-launch closure required; no invented END')
+                required_text(item['controller'], 'launch-capable controller', 128)
+                required_text(item['collector'], 'actual controller collector', 128)
+                if item['writers_closed'] is not True or item['no_launch'] is not True:
+                    raise Refusal('missing begin or collection alone cannot close a launch-capable controller')
+                self._integration_evidence(item['evidence'])
+                found.append(item['controller'])
+            if sorted(found) != basis['controllers']:
+                raise Refusal('conflicting/missing controller closures')
+            self._integration_bounded(receipt)
+            self.budget(None, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            self.db.execute('INSERT INTO integration_prestart_dispositions VALUES(?,?,?,?,?)',
+                (job, actor, encode(basis), encode(receipt), self.clock()))
+            self.db.execute("UPDATE jobs SET state='held',hold_reason=COALESCE(hold_reason,?) WHERE id=?",
+                ('owner withdrew qualified allocated no-start execution; all duties conserved', job))
+            self.db.execute("UPDATE queue SET state='queued',job=NULL WHERE job=?", (job,))
+        return self.integration_retired(job)
+
+    def withdrawn_integration_hold(self, event):
+        """Historical allocated duties remain tied to immutable input members."""
+        return self.one("SELECT w.id FROM integration_prestart_dispositions d JOIN jobs w ON w.id=d.job,"
+            "json_each(w.members) m WHERE json_extract(m.value,'$.event')=? AND "
+            "(EXISTS (SELECT 1 FROM file_publications p JOIN attempts a ON a.id=p.attempt "
+            "WHERE a.job=w.id AND p.state!='published') OR "
+            "(EXISTS (SELECT 1 FROM attempts a WHERE a.job=w.id) AND "
+            "(w.effects NOT IN ('none','reconciled') OR EXISTS (SELECT 1 FROM attempts a WHERE a.job=w.id "
+            "AND a.cleanup NOT IN ('done','owned-ephemeral-lifecycle-observed','no-session-created')))))", (event,))
 
     def integration_context(self, job):
         """Authoritative selection for initial, diagnosed and recovered attempts."""

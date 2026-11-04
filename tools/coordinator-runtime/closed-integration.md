@@ -97,8 +97,45 @@ and frozen members stay intact. The disposition and current duties join the
 conserved debt of every subsequent window; withdrawal alone authorizes no new
 execution. Current source, enrollment, peer/conflict and custodian evidence
 must support a fresh owner-selected batch, including any returned inputs.
-The old execution cannot start or recover later. This does not handle an
-allocated-but-unbegun attempt or recycle lifetime job/window capacity.
+The old execution cannot start or recover later. This route does not handle an
+allocated attempt or recycle lifetime job/window capacity.
+
+`integration-no-start-basis JOB --token TOKEN` is the separate allocated
+route. Every related task attempt must have an affirmative original-controller
+collection of `known_not_started: true` and explicit resume disposition, with
+no begin, session, turn, semantic result, numeric exit or process END. Missing
+begin or missing END alone never qualifies. Uncollected attempts, conflicting
+task native observations, pending owner recovery selections and missing consumed
+windows refuse. Related read-only diagnoses must either qualify as no-start or
+have their actual begin, numeric END and collection retained. Their having
+run does not manufacture an END for an unlaunched task or strand that task. A claimed recovery controller is included even if it has not
+allocated a diagnosis; an uncollected diagnosis cannot be bypassed.
+
+`withdraw-integration-no-start JOB --token TOKEN --receipt ABSOLUTE_FILE`
+requires the exact fresh `basis`, nonempty `reason` and `controllers`. Each
+controller entry has exactly `controller`, nonempty `collector`,
+`writers_closed: true`, `no_launch: true` and bounded nonempty `evidence`
+strings. Here `no_launch` is scoped to the task attempts; a collected read-only
+diagnosis retains its real closure in the basis. Include every original/recovery
+controller exactly once. Those are
+scoped, accountable collector facts that the actual owner must establish;
+text does not authenticate them or prove foreign-writer absence. No process
+END is invented for a process that never started, and no controller END alone
+would establish the no-launch/closed-writers premise. CLI actor and current
+Board authority checks precede this operation.
+
+This disposition uses the same permanent prestart fence and queue return, and
+retains the allocated attempts/results, original window/target/WHY, existing
+job hold, recovery state, input ACK/holds and all effect/publication/outbox/
+custody duties. It requires current disposition evidence but does not require
+the obsolete launch-window snapshot to become current. A fresh exact window
+must then account for all old/new debt before a new job may reserve or launch.
+Begin/session/semantic callbacks, recovery and publication on the withdrawn
+execution are fenced. Related unresolved publication, effect or attempt-cleanup
+duties remain processing/retirement dependencies through the original frozen
+members after queue reassignment; unrelated UNKNOWN debt does not consume all
+future execution capacity. Withdrawal supplies neither processing nor cleanup,
+and no lifetime budget credit is granted.
 
 Initial, diagnosis and recovered successor prompts load the authoritative
 integration-window receipt from the journal. Handoff also records it in the
@@ -123,3 +160,11 @@ custody or service continuity. Run only under the caller's selected isolation
 and writable-root bounds. It imports no stock fixtures, substitutes no HOME or
 session identity, deletes no fixtures and makes no native/model call. Its
 fictional pool allocator performs no shared pool or account operation.
+
+Allocated no-start software controls are in
+`python3 -B tests/test_integration_no_start77.py --fixtures ABSOLUTE_NEW_OWNED_ROOT`.
+They require caller-enforced kernel read-only source/dependency/controller
+mounts, network/PID isolation and explicit owned fixture storage. They check
+cumulative retained fixture headroom before every new case and retain all
+beforeimages/SQL traces. Fictional no-launch/collector/Board/allocation facts
+are protocol premises; this establishes no operating adoption or live recovery.
