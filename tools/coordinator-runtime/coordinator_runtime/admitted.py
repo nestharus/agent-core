@@ -16,6 +16,47 @@ CREATE TABLE IF NOT EXISTS duty_accounts(
 """
 
 
+def task_exclusions(task):
+    """Static capability reasons, without touching configured roots or owners."""
+    reasons = []
+    if task.get('role') not in {'Work', 'Branch', 'Reviews', 'QA'}:
+        reasons.append('role outside selected four coordinators')
+    if task.get('phase') == 'integrator':
+        reasons.append('batched integrator')
+    if task.get('execution') == 'owner':
+        reasons.append('external owner execution/return')
+    if task.get('effects') != 'none':
+        reasons.append('effects beyond terminal no-effect execution')
+    for key in ('responses', 'software_handoffs', 'routine_completion', 'ordinary_effects', 'require_package_scope'):
+        if task.get(key):
+            reasons.append(key)
+    return reasons
+
+
+def correspondence(config):
+    """Pure task-shape report, never selection, admission or operating evidence.
+
+    In particular, a task's eligibility does not prove that its role's complete
+    input choices fit. Do not follow any configuration path to build this report.
+    """
+    selected = config.get('finite_service') or {}
+    names = selected.get('tasks', [])
+    tasks = {name: {'role': task.get('role'), 'phase': task.get('phase'),
+                    'exclusions': task_exclusions(task), 'selected': name in names}
+             for name, task in config['tasks'].items()}
+    roles = {}
+    for role, value in config['roles'].items():
+        routes = value.get('routes', [])
+        unsupported = [name for name in routes if name not in tasks or tasks[name]['exclusions']
+                       or name not in names or tasks[name]['role'] != role]
+        roles[role] = {'routes': routes, 'unsupported_choices': unsupported,
+                       'finite_intake_supported': bool(selected and routes and not unsupported)}
+    return {'mode': 'finite-selected' if selected else 'default-no-finite-accounts',
+            'population': selected.get('max_admitted'), 'population_semantics': 'lifetime; never ACK/age recycling',
+            'tasks': tasks, 'roles': roles,
+            'boundary': 'static source capability only; no actual authority, processing, custodian or fit proof'}
+
+
 def policy(config):
     selected = config.get('finite_service')
     if selected is None:
@@ -27,11 +68,7 @@ def policy(config):
         raise Refusal('finite service needs explicit terminal tasks and bounded admission count')
     for name in selected['tasks']:
         task = config['tasks'].get(name)
-        if (not task or task['role'] not in {'Work', 'Branch', 'Reviews', 'QA'}
-                or task['phase'] == 'integrator' or task.get('execution') == 'owner'
-                or task.get('effects') != 'none' or task.get('responses')
-                or task.get('software_handoffs') or task.get('routine_completion')
-                or task.get('ordinary_effects') or task.get('require_package_scope')):
+        if not task or task_exclusions(task):
             raise Refusal('finite service supports terminal no-effect non-batched tasks only')
     return selected
 
@@ -42,14 +79,19 @@ def plan(config):
     corrections = config['limits'].get('max_owner_corrections', 4)
     tasks = 2 + corrections
     diagnoses = 1 + corrections
-    # Each task can owe 16 explicit handoffs, an owner report and a question.
-    # No effects/publications/response recursion is admitted by policy().
-    outboxes = 18 * tasks
-    # An interrupted partial plan can grow monotonically one delivery at a time;
-    # every distinct outgoing-plan event can require classification + diagnosis.
-    events = 1 + outboxes
-    # Each event also has up to C genuine owner input decisions, each of
-    # which can require a fresh classifier. These are not free retries.
+    # Job-linked producers: 16 handoffs + owner report + owner question per
+    # task, AND one separately keyed disposition question per diagnosis.
+    job_outboxes = 18 * tasks + diagnoses
+    # Each monotonic partial job plan consumes at least one previously unbound
+    # job outbox. Input-control questions already name their event, so they
+    # cannot recursively generate plans through gate_result_delivery().
+    events = 1 + job_outboxes
+    # Every event can owe an input question for its initial classification and
+    # C owner decisions. Its single classifier recovery substitutes for a failed
+    # classification (which cannot have committed a question), not a new round
+    # of owner decisions. Include its attempt separately below.
+    input_questions = (1 + corrections) * events
+    outboxes = job_outboxes + input_questions
     return {'events': events, 'jobs': 1, 'attempts': (2 + corrections) * events + tasks + diagnoses,
             'outboxes': outboxes}
 

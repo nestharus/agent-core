@@ -19,14 +19,25 @@ limit (default 4), the plan reserves:
 | Resource | Credits per admitted input |
 | --- | --- |
 | Task attempts | A = C + 2, including initial and bounded recovery/remaining work |
-| Recovery diagnoses | C + 1 |
-| Outboxes | O = 18A (16 handoffs, one owner question, one owner report per attempt) |
-| Events | E = 1 + O, allowing each monotonic partial outgoing plan its own classification |
+| Recovery diagnoses | D = C + 1 |
+| Job outboxes | B = 18A + D (16 handoffs, one owner question and one owner report per task, plus one disposition question per diagnosis) |
+| Events | E = 1 + B, allowing each monotonic partial job plan its own classification |
+| Input-control questions | Q = (C + 1)E, initially and after each bounded owner input decision |
+| Outboxes total | O = B + Q |
 | Attempts total | (C + 2)E + A + C + 1, including classification and owner input decisions |
 | Jobs | 1 (integrator batches excluded) |
 
-At default C=4 these totals are 109 events, 665 attempts, 108 outboxes and one
-job. Count admission requires current rows + all unspent credits + the new full
+At default C=4 these totals are 114 events, 695 attempts, 683 outboxes and one
+job. At C=1 they are 57 events, 176 attempts, 170 outboxes and one job.
+Input-control outboxes already carry their event; the outgoing-plan gate selects
+only unbound job outboxes. They therefore add questions without recursively
+adding outgoing-plan events. A failed classifier cannot commit a question; its
+single recovery substitutes for that failed classifier. There are at most C+1
+committed question-producing classifications and C+2 classification attempts per
+event. A new partial job-plan event consumes at least one new unbound job outbox,
+so B bounds their population. These are conservative joint maxima, not a claim
+that every maximum is simultaneously feasible in one lawful recovery order.
+ Count admission requires current rows + all unspent credits + the new full
 plan to fit the existing configured caps. Allocating an event, job, attempt or
 outbox charges its original account atomically; rollback returns its credit.
 Unowned producers cannot consume reserved count capacity. Already-owed duties
@@ -88,3 +99,71 @@ The source/consumer/control/transport/outbox/publication/resource/recovery/effec
 privacy duties of all old and new work remain. Work44 remains PARTIAL with
 effects UNKNOWN. Independent Source → DIFFERENT Frame → actual Work precedes
 adoption. No live operation or acceptance is selected by this source.
+
+
+## Selected configuration correspondence and remaining choice
+
+`admitted.correspondence(config)` reports static task/role shapes without following
+any configured path, reading identities/grants, or executing the configuration.
+The same `task_exclusions` predicate drives admission policy; the report is not an
+alternative admission gate. Complete role input choices must all be selected,
+eligible and same-role before finite intake; one eligible terminal task alone
+does not qualify a role's mixed routes. The mode and lifetime population are
+explicit. A report supplies neither actual selection nor operating evidence.
+
+The exact public RFQ rollout configuration selected for Work48606 has no
+`finite_service`. Its current shapes correspond as follows (static mapping only):
+
+| Task | Required behavior outside the terminal count envelope |
+| --- | --- |
+| work-proposer | response to work-integrator; consequential scope/blocker remains with Work |
+| work-integrator | batching, owner-reconciled effects, routine canonical publication, response routes |
+| branch-proposer | proposal response to branch-integrator and scope/blocker to Work |
+| branch-integrator | batching, owner-reconciled effects, admitted package scope, responses to Work |
+| reviews-proposer | actual owner review/return and report-integrator responses; no generic substitute review |
+| reviews-integrator | batching, owned artifacts, response/internal-result publication to Work |
+| qa-execution | owner-reconciled admitted package execution and response to cleanup/Work |
+| qa-cleanup | owned artifacts, qualification to Branch/Work response and internal-result publication |
+
+All eight remain outside this finite mechanism; the default source's existing
+paths are distinct from finite-account support. No current rollout workflow proof
+follows from a terminal example, a changed selection, or this table. Branch,
+Reviews and QA input route lists additionally contain a Work task: current finite
+intake requires same-role choices. No selected route or task is removed here.
+
+The remaining source scope/choice belongs back with Work through Root: retain
+this mechanism for separately selected terminal duties only, or select a bounded
+population/horizon for the actual response graph, external owner returns,
+integrator batching, package/effect/publication duties and their failure tails.
+The actual graph contains cycles through Work and QA qualification to Branch;
+counting it requires an authentic finite workload/transition bound or separately
+admitted child responsibility, not an arbitrary recursion depth, ACK recycling,
+or silent removal of owed routes. Mixed-owner batches need explicit account
+attribution/conservation and all selected producer paths need charging. Existing
+legacy populations cannot simply be retrofitted. This Act does not choose those
+operating semantics or duplicate the separate general held-integrator lifecycle.
+One integrator per coordinator and initial QA maximum five remain the supplied
+constraints; source accounting does not demonstrate their actual operation.
+
+## Genuine operating operands
+
+Before an actual recurring owner arrangement can support a service claim, Work
+must select the entitled operating owner/consumer and current grants; provide
+exact source-to-delivery/transport/control correlation and substantive completed
+processing/settlement receipts; freshly qualify every named hold; and supply a
+durable original intent and result sink with a real custodian for failures after
+an effect. No callback, text sink reference or static mapping provides these.
+The existing Python constructor takes custodians; CLI `serve` supplies none.
+Absent custodians remains a visible gap. A new generic plugin/loader is not
+needed merely to rename that missing actual capability. A selected adapter must
+also supply bounded callback duration and adequate recurring service rate so
+receive/progress remain responsive; a page of 16 alone bounds count, not time.
+
+Finite fit requires the selected lifetime N times the count tail, existing and
+competing populations, alert arrival/burst rate times actual processing lag plus
+24h retention, hold/qualification/outage horizon, and headroom in each relevant
+count, byte, file, SQLite/WAL, control/transport, consumer and evidence sink.
+Each repeated unchanged violation adds its own occurrence. Actual amplification,
+rate and hold operands must come from their owners; no physical reservation or
+universal foreign-store/infinite-arrival guarantee is inferred. A required
+unsupported path remains an actual gap until Work selects its scope and means.
