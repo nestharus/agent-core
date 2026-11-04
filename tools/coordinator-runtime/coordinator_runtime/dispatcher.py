@@ -13,7 +13,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness, prospective, ordinary, capacity
+from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
 from .inputs import input_routes
 
@@ -146,7 +146,8 @@ def template_text(path):
 
 
 class Dispatcher:
-    def __init__(self, store, models=None, boards=None):
+    def __init__(self, store, models=None, boards=None, custodians=None):
+        self.custodians = {} if custodians is None else custodians
         self.store, self.config = store, store.config
         self.models = models or AppServer(self.config)
         self.boards = boards if boards is not None else {r: Board(self.config, r) for r in self.config["roles"]}
@@ -497,7 +498,7 @@ class Dispatcher:
         # their own current error. This does not declare any duty processed.
         for operation in (self.receipts, self.reconcile_completed, self.intake,
                           self.schedule_classifications, self.schedule_classification_recovery,
-                          self.schedule_job, self.schedule_recovery, self.automatic_cleanup):
+                          self.schedule_job, self.schedule_recovery, self.custodian_progress, self.automatic_cleanup):
             subject = 'dispatcher-phase:' + operation.__name__
             try:
                 operation()
@@ -507,6 +508,9 @@ class Dispatcher:
         capacity.deliver_pending(self.store)
         await asyncio.sleep(0)
         await self.pump_deliveries_async()
+
+    def custodian_progress(self):
+        return progress.step(self.store, self.custodians)
 
     def automatic_cleanup(self):
         if self.store.clock()-self.last_cleanup < 60:

@@ -25,7 +25,7 @@ from .publication import SCHEMA as PUBLICATION_SCHEMA
 from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
-from . import prospective, ordinary, capacity
+from . import prospective, ordinary, capacity, admitted
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -140,7 +140,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA)
+        admitted.policy(config)
+        self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self._bind_config()
 
@@ -182,12 +183,17 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         counts['excluded_codex_store_scope'] = 'sessions subtree opaque/unmeasured; shared account stores not inventoried'
         return counts
 
-    def budget(self, kind, incoming=0):
+    def budget(self, kind, incoming=0, *, event=None, job=None):
+        if event or job:
+            if not self.db.in_transaction:
+                raise Refusal('duty credit allocation requires the source write transaction')
+            admitted.charge(self, kind, event=event, job=job)
         usage, limits = self.usage(), self.config["limits"]
         if usage["bytes"] + incoming + capacity.PRESSURE_RESERVE >= limits["max_bytes"]:
             raise Backpressure("cumulative journal/artifact bytes held; conserve before admitting more")
         if kind is not None and usage[kind] >= limits.get(f"max_{kind}", limits["max_events"]):
             raise Backpressure(f"cumulative {kind} bound reached; held work is retained")
+        admitted.check(self, usage, kind)
 
     def enroll(self, role, grant):
         selected = self.config["roles"][role]
@@ -235,7 +241,8 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             if old and old["hash"] != digest(event):
                 raise Refusal("same event identity has different immutable content")
             if not old:
-                self.budget("events", len(content.encode()))
+                admitted.admit(self, event)
+                self.budget("events", len(content.encode()), event=event['id'])
                 self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                                 (event["id"], role, content, digest(event), self.clock(), event.get("parent")))
             if cursor is not None:
@@ -250,7 +257,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
 
     def _attempt(self, kind, event, job, binding, profile):
         self.require_active_sources(event, job)
-        self.budget("attempts")
+        self.budget("attempts", event=event, job=job)
         if profile not in self.config['profiles']:
             raise Refusal('profile advice outside runtime account authorization')
         allocation = self.execution_pool.allocate()
@@ -479,7 +486,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
         members = self._members(row)
         packages = {member["package"] for member in members}
         package = next(iter(packages)) if len(packages) == 1 else None
-        self.budget("jobs")
+        self.budget("jobs", event=row['event'])
         job, token = ident(), ident()
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
@@ -650,7 +657,7 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
             "allowed_tasks": choices, "notice": None, "board_id": None,
             "body": result, "kind": "response", "grant": None,
         }
-        self.budget("events", len(encode(response).encode()))
+        self.budget("events", len(encode(response).encode()), job=job['id'])
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),
                          self.clock(), response["parent"]))
@@ -870,6 +877,9 @@ class Store(DeliveryJournal, RecoveryJournal, InputJournal):
                 "control_receive": {'declared':self.config.get('control_receive',{}),
                     'availability':'cooperative genuine existing owner receive points only; configuration/posts do not prove active receive or native wake'},
                 "alert_service": capacity.service(self),
+                "admitted_duty_accounts": self.rows('SELECT * FROM duty_accounts'),
+                "admitted_count_credits": admitted.reserved(self),
+                "custodian_progress": self.one("SELECT value FROM meta WHERE key='custodian-progress'"),
                 "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),

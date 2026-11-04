@@ -95,6 +95,8 @@ def load_config(path):
 
 
 def validate_config(config):
+    from .admitted import policy
+    policy(config)
     if config.get("version") != 1:
         raise Refusal("configuration version 1 required")
     canonical_uuid(config["actor"])
