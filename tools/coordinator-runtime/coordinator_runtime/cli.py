@@ -68,6 +68,18 @@ def parser():
     sub.add_parser("init")
     sub.add_parser("status")
     sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
+    draft.add_argument('--operator-config', required=True)
+    draft.add_argument('--retention-library')
+    draft.add_argument('--source-task', '--scope-task', dest='scope_task', action='append', default=[])
+    sub.add_parser('current-configuration-status', help='Read current transition receipt; no replay or historical recovery')
+    for command in ('current-configuration-basis', 'select-current-configuration'):
+        transition = sub.add_parser(command, help='Genuine Work: same-journal prospective configuration; no historical recovery')
+        transition.add_argument('--candidate', required=True)
+        if command == 'current-configuration-basis':
+            transition.add_argument('--task', action='append', required=True)
+        else:
+            transition.add_argument('--selection', required=True)
     service = sub.add_parser('processing-service', help='Continuing original collector; foreground, no finite-grant extension')
     service.add_argument('capability')
     service.add_argument('--enable-models', action='store_true')
@@ -279,6 +291,18 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'draft-current-configuration', 'current-configuration-basis', 'select-current-configuration', 'current-configuration-status'}:
+        from . import configuration, processing
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
+        if args.command == 'current-configuration-status':
+            return configuration.latest(store)
+        if args.command == 'draft-current-configuration':
+            return configuration.candidate(store, args.operator_config, args.scope_task, args.retention_library)
+        value = load_config(args.candidate)
+        if args.command == 'current-configuration-basis':
+            return configuration.basis(store, boards, value, args.task)
+        return configuration.apply(store, boards, value, read_record(args.selection))
     recovery_ops={'service-recovery-basis','recover-service','review-recovery-basis','recover-review','reconcile-review-history'}
     branch_ops={'branch-register','branch-route','branch-accept','branch-link-builder','branch-begin','branch-end','branch-context-disposition','branch-lifecycle'}
     custody_ops={'shared-custody-basis','shared-custody-consent','retire-shared-custody','reconcile-shared-custody','release-shared-archive'}

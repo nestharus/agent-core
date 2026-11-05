@@ -73,7 +73,8 @@ def blocked(runtime, row, task=None):
     for job in runtime.rows("SELECT * FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled')", (row['role'],)):
         if row.get('id') == job['id']:
             continue  # Reconcile this operation against OTHER unresolved owners.
-        prior = runtime.config['tasks'][job['task']]
+        from .configuration import task_for_job
+        prior = task_for_job(runtime, job)
         prior_admission = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
         try:
             prior = scoped_task(job['task'], prior, prior_admission)

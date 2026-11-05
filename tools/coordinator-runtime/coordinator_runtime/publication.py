@@ -154,6 +154,8 @@ def snapshot_lock(store):
 
 
 def publish(store, board, job, attempt, run, task):
+    from .configuration import require_current_job
+    require_current_job(store, job)
     store.require_execution_open(job['id'])
     with snapshot_lock(store):
         return locked_publish(store,board,job,attempt,run,task)

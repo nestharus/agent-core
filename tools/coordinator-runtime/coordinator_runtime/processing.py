@@ -10,6 +10,7 @@ import hashlib
 
 from .contracts import Refusal, SOL, digest, encode, ident, required_text, canonical_uuid, parse_json
 from .retained import RetainedBoard
+from . import configuration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS processing_capabilities(
@@ -55,7 +56,9 @@ def implementation():
 
 
 def basis(runtime, boards):
+    version = configuration.latest(runtime)
     return {'configuration': digest(runtime.config), 'implementation': implementation(),
+            **({'configuration_transition': {k: version[k] for k in ('position', 'previous', 'current', 'original', 'issuer')}} if version else {}),
             'roles': {r: {'original': b.retained_basis(runtime),
                           'future_after': b.future_frontier(),
                           'original_cursor': runtime.one('SELECT seq FROM cursors WHERE role=?', (r,))['seq']}
@@ -211,6 +214,7 @@ def select(runtime, boards, selection):
         raise Refusal('explicit unique unchanged task allowlist required')
     if set(selection['tasks']) - set(runtime.config['tasks']):
         raise Refusal('processing task is not in original configuration')
+    configuration.validate_processing(runtime, selection)
     operations = selection.get('owner_operations', [])
     if not isinstance(operations, list) or len(operations) > 32:
         raise Refusal('bounded exact owner operations required')
@@ -269,6 +273,8 @@ class Access:
         self.runtime, self.key, self.boards = runtime, key, boards
 
     def current(self):
+        configuration.assert_current(self.runtime)
+        configuration.assert_release(self.runtime)
         row = self.runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (self.key,))
         if not row:
             raise Refusal('exact processing capability absent')
@@ -288,6 +294,8 @@ class Access:
 
     def event(self, event):
         _, selection = self.current()
+        if not configuration.event_allowed(self.runtime, event):
+            return False
         if event['id'] in selection['retained_events']:
             original = {e['id']: e['hash'] for r in selection['basis']['roles'].values() for e in r['original']['events']}
             if digest(event) != original.get(event['id']):
@@ -375,6 +383,14 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def _configuration(self, runtime, binding):
+        return configuration.original_binding(runtime, self.role, binding)
+
+    def _delivery_grant(self, conn, runtime, outbox):
+        if not configuration.outbox_allowed(runtime, outbox):
+            raise Refusal('historical outbox retains original config, destinations and custody; no current replay')
+        return super()._delivery_grant(conn, runtime, outbox)
+
     def receiving_intent(self, runtime, event):
         """A marker alone grants nothing: require the exact durable delivery intent."""
         delivery = event.get('source_delivery', {})
@@ -602,6 +618,10 @@ class ProcessingDispatcher(Dispatcher):
         if self.store.processing.current()[1]['future_intake']:
             super().intake()
 
+    def pump_delivery(self, outbox, *, send_control=True):
+        if configuration.outbox_allowed(self.store, outbox):
+            return super().pump_delivery(outbox, send_control=send_control)
+
     def receipts(self):
         for row in self.store.rows("SELECT id FROM events WHERE ack IN ('ready','unknown','inflight')"):
             if self.store.processing.event(self.store.event(row['id'])):
@@ -767,6 +787,11 @@ def release(runtime, boards, key, controller, receipt):
 
 
 async def run(runtime, boards, key, seconds, emit):
+    with configuration.stopped(runtime):
+        return await _run(runtime, boards, key, seconds, emit)
+
+
+async def _run(runtime, boards, key, seconds, emit):
     import asyncio
     import signal
     runtime.processing = Access(runtime, key, boards)
@@ -777,7 +802,7 @@ async def run(runtime, boards, key, seconds, emit):
         board.runtime = runtime
         board.verify_authority(runtime)
     with runtime.tx():
-        if runtime.one("SELECT controller FROM processing_runs WHERE state='owned'"):
+        if configuration.owned_service_conflict(runtime):
             raise Refusal('dependency: prior processing controller needs its actual original END and explicit processing-release')
         runtime.budget(None, 2048)
         runtime.db.execute('INSERT INTO processing_runs VALUES(?,?,?,?)', (runtime.controller, key, 'owned', runtime.clock()))

@@ -1257,3 +1257,7 @@ multiple owner command connections; the retained failure is distinct from
 business publication. Existing path-type/link/mode checks still refuse unsafe
 journal files. This change does not repair a corrupted journal or qualify live
 journal health.
+
+See [prospective current configuration](current-configuration.md) for the supported
+Work-selected same-journal release/configuration transition, its immutable
+historical bindings, operating sequence and compatibility/collection limits.

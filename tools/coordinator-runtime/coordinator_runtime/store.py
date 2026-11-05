@@ -26,7 +26,7 @@ from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
 from .integration import IntegrationJournal, SCHEMA as INTEGRATION_SCHEMA
-from . import prospective, ordinary, capacity, admitted, windows, custodian_service
+from . import prospective, ordinary, capacity, admitted, windows, custodian_service, configuration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -147,6 +147,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         custodian_service.policy(config)
         self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
+        self.db.executescript(configuration.SCHEMA)
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
@@ -163,8 +164,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             row = self.one("SELECT value FROM meta WHERE key='configuration'")
             expected = digest(self.config)
-            if row and row["value"] != expected:
-                raise Refusal("configuration differs from this journal; reconcile/migrate offline")
+            current = configuration.latest(self)
+            if row and (current['current'] if current else row['value']) != expected:
+                raise Refusal("configuration differs from this journal; use the supported current-configuration transition")
+            if current and (current['original'] != row['value'] or json.loads(current['configuration']) != self.config):
+                raise Refusal('current configuration/original journal binding differs')
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('configuration',?)", (expected,))
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('actor',?)", (self.config["actor"],))
             windows.initialize(self)
@@ -173,9 +177,13 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.close()
 
     @contextmanager
-    def tx(self):
+    def tx(self, *, collection=None):
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            if collection is None:
+                configuration.assert_current(self)
+            else:
+                configuration.authorize_collection(self, collection)
             yield
             self.db.execute("COMMIT")
         except BaseException:
@@ -406,7 +414,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                             (self.clock(), encode({**json.loads(row["detail"]), **detail}), attempt))
 
     def session(self, attempt, session, turn=None, detail=None):
-        with self.tx():
+        with self.tx(collection=attempt):
             row = self.attempt(attempt)
             if row['job']:
                 self.require_execution_open(row['job'])
@@ -417,7 +425,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                             (session, turn, encode(merged), attempt))
 
     def observe_semantic(self, attempt, semantic):
-        with self.tx():
+        with self.tx(collection=attempt):
             row = self.attempt(attempt)
             if row['job']:
                 self.require_execution_open(row['job'])
@@ -427,7 +435,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def collect(self, attempt, outcome):
         """Only the launching controller supplies actual child.wait() outcome."""
-        with self.tx():
+        with self.tx(collection=attempt):
             row = self.attempt(attempt)
             if row["controller"] != self.controller or row["collected"] is not None:
                 raise Refusal("foreign or duplicate collection refused")

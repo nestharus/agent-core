@@ -41,6 +41,8 @@ class RetainedBoard(Board):
     """An opt-in operator surface; ordinary Board never inherits this authority."""
 
     def _original(self, conn, runtime):
+        from .configuration import assert_current
+        assert_current(runtime)
         enrollment = runtime.one('SELECT * FROM enrollments WHERE role=?', (self.role,))
         grant = conn.execute('SELECT * FROM coordinator_grants_v1 WHERE id=?',
                              (enrollment['grant_id'],)).fetchone() if enrollment else None
@@ -56,9 +58,14 @@ class RetainedBoard(Board):
             raise Refusal('original runtime/source/owner binding changed')
         cap = conn.execute('SELECT configuration FROM coordinator_software_grants_v1 WHERE grant_id=?',
                            (grant['id'],)).fetchone()
-        if not cap or cap['configuration'] != digest(self.config):
+        if not cap or cap['configuration'] != self._configuration(runtime, self._binding(grant)):
             raise Refusal('original immutable software configuration changed')
         return dict(grant)
+
+    def _configuration(self, runtime, binding):
+        # Ordinary retained custody remains strictly bound to its historical
+        # config. Only the explicit prospective ProcessingBoard can bridge it.
+        return digest(self.config)
 
     @staticmethod
     def _binding(grant):
@@ -100,7 +107,7 @@ class RetainedBoard(Board):
             row = conn.execute('SELECT id,issuer,created,revoked,visits,cursor FROM coordinator_retained_caps_v1 '
                                'WHERE source_grant=? AND revoked IS NULL', (grant['id'],)).fetchone()
             continuation = dict(row) if row else None
-        return {'configuration': digest(self.config), 'implementation': implementation(), 'binding': self._binding(grant),
+        return {'configuration': self._configuration(runtime, self._binding(grant)), 'implementation': implementation(), 'binding': self._binding(grant),
                 'usage': self._usage(conn, grant), 'events': events, 'continuation': continuation,
                 'outboxes': [{'id': o['id'], 'hash': digest(o)} for o in outboxes],
                 'scope': 'existing retained sources only; no intake, execution, acceptance or cleanup'}

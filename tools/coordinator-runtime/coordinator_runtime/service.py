@@ -16,6 +16,7 @@ import struct
 from .contracts import Refusal, digest, encode, required_text
 from .processing import ProcessingDispatcher, Access, apply_control
 from . import reviews, resource_scopes
+from .configuration import owned_service_conflict
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS service_runs(
@@ -232,7 +233,7 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with runtime.tx():
-            if runtime.one("SELECT controller FROM processing_runs WHERE state='owned'"):
+            if owned_service_conflict(runtime):
                 raise Refusal('previous original process still owns recovery; collect its actual END first')
             runtime.budget(None, 4096)
             runtime.db.execute('INSERT INTO processing_runs VALUES(?,?,?,?)', (runtime.controller, key, 'owned', runtime.clock()))
