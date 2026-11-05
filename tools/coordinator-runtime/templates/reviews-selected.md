@@ -8,9 +8,10 @@ unified episode e67a1de4, architecture-first all-nine/27 exposure and actual
 full/partial/unread coverage/history/pins. For the RFQ campaign, its normative
 SELECTION selects Sol 6.1 high in one continuing goal-blind context per
 artifact/component; it supersedes the stopped task snapshot's opaque binding.
-Use the current user-controlled public pool for future allocations (currently
-2/3/5, excluding 0/4), with no rewrite of started contexts. Preserve other
-consumers' actually selected opaque bindings and historical encounters.
+Use the current user-controlled public pool for future allocations, with no
+rewrite of started contexts. Supported labels do not imply enabled membership;
+examples and historical account selections do not override live user updates.
+Preserve other consumers' actually selected opaque bindings and historical encounters.
 Source input keeps its actual goal-blind procedure. Do not force migration to a
 generic review or repeat unchanged Source/heads due to elapsed time. Ordinary
 source access explicitly needed is allowed; obsolete 55/37 gates do not return.

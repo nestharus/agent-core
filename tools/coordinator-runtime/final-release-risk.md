@@ -35,7 +35,8 @@ structural correspondence, not the truth of prose or an actor's real authority.
 Branch acquires/authenticates originals and decisions under existing authority;
 do not let the assessor select its own acceptance owner or fabricate evidence.
 Hard privacy/unknown-effect custody cannot be waived. Preserve source, collector,
-current235/no0/4/static, branch/profile/Work7/QA5, sole-slot, all-hold and 24h
+current user-controlled pool membership and pinned static controls,
+branch/profile/Work7/QA5, sole-slot, all-hold and 24h
 whole-processing retention rules. No check supplies native/provider identity,
 processing completion, a missing numeric END or authority for effects/replay.
 

@@ -66,13 +66,14 @@ coordinator --config ACTUAL_CONFIG processing-service ACTUAL_CAPABILITY --enable
 
 Retain its actual terminal, emitted controller, argv and complete return. There is
 no service timer or heartbeat. The original process owns model handles and actual
-child waits. Existing public pool locking governs future allocation and creation;
-current user selection is .codex2/.codex3/.codex5, excluding .codex/.codex4. Every future input, including a later turn on a bound context, rechecks the
+child waits. Existing public pool locking governs future allocation and creation
+against current user-controlled membership, not a fixed subset of supported
+labels. Every future input, including a later turn on a bound context, rechecks the
 current pool on that actually observed account. Running/admitted calls retain
 their account. Excluded/unavailable contexts park or take explicit informed
 recovery; they never silently move. Close can drain existing ownership. The service neither writes the pool nor probes accounts.
 Use the existing public execution_pool.py status/set interface for genuine user
-updates; never restore the dated 2/4/5 template membership.
+updates; do not treat dated template membership as the current user selection.
 
 While that original is alive, the same genuine issuer can reconnect:
 

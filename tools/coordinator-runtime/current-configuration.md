@@ -152,8 +152,10 @@ Original four-role sources/outboxes and all other historical records, unknowns,
 holds, frontiers, accounting and required histories stay conserved and charged.
 Retirement still requires actual whole processing completion plus 24 hours and
 all source/consumer/outbox/recovery/effect/privacy holds, with archives' own
-completed processing frontier. Today's selected pool is automatic 2/3/5, excluding
-0/4. The user can change ordered membership live through the existing public
+completed processing frontier. Enabled membership is the current user-controlled
+ordered public pool, distinct from the five supported labels authorized above.
+Historical selections and examples do not fix membership. The user can change
+ordered membership live through the existing public
 `execution_pool.py --routes PUBLIC_CONTROL set [PROFILE ...]` interface; an empty
 selection pauses new execution. Inspect through its `status` or the runtime's
 `execution-pool` command. No service restart, regrant or account migration is

@@ -87,7 +87,8 @@ addresses and delivery recipients. Existing config profile pins and a diagnosis'
 profile suggestion remain recorded advice; they do not bypass ordinary rotation.
 No config/grant digest migration is needed when the existing authorization covers
 the shared pool. The supported prospective current-configuration draft authorizes
-all five known public labels without enabling them or asserting availability;
+all five known public labels (`.codex`, `.codex2`, `.codex3`, `.codex4`, `.codex5`)
+without enabling them or asserting availability;
 original configurations and receive identities stay immutable. Its release pins
 all static control bytes except the supported membership value, so live updates,
 reordering and empty pauses preserve the current capability. See
@@ -96,11 +97,16 @@ missing-route/close boundaries. An explicit `execution_pool_routes` absolute pat
 public control file for an isolated installation/fixture; adding/changing that
 config field requires the existing offline config reconciliation.
 
-After separate adoption, inspect or change the ordered shared membership with:
+Enabled membership is the current ordered public control value and follows live
+user changes. Supported labels, illustrative subsets and historical observations
+do not fix that membership or exclude accounts from later user selections.
+After separate adoption, inspect or change the ordered shared membership with
+the following syntax examples. Apply `set` only for the actual user selection:
 
 ```sh
 python3 "$RUNTIME" --config /absolute/private/config.json execution-pool
 python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py status
+# Illustrative subset only; this is not a current-membership assertion.
 python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py set .codex2 .codex3 .codex5
 # No names means an explicitly empty pool: NEW execution cannot proceed.
 python3 /absolute/adopted-checkout/tools/direct-child/execution_pool.py set
