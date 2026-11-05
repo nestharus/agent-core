@@ -164,6 +164,13 @@ uses opaque blob key/length only, with body integrity explicitly unobserved.
 No old witness is deleted or searched for in a real journal by this correction.
 An unmarked unknown alias is not discovered or certified by these checks.
 
+The `artifact-source` exporter applies these same current path, retained-origin,
+preimage and historical-stage checks before selecting, hashing or exporting a
+blob. All current bounded-log targets apply, including for original owners and
+exact addressed consumers. Entitlement remains necessary and does not override
+an acquisition exclusion. Legitimate exact exports retain their hash/size
+checks and original custody; missing bodies refuse without inventing custody.
+
 A Branch activity account cannot bypass missing original resource scope.
 Unresolved local jobs need their original frozen policy/admission and original
 executed common-repository identity/ref map to establish independence; unknown,

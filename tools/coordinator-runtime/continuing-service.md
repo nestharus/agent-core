@@ -124,9 +124,26 @@ A native live root uses the selected Sol6.1-high account route. Its only allowed
 Bash command is a stable material facade. Repeated calls emit exact bounded
 source chunks, with path/pin/offset/size/hash, then an explicit end marker. The
 facade cycles for rereading and changes factual material on a correction without
-changing the command or source conversation. Source bodies remain in their
-original repositories/definition homes. Emission does not establish reading or
-coverage. The only facade mutation is its own read cursor.
+changing the command or source conversation. Original source bodies remain in
+their repositories/definition homes. The facade verifies each item in full once
+per visit, keeps only that active item's exact bytes beside its owned cursor,
+and emits chunks by offset without acquiring earlier bodies again. The cache is
+at most 32 MiB and also respects the selected artifact/journal bound; preparation
+checks ordinary owned storage headroom. An oversized item refuses without
+truncating original material. Completed items leave an empty cache file.
+
+Previously visited mutable histories and definitions retain file identity
+witnesses checked on each call; changes, replacements and a formerly absent
+history appearing refuse under the old manifest. Each newly visited file still
+needs its full selected hash. Cached bytes retain the original complete SHA-256;
+cache identity changes refuse instead of silently rebuilding. Manifest revisions
+restart emission; end markers cycle for rereading. An older emission-only cursor
+keeps its current offset, verifying prior mutable inputs once to establish the
+new witnesses. Cursor metadata is bounded to 1 MiB. These are cooperative exact
+byte/currentness checks, not protection from a hostile same-account writer.
+Emission does not establish reading or coverage. No second work/recovery journal
+or retained source archive is introduced; interrupted cursor/cache writes can
+refuse and require explicit operator disposition of owned progress.
 
 The current ordinary procedure owns architecture first and all nine families/27
 constituents. Architecture and remaining returns are separately waited native
@@ -144,6 +161,11 @@ configured sole Reviews report integrator, then Work. Even an incomplete Source
 return is transported whole to that integrator and remains held; generic failure
 handling must not re-review or manufacture Source acceptance. Integration retains
 all findings, dissent, limits, partial/unread coverage and original failures.
+Successful proposal results explicitly declare empty independent handoffs and
+why: their complete report goes through the internal sole integration route.
+This satisfies delivery-required task completion without creating a second Work
+job or substituting a generic failure. Internal response creation and real
+addressed delivery/settlement retain their separate existing obligations.
 
 Native-root failure or malformed wire return uses the explicit informed recovery
 path linked above. Accepted transport and saved history alone are not

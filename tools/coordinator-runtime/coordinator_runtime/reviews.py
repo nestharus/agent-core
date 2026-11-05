@@ -115,6 +115,23 @@ def sha(body):
     return hashlib.sha256(body).hexdigest()
 
 
+def proposal_result(returned, component, acquired, collector, attempt, turns):
+    """Keep the original report on the sole internal integration route.
+
+    This proposer creates no independent addressed handoff. Store._response
+    routes the complete proposal to Reviews integration, which owns Work's
+    consolidated return. Explicit completion fields also satisfy tasks that
+    require delivery; they do not bypass that response or its settlement.
+    """
+    return {'semantic': returned['semantic'], 'summary': returned['summary'], 'category': 'proposal',
+            'findings': [{'kind': 'ordinary-review-full-return', 'component': component, 'material': acquired,
+                          'original_collector': collector, 'original_attempt': attempt, 'turns': turns}],
+            'failures': [], 'unknowns': [] if returned['semantic'] == 'DONE' else [returned['coverage']],
+            'artifacts': [], 'handoffs': [],
+            'no_handoff_reason': 'Complete original report routes internally to sole Reviews integration; '
+                                 'that integrator owns the consolidated Work return.'}
+
+
 def method_files(entry):
     """Resolve only the ordinary prompt's incorporated family/definition homes."""
     entry = regular_path(entry)
@@ -361,6 +378,16 @@ class Executor:
             prior=context or (json.loads(predecessor['context']) if predecessor else None)
             acquired = material(policy, packet, prior)
             acquired['selected_task']=job.get('task')
+            from .review_reader import CACHE_MAX
+            acquired['cache_max_bytes'] = min(CACHE_MAX, runtime.config['limits'].get('max_artifact_bytes', CACHE_MAX),
+                                              runtime.config['limits']['max_bytes'])
+            sizes = [w['bytes'] for w in acquired['source'].values()]
+            sizes += [len(acquired['correction_diff'].encode())]
+            sizes += [Path(p).stat().st_size for p in [*acquired['method_files'], *acquired['prior_histories']]]
+            sizes += [Path(acquired['history']).stat().st_size] if Path(acquired['history']).exists() else []
+            cache_bytes = max(sizes, default=0)
+            if cache_bytes > acquired['cache_max_bytes']:
+                raise Refusal('selected review item exceeds bounded facade cache; original material retained')
             if set(packet['answered_ids'])-prior_observations(runtime,component):
                 raise Refusal('answered IDs must refer to actual preserved prior observations')
             acquired['encounter_recovery']={'same_session_continuity':False,'predecessor':prior} if predecessor else None
@@ -369,7 +396,9 @@ class Executor:
             opening = context is None
             facade = runtime.home / 'review-inputs' / digest(component) / 'material.json'
             facade.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            # Atomic single-file publication only; source bodies are not copied.
+            # Atomic manifest publication. The reader retains at most one
+            # verified active item, charged within ordinary owned byte storage.
+            runtime.budget(None, cache_bytes + 1048576)
             temporary = facade.with_suffix('.pending')
             with temporary.open('x') as stream:
                 stream.write(encode(acquired)); stream.flush()
@@ -466,10 +495,7 @@ class Executor:
             # attestation of hidden provider session/turn identities.
             runtime.session(attempt, context['run'], str(turns[-1]['receipt']['turn']['input']),
                             {'identity_kind': 'observed-native-run', 'native_provider_session': 'not exposed'})
-            result = {'semantic': returned['semantic'], 'summary': returned['summary'], 'category': 'proposal',
-                      'findings': [{'kind': 'ordinary-review-full-return', 'component': component, 'material': acquired,
-                                    'original_collector': runtime.controller, 'original_attempt': attempt, 'turns': turns}],
-                      'failures': [], 'unknowns': [] if returned['semantic'] == 'DONE' else [returned['coverage']], 'artifacts': []}
+            result = proposal_result(returned, component, acquired, runtime.controller, attempt, turns)
             return {'exit': code, 'capture': 'complete', 'cleanup': 'continuing-context-held', 'result': result, 'error': None,
                     'detail': {'native_original_calls': turns,
                                'static_authority': 'selected static procedure; sole whole-command material facade; no exact read-isolation claim',
