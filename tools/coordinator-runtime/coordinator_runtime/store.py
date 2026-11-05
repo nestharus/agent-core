@@ -400,7 +400,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             if not self._classification_available():
                 return None
-            row = next((e for e in self.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' ORDER BY e.received,e.id")
+            scope, parameters = configuration.event_candidate_scope(self)
+            candidates = self.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' AND (" +
+                                   scope + ") ORDER BY e.received,e.id", parameters)
+            row = next((e for e in candidates
                         if self.role_enabled(e['role']) and (not self.processing or self.processing.event(self.event(e['id'])))), None)
             if not row:
                 return None
@@ -420,10 +423,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             if not self._classification_available():
                 return None
+            scope, parameters = configuration.event_candidate_scope(self)
             row = self.one("SELECT e.id,e.classifier FROM events e JOIN attempts a ON e.classifier=a.id "
                            "JOIN enrollments r ON r.role=e.role "
                            "WHERE e.state='classification-held' AND e.recovery_count=0 AND a.collected IS NOT NULL AND r.intake=1 "
-                           "ORDER BY e.received,e.id LIMIT 1")
+                           "AND (" + scope + ") ORDER BY e.received,e.id LIMIT 1", parameters)
             if not row:
                 return None
             selected = self.config["diagnosis"]

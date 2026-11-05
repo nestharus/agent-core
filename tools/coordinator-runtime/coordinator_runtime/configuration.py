@@ -401,6 +401,22 @@ def event_allowed(runtime, event):
     return not row or row['position'] > transition['event_boundary']
 
 
+def event_candidate_scope(runtime):
+    """SQL exclusion for existing events aliased e, never an authority proof.
+
+    Apply the same logical-birth boundary as event_allowed before acquiring
+    candidate bodies or doing per-candidate release/grant work. No transition
+    means no exclusion, including explicitly selected retained processing.
+    Callers still validate every candidate and its actual effect boundaries.
+    The returned predicate is local to this query; it is not cached authority.
+    """
+    transition = selected(runtime)
+    if not transition:
+        return '1', ()
+    return ('COALESCE((SELECT p.position FROM processing_source_positions p '
+            'WHERE p.event=e.id),e.rowid)>?', (transition['event_boundary'],))
+
+
 def task_for_job(runtime, job):
     """Retained resource debt uses its historical policy, never new selectors."""
     for row in runtime.rows('SELECT selection FROM configuration_transitions ORDER BY position'):

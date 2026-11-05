@@ -5,6 +5,19 @@ It establishes no service restoration, historical cause or rollout qualification
 The current configuration/release must still pass its original checks; changing
 source does not update a capability or authorize a provider retry.
 
+Classification, classification recovery/control and pending software admission
+now apply the existing current-configuration event-birth boundary in their SQL
+candidate queries. Excluded historical rows remain owned and unchanged, without
+reacquiring their bodies or repeating full release checks for each excluded row.
+Logical source position takes precedence over physical rowid; legacy rows use
+the same rowid fallback as `event_allowed`. With no configuration transition,
+explicit retained processing remains available. This exclusion proves no
+candidate eligible: existing current/source/configuration, processing, role,
+grant, payload and actual launch/effect guards still run. No authority result is
+cached across queries or boundaries. SQLite enumeration, eligible-row checks,
+other synchronous phases and real source-validation cost remain; this supplies
+no production latency bound or remote-outcome diagnosis.
+
 Normal `processing-service-control` output includes `client_observations`. Its
 owner is `control-client`: config loading, read-only Store opening, current
 configuration/release/source checks and Board/actor preparation, socket connection, send/drain, reply read

@@ -826,7 +826,13 @@ class ProcessingDispatcher(Dispatcher):
 
     def schedule_classification_recovery(self):
         # Control handling is an actual worker, not classifier diagnosis/replay.
-        for row in self.store.rows("SELECT e.id,e.role FROM events e LEFT JOIN queue q ON q.event=e.id WHERE e.processed_at IS NULL AND e.hold IS NULL AND (e.state='classification-held' OR q.phase='control') ORDER BY e.received,e.id"):
+        scope, parameters = configuration.event_candidate_scope(self.store)
+        candidates = self.store.rows(
+            "SELECT e.id,e.role FROM events e LEFT JOIN queue q ON q.event=e.id "
+            "WHERE e.processed_at IS NULL AND e.hold IS NULL "
+            "AND (e.state='classification-held' OR q.phase='control') AND (" +
+            scope + ") ORDER BY e.received,e.id", parameters)
+        for row in candidates:
             if not self.store.processing.event(self.store.event(row['id'])):
                 continue
             if self.store.one('SELECT event FROM processing_controls WHERE event=?', (row['id'],)):

@@ -130,7 +130,11 @@ def admit_pending(runtime):
     policy = runtime.processing.current()[1].get('software_admission')
     if not policy:
         return
-    for row in runtime.rows("SELECT id,role FROM events WHERE state='received' AND hold IS NULL ORDER BY received,id"):
+    from .configuration import event_candidate_scope
+    scope, parameters = event_candidate_scope(runtime)
+    candidates = runtime.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' "
+                              "AND e.hold IS NULL AND (" + scope + ") ORDER BY e.received,e.id", parameters)
+    for row in candidates:
         event = runtime.event(row['id'])
         body = event.get('body')
         if not isinstance(body, dict) or not isinstance(body.get('topic'), str) or body['topic'] not in policy['scopes']:
