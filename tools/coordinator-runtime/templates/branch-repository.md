@@ -28,3 +28,14 @@ with required=settled to Root/Work/QA/Reviews within the configured allowlist.
 Record exact before/after/readback and all possible effects. The real Branch owner
 settles the effect-request using actual evidence and explicit unknown_effects=[]
 when proved; unresolved effects retain custody and prevent mutation replay.
+
+The supported exact prospective local-ref lane is described in bounded-catalog.md.
+Its admitted scope names branch_binding and a complete local-ref ordinary adapter.
+The actual retained custodian supplies fresh ref-scope-basis/qualify-ref-scope
+activity and original receipts; the service rechecks actual common-repository,
+source read/destination write refs, origin, accepted Root and incarnation before
+CAS. This lane has network=false and remote_refs=[]; other network/ref procedures
+remain held. A report is preparation only, never the actual operation. Preserve
+unknown past effects separately from actual writer activity; do not invent ENDs,
+resource maps, owner transfers or empty clearance. Missing activity/custody proof
+holds that exact operation. Current scopes cannot replace historical job policy.

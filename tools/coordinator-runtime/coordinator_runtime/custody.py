@@ -62,6 +62,10 @@ def read_file(path, maximum):
 
 
 def capture(store, attempt, path, task, role_owned=False):
+    from .bounded_log import selected
+    log = task.get('routine_completion', {}).get('bounded_log', {}).get('target')
+    if Path(path).name == 'WORK_LOG.md' or selected(task) and str(path) == log:
+        raise Refusal('whole-log artifact capture unavailable; bounded entry/operation receipt only')
     root = store.home/'artifacts'/attempt
     authority = task['effect_authority']
     candidate = Path(path)

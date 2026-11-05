@@ -108,7 +108,7 @@ def release(runtime, candidate):
             'enabled': enabled, 'qualification': 'source bytes only; no installed provider/native or deployment claim'}
 
 
-def candidate(runtime, operator_config, scope_tasks, retention_library=None):
+def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False):
     """Produce a draft for Work inspection; does not select or write a config."""
     value = copy.deepcopy(runtime.config)
     directory = Path(__file__).resolve().parents[1]
@@ -140,6 +140,18 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None):
                     raise Refusal('only scoped Branch/QA tasks may acquire the release repository scope')
                 if str(root) not in task['scope_roots']:
                     task['scope_roots'].append(str(root))
+    if bounded_work_log:
+        from .bounded_log import KIND
+        matches = [t for t in value['tasks'].values() if t['role']=='Work' and t['phase']=='integrator' and t.get('routine_completion')]
+        if len(matches) != 1:
+            raise Refusal('one existing seven-duty Work integrator required')
+        matches[0]['templates'] = [p for p in matches[0]['templates'] if Path(p).name not in {'AGENTS.md','WORK_LOG.md'}]
+        policy = matches[0]['routine_completion']
+        logs = [p for p in policy['targets'] if Path(p).name == 'WORK_LOG.md']
+        if len(logs) != 1 or len(policy['targets']) != 7:
+            raise Refusal('existing seven real targets and exact log target required')
+        matches[0]['routine_completion'] = {'kind': KIND, 'targets': policy['targets'],
+            'bounded_log': {'target': logs[0], 'max_lines': 12, 'max_bytes': 8192, 'max_entry_bytes': 16384}}
     if set(scope_tasks) - set(value['tasks']):
         raise Refusal('unknown task in current configuration draft')
     return value
@@ -158,7 +170,10 @@ def validate_changes(runtime, value, tasks):
         old = runtime.config['tasks'].get(name, {})
         if task.get('scope_roots') != old.get('scope_roots') or task.get('effect_authority', {}).get('read_roots') != old.get('effect_authority', {}).get('read_roots'):
             additions.append(name)
-    expected = candidate(runtime, value['operator_config'], additions, value.get('canonical_publication', {}).get('library'))
+    bounded = any(t.get('routine_completion') != runtime.config['tasks'][name].get('routine_completion') for name,t in value['tasks'].items())
+    expected = candidate(runtime, value['operator_config'], additions, value.get('canonical_publication', {}).get('library'), bounded)
+    if bounded and any(name not in tasks for name,t in value['tasks'].items() if t.get('routine_completion') != runtime.config['tasks'][name].get('routine_completion')):
+        raise Refusal('changed bounded completion policy needs selected prospective Work task')
     if value != expected:
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):

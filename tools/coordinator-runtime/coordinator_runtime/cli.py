@@ -71,6 +71,7 @@ def parser():
     draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
     draft.add_argument('--operator-config', required=True)
     draft.add_argument('--retention-library')
+    draft.add_argument('--bounded-work-log', action='store_true', help='Prospective joined six inventory plus bounded log duty; original policies unchanged')
     draft.add_argument('--source-task', '--scope-task', dest='scope_task', action='append', default=[])
     sub.add_parser('current-configuration-status', help='Read current transition receipt; no replay or historical recovery')
     for command in ('current-configuration-basis', 'select-current-configuration'):
@@ -90,6 +91,9 @@ def parser():
     for command in ('service-recovery-basis','recover-service','review-recovery-basis','recover-review','reconcile-review-history'):
         item=sub.add_parser(command); item.add_argument('capability'); item.add_argument('target')
         if command in {'recover-service','recover-review'}: item.add_argument('--receipt',required=True)
+    for command in ('ref-scope-basis','qualify-ref-scope'):
+        item=sub.add_parser(command); item.add_argument('capability'); item.add_argument('--task', required=True); item.add_argument('--package', required=True)
+        if command=='qualify-ref-scope': item.add_argument('--receipt', required=True)
     for command in ('branch-register','branch-route','branch-accept','branch-link-builder','branch-begin','branch-end','branch-context-disposition','branch-lifecycle'):
         item=sub.add_parser(command); item.add_argument('capability')
         if command!='branch-register': item.add_argument('branch')
@@ -298,7 +302,7 @@ def operate(args, store):
         if args.command == 'current-configuration-status':
             return configuration.latest(store)
         if args.command == 'draft-current-configuration':
-            return configuration.candidate(store, args.operator_config, args.scope_task, args.retention_library)
+            return configuration.candidate(store, args.operator_config, args.scope_task, args.retention_library, args.bounded_work_log)
         value = load_config(args.candidate)
         if args.command == 'current-configuration-basis':
             return configuration.basis(store, boards, value, args.task)
@@ -306,7 +310,7 @@ def operate(args, store):
     recovery_ops={'service-recovery-basis','recover-service','review-recovery-basis','recover-review','reconcile-review-history'}
     branch_ops={'branch-register','branch-route','branch-accept','branch-link-builder','branch-begin','branch-end','branch-context-disposition','branch-lifecycle'}
     custody_ops={'shared-custody-basis','shared-custody-consent','retire-shared-custody','reconcile-shared-custody','release-shared-archive'}
-    if args.command in recovery_ops|branch_ops|custody_ops:
+    if args.command in recovery_ops|branch_ops|custody_ops|{'ref-scope-basis','qualify-ref-scope'}:
         from . import processing,service_recovery,branches,reviews
         boards={r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
         actor=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
@@ -314,6 +318,13 @@ def operate(args, store):
         store.processing=processing.Access(store,args.capability,boards)
         if 'service' not in store.processing.current()[1]:
             raise Refusal('actual continuing authority required')
+        if args.command in {'ref-scope-basis','qualify-ref-scope'}:
+            from . import ref_scope
+            if args.command == 'ref-scope-basis': return ref_scope.material(store,args.task,args.package)
+            receipt=read_record(args.receipt)
+            if receipt.get('basis',{}).get('task') != args.task or receipt.get('basis',{}).get('package') != args.package:
+                raise Refusal('receipt must bind exact requested task/package')
+            return ref_scope.account(store,actor,receipt)
         if args.command in recovery_ops:
             if actor!=store.processing.current()[0]['issuer']: raise Refusal('actual Work owns recovery admission')
             if args.command=='service-recovery-basis': return service_recovery.basis(store,args.target)

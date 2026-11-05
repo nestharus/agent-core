@@ -1261,3 +1261,10 @@ journal health.
 See [prospective current configuration](current-configuration.md) for the supported
 Work-selected same-journal release/configuration transition, its immutable
 historical bindings, operating sequence and compatibility/collection limits.
+
+
+[Bounded catalog and prospective Branch custody](bounded-catalog.md) describes the
+joined seven-duty Work receipt, mechanical same-inode log prepend without full-log
+reading/hash, and exact accepted-branch local-ref CAS lane. The prospective config
+draft can explicitly select `--bounded-work-log`; old configuration/recovery and
+unresolved historical custody remain original. Source support is not live rollout.

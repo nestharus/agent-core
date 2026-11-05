@@ -442,6 +442,32 @@ class ProcessingBoard(RetainedBoard):
             raise Refusal('processing original grant binding changed')
         return grant
 
+    def completion_authority(self, runtime, task):
+        from .bounded_log import selected as bounded
+        if not bounded(self.config['tasks'][task]):
+            return super().completion_authority(runtime, task)
+        transition = configuration.selected(runtime)
+        if not transition:
+            return super().completion_authority(runtime, task)
+        cap, selection = runtime.processing.current()
+        if task not in selection['tasks'] or task not in transition['basis']['tasks']:
+            raise Refusal('bounded completion outside exact prospective task selection')
+        with self.opened() as conn:
+            grant = self._grant(conn, runtime)  # Exact still-revoked original binding.
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_completion_grants_v1'").fetchone():
+                raise Refusal('original completion delegation unavailable; no fabricated witness')
+            old = conn.execute('SELECT policies FROM coordinator_completion_grants_v1 WHERE grant_id=?', (grant['id'],)).fetchone()
+            first = runtime.one('SELECT selection FROM configuration_transitions ORDER BY position LIMIT 1')
+            original = json.loads(first['selection'])['previous_configuration']['tasks'][task].get('routine_completion')
+            current = self.config['tasks'][task]['routine_completion']
+            if (self.config['tasks'][task]['role'] != self.role or not old
+                    or json.loads(old['policies']).get(task) != original
+                    or original not in ({'kind':'file-witness','targets':current['targets']}, current)):
+                raise Refusal('bounded completion requires original exact seven-target role delegation')
+            return {**grant, 'completion_transition': {'configuration':digest(self.config),
+                    'processing_capability':cap['id'], 'authority':transition['authority'],
+                    'policy':current, 'historical_completion':False}}
+
     def software_authority(self, runtime, task):
         if task not in runtime.processing.current()[1]['tasks'] or self.config['tasks'][task]['role'] != self.role:
             raise Refusal('task outside explicit processing delegation')

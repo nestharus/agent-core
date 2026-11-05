@@ -16,19 +16,23 @@ The seven canonical surfaces are:
 5. ../../WORK_NOW_20261030.md
 6. ../../ROOT_NEXT.md
 7. /home/nes/projects/rfq/trunk/rfqautomation/WORK_LOG.md
-Relative paths use the supplied persistent work role directory. Read only needed
-log sections and preserve peer prefixes. Do not normalize older row schemas.
+Relative paths use the supplied persistent work role directory. Observe only the first twelve physical log lines within the supplied byte ceiling;
+never read/hash the whole log. Preserve peer prefixes. Do not normalize older row schemas.
 
 A proposer returns exact additive deltas, selectors, current-byte/inode
 preconditions, causal evidence and unresolved allocation choices. No canonical
-writes. The single integrator worker reads the supplied exact preimages and full
-relevant returns, reconciles compatible frozen deltas and changes ONLY its mapped
-staged files. Preserve peer text, row schemas and original evidence. Return explicit
+writes. The single integrator worker reads the supplied six inventory preimages, bounded
+log prefix and full relevant returns, reconciles compatible frozen deltas and changes
+ONLY mapped staged files. Under catalog-bounded-log-v1, the seventh log stage is
+ONLY a nonempty authorized NEW entry ending with newline, never an old log body.
+Use TASK_CONTEXT.bounded_log and bounded_log_before. Do not open the canonical log
+or discover AGENTS/Work log for startup. Missing bounded policy leaves that duty pending. Preserve peer text, row schemas and original evidence. Return explicit
 local completion and evidence: expected later controller/review/delivery duties
 are distinct from unresolved local defects; resolved verifier history stays recorded.
 The actual delegated SERVICE publisher owns the canonical procedure: selected
 retention.snapshot_lock, exact regular-file byte/inode preimages, durable compressed
-before-only recovery backups, same-inode writes, fsync and readback receipts with
+before-only recovery backups for inventories; opaque counted kernel conservation
+and bounded prepend for the log; same-inode writes, fsync and readback receipts with
 mode/ownership unchanged. Staged workers do not acquire canonical locks or claim
 canonical backups/writes. Canonical parents never become model-writable directories.
 The cooperative lock and exact preconditions do not establish CAS against an
@@ -46,3 +50,7 @@ needs a reason. The controller delivers as its true automation actor, then the
 actual recipient owns pickup, processing and settlement. DONE alone delivers
 nothing. Preserve effect uncertainty for real Work reconciliation, not another
 permission ceremony or a private-journal discovery obligation.
+
+The seven joined publication receipts, actual new entry and interruption custody
+return to Work through the existing completion/report path. Six witnesses alone
+never complete seven duties. See bounded-catalog.md in the selected runtime source.

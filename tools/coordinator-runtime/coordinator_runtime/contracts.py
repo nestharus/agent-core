@@ -139,7 +139,7 @@ def validate_config(config):
         validate_task(name, task, config)
         if task.get('routine_completion'):
             from .routine import policy_for
-            policy_for(task)
+            policy_for(task, execution=False)
     if config.get('session_storage',{}).get('mode') not in {None,'producer-owned'}:
         raise Refusal('select producer-owned storage; allocated Codex namespaces do not prove logical ownership')
     if any(t.get('routine_completion') for t in config['tasks'].values()):
@@ -265,6 +265,11 @@ def report_only(task):
     """Existing typed authority distinguishes explicit reports from source work."""
     operations=set(task.get('effect_authority',{}).get('operations',[]))
     return bool(operations) and operations<={'read-reports','consolidate-reports','write-owned-artifacts'} and task.get('effects') in {'none','owned-artifacts'}
+
+
+def scoped_startup(task):
+    from .bounded_log import selected
+    return report_only(task) or selected(task)
 
 
 def scoped_task(name, task, admission):

@@ -6,6 +6,7 @@ discover both notices and directed plain posts without claiming their sockets.
 """
 
 import asyncio
+from .contracts import scoped_startup
 import json
 from pathlib import Path
 import time
@@ -85,7 +86,8 @@ def classifier_prompt(event, config):
 
 def job_prompt(store, job, task=None):
     task = task or store.config["tasks"][job["task"]]
-    templates = [template_text(path) for path in task["templates"]]
+    templates = [template_text(path) for path in task["templates"]
+                 if not (scoped_startup(task) and Path(path).name in {"AGENTS.md", "WORK_LOG.md"})]
     members = json.loads(job["members"])
     events = [store.event(m["event"]) for m in members]
     if any(digest(event) != member["hash"] for member, event in zip(members, events)):
@@ -100,6 +102,8 @@ def job_prompt(store, job, task=None):
                "typed_effect_authority": task["effect_authority"],
                "input_resolutions":[store.input_resolution(m['event'],m['input_resolution']) if m.get('input_resolution') else None for m in members],
                "staged_targets": publication.stages(store,attempt['id']),
+               "bounded_log": task.get("routine_completion",{}).get("bounded_log"),
+               "bounded_log_before": (json.loads(store.one("SELECT before_files FROM routine_runs WHERE attempt=?",(attempt["id"],))["before_files"]) if task.get("routine_completion",{}).get("bounded_log") else None),
                "frozen_artifact_inputs": frozen_artifacts,
                "prior_owned_artifact_inputs":prior_artifacts,
                "effect_policy": task["effects"], "members": members, "events": events,
@@ -114,9 +118,9 @@ def job_prompt(store, job, task=None):
                "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "
                "the exact admitted adapter after your original is collected; DONE is preparation, never acceptance. "
                if task.get('ordinary_preparation') else '') +
-            ("REPORT-ONLY: use only the explicit supplied reports/current method and task context. "
+            ("SCOPED STARTUP: use only explicit supplied inputs/current method and task context. "
              "Do not read project AGENTS, WORK_LOG or unrelated goal/history for startup. "
-             if report_only(task) else "Read applicable AGENTS and supplied current method. ") +
+             if scoped_startup(task) else "Read applicable AGENTS and supplied current method. ") +
             "No child/AI launches. No private "
             "profiles/history/credentials, foreign handles, global route changes or background effects. "
             "Current ordinary source access in the explicit task authority is allowed; obsolete source "

@@ -13,6 +13,7 @@ from contextlib import contextmanager, ExitStack
 from .contracts import Refusal, encode, artifact_paths, digest
 from .custody import capture, read_file, safe_path
 from .cleanup import open_parent
+from . import bounded_log
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS routine_stages(attempt TEXT,target TEXT,path TEXT,PRIMARY KEY(attempt,target));
@@ -67,6 +68,8 @@ def remainder_basis(store, job, old, choice, selection, board):
                                         for p in store.config.get('artifact_exclusions', [])):
             raise Refusal('publication remainder path excluded before metadata')
     policy = policy_for(task)
+    if bounded_log.selected(task):
+        raise Refusal('bounded log interruption remains original custody; no full-file remainder/replay')
     run = store.one('SELECT * FROM routine_runs WHERE attempt=?', (old['id'],))
     if (not policy or not run or run['task'] != job['task'] or run['grant_id'] != grant['id']
             or json.loads(run['policy']) != policy or run['state'] != 'prepared'):
@@ -105,12 +108,13 @@ def stages(store, attempt):
     return {r['target']:r['path'] for r in store.rows('SELECT target,path FROM routine_stages WHERE attempt=?',(attempt,))}
 
 
-def prepare(store, attempt, before):
+def prepare(store, attempt, before, policy=None):
     root=store.home/'artifacts'/attempt/'staged'
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
         path=root/(str(index)+'-'+Path(target).name)
-        body=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(witness['sha256'],))['body'] if witness['exists'] else b''
+        body=(b'' if policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target'] else
+              store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(witness['sha256'],))['body'] if witness['exists'] else b'')
         store.budget(None,len(body)+1024)
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as stream:stream.write(body);stream.flush();os.fsync(stream.fileno())
@@ -133,6 +137,8 @@ def conserve_stages(store, attempt, task):
 
 
 def current(path, maximum, expected_bytes=None):
+    if Path(path).name == 'WORK_LOG.md':
+        raise Refusal('whole-log current witness unavailable')
     try:
         body,witness=read_file(path,maximum)
         if expected_bytes is not None and body!=expected_bytes:raise Refusal('exact canonical bytes changed')
@@ -185,8 +191,12 @@ def locked_publish(store, board, job, attempt, run, task):
             raise Refusal('source/resource/recovery hold fences publication')
     fence()
     before=json.loads(run['before_files']);allocated=stages(store,attempt['id'])
-    order=json.loads(run['policy'])['targets']
+    policy=json.loads(run['policy'])
+    order=policy['targets']
     if set(allocated)!=set(before) or set(order)!=set(before):raise Refusal('exact staged publication mapping unavailable')
+    is_bounded=bounded_log.selected(task)
+    if is_bounded:
+        order=bounded_log.inventory(policy)
     maximum=store.config['limits'].get('max_artifact_bytes',33554432)
     proposed={}
     # Validate every preimage/proposal under the cooperative canonical lock.
@@ -259,7 +269,10 @@ def locked_publish(store, board, job, attempt, run, task):
         finally:
             if fd is not None:os.close(fd)
             os.close(parent)
+    if is_bounded:
+        bounded_log.publish(store,board,job,attempt,run,task,fence)
     for target in order:capture(store,attempt['id'],target,task,role_owned=True)
-    return [{**r,'before_gzip':store.one('SELECT path FROM canonical_backups WHERE attempt=? AND target=?',(attempt['id'],r['target']))['path'],
-             'method':'retention.snapshot_lock + exact preimage + before-only gzip + same-inode write'}
+    return [{**r,'before_gzip':(None if is_bounded and r['target']==policy['bounded_log']['target'] else store.one('SELECT path FROM canonical_backups WHERE attempt=? AND target=?',(attempt['id'],r['target']))['path']),
+             'method':('counted-kernel-copy-prepend-v1' if is_bounded and r['target']==policy['bounded_log']['target'] else
+                       'retention.snapshot_lock + exact preimage + before-only gzip + same-inode write')}
             for r in store.rows('SELECT target,state,proposed_sha,witness,error FROM file_publications WHERE attempt=?',(attempt['id'],))]

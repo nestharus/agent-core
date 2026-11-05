@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .contracts import Refusal, encode, collected_task_result, digest
 from .custody import safe_path, read_file
-from . import publication, readiness
+from . import publication, readiness, bounded_log
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS routine_runs(
@@ -18,26 +18,45 @@ CREATE TABLE IF NOT EXISTS coordinator_completion_grants_v1(
 """
 
 
-def policy_for(task):
+def policy_for(task, execution=True):
     policy = task.get('routine_completion')
     if not policy:
         return None
-    if (set(policy) != {'kind','targets'} or not isinstance(policy.get('targets'),list)
+    if (not isinstance(policy, dict) or not isinstance(policy.get('targets'),list)
             or not 1 <= len(policy['targets']) <= 64 or not all(isinstance(p,str) for p in policy['targets'])):
         raise Refusal('routine completion needs a bounded explicit file policy')
-    if (policy.get('kind') != 'file-witness' or not policy.get('targets') or task.get('network', False)
+    if bounded_log.selected(task):
+        bounded_log.validate(task, policy)
+    elif (set(policy) != {'kind', 'targets'} or policy.get('kind') != 'file-witness'
+          or execution and any(Path(p).name == 'WORK_LOG.md' for p in policy['targets'])):
+        raise Refusal('whole-log file routine unavailable; select bounded log catalog contract')
+    if (not policy.get('targets') or task.get('network', False)
             or task['effects'] != 'owner-reconcile'):
         raise Refusal('routine file completion requires exact targets and no network/external effects')
     if set(task['effect_authority']['operations']) - {'read-source','read-reports','prepare-intents','write-role-records','write-owned-artifacts','consolidate-reports'}:
         raise Refusal('ref/CI/resource effects need their actual supported owner callback')
     for p in policy['targets']:
-        safe_path(p, task['effect_authority']['write_roots'])
+        if execution:
+            safe_path(p, task['effect_authority']['write_roots'])
+        elif not Path(p).is_absolute() or '..' in Path(p).parts or not any(Path(p).is_relative_to(Path(r)) for r in task['effect_authority']['write_roots']):
+            raise Refusal('completion target outside selected write authority')
     return policy
+
+
+def execution_policy(store, task):
+    policy = policy_for(task, execution=False)
+    for name in policy['targets'] if policy else []:
+        if any(Path(name) == Path(p) or Path(name).is_relative_to(Path(p))
+               for p in store.config.get('artifact_exclusions', [])):
+            raise Refusal('routine target excluded before metadata')
+    return policy_for(task)
 
 
 def snapshot(store, targets):
     records = {}
     for name in targets:
+        if Path(name).name == 'WORK_LOG.md':
+            raise Refusal('whole-log snapshot unavailable')
         path = safe_path(name, targets)
         try:
             body, witness = read_file(path, store.config['limits'].get('max_artifact_bytes', 33554432))
@@ -53,12 +72,16 @@ def snapshot(store, targets):
 
 
 def prepare(store, board, job, attempt, task):
-    policy = policy_for(task)
+    from .configuration import require_current_job
+    require_current_job(store, {**job, 'active_attempt': attempt})
+    policy = execution_policy(store, task)
     if not policy:
         return
     grant = board.completion_authority(store, job['task'])
     with publication.snapshot_lock(store):
-        before = snapshot(store, policy['targets'])
+        before = snapshot(store, bounded_log.inventory(policy) if bounded_log.selected(task) else policy['targets'])
+        if bounded_log.selected(task):
+            before[policy['bounded_log']['target']] = bounded_log.observe(store, policy['bounded_log'])
         remainder=json.loads(store.attempt(attempt)['detail']).get('publication_remainder')
         if remainder and (before!=remainder['peers'] or digest(grant)!=remainder['grant']):
             raise Refusal('publication remainder peer preimages/grant changed before fresh staging; no replay')
@@ -66,13 +89,13 @@ def prepare(store, board, job, attempt, task):
     with store.tx():
         store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
                          (attempt, job['task'], grant['id'], encode(policy), encode(before), 'prepared'))
-    publication.prepare(store,attempt,before)
+    publication.prepare(store,attempt,before,policy)
 
 
 def reconcile(store, board, job):
     store.require_execution_open(job['id'])
     task = store.config['tasks'][job['task']]
-    if not policy_for(task) or job['effects'] == 'reconciled':
+    if not execution_policy(store, task) or job['effects'] == 'reconciled':
         return False
     attempt = store.attempt(job['active_attempt'])
     run = store.one('SELECT * FROM routine_runs WHERE attempt=?', (attempt['id'],))
@@ -93,6 +116,8 @@ def reconcile(store, board, job):
     with store.tx():
         detail={**json.loads(attempt['detail']),'local_readiness':local}
         store.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt['id']))
+    if bounded_log.selected(task) and not tools['items']:
+        return False  # A real bounded entry is a duty, never an invented no-op.
     if not tools['items']:
         before=json.loads(run['before_files'])
         for target,path in publication.stages(store,attempt['id']).items():
@@ -108,7 +133,8 @@ def reconcile(store, board, job):
                'collector': attempt['controller'], 'worker': attempt['session'], 'attempt': attempt['id'],
                'basis': 'role-granted staged model writer and exact service publication; bounded pre/post custody and tool completion',
                'before': before, 'after': after, 'publication':published,
-               'tool_completion': tools, 'local_readiness':local, 'unknown_effects': []}
+               'tool_completion': tools, 'local_readiness':local, 'unknown_effects': [],
+               'completion_transition': grant.get('completion_transition')}
     with store.tx():
         store.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=? AND active_attempt=?",
                          (encode(receipt), job['id'], attempt['id']))

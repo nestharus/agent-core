@@ -49,6 +49,12 @@ def frozen_file(store, path, roots, expected=None):
 
 
 def policy_for(store, job):
+    admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+    if job.get('id'):
+        frozen = store.one('SELECT * FROM job_resource_policies WHERE job=?',(job['id'],))
+        if frozen and (json.loads(frozen['task']) != store.config['tasks'][job['task']] or
+                       (json.loads(frozen['admission']) if frozen['admission'] else None) != admission):
+            raise Refusal('current admission/task cannot replace the frozen original job resource policy')
     task = scoped_task(job['task'], store.config['tasks'][job['task']], store.one('SELECT * FROM admissions WHERE package=?', (job['package'],)))
     scope = task['admitted_scope']
     p = scope.get('ordinary_effects', {})
@@ -251,7 +257,9 @@ async def source(store, attempt, p, task):
     if head != p['source_head']:
         raise Refusal('actual source ref is stale')
     tree = await git(store, attempt, p, 'rev-parse', '--verify', head + '^{tree}')
-    return {'head': head, 'tree': tree, 'git_common_dir': git_dir}
+    info = scoped_path(store, git_dir, roots).stat()
+    return {'head': head, 'tree': tree, 'git_common_dir': git_dir,
+            'common_repository': {'dev':info.st_dev,'ino':info.st_ino}}
 
 
 async def perform(store, board, job):
@@ -294,12 +302,19 @@ async def perform(store, board, job):
                 raise Refusal('resource still belongs to another original/unknown effect')
             store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (resource['key'], attempt['id']))
     before = await source(store, attempt['id'], p, task)
+    with store.tx():
+        receipt['before'] = before
+        store.db.execute('UPDATE ordinary_runs SET receipt=? WHERE attempt=?',(encode(receipt),attempt['id']))
     if p['kind'] == 'local-ref':
-        resource_key = 'git-ref:' + before['git_common_dir'] + ':' + p['ref']
+        from .branches import repository_identity
+        device, inode = repository_identity(p['repository'])
+        resource_key = 'git-ref:' + str(device) + ':' + str(inode) + ':' + p['ref']
+        read_key = 'git-ref:' + str(device) + ':' + str(inode) + ':' + p['source_ref']
         with store.tx():
-            if store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (resource_key,)):
-                raise Refusal('actual common Git ref remains owned by an original effect')
-            store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (resource_key, attempt['id']))
+            for key in (resource_key, read_key):
+                if store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (key,)):
+                    raise Refusal('actual common Git ref remains owned by an original effect')
+                store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (key, attempt['id']))
     association = await qa_source.export(store, attempt['id'], p, before) if p['kind'] == 'local-qa' else None
     outcome = await adapter(store, attempt['id'], p, task=task, association=association)
     after = await source(store, attempt['id'], p, task)
@@ -324,6 +339,10 @@ async def adapter(store, attempt, p, *, task=None, association=None):
         before = await git(store, attempt, p, 'rev-parse', '--verify', p['ref'] + '^{commit}')
         if before != p['before']:
             raise Refusal('destination ref preimage differs; no blind ref write')
+        from .resource_scopes import blocked
+        run = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
+        if blocked(store, store.job(run['job'])):
+            raise Refusal('fresh exact operation custody changed before CAS')
         await git(store, attempt, p, 'update-ref', p['ref'], p['target'], p['before'])
         after = await git(store, attempt, p, 'rev-parse', '--verify', p['ref'] + '^{commit}')
         if after != p['target']:

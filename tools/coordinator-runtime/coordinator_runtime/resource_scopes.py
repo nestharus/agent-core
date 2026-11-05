@@ -1,4 +1,5 @@
 """Compare actual scoped resources without disposing historical role debt."""
+import json
 from pathlib import Path
 
 from .contracts import PROFILES, Refusal, required_text, scoped_task
@@ -42,6 +43,13 @@ def validate(runtime, policy):
             root(value, runtime.config.get('artifact_exclusions', []))
 
 
+def scope_excluded(runtime, name, admission):
+    scope = json.loads(admission['receipt']).get('task_scopes', {}).get(name, {}) if admission else {}
+    values = scope.get('read_roots', []) + scope.get('write_roots', []) + [scope.get('cwd', '')]
+    return any(Path(value) == Path(p) or Path(value).is_relative_to(Path(p)) or Path(p).is_relative_to(Path(value))
+               for value in values for p in runtime.config.get('artifact_exclusions', []))
+
+
 def blocked(runtime, row, task=None):
     enrollment = runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (row['role'],))
     if not enrollment or not enrollment['legacy_hold']:
@@ -52,6 +60,17 @@ def blocked(runtime, row, task=None):
     if not runtime.processing:
         return True
     selection = runtime.processing.current()[1]
+    if row['role'] == 'Branch' and row['phase'] == 'integrator':
+        admission = runtime.one('SELECT * FROM admissions WHERE package=?', (row['package'],))
+        try:
+            if scope_excluded(runtime, row['task'], admission):
+                return True
+            exact = scoped_task(row['task'], task, admission)
+            from .ref_scope import eligible
+            if eligible(runtime, row, exact):
+                return False
+        except (Refusal, KeyError):
+            pass  # Ordinary local/ref/network path rules below still refuse.
     record = selection.get('service', {}).get('legacy_resources', {}).get(row['role'])
     if not record or record['unbounded'] or record['original_hold'] != enrollment['legacy_hold']:
         return True
@@ -75,7 +94,14 @@ def blocked(runtime, row, task=None):
             continue  # Reconcile this operation against OTHER unresolved owners.
         from .configuration import task_for_job
         prior = task_for_job(runtime, job)
-        prior_admission = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+        frozen = runtime.one('SELECT * FROM job_resource_policies WHERE job=?', (job['id'],))
+        if frozen:
+            prior = json.loads(frozen['task'])
+            prior_admission = json.loads(frozen['admission']) if frozen['admission'] else None
+        elif prior.get('require_package_scope'):
+            return True  # Missing original scope remains unknown, never current admission laundering.
+        else:
+            prior_admission = None
         try:
             prior = scoped_task(job['task'], prior, prior_admission)
             authority = prior['effect_authority']

@@ -150,3 +150,11 @@ five separately admitted QA packages then separate consolidation, real full
 returns and downstream processing. Source/hash/fixture success proves none of
 those encounters. No physical reclamation, exact read isolation, multi-file
 atomicity or noncooperating-writer CAS is claimed.
+
+
+Prospective bounded Work catalog completion is an explicitly selected draft delta:
+`draft-current-configuration --bounded-work-log` retains all seven original targets
+and changes only the Work integrator completion method. Original policies/grants
+remain immutable. Fresh basis/selection and real prospective completion authority
+are still required; no old job can inherit it. The exact catalog/ref custody APIs,
+receipt shapes and interruption limits are in [bounded-catalog.md](bounded-catalog.md).
