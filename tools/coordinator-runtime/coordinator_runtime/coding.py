@@ -24,7 +24,10 @@ class Git:
         self.records = []
 
     def run(self, *arguments):
-        argv = ['git', '-C', self.repository, *arguments]
+        # Command-scoped -c settings also reach Git children (including hooks).
+        # Keep ordinary hooks/signing; this handback owns no maintenance work.
+        argv = ['git', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
+                '-C', self.repository, *arguments]
         child=subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
         output={'stdout':bytearray(),'stderr':bytearray()}; complete=True; reason=None
         selector=selectors.DefaultSelector()
