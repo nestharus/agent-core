@@ -150,9 +150,14 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
+        from .processing import migrate_links
+        migrate_links(self)
         from .reviews import SCHEMA as REVIEW_SCHEMA
         from .service import SCHEMA as SERVICE_SCHEMA
-        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA)
+        from .branches import SCHEMA as BRANCH_SCHEMA
+        from .service_recovery import SCHEMA as SERVICE_RECOVERY_SCHEMA
+        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA)
+        self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
 
     def _bind_config(self):
         with self.tx():
@@ -605,7 +610,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 task = {**task, 'binding': BINDING}
                 member = json.loads(row['members'])[0]
                 source = self.event(member['event'])
-                component = source.get('body', {}).get('review', {}).get('component') if isinstance(source.get('body'), dict) else None
+                from .branches import review_key
+                packet = source.get('body', {}).get('review', {}) if isinstance(source.get('body'), dict) else {}
+                component = review_key(self,row,packet)
                 context = self.one('SELECT * FROM review_contexts WHERE component=?', (component,))
                 if context and (context['state'] != 'live' or context['collector'] != self.controller
                                 or context['capability'] != self.processing.key):
@@ -616,10 +623,14 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 detail = {**json.loads(self.attempt(attempt)['detail']), 'integration_window': window}
                 self.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt))
             self.db.execute("UPDATE jobs SET active_attempt=?,state='running' WHERE id=?", (attempt, job))
+            from .branches import acquire_attempt
+            acquire_attempt(self,row,attempt,context)
         return attempt
 
     def execution_complete(self, job):
         """Release only execution capacity; delivery, queue and source stay owned."""
+        if job['recovery_state']=='source-inactive-custody-held' and self.config['tasks'][job['task']]['effects']=='none':
+            return True  # Explicit owner-supported inactive inquiry, never processing/END.
         if self.integration_retired(job['id']):
             return True
         if job["state"] != "awaiting-delivery" or job["effects"] not in {"none", "reconciled"} or job["hold_reason"]:
@@ -661,6 +672,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 return None
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
+            from .branches import settle_attempt
+            settle_attempt(self,attempt['id'])
             if not attempt["collected"] or attempt["ended"] is None:
                 raise Refusal("actual owned exit and collection required before release")
             if self.one("SELECT target FROM file_publications WHERE attempt=? AND state!='published'",(attempt['id'],)):
@@ -756,6 +769,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             "allowed_tasks": choices, "notice": None, "board_id": None,
             "body": result, "kind": "response", "grant": None,
         }
+        branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
+        if len(branch_keys)==1:
+            response['branch_binding']=next(iter(branch_keys))
         self.budget("events", len(encode(response).encode()), job=job['id'])
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),

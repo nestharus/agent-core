@@ -1,8 +1,8 @@
 # Prospective software admissions and conserved control returns
 
 See [continuing-service.md](continuing-service.md) for the separately selected
-continuing capability and actual-source Reviews executor. Its known recovery and
-shared-custody gaps remain explicit. The finite prospective adapter below keeps
+continuing capability and actual-source Reviews executor. Its recovery, branch association and shared-custody source interfaces are described
+in [branch-and-recovery.md](branch-and-recovery.md); actual operation remains unqualified. The finite prospective adapter below keeps
 its own bounds and does not establish continuing cutover.
 
 This is an extension of the existing finite `processing-*` adapter in the same

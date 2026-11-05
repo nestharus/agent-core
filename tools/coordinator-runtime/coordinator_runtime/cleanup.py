@@ -83,6 +83,9 @@ def conserve(store, path, actor, receipt):
 
 
 def eligible_event(store, event):
+    from .branches import event_held
+    if event_held(store,event['id']):
+        return False
     if store.one('SELECT c.attempt FROM review_calls c JOIN review_contexts r ON r.component=c.component '
                  'JOIN attempts a ON a.id=c.attempt LEFT JOIN queue q ON q.job=a.job '
                  'WHERE (a.event=? OR q.event=?) AND (r.closed_at IS NULL OR r.closed_at>?) LIMIT 1',

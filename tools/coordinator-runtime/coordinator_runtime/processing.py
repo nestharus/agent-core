@@ -31,10 +31,22 @@ CREATE TABLE IF NOT EXISTS processing_admissions(
  package TEXT PRIMARY KEY,capability TEXT NOT NULL,event TEXT NOT NULL UNIQUE,
  scope TEXT NOT NULL,receipt TEXT NOT NULL,created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS processing_delivery_links(
- delivery TEXT PRIMARY KEY,event TEXT NOT NULL UNIQUE REFERENCES events(id));
+ delivery TEXT PRIMARY KEY,event TEXT NOT NULL REFERENCES events(id));
 CREATE TABLE IF NOT EXISTS processing_source_positions(
  position INTEGER PRIMARY KEY AUTOINCREMENT,event TEXT NOT NULL UNIQUE);
 """
+
+
+def migrate_links(runtime):
+    """Preserve every existing link while admitting many outboxes per consumer."""
+    definition = runtime.one("SELECT sql FROM sqlite_master WHERE name='processing_delivery_links'")['sql']
+    if 'NOT NULL UNIQUE' not in definition.upper():
+        return
+    with runtime.tx():
+        runtime.db.execute('ALTER TABLE processing_delivery_links RENAME TO processing_delivery_links_original')
+        runtime.db.execute('CREATE TABLE processing_delivery_links(delivery TEXT PRIMARY KEY,event TEXT NOT NULL REFERENCES events(id))')
+        runtime.db.execute('INSERT INTO processing_delivery_links SELECT * FROM processing_delivery_links_original')
+        runtime.db.execute('DROP TABLE processing_delivery_links_original')
 
 
 def implementation():
@@ -624,7 +636,7 @@ class ProcessingDispatcher(Dispatcher):
                 self.reconcile_collected(job)
         self.store.complete_events()
 
-    def schedule_job(self):
+    def schedule_job(self,job=None):
         for pending in self.store.rows("SELECT q.*,t.legacy_hold FROM queue q JOIN enrollments t ON t.role=q.role WHERE q.state='queued' ORDER BY q.rowid"):
             if not self.store.processing.task(pending):
                 continue
@@ -634,7 +646,7 @@ class ProcessingDispatcher(Dispatcher):
             from .resource_scopes import blocked
             if pending['legacy_hold'] and blocked(self.store, pending):
                 self.store.record_operational_error(pending['event'], {'dependency': 'supported scoped original effect-owner disposition', 'hold': pending['legacy_hold']}, pending['role'], 'processing-dependency')
-        super().schedule_job()
+        super().schedule_job(job)
 
     def schedule_classification_recovery(self):
         # Control handling is an actual worker, not classifier diagnosis/replay.

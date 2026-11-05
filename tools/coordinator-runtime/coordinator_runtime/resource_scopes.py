@@ -71,6 +71,8 @@ def blocked(runtime, row, task=None):
     # Actual unresolved local jobs remain owners of their configured/admitted
     # roots even when an external legacy inventory was narrower.
     for job in runtime.rows("SELECT * FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled')", (row['role'],)):
+        if row.get('id') == job['id']:
+            continue  # Reconcile this operation against OTHER unresolved owners.
         prior = runtime.config['tasks'][job['task']]
         prior_admission = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
         try:

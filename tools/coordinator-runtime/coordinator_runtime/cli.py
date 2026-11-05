@@ -75,6 +75,17 @@ def parser():
     control.add_argument('capability')
     control.add_argument('operation', choices=['status', 'recover', 'stop', 'close-review'])
     control.add_argument('--component')
+    for command in ('service-recovery-basis','recover-service','review-recovery-basis','recover-review','reconcile-review-history'):
+        item=sub.add_parser(command); item.add_argument('capability'); item.add_argument('target')
+        if command in {'recover-service','recover-review'}: item.add_argument('--receipt',required=True)
+    for command in ('branch-register','branch-route','branch-accept','branch-link-builder','branch-begin','branch-end','branch-context-disposition','branch-lifecycle'):
+        item=sub.add_parser(command); item.add_argument('capability')
+        if command!='branch-register': item.add_argument('branch')
+        if command!='branch-route': item.add_argument('--receipt',required=True)
+        if command=='branch-end': item.add_argument('--turn',required=True)
+    for command in ('shared-custody-basis','shared-custody-consent','retire-shared-custody','reconcile-shared-custody','release-shared-archive'):
+        item=sub.add_parser(command); item.add_argument('capability'); item.add_argument('role'); item.add_argument('delivery')
+        if command not in {'shared-custody-basis','reconcile-shared-custody'}: item.add_argument('--receipt',required=True)
     for command in ('processing-retirement-basis', 'processing-retire'):
         item = sub.add_parser(command)
         item.add_argument('capability')
@@ -268,6 +279,41 @@ async def serve(store):
 
 
 def operate(args, store):
+    recovery_ops={'service-recovery-basis','recover-service','review-recovery-basis','recover-review','reconcile-review-history'}
+    branch_ops={'branch-register','branch-route','branch-accept','branch-link-builder','branch-begin','branch-end','branch-context-disposition','branch-lifecycle'}
+    custody_ops={'shared-custody-basis','shared-custody-consent','retire-shared-custody','reconcile-shared-custody','release-shared-archive'}
+    if args.command in recovery_ops|branch_ops|custody_ops:
+        from . import processing,service_recovery,branches,reviews
+        boards={r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
+        actor=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
+        boards['Work'].store.acting_session(actor)
+        store.processing=processing.Access(store,args.capability,boards)
+        if 'service' not in store.processing.current()[1]:
+            raise Refusal('actual continuing authority required')
+        if args.command in recovery_ops:
+            if actor!=store.processing.current()[0]['issuer']: raise Refusal('actual Work owns recovery admission')
+            if args.command=='service-recovery-basis': return service_recovery.basis(store,args.target)
+            if args.command=='recover-service': return service_recovery.apply(store,actor,args.target,read_record(args.receipt))
+            if args.command=='review-recovery-basis': return service_recovery.review_basis(store,args.target)
+            if args.command=='recover-review': return service_recovery.recover_review(store,actor,args.target,read_record(args.receipt))
+            return reviews.apply_history(store,args.target)
+        if args.command in branch_ops:
+            if args.command=='branch-route': return branches.route(store,args.branch)
+            receipt=read_record(args.receipt)
+            if args.command=='branch-register': return branches.register(store,actor,receipt)
+            if args.command=='branch-accept': return branches.accept(store,args.branch,actor,receipt['evidence'])
+            if args.command=='branch-link-builder': return branches.link(store,args.branch,actor,receipt)
+            if args.command=='branch-begin': return branches.begin(store,args.branch,actor,receipt)
+            if args.command=='branch-end': return branches.end(store,args.branch,actor,args.turn,receipt)
+            if args.command=='branch-context-disposition': return branches.context_disposition(store,args.branch,actor,receipt)
+            return branches.lifecycle(store,args.branch,actor,receipt)
+        board=boards[args.role]
+        if args.command=='shared-custody-basis': return board.shared_custody_basis(store,args.delivery)
+        if args.command=='reconcile-shared-custody': return board.reconcile_shared_custody(store,args.delivery)
+        receipt=read_record(args.receipt)
+        if args.command=='shared-custody-consent': return board.shared_custody_consent(store,args.delivery,receipt)
+        if args.command=='retire-shared-custody': return board.retire_shared_custody(store,args.delivery,receipt)
+        return board.release_shared_archive(store,args.delivery,receipt)
     if args.command in {'processing-service', 'processing-service-control', 'processing-retirement-basis', 'processing-retire'}:
         from . import processing, service, retirement
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}

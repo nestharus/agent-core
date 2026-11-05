@@ -260,10 +260,8 @@ class Dispatcher:
                                                            "cause": outcome.get("detail", {})}, event["role"], "classification-error")
 
     def schedule_classifications(self):
-        count = self.store.db.execute("SELECT COUNT(*) FROM attempts WHERE kind='classifier' "
-                                     "AND state IN ('reserved','running','unknown')").fetchone()[0]
-        if count >= self.config.get("classification_capacity", 5):
-            return
+        # Store owns the current service/capacity question, including conserved
+        # foreign classifiers. Do not reintroduce a global historical veto here.
         claimed = self.store.claim_classification()
         if claimed:
             self.spawn(self.classify(*claimed))
@@ -273,10 +271,10 @@ class Dispatcher:
         if claimed:
             self.spawn(self.classify(*claimed))
 
-    def schedule_job(self):
+    def schedule_job(self, job=None):
         # A failed pool allocation leaves the frozen unstarted job intact.
         # Retry only this controller's reservation, never an existing attempt.
-        job = self.store.one("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id LIMIT 1",
+        job = job or self.store.one("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id LIMIT 1",
                              (self.store.controller,)) or self.store.reserve()
         if not job:
             return

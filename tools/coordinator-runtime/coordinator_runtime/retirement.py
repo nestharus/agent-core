@@ -125,6 +125,10 @@ def apply(store, root, actor, receipt):
             if (not row or row['state'] != 'settled' or row['hold'] or row['error']
                     or row['processed_at'] is None or store.clock() < row['processed_at'] + RETENTION):
                 raise Refusal('delivery processing+24h and all holds remain')
+            if row.get('board_receipt'):
+                conserved=store.one("SELECT * FROM shared_custody_intents WHERE delivery=? AND state='retired'",(key,))
+                if not conserved:
+                    raise Refusal('actual shared canonical custody must retire/conserve before deleting local scan attribution')
         # No canonical or shared Board row is deleted here. All SQL targets are
         # this journal's exact qualified episode. SQLite reuses its free pages;
         # this makes no physical platform-reclamation claim.
@@ -141,11 +145,14 @@ def apply(store, root, actor, receipt):
                     raise Refusal('alert whole processing retention remains')
                 delete('alert_debt', 'id', [row['alert']]); delete('alerts','id',[row['alert']])
         delete('outboxes','id',members['deliveries'])
+        delete('shared_custody_intents','delivery',members['deliveries'])
         blob_candidates = {r['sha256'] for a in members['attempts'] for r in store.rows('SELECT sha256 FROM artifact_custody WHERE attempt=?', (a,))}
         for table, column in [('results','attempt'),('artifact_custody','attempt'),('artifacts','attempt'),('attempt_storage','attempt'),
                               ('routine_runs','attempt'),('routine_stages','attempt'),('file_publications','attempt'),('ordinary_runs','attempt'),('ordinary_tool_records','attempt'),
-                              ('ordinary_acceptance','attempt'),('review_calls','attempt')]:
+                              ('ordinary_acceptance','attempt')]:
             delete(table,column,members['attempts'])
+        # Continuing review calls/history remain branch evidence through actual
+        # branch/context closure, with their original snapshots and raw returns.
         for table, column in [('recovery_requests','job'),('recovery_dispositions','job'),('owner_results','job'),('qa_package_owners','job')]:
             delete(table,column,members['jobs'])
         delete('attempts','id',members['attempts'])

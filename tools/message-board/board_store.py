@@ -51,6 +51,44 @@ class UserError(Exception):
     """Expected input or board-state error, safe to print without a traceback."""
 
 
+def retire_coordinator_pointer(conn, delivery, issuer, proof):
+    """Explicit qualified producer-output retirement, inside caller's write tx.
+
+    Ordinary posts stay immutable. The public coordinator custody consumer
+    supplies the genuine issuer, current recipient consent and full archived
+    original. This interface deletes no source/foreign reply/attachment.
+    """
+    acting_session(issuer)
+    if not conn.in_transaction or not isinstance(proof,dict) or set(proof)!={'basis','archive_hash','recipient','evidence'} or not all(proof.values()):
+        raise UserError('exact current archived custody/recipient qualification inside write transaction required')
+    row=conn.execute('SELECT d.*,g.issued_by FROM coordinator_deliveries_v1 d JOIN coordinator_grants_v1 g ON g.id=d.grant_id WHERE d.id=?',(delivery,)).fetchone()
+    if not row or row['issued_by']!=issuer or row['recipient']!=proof['recipient'] or row['state']!='settled':
+        raise UserError('exact owned coordinator source/issuer/recipient required')
+    post=conn.execute('SELECT * FROM posts WHERE seq=?',(row['post'],)).fetchone()
+    if not post or post['author']!=row['actor'] or post['topic']!='coordinator-runtime' or post['ref']!='delivery:'+delivery:
+        raise UserError('only the exact generated coordinator pointer is producer-owned output')
+    if (conn.execute('SELECT seq FROM posts WHERE reply_to=?',(row['post'],)).fetchone()
+            or conn.execute('SELECT post_seq FROM thread_posts WHERE thread_id=? AND post_seq!=?',(row['post'],row['post'])).fetchone()
+            or conn.execute('SELECT post_seq FROM attachments WHERE post_seq=?',(row['post'],)).fetchone()):
+        raise UserError('foreign reply/attachment relationships retain the immutable source')
+    if conn.execute("SELECT notification_id FROM notification_outbox WHERE post_seq=? AND delivery_state!='acknowledged'",(row['post'],)).fetchone():
+        raise UserError('original notification uncertainty still owns this output')
+    conn.execute('CREATE TABLE IF NOT EXISTS coordinator_pointer_retirement_guard(seq INTEGER PRIMARY KEY,author TEXT NOT NULL,ref TEXT NOT NULL,proof TEXT NOT NULL)')
+    # This explicit interface installs the narrow opt-in trigger. All other
+    # deletes still fail; the exact guard lives only in this transaction.
+    conn.execute('DROP TRIGGER IF EXISTS posts_no_delete')
+    conn.execute("CREATE TRIGGER posts_no_delete BEFORE DELETE ON posts WHEN NOT EXISTS (SELECT 1 FROM coordinator_pointer_retirement_guard g WHERE g.seq=OLD.seq AND g.author=OLD.author AND g.ref=OLD.ref) BEGIN SELECT RAISE(ABORT,'board posts are immutable'); END")
+    conn.execute('INSERT INTO coordinator_pointer_retirement_guard VALUES(?,?,?,?)',(post['seq'],post['author'],post['ref'],json.dumps(proof)))
+    conn.execute('DELETE FROM notification_attempts WHERE notification_id IN (SELECT notification_id FROM notification_outbox WHERE post_seq=?)',(post['seq'],))
+    conn.execute('DELETE FROM notification_outbox WHERE post_seq=?',(post['seq'],))
+    conn.execute('DELETE FROM subscriptions WHERE thread_id=?',(post['seq'],))
+    conn.execute('DELETE FROM thread_posts WHERE post_seq=?',(post['seq'],))
+    conn.execute('DELETE FROM threads WHERE thread_id=?',(post['seq'],))
+    conn.execute('DELETE FROM posts WHERE seq=?',(post['seq'],))
+    conn.execute('DELETE FROM coordinator_pointer_retirement_guard WHERE seq=?',(post['seq'],))
+    return {'post':post['seq'],'proof':proof,'meaning':'exact qualified owned pointer only; no foreign/canonical source or physical reclamation'}
+
+
 def scrub(value: str) -> str:
     for pattern in SECRET_PATTERNS:
         value = pattern.sub("[REDACTED]", value)

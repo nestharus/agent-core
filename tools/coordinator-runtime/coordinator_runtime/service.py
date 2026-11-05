@@ -49,14 +49,28 @@ class Dispatcher(ProcessingDispatcher):
         self.reviews = reviews.Executor(runtime, review_transport)
 
     def schedule_job(self):
-        job = self.store.one("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id LIMIT 1",
-                             (self.store.controller,)) or self.store.reserve()
+        candidates = self.store.rows("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id",
+                                     (self.store.controller,))
+        # Reserve independent eligible work even while an earlier Source waits
+        # for its own context. Frozen reservations/capacity are never released.
+        fresh = self.store.reserve()
+        if fresh:
+            candidates.append(fresh)
+        for job in candidates:
+            if self.schedule_candidate(job):
+                return
+
+    def schedule_candidate(self,job):
         if not job:
             return
         if not self.store.processing.review_task(job['task']):
-            # The base dispatcher picks this exact current unstarted reservation.
-            return super().schedule_job()
-        self.boards[job['role']].verify_authority(self.store)
+            super().schedule_job(job)
+            return True
+        try:
+            self.boards[job['role']].verify_authority(self.store)
+        except Refusal as exc:
+            self.store.hold_job(job['id'],'pre-launch Source authority refused: '+str(exc))
+            return False
         members = json.loads(job['members'])
         if len(members) != 1:
             raise Refusal('one continuing Source input per component, never a batch of artifacts')
@@ -67,17 +81,26 @@ class Dispatcher(ProcessingDispatcher):
         if not isinstance(packet, dict):
             self.store.hold_job(job['id'], 'ordinary Source needs an exact goal-blind review packet')
             return
-        component = packet.get('component')
+        from .branches import review_key
+        component = review_key(self.store,job,packet)
         context = self.store.one('SELECT * FROM review_contexts WHERE component=?', (component,))
         if component in self.reviews.busy:
-            return  # This exact reservation waits, without overlapping calls.
-        attempt = self.store.start_job(job['id'], job['token'])
+            return False
+        if context and (context['state']!='live' or context['collector']!=self.store.controller or context['capability']!=self.store.processing.key):
+            self.store.hold_job(job['id'],'original review context unavailable; explicit informed recovery required')
+            return False
+        try:
+            attempt = self.store.start_job(job['id'], job['token'])
+        except Refusal as exc:
+            self.store.record_operational_error(job['id'],{'error':str(exc)},job['role'],'source-admission-held')
+            return False
         self.spawn(self.execute_review(job, attempt, packet))
+        return True
 
     async def execute_review(self, job, attempt, packet):
-        self.boards[job['role']].bind_software_attempt(self.store, job, attempt, None)
-        policy = self.store.processing.current()[1]['service']['reviews'][job['task']]
         try:
+            self.boards[job['role']].bind_software_attempt(self.store, job, attempt, None)
+            policy = self.store.processing.current()[1]['service']['reviews'][job['task']]
             outcome = await self.reviews.execute(job, attempt, policy, packet)
         except Exception as exc:
             call = self.store.one('SELECT * FROM review_calls WHERE attempt=?', (attempt,))
@@ -86,7 +109,11 @@ class Dispatcher(ProcessingDispatcher):
             # Only this original call's actually waited exits may be relayed.
             outcome = {'exit': actual[-1] if actual else None, 'capture': 'incomplete',
                        'cleanup': 'continuing-context-held', 'result': None, 'error': str(exc),
-                       'detail': {'original_review_calls': turns, 'original_collector': self.store.controller}}
+                       'detail': {'original_review_calls': turns, 'original_collector': self.store.controller,
+                                  'known_not_started':self.store.attempt(attempt)['begin'] is None and
+                                      (not call or call['state']=='prepared')}}
+            if outcome['detail']['known_not_started']:
+                outcome['cleanup']='no-session-created'
         self.store.collect(attempt, outcome)
         # Exact owned producer files are inventoried, never a platform store.
         # Consumer conservation remains a separate real receipt before removal.
@@ -109,6 +136,8 @@ class Dispatcher(ProcessingDispatcher):
                 outcome['error'] = str(exc)
         with self.store.tx():
             self.store.db.execute("UPDATE jobs SET effects='none' WHERE id=?", (job['id'],))
+            from .branches import settle_attempt
+            settle_attempt(self.store,attempt)
         # Even a malformed/partial Source return goes whole to the sole report
         # integrator. This informative return cannot complete the Source job.
         if outcome['error'] or not outcome['result'] or outcome['result']['semantic'] != 'DONE':
@@ -141,6 +170,9 @@ class Dispatcher(ProcessingDispatcher):
                  'source_job': job['id'], 'source_attempt': attempt,
                  'body': {'status': 'PARTIAL', 'full_original_call': call, 'full_original_outcome': outcome,
                           'meaning': 'Source incomplete; sole integrator must preserve all reports, dissent and gaps'}}
+        branch=self.store.event(source).get('branch_binding')
+        if branch:
+            event['branch_binding']=branch
         with self.store.tx():
             if not self.store.one('SELECT id FROM events WHERE id=?', (key,)):
                 self.store.budget('events', len(encode(event).encode()))
@@ -229,9 +261,7 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
                     answer = {'controller': runtime.controller, 'state': 'draining; parent still owes this original numeric END'}
                 elif operation == 'close-review':
                     component = request.get('component')
-                    policy = next((p for p in selection['service']['reviews'].values() if component in p['components']), None)
-                    if not policy:
-                        raise Refusal('component outside selected service')
+                    policy = reviews.context_policy(runtime,component,selection['service']['reviews'])
                     answer = await dispatcher.reviews.close(component, policy)
                 else:
                     raise Refusal('unsupported control; no replay or authority mutation endpoint')
@@ -253,14 +283,12 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
             server.close()
             await server.wait_closed()
             # Live contexts remain owned and explicitly reported if close fails.
-            for name, policy in selection['service']['reviews'].items():
-                for context in runtime.rows("SELECT component FROM review_contexts WHERE collector=? AND state!='closed'", (runtime.controller,)):
-                    if context['component'] not in policy['components']:
-                        continue
-                    try:
-                        await dispatcher.reviews.close(context['component'], policy)
-                    except Exception as exc:
-                        runtime.record_operational_error(context['component'], {'error': str(exc)}, 'Reviews', 'original-context-close')
+            for context in runtime.rows("SELECT component FROM review_contexts WHERE collector=? AND state!='closed'", (runtime.controller,)):
+                try:
+                    policy=reviews.context_policy(runtime,context['component'],selection['service']['reviews'])
+                    await dispatcher.reviews.close(context['component'], policy)
+                except Exception as exc:
+                    runtime.record_operational_error(context['component'], {'error': str(exc)}, 'Reviews', 'original-context-close')
             receipt = dispatcher.recover_originals()
             with runtime.tx():
                 runtime.db.execute("UPDATE service_runs SET state='returned-awaiting-parent-END',returned=?,receipt=? WHERE controller=?",

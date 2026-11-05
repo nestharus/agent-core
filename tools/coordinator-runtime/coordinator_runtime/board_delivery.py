@@ -65,9 +65,22 @@ class BoardDelivery:
         if not row:
             raise Refusal("incoming/receipt grant does not grant outgoing delegation; actual owner issues full scoped grant")
         target = self.config["delivery"]["recipients"].get(outbox["recipient"], {})
+        configured_target=target
+        original_recipients=json.loads(row['recipients'])
+        if (not configured_target.get('session') or outbox['recipient'] not in original_recipients
+                or original_recipients[outbox['recipient']]!=configured_target['session']):
+            raise Refusal('branch association cannot expand the original selected delivery routes')
+        payload=json.loads(outbox['payload'])
+        if runtime.processing and outbox['recipient']=='Root' and payload.get('branch_root_routing'):
+            from .branches import association
+            branch=association(runtime,payload['branch_binding'])
+            if (branch['root']!=payload['branch_root_routing']['root'] or branch['scope']!=payload.get('package')
+                    or runtime.processing.current()[0]['issuer']!=grant['issued_by']):
+                raise Refusal('current genuine Work branch Root authority/source scope changed; original send held')
+            target={**target,'session':branch['root'],'profile':None}
         if not target.get("session") or target.get("active") is False:
             raise Refusal("actual recipient identity is inactive/unbound")
-        if json.loads(row["recipients"]).get(outbox["recipient"]) != target["session"] or outbox["kind"] not in json.loads(row["kinds"]):
+        if json.loads(row["recipients"]).get(outbox["recipient"]) != configured_target["session"] or outbox["kind"] not in json.loads(row["kinds"]):
             raise Refusal("delivery exceeds current real-actor grant")
         member = conn.execute("SELECT status,role,profile FROM sessions WHERE session=?", (target["session"],)).fetchone()
         if not member or member["status"] != "active" or member["role"] != target["board_role"]:
@@ -77,6 +90,13 @@ class BoardDelivery:
         return grant, target
 
     def post_delivery(self, runtime, outbox):
+        if runtime.processing:
+            original=runtime.one('SELECT * FROM outboxes WHERE id=?',(outbox['id'],))
+            if not original or original['payload']!=outbox['payload'] or original['producer']!=outbox['producer']:
+                raise Refusal('original live outbox required; retired metadata never permits pointer-post replay')
+            intent=runtime.one('SELECT delivery FROM shared_custody_intents WHERE delivery=?',(outbox['id'],))
+            if intent:
+                raise Refusal('shared retirement intent owns this source; reconcile conservation, never repost')
         with self.opened() as conn:
             with self.store.write(conn):
                 existing = conn.execute("SELECT * FROM coordinator_deliveries_v1 WHERE id=?", (outbox["id"],)).fetchone()

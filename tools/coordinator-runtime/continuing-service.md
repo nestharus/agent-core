@@ -1,7 +1,7 @@
 # Continuing first-four source and original collector contract
 
 This is an opt-in construction candidate, not deployment or cutover admission.
-Work239's selected goal remains continuing Work, Branch, Reviews and QA. The
+Work268's selected goal remains continuing Work, Branch, Reviews and QA. The
 builder's five reports distinguish delivered mechanisms, verification and
 remaining construction. Existing finite processing and native owner procedures
 retain their own authority; an expired grant is never extended here.
@@ -66,9 +66,10 @@ coordinator --config ACTUAL_CONFIG processing-service ACTUAL_CAPABILITY --enable
 Retain its actual terminal, emitted controller, argv and complete return. There is
 no service timer or heartbeat. The original process owns model handles and actual
 child waits. Existing public pool locking governs future allocation and creation;
-current user selection is .codex2/.codex3/.codex5, excluding .codex/.codex4. Existing
-review contexts continue on their actually observed accounts, including after
-future pool exclusion. The service neither writes the pool nor probes accounts.
+current user selection is .codex2/.codex3/.codex5, excluding .codex/.codex4. Every future input, including a later turn on a bound context, rechecks the
+current pool on that actually observed account. Running/admitted calls retain
+their account. Excluded/unavailable contexts park or take explicit informed
+recovery; they never silently move. Close can drain existing ownership. The service neither writes the pool nor probes accounts.
 Use the existing public execution_pool.py status/set interface for genuine user
 updates; never restore the dated 2/4/5 template membership.
 
@@ -92,13 +93,15 @@ review roots, retaining close failures and unknowns. Collect this SAME original'
 numeric END. Only then use existing processing-release with the genuine parent
 END/evidence, and deliberate revoke if selected. A returned record is not END.
 
-An entire service-process crash with uncollected children remains held. A new
-process cannot borrow its controller name or infer collection from files/PIDs.
-An interrupted/dead native review root remains `interrupted`; no new disposable
-root is silently substituted. The current source still lacks a complete
-dead-collector/native-input recovery and explicit informed-recovery admission
-path. This is unfinished software, not missing user permission or native-owner
-implementation authority. Keep original native/external/human holders intact.
+A dead original is recovered using the exact current `service-recovery-basis`
+and `recover-service` contract in [branch-and-recovery.md](branch-and-recovery.md).
+This enables a new original on the SAME capability/journal while preserving every
+uncollected predecessor, its unknown activity/effects and actual custodians.
+An unavailable caller's END stays null. Root/context loss, intentional closure,
+expiry and malformed returns use explicit review recovery, never a fresh fallback
+or an invented same-session claim. Unknown activity does not release a conflicting
+turn or writer. An owner-supported inactive predecessor can admit a new encounter
+with complete permitted history. All source/native/effect obligations remain.
 
 ## Selected ordinary Reviews material and return
 
@@ -142,8 +145,8 @@ return is transported whole to that integrator and remains held; generic failure
 handling must not re-review or manufacture Source acceptance. Integration retains
 all findings, dissent, limits, partial/unread coverage and original failures.
 
-Native-root failure or malformed wire return still needs the unfinished recovery
-path described above. Accepted transport and saved history alone are not
+Native-root failure or malformed wire return uses the explicit informed recovery
+path linked above. Accepted transport and saved history alone are not
 continuity. There is no model/provider test or self-admission in construction.
 
 ## Completion, custody and repeated retirement
@@ -173,15 +176,18 @@ Exact qualified local rows can be recycled in the same runtime.sqlite3. The
 monotonic source-position counter prevents rowid reuse from making an old source
 prospective. Body garbage collection preserves surviving peer references.
 
-This does not yet retire/conserve the shared Board delivery record bodies that
-currently serve as canonical full payload custody. Their shared cumulative
-capacity remains a consequential sustainable-operation gap; deleting them would
-also remove scan exclusions and could replay their canonical pointer posts.
-Do not delete/relabel those stores or waive old44/17/165 four revocations/four
-sources/67 outboxes/207 partials. Required evidence is not disposable merely
-because local rows retired. This remaining construction returns to actual Work.
-No physical profile reclamation, exact read isolation, multi-file atomicity or
-noncooperating-writer CAS is claimed.
+Shared canonical delivery residency now has an explicit public custody interface,
+[branch-and-recovery.md](branch-and-recovery.md). Full canonical envelopes are
+conserved before qualified shared retirement; real recipient or genuinely delegated
+software custody and all holds are required. Foreign replies/attachments and
+unsettled transport refuse retirement. A durable compact scan frontier and the
+original outbox/retirement-intent fences prevent pointer-post replay after local
+metadata retirement. The public Board interface admits deletion of only that exact
+qualified producer-owned pointer; ordinary posts remain immutable. Local retirement
+requires the actual shared custody return first. Archive copies remain counted in
+owned residency; their separate conservation+24h/all-hold release requires every
+original hash/custodian. No cap increase, renamed journal or platform-store
+reclamation follows. Old44/17/165/207/239 and all required originals remain held.
 
 Root's real coding workers must commit and push even partial handback. The
 coordinator_runtime.coding module provides normal signed commit, normal push and
@@ -195,3 +201,9 @@ ordinary Reviews continuation on actual material, whole original integration and
 Work processing, scoped allowed/refused resources, QA's separate packages,
 future pool changes, original recovery, repeated capacity and real elapsed
 retention. Fictional fixtures cannot provide those native identities or acceptance.
+
+For branch-specific responsible Root, delegated builder and separate ordinary review
+association/routing/lifecycle, use [branch-and-recovery.md](branch-and-recovery.md).
+Root remains a coordinator and delegates build/test work. Source gets only factual
+material; Root/Work goals and decisions stay outside. Construction/tests/publication
+do not establish provider qualification, adoption or rollout.

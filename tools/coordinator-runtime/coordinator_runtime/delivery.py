@@ -51,6 +51,14 @@ class DeliveryJournal:
             raise Refusal("recipient is outside the selected delivery allowlist")
         if kind not in {"work", "result", "question", "alert", "effect-request"}:
             raise Refusal("unknown outgoing message kind")
+        if self.processing and recipient=='Root' and kind in {'work','result'}:
+            from .branches import delivery_branch
+            branch=delivery_branch(self,payload,job,event)
+            if branch:
+                payload={**payload,'branch_binding':branch['id'],
+                         'branch_root_routing':{'root':branch['root'],'ref':branch['ref'],'incarnation':branch['incarnation'],
+                                                'scope':branch['scope'],'authority':branch['authority'],
+                                                'accepted':branch['accepted']}}
         self.budget("outboxes", len(encode(payload).encode()), event=event, job=job)
         self.db.execute("INSERT INTO outboxes(id,role,job,event,alert,producer,recipient,kind,required,payload,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (key, role, job, event, alert, producer or self.config["actor"],
@@ -112,6 +120,9 @@ class DeliveryJournal:
                      "artifact_witnesses": witnesses(self, attempt['id']),
                      "package": job["package"], "parent": members[0]["event"], "allowed_tasks": ["@delivery"],
                      "notice": None, "board_id": None, "grant": None}
+            branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
+            if len(branch_keys)==1:
+                event['branch_binding']=next(iter(branch_keys))
             self.budget("events", len(encode(event)), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (response_id, job["role"], encode(event), digest(event), self.clock(), event["parent"]))

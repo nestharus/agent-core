@@ -23,6 +23,7 @@ from .completion import Completion
 from .routine import BOARD_SCHEMA as COMPLETION_SCHEMA
 from .owner_control import OwnerControl
 from .software import Software, BOARD_SCHEMA as SOFTWARE_SCHEMA
+from .shared_custody import SharedCustody, SCHEMA as SHARED_CUSTODY_SCHEMA
 
 EXTENSION = """
 CREATE TABLE IF NOT EXISTS coordinator_grants_v1(
@@ -79,7 +80,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat()
 
 
-class Board(BoardDelivery, Completion, OwnerControl, Software):
+class Board(BoardDelivery, Completion, OwnerControl, Software, SharedCustody):
     def __init__(self, config, role):
         self.config, self.role = config, role
         self.selected = config["roles"][role]
@@ -160,7 +161,7 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
             raise Refusal("actual user/role delegation authority reference required")
         stat = regular_path(str(runtime.path)).stat()
         with self.opened() as conn:
-            conn.executescript(EXTENSION + DELIVERY_SCHEMA + COMPLETION_SCHEMA + SOFTWARE_SCHEMA)
+            conn.executescript(EXTENSION + DELIVERY_SCHEMA + COMPLETION_SCHEMA + SOFTWARE_SCHEMA + SHARED_CUSTODY_SCHEMA)
             with self.store.write(conn):
                 route = conn.execute("SELECT route FROM sessions WHERE session=?", (owner,)).fetchone()[0]
                 if route != "managed":
@@ -276,13 +277,20 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
         with self.opened() as conn:
             grant = self._grant(conn, runtime)
             after = self.scan_after(runtime, grant)
+            through=-1
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_scan_frontiers_v1'").fetchone():
+                info=runtime.path.stat()
+                saved=conn.execute('SELECT through FROM coordinator_scan_frontiers_v1 WHERE runtime=? AND device=? AND inode=? AND actor=?',
+                                   (str(runtime.path),info.st_dev,info.st_ino,self.config['actor'])).fetchone()
+                through=saved['through'] if saved else -1
             rows = conn.execute("SELECT p.seq,n.notification_id FROM posts p LEFT JOIN notification_outbox n "
                 "ON n.post_seq=p.seq AND n.recipient=? WHERE p.seq>? AND "
+                "NOT (p.seq<=? AND p.author=? AND p.topic='coordinator-runtime' AND COALESCE(p.ref,'') LIKE 'delivery:%') AND "
                 "NOT EXISTS (SELECT 1 FROM coordinator_deliveries_v1 d WHERE d.post=p.seq AND d.actor=? "
                 "AND (? OR NOT (d.kind='work' AND d.recipient=? AND d.owner!=?))) AND "
                 "(n.notification_id IS NOT NULL OR (p.recipient=? AND NOT EXISTS "
                 "(SELECT 1 FROM thread_posts t WHERE t.post_seq=p.seq))) ORDER BY p.seq LIMIT ?",
-                (grant["owner"], max(after, grant["cutover"]), self.config["actor"], bool(self.config.get('software_delegation')),
+                (grant["owner"], max(after, grant["cutover"]), through,self.config['actor'],self.config["actor"], bool(self.config.get('software_delegation')),
                  grant["owner"], grant["owner"], grant["owner"], limit)).fetchall()
             replies = conn.execute("SELECT p.seq,n.notification_id,d.id AS parent_delivery FROM posts p "
                 "JOIN thread_posts t ON t.post_seq=p.seq JOIN coordinator_deliveries_v1 d ON d.post=t.thread_id "
@@ -323,6 +331,15 @@ class Board(BoardDelivery, Completion, OwnerControl, Software):
                 "allowed_tasks": self.selected["routes"]}
         if service_reply:
             event.update({"receipt_recipient": recipient, "parent_delivery": row["parent_delivery"]})
+        if runtime is not None and runtime.processing and self.role=='Reviews':
+            from .branches import board_review
+            factual=board_review(runtime,body)
+            if factual:
+                event['board_source']=body
+                event['body']={'review':factual['packet']}
+                if factual['branch']:
+                    event['branch_binding']=factual['branch']['id']
+                    event['package']=factual['branch']['scope']
         return event
 
     def receipt(self, runtime, event_id):

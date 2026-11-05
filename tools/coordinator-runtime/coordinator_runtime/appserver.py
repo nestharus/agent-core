@@ -503,7 +503,8 @@ class AppServer:
 
     async def turn(self, peer, store, attempt, thread, prompt, spec, binding, schema, outcome):
         store.authorize_launch(attempt)
-        started = await self.start_turn(peer, thread, prompt, binding, schema, spec)
+        async with store.execution_pool.admission(store.attempt(attempt)['profile']):
+            started = await self.start_turn(peer, thread, prompt, binding, schema, spec)
         turn = canonical_uuid(started["turn"]["id"])
         store.session(attempt, thread, turn)
         timeout = self.config["deadlines"]["classify" if store.attempt(attempt)["kind"] in {"classifier", "diagnosis"} else "task"]
@@ -574,7 +575,8 @@ class AppServer:
                   "Use the original required JSON result contract. This is the single supported resume budget.")
         if not clarification and schema and set(schema.get('properties',{}))=={'payload_json'}:
             prompt+='\n'+task_result_instructions()
-        next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
+        async with store.execution_pool.admission(store.attempt(attempt)['profile']):
+            next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])
 
