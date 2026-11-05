@@ -1043,6 +1043,45 @@ numeric END, wrong collector or successor evidence return a precise remaining
 question with exact IDs. No raw-history search, foreign wait, force-release, source
 root widening, handoff deletion or task launch is used to make compatibility pass.
 
+### Bounded integration witnesses with distinct delivery placements
+
+Integration debt can use `integration-debt-v2` when large result/detail objects
+repeat at known protocol placements. All delivery rows, recipients, required
+frontiers, receipts, reasons, errors, handoff text and failure state remain
+separate. The self-contained `shared_values` map carries full values once;
+it does not merge duties or assert that equal snapshots have equal meaning.
+Unknown fields inside these values remain complete. Unrecognized fields outside
+these placements, malformed JSON and noncanonical TEXT stay verbatim and can
+still exceed the unchanged result bound.
+
+A folded column has `format: integration-shared-json-v1`, a `value`, and explicit
+`references` with `json_path` and `sha256`. Only those recorded paths contain null
+placeholders; an original object that looks like a reference remains ordinary
+data. Each occurrence keeps its row/column placement through `original_column`.
+Shared entries may themselves reference a repeated `prior_turn_result`.
+`integration_evidence.expand_shared(column, debt['shared_values'])` reconstructs
+the complete represented JSON without I/O and refuses missing, changed or cyclic
+shared material. Full original TEXT remains in the original journal; the existing
+`expand(column['original_column'], independently_authorized_row)` verifies exact
+original bytes. Older historical-window projections retain their existing
+original-detail reference and historical-debt expansion dependency. Neither
+function grants access, authenticates row truth, settles effects or establishes
+durable availability. The witness is not a replacement for the original journal.
+
+Exact owner-selected windows also require ordinary `processing.task` eligibility
+for **every** member when a processing selection applies. Composition, selection,
+reservation, task start and launch authorization recheck the applicable predicate,
+including admission, task scope and ancestry. An owner window supplies no
+exception; existing event, enrollment, grant, source and execution fences remain.
+Paused management has no processing capability and cannot establish future
+processing eligibility. Future execution must pass its own current selection.
+
+The fictional in-memory construction controls are
+`python3 -B tools/coordinator-runtime/tests/test_witness427.py`, alongside
+`test_integration_bound419.py`. They exercise production journal, delivery and
+processing methods with fictional allocations. They establish no actual case fit,
+recipient comprehension, account availability, delivery success or rollout state.
+
 ### Complete receipts and the preflight boundary
 
 Independent control receipts now retain the entire supplied JSON under

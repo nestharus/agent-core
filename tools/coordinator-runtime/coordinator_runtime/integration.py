@@ -8,7 +8,7 @@ import json
 from contextlib import nullcontext
 
 from .contracts import Refusal, digest, encode, required_text
-from .integration_evidence import attempt_view, fence_view
+from .integration_evidence import attempt_view, fence_view, shared_debt_view
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS integration_retirements(
@@ -291,7 +291,7 @@ class IntegrationJournal:
             row = self.job(job)
             members = json.loads(row['members'])
             table = 'integration_retirements' if kind == 'retirement' else 'integration_prestart_dispositions'
-            result.append({'representation': 'integration-debt-v1',
+            result.append(shared_debt_view({'representation': 'integration-debt-v1',
                 kind: fence_view(retired, table), 'current_job': row,
                 'attempts': [attempt_view(a) for a in self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,))],
                 'outboxes': self.rows('SELECT * FROM outboxes WHERE job=? ORDER BY rowid', (job,)),
@@ -301,7 +301,7 @@ class IntegrationJournal:
                 'recovery_dispositions': self.rows('SELECT * FROM recovery_dispositions WHERE job=? ORDER BY rowid', (job,)),
                 'queue': self.rows('SELECT * FROM queue WHERE job=? ORDER BY rowid', (job,)),
                 'publication': self.rows('SELECT p.* FROM file_publications p JOIN attempts a ON a.id=p.attempt WHERE a.job=? ORDER BY p.rowid', (job,)),
-                'custody': self.rows('SELECT c.* FROM artifact_custody c JOIN attempts a ON a.id=c.attempt WHERE a.job=? ORDER BY c.rowid', (job,))})
+                'custody': self.rows('SELECT c.* FROM artifact_custody c JOIN attempts a ON a.id=c.attempt WHERE a.job=? ORDER BY c.rowid', (job,))}))
         return self._integration_bounded(result)
 
     def integration_window_basis(self, task, events):
@@ -317,9 +317,16 @@ class IntegrationJournal:
             row = self.one("SELECT q.* FROM queue q JOIN events e ON e.id=q.event WHERE q.event=? AND q.task=? AND q.state='queued' AND e.hold IS NULL", (event, task))
             if not row:
                 raise Refusal('next input is not currently eligible; no old input replay')
+            self._integration_member_eligible(row)
             members.append(self._input_member(row))
         return self._integration_bounded({'task': task, 'members': members,
             'debt': self.integration_debt(), 'enrollment': self._integration_enrollment('Work')})
+
+    def _integration_member_eligible(self, row):
+        # An owner-selected window narrows composition; it grants no exception
+        # to ordinary processing task scope, admission or source ancestry.
+        if self.processing and not self.processing.task(row):
+            raise Refusal('selected integration member outside ordinary processing admission')
 
     def select_integration_window(self, actor, receipt):
         """Select one bounded future batch; unrelated UNKNOWN debt is conserved."""
@@ -383,3 +390,4 @@ class IntegrationJournal:
                     or queue['task'] != job['task'] or not source or source['hold'] is not None
                     or self._input_member(queue) != member):
                 raise Refusal('selected integration source changed or held before launch')
+            self._integration_member_eligible(queue)
