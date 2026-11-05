@@ -390,6 +390,23 @@ class Access:
         from .processing_admission import permits
         return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event'])) and permits(self.runtime, row)
 
+    def retirement_event(self, event):
+        """Authenticate conserved receiving evidence only for retired local work.
+
+        A conserved envelope is evidence, never a replacement current grant or
+        permission to dispatch/repost an input whose shared rows have retired.
+        """
+        self.current()
+        if not configuration.event_allowed(self.runtime, event):
+            return False
+        if event.get('processing_capability') != self.key:
+            return self.event(event)
+        row = self.runtime.one('SELECT state FROM events WHERE id=?', (event['id'],))
+        if not row or row['state'] != 'retired':
+            raise Refusal('conserved receiving evidence is only for retired local source material')
+        board = (self.boards or {}).get(event['role']) or ProcessingBoard(self.runtime.config, event['role'])
+        return board.receiving_intent(self.runtime, event, conserved=True)
+
     def reserve(self, attempt, event, job):
         row, selection = self.current()
         if 'service' in selection:
@@ -472,7 +489,7 @@ class ProcessingBoard(RetainedBoard):
             raise Refusal('historical outbox retains original config, destinations and custody; no current replay')
         return super()._delivery_grant(conn, runtime, outbox)
 
-    def receiving_intent(self, runtime, event):
+    def receiving_intent(self, runtime, event, *, conserved=False):
         """A marker alone grants nothing: require the exact durable delivery intent."""
         delivery = event.get('source_delivery', {})
         with self.opened(settlement=True) as conn:
@@ -481,6 +498,10 @@ class ProcessingBoard(RetainedBoard):
                                   (delivery.get('id'),)).fetchone()
             row = conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?', (delivery.get('id'),)).fetchone()
             outbox = runtime.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
+            material = None
+            if conserved and not intent and not row:
+                material = self.conserved_receiving_material(runtime, conn, delivery.get('id'))
+                intent, row = material['software'][0], material['delivery']
             if (not intent or not row or not outbox or json.loads(intent['payload']) != event
                     or intent['event'] != event['id'] or intent['receiver_grant'] != receiver['id']
                     or intent['source_grant'] != row['grant_id']
@@ -499,7 +520,10 @@ class ProcessingBoard(RetainedBoard):
             source_board = (runtime.processing.boards or {}).get(source_role) or ProcessingBoard(self.config, source_role)
             if source_board.identity != self.identity or source_board._grant(conn, runtime)['id'] != row['grant_id']:
                 raise Refusal('original source/receiving board or grant binding changed')
-            notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
+            if material and self._binding(material['grant']) != source_board._binding(source_board._grant(conn, runtime)):
+                raise Refusal('conserved source grant differs from its exact current binding')
+            notice = (material['notices'][0] if material else
+                      conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone())
             if (not notice or notice['route'] != 'managed' or notice['delivery_state'] in {'sending', 'ambiguous'}
                     or row['transport_started'] or self.control_receipt_status(conn, row)['pending']):
                 raise Refusal('original transport/control uncertainty remains with its custodian')

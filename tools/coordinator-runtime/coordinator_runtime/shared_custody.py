@@ -65,6 +65,59 @@ def fresh(store,receipt,basis):
 
 
 class SharedCustody:
+    def conserved_receiving_material(self, store, conn, key):
+        """Exact observed conservation evidence; callers still require grants.
+
+        No shared row is reconstructed. The copy must still be in custody until
+        the local software consumer retires; release first conserves no usable
+        receiving evidence here. Ordinary processing never calls this accessor.
+        """
+        intent = store.one("SELECT * FROM shared_custody_intents WHERE delivery=? AND state='retired'", (key,))
+        if not intent or not intent['receipt']:
+            raise Refusal('exact observed shared conservation intent required')
+        archive = Path(intent['archive'])
+        if not archive.is_relative_to(store.home/'shared-custody'):
+            raise Refusal('receiving evidence must remain in exact owned archive custody')
+        archive = regular_path(str(root(str(archive), store.config.get('artifact_exclusions', []))))
+        try:
+            witness = json.loads(archive.read_text())
+            observed = json.loads(intent['receipt'])
+        except (OSError, ValueError) as exc:
+            raise Refusal('conserved receiving evidence unavailable; preserve local custody') from exc
+        original = witness.get('original', {})
+        material = original.get('material', {})
+        if (original.get('basis') != intent['basis'] or digest(material) != intent['basis']
+                or observed.get('delivery') != key or observed.get('canonical_archive') != str(archive)
+                or observed.get('archive_hash') != digest(witness)
+                or type(observed.get('conserved_at')) not in {int, float}
+                or not math.isfinite(observed['conserved_at']) or observed['conserved_at'] > store.clock()
+                or witness.get('issuer') != store.processing.current()[0]['issuer']):
+            raise Refusal('exact original envelope and observed conservation binding required')
+        return self._conserved_receiving_frontier(store, conn, key, material)
+
+    def _conserved_receiving_frontier(self, store, conn, key, material):
+        row = material.get('delivery', {})
+        software, notices = material.get('software', []), material.get('notices', [])
+        outbox = store.one('SELECT * FROM outboxes WHERE id=?', (key,))
+        if (row.get('id') != key or len(software) != 1 or software[0].get('delivery') != key
+                or len(notices) != 1 or notices[0].get('notification_id') != row.get('notice')
+                or notices[0].get('delivery_state') != 'acknowledged'
+                or row.get('state') != 'settled' or material.get('outbox') != outbox
+                or not material.get('frontier', {}).get('event')
+                or material['frontier'] != delivery(store, key) or not material['frontier']['complete']):
+            raise Refusal('exact conserved delivery/software/transport/whole consumer required')
+        info = store.path.stat()
+        frontier = conn.execute('SELECT * FROM coordinator_scan_frontiers_v1 WHERE runtime=? AND device=? AND inode=? AND actor=?',
+                                (str(store.path), info.st_dev, info.st_ino, store.config['actor'])).fetchone()
+        if not frontier or frontier['through'] < row['post']:
+            raise Refusal('original shared conservation frontier unobserved')
+        if (conn.execute('SELECT 1 FROM coordinator_deliveries_v1 WHERE id=?', (key,)).fetchone()
+                or conn.execute('SELECT 1 FROM coordinator_software_deliveries_v1 WHERE delivery=?', (key,)).fetchone()
+                or conn.execute('SELECT 1 FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()):
+            raise Refusal('conserved receiving evidence requires exact shared retirement absence')
+        require_aged(store, key, RETENTION)
+        return material
+
     def shared_custody_basis(self,store,key):
         with self.opened(settlement=True,owner_required=False) as conn:
             return envelope(self,conn,store,key)

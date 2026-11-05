@@ -204,7 +204,7 @@ it is a lower bound for archive processing, not processing completion. A lost
 local return supplies no original completion clock: reconciliation records its
 later actual observation, and repeated reconciliation preserves that frontier.
 After its own completed conservation/consumer processing+24h and all holds,
-`release-shared-archive ... --receipt FILE` takes
+`release-shared-archive CAP ROLE DELIVERY --receipt FILE` takes
 `hash, qualified_at, holds, evidence, originals, custodian, processing`.
 `processing` is `{completed_at, evidence}` supplied by the real archive custodian
 for actual whole archive/consumer processing, at or after observed `conserved_at`
@@ -214,8 +214,17 @@ fsync or caller END cannot substitute. Old receipts without this frontier remain
 held; do not invent timestamps to upgrade them. Originals maps EVERY
 envelope material key to exact `hash, custodian, evidence` of full original
 conservation. Exact owned identity/bytes are rechecked before copy removal. Its
-full return carries the original witness to the collecting custodian. Complete
-local retirement while that actual receipt/intent remains available. Repeated
+full return carries the original witness to the collecting custodian. Qualified
+local episode retirement preserves the exact intent, archive binding and observed
+conservation receipt, so the original episode can retire before later eligible
+copy release. Software receiving consumers need that exact archive for local
+retirement after their shared rows disappear; retire those local episodes before
+releasing the copy. Ordinary episodes without this dependency also support
+eligible copy-first release. Neither order supplies
+copy processing evidence or clears any hold. The small intent remains counted
+in journal residency after release; there is no automatic intent reclamation.
+Reconciliation still needs the exact archive and shared absence, and a lost release
+return remains an uncertain effect, never permission to replay deletion. Repeated
 same-journal local/shared reuse never hides still-required history/custody or
 claims physical SQLite/platform shrinkage.
 

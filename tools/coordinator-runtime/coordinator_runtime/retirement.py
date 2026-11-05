@@ -162,7 +162,7 @@ def apply(store, root, actor, receipt):
                 raise Refusal('an actual scoped operational/recovery question remains unresolved')
         for event in members['events']:
             row = store.one('SELECT * FROM events WHERE id=?', (event,))
-            if not store.processing.event(store.event(event)) or not eligible_event(store, row):
+            if not store.processing.retirement_event(store.event(event)) or not eligible_event(store, row):
                 raise Refusal('source/descendant processing+24h or a structural hold remains')
             if row['state'] != 'retired':
                 raise Refusal('retire owned artifact/queue material first; do not delete required body custody')
@@ -229,7 +229,10 @@ def apply(store, root, actor, receipt):
         delete('alert_debt', 'id', members['occurrences'])
         delete('alerts', 'id', members['occurrences'])
         delete('outboxes','id',members['deliveries'])
-        delete('shared_custody_intents','delivery',members['deliveries'])
+        # The conserved archive has its own consumer/retention frontier. Keep
+        # its exact binding and observed conservation receipt after the original
+        # episode retires, so later reconciliation/release needs no lost outbox
+        # or reconstructed authority. This small custody record remains charged.
         blob_candidates = {r['sha256'] for a in members['attempts'] for r in store.rows('SELECT sha256 FROM artifact_custody WHERE attempt=?', (a,))}
         for table, column in [('results','attempt'),('artifact_custody','attempt'),('artifacts','attempt'),('attempt_storage','attempt'),
                               ('routine_runs','attempt'),('routine_stages','attempt'),('file_publications','attempt'),('ordinary_runs','attempt'),('ordinary_tool_records','attempt'),
