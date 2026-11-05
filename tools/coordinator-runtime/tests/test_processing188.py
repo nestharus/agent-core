@@ -168,7 +168,7 @@ def engine_config(directory):
             'roles': {r: {'owner': 'fictional-logical-' + r, 'profile': None, 'legacy_hold': None} for r in ('Work', 'Branch', 'Reviews', 'QA')},
             'limits': {'max_events': 100, 'max_attempts': 100, 'max_jobs': 100, 'max_alerts': 100,
                        'max_result_bytes': 65536, 'max_files': 1000, 'max_bytes': 8388608},
-            'deadlines': {'bind': 1}, 'delivery': {'recipients': {}}, 'classification_capacity': 5}
+            'deadlines': {'bind': 1, 'shutdown': 2}, 'delivery': {'recipients': {}}, 'classification_capacity': 5}
 
 
 class EngineTests(unittest.TestCase):

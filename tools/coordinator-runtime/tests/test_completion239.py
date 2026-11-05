@@ -232,9 +232,9 @@ class Completion(EngineTests):
         @asynccontextmanager
         async def admission(profile): yield {'fictional-local-only':True}
         self.runtime.execution_pool.admission=admission
-        policy={'caller':str(program),'deadline':1,'components':{'fictional-component':{'repository':'/fixtures'}}}
+        policy={'caller':str(program),'caller_sha256':reviews.sha(program.read_bytes()),'deadline':1,'routes':{None:'fictional-local-refusal-only'},'components':{'fictional-component':{'repository':'/fixtures'}}}
         context={'component':'fictional-component','route':'fictional-local-refusal-only','profile':None,
-                 'handle':str(self.directory/'unused-handle')}
+                 'handle':str(self.directory/'unused-handle'),'run':None}
         code,receipt,answer=asyncio.run(reviews.Native().call(self.runtime,attempt,policy,context,self.directory/'local-output','fictional local input',[],opening=True))
         self.assertEqual(code,7)
         self.assertEqual(receipt['class'],'incomplete')
@@ -329,7 +329,7 @@ class Material(EngineTests):
         policy, packet = self.setup_repository()
         method = self.directory/'fictional-method.md'; method.write_text('Fictional local failure path only.\n')
         caller = self.directory/'local-original'; caller.write_text('#!/usr/bin/python3\nraise SystemExit(7)\n'); caller.chmod(0o700)
-        policy.update(method=str(method),method_files=reviews.method_files(str(method)),caller=str(caller),deadline=1,
+        policy.update(method=str(method),method_files=reviews.method_files(str(method)),caller=str(caller),caller_sha256=reviews.sha(caller.read_bytes()),deadline=1,
                       routes={None:'fictional-local-refusal-only'})
         # Explicit NULL projection avoids inventing an account for this local
         # SQL/pipe failure test. Production context profiles stay NOT NULL.

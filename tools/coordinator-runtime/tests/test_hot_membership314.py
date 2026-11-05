@@ -40,6 +40,7 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             # Public prospective authorization, separate from all NULL native
             # role/attempt identities in the underlying protocol fixture.
             value['profiles'] = ['.codex', '.codex2', '.codex3', '.codex5']
+            value['deadlines']['shutdown']=2  # Original local pipe collection bound.
             return value
         with patch.object(previous, 'engine_config', side_effect=original):
             self.f.setUp()
@@ -261,8 +262,8 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
 
     async def test_review_creation_exclusion_running_custody_and_close_drain(self):
         # A selected policy/context declaration, never an observed native identity.
-        context={'profile':'.codex2','route':'public-declared-sol-two','handle':str(self.f.directory/'declared-control-handle'),'run':None}
-        policy={'caller':'/usr/bin/true','routes':{'.codex2':context['route']},'deadline':1}
+        context={'profile':'.codex2','route':'public-declared-sol-two','handle':str(self.f.directory/'declared-control-handle'),'run':None,'created':self.runtime.clock()}
+        policy={'caller':'/usr/bin/true','caller_sha256':reviews.sha(Path('/usr/bin/true').read_bytes()),'routes':{'.codex2':context['route']},'deadline':1}
         native=reviews.Native()
         children=[]
         spawned=asyncio.Event()
@@ -278,7 +279,7 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
              patch.object(self.runtime,'begin',return_value=None), \
              patch('coordinator_runtime.reviews.asyncio.create_subprocess_exec',side_effect=harmless_spawn):
             running=asyncio.create_task(native.call(self.runtime,name,policy,context,self.f.directory/'call-one','fixture input',[],opening=True))
-            await spawned.wait()
+            await asyncio.wait_for(spawned.wait(),2)
             self.pool.set([])
             frozen=copy.deepcopy(context)
             self.assertIsNone(children[0][0].returncode)
@@ -291,9 +292,13 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(Refusal,'empty'):
                 await native.call(self.runtime,name,policy,context,self.f.directory/'excluded-input','future input',[])
             self.assertEqual(len(children),1)
+            # Fictional owned handle for the harmless close subprocess; no native run.
+            Path(context['handle']).write_text(encode({'v':1,'uid':os.getuid(),'run':'fictional-protocol-run',
+                'socket':'/fixtures/fictional-unused.sock','token':'fictional-not-a-credential'}))
+            Path(context['handle']).chmod(0o600)
             spawned.clear()
             draining=asyncio.create_task(native.call(self.runtime,name,policy,context,self.f.directory/'close-one','',[],close=True))
-            await spawned.wait()
+            await asyncio.wait_for(spawned.wait(),2)
             self.assertIn('--close',children[1][1])
             self.assertNotIn('--prompt-file',children[1][1])
             children[1][0].stdin.close()
@@ -303,8 +308,8 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
         self.unchanged_history()
 
     async def test_unavailable_review_route_refuses_without_borrowing_or_affecting_other_work(self):
-        context={'profile':'.codex4','route':None,'handle':str(self.f.directory/'declaration'),'run':None}
-        policy={'caller':'/usr/bin/true','routes':{'.codex3':'declared-three'},'deadline':1}
+        context={'profile':'.codex4','route':None,'handle':str(self.f.directory/'declaration'),'run':None,'created':self.runtime.clock()}
+        policy={'caller':'/usr/bin/true','caller_sha256':reviews.sha(Path('/usr/bin/true').read_bytes()),'routes':{'.codex3':'declared-three'},'deadline':1}
         self.pool.set(['.codex4'])
         with patch.object(self.runtime,'authorize_launch',side_effect=lambda unused:self.current()), \
              patch('coordinator_runtime.reviews.asyncio.create_subprocess_exec',side_effect=AssertionError('no substitute')):
@@ -314,7 +319,7 @@ class HotMembership(unittest.IsolatedAsyncioTestCase):
         self.current();self.unchanged_history()
 
     async def test_partial_review_route_declarations_do_not_require_unenabled_accounts(self):
-        policy={'caller':'/usr/bin/true','routes':{'.codex3':'public-declared-three'},'deadline':1,
+        policy={'caller':'/usr/bin/true','caller_sha256':reviews.sha(Path('/usr/bin/true').read_bytes()),'routes':{'.codex3':'public-declared-three'},'deadline':1,
                 'method':'fixture-method','method_files':{},'components':{}}
         runtime=SimpleNamespace(config={'profiles':KNOWN,'tasks':{'review':{'role':'Reviews','phase':'proposer','effects':'none'}}})
         with patch.object(reviews,'method_files',return_value={}):
