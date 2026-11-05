@@ -75,16 +75,24 @@ def guard_frozen(store, sha256, task=None, path=None):
     This neither searches for aliases nor alters/deletes the retained source.
     """
     if path is not None:
-        refuse_log(path, task)
-        refuse_excluded(store, path)
+        guard_origin(store, path, task)
     for row in store.rows('SELECT path FROM artifact_custody WHERE sha256=?', (sha256,)):
-        refuse_log(row['path'], task)
-        refuse_excluded(store, row['path'])
+        guard_origin(store, row['path'], task)
     # Older file-witness snapshots conserved blobs without artifact_custody.
     # Consult their existing preimage keys, not bodies or filesystem aliases.
     for row in store.rows("SELECT j.key AS path FROM routine_runs r,json_each(r.before_files) j WHERE json_extract(j.value,'$.sha256')=?", (sha256,)):
-        refuse_log(row['path'], task)
-        refuse_excluded(store, row['path'])
+        guard_origin(store, row['path'], task)
+
+
+def guard_origin(store, path, task=None):
+    if not Path(path).is_absolute() or '..' in Path(path).parts:
+        raise Refusal('exact absolute artifact origin required before acquisition')
+    refuse_log(path, task)
+    # Exports can outlive their original task, including owner-held artifacts.
+    # Current selected log targets remain whole-log acquisition boundaries.
+    for selected in store.config.get('tasks', {}).values():
+        refuse_log(path, selected)
+    refuse_excluded(store, path)
 
 
 def refuse_excluded(store, path):
@@ -94,20 +102,28 @@ def refuse_excluded(store, path):
 
 
 def guard_path(store, path, task=None):
-    refuse_log(path, task)
-    refuse_excluded(store, path)
+    guard_origin(store, path, task)
     known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (str(path),))
     if known:
         guard_frozen(store, known['sha256'], task, path)
     for stage in store.rows('SELECT s.target,r.policy FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (str(path),)):
         policy = json.loads(stage['policy']) if stage['policy'] else {}
         from .bounded_log import KIND
-        if Path(stage['target']).name == 'WORK_LOG.md' and policy.get('kind') != KIND:
-            raise Refusal('historical whole-log stage remains original custody; no acquisition')
+        refuse_excluded(store, stage['target'])
+        if policy.get('kind') != KIND:
+            guard_origin(store, stage['target'], task)
 
 
-def frozen_body(store, sha256, task=None, path=None):
+def frozen_body(store, sha256, task=None, path=None, maximum=None):
+    if path is not None:
+        guard_path(store, path, task)
     guard_frozen(store, sha256, task, path)
+    if maximum is not None:
+        size = store.one('SELECT length(body) AS bytes FROM artifact_blobs WHERE sha256=?', (sha256,))
+        if not size:
+            raise Refusal('required frozen artifact custody is unavailable')
+        if size['bytes'] > maximum:
+            raise Refusal('source exceeds selected export bound; retained without truncation')
     return store.one('SELECT body FROM artifact_blobs WHERE sha256=?', (sha256,))
 
 

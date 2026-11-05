@@ -579,7 +579,11 @@ def operate(args, store):
             if (not delivery or not delivery['board_receipt'] or target.get('session')!=caller or
                     not any((w.get('source_attempt')==args.attempt or w.get('source_context')==args.attempt) and w.get('path')==args.path and w.get('sha256')==row['sha256'] for w in listed)):
                 raise Refusal('artifact source is private to its actual owner or exact addressed consumer')
-        body=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))['body']
+        from .custody import frozen_body
+        frozen=frozen_body(store,row['sha256'],path=args.path,
+                           maximum=store.config['limits'].get('max_artifact_bytes',33554432))
+        if not frozen:raise Refusal('required frozen artifact custody is unavailable')
+        body=frozen['body']
         if hashlib.sha256(body).hexdigest()!=row['sha256']:raise Refusal('conserved artifact bytes no longer match the exact witness')
         if len(body)>store.config['limits'].get('max_artifact_bytes',33554432):raise Refusal('source exceeds selected export bound; retained without truncation')
         return {**row,'body_base64':base64.b64encode(body).decode()}
