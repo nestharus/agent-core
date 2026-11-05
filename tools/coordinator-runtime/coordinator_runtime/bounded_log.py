@@ -25,9 +25,18 @@ def inventory(policy):
 
 
 def validate(task, policy):
+    validate_policy(policy)
+    if task['role'] != 'Work' or task['phase'] != 'integrator':
+        raise Refusal('seven catalog duties and exact bounded log policy required')
+
+
+def validate_policy(policy):
+    """Validate retained policy shape without inventing a historical task role."""
     spec = policy.get('bounded_log')
-    if (set(policy) != {'kind', 'targets', 'bounded_log'} or task['role'] != 'Work'
-            or task['phase'] != 'integrator' or len(policy['targets']) != 7
+    if (set(policy) != {'kind', 'targets', 'bounded_log'} or policy['kind'] != KIND
+            or not isinstance(policy['targets'], list)
+            or not all(isinstance(p, str) and Path(p).is_absolute() and '..' not in Path(p).parts
+                       for p in policy['targets']) or len(policy['targets']) != 7
             or len(set(policy['targets'])) != 7 or not isinstance(spec, dict)
             or set(spec) != {'target', 'max_lines', 'max_bytes', 'max_entry_bytes'}
             or spec['target'] not in policy['targets'] or spec['max_lines'] != 12
