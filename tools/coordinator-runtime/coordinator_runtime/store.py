@@ -583,6 +583,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
                                                      encode(members), self.controller, token, self.clock()))
+        prospective.note_job(self, job)
         self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
                         encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
         if admission and phase == "execution":

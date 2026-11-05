@@ -13,7 +13,38 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS prospective_authorities(
  id TEXT PRIMARY KEY,selection TEXT NOT NULL,event_boundary INTEGER NOT NULL,
  job_boundary INTEGER NOT NULL,created REAL NOT NULL,revoked REAL);
+CREATE TABLE IF NOT EXISTS prospective_job_positions(
+ position INTEGER PRIMARY KEY AUTOINCREMENT,job TEXT NOT NULL UNIQUE);
 """
+
+
+def job_boundary(store):
+    """Conserve the frontier, including physical boundaries of older epochs."""
+    physical = store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM jobs')['n']
+    epochs = store.one('SELECT COALESCE(MAX(job_boundary),0) AS n FROM prospective_authorities')['n']
+    sequence = store.one("SELECT seq FROM sqlite_sequence WHERE name='prospective_job_positions'")
+    return max(physical, epochs, sequence['seq'] if sequence else 0)
+
+
+def note_job(store, job):
+    """Observe only a fresh reservation, inside its existing transaction.
+
+    No historical job is backfilled. Retirement removes the per-job observation
+    with its cohort, but SQLite's sequence retains the temporal frontier.
+    """
+    store.db.execute('INSERT INTO prospective_job_positions(position,job) VALUES(?,?)',
+                     (job_boundary(store) + 1, job))
+
+
+def job_position(store, job, authority):
+    observed = store.one('SELECT position FROM prospective_job_positions WHERE job=?', (job['id'],))
+    if observed:
+        return observed['position']
+    if authority['selection'].get('job_birth') == 'observed-v1':
+        return None  # Missing history cannot acquire newly selected authority.
+    # Retain the original interpretation for unobserved jobs of legacy epochs;
+    # no reobservation, new identity or historical authority is manufactured.
+    return store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n']
 
 
 def select(store, actor, selection):
@@ -38,13 +69,15 @@ def select(store, actor, selection):
     with store.tx():
         if store.one('SELECT id FROM prospective_authorities WHERE revoked IS NULL'):
             raise Refusal('explicitly revoke previous boundary before selecting another; no implicit supersession')
-        boundary = {t: store.one(f'SELECT COALESCE(MAX(rowid),0) AS n FROM {t}')['n'] for t in ('events', 'jobs')}
+        boundary = {'events': store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM events')['n'],
+                    'jobs': job_boundary(store)}
         if bridge is not None:
             from .processing import source_boundary
             boundary['events'] = source_boundary(store)
         key = ident()
         store.db.execute('INSERT INTO prospective_authorities VALUES(?,?,?,?,?,NULL)',
-                         (key, encode({**selection, 'grantor': actor}), boundary['events'], boundary['jobs'], store.clock()))
+                         (key, encode({**selection, 'grantor': actor, 'job_birth': 'observed-v1'}),
+                          boundary['events'], boundary['jobs'], store.clock()))
     return {'id': key, 'event_boundary': boundary['events'], 'job_boundary': boundary['jobs'],
             'meaning': 'future work only; all original responsibilities stay in this journal'}
 
@@ -98,10 +131,14 @@ def requires_authority(store, job):
     the active attempt's possibly absent proof and the current config flag.
     Older jobs/members and unrelated task policies retain their native path.
     """
-    position = store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n']
     members = json.loads(job['members'])
-    for row in store.rows('SELECT * FROM prospective_authorities WHERE job_boundary<?', (position,)):
+    for row in store.rows('SELECT * FROM prospective_authorities'):
         authority = {**row, 'selection': json.loads(row['selection'])}
+        position = job_position(store, job, authority)
+        if position is not None and position <= row['job_boundary']:
+            continue
+        # Missing birth cannot prove exclusion from a retained duty. Keep the
+        # checker required for future members, while for_job refuses to grant.
         if (job['task'] in authority['selection']['tasks'] and members
                 and all(event_position(store, m['event'], authority) > row['event_boundary'] for m in members)):
             return True
@@ -115,7 +152,8 @@ def for_job(store, job):
     row = current(store, job['task'], epoch)
     if not row:
         return None
-    if store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n'] <= row['job_boundary']:
+    position = job_position(store, job, row)
+    if position is None or position <= row['job_boundary']:
         return None
     members = json.loads(job['members'])
     if not members or any(event_position(store, m['event'], row) <= row['event_boundary'] for m in members):

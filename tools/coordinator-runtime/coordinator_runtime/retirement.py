@@ -156,6 +156,9 @@ def apply(store, root, actor, receipt):
         for table, column in [('recovery_requests','job'),('recovery_dispositions','job'),('owner_results','job'),('qa_package_owners','job')]:
             delete(table,column,members['jobs'])
         delete('attempts','id',members['attempts'])
+        # Per-job birth retires only with the same fully qualified cohort.
+        # Never reset sqlite_sequence: future epochs/jobs keep this frontier.
+        delete('prospective_job_positions','job',members['jobs'])
         delete('jobs','id',members['jobs'])
         for table, column in [('queue','event'),('input_resolutions','event'),('source_custody','event'),('duty_accounts','event'),
                               ('processing_controls','event'),('processing_control_returns','source'),('processing_source_positions','event')]:
