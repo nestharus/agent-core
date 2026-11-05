@@ -44,7 +44,10 @@ until it resumes. No watchdog, thread, executor or second Store owner is added.
 
 Each owned Peer retains at most 64 method-progress entries until its existing
 owned lifecycle ends. Unknown method names project to `other`. `sequence` is
-local to that Peer and remains enclosed by the existing attempt detail.
+local to that Peer and remains enclosed by the existing attempt detail. When a
+record admits the method span, `observation_sequence` joins that attempt-local
+progress to the owning record's method sequence. An absent join is unobserved;
+parents/method entries can expire or be evicted before collection.
 `protocol_progress_dropped` counts history evictions;
 `protocol_correlation_dropped` counts omitted timing joins above 64 concurrent
 calls. Those telemetry bounds do not change pending RPCs, admission or effects.

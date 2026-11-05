@@ -218,10 +218,10 @@ class Peer:
         await self.child.stdin.drain()
 
     async def rpc(self, method, params, timeout=20):
-        with observations.span(method if method in RPC_METHODS else "rpc-other"):
-            return await self.rpc_owned(method, params, timeout)
+        with observations.span(method if method in RPC_METHODS else "rpc-other") as observation_sequence:
+            return await self.rpc_owned(method, params, timeout, observation_sequence)
 
-    async def rpc_owned(self, method, params, timeout):
+    async def rpc_owned(self, method, params, timeout, observation_sequence):
         self.sequence += 1
         number = self.sequence
         future = asyncio.get_running_loop().create_future()
@@ -229,6 +229,8 @@ class Peer:
         started = asyncio.get_running_loop().time()
         progress = {"method": method if method in RPC_METHODS else 'other',
                     "sequence": observations.bounded(number), "state": "sending", "budget_ms": observations.bounded(timeout*1000)}
+        if observation_sequence:
+            progress["observation_sequence"] = observation_sequence
         if len(self.progress) == 64:
             self.progress.pop(0)
             self.progress_dropped = observations.bounded(self.progress_dropped + 1)

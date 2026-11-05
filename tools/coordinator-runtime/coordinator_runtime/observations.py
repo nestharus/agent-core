@@ -111,13 +111,13 @@ def owning(owner):
 def span(label):
     record = _record.get()
     if record is None:
-        yield
+        yield 0
         return
     number = record.begin(label)
     token = _parent.set(number)
     state = 'succeeded'
     try:
-        yield
+        yield number
     except BaseException as exc:
         state = 'cancelled' if isinstance(exc, asyncio.CancelledError) else 'failed'
         raise

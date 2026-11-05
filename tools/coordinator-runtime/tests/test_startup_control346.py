@@ -69,7 +69,7 @@ class Startup(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(all(type(p['elapsed_ms']) is int and p['elapsed_ms'] >= 0 for p in progress))
                 public_fields = {'method', 'state', 'elapsed_ms', 'failure', 'sequence', 'budget_ms',
                                  'exchange_entered_ms', 'send_drain_ms', 'correlated_reply_ms',
-                                 'cancellation_delivered_ms', 'boundary', 'budget_overrun_ms'}
+                                 'cancellation_delivered_ms', 'boundary', 'budget_overrun_ms', 'observation_sequence'}
                 self.assertTrue(all(set(p) <= public_fields for p in progress))
                 for p in progress:
                     self.assertTrue(all(type(value) is int and value >= 0 for key, value in p.items()
