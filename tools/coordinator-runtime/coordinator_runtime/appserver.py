@@ -201,6 +201,9 @@ class Peer:
         self.tools, self.unknown_tools, self.thread = {}, set(), None
         self.events = asyncio.Queue(maxsize=8)
         self.sequence = 0
+        # Only local method names and durations, never params, response bodies,
+        # stderr or account state. The finite owned lifecycle bounds this list.
+        self.progress = []
         self.capture = "complete"
         self.reader = asyncio.create_task(self.read())
 
@@ -213,16 +216,29 @@ class Peer:
         number = self.sequence
         future = asyncio.get_running_loop().create_future()
         self.pending[number] = future
+        started = asyncio.get_running_loop().time()
+        progress = {"method": method, "state": "sending"}
+        self.progress.append(progress)
         try:
             await self.send({"id": number, "method": method, "params": params})
+            progress["state"] = "awaiting-response"
             response = await asyncio.wait_for(future, timeout)
+            progress["state"] = "response-received"
+            if "error" in response:
+                raise RpcFailure(method, response["error"])
+            if not isinstance(response.get("result"), dict):
+                raise Refusal("malformed RPC result")
+            progress["state"] = "succeeded"
+            return response["result"]
+        except asyncio.TimeoutError:
+            progress["state"] = "timeout"
+            raise
+        except BaseException as exc:
+            progress.update(state="failed", failure=type(exc).__name__)
+            raise
         finally:
+            progress["elapsed_ms"] = round((asyncio.get_running_loop().time()-started)*1000)
             self.pending.pop(number, None)
-        if "error" in response:
-            raise RpcFailure(method, response["error"])
-        if not isinstance(response.get("result"), dict):
-            raise Refusal("malformed RPC result")
-        return response["result"]
 
     async def read(self):
         try:
@@ -384,7 +400,9 @@ class AppServer:
             async with store.execution_pool.admission(profile):
                 pass  # Refuse an already disabled reservation before provider preflight too.
             owned_storage = storage.prepare(store, attempt)
+            outcome['detail']['startup_stage'] = 'preflight'
             argv, preflight_result = await self.command(profile, storage.flags(owned_storage), spec['cwd'])
+            outcome['detail']['startup_stage'] = 'process-creation'
             store.authorize_launch(attempt)
             # Admission and BEGIN share the operator-update lock. It is released
             # before model work; exclusion never touches a running original call.
@@ -400,10 +418,13 @@ class AppServer:
                 store.begin(attempt, {**preflight_result, "argv": argv, "process_handle": "owned-asyncio-subprocess",
                                       "pid_information_only": child.pid, 'execution_pool_admission': admission})
             peer = Peer(child, self.config["limits"]["max_result_bytes"])
+            outcome['detail']['protocol_progress'] = peer.progress
+            outcome['detail']['startup_stage'] = 'protocol'
             peer.owned_storage = owned_storage
             if owned_storage:
                 watcher=asyncio.create_task(storage.guard(store,child,outcome))
             outcome["result"] = await self.session(peer, store, attempt, prompt, spec, binding, profile, schema, outcome)
+            outcome['detail']['startup_stage'] = 'session-returned'
         except Exception as exc:
             if isinstance(exc, OSError) and exc.errno in {errno.ENOENT, errno.EACCES} and child is None:
                 outcome["detail"]["creation"] = "proved-rejected"

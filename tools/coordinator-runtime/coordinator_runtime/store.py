@@ -112,14 +112,17 @@ def private_directory(path):
 
 
 class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
-    def __init__(self, config, controller=None, clock=time.time):
+    def __init__(self, config, controller=None, clock=time.time, *, read_only=False):
         self.config, self.controller, self.clock = config, controller or ident(), clock
         self.launch_authorizer = None
         self.task_launch_authorizer = None
         self.processing = None  # Explicit service-local capability, never an intake flag rewrite.
         self.execution_pool = ExecutionPool(config, runtime=self)
-        self.home = private_directory(config["state_dir"])
+        self.home = Path(config["state_dir"]) if read_only else private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
+        if read_only:
+            self._open_control_view()
+            return
         # Closing ANY raw descriptor for an existing SQLite file can release
         # this process's POSIX locks held by other SQLite connections. Owner
         # CLI opens must not invalidate the running collector's journal locks.
@@ -161,15 +164,42 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
         windows.prepare_revision(self)
 
+    def _open_control_view(self):
+        """Existing journal only: control must never initialize or migrate it.
+
+        A WAL reader can validate the committed capability while another
+        connection owns a write transaction. No BEGIN IMMEDIATE/configuration
+        binding write is needed before addressing the original service socket.
+        """
+        from .contracts import regular_path
+        info = regular_path(str(self.path)).stat()
+        if info.st_nlink != 1 or info.st_mode & 0o077 or self.home.stat().st_mode & 0o077:
+            raise Refusal("private single-link runtime database required")
+        self.db = sqlite3.connect(self.path.as_uri()+"?mode=ro", uri=True, isolation_level=None, timeout=15)
+        self.db.row_factory = sqlite3.Row
+        try:
+            self.db.execute('PRAGMA query_only=ON')
+            if self.db.execute('PRAGMA user_version').fetchone()[0] != 1:
+                raise Refusal('service control requires an initialized runtime schema')
+            if not self.one("SELECT value FROM meta WHERE key='configuration'"):
+                raise Refusal('service control requires an existing configuration binding')
+            self._check_config()
+        except BaseException:
+            self.db.close()
+            raise
+
+    def _check_config(self):
+        row = self.one("SELECT value FROM meta WHERE key='configuration'")
+        current = configuration.latest(self)
+        if row and (current['current'] if current else row['value']) != digest(self.config):
+            raise Refusal("configuration differs from this journal; use the supported current-configuration transition")
+        if current and (current['original'] != row['value'] or json.loads(current['configuration']) != self.config):
+            raise Refusal('current configuration/original journal binding differs')
+
     def _bind_config(self):
         with self.tx():
-            row = self.one("SELECT value FROM meta WHERE key='configuration'")
+            self._check_config()
             expected = digest(self.config)
-            current = configuration.latest(self)
-            if row and (current['current'] if current else row['value']) != expected:
-                raise Refusal("configuration differs from this journal; use the supported current-configuration transition")
-            if current and (current['original'] != row['value'] or json.loads(current['configuration']) != self.config):
-                raise Refusal('current configuration/original journal binding differs')
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('configuration',?)", (expected,))
             self.db.execute("INSERT OR IGNORE INTO meta VALUES('actor',?)", (self.config["actor"],))
             windows.initialize(self)

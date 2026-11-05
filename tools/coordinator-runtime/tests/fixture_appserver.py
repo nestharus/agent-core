@@ -30,6 +30,8 @@ def completed(status="completed", error=None):
 for line in sys.stdin:
     request = json.loads(line)
     method, params = request.get("method"), request.get("params", {})
+    if method == plan.get('stall_rpc'):
+        continue  # Synthetic missing response; EOF still yields the actual plan exit.
     if method == "initialize":
         respond(request, {"codexHome": os.environ["CODEX_HOME"]})
     elif method == "thread/start":

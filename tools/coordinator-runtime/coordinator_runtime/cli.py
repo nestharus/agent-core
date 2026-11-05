@@ -655,7 +655,7 @@ def main(argv=None):
                 value = board.delivery_stage(args.delivery, args.stage, read_record(args.receipt))
             print_json(value)
             return 0
-        store = Store(config)
+        store = Store(config, read_only=args.command == 'processing-service-control')
         try:
             value = operate(args, store)
             print_json(value)
