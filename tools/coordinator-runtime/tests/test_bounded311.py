@@ -50,7 +50,10 @@ class Base(unittest.TestCase):
         self.config = engine_config(self.area)
         self.config.update(canonical_publication={'method':'retention-same-inode-v1','library':'/src/tools/coordinator-runtime/tests/fixture_snapshot'},
                            board_library='/src/tools/message-board', recheck_seconds=.01)
-        self.config['limits'].update(max_bytes=16*1024*1024, max_files=4000)
+        # Keep reservation headroom for an interrupted publication and its held
+        # result. Without an explicit artifact ceiling the reserve defaults to
+        # the entire 16 MiB fixture budget, so delivery cannot reach its oracle.
+        self.config['limits'].update(max_bytes=16*1024*1024, max_artifact_bytes=1024*1024, max_files=4000)
         self.config['deadlines'].update(task=10)
         self.config['delivery']['recipients']={'Work':{'session':'fictional-logical-Work'}}
         for task in self.config['tasks'].values():

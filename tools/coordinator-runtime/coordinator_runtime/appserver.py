@@ -619,7 +619,17 @@ class AppServer:
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
             outcome["detail"]["resume_disposition"] = "attempted-after-semantic-incompletion"
-            return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+            prompt=None
+            if is_task and spec.get('routine_completion'):
+                prompt=('Continue this SAME owned task once. Retain real blockers and original history; '
+                    'do not invent DONE, replay effects or rewrite completed stages. These are available '
+                    'own observed protocol IDs, never inferred correlations to visible labels. Complete only '
+                    'genuinely remaining authorized local work or remain truthfully partial/blocked.\n'+
+                    task_result_instructions()+readiness.INSTRUCTIONS+
+                    '\nOBSERVED_TOOL_METADATA='+encode(items)+
+                    '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
+                    '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools)))
+            return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema,prompt)
         return result
 
     async def start_turn(self, peer, thread, prompt, binding, schema, spec):

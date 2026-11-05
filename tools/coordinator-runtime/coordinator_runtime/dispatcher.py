@@ -112,6 +112,7 @@ def job_prompt(store, job, task=None):
                "prior_owned_context": json.loads(attempt["detail"]),
                "integration_window": store.integration_context(job['id']),
                "conserved_integration_debt": store.integration_debt() if job['role']=='Work' and job['phase']=='integrator' else [],
+               "inherited_failure_sources": readiness.failure_sources(store,attempt['id']) if task.get('routine_completion') else [],
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
@@ -358,7 +359,9 @@ class Dispatcher:
         job = self.store.job(self.store.attempt(attempt)['job'])
         selected=task or self.config['tasks'][job['task']]
         errors=[]
-        try:custody.inventory(self.store,attempt,publication.artifact_view(self.store,attempt,result),selected)
+        # Inventory the original declared referents. Stages are separate claims
+        # and are conserved independently even when another leaf is refused.
+        try:custody.inventory(self.store,attempt,result,selected)
         except (Refusal,OSError) as exc:errors.append(str(exc))
         try:publication.conserve_stages(self.store,attempt,selected)
         except (Refusal,OSError) as exc:errors.append(str(exc))

@@ -102,6 +102,19 @@ producer's resolution claim, not independent proof of the semantic explanation,
 universal correctness, review acceptance or absence of other defects. Unknown or
 unsettled tool metadata remains a separate hard fence even if a later item exits0.
 
+Inherited failures may instead use {index,status:"inherited",source,reason}.
+The source is an exact object supplied in TASK_CONTEXT.inherited_failure_sources:
+kind, id, sha256 and a typed JSON path into a frozen event or linked prior result.
+The failure entry must equal the supplied original JSON value. No filename, prose
+historical label or producer-invented source qualifies. Explain why it creates no
+unmet current local duty; this is a producer scope attestation, subject to later
+independent interpretation, never semantic proof of non-applicability. Original
+facts, owners, source/effect/consumer holds remain unchanged. This disposition
+does not mark the failure resolved or settle its old job. If it also causes a
+current local defect, retain a separate current unresolved entry and local=blocked.
+Current observed adverse tools retain their separate proof obligations regardless
+of an inherited failure. Live and collected checks bind the same frozen sources.
+
 tools covers ONLY observed adverse protocol items, exactly once. When all observed
 commands succeeded, tools MUST be []; successful commands require no adverse
 disposition. Visible exec_command chunk labels are a different namespace from
@@ -114,8 +127,11 @@ If actual item IDs are not visible to the producer, or an otherwise DONE return
 lacks a coherent explicit contract, the service uses the same grammar/ownership/
 evidence checks while live as it does after collection, within its one supported
 same-owned-idle continuation. It supplies bounded safe actual item metadata and
-asks for faithful clarification/remaining verification in the SAME context. Live
-checks read only declared or mapped staged own files under the current attempt;
+asks for faithful clarification/remaining verification in the SAME context. A
+semantic PARTIAL/FAILED/UNKNOWN continuation for a staged task also supplies its
+available own metadata, within that same single idle continuation budget. This
+does not infer missing commands, provider failure or a reason to promote DONE.
+Live checks read only declared or mapped staged own files under the current attempt;
 they are preliminary byte checks, not capture, process collection or publication.
 Post-collection assessment requires complete tool metadata and conserved bytes.
 Specific clarification issues and the full original return, including original

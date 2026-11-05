@@ -12,10 +12,16 @@ from .contracts import Refusal, digest, required_text, task_result_issues, colle
 CONTROLLER_DUTIES={'publication','artifact-custody','effect-reconciliation','delivery'}
 BOUNDARY_DUTIES={'review','acceptance'}
 INSTRUCTIONS = '''For this staged file task include completion={version:1,local:"ready"|"blocked",
-failures:[{index,status:"resolved"|"unresolved",evidence:[{path,sha256}],verification_items:[PROTOCOL_ID]}],
+failures:[{index,status:"resolved"|"unresolved",evidence:[{path,sha256}],verification_items:[PROTOCOL_ID]}
+OR {index,status:"inherited",source:EXACT_SUPPLIED_SOURCE,reason}],
 unknowns:[{index,status,owner,duty,reason} OR {index,duties:[{status,owner,duty,reason},...]}],
 tools:[{id:ADVERSE_PROTOCOL_ID,status:"resolved"|"expected",reason,evidence:[{path,sha256}],verification_items:[SUCCESSFUL_PROTOCOL_ID]}]}.
 Cover every ORIGINAL failures/unknowns index once. Preserve those arrays verbatim, including objects/prose.
+An inherited failure must equal the exact failure at its TASK_CONTEXT.inherited_failure_sources source.
+Supply that source object unchanged and explain why the original failure is outside CURRENT local duties.
+This preserves original facts/owners/holds; it does not resolve, accept or reassign the old failure.
+If it also exposes a current local defect, retain a separate unresolved current entry and local=blocked.
+No source match, source reference alone or historical label can waive current local work or adverse tools.
 Use a duties group to split one combined original unknown into individual obligations, not a combined prose enum.
 Controller deferred duties are EXACTLY publication, artifact-custody, effect-reconciliation, delivery;
 owner=controller. A review/acceptance boundary is status=boundary, owner=outside-workflow,
@@ -80,7 +86,38 @@ def _duty(row,index,answer,task,config):
     return {'index':index,**row,'actual_owner':actor}
 
 
-def inspect(answer,items,task=None,config=None,check_ref=None):
+def failure_sources(store,attempt):
+    """Only frozen inputs and explicitly linked prior results, never an owner census.
+
+    Sources bind original JSON values, not inferred age, prose labels or semantic
+    resolution. The producer must separately attest current duty scope.
+    """
+    row=store.attempt(attempt);job=store.job(row['job']);sources=[]
+    def visit(value,origin,path):
+        if isinstance(value,dict):
+            failures=value.get('failures')
+            if isinstance(failures,list):
+                for index,failure in enumerate(failures):
+                    sources.append({'source':{**origin,'path':[*path,'failures',index]},'failure':failure})
+            for key,child in value.items():visit(child,origin,[*path,key])
+        elif isinstance(value,list):
+            for index,child in enumerate(value):visit(child,origin,[*path,index])
+    for member in json.loads(job['members']):
+        event=store.event(member['event'])
+        _require(digest(event)==member['hash'],'frozen failure source changed')
+        visit(event,{'kind':'event','id':member['event'],'sha256':member['hash']},[])
+    detail=json.loads(row['detail'])
+    if detail.get('prior_attempt'):
+        old=store.attempt(detail['prior_attempt'])
+        _require(old['job']==row['job'] and old['result']==detail.get('prior_result'),
+                 'inherited prior result binding changed')
+        if old['result'] is not None:
+            prior=json.loads(old['result'])
+            visit(prior,{'kind':'prior-result','id':old['id'],'sha256':digest(prior)},[])
+    return sources
+
+
+def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=()):
     """Representation checks are identical while owned-live and after collection.
 
     Unsettled execution/capture is a separate hard fence, not a proof grammar
@@ -99,6 +136,13 @@ def inspect(answer,items,task=None,config=None,check_ref=None):
     zero={r['id'] for r in items if r.get('type')=='commandExecution' and r.get('exit_code')==0 and r.get('completed_notification') and r.get('status')=='completed'}
     adverse={r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'}
     def failure(row):
+        if row.get('status')=='inherited':
+            _require(set(row)=={'index','status','source','reason'},'typed inherited failure source/rationale required')
+            required_text(row['reason'],'inherited failure current-scope rationale',4000)
+            sources=inherited_sources() if callable(inherited_sources) else inherited_sources
+            _require(any(digest(row['source'])==digest(s['source']) and digest(answer['failures'][row['index']])==digest(s['failure'])
+                         for s in sources),'inherited failure must match an exact controller-supplied frozen source')
+            return
         _require(set(row)=={'index','status','evidence','verification_items'},'typed local failure disposition required')
         if row['status']=='unresolved':_require(proof['local']=='blocked','local ready contradicts an unresolved local failure')
         else:
@@ -144,8 +188,8 @@ def inspect(answer,items,task=None,config=None,check_ref=None):
     return proof,duties,issues
 
 
-def needs_clarification(answer,items,task=None,config=None,check_ref=None):
-    return bool(inspect(answer,items,task,config,check_ref)[2])
+def needs_clarification(answer,items,task=None,config=None,check_ref=None,inherited_sources=()):
+    return bool(inspect(answer,items,task,config,check_ref,inherited_sources)[2])
 
 
 def live_issues(store,attempt,answer,items,task):
@@ -165,7 +209,7 @@ def live_issues(store,attempt,answer,items,task):
         try:_,witness=read_file(safe_path(str(path),[str(root)]),min(store.config['limits'].get('max_artifact_bytes',33554432),store.config['limits']['max_bytes']))
         except (OSError,Refusal) as exc:raise Refusal('own resolution artifact unavailable/unsafe: '+type(exc).__name__) from exc
         _require(witness['sha256']==ref['sha256'],'resolution artifact hash is not current exact own bytes')
-    return inspect(answer,items,task,store.config,reference)[2]
+    return inspect(answer,items,task,store.config,reference,lambda:failure_sources(store,attempt))[2]
 
 
 def assess(store,attempt):
@@ -180,12 +224,14 @@ def assess(store,attempt):
         held=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],str(path)))
         _require(held and held['sha256']==ref['sha256'],'resolution evidence is not the exact conserved artifact')
     job=store.job(attempt['job']);task=store.config['tasks'][job['task']]
-    proof,duties,issues=inspect(answer,tools['items'],task,store.config,reference)
+    proof,duties,issues=inspect(answer,tools['items'],task,store.config,reference,lambda:failure_sources(store,attempt['id']))
     _require(not issues,'; '.join(issues))
     _require(answer.get('semantic')=='DONE' and proof['local']=='ready','current local work is not ready')
     return {'version':1,'local':'ready','producer':attempt['session'],'result_hash':digest(answer),
         'original_failures':answer['failures'],'original_unknowns':answer['unknowns'],
-        'resolved_history':proof['failures'],'tool_dispositions':proof['tools'],'subsequent_duties':duties,
+        'resolved_history':[r for r in proof['failures'] if r['status']=='resolved'],
+        'inherited_history':[r for r in proof['failures'] if r['status']=='inherited'],
+        'tool_dispositions':proof['tools'],'subsequent_duties':duties,
         'reported_commands':proof.get('reported_commands',[]),
         'clarification_origin':{'result_hash':digest(detail['prior_turn_result']),'completion':detail['prior_turn_result'].get('completion') if isinstance(detail['prior_turn_result'],dict) else None,'issues':detail.get('readiness_issues',[])} if detail.get('readiness_clarification') else None,
         'qualification':'producer-attested local readiness/resolution with actual protocol IDs and conserved-byte links; producer-visible labels are uncorrelated claims, not OS handles; not independent semantic verification or downstream acceptance'}

@@ -123,10 +123,16 @@ class WriterCustody(unittest.IsolatedAsyncioTestCase):
 
     async def test_L02_role_strings_and_structured_artifacts_have_custody_never_delete_canonical(self):
         job,attempt=await self.run_writer(artifacts=[str(self.target),{'path':str(self.target),'meaning':'same canonical target'}])
-        row=self.store.one('SELECT * FROM artifact_custody WHERE attempt=?',(attempt,))
+        row=self.store.one('SELECT * FROM artifact_custody WHERE attempt=? AND path=?',(attempt,str(self.target)))
         self.assertEqual(row['kind'],'role-owned')
         self.assertEqual(self.store.rows('SELECT * FROM artifacts WHERE path=?',(str(self.target),)),[])
-        self.assertEqual(self.store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))['body'],self.target.read_bytes())
+        # The returned canonical reference is an input snapshot. Publication
+        # conserves the distinct postimage at the mapped stage and in receipts.
+        self.assertEqual(self.store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))['body'],b'{"total":0}')
+        from coordinator_runtime.publication import stages
+        stage=stages(self.store,attempt)[str(self.target)]
+        held=self.store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt,stage))
+        self.assertEqual(self.store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(held['sha256'],))['body'],self.target.read_bytes())
         await self.settle_routine(job)
         with patch.object(self.store,'clock',return_value=self.store.clock()+86401):sweep(self.store)
         self.assertTrue(self.target.is_file())

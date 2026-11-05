@@ -28,6 +28,11 @@ selectors/preconditions and a proposed new log entry are prepared. Null bounded_
 bounded_log_before and empty staged_targets are expected in this phase; they are
 not proposer defects or seven-duty publication readiness. Keep any original
 PARTIAL/failure/unknown report unchanged when reusing its substantive proposal.
+Inline findings can contain the full proposal and new entry with artifacts=[].
+Artifacts is a request to acquire exact regular-file bytes, not a mention list.
+Keep canonical log/directory mentions in findings; NONE/header-only labels do
+not grant acquisition exceptions. Declare a permitted input file only when its
+exact bytes are required, with that file's own hash/size. Never invent outputs.
 Use the actual current Work selection/phase as authority. Old dated one-hour,
 per-window or storage diagnostic statements remain attributed history; do not
 promote them into a current overlay without current authority. If current
@@ -42,6 +47,14 @@ policy leaves that duty pending. Preserve peer text, row schemas and original
 evidence. Return explicit
 local completion and evidence: expected later controller/review/delivery duties
 are distinct from unresolved local defects; resolved verifier history stays recorded.
+Declare canonical input preimages and explicit mapped stage postimages separately;
+no implicit path substitution occurs. Conserved canonical input witnesses remain
+snapshots; post-publication witnesses are in the joined publication receipts and
+conserved stages, without overwriting the original input claims.
+For carried failures use completion status=inherited only with an exact supplied
+inherited_failure_sources source and an explicit current-duty rationale. Preserve
+the original failure unchanged, its owners and holds. A current local defect still
+needs an unresolved local entry and local=blocked, even if related to old history.
 The actual delegated SERVICE publisher owns the canonical procedure: selected
 retention.snapshot_lock, exact regular-file byte/inode preimages, durable compressed
 before-only recovery backups for inventories; opaque counted kernel conservation

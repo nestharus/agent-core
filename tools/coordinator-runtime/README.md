@@ -377,7 +377,13 @@ No canonical parent or network scope is widened. Local input copies share the
 owned directory ceiling; durable original report bytes remain in journal custody.
 
 Local producer readiness now distinguishes current defects from expected later
-controller/review/delivery duties and resolved history. The required file-worker
+controller/review/delivery duties and resolved or inherited history. An inherited
+failure must match an exact controller-supplied frozen input/prior-result source
+and include the producer's current-duty rationale. It stays in original_failures
+and inherited_history, never resolved_history; no old job/effect/hold is settled.
+Scope remains an attestation requiring independent interpretation. Current local
+defects and current adverse tools still block regardless of related old history.
+The required file-worker
 `completion` protocol covers every original failure/unknown index and adverse tool
 item; original arrays are never erased. A combined original unknown may use one
 indexed duties group containing individual exact controller or review/acceptance
@@ -394,7 +400,9 @@ Genuine unresolved local work, missing evidence, unsettled tools, invalid owners
 or source/resource/revocation fences still hold. Live clarification uses the same
 proof grammar/ownership checks, plus bounded declared own-byte checks; final
 assessment still requires actual collection, complete tool metadata and conserved
-byte witnesses. Ambiguous DONE can use the
+byte witnesses. Staged semantic PARTIAL/FAILED/UNKNOWN continuation also supplies
+its available own protocol metadata; it can remain partial without guessing IDs
+or replaying work. Ambiguous DONE can use the
 ONE existing same-owned-idle continuation for faithful clarification/verification;
 no new session, blind rewrite, text heuristic, repeated clarification or per-job
 human permission is supplied. Original pre-clarification arrays must remain verbatim
@@ -421,8 +429,13 @@ bounded to depth four and 64 total leaves. `common`, `kind`, anchors and read
 extents remain original data; they supply no implicit path or access authority.
 Leaf hash/byte claims, when supplied, must match actual captured bytes. Current
 peer changes can therefore hold a historical reference rather than replace its
-meaning. Declared target paths map to their owned stages even inside groups;
-the original result is never rewritten. Missing/invalid item representations can
+meaning. Declared canonical input paths retain their referents, including inside
+groups. Explicit stage paths declare postimages; all mapped stages are also
+independently conserved. Publication retains a captured canonical input snapshot
+unchanged; conserved stage bytes and joined publication receipts witness the
+postimage. The original result is never rewritten. Inline preparation can use
+artifacts=[]; log/directory mentions belong in findings because NONE/header-only
+metadata grants no acquisition exception. Missing/invalid item representations can
 use the existing one actual-owned-idle clarification: conserve the entire old
 array in `outer-contract-original.fields` and retain every valid old item as a
 verbatim prefix. Never guess a missing path or erase adverse arrays to repair it.

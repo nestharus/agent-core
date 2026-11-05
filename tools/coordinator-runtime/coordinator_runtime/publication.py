@@ -10,7 +10,7 @@ from pathlib import Path
 import stat
 from contextlib import contextmanager, ExitStack
 
-from .contracts import Refusal, encode, artifact_paths, digest
+from .contracts import Refusal, encode, digest
 from .custody import capture, read_file, safe_path, frozen_body, refuse_log
 from .cleanup import open_parent
 from . import bounded_log
@@ -122,17 +122,6 @@ def prepare(store, attempt, before, policy=None):
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as stream:stream.write(body);stream.flush();os.fsync(stream.fileno())
         with store.tx():store.db.execute('INSERT INTO routine_stages VALUES(?,?,?)',(attempt,target,str(path)))
-
-
-def artifact_view(store, attempt, answer):
-    mapping=stages(store,attempt)
-    if not mapping:return answer
-    artifact_paths(answer.get('artifacts'))
-    def mapped(item):
-        if isinstance(item,str):return mapping.get(item,item)
-        if 'files' in item:return {**item,'files':[mapped(child) for child in item['files']]}
-        return {**item,'path':mapping.get(item['path'],item['path'])}
-    return {**answer,'artifacts':[mapped(item) for item in answer['artifacts']]}
 
 
 def conserve_stages(store, attempt, task):
@@ -274,7 +263,12 @@ def locked_publish(store, board, job, attempt, run, task):
             os.close(parent)
     if is_bounded:
         bounded_log.publish(store,board,job,attempt,run,task,fence)
-    for target in order:capture(store,attempt['id'],target,task,role_owned=True)
+    for target in order:
+        # Custody is a snapshot, not a mutable latest-path cache. A declared
+        # input may already conserve this path's preimage. Keep it intact;
+        # exact postimages live at conserved stages and file_publications.
+        if not store.one('SELECT path FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],target)):
+            capture(store,attempt['id'],target,task,role_owned=True)
     return [{**r,'before_gzip':(None if is_bounded and r['target']==policy['bounded_log']['target'] else store.one('SELECT path FROM canonical_backups WHERE attempt=? AND target=?',(attempt['id'],r['target']))['path']),
              'method':('counted-kernel-copy-prepend-v1' if is_bounded and r['target']==policy['bounded_log']['target'] else
                        'retention.snapshot_lock + exact preimage + before-only gzip + same-inode write')}
