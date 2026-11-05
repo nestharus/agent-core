@@ -132,6 +132,9 @@ class Retained(unittest.TestCase):
         self.record(stage)
         policy = {'kind':bounded_log.KIND, 'targets':[target, *[str(self.f.area/('fiction-peer-'+str(i))) for i in range(6)]],
                   'bounded_log':{'target':target, 'max_lines':12, 'max_bytes':8192, 'max_entry_bytes':16384}}
+        for task in ({'role':'Reviews', 'phase':'integrator'}, {'role':'Work', 'phase':'proposer'}):
+            with self.assertRaises(Refusal):
+                bounded_log.validate(task, policy)
         self.s.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
                           ('fiction-entry', 'wi', 'fiction-grant', encode(policy), '{}', 'prepared'))
         self.s.db.execute('INSERT INTO routine_stages VALUES(?,?,?)', ('fiction-entry', target, stage))
@@ -141,11 +144,19 @@ class Retained(unittest.TestCase):
             self.assertEqual(base64.b64decode(exported.pop('body_base64')), self.f.body)
             self.assertEqual(exported, before[0])
         self.assertEqual(self.s.rows('SELECT * FROM artifact_custody'), before)
+        # Removing today's task must not invent a new historical role or erase
+        # the lawful entry representation conserved by the original policy.
+        del self.s.config['tasks']['wi']
+        for caller in ('fiction-owner', 'fiction-consumer'):
+            self.assertEqual(base64.b64decode(self.f.export(caller)['body_base64']), self.f.body)
         # Entry metadata cannot waive current exclusions or corrupt policy.
         self.s.config['artifact_exclusions'] = [target]
         self.export_refuses()
         self.s.config['artifact_exclusions'] = []
         bad = copy.deepcopy(policy); bad['bounded_log'].pop('max_lines')
+        self.s.db.execute('UPDATE routine_runs SET policy=?', (encode(bad),))
+        self.export_refuses()
+        bad = copy.deepcopy(policy); bad['targets'] = 'abcdefg'
         self.s.db.execute('UPDATE routine_runs SET policy=?', (encode(bad),))
         self.export_refuses()
 

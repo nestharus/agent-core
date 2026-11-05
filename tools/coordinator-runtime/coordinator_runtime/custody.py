@@ -116,11 +116,11 @@ def _stage_origin(store, stage):
     target = origin_path(stage['target'])
     refuse_excluded(store, target)
     policy = metadata_json(stage['policy']) if stage['policy'] is not None else {}
-    from .bounded_log import KIND, validate
+    from .bounded_log import KIND, validate_policy
     if policy.get('kind') != KIND:
         return target
     try:
-        validate(store.config['tasks'][stage['task']], policy)
+        validate_policy(policy)
     except (KeyError, TypeError, ValueError) as exc:
         raise Refusal('invalid retained bounded-entry policy') from exc
     # A lawful bounded entry is distinct from the whole target's body. Its
@@ -135,7 +135,7 @@ def _path_origins(store, path, tasks):
     known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (path,))
     hashes = [known['sha256']] if known else []
     hashes.extend(row['sha256'] for row in store.rows('SELECT sha256 FROM artifact_custody WHERE path=?', (path,)))
-    stages = store.rows('SELECT s.target,r.policy,r.task FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (path,))
+    stages = store.rows('SELECT s.target,r.policy FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (path,))
     targets = [_stage_origin(store, stage) for stage in stages]
     return hashes, [target for target in targets if target is not None]
 
