@@ -7,7 +7,7 @@ source does not update a capability or authorize a provider retry.
 
 Normal `processing-service-control` output includes `client_observations`. Its
 owner is `control-client`: config loading, read-only Store opening, current
-configuration/release/source checks, socket connection, send/drain, reply read
+configuration/release/source checks and Board/actor preparation, socket connection, send/drain, reply read
 and socket close. A failure before connection has no connection/reply entry.
 These observations belong to the client invocation. They are not service timing.
 
@@ -15,9 +15,12 @@ An authorized reply from the existing original endpoint also includes
 `service_observations`, with owner `service` and the original's `controller` in
 the enclosing reply. Final original-return emission carries the same service
 record alongside its existing collector. The service records startup authority,
-all nine existing tick phases, capacity, delivery and alerts, plus nested Board,
+all nine existing tick phases including success-error clearing, capacity, delivery
+and alerts, plus nested Board,
 retained-source and current configuration/release/implementation checks. It
-records control read, selected operation and write/drain. A reply's snapshot
+records control read, selected operation and write/drain. Failed-phase error
+reporting has a separate span whose parent is the failed phase. Dispatcher/alert
+error accounting also has fixed spans. A reply's snapshot
 precedes its own write/drain; a later snapshot can include that write. Direct
 control callers without an owning record receive no invented client record.
 

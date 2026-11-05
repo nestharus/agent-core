@@ -368,10 +368,11 @@ def operate(args, store):
         return service.ingest_report(store, actor, args.task, read_record(args.receipt))
     if args.command in {'processing-service', 'processing-service-control', 'processing-retirement-basis', 'processing-retire'}:
         from . import processing, service, retirement
-        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
-        actor = boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
-        store.processing = processing.Access(store, args.capability, boards)
-        _, selection = store.processing.current()
+        with observations.span('control-prepare'):
+            boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+            actor = boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
+            store.processing = processing.Access(store, args.capability, boards)
+            _, selection = store.processing.current()
         if 'service' not in selection:
             raise Refusal('a finite/expired capability cannot become a continuing service')
         if args.command == 'processing-service-control':

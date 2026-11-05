@@ -553,12 +553,14 @@ class Dispatcher:
             # a single blocking operation remains a responsiveness limit.
             await asyncio.sleep(0)
             subject = 'dispatcher-phase:' + operation.__name__
+            phase_sequence = 0
             try:
-                with observations.span(phase):
+                with observations.span(phase) as phase_sequence:
                     operation()
-                self.store.clear_operational_error(subject)
+                    self.store.clear_operational_error(subject)
             except Exception as exc:
-                self.store.record_operational_error(subject, {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
+                with observations.span('phase-error-report', parent=phase_sequence):
+                    self.store.record_operational_error(subject, {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
         with observations.span("capacity"):
             capacity.deliver_pending(self.store)
         await asyncio.sleep(0)
@@ -592,14 +594,17 @@ class Dispatcher:
     async def guarded_tick(self, emit):
         try:
             await self.tick()
-            self.store.clear_operational_error("dispatcher")
+            with observations.span("dispatcher-clear-error"):
+                self.store.clear_operational_error("dispatcher")
         except Exception as exc:
-            self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
+            with observations.span("dispatcher-error-report"):
+                self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
         try:
             with observations.span("alerts"):
                 await self.alerts(emit)
         except Exception as exc:
-            self.store.record_operational_error('alert-reporting', {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
+            with observations.span('alert-error-report'):
+                self.store.record_operational_error('alert-reporting', {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
             # The exception is retained, not retried as another alert cohort.
             # Existing delivery progress is independent of reporting capacity.
             await self.pump_deliveries_async()

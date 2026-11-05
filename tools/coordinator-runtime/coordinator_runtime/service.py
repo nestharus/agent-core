@@ -352,8 +352,8 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
                     answer = {'controller': runtime.controller, 'state': 'draining; parent still owes this original numeric END'}
                 elif operation == 'close-review':
                     component = request.get('component')
-                    policy = reviews.context_policy(runtime,component,selection['service']['reviews'])
                     with observations.span("control-close-review"):
+                        policy = reviews.context_policy(runtime,component,selection['service']['reviews'])
                         answer = await dispatcher.reviews.close(component, policy)
                 else:
                     raise Refusal('unsupported control; no replay or authority mutation endpoint')

@@ -21,7 +21,8 @@ retained-source board-authority retained-authority
 board-scan retained-step receipts reconcile_completed intake
 schedule_classifications schedule_classification_recovery schedule_job
 schedule_recovery custodian_progress automatic_cleanup capacity delivery
-alerts control-connect control-send control-reply control-close control-read
+phase-error-report dispatcher-clear-error dispatcher-error-report alert-error-report
+alerts control-prepare control-connect control-send control-reply control-close control-read
 control-validate control-status control-recover control-stop control-close-review
 control-write service-current service-boards rpc-send-drain rpc-reply-wait rpc-other
 initialize config/read thread/start thread/read thread/unsubscribe turn/start turn/interrupt'''.split())
@@ -57,7 +58,7 @@ class Record:
         self.totals.clear()
         self.window_started = monotonic()
 
-    def begin(self, label):
+    def begin(self, label, parent=None):
         self.expire()
         if label not in LABELS:
             raise ValueError('constant observation label required')
@@ -65,7 +66,7 @@ class Record:
             self.dropped = bounded(self.dropped + 1)
             return 0
         self.sequence += 1
-        self.active[self.sequence] = (label, monotonic(), _parent.get())
+        self.active[self.sequence] = (label, monotonic(), _parent.get() if parent is None else parent)
         return self.sequence
 
     def end(self, number, state):
@@ -108,12 +109,12 @@ def owning(owner):
 
 
 @contextmanager
-def span(label):
+def span(label, parent=None):
     record = _record.get()
     if record is None:
         yield 0
         return
-    number = record.begin(label)
+    number = record.begin(label, parent)
     token = _parent.set(number)
     state = 'succeeded'
     try:
