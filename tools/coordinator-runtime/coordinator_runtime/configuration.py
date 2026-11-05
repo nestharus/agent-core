@@ -170,8 +170,9 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd'}:
         raise Refusal('unsupported prospective scope option')
+    select_capacity(original, value, options.get('capacity'))
     exclusions = options.get('exclusions', [])
     if not isinstance(exclusions, list):
         raise Refusal('explicit additional exclusions required')
@@ -223,7 +224,40 @@ def apply_scope_options(original, value, options):
             # No general home/AI grant. This separate ceiling is usable only with
             # its paired cwd and freshly verified actual topology in scoped_task.
         task['linked_repositories'] = copy.deepcopy(records)
+    directories = options.get('cwd', {})
+    if not isinstance(directories, dict) or set(directories) - set(value['tasks']):
+        raise Refusal('exact future task working-directory map required')
+    for name, directory in directories.items():
+        path = safe(directory)
+        allowed = original['tasks'][name]['effect_authority']['read_roots'] + [original['tasks'][name]['cwd']]
+        if (not any(path.is_relative_to(Path(p)) for p in allowed)
+                or any(Path(e).is_relative_to(path) for e in value.get('artifact_exclusions', []))):
+            raise Refusal('future cwd must narrow existing nonexcluded authority; no new resource grant')
+        value['tasks'][name]['cwd'] = str(path)
     value['prospective_scope_selection'] = copy.deepcopy(options)
+
+
+def select_capacity(original, value, policy):
+    """Explicit bounded prospective ceilings; original rows/grants stay charged.
+
+    This declaration is not physical entitlement, allocation or headroom proof.
+    Work selects it through the existing exact configuration basis/decision.
+    """
+    if policy is None:
+        return
+    bounds = {'max_bytes': 1024 * 1024 * 1024, 'max_files': 50000,
+              'max_events': 65536, 'max_jobs': 65536, 'max_attempts': 65536,
+              'max_outboxes': 65536, 'max_alerts': 65536, 'max_alert_debt': 65536,
+              'max_board_deliveries': 65536}
+    if (not isinstance(policy, dict) or set(policy) != {'authority', 'evidence', 'limits'}
+            or not isinstance(policy['limits'], dict) or not policy['limits'] or set(policy['limits']) - set(bounds)):
+        raise Refusal('exact bounded Work prospective capacity authority/evidence/limits required')
+    for key in ('authority', 'evidence'):
+        required_text(policy[key], 'genuine prospective capacity ' + key, 16000)
+    for key, limit in policy['limits'].items():
+        if type(limit) is not int or not 1 <= limit <= bounds[key]:
+            raise Refusal('prospective capacity exceeds supported finite ceiling: ' + key)
+        value['limits'][key] = limit
 
 
 def validate_changes(runtime, value, tasks):
@@ -232,7 +266,8 @@ def validate_changes(runtime, value, tasks):
             or set(tasks) - set(value['tasks'])):
         raise Refusal('exact prospective task allowlist required')
     # Reconstruct the permitted change. All other identities, grants, task
-    # effects/bindings/capacities, recipients, limits, policies and fences freeze.
+    # effects/bindings/concurrency, recipients, policies and fences freeze.
+    # Only the explicit bounded capacity option may amend residency ceilings.
     root = str(Path(__file__).resolve().parents[3])
     additions = value.get('release_scope_tasks', [])
     if not isinstance(additions, list) or len(set(additions)) != len(additions) or set(additions) - set(value['tasks']):
@@ -246,7 +281,7 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
-    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {}))) - set(tasks):
+    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     # Scoped_task still narrows each actual package; this grants no writes or
     # Root acceptance. Broad ancestors and peer checkout roots cannot enter.

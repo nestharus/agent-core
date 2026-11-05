@@ -275,6 +275,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if old and old["hash"] != digest(event):
                 raise Refusal("same event identity has different immutable content")
             if not old:
+                if self.processing and event.get('kind') == 'board':
+                    from .service import admit_input
+                    admit_input(self)
                 windows.charge(self, None, new_input=True)
                 admitted.admit(self, event)
                 self.budget("events", len(content.encode()), event=event['id'])

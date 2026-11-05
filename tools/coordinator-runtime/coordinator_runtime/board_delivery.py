@@ -74,10 +74,21 @@ class BoardDelivery:
         if runtime.processing and outbox['recipient']=='Root' and payload.get('branch_root_routing'):
             from .branches import association
             branch=association(runtime,payload['branch_binding'])
-            if (branch['root']!=payload['branch_root_routing']['root'] or branch['scope']!=payload.get('package')
+            if ({k: branch[k] for k in ('root','ref','incarnation','scope','authority','accepted')} != payload['branch_root_routing']
+                    or branch['scope']!=payload.get('package')
                     or runtime.processing.current()[0]['issuer']!=grant['issued_by']):
                 raise Refusal('current genuine Work branch Root authority/source scope changed; original send held')
-            target={**target,'session':branch['root'],'profile':None}
+            try:
+                accepted = json.loads(branch['accepted'])
+            except (ValueError, TypeError):
+                accepted = {}
+            member = accepted.get('membership') if isinstance(accepted, dict) else None
+            if member:
+                if member.get('session') != branch['root'] or member.get('status') != 'active':
+                    raise Refusal('scoped coordinator acceptance membership changed')
+                target = {**target, 'session': branch['root'], 'profile': member['profile'], 'board_role': member['role']}
+            elif branch['root'] != configured_target['session']:
+                raise Refusal('scoped coordinator needs genuine acceptance with its actual membership')
         if not target.get("session") or target.get("active") is False:
             raise Refusal("actual recipient identity is inactive/unbound")
         if json.loads(row["recipients"]).get(outbox["recipient"]) != configured_target["session"] or outbox["kind"] not in json.loads(row["kinds"]):

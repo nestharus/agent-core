@@ -27,11 +27,18 @@ CREATE TABLE IF NOT EXISTS service_runs(
 
 def validate(runtime, selection):
     policy = selection['service']
-    if (not isinstance(policy, dict) or set(policy) != {'max_inflight', 'reviews', 'legacy_resources'}
+    if (not isinstance(policy, dict) or set(policy) - {'report_tasks', 'admission'} != {'max_inflight', 'reviews', 'legacy_resources'}
             or type(policy['max_inflight']) is not int or not 1 <= policy['max_inflight'] <= runtime.config['limits']['max_attempts']
             or not isinstance(policy['reviews'], dict) or not isinstance(policy['legacy_resources'], dict)
             or not selection['future_intake']):
         raise Refusal('continuing service needs concurrent capacity, selected Reviews, legacy resource account and future intake')
+    report_tasks = policy.get('report_tasks', [])
+    if (not isinstance(report_tasks, list) or len(report_tasks) > 1 or len(set(report_tasks)) != len(report_tasks)
+            or any(t not in selection['tasks'] or runtime.config['tasks'][t]['role'] != 'Reviews'
+                   or runtime.config['tasks'][t]['phase'] != 'integrator'
+                   or runtime.config['tasks'][t].get('execution') == 'owner' for t in report_tasks)):
+        raise Refusal('attributed reports need the selected sole software Reviews integrator')
+    validate_admission(runtime, policy.get('admission'))
     resource_scopes.validate(runtime, policy['legacy_resources'])
     reviews.validate(runtime, policy['reviews'])
     if set(policy['reviews']) - set(selection['tasks']):
@@ -42,6 +49,71 @@ def validate(runtime, selection):
         choices = response_tasks(task, {'category': 'proposal'}, runtime.config)
         if not choices or any(runtime.config['tasks'][c]['role'] != 'Reviews' or runtime.config['tasks'][c]['phase'] != 'integrator' for c in choices):
             raise Refusal('ordinary Source needs actual sole Reviews report integration routes')
+
+
+def validate_admission(runtime, policy):
+    if policy is None:
+        return
+    if (not isinstance(policy, dict) or set(policy) != {'until', 'pause_bytes', 'max_new_inputs'}
+            or type(policy['until']) not in {int, float} or not runtime.clock() < policy['until'] <= runtime.clock() + 3600
+            or type(policy['pause_bytes']) is not int or not 4096 < policy['pause_bytes'] < runtime.config['limits']['max_bytes']
+            or type(policy['max_new_inputs']) is not int or not 1 <= policy['max_new_inputs'] <= runtime.config['limits']['max_events']):
+        raise Refusal('bounded one-hour admission, owned-byte pause and input count required')
+
+
+def admit_input(runtime):
+    """Pressure stops new upstream acquisition, without waiving/draining debt."""
+    from .contracts import Backpressure
+    _, selection = runtime.processing.current()
+    policy = selection.get('service', {}).get('admission')
+    if not policy:
+        return  # Existing finite/continuing policies keep their original bounds.
+    usage = runtime.usage()
+    debt = runtime.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=0')['n']
+    if (runtime.clock() >= policy['until'] or usage['bytes'] >= policy['pause_bytes']
+            or usage['alerts'] >= runtime.config['limits']['max_alerts']
+            or debt >= runtime.config['limits'].get('max_alert_debt', runtime.config['limits']['max_alerts'])):
+        raise Backpressure('selected admission time/bytes/alerts/debt pressure; upstream remains unACKed, old duties retained')
+    count = runtime.one("SELECT COUNT(*) AS n FROM processing_source_positions WHERE position>?",
+                        (selection['basis']['event_boundary'],))['n']
+    if count >= policy['max_new_inputs']:
+        raise Backpressure('selected new input window full; preserve original history and continue owned work')
+
+
+def ingest_report(runtime, actor, task, receipt):
+    """Work's actual collected report is input, never another owner's execution.
+
+    Whole inline reports/history preserve attribution. This operation makes no
+    claim that native receipt fields were independently observed by the service.
+    """
+    cap, selection = runtime.processing.current()
+    if actor != cap['issuer'] or task not in selection.get('service', {}).get('report_tasks', []):
+        raise Refusal('actual Work collector and explicitly selected Reviews report route required')
+    fields = {'reference', 'collector', 'actual_END', 'reports', 'history', 'method_pin', 'coverage', 'effects'}
+    if (not isinstance(receipt, dict) or set(receipt) != fields or receipt['collector'] != actor
+            or type(receipt['actual_END']) is not int or receipt['effects'] != 'known-report-only'
+            or not isinstance(receipt['reports'], list) or not receipt['reports'] or len(receipt['reports']) > 32
+            or not isinstance(receipt['coverage'], dict)):
+        raise Refusal('whole attributed original reports/history/coverage and actual owned END required')
+    for key in ('reference', 'history', 'method_pin'):
+        required_text(receipt[key], 'actual original report ' + key, 262144)
+    for report in receipt['reports']:
+        if not isinstance(report, dict) or set(report) != {'name', 'body'}:
+            raise Refusal('complete named report bodies required; no pointer-only full-read claim')
+        required_text(report['name'], 'report name', 256)
+        required_text(report['body'], 'whole report body', 262144)
+    body = {'kind': 'attributed-report', 'original': receipt, 'native_owner_execution': False,
+            'meaning': 'Work testimony and whole report input; not persistent Reviews owner collection or native liveness'}
+    event = {'id': digest({'attributed_report': {'collector': actor, 'reference': receipt['reference']}}),
+             'role': 'Reviews', 'recipient': runtime.config['roles']['Reviews']['owner'],
+             'kind': 'response', 'author': actor, 'allowed_tasks': [task], 'package': None,
+             'processing_report': cap['id'], 'body': body}
+    if len(encode(event).encode()) > min(262144, runtime.config['limits']['max_result_bytes']):
+        raise Refusal('whole report exceeds selected intake envelope; no truncation or full-report claim')
+    runtime.processing.boards['Reviews'].verify_authority(runtime)
+    runtime.ingest(event)
+    return {'event': event['id'], 'report_hash': digest(receipt), 'native_owner_execution': False,
+            'acceptance': None, 'meaning': 'durable attributed input; fresh classification, sole integration and Work consumption still owed'}
 
 
 class Dispatcher(ProcessingDispatcher):

@@ -168,6 +168,7 @@ class Dispatcher:
         self.last_alert = 0
         self.last_cleanup = 0
         self.runtime_errors = {}
+        self.acceptance_active = set()
         frontier = self.store.one("SELECT COALESCE(MAX(rowid),0) AS seq FROM outboxes")["seq"]
         self.delivery_fresh = self.store.one("SELECT COALESCE(MAX(seq),0) AS seq FROM delivery_wakeups")["seq"]
         self.delivery_revisit = 0
@@ -341,6 +342,9 @@ class Dispatcher:
             await ordinary.perform(self.store, self.boards[job['role']], self.store.job(job_id))
             if (ordinary.needs_acceptance(self.store, job['package'])
                     and isinstance(outcome.get('result'), dict) and outcome['result'].get('category') == 'qualification'):
+                if not ordinary.accepted_runs(self.store, job['package']):
+                    ordinary.wait_for_acceptance(self.store, self.store.job(job_id))
+                    return
                 await ordinary.qualification(self.store, self.store.job(job_id))
         except (Refusal, OSError, ValueError) as exc:
             self.store.hold_job(job_id, 'Ordinary original effect/collection needs accountable disposition: ' + str(exc))
@@ -497,6 +501,12 @@ class Dispatcher:
 
     def reconcile_collected(self, job):
         if self.store.integration_retired(job['id']):return
+        if ordinary.awaiting_acceptance(self.store, job):
+            if (job['controller'] == self.store.controller and not job['hold_reason']
+                    and job['id'] not in self.acceptance_active and ordinary.accepted_runs(self.store, job['package'])):
+                self.acceptance_active.add(job['id'])
+                self.spawn(self.resume_acceptance(job))
+            return  # Independent acceptance never adopts a foreign collector.
         try:
             if (job['state']=='held' and job['recovery_state']=='awaiting-disposition'
                     and self.store.owner_remaining_selection(job['id'],job['active_attempt'])):
@@ -509,6 +519,23 @@ class Dispatcher:
             self.try_finish(job["id"])
         except Refusal as exc:
             self.runtime_errors[job["id"]] = str(exc)
+
+    async def resume_acceptance(self, job):
+        try:
+            current = self.store.job(job['id'])
+            if current['active_attempt'] != job['active_attempt'] or current['controller'] != self.store.controller:
+                raise Refusal('acceptance continuation must retain the same original attempt/collector')
+            await ordinary.qualification(self.store, current)
+            with self.store.tx():
+                attempt = self.store.attempt(current['active_attempt'])
+                detail = json.loads(attempt['detail'])
+                detail.pop('ordinary_awaiting_acceptance', None)
+                self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+            self.try_finish(current['id'])
+        except (Refusal, OSError, ValueError) as exc:
+            self.store.hold_job(job['id'], 'Accepted outcome needs original currentness disposition: ' + str(exc))
+        finally:
+            self.acceptance_active.discard(job['id'])
 
     async def tick(self):
         # One held phase must not prevent independent already-owed progress.

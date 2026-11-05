@@ -82,6 +82,10 @@ def parser():
             transition.add_argument('--task', action='append', required=True)
         else:
             transition.add_argument('--selection', required=True)
+    report = sub.add_parser('processing-report', help='Actual Work-owned full attributed report input; no native-owner receipt')
+    report.add_argument('capability')
+    report.add_argument('--task', required=True)
+    report.add_argument('--receipt', required=True)
     service = sub.add_parser('processing-service', help='Continuing original collector; foreground, no finite-grant extension')
     service.add_argument('capability')
     service.add_argument('--enable-models', action='store_true')
@@ -150,10 +154,12 @@ def parser():
     advance.add_argument('--receipt', required=True)
     boundary = sub.add_parser('authorize-prospective', help='Actual Work explicitly authorizes future work in unchanged original journal')
     boundary.add_argument('--selection', required=True)
+    boundary.add_argument('--capability', help='Explicit continuing processing authority; original grants stay revoked')
     revoke_boundary = sub.add_parser('revoke-prospective')
     revoke_boundary.add_argument('epoch')
     semantic = sub.add_parser('ordinary-acceptance', help='Independent admitted actor decides exact current execution, distinct from reporting')
     semantic.add_argument('attempt')
+    semantic.add_argument('--capability', help='Same selected continuing capability as the original execution')
     semantic.add_argument('--decision', choices=['accepted', 'rejected'], required=True)
     semantic.add_argument('--receipt', required=True)
     sub.add_parser('execution-pool', help='Inspect shared new-execution membership and next unreserved turn; no account probing')
@@ -351,6 +357,13 @@ def operate(args, store):
         if args.command=='shared-custody-consent': return board.shared_custody_consent(store,args.delivery,receipt)
         if args.command=='retire-shared-custody': return board.retire_shared_custody(store,args.delivery,receipt)
         return board.release_shared_archive(store,args.delivery,receipt)
+    if args.command == 'processing-report':
+        from . import processing, service
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        store.processing = processing.Access(store, args.capability, boards)
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        boards['Work'].store.acting_session(actor)
+        return service.ingest_report(store, actor, args.task, read_record(args.receipt))
     if args.command in {'processing-service', 'processing-service-control', 'processing-retirement-basis', 'processing-retire'}:
         from . import processing, service, retirement
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
@@ -457,6 +470,11 @@ def operate(args, store):
             raise Refusal('recurring allocation windows not selected')
         with store.tx():
             return windows.basis(store)
+    if args.command in {'authorize-prospective', 'ordinary-acceptance'} and getattr(args, 'capability', None):
+        from . import processing
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        store.processing = processing.Access(store, args.capability, boards)
+        store.processing.current()
     if args.command in {'authorize-prospective', 'revoke-prospective'}:
         actor = actual_actor(store.config['roles']['Work']['owner'])
         if args.command == 'authorize-prospective':

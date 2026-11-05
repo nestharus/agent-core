@@ -229,3 +229,108 @@ association/routing/lifecycle, use [branch-and-recovery.md](branch-and-recovery.
 Root remains a coordinator and delegates build/test work. Source gets only factual
 material; Root/Work goals and decisions stay outside. Construction/tests/publication
 do not establish provider qualification, adoption or rollout.
+
+## Continuing service with prospective ordinary effects
+
+A Work-selected `authorize-prospective` epoch can explicitly bind
+`processing_capability` to a continuing capability in this same journal. Use
+`authorize-prospective --capability CAP --selection FILE` after selecting CAP and
+**before** its new source intake/jobs. FILE retains the existing exact fields
+`configuration`, `authority`, `expires`, `grants`, `tasks`, plus
+`processing_capability: CAP`. Each task policy is
+`{task_hash, software_handoffs, ordinary_effects}`. Grant IDs are the unchanged
+original enrollment IDs. Only scoped `branch-integrator` and `qa-execution` may
+select ordinary effects. Receiver policies must select every software handoff
+route. Actual Work supplies the decision, operands and bounded expiry; this
+command creates no resource entitlement or independent acceptance.
+
+The bridge checks the current service, exact source/configuration/task/grant,
+monotonic source frontier, future job boundary and original attempt capability.
+A stopped original grant stays stopped. Legacy/mixed jobs, another service's
+attempts, changed admissions and expired/revoked authority cannot inherit it.
+Ordinary tools, known-effect recording, qualification and independent acceptance
+use these same retained grant checkers. Normal active-grant operation keeps its
+existing path. Do not turn an old source into a new one to fit the boundary.
+
+`ordinary-acceptance ATTEMPT --capability CAP --decision accepted|rejected
+--receipt FILE` is the independent admitted actor's operation. The receipt
+contains the exact execution hash, rationale and explicit unknowns. A worker,
+controller or service actor cannot accept its own result. Actual tools and
+candidate/ref readback remain separate from the preparation worker's DONE.
+A collected qualification that awaits the independent decision keeps its same
+original attempt and collector. The service resumes its currentness checks and
+qualified handoff after actual acceptance; it launches no replacement worker or
+replays effects. Other holds require their own disposition.
+Source receipts now include origin, full source ref, head, tree, ALLparents and
+common-Git identity, compared again after effects and before acceptance or
+qualification; an admitted `branch_binding` also verifies the accepted
+repository/origin/package and conserves its ref/incarnation/coordinator. These
+are local scoped effects; they grant no remote push/merge, CI dispatch or Stage.
+
+## Attributed reports and scoped coordinators
+
+Service selection may add `report_tasks: ["reviews-integrator"]` (at most one
+selected software Reviews integrator). Actual Work can submit its **own**
+collected review with `processing-report CAP --task reviews-integrator --receipt
+FILE`. FILE contains exactly `reference`, `collector` (actual Work), integer
+`actual_END`, `reports` (complete `{name,body}` objects), full `history`,
+`method_pin`, `coverage`, and `effects: "known-report-only"`. Whole input must fit
+the existing message/result envelope; refusal never truncates it or claims full
+coverage. The original reference is immutable across capability changes.
+
+This is attributed REPORT input, not execution by the persistent Reviews owner.
+The service attests no supplied native receipt. Fresh classification, the sole
+Reviews integration, full partials/history/dissent and Work consumption remain
+owed. Native review through `service.reviews` remains the separate continuing
+executor with its original collector and coverage. Neither route replaces the
+other's historical originals. The software integrator still needs genuine
+resource independence or the actual owner's disposition; unknown old scope is
+not empty scope.
+
+`branch-register`, actual coordinator `branch-accept`, builder links and turn
+receipts retain their existing scope. New acceptance records the coordinator's
+actual active Board session/role/profile. An associated Root-addressed duty can
+then reach that exact accepting member in its actual role (including a Work
+coordinator). Delivery rechecks the complete routing association and membership.
+It changes no global Root identity. Historical acceptance without this member
+witness can use the unchanged configured Root route only. Board/API acceptance
+is not a provider/native liveness claim.
+
+## Bounded prospective capacity and admission
+
+`draft-current-configuration --scope-options FILE` additionally accepts:
+
+- `capacity: {authority, evidence, limits}`: actual Work's explicit bounded
+  prospective entitlement decision. Supported ceilings are `max_bytes` up to
+  1GiB, `max_files` up to 50000, and each of `max_events`, `max_jobs`,
+  `max_attempts`, `max_outboxes`, `max_alerts`, `max_alert_debt`,
+  `max_board_deliveries` up to 65536. Other limits cannot change here. These
+  implementation bounds are not physical headroom or permission to combine
+  distinct resource accounts.
+- `cwd: {TASK: EXACT_PATH}`: a future working directory narrowing that task's
+  original nonexcluded read/cwd authority. Pair this with `read_roots` and neutral
+  startup for disjoint report work. It adds no write authority or old-resource
+  clearance; each changed task must be selected in the configuration basis.
+
+The existing exact basis/Work selection, stopped-service lock/revocation and
+source guards apply. Original configurations, grants, charges, rows, counters,
+holds and history stay original; there is no reset, refund or automatic quota
+renewal. Raising ceilings does not settle the old 64 alerts/130 debt or imply
+that zero jobs supplies headroom. Initial live amounts are Work's operands.
+
+A continuing `service` policy may select
+`admission: {until, pause_bytes, max_new_inputs}`: `until` is within one hour at
+selection, pause is below selected cumulative byte capacity, and the positive
+input count is at most `max_events`. It pauses **new upstream Board acquisition**
+and ingestion at the time/owned-byte/alert/debt/count boundary. Existing owned
+processing, receipt/delivery/recovery and close/drain can continue within their
+actual remaining capacity. Admission counts use the original monotonic source
+positions (conservatively including internal sources); row retirement never
+refunds them. Without this optional field existing policies keep their bounds.
+Select another genuine bounded envelope through the existing stop, original
+END/full collection, release/revocation and fresh selection operations; run only
+one service/intake/resource owner. No borrowed collector or automatic replay.
+
+Whole-processing completion plus 24 hours **and every hold** still controls
+retirement. This code path makes no live first-four qualification, native PASS,
+throughput guarantee, deployment or physical-store reclamation claim.

@@ -5,6 +5,7 @@ cannot inherit a later authority, including when batched with new members.
 Roles: validator, orchestration.
 """
 import json
+import math
 
 from .contracts import Refusal, canonical_uuid, digest, encode, ident, required_text
 
@@ -18,21 +19,29 @@ CREATE TABLE IF NOT EXISTS prospective_authorities(
 def select(store, actor, selection):
     if actor != store.config['roles'].get('Work', {}).get('owner'):
         raise Refusal('actual Work alone selects prospective authority')
-    if set(selection) != {'configuration', 'authority', 'expires', 'grants', 'tasks'}:
+    if set(selection) - {'processing_capability'} != {'configuration', 'authority', 'expires', 'grants', 'tasks'}:
         raise Refusal('exact configuration/authority/expiry/grants/tasks selection required')
+    bridge = selection.get('processing_capability')
     required_text(selection['authority'], 'actual prospective authority', 4000)
-    if selection['configuration'] != digest(store.config) or type(selection['expires']) not in {int, float} or selection['expires'] <= store.clock():
+    if selection['configuration'] != digest(store.config) or type(selection['expires']) not in {int, float} or not math.isfinite(selection['expires']) or selection['expires'] <= store.clock():
         raise Refusal('prospective authority must be current and bind unchanged configuration')
     if not isinstance(selection['tasks'], dict) or not selection['tasks'] or set(selection['tasks']) - set(store.config['tasks']):
         raise Refusal('explicit known task policies required')
     if not isinstance(selection['grants'], dict) or set(selection['grants']) != {store.config['tasks'][t]['role'] for t in selection['tasks']}:
         raise Refusal('exact task role/grant population required')
+    if bridge is not None:
+        bridge_authority(store, bridge, selection['tasks'])
+    elif store.processing:
+        raise Refusal('processing ordinary authority needs its explicitly selected capability')
     for name, policy in selection['tasks'].items():
         validate_policy(store, name, policy, selection)
     with store.tx():
         if store.one('SELECT id FROM prospective_authorities WHERE revoked IS NULL'):
             raise Refusal('explicitly revoke previous boundary before selecting another; no implicit supersession')
         boundary = {t: store.one(f'SELECT COALESCE(MAX(rowid),0) AS n FROM {t}')['n'] for t in ('events', 'jobs')}
+        if bridge is not None:
+            from .processing import source_boundary
+            boundary['events'] = source_boundary(store)
         key = ident()
         store.db.execute('INSERT INTO prospective_authorities VALUES(?,?,?,?,?,NULL)',
                          (key, encode({**selection, 'grantor': actor}), boundary['events'], boundary['jobs'], store.clock()))
@@ -69,6 +78,10 @@ def current(store, task, epoch=None):
     if task not in selection['tasks']:
         return None
     policy = selection['tasks'][task]
+    if selection.get('processing_capability') is not None:
+        bridge_authority(store, selection['processing_capability'], selection['tasks'])
+    elif store.processing:
+        raise Refusal('ordinary authority belongs to another service mode')
     role = store.config['tasks'][task]['role']
     if (row['revoked'] is not None or selection['expires'] <= store.clock()
             or selection['configuration'] != digest(store.config)
@@ -88,9 +101,9 @@ def requires_authority(store, job):
     position = store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n']
     members = json.loads(job['members'])
     for row in store.rows('SELECT * FROM prospective_authorities WHERE job_boundary<?', (position,)):
-        if (job['task'] in json.loads(row['selection'])['tasks'] and members
-                and all(store.one('SELECT rowid AS n FROM events WHERE id=?', (m['event'],))['n']
-                        > row['event_boundary'] for m in members)):
+        authority = {**row, 'selection': json.loads(row['selection'])}
+        if (job['task'] in authority['selection']['tasks'] and members
+                and all(event_position(store, m['event'], authority) > row['event_boundary'] for m in members)):
             return True
     return False
 
@@ -105,9 +118,47 @@ def for_job(store, job):
     if store.one('SELECT rowid AS n FROM jobs WHERE id=?', (job['id'],))['n'] <= row['job_boundary']:
         return None
     members = json.loads(job['members'])
-    if any(store.one('SELECT rowid AS n FROM events WHERE id=?', (m['event'],))['n'] <= row['event_boundary'] for m in members):
+    if not members or any(event_position(store, m['event'], row) <= row['event_boundary'] for m in members):
         return None
+    bridge = row['selection'].get('processing_capability')
+    if bridge:
+        detail = json.loads(attempt['detail']) if attempt else {}
+        if (not attempt or detail.get('processing_capability') != bridge
+                or proof and proof.get('processing_capability') != bridge):
+            raise Refusal('ordinary job/attempt belongs to another original service authority')
+        if any(not store.processing.event(store.event(m['event'])) for m in members):
+            raise Refusal('ordinary members outside selected service')
     return row
+
+
+def bridge_authority(store, key, tasks):
+    if not store.processing or store.processing.key != key:
+        raise Refusal('explicit current processing capability required for ordinary service operations')
+    cap, selected = store.processing.current()
+    if ('service' not in selected or set(tasks) - set(selected['tasks'])
+            or cap['issuer'] != store.config['roles']['Work']['owner']):
+        raise Refusal('ordinary bridge cannot expand genuine Work continuing task authority')
+    if store.processing.boards is None:
+        raise Refusal('actual original grant checkers required for service ordinary authority')
+    for role in {store.config['tasks'][t]['role'] for t in tasks}:
+        store.processing.boards[role].verify_authority(store)
+
+
+def event_position(store, event, authority):
+    if authority['selection'].get('processing_capability'):
+        row = store.one('SELECT COALESCE(p.position,e.rowid) AS n FROM events e LEFT JOIN processing_source_positions p ON p.event=e.id WHERE e.id=?', (event,))
+        return row['n']
+    return store.one('SELECT rowid AS n FROM events WHERE id=?', (event,))['n']
+
+
+def board(store, role):
+    if store.processing:
+        store.processing.current()
+        if not store.processing.boards or role not in store.processing.boards:
+            raise Refusal('actual service role grant checker required')
+        return store.processing.boards[role]
+    from .board import Board
+    return Board(store.config, role)
 
 
 def revoke(store, actor, epoch):

@@ -321,6 +321,15 @@ class Access:
             if digest(event) != original.get(event['id']):
                 raise Refusal('retained processing source differs from its original hash')
             return True
+        if event.get('processing_report') == self.key:
+            tasks = selection.get('service', {}).get('report_tasks', [])
+            original = event.get('body', {}).get('original', {})
+            return (event.get('author') == self.current()[0]['issuer']
+                    and original.get('collector') == event.get('author')
+                    and event.get('role') == 'Reviews' and event.get('kind') == 'response'
+                    and len(event.get('allowed_tasks', [])) == 1 and event['allowed_tasks'][0] in tasks
+                    and event['id'] == digest({'attributed_report': {'collector': event.get('author'),
+                                              'reference': original.get('reference')}}))
         if event.get('processing_capability') == self.key:
             board = (self.boards or {}).get(event['role']) or ProcessingBoard(self.runtime.config, event['role'])
             return board.receiving_intent(self.runtime, event)
@@ -491,7 +500,16 @@ class ProcessingBoard(RetainedBoard):
     def software_authority(self, runtime, task):
         if task not in runtime.processing.current()[1]['tasks'] or self.config['tasks'][task]['role'] != self.role:
             raise Refusal('task outside explicit processing delegation')
-        return self.verify_authority(runtime)
+        grant = self.verify_authority(runtime)
+        from . import prospective
+        epoch = prospective.current(runtime, task)
+        if epoch:
+            if epoch['selection'].get('processing_capability') != runtime.processing.key:
+                raise Refusal('ordinary epoch not issued for this exact continuing service')
+            return {**grant, 'prospective_epoch': epoch['id'],
+                    'delegated_by': epoch['selection']['grantor'],
+                    'delegation_authority': epoch['selection']['authority']}
+        return grant
 
     def receipt(self, runtime, event_id):
         if not runtime.processing.event(runtime.event(event_id)):
@@ -594,6 +612,8 @@ class ProcessingBoard(RetainedBoard):
         _, selection = runtime.processing.current()
         if not selection['future_intake']:
             raise Refusal('future intake was not selected')
+        from .service import admit_input
+        admit_input(runtime)
         return max(super().scan_after(runtime, grant), selection['basis']['roles'][self.role]['future_after'])
 
 

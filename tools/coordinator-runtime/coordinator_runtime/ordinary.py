@@ -140,8 +140,7 @@ async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum
     current_job = store.job(current_run['job'])
     if not selected(store, current_job):
         raise Refusal('original prospective effect authority no longer current')
-    from .board import Board
-    Board(store.config, current_job['role'])._software_job_grant(store, current_job)
+    prospective.board(store, current_job['role'])._software_job_grant(store, current_job)
     policy_for(store, current_job)
     admission = store.one('SELECT receipt FROM admissions WHERE package=?', (current_job['package'],))
     if digest(admission['receipt']) != current_run['admission']:
@@ -258,8 +257,19 @@ async def source(store, attempt, p, task):
     if head != p['source_head']:
         raise Refusal('actual source ref is stale')
     tree = await git(store, attempt, p, 'rev-parse', '--verify', head + '^{tree}')
+    origin = await git(store, attempt, p, 'remote', 'get-url', 'origin')
+    parents = (await git(store, attempt, p, 'show', '-s', '--format=%P', head)).split()
+    binding = task.get('admitted_scope', {}).get('branch_binding')
+    branch = None
+    if binding:
+        from .branches import association
+        branch = association(store, binding)
+        job = store.job(store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))['job'])
+        if branch['repository'] != p['repository'] or branch['origin'] != origin or branch['scope'] != job['package']:
+            raise Refusal('ordinary source differs from exact accepted branch repository/origin/scope')
     info = scoped_path(store, git_dir, roots).stat()
-    return {'head': head, 'tree': tree, 'git_common_dir': git_dir,
+    return {'head': head, 'tree': tree, 'ALLparents': parents, 'origin': origin, 'fullref': p['source_ref'],
+            'branch': {k: branch[k] for k in ('id','ref','incarnation','scope','root','accepted')} if branch else None, 'git_common_dir': git_dir,
             'common_repository': {'dev':info.st_dev,'ino':info.st_ino}}
 
 
@@ -319,6 +329,8 @@ async def perform(store, board, job):
     association = await qa_source.export(store, attempt['id'], p, before) if p['kind'] == 'local-qa' else None
     outcome = await adapter(store, attempt['id'], p, task=task, association=association)
     after = await source(store, attempt['id'], p, task)
+    if after != before:
+        raise Refusal('source repository/origin/ref/branch identity changed during effects; retain original intent/resources')
     board._software_job_grant(store, store.job(job['id']))
     policy_for(store, store.job(job['id']))  # Lease/procedure/executable/admission current after tool collection.
     if store.one('SELECT receipt FROM admissions WHERE package=?', (job['package'],))['receipt'] != admission['receipt']:
@@ -389,8 +401,7 @@ async def accept(store, actor, attempt_id, decision, evidence):
     attempt = store.attempt(attempt_id)
     if job['active_attempt'] != attempt_id or not selected(store, job):
         raise Refusal('acceptance must bind the current original attempt/authority')
-    from .board import Board
-    Board(store.config, job['role'])._software_job_grant(store, job)
+    prospective.board(store, job['role'])._software_job_grant(store, job)
     task, p = policy_for(store, job)
     receipt = json.loads(run['receipt'])
     if actor != p['acceptor'] or actor in {attempt['session'], attempt['controller'], store.config['actor']}:
@@ -402,7 +413,8 @@ async def accept(store, actor, attempt_id, decision, evidence):
     if p['kind'] == 'local-qa':
         qa_source.verify(store, attempt_id, p, receipt)
     # Currentness observation has its own actual tool records in this run.
-    await source(store, attempt_id, p, task)
+    if await source(store, attempt_id, p, task) != receipt['after']:
+        raise Refusal('source identity changed before independent acceptance; retain original execution')
     if p['kind'] == 'local-ref' and await git(store, attempt_id, p, 'rev-parse', '--verify', p['ref'] + '^{commit}') != p['target']:
         raise Refusal('accepted ref no longer current')
     if p['kind'] == 'github-run':
@@ -441,6 +453,21 @@ def needs_acceptance(store, package):
     return bool(row and any(s.get('ordinary_effects') for s in json.loads(row['receipt']).get('task_scopes', {}).values()))
 
 
+def wait_for_acceptance(store, job):
+    """Expected independent decision wait, not an effect failure or new worker."""
+    attempt = store.attempt(job['active_attempt'])
+    if attempt['controller'] != store.controller or attempt['collected'] is None:
+        raise Refusal('only the actual collected original can await semantic acceptance')
+    with store.tx():
+        detail = json.loads(attempt['detail'])
+        detail['ordinary_awaiting_acceptance'] = True
+        store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
+
+
+def awaiting_acceptance(store, job):
+    return bool(job['active_attempt'] and json.loads(store.attempt(job['active_attempt'])['detail']).get('ordinary_awaiting_acceptance'))
+
+
 async def qualification(store, job):
     with store.tx():
         attempt = store.attempt(job['active_attempt'])
@@ -454,12 +481,12 @@ async def qualification(store, job):
         original = store.job(row['job'])
         if not selected(store, original):
             raise Refusal('qualified ordinary authority no longer current')
-        from .board import Board
-        Board(store.config, original['role'])._software_job_grant(store, original)
+        prospective.board(store, original['role'])._software_job_grant(store, original)
         task, p = policy_for(store, original)
         if p['kind'] == 'local-qa':
             qa_source.verify(store, row['attempt'], p, json.loads(row['receipt']))
-        await source(store, row['attempt'], p, task)
+        if await source(store, row['attempt'], p, task) != json.loads(row['receipt'])['after']:
+            raise Refusal('qualified source repository/origin/ref/branch no longer current')
         if p['kind'] == 'local-ref' and await git(store, row['attempt'], p, 'rev-parse', '--verify', p['ref'] + '^{commit}') != p['target']:
             raise Refusal('qualified ref no longer current')
         if p['kind'] == 'github-run' and digest(await github(store, row['attempt'], p)) != digest(json.loads(row['receipt'])['outcome']):

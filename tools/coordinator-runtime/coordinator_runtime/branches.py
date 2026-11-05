@@ -98,8 +98,14 @@ def accept(store, key, actor, evidence):
         row = association(store, key, active=False)
         if actor != row['root'] or row['state'] != 'assigned':
             raise Refusal('only genuinely assigned Root can accept this branch')
-        store.db.execute("UPDATE branch_associations SET state='active',accepted=? WHERE id=?", (evidence, key))
-        record(store, key, actor, {'accepted':evidence})
+        board = store.processing.boards['Work']
+        with board.opened(settlement=True) as conn:
+            member = conn.execute('SELECT session,status,role,profile FROM sessions WHERE session=?', (actor,)).fetchone()
+            if not member or member['status'] != 'active':
+                raise Refusal('actual accepting coordinator needs its real active Board membership')
+            accepted = {'evidence': evidence, 'membership': dict(member)}
+        store.db.execute("UPDATE branch_associations SET state='active',accepted=? WHERE id=?", (encode(accepted), key))
+        record(store, key, actor, {'accepted':accepted})
     return route(store, key)
 
 

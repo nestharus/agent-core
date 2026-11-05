@@ -22,6 +22,16 @@ def validate(store, p):
     frozen_file(store, policy['bwrap'], [policy['bwrap']], policy['sha256'])
 
 
+def guard_candidate(store, repository, name):
+    # Lexical known origin first: no candidate body, copy, hash or export-root
+    # creation is permitted until EVERY listed path has passed this boundary.
+    from .custody import guard_path
+    path = Path(repository) / name
+    guard_path(store, path)
+    for task in store.config['tasks'].values():
+        guard_path(store, path, task)
+
+
 async def export(store, attempt, p, source):
     from .ordinary import git, tool
     policy = p['source_capture']
@@ -36,6 +46,7 @@ async def export(store, attempt, p, source):
         if (kind != 'blob' or mode not in {'100644', '100755'} or path.is_absolute()
                 or any(part in {'.', '..', '.git'} for part in path.parts) or str(path) != name):
             raise Refusal('QA export supports ordinary tracked files only; no symlink/submodule/path substitution')
+        guard_candidate(store, p['repository'], name)
         if int(size) > 4 * 1024 * 1024:
             raise Refusal('candidate file exceeds exact retained-file verification budget')
         total += int(size)
@@ -49,6 +60,7 @@ async def export(store, attempt, p, source):
     root.mkdir(parents=True, mode=0o700, exist_ok=False)
     store.budget(None, total + len(files) * 1024)
     for item in files:
+        guard_candidate(store, p['repository'], item['path'])
         target = root / item['path']
         target.parent.mkdir(parents=True, exist_ok=True)
         argv = [p['git'], '--no-optional-locks', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false',
