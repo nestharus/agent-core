@@ -1034,7 +1034,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 "admitted_count_credits": admitted.reserved(self),
                 "allocation_window": windows.current(self) if self.config.get('window_service') else None,
                 "custodian_progress": self.one("SELECT value FROM meta WHERE key='custodian-progress'"),
-                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
+                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id) AND NOT EXISTS (SELECT 1 FROM alert_delivery_members m WHERE m.occurrence=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),

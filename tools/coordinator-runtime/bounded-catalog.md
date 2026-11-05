@@ -34,6 +34,16 @@ Work integrator completion policy becomes:
 surfaces and the seventh log. The illustrative placeholder is not a runnable
 selection. This introduces no eighth task or lost seventh duty.
 
+Work proposer completion is substantive preparation: compatible additive deltas,
+exact inventory selectors/preconditions and a new-entry log candidate. The
+publisher supplies bounded log policy/before-state and mapped stages only to the
+single integrator. Their absence in proposer context is expected and does not
+assert publication readiness. Reusing a substantive PARTIAL proposal preserves
+its original semantic/failures/unknowns; it never normalizes that result to DONE.
+Current overlays require the actual Work selection and phase authority. Earlier
+time/window/storage diagnostics retain their dated provenance without becoming
+current policy by copying.
+
 `routine.prepare` snapshots/stages the six inventory bodies normally. For the
 log it records only stable file identity/size/mode/ownership/timestamps and up to
 the first twelve physical lines within the byte ceiling. That bounded prefix is

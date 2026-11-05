@@ -208,8 +208,9 @@ class DeliveryJournal:
             self.db.execute("UPDATE outboxes SET state=?,board_receipt=?,error=NULL,processed_at=? WHERE id=?",
                             (receipt["state"], encode(receipt), completed, delivery))
             if row["alert"] and completed is not None:
-                self.db.execute("UPDATE alerts SET processed_at=MAX(COALESCE(processed_at,?),?) WHERE id=?",
-                                (completed, completed, row["alert"]))
+                self.db.execute("UPDATE alerts SET processed_at=MAX(COALESCE(processed_at,?),?) WHERE id=? OR id IN "
+                                "(SELECT occurrence FROM alert_delivery_members WHERE delivery=?)",
+                                (completed, completed, row["alert"], delivery))
             self._owner_settlement(row, receipt)
             if row["event"] and not self.one("SELECT id FROM outboxes WHERE event=? AND (state!='settled' OR hold IS NOT NULL OR processed_at IS NULL)", (row["event"],)):
                 self.db.execute("UPDATE queue SET state='done' WHERE event=? AND phase='delivery'", (row["event"],))

@@ -121,6 +121,8 @@ def apply(store, root, actor, receipt):
                 raise Refusal('selected owner recovery still outstanding')
         for key in members['deliveries']:
             row = store.one('SELECT * FROM outboxes WHERE id=?', (key,))
+            if store.one('SELECT occurrence FROM alert_delivery_members WHERE delivery=?', (key,)):
+                raise Refusal('grouped notification source/consumer custody is outside episode retirement')
             require_aged(store, key, RETENTION)
             if (not row or row['state'] != 'settled' or row['hold'] or row['error']
                     or row['processed_at'] is None or store.clock() < row['processed_at'] + RETENTION):

@@ -90,9 +90,15 @@ class InputJournal:
             self.budget(None,len(encode(receipt).encode())+len(encode(prior).encode())+1024)
             self.db.execute('INSERT INTO input_resolutions VALUES(?,?,?,?,?,?,?)',
                             (event,version,row['hash'],actor,encode(receipt),encode(prior),self.clock()))
-            # A derived decision gets a fresh classifier; no payload/hash/ACK/cursor/result rewrite.
-            self.db.execute("UPDATE events SET state='received' WHERE id=?",(event,))
-            if queue:self.db.execute("UPDATE queue SET state='owner-resolution-pending' WHERE event=?",(event,))
+            if receipt['mode']=='notification':
+                # The actual classifier already selected @control, and the
+                # collected worker read the entire authenticated notification.
+                # Finish that queue only; preserve its ACK and every cause.
+                self.db.execute("UPDATE queue SET state='done' WHERE event=?", (event,))
+            else:
+                # A derived task decision requires fresh classification.
+                self.db.execute("UPDATE events SET state='received' WHERE id=?",(event,))
+                if queue:self.db.execute("UPDATE queue SET state='owner-resolution-pending' WHERE event=?",(event,))
         return self.input_resolution(event)
 
     def validate_input_selection(self,original,receipt):
@@ -111,6 +117,15 @@ class InputJournal:
                     required_text(package,'actual admitted execution package',128)
                     if not self.one('SELECT package FROM admissions WHERE package=?',(package,)):
                         raise Refusal('actual execution package admission required')
+        elif mode=='notification':
+            from .capacity import notification
+            notice = notification(self, original)
+            classified = self.one('SELECT classification,state FROM events WHERE id=?', (original['id'],))
+            queue = self.one('SELECT task FROM queue WHERE event=?', (original['id'],))
+            if (not classified or not classified['classification'] or classified['state']!='queued'
+                    or not queue or queue['task']!='@control' or not notice or task is not None or package is not None
+                    or receipt['remaining_obligations'] or notice['coverage_evidence'] not in receipt['evidence']):
+                raise Refusal('notification receipt requires full authenticated occurrence coverage; no underlying settlement')
         elif mode=='control':
             if original['kind']!='board' or task is not None or package is not None:
                 raise Refusal('processed control is board input only, without task or invented package')
@@ -123,7 +138,7 @@ class InputJournal:
                     or job['role']!=original['role'] or job['package']!=package
                     or not any(m['event']==target['id'] for m in json.loads(job['members']))):
                 raise Refusal('coalescence needs the exact same-role existing event/job/package and actual owner purpose evidence')
-        else:raise Refusal('input mode must be route, control or coalesce')
+        else:raise Refusal('input mode must be route, control, notification or coalesce')
         if mode!='coalesce' and (receipt['related_event'] is not None or receipt['related_job'] is not None):
             raise Refusal('only coalescence names an existing responsibility')
 

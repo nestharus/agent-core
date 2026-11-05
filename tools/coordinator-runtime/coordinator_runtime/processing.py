@@ -597,7 +597,9 @@ class ProcessingBoard(RetainedBoard):
                     event = {'id': digest({'software_delivery': row['id'], 'receiver_grant': receive['id']}),
                              'role': receiver.role, 'recipient': receive['owner'], 'kind': 'board',
                              'author': row['actor'], 'body': json.loads(outbox['payload']), 'package': None,
-                             'allowed_tasks': receiver.selected['routes'], 'parent': outbox['event'],
+                             'allowed_tasks': ([] if json.loads(outbox['payload']).get('schema') == 'alert-occurrences-v1'
+                                               and outbox['alert'] and not outbox['event'] and not outbox['job']
+                                               else receiver.selected['routes']), 'parent': outbox['event'],
                              'post': row['post'], 'notice': row['notice'], 'board_id': receive['board_id'],
                              'grant': receive['id'], 'processing_capability': runtime.processing.key,
                              'source_delivery': {'id': row['id'], 'source_grant': source['id'],
@@ -615,7 +617,7 @@ class ProcessingBoard(RetainedBoard):
         if not record or not record['resolution']:
             return True
         resolution = runtime.input_resolution(event['id'])
-        if (not resolution or resolution['receipt']['mode'] != 'control'
+        if (not resolution or resolution['receipt']['mode'] not in {'control', 'notification'}
                 or resolution['receipt']['remaining_obligations']):
             return True
         proof = runtime.processing.control_proof(event['id'], record['attempt'], resolution['receipt'])
@@ -814,6 +816,8 @@ class ProcessingDispatcher(Dispatcher):
 
     async def control(self, event, attempt):
         original = self.store.event(event)
+        from .capacity import notification
+        notice = notification(self.store, original)
         prompt = ('You are the actually delegated software input/control worker at Work xhigh. Actual Work issuer, '
                   'native owner, Root and final human/Adam are outside your session. No model children, tools, '
                   'shell, native wake, effect, grant, pool or acceptance operations. Personally read the full source '
@@ -828,8 +832,17 @@ class ProcessingDispatcher(Dispatcher):
                   'source. Scope corrections go to Root, scope/blockers to Work; Reviews/QA/Branch duties stay '
                   'with actual holders. Retain every unresolved authority/effect/selected-procedure dependency in '
                   'remaining_obligations. Do not resolve an effect hold or acceptance by giving it an empty array. '
-                  'Return PARTIAL with decision_json="null" when actual authority/meaning is insufficient.\n' +
-                  encode({'source': original, 'source_hash': digest(original),
+                  '''Return PARTIAL with decision_json="null" when actual authority/meaning is insufficient.
+For an authenticated notification_context, your bounded task is to read and account for EVERY
+full occurrence and its cause/owner/limits. mode=notification acknowledges ONLY this notification's
+processing. Its evidence MUST include notification_context.coverage_evidence. Use task/package/
+related_event/related_job=null and remaining_obligations=[] only when this notification reading is
+complete. Underlying original/debt/source/effect/consumer/uncertainty/retention obligations remain
+whole in the supplied occurrences with their actual owners; this receipt neither settles them nor
+creates another business allocation for every unchanged recurrence. If interpretation itself needs
+an actual decision, retain mode=control/route/coalesce and explicit obligations instead. Do not
+fabricate reading, consent or a native owner's receipt.\n''' +
+                  encode({'source': original, 'source_hash': digest(original), 'notification_context': notice,
                           'prior': self.store.input_resolution(event),
                           'responsibility': self.store.one('SELECT * FROM queue WHERE event=?', (event,)),
                           'same_role_jobs': self.store.rows('SELECT id,task,package,state,members,effects,hold_reason,controller,active_attempt FROM jobs WHERE role=? ORDER BY created,id LIMIT 16', (original['role'],)),
@@ -853,7 +866,8 @@ def apply_control(runtime, event, attempt):
     runtime.processing.control_proof(event, attempt, receipt)
     with runtime.tx():
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
-        control_return(runtime, event, attempt, result, resolution)
+        if receipt['mode'] != 'notification':
+            control_return(runtime, event, attempt, result, resolution)
         runtime.db.execute('UPDATE processing_controls SET resolution=?,error=NULL WHERE event=?', (encode(resolution), event))
     return resolution
 
