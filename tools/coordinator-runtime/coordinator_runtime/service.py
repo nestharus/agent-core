@@ -15,7 +15,7 @@ import struct
 
 from .contracts import Refusal, digest, encode, required_text
 from .processing import ProcessingDispatcher, Access, apply_control
-from . import reviews, resource_scopes
+from . import reviews, resource_scopes, windows
 from .configuration import owned_service_conflict
 
 SCHEMA = """
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS service_runs(
 
 def validate(runtime, selection):
     policy = selection['service']
-    if (not isinstance(policy, dict) or set(policy) - {'report_tasks', 'admission'} != {'max_inflight', 'reviews', 'legacy_resources'}
+    if (not isinstance(policy, dict) or set(policy) - {'report_tasks', 'admission', 'allocations'} != {'max_inflight', 'reviews', 'legacy_resources'}
             or type(policy['max_inflight']) is not int or not 1 <= policy['max_inflight'] <= runtime.config['limits']['max_attempts']
             or not isinstance(policy['reviews'], dict) or not isinstance(policy['legacy_resources'], dict)
             or not selection['future_intake']):
@@ -39,6 +39,7 @@ def validate(runtime, selection):
                    or runtime.config['tasks'][t].get('execution') == 'owner' for t in report_tasks)):
         raise Refusal('attributed reports need the selected sole software Reviews integrator')
     validate_admission(runtime, policy.get('admission'))
+    windows.validate_delegation(runtime, selection)
     resource_scopes.validate(runtime, policy['legacy_resources'])
     reviews.validate(runtime, policy['reviews'])
     if set(policy['reviews']) - set(selection['tasks']):
@@ -67,7 +68,7 @@ def admit_input(runtime):
     _, selection = runtime.processing.current()
     policy = selection.get('service', {}).get('admission')
     if not policy:
-        return  # Existing finite/continuing policies keep their original bounds.
+        return windows.preflight_input(runtime)  # Optional admission remains a separate finite policy.
     usage = runtime.usage()
     debt = runtime.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=0')['n']
     if (runtime.clock() >= policy['until'] or usage['bytes'] >= policy['pause_bytes']
@@ -78,6 +79,7 @@ def admit_input(runtime):
                         (selection['basis']['event_boundary'],))['n']
     if count >= policy['max_new_inputs']:
         raise Backpressure('selected new input window full; preserve original history and continue owned work')
+    return windows.preflight_input(runtime)
 
 
 def ingest_report(runtime, actor, task, receipt):

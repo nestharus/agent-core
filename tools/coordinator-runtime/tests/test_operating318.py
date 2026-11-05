@@ -80,8 +80,8 @@ class LogRoutes(unittest.TestCase):
         try: binding=configuration.journal(self.s)
         finally: self.s.db.set_trace_callback(None)
         self.assertIn('body integrity unobserved',binding['artifact_blobs']['body_observation'])
-        self.assertTrue(any('SELECT sha256,length(body)' in s for s in statements))
-        self.assertFalse(any('SELECT * FROM "artifact_blobs"' in s for s in statements))
+        self.assertTrue(binding['artifact_blobs']['revision'])
+        self.assertFalse(any('SELECT' in s.upper() and 'FROM ARTIFACT_BLOBS' in s.upper() for s in statements))
 
 
 class FutureScopes(unittest.TestCase):

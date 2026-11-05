@@ -1274,3 +1274,64 @@ joined seven-duty Work receipt, mechanical same-inode log prepend without full-l
 reading/hash, and exact accepted-branch local-ref CAS lane. The prospective config
 draft can explicitly select `--bounded-work-log`; old configuration/recovery and
 unresolved historical custody remain original. Source support is not live rollout.
+
+Continuing allocation boundaries use the existing Work processing selection.
+An optional `service.allocations` object contains the complete fresh
+`window-basis` return plus `target`, `reason`, `evidence`, and `custody` as for
+`advance-window`, and explicit finite `expires` and `max_windows` (1–10000).
+Work chooses that horizon and ceiling prospectively; neither the initial 40
+inputs, 16 decisions nor optional one-hour admission policy is a permanent
+lifetime rule. Omission preserves manual window boundaries. This selection is
+issued through `delegate-processing`, with its actual original Work issuer,
+current source/configuration, exact tasks, future frontier, and all existing
+residency/concurrency/resource policies. It creates no ordinary-effect epoch or
+acceptance and extends no existing expiry. Work separately chooses any genuine
+ordinary epoch and its finite horizon.
+
+The continuing capability can append up to that many new windows, including a
+first window after configuration adoption, until its selected expiry. Each
+append is attributed to the original issuer, capability and authority hash,
+with a fresh boundary witness and unchanged custodian evidence. The original
+window and every charged counter stay unchanged. Automatic boundaries share
+allocation transactions; scanning limits each acquisition batch to remaining
+input/event credits and checks authority before fetching bodies. Byte/file,
+Board residency, rate, task, slot, per-source, effect and hold gates remain in
+force. Expired, revoked, exhausted, borrowed, stale-source or mixed-window
+authority refuses without adopting old work, releasing slots, completing input
+processing or starting retention clocks. A manual intervening boundary requires
+a fresh explicit capability selection; no old delegation silently follows it.
+
+Boundary and configuration journal witnesses use per-table SQLite mutation
+tokens and schema/sequence metadata, installed by the current Store source.
+Bootstrap does not inspect historical bodies, blob keys, presence or sizes.
+Triggers record subsequent insert/update/delete operations in their same
+transactions; rollback rolls back the tokens. Missing/changed trigger coverage
+refuses a witness; installing newly required coverage invalidates earlier
+witnesses. These are cooperative currentness witnesses, not body hashes,
+historical truth/immutability/whole-read attestations or hostile-writer isolation.
+Source use still requires applicable origin, exclusion, custody and body-integrity
+guards. Publication admission reserves the configured maximum artifact bytes
+per outstanding publication intent without inspecting retained blobs; this may
+pause earlier than an exact-body-size account. It does not measure held bodies
+or authorize resolving, deleting or reacquiring them. Old holds remain owned.
+
+After source adoption Work must take fresh configuration/processing/allocation
+bases and make the actual selection. Existing private/canonical source must not
+be inspected to obtain those allocation witnesses. A preserved shared residency
+above a proposed ceiling requires a genuine bounded operator choice; deleting
+shared records or refunding old charges is not a continuation mechanism.
+
+For stopped/revoked originals, obtain the continuing basis using
+`processing-basis --future-only`. Its `allocation` field is the complete fresh
+window witness to place in `service.allocations.basis`; its `future_only: true`
+basis permits only continuing future intake, with no retained sources, control
+recovery, legacy-disposition or old input-resolution operations. New exact
+package admissions remain possible under their own genuine selection. The
+source/configuration transition also uses this prospective metadata witness.
+The default `processing-basis`, historical retained APIs and manual window CLI
+retain their original authority/admission contracts. Future-only witnesses carry
+recorded old event hashes as metadata, without newly validating old bodies.
+SQLite SQL mutation tokens do not attest incremental blob writes, direct file
+rewrites or noncooperating writers; applicable body-integrity guards still run
+at actual permitted body use. Work must never use a metadata-only basis as an
+old-body validation, held-source clearance or native-operation qualification.

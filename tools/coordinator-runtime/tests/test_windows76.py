@@ -258,7 +258,7 @@ class Controls(unittest.TestCase):
                     self.assertEqual(self.advance(s)['window'], 2)
             self.assertEqual(s.one('SELECT COUNT(*) AS n FROM canonical_backups')['n'], 2)
             self.assertEqual(s.one('SELECT COUNT(*) AS n FROM jobs')['n'], 6)
-            self.assertTrue(windows.basis(s)['journal_sha256'])  # Includes actual BLOB custody.
+            self.assertTrue(windows.basis(s)['journal_revision']['tokens']['artifact_blobs'])
 
     def test_branch_reviews_owner_and_qa_response_cycles(self):
         s = self.store(); self.admit(s, 'FICTIONAL-P')

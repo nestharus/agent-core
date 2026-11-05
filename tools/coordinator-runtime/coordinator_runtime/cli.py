@@ -67,7 +67,8 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
-    sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
     draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
     draft.add_argument('--operator-config', required=True)
     draft.add_argument('--retention-library')
@@ -399,7 +400,7 @@ def operate(args, store):
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
         if args.command == 'processing-basis':
-            return processing.basis(store, boards)
+            return processing.basis(store, boards, future_only=args.future_only)
         if args.command == 'delegate-processing':
             return processing.select(store, boards, read_record(args.selection))
         if args.command == 'processing-status':

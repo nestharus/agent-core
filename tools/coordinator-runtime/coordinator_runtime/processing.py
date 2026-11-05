@@ -55,11 +55,17 @@ def implementation():
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(directory.glob('*.py'))}
 
 
-def basis(runtime, boards):
+def basis(runtime, boards, *, future_only=False):
+    from . import windows
+    if future_only and not runtime.db.in_transaction:
+        with runtime.tx():
+            return basis(runtime, boards, future_only=True)
     version = configuration.latest(runtime)
     return {'configuration': digest(runtime.config), 'implementation': implementation(),
             **({'configuration_transition': {k: version[k] for k in ('position', 'previous', 'current', 'original', 'issuer')}} if version else {}),
-            'roles': {r: {'original': b.retained_basis(runtime),
+            **({'future_only': True, 'journal_revision': windows.revision(runtime),
+                'allocation': windows.basis(runtime) if runtime.config.get('window_service') else None} if future_only else {}),
+            'roles': {r: {'original': b.prospective_basis(runtime) if future_only else b.retained_basis(runtime),
                           'future_after': b.future_frontier(),
                           'original_cursor': runtime.one('SELECT seq FROM cursors WHERE role=?', (r,))['seq']}
                       for r, b in boards.items()},
@@ -225,6 +231,13 @@ def select(runtime, boards, selection):
         raise Refusal('processing cannot expand original logical entitlement')
     if type(selection['future_intake']) is not bool:
         raise Refusal('future intake must be an explicit boolean, separate from retained input selection')
+    future_only = selection['basis'].get('future_only', False)
+    if 'future_only' in selection['basis'] and future_only is not True:
+        raise Refusal('future-only basis must be explicitly true')
+    if future_only and (not continuing or not selection['future_intake'] or selection['retained_events']
+                        or selection['recover_controls'] or selection.get('control_recognitions')
+                        or any(r.get('kind') != 'admit-package' for r in selection.get('owner_operations', []))):
+        raise Refusal('metadata-only future basis cannot authorize retained history, recovery or finite processing')
     events = selection['retained_events']
     if not isinstance(events, list) or any(not isinstance(e, str) for e in events) or len(events) != len(set(events)):
         raise Refusal('explicit unique retained source IDs required')
@@ -260,7 +273,7 @@ def select(runtime, boards, selection):
     if continuing:
         from .service import validate
         validate(runtime, selection)
-    current = basis(runtime, boards)
+    current = basis(runtime, boards, future_only=future_only)
     if selection['basis'] != current:
         raise Refusal('processing source/capacity/frontier basis changed; no automatic retry')
     if len(encode(selection).encode()) > runtime.config['limits']['max_result_bytes']:
@@ -280,6 +293,11 @@ def select(runtime, boards, selection):
     with runtime.tx():
         if runtime.one('SELECT id FROM processing_capabilities WHERE revoked IS NULL'):
             raise Refusal('existing processing capability remains owned; explicit revocation required')
+        if continuing:
+            from . import windows
+            windows.validate_delegation(runtime, selection)
+        if future_only and basis(runtime, boards, future_only=True) != selection['basis']:
+            raise Refusal('future-only processing basis changed before local selection; no automatic replay')
         runtime.budget(None, len(encode(selection).encode()) + 2048)
         key = ident()
         runtime.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,?,NULL,0)',
@@ -412,6 +430,25 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def prospective_basis(self, runtime):
+        """Original binding and recorded identifiers, never rehash old bodies.
+
+        Usable only for explicitly future-only continuing selection. Historical
+        retained APIs keep their own guarded body validation and attribution.
+        """
+        with self.opened(settlement=True) as conn:
+            grant = self._original(conn, runtime)
+            original = self._binding(grant)
+            continuation = None
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_retained_caps_v1'").fetchone():
+                row = conn.execute('SELECT id,issuer,created,revoked,visits,cursor FROM coordinator_retained_caps_v1 '
+                                   'WHERE source_grant=? AND revoked IS NULL', (grant['id'],)).fetchone()
+                continuation = dict(row) if row else None
+            return {'configuration': self._configuration(runtime, original), 'binding': original,
+                    'usage': self._usage(conn, grant), 'continuation': continuation,
+                    'events': runtime.rows('SELECT id,hash FROM events WHERE role=? ORDER BY id', (self.role,)),
+                    'scope': 'future-only; recorded original hashes/bindings, no body observation, validation or historical authority'}
+
     def _configuration(self, runtime, binding):
         return configuration.original_binding(runtime, self.role, binding)
 
@@ -607,6 +644,11 @@ class ProcessingBoard(RetainedBoard):
 
     def automatic_control(self, runtime, outbox, **kwargs):
         raise Refusal('dependency: software control consumption required; native pointer delegation remains separate')
+
+    def scan(self, runtime, limit=100):
+        from .service import admit_input
+        available = admit_input(runtime)
+        return super().scan(runtime, min(limit, available) if available is not None else limit)
 
     def scan_after(self, runtime, grant):
         _, selection = runtime.processing.current()

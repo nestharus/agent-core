@@ -159,6 +159,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         from .service_recovery import SCHEMA as SERVICE_RECOVERY_SCHEMA
         self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA)
         self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
+        windows.prepare_revision(self)
 
     def _bind_config(self):
         with self.tx():
@@ -201,7 +202,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         counts = {name: self.db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
                   for name in ("events", "attempts", "jobs", "alerts", "outboxes")}
         counts["bytes"] = owned_bytes(self.home, self.config["limits"].get("max_files", 50000))
-        counts['publication_reserved_bytes']=self.db.execute("SELECT COALESCE(SUM(length(b.body)),0) FROM file_publications p JOIN artifact_blobs b ON b.sha256=p.proposed_sha WHERE p.state!='published'").fetchone()[0]
+        # Reserve a configured maximum per possible publication. Never measure
+        # retained blob bodies (or probe their keys/presence) for admission.
+        counts['publication_reserved_bytes'] = self.db.execute("SELECT COUNT(*) FROM file_publications WHERE state!='published'").fetchone()[0] * min(self.config['limits'].get('max_artifact_bytes', 33554432), self.config['limits']['max_bytes'])
         counts['bytes']+=counts['publication_reserved_bytes']
         counts['custodian_reserved_bytes'] = self.one(
             "SELECT COUNT(*) AS n FROM custodian_visits WHERE state IN ('prepared','running')")['n'] * (3 * custodian_service.CAPTURE + 4096)

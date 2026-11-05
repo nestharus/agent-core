@@ -304,21 +304,21 @@ def validate_changes(runtime, value, tasks):
 
 
 def journal(runtime):
-    """Exact local protocol rows only; no filesystem/history/foreign census."""
+    """Protocol mutation witnesses; no retained body/key/size acquisition.
+
+    Applicable guarded body validation stays at source use. These tokens bind
+    writes since bootstrap, not historical truth, integrity or whole reads.
+    """
+    from . import windows
+    witness = windows.revision(runtime)
     result = {}
     for table in runtime.rows("SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name"):
-        name = table['name'].replace('"', '""')
-        hasher, count = hashlib.sha256(), 0
-        query = ("SELECT sha256,length(body) AS opaque_bytes FROM artifact_blobs ORDER BY rowid"
-                 if table['name'] == 'artifact_blobs' else f'SELECT * FROM "{name}" ORDER BY rowid')
-        for row in runtime.db.execute(query):
-            # Retained blobs may contain a forbidden whole log. Bind only their
-            # existing custody key/size, never reacquire/hash historical bodies.
-            values = [ {'bytes_sha256': hashlib.sha256(v).hexdigest(), 'length': len(v)} if isinstance(v, bytes) else v for v in row]
-            hasher.update(encode(values).encode()+b'\n'); count += 1
-        result[table['name']] = {'rows': count, 'hash': hasher.hexdigest(), 'schema': digest(table['sql'])}
+        name = table['name']
+        token = (digest(witness['sequences']) if name == 'sqlite_sequence' else
+                 'revision infrastructure; no source rows' if name == 'allocation_revision' else witness['tokens'][name])
+        result[name] = {'revision': token, 'schema': digest(table['sql'])}
         if table['name'] == 'artifact_blobs':
-            result[table['name']]['body_observation'] = 'opaque retained key/length only; body integrity unobserved'
+            result[name]['body_observation'] = 'no body/key/size acquisition; body integrity unobserved'
     return result
 
 
@@ -330,7 +330,7 @@ def basis(runtime, boards, value, tasks):
     return {'configuration': digest(runtime.config), 'candidate': digest(value),
             'runtime': {'path': str(runtime.path), 'dev': identity.st_dev, 'ino': identity.st_ino,
                         'actor': runtime.config['actor']},
-            'processing': processing.basis(runtime, boards), 'journal': journal(runtime),
+            'processing': processing.basis(runtime, boards, future_only=True), 'journal': journal(runtime),
             'release': release(runtime, value), 'tasks': tasks}
 
 
