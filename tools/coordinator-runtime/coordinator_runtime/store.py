@@ -793,6 +793,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),
                          self.clock(), response["parent"]))
+        from .processing import note_source
+        note_source(self, response_id)
         if task.get("publish_internal_results"):
             self._outbox(job["role"], destination, "result", response, job=job["id"], event=response_id,
                          producer=attempt["session"], key=digest({"response_delivery": response_id}))

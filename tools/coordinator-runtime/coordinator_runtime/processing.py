@@ -80,8 +80,9 @@ def source_boundary(runtime):
 
 
 def note_source(runtime, event):
-    # The actual admitted-source counter survives row recycling; it is never
-    # renewed/reset to make an old input look prospective.
+    # Record logical birth for a newly inserted event, including internal
+    # responses, in its existing write transaction. This counter survives row
+    # recycling; it is never renewed/reset to make an old input prospective.
     runtime.db.execute('INSERT INTO processing_source_positions(position,event) VALUES(?,?)',
                        (source_boundary(runtime) + 1, event))
 
@@ -887,6 +888,7 @@ def control_return(runtime, event, attempt, result, resolution):
                        (event, response['id'], attempt, encode(response), runtime.clock()))
     runtime.db.execute('INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)',
                        (response['id'], 'Work', encode(response), digest(response), runtime.clock(), event))
+    note_source(runtime, response['id'])
     return response['id']
 
 
