@@ -171,6 +171,21 @@ exact addressed consumers. Entitlement remains necessary and does not override
 an acquisition exclusion. Legitimate exact exports retain their hash/size
 checks and original custody; missing bodies refuse without inventing custody.
 
+Recorded relationships are transitive: a second same-hash custody path still
+carries a known stage target's exclusions. The shared guard follows recorded
+custody hashes, preimage keys and stage targets with cycle detection, without
+resolving filesystem aliases. Frozen materialization and publication reads use
+the same guard and all current task log targets. A lawful recorded bounded entry
+remains distinct from its whole-log target; corrupt or incomplete entry policy
+cannot supply that exception.
+
+Retained custody witnesses must be JSON objects with an exact matching SHA-256
+and a nonnegative integer byte size. Invalid JSON, duplicate keys, non-JSON
+constants, conflicting sizes and malformed source paths refuse before body
+acquisition, hashing or encoding. Blob length is checked against the witness and
+export bound before selecting its body. No witness or source is repaired,
+replaced or deleted; unknown aliases and live held material remain unqualified.
+
 A Branch activity account cannot bypass missing original resource scope.
 Unresolved local jobs need their original frozen policy/admission and original
 executed common-repository identity/ref map to establish independence; unknown,

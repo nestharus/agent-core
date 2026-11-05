@@ -579,15 +579,12 @@ def operate(args, store):
             if (not delivery or not delivery['board_receipt'] or target.get('session')!=caller or
                     not any((w.get('source_attempt')==args.attempt or w.get('source_context')==args.attempt) and w.get('path')==args.path and w.get('sha256')==row['sha256'] for w in listed)):
                 raise Refusal('artifact source is private to its actual owner or exact addressed consumer')
-        from .custody import guard_path, guard_frozen
+        from .custody import frozen_body
         # Ownership permits requesting custody; current acquisition exclusions
         # still govern owners and addressed consumers alike. Check every current
         # bounded-log target, including known origins and historical stages,
         # before acquiring, hashing or exporting a retained body.
-        for task in [None, *store.config['tasks'].values()]:
-            guard_path(store, row['path'], task)
-            guard_frozen(store, row['sha256'], task, row['path'])
-        frozen=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(row['sha256'],))
+        frozen=frozen_body(store, row['sha256'], path=row['path'])
         if not frozen:raise Refusal('required original artifact custody unavailable')
         body=frozen['body']
         if hashlib.sha256(body).hexdigest()!=row['sha256']:raise Refusal('conserved artifact bytes no longer match the exact witness')
