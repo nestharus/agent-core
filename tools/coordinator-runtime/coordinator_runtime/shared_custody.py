@@ -240,7 +240,10 @@ class SharedCustody:
         intent=store.one('SELECT * FROM shared_custody_intents WHERE delivery=?',(key,))
         if not intent:
             raise Refusal('original shared retirement intent required')
-        raw=regular_path(intent['archive']).read_text()
+        # Historical provenance is not current acquisition authority. Check
+        # exclusions before regular_path touches metadata or reads the copy.
+        archive=root(intent['archive'],store.config.get('artifact_exclusions',[]))
+        raw=regular_path(str(archive)).read_text()
         witness=json.loads(raw)
         if witness['original']['basis']!=intent['basis'] or witness['original']['material']['delivery']['id']!=key:
             raise Refusal('exact conserved canonical witness required')
@@ -272,7 +275,8 @@ class SharedCustody:
         intent=store.one("SELECT * FROM shared_custody_intents WHERE delivery=? AND state='retired'",(key,))
         if not intent or set(receipt)!={'hash','qualified_at','holds','evidence','originals','custodian','processing'}:
             raise Refusal('exact retired archive and actual original conservation/release required')
-        path=regular_path(intent['archive']); witness=json.loads(path.read_text())
+        archive=root(intent['archive'],store.config.get('artifact_exclusions',[]))
+        path=regular_path(str(archive)); witness=json.loads(path.read_text())
         fresh(store,{**receipt,'basis':receipt['hash']},digest(witness))
         conserved=json.loads(intent['receipt'] or '{}')
         processing=receipt['processing']

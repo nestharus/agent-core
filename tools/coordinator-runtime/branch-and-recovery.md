@@ -198,6 +198,13 @@ absence and scan frontier after a lost local return. Shared existence or unknown
 bytes remain held. No multi-file/cross-database atomicity is promised and no blind
 send/delete replay follows.
 
+Reconciliation and archive release apply the current `artifact_exclusions`
+before archive metadata or body acquisition. A previously lawful archive can
+become excluded through prospective configuration narrowing; its retained intent
+and hash remain provenance, without granting current access. Refusal preserves
+the intent and custody obligations. An unrelated exclusion leaves allowed
+archives subject to the same ordinary qualification and retention checks.
+
 The archive is required custody until genuine conservation/release. The returned
 `conserved_at` is observed after durable archive publication and shared commit;
 it is a lower bound for archive processing, not processing completion. A lost
