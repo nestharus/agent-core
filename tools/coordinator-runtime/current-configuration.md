@@ -14,12 +14,19 @@ Invoke the corrected `coordinator` in the selected existing release checkout.
 The draft relocates Board SDK, operator CLI, receive instructions, runtime
 procedure templates, and classifier/diagnosis CWD to that checkout. Persistent
 role CWDs and non-runtime procedure templates remain explicit. Each
-`--source-task NAME` adds only the four public release tool directories to an
+`--source-task NAME` adds the four public release tool directories to an
 already source-authorized task's read roots. For already package-scoped Branch
 or QA tasks it also admits this exact repository root as a scope ceiling for
 CWD/ref organization. Each actual package still needs its narrower procedure,
 paths and resource evidence through existing admission; no canonical write
 root, network capability or operation is added.
+
+For already source-authorized Branch tasks it also adds exact read paths for
+`tools/branch_release.py`, `tools/operational_contracts.py` and
+`tools/coordinator-runtime/final-release-risk.md`. The release manifest pins these
+final-consumer dependencies alongside all existing static sources; it grants no
+general `tools/` ancestor access. This is the final PR-risk check used by the
+existing Branch repository template, not an added task or first-four admission.
 
 Roles/owners/receive profiles, actor, original state directory and board,
 software grantor/authority, recipients, task bindings/effects/capacities,
