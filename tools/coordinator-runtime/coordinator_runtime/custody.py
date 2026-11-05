@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import sqlite3
 import stat
 
 from .contracts import PROFILES, Refusal, digest, encode, artifact_leaves
@@ -68,23 +70,124 @@ def refuse_log(path, task=None):
         raise Refusal('whole-log acquisition unavailable; bounded entry/operation receipt only')
 
 
-def guard_frozen(store, sha256, task=None, path=None):
-    """Check retained origin metadata BEFORE acquiring any cached body.
+def origin_path(path):
+    # Pure lexical checks only: never stat, resolve or search retained origins.
+    if (not isinstance(path, str) or not path or '\x00' in path
+            or not Path(path).is_absolute() or '..' in Path(path).parts):
+        raise Refusal('invalid retained original path')
+    return path
 
-    A renamed witness or cached input does not erase its known original custody.
-    This neither searches for aliases nor alters/deletes the retained source.
+
+def blob_id(sha256):
+    if not isinstance(sha256, str) or re.fullmatch('[0-9a-f]{64}', sha256) is None:
+        raise Refusal('invalid retained blob identifier')
+    return sha256
+
+
+def metadata_json(value):
+    def pairs(items):
+        result = {}
+        for key, item in items:
+            if key in result:
+                raise ValueError('duplicate metadata key')
+            result[key] = item
+        return result
+    def constant(value):
+        raise ValueError('non-JSON metadata constant: ' + value)
+    try:
+        result = json.loads(value, object_pairs_hook=pairs,
+                            parse_constant=constant)
+    except (ValueError, TypeError, RecursionError) as exc:
+        raise Refusal('invalid retained custody metadata') from exc
+    if not isinstance(result, dict):
+        raise Refusal('retained custody metadata must be an object')
+    return result
+
+
+def custody_witness(row):
+    witness = metadata_json(row['witness'])
+    if (witness.get('sha256') != blob_id(row['sha256'])
+            or type(witness.get('size')) is not int or witness['size'] < 0):
+        raise Refusal('retained custody witness needs its exact hash and byte size')
+    return witness
+
+
+def _stage_origin(store, stage):
+    target = origin_path(stage['target'])
+    refuse_excluded(store, target)
+    policy = metadata_json(stage['policy']) if stage['policy'] is not None else {}
+    from .bounded_log import KIND, validate
+    if policy.get('kind') != KIND:
+        return target
+    try:
+        validate(store.config['tasks'][stage['task']], policy)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise Refusal('invalid retained bounded-entry policy') from exc
+    # A lawful bounded entry is distinct from the whole target's body. Its
+    # target's exclusion still applies; do not acquire/follow the whole log.
+    return None if policy['bounded_log']['target'] == target else target
+
+
+def _path_origins(store, path, tasks):
+    refuse_excluded(store, path)
+    for current in tasks:
+        refuse_log(path, current)
+    known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (path,))
+    hashes = [known['sha256']] if known else []
+    hashes.extend(row['sha256'] for row in store.rows('SELECT sha256 FROM artifact_custody WHERE path=?', (path,)))
+    stages = store.rows('SELECT s.target,r.policy,r.task FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (path,))
+    targets = [_stage_origin(store, stage) for stage in stages]
+    return hashes, [target for target in targets if target is not None]
+
+
+def _hash_origins(store, sha256, sizes):
+    paths = []
+    for row in store.rows('SELECT * FROM artifact_custody WHERE sha256=?', (sha256,)):
+        size = custody_witness(row)['size']
+        if sha256 in sizes and sizes[sha256] != size:
+            raise Refusal('conflicting retained custody byte sizes')
+        sizes[sha256] = size
+        paths.append(row['path'])
+    # Older snapshots conserved blobs without artifact_custody. Consult their
+    # existing preimage keys, never bodies or filesystem aliases.
+    paths.extend(row['path'] for row in store.rows("SELECT j.key AS path FROM routine_runs r,json_each(r.before_files) j WHERE json_extract(j.value,'$.sha256')=?", (sha256,)))
+    return paths
+
+
+def _guard_sources(store, hashes, paths, task):
+    """Follow recorded relationships before bodies, without filesystem searches.
+
+    Distinct visited sets retain transitive stage restrictions and terminate
+    cycles. Every current task's log policy governs every acquisition path.
     """
-    if path is not None:
-        refuse_log(path, task)
-        refuse_excluded(store, path)
-    for row in store.rows('SELECT path FROM artifact_custody WHERE sha256=?', (sha256,)):
-        refuse_log(row['path'], task)
-        refuse_excluded(store, row['path'])
-    # Older file-witness snapshots conserved blobs without artifact_custody.
-    # Consult their existing preimage keys, not bodies or filesystem aliases.
-    for row in store.rows("SELECT j.key AS path FROM routine_runs r,json_each(r.before_files) j WHERE json_extract(j.value,'$.sha256')=?", (sha256,)):
-        refuse_log(row['path'], task)
-        refuse_excluded(store, row['path'])
+    tasks = [None, *store.config.get('tasks', {}).values()]
+    if task is not None:
+        tasks.append(task)
+    seen_paths, seen_hashes, sizes = set(), set(), {}
+    while paths or hashes:
+        if paths:
+            path = origin_path(paths.pop())
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            linked_hashes, targets = _path_origins(store, path, tasks)
+            hashes.extend(linked_hashes)
+            paths.extend(targets)
+            continue
+        sha256 = blob_id(hashes.pop())
+        if sha256 in seen_hashes:
+            continue
+        seen_hashes.add(sha256)
+        paths.extend(_hash_origins(store, sha256, sizes))
+    return sizes
+
+
+def guard_frozen(store, sha256, task=None, path=None):
+    """Validate known custody and current policy BEFORE any retained body read."""
+    try:
+        return _guard_sources(store, [sha256], [path] if path is not None else [], task)
+    except sqlite3.DatabaseError as exc:
+        raise Refusal('retained origin metadata unavailable or corrupt') from exc
 
 
 def refuse_excluded(store, path):
@@ -94,20 +197,21 @@ def refuse_excluded(store, path):
 
 
 def guard_path(store, path, task=None):
-    refuse_log(path, task)
-    refuse_excluded(store, path)
-    known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (str(path),))
-    if known:
-        guard_frozen(store, known['sha256'], task, path)
-    for stage in store.rows('SELECT s.target,r.policy FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (str(path),)):
-        policy = json.loads(stage['policy']) if stage['policy'] else {}
-        from .bounded_log import KIND
-        if Path(stage['target']).name == 'WORK_LOG.md' and policy.get('kind') != KIND:
-            raise Refusal('historical whole-log stage remains original custody; no acquisition')
+    try:
+        _guard_sources(store, [], [str(path)], task)
+    except sqlite3.DatabaseError as exc:
+        raise Refusal('retained origin metadata unavailable or corrupt') from exc
 
 
 def frozen_body(store, sha256, task=None, path=None):
-    guard_frozen(store, sha256, task, path)
+    sizes = guard_frozen(store, sha256, task, path)
+    length = store.one('SELECT length(body) AS size FROM artifact_blobs WHERE sha256=?', (sha256,))
+    if not length:
+        return None
+    if length['size'] > store.config['limits'].get('max_artifact_bytes', 33554432):
+        raise Refusal('source exceeds selected export bound; retained without truncation')
+    if sha256 in sizes and sizes[sha256] != length['size']:
+        raise Refusal('retained body size differs from its exact custody witness')
     return store.one('SELECT body FROM artifact_blobs WHERE sha256=?', (sha256,))
 
 

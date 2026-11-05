@@ -32,7 +32,8 @@ class Export(Base):
         self.path = str(self.area/'report.bin')
         self.store.db.execute('INSERT INTO artifact_blobs VALUES(?,?)', (self.sha, self.body))
         self.store.db.execute('INSERT INTO artifact_custody VALUES(?,?,?,?,?,?)',
-                              ('fiction-original', self.path, 'role-owned', 'fiction-owner', '{}', self.sha))
+                              ('fiction-original', self.path, 'role-owned', 'fiction-owner',
+                               encode({'sha256':self.sha, 'size':len(self.body)}), self.sha))
         self.args = SimpleNamespace(command='artifact-source', attempt='fiction-original', path=self.path, delivery='fiction-delivery')
         self.store.config['delivery']['recipients']['Work']['session'] = 'fiction-consumer'
         self.store._outbox('Work', 'Work', 'result', {'artifact_witnesses': [
@@ -67,7 +68,8 @@ class Export(Base):
         origin=str(self.area/'opaque-held')
         self.store.config['artifact_exclusions']=[origin]
         self.store.db.execute('INSERT INTO artifact_custody VALUES(?,?,?,?,?,?)',
-                              ('fiction-prior',origin,'role-owned','fiction-owner','{}',self.sha))
+                              ('fiction-prior',origin,'role-owned','fiction-owner',
+                               encode({'sha256':self.sha, 'size':len(self.body)}),self.sha))
         self.denied_before_body()
         self.store.db.execute("DELETE FROM artifact_custody WHERE attempt='fiction-prior'")
         self.store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
@@ -96,7 +98,7 @@ class Export(Base):
         self.store.config['limits']['max_artifact_bytes']=1
         with self.assertRaisesRegex(Refusal,'export bound'):self.export('fiction-owner')
         self.store.config['limits']['max_artifact_bytes']=1000
-        self.store.db.execute('UPDATE artifact_blobs SET body=?',(b'FICTION changed bytes',))
+        self.store.db.execute('UPDATE artifact_blobs SET body=?',(self.body[:-1]+b'Z',))
         with self.assertRaisesRegex(Refusal,'no longer match'):self.export('fiction-owner')
         self.store.db.execute('DELETE FROM artifact_blobs')
         with self.assertRaisesRegex(Refusal,'custody unavailable'):self.export('fiction-owner')
