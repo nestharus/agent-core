@@ -29,6 +29,12 @@ with repeated `--task`; newly added source scopes must be in it. Current
 processing can use only those tasks and genuinely future sources. It cannot
 select retained events, historical control recovery or legacy-hold disposition.
 
+The draft prospectively authorizes the five known public execution labels:
+`.codex`, `.codex2`, `.codex3`, `.codex4`, `.codex5`. This changes only future
+execution authority in the separate selected config. It does not enable an
+account, establish its availability or registered site binding, or change any
+original config, grant, receive address, job or running account.
+
 Retention is a separately selected provider: this repository has no
 `tools/message-board/retention.py`. The draft retains the existing
 `canonical_publication.library`, or Work can choose an actual compatible public
@@ -138,9 +144,30 @@ Original four-role sources/outboxes and all other historical records, unknowns,
 holds, frontiers, accounting and required histories stay conserved and charged.
 Retirement still requires actual whole processing completion plus 24 hours and
 all source/consumer/outbox/recovery/effect/privacy holds, with archives' own
-completed processing frontier. Pool control must remain automatic 2/3/5, excluding
-0/4; receive authorization is distinct. Each future input/allocation still checks
-membership; admitted originals retain their accounts/collectors.
+completed processing frontier. Today's selected pool is automatic 2/3/5, excluding
+0/4. The user can change ordered membership live through the existing public
+`execution_pool.py --routes PUBLIC_CONTROL set [PROFILE ...]` interface; an empty
+selection pauses new execution. Inspect through its `status` or the runtime's
+`execution-pool` command. No service restart, regrant or account migration is
+needed for membership updates after selecting this corrected configuration.
+
+The release pins the exact control path and every static control byte, masking
+only the supported `providers.codex.pool` value. Other route/model/effort/provider,
+manual authorization, caller and rotation-state bindings remain pinned, alongside
+all implementation, procedure, operator-config and dependency bytes. Even static
+formatting changes require a fresh coherent selection. Malformed or unsupported
+controls refuse. Allocation and admission recheck the selected static control
+before state access and under the cooperating lock. They retain the original
+monotonic counter and apply its next turn modulo the new ordered pool.
+
+Each future creation and input checks current membership, including bound review
+inputs and same-session continuations. Excluded bound contexts refuse without
+substitution; running calls retain their actual accounts and collectors. Actual
+close may drain after exclusion. Empty capacity and missing declared review routes
+hold the affected operation. Partial review route declarations need not claim
+bindings for every possible account; a future opening needs its own selected
+declaration, and bound inputs must match their original route. Public labels and
+declarations alone prove no registered site, available account or native identity.
 
 Actual rollout still needs compatible installed protocol/caller/route/model and
 resource capacity, legal current method/material/history, genuine receiving,

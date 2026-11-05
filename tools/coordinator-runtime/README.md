@@ -86,7 +86,13 @@ successor. This is separate from `profiles` (account authorization), role receiv
 addresses and delivery recipients. Existing config profile pins and a diagnosis's
 profile suggestion remain recorded advice; they do not bypass ordinary rotation.
 No config/grant digest migration is needed when the existing authorization covers
-the shared pool. An explicit `execution_pool_routes` absolute path selects another
+the shared pool. The supported prospective current-configuration draft authorizes
+all five known public labels without enabling them or asserting availability;
+original configurations and receive identities stay immutable. Its release pins
+all static control bytes except the supported membership value, so live updates,
+reordering and empty pauses preserve the current capability. See
+[current-configuration.md](current-configuration.md) for the exact guards and
+missing-route/close boundaries. An explicit `execution_pool_routes` absolute path selects another
 public control file for an isolated installation/fixture; adding/changing that
 config field requires the existing offline config reconciliation.
 

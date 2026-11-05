@@ -19,6 +19,7 @@ import tomllib
 
 PROFILES = {'.codex', '.codex2', '.codex3', '.codex4', '.codex5'}
 DEFAULT_ROUTES = Path.home() / 'ai/tools/direct-child/routes.toml'
+MEMBERSHIP = rb'(?ms)(^\[providers\.codex\][^\[]*?^pool\s*=\s*)\[[^\]]*\]'
 
 
 class PoolError(Exception):
@@ -27,6 +28,18 @@ class PoolError(Exception):
 
 class PoolBusy(PoolError):
     pass
+
+
+def replace_membership(raw, enabled):
+    """Change only the supported public setting, retaining every other byte."""
+    changed, n = re.subn(MEMBERSHIP, lambda m: m[1] + json.dumps(enabled).encode(), raw)
+    if n != 1:
+        raise PoolError('unsupported public pool syntax; no update')
+    original = tomllib.loads(raw.decode())
+    original['providers']['codex']['pool'] = enabled
+    if tomllib.loads(changed.decode()) != original:
+        raise PoolError('public pool syntax does not isolate membership; no update')
+    return changed
 
 
 def counter_value(value):
@@ -64,8 +77,9 @@ class Pool:
             raise PoolError('public execution pool unavailable/invalid: ' + str(exc)) from exc
 
     @contextmanager
-    def locked(self, blocking=True):
-        _, _, path = self.read()
+    def locked(self, blocking=True, expected_control=None):
+        raw, _, path = self.read()
+        self.assert_control(raw, expected_control)
         try:
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             # Stable control lock serializes first creation too. Retain the old
@@ -82,6 +96,7 @@ class Pool:
                 with os.fdopen(fd, 'r+') as handle:
                     self.lock(handle, blocking)
                     raw, pool, current_path = self.read()
+                    self.assert_control(raw, expected_control)
                     if current_path != path:
                         raise PoolError('rotation state path changed; explicit cutover required')
                     value = handle.read().strip()
@@ -107,8 +122,17 @@ class Pool:
                 'enabled': pool, 'turn': count, 'profile': pool[count % len(pool)] if pool else None,
                 'availability': 'not-probed', 'fairness': 'durable reservation turns; no refund on failure'}
 
-    def status(self, *, blocking=True):
-        with self.locked(blocking) as (_, raw, pool, count):
+    def control_binding(self, raw):
+        """Static public bytes, with only the supported membership value masked."""
+        return {'routes': str(self.routes),
+                'static_sha256': hashlib.sha256(replace_membership(raw, [])).hexdigest()}
+
+    def assert_control(self, raw, expected):
+        if expected is not None and self.control_binding(raw) != expected:
+            raise PoolError('selected static execution pool control changed; no allocation/admission')
+
+    def status(self, *, blocking=True, expected_control=None):
+        with self.locked(blocking, expected_control) as (_, raw, pool, count):
             return {**self.witness(raw, pool, count), 'state': 'enabled' if pool else 'empty',
                     'next_is_reserved': False}
 
@@ -142,8 +166,8 @@ class Pool:
         return {**self.witness(raw, pool, count), 'state': 'enabled',
                 'next_is_reserved': False}
 
-    def allocate(self, authorized=None, *, blocking=True):
-        with self.locked(blocking) as (handle, raw, pool, count):
+    def allocate(self, authorized=None, *, blocking=True, expected_control=None):
+        with self.locked(blocking, expected_control) as (handle, raw, pool, count):
             self.eligible(pool, authorized)
             chosen = self.witness(raw, pool, count)
             try:
@@ -165,8 +189,8 @@ class Pool:
             raise PoolError('execution pool exceeds runtime account authorization; explicit compatibility decision required')
 
     @contextmanager
-    def admission(self, profile, authorized=None, *, blocking=True):
-        with self.locked(blocking) as (_, raw, pool, count):
+    def admission(self, profile, authorized=None, *, blocking=True, expected_control=None):
+        with self.locked(blocking, expected_control) as (_, raw, pool, count):
             self.eligible(pool, authorized)
             if profile not in pool:
                 raise PoolError('reserved execution profile disabled before launch: ' + profile)
@@ -186,11 +210,7 @@ class Pool:
             for binding in config.get('native', {}).get('bindings', []):
                 if binding.get('provider') == 'codex' and not set(enabled) <= set(binding.get('site_routes', {})):
                     raise PoolError('enabled pool lacks a declared native account route; explicit compatibility decision required')
-            # Replace only this public setting; preserve all other source bytes.
-            pattern = rb'(?ms)(^\[providers\.codex\][^\[]*?^pool\s*=\s*)\[[^\]]*\]'
-            changed, n = re.subn(pattern, lambda m: m[1] + json.dumps(enabled).encode(), raw)
-            if n != 1:
-                raise PoolError('unsupported public pool syntax; no update')
+            changed = replace_membership(raw, enabled)
             temp = None
             try:
                 fd, temp = tempfile.mkstemp(prefix='.pool-update-', dir=self.routes.parent)

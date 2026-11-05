@@ -117,7 +117,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.launch_authorizer = None
         self.task_launch_authorizer = None
         self.processing = None  # Explicit service-local capability, never an intake flag rewrite.
-        self.execution_pool = ExecutionPool(config)
+        self.execution_pool = ExecutionPool(config, runtime=self)
         self.home = private_directory(config["state_dir"])
         self.path = self.home / "runtime.sqlite3"
         # Closing ANY raw descriptor for an existing SQLite file can release

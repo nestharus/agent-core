@@ -147,8 +147,10 @@ def validate(runtime, choices):
         regular_path(policy['caller'])
         if method_files(policy['method']) != policy['method_files']:
             raise Refusal('current ordinary definition bodies differ from selected pins')
-        for profile in runtime.config['profiles']:
-            required_text(policy['routes'].get(profile), 'actual registered Sol high account route', 128)
+        if not isinstance(policy['routes'], dict) or set(policy['routes']) - set(runtime.config['profiles']):
+            raise Refusal('review routes must name prospectively authorized public profiles')
+        for route in policy['routes'].values():
+            required_text(route, 'declared Sol high account route', 128)
         for component, material in policy['components'].items():
             required_text(component, 'component', 128)
             if set(material) - {'prior_histories','relationship_paths'} != {'repository', 'origin', 'paths', 'history', 'authority'}:
@@ -284,11 +286,14 @@ class Native:
         argv += ['--out', str(out)] + (['--close'] if close else ['--prompt-file', str(prompt_path)])
         if not close:
             runtime.authorize_launch(attempt)
+            if policy['routes'].get(context['profile']) != context['route'] or not context['route']:
+                raise Refusal('bound review account route unavailable/changed; original context retained')
         # Each NEW input obeys current user membership. Close drains existing
         # ownership even after exclusion, without admitting new model work.
         guard = _existing() if close else runtime.execution_pool.admission(context['profile'])
         async with guard:
             if not close:
+                runtime.authorize_launch(attempt)
                 with runtime.tx():
                     runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?",(attempt,))
             try:
@@ -374,8 +379,9 @@ class Executor:
             read_command = shlex.join(['/usr/bin/python3', '-B', str(Path(__file__).with_name('review_reader.py')), str(facade)])
             if opening:
                 profile = runtime.attempt(attempt)['profile']
+                route = required_text(policy['routes'].get(profile), 'declared review account route unavailable; no substitution', 128)
                 context = {'component': component, 'capability': runtime.processing.key, 'profile': profile,
-                           'route': policy['routes'][profile], 'handle': str(runtime.home / 'review-handles' / attempt),
+                           'route': route, 'handle': str(runtime.home / 'review-handles' / attempt),
                            'run': None, 'collector': runtime.controller, 'state': 'opening', 'head': None,
                            'history_hash': acquired['history_sha256'], 'created': runtime.clock(), 'closed_at': None}
                 Path(context['handle']).parent.mkdir(mode=0o700, parents=True, exist_ok=True)

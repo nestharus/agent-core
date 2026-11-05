@@ -4,7 +4,9 @@ This is a source/operator contract, not a live operating receipt. Work retains
 purpose and decisions. The responsible accepting Root delegates builders/testers;
 ordinary continuing review remains separate. Existing Work/Branch/Reviews sole
 integrators, up to five separate QA executions and one-package QA consolidation
-are unchanged. Current automatic accounts remain 2/3/5, never future 0/4.
+are unchanged. Today's automatic accounts remain 2/3/5, excluding 0/4. Prospective
+five-label authority and live membership control follow [current-configuration.md](current-configuration.md);
+this corrects no original config, grant, received identity or running account.
 
 ## Seven real Work duties
 

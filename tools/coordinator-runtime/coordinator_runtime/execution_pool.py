@@ -14,20 +14,26 @@ _spec.loader.exec_module(_module)
 
 
 class ExecutionPool:
-    def __init__(self, config):
+    def __init__(self, config, runtime=None):
+        self.runtime = runtime
         self.authorized = config['profiles']
         self.bind_seconds = config['deadlines']['bind']
         self.pool = _module.Pool(config.get('execution_pool_routes', _module.DEFAULT_ROUTES))
 
+    def control(self):
+        from .configuration import selected
+        transition = selected(self.runtime) if self.runtime is not None else None
+        return transition['basis']['release']['pool_control'] if transition else None
+
     def allocate(self):
         try:
-            return self.pool.allocate(self.authorized, blocking=False)
+            return self.pool.allocate(self.authorized, blocking=False, expected_control=self.control())
         except _module.PoolError as exc:
             raise Refusal(str(exc)) from exc
 
     def status(self):
         try:
-            value = self.pool.status(blocking=False)
+            value = self.pool.status(blocking=False, expected_control=self.control())
             self.pool.eligible(value['enabled'], self.authorized)
             return value
         except _module.PoolError as exc:
@@ -39,7 +45,7 @@ class ExecutionPool:
         # await. Busy admissions wait only within the existing bind budget.
         deadline = asyncio.get_running_loop().time() + self.bind_seconds
         while True:
-            guard = self.pool.admission(profile, self.authorized, blocking=False)
+            guard = self.pool.admission(profile, self.authorized, blocking=False, expected_control=self.control())
             try:
                 witness = guard.__enter__()
                 break

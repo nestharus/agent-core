@@ -136,13 +136,20 @@ class CurrentConfiguration(unittest.TestCase):
         self.validation.start(); self.addCleanup(self.validation.stop)
 
     def fixture_config(self, value):
-        self.assertEqual(value['profiles'], [None])
+        self.assertEqual(value['profiles'], sorted(configuration.PROFILES))
         self.assertTrue(all(r['profile'] is None for r in value['roles'].values()))
         self.assertTrue(all(t['profile'] is None for t in value['tasks'].values()))
         return value
 
     def attach_pool(self, runtime):
         runtime.execution_pool = FixturePool()
+        # Advice is a public declaration after prospective five-label authority;
+        # the allocation seam still records NULL native account/session/turn.
+        original_attempt = runtime._attempt
+        def null_native_attempt(kind, event, job, binding, profile, **kwargs):
+            advice = '.codex2' if profile is None and runtime.config['profiles'] != [None] else profile
+            return original_attempt(kind, event, job, binding, advice, **kwargs)
+        runtime._attempt = null_native_attempt
         from coordinator_runtime.execution_pool import _module
         public_pool = _module.Pool(runtime.config['execution_pool_routes'])
         # No native profile allocation. Real public control parsing still runs.
@@ -404,10 +411,12 @@ class CurrentConfiguration(unittest.TestCase):
         basis = self.selection()['basis']
         self.assertIn('/src/tools/message-board/board_store.py', basis['release']['files'])
         self.assertIn('/src/tools/coordinator-runtime/tests/fixture_snapshot/retention.py', basis['release']['files'])
-        self.assertEqual(set(basis['release']['enabled']), {'.codex2','.codex3','.codex5'})
+        self.assertEqual(basis['release']['pool_control']['routes'], self.value['execution_pool_routes'])
+        self.assertNotIn(self.value['execution_pool_routes'], basis['release']['files'])
+        selected = self.selection()
         path = Path(self.original['execution_pool_routes'])
         path.write_text(path.read_text().replace('".codex5"]', '".codex4"]'))
-        with self.assertRaises(Refusal): configuration.apply(self.runtime, self.boards, self.value, self.selection())
+        with self.assertRaises(Refusal): configuration.apply(self.runtime, self.boards, self.value, selected)
         self.assertIsNone(configuration.latest(self.runtime))
 
 

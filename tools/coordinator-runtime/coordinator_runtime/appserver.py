@@ -512,6 +512,7 @@ class AppServer:
     async def turn(self, peer, store, attempt, thread, prompt, spec, binding, schema, outcome):
         store.authorize_launch(attempt)
         async with store.execution_pool.admission(store.attempt(attempt)['profile']):
+            store.authorize_launch(attempt)
             started = await self.start_turn(peer, thread, prompt, binding, schema, spec)
         turn = canonical_uuid(started["turn"]["id"])
         store.session(attempt, thread, turn)
@@ -584,6 +585,7 @@ class AppServer:
         if not clarification and schema and set(schema.get('properties',{}))=={'payload_json'}:
             prompt+='\n'+task_result_instructions()
         async with store.execution_pool.admission(store.attempt(attempt)['profile']):
+            store.authorize_launch(attempt)
             next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])

@@ -519,7 +519,7 @@ class DraftConfiguration(Base):
             with self.assertRaises(Refusal):configuration.validate_changes(runtime,unrelated,['wi'])
             with self.assertRaises(Refusal):configuration.validate_changes(runtime,value,['bi'])
         self.assertEqual(value['tasks']['wi']['binding'],original['tasks']['wi']['binding'])
-        self.assertEqual(value['profiles'],[None])
+        self.assertEqual(value['profiles'],sorted(configuration.PROFILES))
 
 
 # Reuse the public NULL-native Board/transition fixture, with its ORIGINAL config

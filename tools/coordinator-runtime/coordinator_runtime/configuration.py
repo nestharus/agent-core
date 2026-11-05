@@ -90,22 +90,23 @@ def release(runtime, candidate):
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
-             Path(candidate['execution_pool_routes']), Path(candidate['canonical_publication']['library'])/'retention.py', operator]
+             Path(candidate['canonical_publication']['library'])/'retention.py', operator]
     for task in candidate['tasks'].values():
         paths.extend(Path(p) for p in task['templates'])
     files = {str(p): hashlib.sha256(regular_path(str(_path(str(p), exclusions))).read_bytes()).hexdigest()
              for p in sorted(set(paths))}
-    # read() observes only the public control document, never counter/profile stores.
+    # Membership is user-owned hot control, including an empty paused pool.
+    # Pin all other bytes and the exact public location, without touching state.
+    control = regular_path(str(_path(candidate['execution_pool_routes'], exclusions)))
     from .execution_pool import _module
     try:
-        raw, enabled, _ = runtime.execution_pool.pool.read()
-        runtime.execution_pool.pool.eligible(enabled, candidate['profiles'])
+        pool = _module.Pool(control)
+        raw, _, _ = pool.read()
+        pool_control = pool.control_binding(raw)
     except _module.PoolError as exc:
         raise Refusal('current public pool unavailable: '+str(exc)) from exc
-    if set(enabled) != {'.codex2', '.codex3', '.codex5'}:
-        raise Refusal('current automatic pool must remain 2/3/5, excluding 0/4')
-    return {'root': str(root), 'files': files, 'pool_control': hashlib.sha256(raw).hexdigest(),
-            'enabled': enabled, 'qualification': 'source bytes only; no installed provider/native or deployment claim'}
+    return {'root': str(root), 'files': files, 'pool_control': pool_control,
+            'qualification': 'source bytes only; no installed provider/native or deployment claim'}
 
 
 def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False):
@@ -115,7 +116,7 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
     root = directory.parent.parent
     old_directory = Path(value['operator_cli']).parent
     value.update(board_library=str(root/'tools/message-board'), operator_cli=str(directory/'coordinator'),
-                 operator_config=operator_config)
+                 operator_config=operator_config, profiles=sorted(PROFILES))
     # Retention is a separately supplied dependency; this repository does not
     # contain retention.py. Preserve its explicit selector unless Work selects
     # another actual compatible provider, and pin that public dependency.
