@@ -34,3 +34,23 @@ unauthorized-task holds. They exercise real owned fixture processes, WAL locks
 and the ordinary CLI/socket control route. They establish neither Luna semantic
 judgment nor recovery of the reported live startup failures. Actual runtime
 qualification and source adoption remain with the operating Work owner.
+
+RPC response collection uses one existing timeout budget for send/drain and the
+matching response together. Transport backpressure therefore cannot postpone
+starting that budget. Cancellation clears the local pending correlation; a late
+response cannot turn a timed-out request into success. Bytes may already have
+been written, so timeout still leaves thread creation uncertain and grants no
+replay. The default numeric budget remains 20 seconds.
+
+The dispatcher yields before each synchronous phase, including after a preceding
+phase records an error. This lets ready readers, timers and control connections
+run between phases while preserving phase order and all phase checks. A single
+synchronous Board lock, SQLite wait, source check or phase can still block the
+loop; these yields neither interrupt it nor provide a hard wall-clock bound.
+
+`test_coordination366` contrasts blocked drain, combined send/response delay and
+ready control/reader scheduling against immutable source. Its phases, transport
+and control callback are fictional. It executes the real `Peer` and `tick`
+boundaries, retains an independent held-phase error and demonstrates subsequent
+phase progress. It does not exercise full Board work or qualify actual service
+latency, installed protocol/context compatibility or the historical timeout cause.

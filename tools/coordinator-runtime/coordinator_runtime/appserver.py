@@ -220,9 +220,11 @@ class Peer:
         progress = {"method": method, "state": "sending"}
         self.progress.append(progress)
         try:
-            await self.send({"id": number, "method": method, "params": params})
-            progress["state"] = "awaiting-response"
-            response = await asyncio.wait_for(future, timeout)
+            # The existing budget covers transport backpressure as well as the
+            # response. A cancelled/timed-out send may already have written bytes;
+            # it does not prove rejection or permit replay of thread/start.
+            response = await asyncio.wait_for(
+                self.exchange(number, method, params, future, progress), timeout)
             progress["state"] = "response-received"
             if "error" in response:
                 raise RpcFailure(method, response["error"])
@@ -239,6 +241,13 @@ class Peer:
         finally:
             progress["elapsed_ms"] = round((asyncio.get_running_loop().time()-started)*1000)
             self.pending.pop(number, None)
+            if not future.done():
+                future.cancel()
+
+    async def exchange(self, number, method, params, future, progress):
+        await self.send({"id": number, "method": method, "params": params})
+        progress["state"] = "awaiting-response"
+        return await future
 
     async def read(self):
         try:

@@ -544,6 +544,10 @@ class Dispatcher:
         for operation in (self.receipts, self.reconcile_completed, self.intake,
                           self.schedule_classifications, self.schedule_classification_recovery,
                           self.schedule_job, self.schedule_recovery, self.custodian_progress, self.automatic_cleanup):
+            # Give owned readers, RPC timers and control connections a turn
+            # between phases. Each synchronous phase still runs all its checks;
+            # a single blocking operation remains a responsiveness limit.
+            await asyncio.sleep(0)
             subject = 'dispatcher-phase:' + operation.__name__
             try:
                 operation()
