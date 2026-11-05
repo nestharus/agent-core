@@ -269,7 +269,7 @@ def report_only(task):
 
 def scoped_startup(task):
     from .bounded_log import selected
-    return report_only(task) or selected(task)
+    return report_only(task) or selected(task) or task.get('startup') == 'explicit-packet'
 
 
 def scoped_task(name, task, admission):
@@ -285,7 +285,19 @@ def scoped_task(name, task, admission):
     if not isinstance(scope, dict) or not scope.get("procedure") or not scope.get("resource_evidence"):
         raise Refusal("actual package procedure, resource-owner evidence and task scope are missing")
     roots = scope.get("write_roots", []) + scope.get("read_roots", []) + [scope.get("cwd", "")]
+    if any(Path(p) == Path(e) or Path(p).is_relative_to(Path(e)) or Path(e).is_relative_to(Path(p))
+           for p in roots for e in task.get('scope_exclusions', [])):
+        raise Refusal('package scope crosses known exclusion before metadata')
     allowed = [Path(p) for p in task["scope_roots"]]
+    # An external common Git ceiling is conditional on the actual paired cwd.
+    # It never grants its parent, peer repository or unrelated package access.
+    linked_checks = []
+    for pair in task.get('linked_repositories', []):
+        if scope.get('cwd') == pair['repository']:
+            common = Path(pair['common_git'])
+            if any(Path(p).is_relative_to(common) for p in roots):
+                allowed.append(common)
+                linked_checks.append(pair)
     private = [Path.home()/p for p in PROFILES]
     for value in roots:
         path = Path(value)
@@ -293,6 +305,11 @@ def scoped_task(name, task, admission):
                 or any(path.is_relative_to(p) or p.is_relative_to(path) for p in private)
                 or any(p.is_symlink() for p in (path, *path.parents)) or ".." in path.parts):
             raise Refusal("package scope escapes selected roots or crosses a symlink/private boundary")
+    for pair in linked_checks:
+        from .reviews import git
+        actual = git(pair['repository'], 'rev-parse', '--path-format=absolute', '--git-common-dir').decode().strip()
+        if actual != pair['common_git']:
+            raise Refusal('associated common Git topology changed')
     network = scope.get("network", False)
     if type(network) is not bool or (network and not task.get("network", False)):
         raise Refusal("admission cannot expand selected network authority")

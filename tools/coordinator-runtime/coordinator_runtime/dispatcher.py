@@ -93,9 +93,9 @@ def job_prompt(store, job, task=None):
     if any(digest(event) != member["hash"] for member, event in zip(members, events)):
         raise Refusal("frozen material changed; hold instead of silently refreshing batch")
     attempt = store.attempt(job["active_attempt"])
-    frozen_artifacts = custody.materialize(store, events, attempt['id'])
+    frozen_artifacts = custody.materialize(store, events, attempt['id'], task)
     prior=json.loads(attempt['detail'])
-    prior_artifacts=custody.materialize(store,[{'artifact_witnesses':prior.get('prior_artifact_witnesses',[])}],attempt['id'])
+    prior_artifacts=custody.materialize(store,[{'artifact_witnesses':prior.get('prior_artifact_witnesses',[])}],attempt['id'],task)
     context = {"role": job["role"], "phase": job["phase"], "reservation": job["id"],
                "collector": store.controller, "attempt": attempt["id"], "package": job["package"],
                "target_and_why": task["purpose"], "authority": task["authority"],

@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 
 from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode, scoped_task
-from .custody import safe_path, read_file
+from .custody import safe_path, read_file, guard_path
 from . import prospective, qa_source
 
 SCHEMA = """
@@ -42,6 +42,7 @@ def scoped_path(store, path, roots):
 
 
 def frozen_file(store, path, roots, expected=None):
+    guard_path(store, path)
     body, witness = read_file(scoped_path(store, path, roots), 4 * 1024 * 1024)
     if expected is not None and witness['sha256'] != expected:
         raise Refusal('admitted executable/procedure bytes changed')

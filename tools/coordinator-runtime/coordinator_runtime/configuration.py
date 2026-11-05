@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 
-from .contracts import Refusal, digest, encode, regular_path, required_text, validate_config, parse_json, PROFILES
+from .contracts import Refusal, digest, encode, regular_path, required_text, validate_config, parse_json, PROFILES, scoped_startup
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS configuration_transitions(
@@ -92,9 +92,13 @@ def release(runtime, candidate):
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
              Path(candidate['canonical_publication']['library'])/'retention.py', operator]
     for task in candidate['tasks'].values():
-        paths.extend(Path(p) for p in task['templates'])
-    files = {str(p): hashlib.sha256(regular_path(str(_path(str(p), exclusions))).read_bytes()).hexdigest()
-             for p in sorted(set(paths))}
+        paths.extend(Path(p) for p in task['templates']
+                     if not (scoped_startup(task) and Path(p).name in {'AGENTS.md', 'WORK_LOG.md'}))
+    from .custody import refuse_log
+    files = {}
+    for p in sorted(set(paths)):
+        refuse_log(p)
+        files[str(p)] = hashlib.sha256(regular_path(str(_path(str(p), exclusions))).read_bytes()).hexdigest()
     # Membership is user-owned hot control, including an empty paused pool.
     # Pin all other bytes and the exact public location, without touching state.
     control = regular_path(str(_path(candidate['execution_pool_routes'], exclusions)))
@@ -109,7 +113,7 @@ def release(runtime, candidate):
             'qualification': 'source bytes only; no installed provider/native or deployment claim'}
 
 
-def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False):
+def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False, scope_options=None):
     """Produce a draft for Work inspection; does not select or write a config."""
     value = copy.deepcopy(runtime.config)
     directory = Path(__file__).resolve().parents[1]
@@ -117,6 +121,7 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
     old_directory = Path(value['operator_cli']).parent
     value.update(board_library=str(root/'tools/message-board'), operator_cli=str(directory/'coordinator'),
                  operator_config=operator_config, profiles=sorted(PROFILES))
+    value['release_scope_tasks'] = list(scope_tasks)
     # Retention is a separately supplied dependency; this repository does not
     # contain retention.py. Preserve its explicit selector unless Work selects
     # another actual compatible provider, and pin that public dependency.
@@ -155,7 +160,70 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
             'bounded_log': {'target': logs[0], 'max_lines': 12, 'max_bytes': 8192, 'max_entry_bytes': 16384}}
     if set(scope_tasks) - set(value['tasks']):
         raise Refusal('unknown task in current configuration draft')
+    if scope_options is not None:
+        apply_scope_options(runtime.config, value, scope_options)
+    for task in value['tasks'].values():
+        if task.get('require_package_scope'):
+            task['scope_exclusions'] = list(value.get('artifact_exclusions', []))
     return value
+
+
+def apply_scope_options(original, value, options):
+    """Explicit future narrowing and associated resource ceilings, never old policy edits."""
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories'}:
+        raise Refusal('unsupported prospective scope option')
+    exclusions = options.get('exclusions', [])
+    if not isinstance(exclusions, list):
+        raise Refusal('explicit additional exclusions required')
+    # Lexical exclusion union only. Never stat an exclusion or seek its aliases.
+    for p in exclusions:
+        path = Path(required_text(p, 'known exclusion', 4000))
+        if not path.is_absolute() or '..' in path.parts:
+            raise Refusal('absolute known exclusion required')
+        if p not in value.setdefault('artifact_exclusions', []):
+            value['artifact_exclusions'].append(p)
+    def safe(p):
+        from .resource_scopes import root
+        return root(p, value.get('artifact_exclusions', []))
+    reads = options.get('read_roots', {})
+    linked = options.get('linked_repositories', {})
+    neutral = options.get('neutral_startup', [])
+    if not isinstance(reads, dict) or not isinstance(linked, dict) or not isinstance(neutral, list):
+        raise Refusal('exact task read scopes, linked repositories and startup selections required')
+    if (set(reads) | set(linked) | set(neutral)) - set(value['tasks']):
+        raise Refusal('unknown prospective scoped task')
+    for name, roots in reads.items():
+        if not isinstance(roots, list) or not roots:
+            raise Refusal('nonempty explicit future read roots required')
+        allowed = value['tasks'][name]['effect_authority']['read_roots']
+        retention = str(Path(value['canonical_publication']['library'])/'retention.py')
+        for p in roots:
+            path = safe(p)
+            if not (p == retention or any(path.is_relative_to(Path(r)) for r in allowed)):
+                raise Refusal('read roots may only narrow existing/release authority or select exact retention.py')
+            # No broad ancestor containing a known exclusion is a safe read scope.
+            if any(Path(e).is_relative_to(path) for e in value.get('artifact_exclusions', [])):
+                raise Refusal('read root contains a known exclusion; select exact safe inputs')
+        value['tasks'][name]['effect_authority']['read_roots'] = list(dict.fromkeys(roots))
+    for name in neutral:
+        task = value['tasks'][name]
+        task['startup'] = 'explicit-packet'
+        task['templates'] = [p for p in task['templates'] if Path(p).name not in {'AGENTS.md','WORK_LOG.md'}]
+    for name, records in linked.items():
+        task = value['tasks'][name]
+        if task['role'] not in {'Branch','QA'} or not task.get('require_package_scope') or not isinstance(records, list) or not records:
+            raise Refusal('associated common Git ceiling needs an existing scoped Branch/QA task')
+        for record in records:
+            if not isinstance(record, dict) or set(record) != {'repository','common_git'}:
+                raise Refusal('exact repository/common Git pair required')
+            repo, common = safe(record['repository']), safe(record['common_git'])
+            if (not any(repo.is_relative_to(Path(p)) for p in task['scope_roots'])
+                    or common.name != '.git' or common == repo or repo.is_relative_to(common)):
+                raise Refusal('narrow associated common Git path and already admitted repository required')
+            # No general home/AI grant. This separate ceiling is usable only with
+            # its paired cwd and freshly verified actual topology in scoped_task.
+        task['linked_repositories'] = copy.deepcopy(records)
+    value['prospective_scope_selection'] = copy.deepcopy(options)
 
 
 def validate_changes(runtime, value, tasks):
@@ -166,19 +234,20 @@ def validate_changes(runtime, value, tasks):
     # Reconstruct the permitted change. All other identities, grants, task
     # effects/bindings/capacities, recipients, limits, policies and fences freeze.
     root = str(Path(__file__).resolve().parents[3])
-    additions = []
-    for name, task in value['tasks'].items():
-        old = runtime.config['tasks'].get(name, {})
-        if task.get('scope_roots') != old.get('scope_roots') or task.get('effect_authority', {}).get('read_roots') != old.get('effect_authority', {}).get('read_roots'):
-            additions.append(name)
+    additions = value.get('release_scope_tasks', [])
+    if not isinstance(additions, list) or len(set(additions)) != len(additions) or set(additions) - set(value['tasks']):
+        raise Refusal('exact release source-task list required')
     bounded = any(t.get('routine_completion') != runtime.config['tasks'][name].get('routine_completion') for name,t in value['tasks'].items())
-    expected = candidate(runtime, value['operator_config'], additions, value.get('canonical_publication', {}).get('library'), bounded)
+    options = value.get('prospective_scope_selection')
+    expected = candidate(runtime, value['operator_config'], additions, value.get('canonical_publication', {}).get('library'), bounded, options)
     if bounded and any(name not in tasks for name,t in value['tasks'].items() if t.get('routine_completion') != runtime.config['tasks'][name].get('routine_completion')):
         raise Refusal('changed bounded completion policy needs selected prospective Work task')
     if value != expected:
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
+    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {}))) - set(tasks):
+        raise Refusal('every changed future scope/startup needs an explicitly selected task')
     # Scoped_task still narrows each actual package; this grants no writes or
     # Root acceptance. Broad ancestors and peer checkout roots cannot enter.
     if any(root not in value['tasks'][name]['scope_roots'] for name in additions
@@ -192,11 +261,16 @@ def journal(runtime):
     for table in runtime.rows("SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name"):
         name = table['name'].replace('"', '""')
         hasher, count = hashlib.sha256(), 0
-        for row in runtime.db.execute(f'SELECT * FROM "{name}" ORDER BY rowid'):
-            # Local artifact_blobs contain bytes. Bind those without exposing them.
+        query = ("SELECT sha256,length(body) AS opaque_bytes FROM artifact_blobs ORDER BY rowid"
+                 if table['name'] == 'artifact_blobs' else f'SELECT * FROM "{name}" ORDER BY rowid')
+        for row in runtime.db.execute(query):
+            # Retained blobs may contain a forbidden whole log. Bind only their
+            # existing custody key/size, never reacquire/hash historical bodies.
             values = [ {'bytes_sha256': hashlib.sha256(v).hexdigest(), 'length': len(v)} if isinstance(v, bytes) else v for v in row]
             hasher.update(encode(values).encode()+b'\n'); count += 1
         result[table['name']] = {'rows': count, 'hash': hasher.hexdigest(), 'schema': digest(table['sql'])}
+        if table['name'] == 'artifact_blobs':
+            result[table['name']]['body_observation'] = 'opaque retained key/length only; body integrity unobserved'
     return result
 
 

@@ -11,7 +11,7 @@ import stat
 from contextlib import contextmanager, ExitStack
 
 from .contracts import Refusal, encode, artifact_paths, digest
-from .custody import capture, read_file, safe_path
+from .custody import capture, read_file, safe_path, frozen_body, refuse_log
 from .cleanup import open_parent
 from . import bounded_log
 
@@ -112,9 +112,12 @@ def prepare(store, attempt, before, policy=None):
     root=store.home/'artifacts'/attempt/'staged'
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
+        bounded_entry = policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target']
+        if not bounded_entry:
+            refuse_log(target)
         path=root/(str(index)+'-'+Path(target).name)
-        body=(b'' if policy and policy['kind'] == bounded_log.KIND and target == policy['bounded_log']['target'] else
-              store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(witness['sha256'],))['body'] if witness['exists'] else b'')
+        body=(b'' if bounded_entry else
+              frozen_body(store, witness['sha256'], path=target)['body'] if witness['exists'] else b'')
         store.budget(None,len(body)+1024)
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,'wb') as stream:stream.write(body);stream.flush();os.fsync(stream.fileno())
@@ -207,7 +210,7 @@ def locked_publish(store, board, job, attempt, run, task):
         if not held or held['sha256']!=witness['sha256']:raise Refusal('proposed file lacks exact durable custody')
         proposed[target]=(body,witness)
         old=store.one('SELECT * FROM file_publications WHERE attempt=? AND target=?',(attempt['id'],target))
-        expected_bytes=body if old and old['state']=='published' else store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(before[target]['sha256'],))['body']
+        expected_bytes=body if old and old['state']=='published' else frozen_body(store, before[target]['sha256'], task, target)['body']
         observed=current(safe_path(target,order),maximum,expected_bytes)
         if old:
             if old['state']!='published':raise Refusal('interrupted same-inode write remains uncertain; no blind replay')
@@ -221,7 +224,7 @@ def locked_publish(store, board, job, attempt, run, task):
     for index,target in enumerate(order):
         row=store.one('SELECT * FROM canonical_backups WHERE attempt=? AND target=?',(attempt['id'],target))
         if row:continue  # Never rewrite/reclaim an existing recovery source.
-        source=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(before[target]['sha256'],))['body']
+        source=frozen_body(store, before[target]['sha256'], task, target)['body']
         path=backups/(str(index)+'-'+Path(target).name+'.before.gz')
         store.budget(None,len(source)+65536)
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
@@ -238,7 +241,7 @@ def locked_publish(store, board, job, attempt, run, task):
         if old:continue
         fence()
         path=safe_path(target,order)
-        preimage=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(before[target]['sha256'],))['body']
+        preimage=frozen_body(store, before[target]['sha256'], task, target)['body']
         if current(path,maximum,preimage)!=before[target]:raise Refusal('canonical preimage changed immediately before write')
         if before[target]['sha256']==witness['sha256']:
             with store.tx():store.db.execute("INSERT INTO file_publications VALUES(?,?,'published',?,NULL,?,NULL)",(attempt['id'],target,witness['sha256'],encode(before[target])))

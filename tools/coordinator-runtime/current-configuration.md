@@ -23,8 +23,9 @@ root, network capability or operation is added.
 
 Roles/owners/receive profiles, actor, original state directory and board,
 software grantor/authority, recipients, task bindings/effects/capacities,
-routine publication targets, limits, exclusions, holds and policies cannot
-change through this narrow API. Work selects the prospective task allowlist
+routine publication targets, limits, original exclusions, holds and policies
+remain conserved. Explicit future read narrowing, neutral startup, associated
+common Git ceilings and additional exclusions use the scope options below. Work selects the prospective task allowlist
 with repeated `--task`; newly added source scopes must be in it. Current
 processing can use only those tasks and genuinely future sources. It cannot
 select retained events, historical control recovery or legacy-hold disposition.
@@ -185,3 +186,105 @@ and changes only the Work integrator completion method. Original policies/grants
 remain immutable. Fresh basis/selection and real prospective completion authority
 are still required; no old job can inherit it. The exact catalog/ref custody APIs,
 receipt shapes and interruption limits are in [bounded-catalog.md](bounded-catalog.md).
+
+## Narrow future operating scopes
+
+`draft-current-configuration --scope-options PUBLIC_JSON` can be combined with
+`--source-task`, `--bounded-work-log` and the exact `--retention-library` selector.
+The optional JSON has only these fields:
+
+```json
+{
+  "read_roots": {"work-proposer": ["/authorized/exact/report.md"]},
+  "neutral_startup": ["work-proposer", "work-integrator"],
+  "exclusions": ["/known/held/path"],
+  "linked_repositories": {
+    "branch-integrator": [{"repository": "/authorized/release", "common_git": "/associated/.git"}]
+  }
+}
+```
+
+Read roots replace future task reads with nonempty narrower existing/release
+scopes. The selected provider's exact `retention.py` is also permitted; its
+parent library, home and AI are not general read grants. Choose exact safe report
+files/directories and needed source directories, not an ancestor containing an
+exclusion. Keep the six catalog reads explicit; the bounded old log has its own
+prefix/opaque-conservation procedure and needs no whole-log read grant.
+Exclusions are a lexical monotonic union with the original list. Supply every
+actually identified current exclusion from the operating bounds, including
+known mixed streams and the held Root runs subtree; do not query them or seek
+aliases. Unknown derivatives remain held, never implicitly cleared.
+
+Neutral startup selects `explicit-packet` for named coordinator tasks and removes
+AGENTS/WORK_LOG templates before source-manifest acquisition. The release and
+prompt also filter them before access, and app-server startup disables project
+doc loading. Necessary source/report operations remain typed as before; this
+is not a relabeling as report-only, an exact model read-isolation claim, or a
+change to the genuine coding Root's context. Select neutral startup for every
+coordinator whose startup must use explicit packets. Every scoped/read/startup
+change must belong to the prospective task allowlist.
+
+A linked-repository pair adds a separate conditional common-Git ceiling for an
+already package-scoped Branch/QA task. It does not add general scope_roots,
+canonical writes, network, refs or acceptance. The paired repository must already
+be under its task's ceiling. A package using that common path must have that
+exact repository cwd and freshly matching `git rev-parse --path-format=absolute
+--git-common-dir`; mismatch refuses. Admission still supplies the exact read and
+write roots, local-ref procedure/resources and accepted association. For the
+existing AI linked checkout, the known common path is `/home/nes/ai/.git`, not
+an ancestor grant to `/home/nes/ai`. The declared association is checked at use;
+it is not a historical map or deployment qualification.
+
+The draft records its source-task list and scope options so exact-delta
+validation can reconstruct them, including read narrowing after source additions.
+Original configs/grants/job policies remain immutable. Configuration basis binds
+historical artifact blobs by their retained key and length only: it never
+acquires or rehashes those bodies. Their body integrity remains unobserved there;
+needed permitted bodies are validated at their own acquisition boundary.
+
+## Exact original owner disposition before transition
+
+Prefer the existing procedure when its real local conditions truthfully permit
+the next operation. The current-config transition grants no historical-owner
+operation. While ORIGINAL_CONFIG is still current, actual Work can take
+`processing-basis`, issue an appropriate bounded preparation capability with
+`delegate-processing --selection PREPARATION`, then request:
+
+```sh
+RELEASE/tools/coordinator-runtime/coordinator --config ORIGINAL_CONFIG \
+  processing-owner-source PREPARATION_CAP Work legacy-disposition Work
+```
+
+ProcessingBoard verifies retained owner authority; the source projection no
+longer requires reopening revoked intake. This returns the exact prior hold,
+effect jobs and `local_resource_disposition`:
+all unresolved local role effect jobs, uncollected originals linked through jobs
+OR events (including classifier/ACK/control attempts), nonpublished file intents,
+unreconciled ordinary intents and retained resource leases. ALL local epoch165
+obligations count, not just an apparently quiet next job. A free service lock,
+old numeric END or absent publication intent supplies no missing fact.
+
+Collect/release and explicitly revoke preparation authority; take a fresh
+`processing-basis`. Actual Work selects the exact request in `owner_operations`
+of a fresh `delegate-processing --selection OWNER_SELECTION`. The request shape
+is `{kind:"legacy-disposition",role:"Work",target:"Work",prior:EXACT_HOLD,
+receipt:{collector:ACTUAL_ORIGINAL_COLLECTOR,evidence:[ACTUAL_EVIDENCE],
+remaining_holds:[UNDISPOSED_RESOURCE_CONSTRAINTS]}}`. The genuine original Work
+owner, under its existing verified processing-owner authority, then invokes:
+
+```sh
+RELEASE/tools/coordinator-runtime/coordinator --config ORIGINAL_CONFIG \
+  processing-owner-apply OWNER_CAP --request EXACT_REQUEST
+```
+
+Nonempty holds record disposition without clearing the fence or altering old
+jobs/effects. Empty remaining_holds is truthful only for an independently
+supported exact prospective-resource disposition AND no listed local blocker;
+apply rechecks all local conditions transactionally. External old44/17 custody
+is separate and remains conserved. It is neither automatically cleared nor a
+reason to invent local blockers. Source-only work cannot establish actual
+eligibility, owner availability, collection, consent or exact-resource evidence.
+Do not fill an unknown with `[]`, reopen revoked intake, borrow an owner or
+fabricate a historical scope map. If conditions do not pass, retain the affected
+effect hold and return the concrete missing fact to actual Work. This correction
+adds no Work-account framework or blanket waiver.

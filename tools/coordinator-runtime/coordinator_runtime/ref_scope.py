@@ -124,6 +124,8 @@ def account(store, actor, receipt):
     actual = material(store, basis['task'], basis['package'])
     if actual != basis or actor != actual['custodian']:
         raise Refusal('actual retained custodian and fresh exact prospective basis required')
+    if not historical_resources_clear(store, actual):
+        raise Refusal('original historical resource scope/overlap remains unknown or conflicting; activity closure is separate')
     required_text(receipt['authority'], 'actual custodian current-operation authority and rationale')
     if (not isinstance(receipt['remaining_holds'], list) or actual['original_hold'] not in receipt['remaining_holds']
             or not isinstance(receipt['past_effects'], list) or not receipt['past_effects']):
@@ -168,6 +170,8 @@ def eligible(store, row, task):
         actual = material(store, row['task'], row['package'])
     except (Refusal, OSError, KeyError):
         return False
+    if not historical_resources_clear(store, actual, row.get('id')):
+        return False
     # Current job/attempt progression is not a change to historical activity.
     records = store.rows('SELECT * FROM ref_scope_accounts WHERE actor=?', (actual['custodian'],))
     for record in records:
@@ -177,3 +181,42 @@ def eligible(store, row, task):
         if current == previous:
             return True
     return False
+
+
+def historical_resources_clear(store, actual, current_job=None):
+    """Only original frozen/executed maps can establish ref independence.
+
+    Collected END and no-active-writer evidence cannot replace missing scope.
+    Conservative refusal retains the original hold and all past-effect custody.
+    """
+    for job in actual['unresolved_jobs']:
+        if job['id'] == current_job:
+            continue
+        frozen = job['original_resource_policy']
+        if not frozen or not frozen['admission']:
+            return False
+        try:
+            # The exact task key is retained on the original job, not the new admission.
+            old = store.job(job['id'])
+            if scope_excluded(store, old['task'], json.loads(frozen['admission'])):
+                return False
+            task = scoped_task(old['task'], json.loads(frozen['task']), json.loads(frozen['admission']))
+            policy = task.get('admitted_scope', {}).get('ordinary_effects', {})
+            if policy.get('kind') != 'local-ref' or task.get('network'):
+                return False
+            runs = store.rows('SELECT policy,receipt FROM ordinary_runs WHERE attempt IN (SELECT id FROM attempts WHERE job=?)', (job['id'],))
+            if not runs:
+                return False
+            for run in runs:
+                if json.loads(run['policy']) != policy or not run['receipt']:
+                    return False
+                source = json.loads(run['receipt']).get('before', {})
+                identity = source.get('common_repository', {})
+                if not all(type(identity.get(k)) is int for k in ('dev','ino')):
+                    return False
+                same = all(identity[k] == actual['common_repository'][k] for k in ('dev','ino'))
+                if same and {policy['source_ref'], policy['ref']} & {r['ref'] for r in actual['local_refs']}:
+                    return False
+        except (Refusal, KeyError, TypeError, ValueError):
+            return False
+    return True

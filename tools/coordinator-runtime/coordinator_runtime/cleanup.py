@@ -23,6 +23,8 @@ def regular_identity(path):
 
 
 def register_artifact(store, attempt, path):
+    from .custody import guard_path
+    guard_path(store, path)
     root = store.home / "artifacts" / attempt
     path = Path(path)
     if not path.is_absolute() or not path.is_relative_to(root):

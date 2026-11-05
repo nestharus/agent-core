@@ -28,6 +28,7 @@ def safe_path(path, roots):
 
 
 def read_file(path, maximum):
+    refuse_log(path)
     parent = os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try:
         for part in path.parts[1:-1]:
@@ -61,11 +62,57 @@ def read_file(path, maximum):
         os.close(parent)
 
 
+def refuse_log(path, task=None):
+    log = (task or {}).get('routine_completion', {}).get('bounded_log', {}).get('target')
+    if Path(path).name == 'WORK_LOG.md' or log and str(path) == log:
+        raise Refusal('whole-log acquisition unavailable; bounded entry/operation receipt only')
+
+
+def guard_frozen(store, sha256, task=None, path=None):
+    """Check retained origin metadata BEFORE acquiring any cached body.
+
+    A renamed witness or cached input does not erase its known original custody.
+    This neither searches for aliases nor alters/deletes the retained source.
+    """
+    if path is not None:
+        refuse_log(path, task)
+        refuse_excluded(store, path)
+    for row in store.rows('SELECT path FROM artifact_custody WHERE sha256=?', (sha256,)):
+        refuse_log(row['path'], task)
+        refuse_excluded(store, row['path'])
+    # Older file-witness snapshots conserved blobs without artifact_custody.
+    # Consult their existing preimage keys, not bodies or filesystem aliases.
+    for row in store.rows("SELECT j.key AS path FROM routine_runs r,json_each(r.before_files) j WHERE json_extract(j.value,'$.sha256')=?", (sha256,)):
+        refuse_log(row['path'], task)
+        refuse_excluded(store, row['path'])
+
+
+def refuse_excluded(store, path):
+    if any(Path(path) == Path(p) or Path(path).is_relative_to(Path(p))
+           for p in store.config.get('artifact_exclusions', [])):
+        raise Refusal('opaque source excluded before acquisition')
+
+
+def guard_path(store, path, task=None):
+    refuse_log(path, task)
+    refuse_excluded(store, path)
+    known = store.one('SELECT sha256 FROM artifacts WHERE path=?', (str(path),))
+    if known:
+        guard_frozen(store, known['sha256'], task, path)
+    for stage in store.rows('SELECT s.target,r.policy FROM routine_stages s LEFT JOIN routine_runs r ON r.attempt=s.attempt WHERE s.path=?', (str(path),)):
+        policy = json.loads(stage['policy']) if stage['policy'] else {}
+        from .bounded_log import KIND
+        if Path(stage['target']).name == 'WORK_LOG.md' and policy.get('kind') != KIND:
+            raise Refusal('historical whole-log stage remains original custody; no acquisition')
+
+
+def frozen_body(store, sha256, task=None, path=None):
+    guard_frozen(store, sha256, task, path)
+    return store.one('SELECT body FROM artifact_blobs WHERE sha256=?', (sha256,))
+
+
 def capture(store, attempt, path, task, role_owned=False):
-    from .bounded_log import selected
-    log = task.get('routine_completion', {}).get('bounded_log', {}).get('target')
-    if Path(path).name == 'WORK_LOG.md' or selected(task) and str(path) == log:
-        raise Refusal('whole-log artifact capture unavailable; bounded entry/operation receipt only')
+    guard_path(store, path, task)
     root = store.home/'artifacts'/attempt
     authority = task['effect_authority']
     candidate = Path(path)
@@ -130,14 +177,18 @@ def witnesses(store, attempt):
             for r in store.rows('SELECT * FROM artifact_custody WHERE attempt=?', (attempt,))]
 
 
-def materialize(store, events, attempt):
+def materialize(store, events, attempt, task=None):
     """Give the worker only its declared frozen input bytes, not journal access."""
     result = []
     for event in events:
         for w in event.get('artifact_witnesses', []):
             if w.get('custody') != 'artifact_blobs':
                 continue
-            row = store.one('SELECT body FROM artifact_blobs WHERE sha256=?', (w['sha256'],))
+            # Refuse even if an input copy already exists or custody is inherited.
+            # The witness origin must be present; opaque hashes are no authority.
+            if not w.get('path'):
+                raise Refusal('frozen artifact needs its retained original path')
+            row = frozen_body(store, w['sha256'], task, w['path'])
             if not row or hashlib.sha256(row['body']).hexdigest() != w['sha256']:
                 raise Refusal('required frozen artifact custody is unavailable')
             root = store.home/'artifacts'/attempt/'inputs'

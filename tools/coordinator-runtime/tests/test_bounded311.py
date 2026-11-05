@@ -427,12 +427,12 @@ class RefOperations(Base):
         self.assertTrue(resource_scopes.blocked(self.store,self.pending))
         with self.assertRaises(Refusal):self.qualify()
 
-    def test_unresolved_past_with_actual_closed_originals_can_qualify_but_unknown_activity_cannot(self):
+    def test_unknown_original_scope_stays_fenced_after_collected_END_and_closed_activity(self):
         self.ready()
         self.store.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created,effects) VALUES('fictional-old','Branch','integrator','bi','fictional-old-scope','[]','fictional-old-collector','old-token',900,'unknown')")
         self.store.db.execute("INSERT INTO attempts(id,kind,job,controller,profile,binding,created,begin,ended,exit,collected,capture) VALUES('fictional-old-original','task','fictional-old','fictional-old-collector',NULL,'{}',900,900,901,0,902,'unknown')")
-        self.qualify()
-        self.assertFalse(resource_scopes.blocked(self.store,self.pending))
+        with self.assertRaises(Refusal):self.qualify()
+        self.assertTrue(resource_scopes.blocked(self.store,self.pending))
         self.assertIsNone(self.store.one("SELECT * FROM job_resource_policies WHERE job='fictional-old'"))
         self.assertEqual(self.store.job('fictional-old')['effects'],'unknown')
         self.store.db.execute("UPDATE attempts SET collected=NULL WHERE id='fictional-old-original'")

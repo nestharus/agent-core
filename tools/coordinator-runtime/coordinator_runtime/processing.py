@@ -129,7 +129,12 @@ def owner_source(runtime, boards, key, role, kind, target):
     if kind == 'admit-package' and role == 'Branch':
         prior = runtime.one('SELECT * FROM admissions WHERE package=?', (target,))
     elif kind == 'legacy-disposition' and target == role:
-        prior = runtime.enrollment(role)['legacy_hold']
+        # ProcessingBoard already verifies actual retained owner authority.
+        # Source inspection must not require reopening revoked intake.
+        enrollment = runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))
+        if not enrollment or not enrollment['legacy_hold']:
+            raise Refusal('original retained resource hold required')
+        prior = enrollment['legacy_hold']
     elif kind == 'resolve-input' and runtime.event(target)['role'] == role and runtime.processing.event(runtime.event(target)):
         prior = {'source_hash': digest(runtime.event(target)), 'resolution': runtime.input_resolution(target)}
     else:
@@ -137,7 +142,24 @@ def owner_source(runtime, boards, key, role, kind, target):
     return {'kind': kind, 'role': role, 'target': target, 'prior': prior,
             'effect_jobs': runtime.rows('SELECT id,token,active_attempt,state,effects,hold_reason FROM jobs WHERE role=? ORDER BY created,id', (role,))
                            if kind == 'legacy-disposition' else [],
+            'local_resource_disposition': local_disposition(runtime, role) if kind == 'legacy-disposition' else None,
             'meaning': 'basis only; exact Work selection AND actual owner application required'}
+
+
+def local_disposition(runtime, role):
+    """All local role obligations, distinct from external historical custody.
+
+    This supplies procedure preconditions, never an automatic receipt or consent.
+    Classifier/ACK/control attempts linked to role events count too.
+    """
+    return {
+        'effect_jobs': runtime.rows("SELECT id,effects,hold_reason FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled') ORDER BY id", (role,)),
+        'uncollected_originals': runtime.rows('SELECT a.id,a.controller,a.ended,a.collected,a.exit FROM attempts a '
+            'LEFT JOIN jobs j ON j.id=a.job LEFT JOIN events e ON e.id=a.event '
+            'WHERE (j.role=? OR e.role=?) AND (a.collected IS NULL OR a.ended IS NULL OR a.exit IS NULL) ORDER BY a.id', (role, role)),
+        'publication_intents': runtime.rows("SELECT p.attempt,p.target,p.state FROM file_publications p JOIN attempts a ON a.id=p.attempt JOIN jobs j ON j.id=a.job WHERE j.role=? AND p.state!='published' ORDER BY p.attempt,p.target", (role,)),
+        'ordinary_intents': runtime.rows("SELECT o.attempt,o.state FROM ordinary_runs o JOIN attempts a ON a.id=o.attempt JOIN jobs j ON j.id=a.job WHERE j.role=? AND o.state!='reconciled' ORDER BY o.attempt", (role,)),
+        'resource_leases': runtime.rows('SELECT r.resource,r.attempt FROM ordinary_resources r JOIN attempts a ON a.id=r.attempt JOIN jobs j ON j.id=a.job WHERE j.role=? ORDER BY r.resource', (role,))}
 
 
 def apply_owner(runtime, boards, key, request, actor):
@@ -165,9 +187,7 @@ def apply_owner(runtime, boards, key, request, actor):
             # Nonempty remaining holds record useful owner disposition without
             # clearing the original hold or touching any old job/effect.
             cleared = not receipt['remaining_holds']
-            if cleared and (runtime.one("SELECT id FROM jobs WHERE role=? AND effects NOT IN ('none','reconciled') LIMIT 1", (role,))
-                    or runtime.one('SELECT a.id FROM attempts a JOIN jobs j ON j.id=a.job WHERE j.role=? AND (a.collected IS NULL OR a.ended IS NULL) LIMIT 1', (role,))
-                    or runtime.one("SELECT p.target FROM file_publications p JOIN attempts a ON a.id=p.attempt JOIN jobs j ON j.id=a.job WHERE j.role=? AND p.state!='published' LIMIT 1", (role,))):
+            if cleared and any(local_disposition(runtime, role).values()):
                 raise Refusal('original local job/collector/publication effects remain unresolved; exact owner recovery required')
             runtime.db.execute('UPDATE enrollments SET legacy_hold=?,reconciliation=? WHERE role=?',
                                (None if cleared else request['prior'], encode({'actor': actor, 'capability': key,

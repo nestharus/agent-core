@@ -151,3 +151,25 @@ and native config validation are explicit seams; real SQLite publication, kernel
 copies and Git CAS/tool capture execute. Original failed and successful captures
 and exact source maps remain with the producing Maker. Source checks establish
 no live all-goal completion, ordinary review encounter or native qualification.
+
+### Retained inputs and historical ref scope
+
+Whole-log refusal precedes controller acquisition, including member/prior
+artifact witnesses and known renamed cached inputs. Custody checks the supplied
+origin and retained custody paths before any blob SELECT/hash/copy; fresh capture,
+ordinary frozen-file reads and registration also guard known origins and legacy
+whole-log stages. A bounded entry stage remains a new entry. Generic legacy
+publication staging cannot acquire a whole-log preimage. Configuration binding
+uses opaque blob key/length only, with body integrity explicitly unobserved.
+No old witness is deleted or searched for in a real journal by this correction.
+An unmarked unknown alias is not discovered or certified by these checks.
+
+A Branch activity account cannot bypass missing original resource scope.
+Unresolved local jobs need their original frozen policy/admission and original
+executed common-repository identity/ref map to establish independence; unknown,
+network, overlapping or unmapped work remains fenced even after collected END
+and current no-active-writer assertions. Current candidate progression is
+separate. Historical constraints, unknown past effects, leases and custodians
+remain unchanged. Actual accepting Root/delegated builders, exact repository,
+origin/fullref/incarnation/head, CAS/readback and independent acceptance still
+apply; no worker/native ID becomes a coordinator.
