@@ -69,6 +69,12 @@ def _path(value, exclusions):
     return path
 
 
+def branch_release_sources(root):
+    """Exact public final-consumer dependencies outside the runtime module glob."""
+    return [root/'tools/branch_release.py', root/'tools/operational_contracts.py',
+            root/'tools/coordinator-runtime/final-release-risk.md']
+
+
 def release(runtime, candidate):
     """Actual public source bytes; no account probing, pool allocation or install."""
     directory = Path(__file__).resolve().parents[1]
@@ -90,7 +96,8 @@ def release(runtime, candidate):
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
-             Path(candidate['canonical_publication']['library'])/'retention.py', operator]
+             Path(candidate['canonical_publication']['library'])/'retention.py', operator,
+             *branch_release_sources(root)]
     for task in candidate['tasks'].values():
         paths.extend(Path(p) for p in task['templates']
                      if not (scoped_startup(task) and Path(p).name in {'AGENTS.md', 'WORK_LOG.md'}))
@@ -141,6 +148,12 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
                 path = str(root/'tools'/name)
                 if path not in authority['read_roots']:
                     authority['read_roots'].append(path)
+            if task['role'] == 'Branch':
+                # Existing Branch source authority, exact files only. No tools/
+                # ancestor grant, additional task, write, network or capacity.
+                for source in branch_release_sources(root):
+                    if str(source) not in authority['read_roots']:
+                        authority['read_roots'].append(str(source))
             if task.get('require_package_scope'):
                 if task['role'] not in {'Branch', 'QA'}:
                     raise Refusal('only scoped Branch/QA tasks may acquire the release repository scope')

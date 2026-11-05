@@ -6,11 +6,15 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 TOOLS = Path(__file__).resolve().parents[1] / 'tools'
 sys.path.insert(0, str(TOOLS))
 import branch_release as gate
+sys.path.insert(0, str(TOOLS / 'coordinator-runtime'))
+from coordinator_runtime import configuration
+from coordinator_runtime.contracts import Refusal
 
 FICTION = {key: None for key in ('native', 'profile', 'session', 'turn', 'provider', 'encounter')}
 
@@ -357,6 +361,39 @@ class BranchRelease(unittest.TestCase):
         self.assertBlocked(result, 'Derived check exceeds')
         self.assertLess(len(json.dumps(result).encode()), gate.MAX_BYTES)
         self.assertEqual((c, a, d), original)
+
+    def prospective_fixture(self):
+        tasks = {}
+        for role in ('Branch', 'QA', 'Work'):
+            tasks[role] = {'role': role, 'capacity': 1, 'profile': None, 'network': False,
+                           'effects': 'none', 'templates': ['/fixture-old/templates/role.md'],
+                           'effect_authority': {'operations': ['read-source'], 'read_roots': ['/fixtures'],
+                                                'write_roots': []}}
+        return SimpleNamespace(config={'operator_cli': '/fixture-old/coordinator', 'control_receive': {},
+            'classifier': {'cwd': '/fixtures'}, 'diagnosis': {'cwd': '/fixtures'}, 'tasks': tasks,
+            'profiles': [None], 'canonical_publication': {'library': '/fixtures/fixture-retention'}})
+
+    def test_prospective_source_selection_adds_exact_branch_consumer_files_only(self):
+        runtime = self.prospective_fixture()
+        original = deepcopy(runtime.config)
+        value = configuration.candidate(runtime, '/fixtures/fixture-current.json', ['Branch', 'QA'])
+        expected = {str(p) for p in configuration.branch_release_sources(TOOLS.parent)}
+        self.assertTrue(expected <= set(value['tasks']['Branch']['effect_authority']['read_roots']))
+        self.assertFalse(expected & set(value['tasks']['QA']['effect_authority']['read_roots']))
+        self.assertNotIn(str(TOOLS), value['tasks']['Branch']['effect_authority']['read_roots'])
+        self.assertEqual(value['tasks']['Work']['effect_authority'], original['tasks']['Work']['effect_authority'])
+        for role in value['tasks']:
+            for key in ('capacity', 'profile', 'network', 'effects'):
+                self.assertEqual(value['tasks'][role][key], original['tasks'][role][key])
+            self.assertEqual(value['tasks'][role]['effect_authority']['write_roots'], [])
+        self.assertEqual(runtime.config, original)
+        self.assertEqual(set(value['tasks']), set(original['tasks']))
+
+    def test_report_only_task_cannot_acquire_source_for_final_risk(self):
+        runtime = self.prospective_fixture()
+        runtime.config['tasks']['Branch']['effect_authority']['operations'] = ['read-reports']
+        with self.assertRaisesRegex(Refusal, 'already source-authorized'):
+            configuration.candidate(runtime, '/fixtures/fixture-current.json', ['Branch'])
 
     def test_actual_branch_consumer_cli_success_block_and_preserves_inputs(self):
         with retained_fixture() as root:
