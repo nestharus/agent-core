@@ -33,6 +33,22 @@ FAMILIES = {'organization-and-communication','cross-change-understanding','purpo
             'service-capability-and-headroom','operational-evidence-capabilities','agent-reasoning-integrity'}
 
 
+def proposal_result(returned, component, acquired, collector, attempt, turns):
+    """Conserve the original report for the task's sole integration response.
+
+    An ordinary Source report is internal proposal material. Only its integrator
+    can consolidate it and hand a result to Work; creating an outgoing handoff
+    here would bypass that responsibility or duplicate the internal response.
+    """
+    return {'semantic': returned['semantic'], 'summary': returned['summary'], 'category': 'proposal',
+            'findings': [{'kind': 'ordinary-review-full-return', 'component': component, 'material': acquired,
+                          'original_collector': collector, 'original_attempt': attempt, 'turns': turns}],
+            'failures': [], 'unknowns': [] if returned['semantic'] == 'DONE' else [returned['coverage']],
+            'artifacts': [], 'handoffs': [],
+            'no_handoff_reason': 'Whole original report travels in the internal proposal response to the sole '
+                                 'Reviews integrator; consolidated results/questions then return to Work.'}
+
+
 def coverage(returned,packet,architecture):
     """Account for the actual method, without treating a label as reading proof."""
     account=returned.get('coverage')
@@ -466,10 +482,7 @@ class Executor:
             # attestation of hidden provider session/turn identities.
             runtime.session(attempt, context['run'], str(turns[-1]['receipt']['turn']['input']),
                             {'identity_kind': 'observed-native-run', 'native_provider_session': 'not exposed'})
-            result = {'semantic': returned['semantic'], 'summary': returned['summary'], 'category': 'proposal',
-                      'findings': [{'kind': 'ordinary-review-full-return', 'component': component, 'material': acquired,
-                                    'original_collector': runtime.controller, 'original_attempt': attempt, 'turns': turns}],
-                      'failures': [], 'unknowns': [] if returned['semantic'] == 'DONE' else [returned['coverage']], 'artifacts': []}
+            result = proposal_result(returned,component,acquired,runtime.controller,attempt,turns)
             return {'exit': code, 'capture': 'complete', 'cleanup': 'continuing-context-held', 'result': result, 'error': None,
                     'detail': {'native_original_calls': turns,
                                'static_authority': 'selected static procedure; sole whole-command material facade; no exact read-isolation claim',
