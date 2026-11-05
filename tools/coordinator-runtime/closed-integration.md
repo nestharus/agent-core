@@ -163,6 +163,60 @@ reservation retains the reservation for actual owner disposition as below.
 Retired original execution cannot resume through this API. Genuine remaining
 work needs separately authorized new scope while retaining the original debt.
 
+Debt entries now identify their operational representation as
+`integration-debt-v1`. They retain current job, attempt, source, custody,
+recovery, queue, publication and outbox fields. Every attempt's semantic state,
+capture/cleanup/error, unknowns, partial reports and unrecognized detail fields
+remain inline. The execution fence retains its actor, reason and controller
+closures; an earlier attempt window retains its target/WHY, conflict and
+custodian evidence. These current duties and assertions, rather than a short
+identity alone, inform the owner's next decision. Assertions are still
+attributed evidence, not proof of actual custody or availability.
+
+Three repeated historical snapshots use `integration-evidence-ref-v1`:
+the fence's original `basis` TEXT column, the `basis` inside its receipt, and
+the `debt` inside an attempt detail's historical `integration_window.basis`.
+That earlier window's task, frozen members and enrollment remain inline.
+Whole original receipt/detail references also bind their exact text bytes.
+`basis_matches_receipt` exposes a conflicting fence/receipt snapshot directly.
+No database schema or historical row changes. A reference identifies table,
+primary key, column, optional JSON path, SHA-256 and encoded UTF-8 byte length.
+Hash/length cover `contracts.encode(value)`; for a whole TEXT column the value
+is the original string, including whitespace. JSON paths select inside that
+column's strictly parsed JSON. The enclosing raw-text reference also detects
+format-only changes. Older stored full witnesses keep their original format;
+they differ from a new view and require fresh owner selection rather than an
+automatic refresh or historical rewrite.
+
+Fuller evidence remains in the named existing journal rows. A consumer with
+independent authority for those rows can supply one to
+`integration_evidence.expand(reference, row)`, which verifies identity, path,
+length and digest without I/O. This is not a new CLI operation, read capability,
+grant, body-discovery instruction or permission to follow private references.
+Missing, changed or inaccessible originals remain gaps for the actual custodian;
+they do not become empty/settled duties. Existing custody, retention and access
+requirements still govern the original rows. Current mutable fields remain
+inline, and folded history remains hash-bound, so neither kind of change can
+silently reuse an old selection through reservation or launch.
+
+This reduces repeated transport, not acquisition, memory or transaction cost:
+the existing authorized row queries still load and hash those columns. There
+is no new responsiveness, cross-store durability or isolation guarantee.
+Other large current fields and unexpected historical formats remain intact;
+they can still exceed the unchanged bound and refuse without dropping duties.
+The separate alert-reporting behavior is unchanged.
+
+The source-only control below uses in-memory fictional journals, selected
+unchanged Store methods and fictional allocation. It exercises nested evidence,
+exact retained expansion, duty conservation, stale selection/reservation/start/
+launch authorization and owner/refusal boundaries. Configuration admission,
+cumulative disk accounting, actual producer/service access and runtime outcomes
+are outside that control; no real accounts, Board or original bodies are used.
+
+```bash
+python3 -B tools/coordinator-runtime/tests/test_integration_bound419.py
+```
+
 `integration-prestart-basis JOB --token TOKEN` supplies a separate disposition
 for an exact selected Work reservation with **no allocated attempt at all**.
 `withdraw-integration-prestart JOB --token TOKEN --receipt ABSOLUTE_FILE`

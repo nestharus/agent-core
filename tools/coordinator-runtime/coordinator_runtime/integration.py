@@ -8,6 +8,7 @@ import json
 from contextlib import nullcontext
 
 from .contracts import Refusal, digest, encode, required_text
+from .integration_evidence import attempt_view, fence_view
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS integration_retirements(
@@ -275,7 +276,13 @@ class IntegrationJournal:
         return self.integration_retired(job)
 
     def integration_debt(self):
-        """Current attributed debt, including later adverse delivery/custody state."""
+        """Current duties with verifiable, retained historical snapshot references.
+
+        Full originals stay in their existing rows under existing authority.
+        References bind even folded material, so byte or relationship changes
+        still invalidate selection/reservation/launch. No new acquisition bound
+        or availability guarantee follows from the smaller transported view.
+        """
         result = []
         fences = [(r, 'retirement') for r in self.rows('SELECT * FROM integration_retirements ORDER BY rowid')]
         fences += [(r, 'prestart_disposition') for r in self.rows('SELECT * FROM integration_prestart_dispositions ORDER BY rowid')]
@@ -283,8 +290,10 @@ class IntegrationJournal:
             job = retired['job']
             row = self.job(job)
             members = json.loads(row['members'])
-            result.append({kind: retired, 'current_job': row,
-                'attempts': self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,)),
+            table = 'integration_retirements' if kind == 'retirement' else 'integration_prestart_dispositions'
+            result.append({'representation': 'integration-debt-v1',
+                kind: fence_view(retired, table), 'current_job': row,
+                'attempts': [attempt_view(a) for a in self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,))],
                 'outboxes': self.rows('SELECT * FROM outboxes WHERE job=? ORDER BY rowid', (job,)),
                 'inputs': [self.one('SELECT * FROM events WHERE id=?', (m['event'],)) for m in members],
                 'source_custody': [self.one('SELECT * FROM source_custody WHERE event=?', (m['event'],)) for m in members],
