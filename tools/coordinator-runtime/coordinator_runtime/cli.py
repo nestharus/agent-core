@@ -233,12 +233,20 @@ def parser():
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
         integration.add_argument('--token', required=True)
+        if command in {'integration-closure-basis', 'retire-integration'}:
+            integration.add_argument('--management', help='Explicit current paused-owner operation selection; no processing access')
         if command in {'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start'}:integration.add_argument('--receipt', required=True)
     window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
     window.add_argument('task')
     window.add_argument('--events', nargs='+', required=True)
+    window.add_argument('--management', help='Explicit current paused-owner operation selection; exact tracked-debt acquisition scope')
     window = sub.add_parser('select-integration-window', help='Actual Work selects one bounded future batch with peer/custodian evidence')
     window.add_argument('--receipt', required=True)
+    window.add_argument('--management', help='Explicit current paused-owner operation selection; no launch authority')
+    management = sub.add_parser('integration-management-basis', help='Genuine Work: original enrollment/grant metadata and source pins only; no old bodies or authority issuance')
+    management.add_argument('--roles', nargs='+', required=True)
+    management.add_argument('--authority', required=True)
+    management.add_argument('--purpose', required=True)
     basis=sub.add_parser('publication-remainder-basis',help='Actual owner reads qualified publication operands; no request, new purpose, publication or launch')
     basis.add_argument('job')
     for name in ['token','attempt','diagnosis','selection']:basis.add_argument('--'+name,required=True)
@@ -304,6 +312,11 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command == 'integration-management-basis':
+        from . import integration_management
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        with store.tx():
+            return integration_management.basis(store, args.roles, actor, args.authority, args.purpose)
     if args.command in {'draft-current-configuration', 'current-configuration-basis', 'select-current-configuration', 'current-configuration-status'}:
         from . import configuration, processing
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
@@ -454,16 +467,17 @@ def operate(args, store):
             return board.revoke_retained(store, args.capability)
         return board.retained_step(store, args.capability)
     if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start'}:
+        if getattr(args, 'management', None):
+            from . import integration_management
+            actor = actual_actor(store.config['roles']['Work']['owner'])
+            selection = read_record(args.management)
+            receipt = read_record(args.receipt) if getattr(args, 'receipt', None) else None
+            selected = integration_management.target(args.command, args, receipt)
+            return integration_management.execute(store, args.command, selected, selection, actor,
+                lambda: integration_operation(args, store, actor, receipt))
         actor = actual_actor(store.enrollment('Work')['owner'])
         Board(store.config, 'Work').verify_authority(store)
-        if args.command == 'integration-no-start-basis':return store.integration_no_start_basis(args.job, args.token)
-        if args.command == 'withdraw-integration-no-start':return store.withdraw_integration_no_start(args.job, args.token, actor, read_record(args.receipt))
-        if args.command == 'integration-prestart-basis':return store.integration_prestart_basis(args.job, args.token)
-        if args.command == 'withdraw-integration-prestart':return store.withdraw_integration_prestart(args.job, args.token, actor, read_record(args.receipt))
-        if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
-        if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, read_record(args.receipt))
-        if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
-        return store.select_integration_window(actor, read_record(args.receipt))
+        return integration_operation(args, store, actor)
     if args.command in {'window-basis', 'advance-window'}:
         actor = actual_actor(store.enrollment('Work')['owner'])
         Board(store.config, 'Work').verify_authority(store)
@@ -636,6 +650,20 @@ def run_selected(args, store):
         raise Refusal("offline schema qualification differs from configured CLI")
     asyncio.run(serve(store))
     return {"stopped": "owned tasks collected; inspect status for unresolved holds"}
+
+
+def integration_operation(args, store, actor, receipt=None):
+    """Same qualified operations for ordinary and explicit management callers."""
+    if args.command == 'integration-no-start-basis':return store.integration_no_start_basis(args.job, args.token)
+    if args.command == 'integration-prestart-basis':return store.integration_prestart_basis(args.job, args.token)
+    if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
+    if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
+    if receipt is None:
+        receipt = read_record(args.receipt)
+    if args.command == 'withdraw-integration-no-start':return store.withdraw_integration_no_start(args.job, args.token, actor, receipt)
+    if args.command == 'withdraw-integration-prestart':return store.withdraw_integration_prestart(args.job, args.token, actor, receipt)
+    if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, receipt)
+    return store.select_integration_window(actor, receipt)
 
 
 def main(argv=None):

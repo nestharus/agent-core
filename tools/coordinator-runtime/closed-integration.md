@@ -8,12 +8,96 @@ process its frozen input, transfer custody, settle delivery, promote its result,
 clear a hold, reconcile an effect or authorize another execution by itself.
 
 Only the actual enrolled Work owner can use the CLI entrypoints below;
-they check the existing current Board authority. Journal methods follow the
+ordinary calls check the existing current Board authority. The explicit paused
+management path below has a separate original-owner check. Journal methods follow the
 same trusted caller convention as existing owner methods. Plain receipt text
 does not authenticate a collector or establish actual process closure. The
 owner must qualify the genuine original handles, numeric ENDs, collection and
 applicable writer closure before submitting it. An END count is insufficient.
 This protocol cannot exclude a noncooperating external writer.
+
+## Explicit management during an ordinary-intake pause
+
+The genuine Work owner may separately select purpose-scoped management while
+ordinary enrollment remains paused and its original software grants remain
+revoked. An owner name, reservation token, metadata basis, or lower journal
+method supplies no current management authority. The owner must have an actual
+current decision for both the operation and its record acquisition. Authority
+and purpose text is attributed owner testimony; software does not authenticate
+external decisions, collector closure, peer facts or custody assertions.
+
+`integration-management-basis --roles Work [RELATED_ROLE ...] --authority REF
+--purpose TEXT` requires the actual Work session, which must also be the original
+software grantor. It returns current configuration/source pins and only the
+named roles' original grant/enrollment metadata. It uses the existing qualified
+original-grant protocol, including revoked software grant, paused enrollment,
+same journal path/device/inode, Board/owner/actor identity, membership and original
+configuration binding through any selected current transition. Current release
+checks still apply. It acquires no old input/result/capture bodies and issues no
+grant or processing capability. No normal intake is reopened.
+
+The four commands `integration-closure-basis`, `retire-integration`,
+`integration-window-basis` and `select-integration-window` accept an optional
+`--management ABSOLUTE_FILE`. That file must contain exactly:
+
+```json
+{
+  "basis": "EXACT management metadata basis OBJECT, including current authority and purpose",
+  "expires": 1234567890,
+  "operation": "integration-closure-basis",
+  "target": {"job": "EXACT owned job", "token": "EXACT reservation token"},
+  "records": {"jobs": ["EXACT owned job"], "events": ["EXACT frozen input"]}
+}
+```
+
+The placeholders must be actual JSON objects/identities with independent access
+authority. Expiry is a finite future Unix time at most one hour away. Each call
+binds its exact command and target. The two window commands instead require
+`target: {"task": "EXACT Work integrator task", "events": ["EXACT next input"]}`.
+For window selection those values must match the supplied receipt basis.
+Changing the command, target, source, original binding, configuration, expiry or
+related enrollment requires a fresh explicit selection; there is no automatic
+renewal, borrowed processing capability or old-grant reactivation.
+
+`records.jobs` must name exactly the closure job, or exactly the jobs with
+tracked retirement/prestart fences for a window. `records.events` must name all
+of those jobs' frozen inputs plus the proposed next inputs for a window. The
+basis roles must match the actual related source roles, including Work. Small
+job membership/source-role headers and fence job IDs are checked before full
+operation acquisition; extra or missing scope refuses. This is bounded tracked
+debt qualification, never all-history clearance. Basis/receipt/result/debt rows
+can contain full old material: the selected scope must independently permit
+those bodies, linked attempts, results, outboxes, publications, recovery and
+custody records. Referenced physical artifacts/captures are not opened by this
+path. Existing mutation admission also measures runtime-home file metadata
+(excluding the opaque sessions subtree) for its cumulative budget; this needs
+its own actual privacy/access qualification. A command name waives no exclusion.
+
+Within one local transaction the adapter checks the current selection, runs the
+original closure/fence/window predicates, rechecks currentness, and for a mutation
+appends its exact management selection and outcome to
+`integration_management_operations`. Audit/budget failure rolls back the local
+mutation. Board lifecycle locks and rechecks retain their existing limits; this
+is neither multi-file atomicity nor noncooperating-writer CAS. Ordinary public
+paths, prestart/no-start routes, Store enrollment, intake, processing, recovery,
+launch and publication authority are unchanged. Management cannot start a task.
+
+The original begin/END/collection/numeric-exit, exact fresh closure basis,
+original collector/controller/writer closure, no-pending-recovery, future-window
+currentness and applicable conflict/custodian evidence requirements below all
+remain. Access proves no old-job eligibility. A fence completes no processing,
+settles no unknown effect and starts no disposal clock. Whole processing plus
+24 hours AND every source/privacy/consumer/outbox/recovery/effect hold still
+govern disposal. Synthetic checks establish source behavior only, never live
+authority, source adoption, real original closure or rollout acceptance.
+
+The focused public-entry tests run with:
+`PYTHONPATH=tools/coordinator-runtime:tools/coordinator-runtime/tests python3 -B
+-m unittest -v test_management406` from the selected source checkout. They use
+temporary synthetic boards/journals, an explicit synthetic clock and generated
+fixture identities, with no provider/model/runtime encounter or pool allocation.
+
+## Closure and conserved future windows
 
 `integration-closure-basis JOB --token TOKEN` returns the exact held Work
 integrator job, related original attempts and results, and all controller

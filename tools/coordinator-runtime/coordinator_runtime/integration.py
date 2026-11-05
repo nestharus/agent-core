@@ -5,6 +5,7 @@ Only the actual owner may select them through the authority-checked CLI. No
 retirement completes a job, processes an input, transfers custody or replays work.
 """
 import json
+from contextlib import nullcontext
 
 from .contracts import Refusal, digest, encode, required_text
 
@@ -18,6 +19,9 @@ CREATE TABLE IF NOT EXISTS integration_windows(
 CREATE TABLE IF NOT EXISTS integration_prestart_dispositions(
  job TEXT PRIMARY KEY,actor TEXT NOT NULL,basis TEXT NOT NULL,
  receipt TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS integration_management_operations(
+ id TEXT PRIMARY KEY,actor TEXT NOT NULL,selection TEXT NOT NULL,
+ outcome TEXT NOT NULL,created REAL NOT NULL);
 """
 
 
@@ -33,8 +37,19 @@ class IntegrationJournal:
             raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
 
     def _integration_owner(self, actor):
-        if actor != self.enrollment('Work')['owner']:
+        if actor != self._integration_enrollment('Work')['owner']:
             raise Refusal('actual current Work owner required')
+
+    def _integration_enrollment(self, role):
+        management = getattr(self, 'integration_management', None)
+        return management.enrollment(role) if management else self.enrollment(role)
+
+    def _integration_transaction(self):
+        # Management validates exact access and records the selected purpose in
+        # the same local write transaction as the existing fence/window checks.
+        if getattr(self, 'integration_management', None) is not None and self.db.in_transaction:
+            return nullcontext()
+        return self.tx()
 
     def _integration_bounded(self, value):
         if len(encode(value).encode()) > self.config['limits']['max_result_bytes']:
@@ -208,7 +223,12 @@ class IntegrationJournal:
         row = self.job(job, token)
         if row['role'] != 'Work' or row['phase'] != 'integrator' or row['state'] != 'held':
             raise Refusal('exact held Work integrator required')
-        self.require_active_sources(job=job)
+        management = getattr(self, 'integration_management', None)
+        if management:
+            for role in self.source_roles(job=job):
+                management.enrollment(role)
+        else:
+            self.require_active_sources(job=job)
         attempts = self.rows('SELECT * FROM attempts WHERE job=? ORDER BY rowid', (job,))
         if not attempts or not row['active_attempt'] or not any(a['id'] == row['active_attempt'] for a in attempts):
             raise Refusal('exact original task and related closure required')
@@ -223,7 +243,7 @@ class IntegrationJournal:
 
     def retire_integration(self, job, token, actor, receipt):
         """One permanent execution fence; all historical rows stay unchanged."""
-        with self.tx():
+        with self._integration_transaction():
             self._integration_owner(actor)
             self.require_execution_open(job)
             basis = self.integration_closure_basis(job, token)
@@ -290,11 +310,11 @@ class IntegrationJournal:
                 raise Refusal('next input is not currently eligible; no old input replay')
             members.append(self._input_member(row))
         return self._integration_bounded({'task': task, 'members': members,
-            'debt': self.integration_debt(), 'enrollment': self.enrollment('Work')})
+            'debt': self.integration_debt(), 'enrollment': self._integration_enrollment('Work')})
 
     def select_integration_window(self, actor, receipt):
         """Select one bounded future batch; unrelated UNKNOWN debt is conserved."""
-        with self.tx():
+        with self._integration_transaction():
             self._integration_owner(actor)
             if not isinstance(receipt, dict) or set(receipt) != {'basis', 'target', 'why', 'conflict_evidence', 'custodian_evidence'}:
                 raise Refusal('exact basis, target/WHY and applicable peer/custodian evidence required')
