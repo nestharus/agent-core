@@ -3,6 +3,8 @@
 This adapter uses the existing dispatcher, pool and collector. Original grants,
 enrollment intake flags, native owners, source bytes and effect holds stay put.
 """
+from . import observations
+
 import json
 import math
 from pathlib import Path
@@ -50,9 +52,12 @@ def migrate_links(runtime):
         runtime.db.execute('DROP TABLE processing_delivery_links_original')
 
 
+@observations.observe('source-implementation')
 def implementation():
     directory = Path(__file__).resolve().parent
-    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(directory.glob('*.py'))}
+    files = sorted(directory.glob('*.py'))
+    observations.count('source-files', len(files))
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 
 
 def basis(runtime, boards, *, future_only=False):
@@ -311,6 +316,7 @@ class Access:
     def __init__(self, runtime, key, boards=None):
         self.runtime, self.key, self.boards = runtime, key, boards
 
+    @observations.observe('current')
     def current(self):
         configuration.assert_current(self.runtime)
         configuration.assert_release(self.runtime)

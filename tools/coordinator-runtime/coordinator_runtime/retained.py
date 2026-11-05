@@ -5,6 +5,8 @@ Original owners, sources, queues, collectors and processing clocks remain intact
 Shared residency is observed globally; logical use is charged to the original
 runtime identity across grants. Neither counter measures physical platform bytes.
 """
+from . import observations
+
 import json
 import math
 import hashlib
@@ -94,6 +96,7 @@ class RetainedBoard(Board):
             grant = self._original(conn, runtime)
             return self._basis(conn, runtime, grant)
 
+    @observations.observe('retained-source')
     def _basis(self, conn, runtime, grant):
         # Streaming only this role's source hashes, never foreign payloads.
         events = []
@@ -102,6 +105,8 @@ class RetainedBoard(Board):
                 raise Refusal('retained original input payload/hash differs; preserve source for its owner')
             events.append({k: event[k] for k in ('id', 'hash')})
         outboxes = runtime.rows('SELECT id,producer,recipient,kind,required,payload FROM outboxes WHERE role=? ORDER BY id', (self.role,))
+        observations.count('retained-events', len(events))
+        observations.count('retained-outboxes', len(outboxes))
         continuation = None
         if conn.execute("SELECT 1 FROM sqlite_master WHERE name='coordinator_retained_caps_v1'").fetchone():
             row = conn.execute('SELECT id,issuer,created,revoked,visits,cursor FROM coordinator_retained_caps_v1 '
@@ -166,6 +171,7 @@ class RetainedBoard(Board):
                 conn.execute('UPDATE coordinator_retained_caps_v1 SET revoked=COALESCE(revoked,?) WHERE id=?', (runtime.clock(), key))
         return {'revoked': key, 'original_responsibilities': 'retained'}
 
+    @observations.observe('retained-authority')
     def _continued(self, conn, runtime):
         grant = self._original(conn, runtime)
         row = conn.execute('SELECT * FROM coordinator_retained_caps_v1 WHERE id=?', (self.capability,)).fetchone()
@@ -206,6 +212,7 @@ class RetainedBoard(Board):
                 raise Refusal('retained delivery attribution/correlation differs from original source')
             return self._delivery_record(conn, dict(row))
 
+    @observations.observe('retained-step')
     def retained_step(self, runtime, capability):
         """One real finite software handling visit; no native-owner impersonation.
 

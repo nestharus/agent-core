@@ -5,6 +5,7 @@ client reconnects to that process; a dead process never becomes a fresh collecto
 by reusing its name. Actual uncollected children stay UNKNOWN after a crash.
 """
 import asyncio
+from . import observations
 import fcntl
 import json
 import os
@@ -297,13 +298,20 @@ def endpoint(runtime, key):
 
 
 async def serve(runtime, boards, key, emit, models=None, review_transport=None):
+    with observations.owning("service"):
+        return await serve_owned(runtime, boards, key, emit, models, review_transport)
+
+
+async def serve_owned(runtime, boards, key, emit, models=None, review_transport=None):
     runtime.processing = Access(runtime, key, boards)
-    _, selection = runtime.processing.current()
+    with observations.span("service-current"):
+        _, selection = runtime.processing.current()
     if 'service' not in selection:
         raise Refusal('finite processing capability cannot be extended into a service')
-    for board in boards.values():
-        board.runtime = runtime
-        board.verify_authority(runtime)
+    with observations.span("service-boards"):
+        for board in boards.values():
+            board.runtime = runtime
+            board.verify_authority(runtime)
     path = endpoint(runtime, key)
     lock = os.open(runtime.home / 'service.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
@@ -317,35 +325,46 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
                                (runtime.controller, key, str(path), 'serving', runtime.clock()))
         dispatcher = Dispatcher(runtime, boards, models, review_transport)
         async def connection(reader, writer):
+            authorized = False
             try:
                 peer = writer.get_extra_info('socket')
                 _, uid, _ = struct.unpack('3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                 if uid != os.getuid():
                     raise Refusal('different requester cannot address the original collector')
-                line = await asyncio.wait_for(reader.readline(), 10)
+                with observations.span("control-read"):
+                    line = await asyncio.wait_for(reader.readline(), 10)
                 if len(line) > 65536:
                     raise Refusal('bounded service control required')
                 request = json.loads(line)
                 if request.get('capability') != key or set(request) - {'capability', 'operation', 'component'}:
                     raise Refusal('exact current service control required')
+                authorized = True
                 operation = request.get('operation')
                 if operation == 'status':
-                    answer = status(runtime, key)
+                    with observations.span('control-status'):
+                        answer = status(runtime, key)
                 elif operation == 'recover':
-                    answer = dispatcher.recover_originals()
+                    with observations.span("control-recover"):
+                        answer = dispatcher.recover_originals()
                 elif operation == 'stop':
-                    dispatcher.stopping.set()
+                    with observations.span("control-stop"):
+                        dispatcher.stopping.set()
                     answer = {'controller': runtime.controller, 'state': 'draining; parent still owes this original numeric END'}
                 elif operation == 'close-review':
                     component = request.get('component')
                     policy = reviews.context_policy(runtime,component,selection['service']['reviews'])
-                    answer = await dispatcher.reviews.close(component, policy)
+                    with observations.span("control-close-review"):
+                        answer = await dispatcher.reviews.close(component, policy)
                 else:
                     raise Refusal('unsupported control; no replay or authority mutation endpoint')
             except Exception as exc:
                 answer = {'error': str(exc), 'processing_complete': False}
-            writer.write((encode(answer) + '\n').encode())
-            await writer.drain()
+            if authorized:
+                answer.setdefault('controller', runtime.controller)
+                answer['service_observations'] = observations.snapshot()
+            with observations.span('control-write'):
+                writer.write((encode(answer) + '\n').encode())
+                await writer.drain()
             writer.close()
             await writer.wait_closed()
         server = await asyncio.start_unix_server(connection, path=path, limit=65537)
@@ -370,6 +389,7 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
             with runtime.tx():
                 runtime.db.execute("UPDATE service_runs SET state='returned-awaiting-parent-END',returned=?,receipt=? WHERE controller=?",
                                    (runtime.clock(), encode(receipt), runtime.controller))
+            receipt["service_observations"] = observations.snapshot()
             emit(receipt)
             # Kernel endpoint lifetime follows this actual original socket;
             # the parent-END barrier remains in the original journal.
@@ -378,15 +398,19 @@ async def serve(runtime, boards, key, emit, models=None, review_transport=None):
 
 
 async def control(runtime, key, operation, component=None):
-    reader, writer = await asyncio.open_unix_connection(endpoint(runtime, key), limit=runtime.config['limits']['max_bytes'])
+    with observations.span('control-connect'):
+        reader, writer = await asyncio.open_unix_connection(endpoint(runtime, key), limit=runtime.config['limits']['max_bytes'])
     try:
-        writer.write((encode({'capability': key, 'operation': operation, **({'component': component} if component else {})}) + '\n').encode())
-        await writer.drain()
-        answer = await reader.readline()  # Notification from the actual original; no PID/file polling.
-        return json.loads(answer)
+        with observations.span('control-send'):
+            writer.write((encode({'capability': key, 'operation': operation, **({'component': component} if component else {})}) + '\n').encode())
+            await writer.drain()
+        with observations.span('control-reply'):
+            answer = await reader.readline()  # Actual original notification, no polling.
+            return json.loads(answer)
     finally:
-        writer.close()
-        await writer.wait_closed()
+        with observations.span('control-close'):
+            writer.close()
+            await writer.wait_closed()
 
 
 def status(runtime, key):

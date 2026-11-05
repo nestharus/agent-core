@@ -1,6 +1,7 @@
 """Operator entry points. No command adopts existing collectors or logs in."""
 
 import argparse
+from . import observations
 import base64
 import hashlib
 import asyncio
@@ -638,13 +639,19 @@ def run_selected(args, store):
 
 def main(argv=None):
     args = parser().parse_args(argv)
+    with observations.owning("control-client" if args.command == "processing-service-control" else "runtime"):
+        return main_owned(args)
+
+
+def main_owned(args):
     try:
         if args.command == "qualify-schema":
             print_json(qualify_schema(args.codex, args.output))
             return 0
         if not args.config:
             raise Refusal("--config is required")
-        config = load_config(args.config)
+        with observations.span("config-load"):
+            config = load_config(args.config)
         if args.command in {"delivery-show", "delivery-stage", "delivery-correct"}:
             board = Board(config, args.role)
             if args.command == "delivery-show":
@@ -655,9 +662,12 @@ def main(argv=None):
                 value = board.delivery_stage(args.delivery, args.stage, read_record(args.receipt))
             print_json(value)
             return 0
-        store = Store(config, read_only=args.command == 'processing-service-control')
+        with observations.span('store-open'):
+            store = Store(config, read_only=args.command == 'processing-service-control')
         try:
             value = operate(args, store)
+            if args.command == "processing-service-control":
+                value["client_observations"] = observations.snapshot()
             print_json(value)
             if args.command == 'execution-pool' and value.get('state') == 'held':
                 return 2
@@ -665,7 +675,8 @@ def main(argv=None):
             store.close()
         return 0
     except (Refusal, ValueError, KeyError, OSError, sqlite3.Error) as exc:
-        print_json({"state": "held", "error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
+        print_json({"state": "held", "error": f"{type(exc).__name__}: {str(exc)[:1000]}",
+                    **({"client_observations": observations.snapshot()} if args.command == "processing-service-control" else {})})
         return 2
 
 

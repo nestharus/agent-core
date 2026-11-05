@@ -67,7 +67,16 @@ class Startup(unittest.IsolatedAsyncioTestCase):
                 failures = [p for p in progress if p['state'] == 'timeout']
                 self.assertEqual([p['method'] for p in failures], [method])
                 self.assertTrue(all(type(p['elapsed_ms']) is int and p['elapsed_ms'] >= 0 for p in progress))
-                self.assertTrue(all(set(p) <= {'method', 'state', 'elapsed_ms', 'failure'} for p in progress))
+                public_fields = {'method', 'state', 'elapsed_ms', 'failure', 'sequence', 'budget_ms',
+                                 'exchange_entered_ms', 'send_drain_ms', 'correlated_reply_ms',
+                                 'cancellation_delivered_ms', 'boundary', 'budget_overrun_ms'}
+                self.assertTrue(all(set(p) <= public_fields for p in progress))
+                for p in progress:
+                    self.assertTrue(all(type(value) is int and value >= 0 for key, value in p.items()
+                                        if key.endswith('_ms') or key == 'sequence'))
+                self.assertEqual(failures[0]['boundary'], 'awaiting-response')
+                self.assertIn('send_drain_ms', failures[0])
+                self.assertNotIn('correlated_reply_ms', failures[0])
                 expected = 'not-requested' if method in {'initialize', 'config/read'} else (
                     'requested-uncertain' if method == 'thread/start' else 'owned-root-observed')
                 self.assertEqual(outcome['detail']['thread_start'], expected)

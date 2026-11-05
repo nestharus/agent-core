@@ -5,6 +5,8 @@ receipt; coordinator runtime durable responsibility. No owner cursor, membership
 queue transport, TUI socket or native collector is borrowed. Grants are explicit
 same-account cooperation records, NOT authentication or product-effect authority.
 """
+from . import observations
+
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -215,6 +217,7 @@ class Board(BoardDelivery, Completion, OwnerControl, Software, SharedCustody):
             raise Refusal("grant runtime/role/actor identity differs")
         return dict(row)
 
+    @observations.observe('board-authority')
     def verify_authority(self, runtime):
         with self.opened() as conn:
             return self._grant(conn, runtime)
@@ -272,6 +275,7 @@ class Board(BoardDelivery, Completion, OwnerControl, Software, SharedCustody):
             return {'owner':self.selected['owner'],'after':after,'through':upper,'next_after':cursor,
                     'complete_interval':bool(complete),'sources':recovered,'membership_or_cursor_changed':False}
 
+    @observations.observe('board-scan')
     def scan(self, runtime, limit=100):
         """No owner ack_seq is read or advanced. Our prospective cursor is atomic with intake."""
         with self.opened() as conn:

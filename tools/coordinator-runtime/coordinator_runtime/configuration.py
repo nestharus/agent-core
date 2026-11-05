@@ -3,6 +3,8 @@
 Append-only local selection, not historical recovery, enrollment or deployment.
 Board grants and all original duties remain bound to their original bytes.
 """
+from . import observations
+
 from contextlib import contextmanager
 import copy
 import fcntl
@@ -31,6 +33,7 @@ def latest(runtime):
     return runtime.one('SELECT * FROM configuration_transitions ORDER BY position DESC LIMIT 1')
 
 
+@observations.observe('configuration-current')
 def assert_current(runtime):
     row = latest(runtime)
     if row and row['current'] != digest(runtime.config):
@@ -456,6 +459,7 @@ def outbox_allowed(runtime, outbox):
     return True
 
 
+@observations.observe('source-release')
 def assert_release(runtime):
     transition = selected(runtime)
     if transition and release(runtime, runtime.config) != transition['basis']['release']:

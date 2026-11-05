@@ -17,7 +17,10 @@ import re
 
 from .contracts import (PROFILES, Refusal, canonical_uuid, encode, parse_json,
                         task_result, task_result_issues, task_result_instructions, report_only)
-from . import storage, readiness
+from . import storage, readiness, observations
+
+RPC_METHODS = frozenset({'initialize', 'config/read', 'thread/start', 'thread/read',
+                         'thread/unsubscribe', 'turn/start', 'turn/interrupt'})
 
 
 class RpcFailure(Refusal):
@@ -204,6 +207,9 @@ class Peer:
         # Only local method names and durations, never params, response bodies,
         # stderr or account state. The finite owned lifecycle bounds this list.
         self.progress = []
+        self.progress_dropped = 0
+        self.correlation_dropped = 0
+        self.rpc_timings = {}
         self.capture = "complete"
         self.reader = asyncio.create_task(self.read())
 
@@ -212,19 +218,31 @@ class Peer:
         await self.child.stdin.drain()
 
     async def rpc(self, method, params, timeout=20):
+        with observations.span(method if method in RPC_METHODS else "rpc-other"):
+            return await self.rpc_owned(method, params, timeout)
+
+    async def rpc_owned(self, method, params, timeout):
         self.sequence += 1
         number = self.sequence
         future = asyncio.get_running_loop().create_future()
         self.pending[number] = future
         started = asyncio.get_running_loop().time()
-        progress = {"method": method, "state": "sending"}
+        progress = {"method": method if method in RPC_METHODS else 'other',
+                    "sequence": observations.bounded(number), "state": "sending", "budget_ms": observations.bounded(timeout*1000)}
+        if len(self.progress) == 64:
+            self.progress.pop(0)
+            self.progress_dropped = observations.bounded(self.progress_dropped + 1)
         self.progress.append(progress)
+        if len(self.rpc_timings) < 64:
+            self.rpc_timings[number] = (started, progress)
+        else:
+            self.correlation_dropped = observations.bounded(self.correlation_dropped + 1)
         try:
             # The existing budget covers transport backpressure as well as the
             # response. A cancelled/timed-out send may already have written bytes;
             # it does not prove rejection or permit replay of thread/start.
             response = await asyncio.wait_for(
-                self.exchange(number, method, params, future, progress), timeout)
+                self.exchange(number, method, params, future, progress, started), timeout)
             progress["state"] = "response-received"
             if "error" in response:
                 raise RpcFailure(method, response["error"])
@@ -233,21 +251,35 @@ class Peer:
             progress["state"] = "succeeded"
             return response["result"]
         except asyncio.TimeoutError:
+            progress['boundary'] = progress['state']
             progress["state"] = "timeout"
+            progress['budget_overrun_ms'] = observations.bounded((asyncio.get_running_loop().time()-started-timeout)*1000)
             raise
         except BaseException as exc:
-            progress.update(state="failed", failure=type(exc).__name__)
+            progress['boundary'] = progress['state']
+            progress.update(state="failed", failure='CancelledError' if isinstance(exc, asyncio.CancelledError) else 'Exception')
             raise
         finally:
-            progress["elapsed_ms"] = round((asyncio.get_running_loop().time()-started)*1000)
+            progress["elapsed_ms"] = observations.bounded(round((asyncio.get_running_loop().time()-started)*1000))
             self.pending.pop(number, None)
+            self.rpc_timings.pop(number, None)
             if not future.done():
                 future.cancel()
 
-    async def exchange(self, number, method, params, future, progress):
-        await self.send({"id": number, "method": method, "params": params})
-        progress["state"] = "awaiting-response"
-        return await future
+    async def exchange(self, number, method, params, future, progress, started):
+        progress["exchange_entered_ms"] = observations.bounded(round((asyncio.get_running_loop().time()-started)*1000))
+        try:
+            with observations.span("rpc-send-drain"):
+                await self.send({"id": number, "method": method, "params": params})
+            progress['send_drain_ms'] = observations.bounded(round((asyncio.get_running_loop().time()-started)*1000))
+            progress["state"] = "awaiting-response"
+            with observations.span("rpc-reply-wait"):
+                return await future
+        except asyncio.CancelledError:
+            # Delivery time is observed here; external cancellation request time
+            # is unknown. Timeout overrun alone does not identify its cause.
+            progress['cancellation_delivered_ms'] = observations.bounded(round((asyncio.get_running_loop().time()-started)*1000))
+            raise
 
     async def read(self):
         try:
@@ -274,6 +306,10 @@ class Peer:
         if "id" in value and "method" not in value:
             future = self.pending.get(value["id"])
             if future and not future.done():
+                timing = self.rpc_timings.get(value['id'])
+                if timing:
+                    started, progress = timing
+                    progress['correlated_reply_ms'] = observations.bounded(round((asyncio.get_running_loop().time()-started)*1000))
                 future.set_result(value)
             return
         if "id" in value:
@@ -464,6 +500,9 @@ class AppServer:
                 with suppress(asyncio.CancelledError):await watcher
             if child is None and outcome['cleanup']=='no-session-created':
                 outcome['detail']['session_residuals']['state']='no-runtime-start'
+        if peer:
+            outcome["detail"]["protocol_progress_dropped"] = peer.progress_dropped
+            outcome["detail"]["protocol_correlation_dropped"] = peer.correlation_dropped
         return outcome
 
     async def command(self, profile, storage_flags=(), cwd=None):

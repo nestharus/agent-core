@@ -6,6 +6,7 @@ discover both notices and directed plain posts without claiming their sockets.
 """
 
 import asyncio
+from . import observations
 from .contracts import scoped_startup
 import json
 from pathlib import Path
@@ -541,22 +542,28 @@ class Dispatcher:
         # One held phase must not prevent independent already-owed progress.
         # Each failure stays separately owned; successful phases clear only
         # their own current error. This does not declare any duty processed.
-        for operation in (self.receipts, self.reconcile_completed, self.intake,
-                          self.schedule_classifications, self.schedule_classification_recovery,
-                          self.schedule_job, self.schedule_recovery, self.custodian_progress, self.automatic_cleanup):
+        for phase, operation in (
+                ('receipts', self.receipts), ('reconcile_completed', self.reconcile_completed),
+                ('intake', self.intake), ('schedule_classifications', self.schedule_classifications),
+                ('schedule_classification_recovery', self.schedule_classification_recovery),
+                ('schedule_job', self.schedule_job), ('schedule_recovery', self.schedule_recovery),
+                ('custodian_progress', self.custodian_progress), ('automatic_cleanup', self.automatic_cleanup)):
             # Give owned readers, RPC timers and control connections a turn
             # between phases. Each synchronous phase still runs all its checks;
             # a single blocking operation remains a responsiveness limit.
             await asyncio.sleep(0)
             subject = 'dispatcher-phase:' + operation.__name__
             try:
-                operation()
+                with observations.span(phase):
+                    operation()
                 self.store.clear_operational_error(subject)
             except Exception as exc:
                 self.store.record_operational_error(subject, {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
-        capacity.deliver_pending(self.store)
+        with observations.span("capacity"):
+            capacity.deliver_pending(self.store)
         await asyncio.sleep(0)
-        await self.pump_deliveries_async()
+        with observations.span("delivery"):
+            await self.pump_deliveries_async()
 
     def custodian_progress(self):
         if self.config.get('window_service') or self.config.get('custodian_service'):
@@ -589,7 +596,8 @@ class Dispatcher:
         except Exception as exc:
             self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
         try:
-            await self.alerts(emit)
+            with observations.span("alerts"):
+                await self.alerts(emit)
         except Exception as exc:
             self.store.record_operational_error('alert-reporting', {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
             # The exception is retained, not retried as another alert cohort.
