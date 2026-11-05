@@ -382,10 +382,17 @@ class Executor:
             acquired['encounter_recovery']={'same_session_continuity':False,'predecessor':prior} if predecessor else None
             if method_files(policy['method']) != policy['method_files']:
                 raise Refusal('selected ordinary procedure changed before execution')
+            from .review_reader import storage_bound
+            # Check peak owned reader growth before admitting the native input.
+            # Ordinary cumulative usage subsequently includes these owned files;
+            # like other runtime admission checks, this is not a filesystem quota.
+            reader_bytes = storage_bound(acquired)
+            with runtime.tx():
+                runtime.budget(None, reader_bytes + 2 * len(encode(acquired).encode()) + 4096)
             opening = context is None
             facade = runtime.home / 'review-inputs' / digest(component) / 'material.json'
             facade.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            # Atomic single-file publication only; source bodies are not copied.
+            # Atomic manifest only; the facade caches one bounded verified item.
             temporary = facade.with_suffix('.pending')
             with temporary.open('x') as stream:
                 stream.write(encode(acquired)); stream.flush()
