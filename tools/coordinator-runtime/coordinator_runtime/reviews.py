@@ -6,6 +6,7 @@ not a new reviewer method. Lost/expired roots never fall back to fresh ones.
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -158,10 +159,10 @@ def validate(runtime, choices):
         task = runtime.config['tasks'].get(name, {})
         if task.get('role') != 'Reviews' or task.get('phase') != 'proposer' or task.get('effects') != 'none':
             raise Refusal('ordinary review requires a selected read-only Reviews proposer')
-        if (set(policy) != {'caller', 'routes', 'deadline', 'method', 'method_files', 'components'}
+        if (set(policy) != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
                 or not 1 <= policy['deadline'] <= 7200):
             raise Refusal('exact native caller/routes/deadline/method/components required')
-        regular_path(policy['caller'])
+        caller_current(policy)
         if method_files(policy['method']) != policy['method_files']:
             raise Refusal('current ordinary definition bodies differ from selected pins')
         if not isinstance(policy['routes'], dict) or set(policy['routes']) - set(runtime.config['profiles']):
@@ -285,6 +286,82 @@ def prompt(policy, acquired, read_command):
             encode({k: v for k, v in acquired.items() if k != 'commands'}) + '\nREAD_COMMAND=' + read_command)
 
 
+def caller_current(policy):
+    if (not isinstance(policy.get('caller_sha256'), str)
+            or not re.fullmatch('[a-f0-9]{64}', policy['caller_sha256'])
+            or sha(regular_path(policy['caller']).read_bytes()) != policy['caller_sha256']):
+        raise Refusal('selected public native caller bytes changed/unpinned; no substitute')
+
+
+def handle_run(context):
+    """Read only this original's private handle; never publish its token."""
+    path = regular_path(context['handle'])
+    info = path.stat()
+    if info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 65536:
+        raise Refusal('original live handle ownership/mode/size invalid')
+    handle = parse_json(path.read_text())
+    if (not isinstance(handle, dict) or handle.get('v') != 1 or handle.get('uid') != os.getuid()
+            or any(not isinstance(handle.get(k), str) or not handle[k] for k in ('run', 'socket', 'token'))
+            or not handle['socket'].startswith('/') or '\0' in handle['socket']
+            or len(os.fsencode(handle['socket'])) >= 108
+            or context['run'] is not None and context['run'] != handle['run']):
+        raise Refusal('original live handle run/requester/shape changed; no adoption')
+    return handle['run']
+
+
+def answered(code, receipt, answer, run, opening=False):
+    """Installed live_result/Attached.turn contract; CLI END alone says nothing."""
+    if not isinstance(receipt, dict):
+        return False
+    turn, transport = receipt.get('turn'), receipt.get('transport')
+    if not isinstance(turn, dict) or not isinstance(transport, dict):
+        return False
+    ack, end, attached = turn.get('ack'), turn.get('turn_end'), transport.get('attached')
+    index = turn.get('input')
+    return (type(code) is int and code == 0 and receipt.get('class') == 'answered'
+            and not receipt.get('consumer_errors') and receipt.get('run') == run
+            and isinstance(answer, str) and bool(answer.strip())
+            and type(index) is int and index >= 0 and (index == 0 if opening else index > 0)
+            and turn.get('admitted') is True and turn.get('answer_present') is True
+            and type(turn.get('linked_messages')) is int and turn['linked_messages'] > 0
+            and isinstance(ack, dict) and bool(ack.get('message_id'))
+            and isinstance(end, dict) and end.get('event') == 'turn-end'
+            and end.get('input') == index and end.get('stop_reason') == 'end_turn'
+            and 'child' not in end and turn.get('root_ended') is None
+            and turn.get('refused') is None and turn.get('rejected') is None
+            and (opening or isinstance(turn.get('ref'), str) and bool(turn['ref']))
+            and transport.get('errors') == [] and isinstance(attached, dict)
+            and attached.get('frontdoor') == 'attached' and attached.get('run') == run
+            and attached.get('backlog_dropped_total') == 0
+            and attached.get('interrupted_records_total', 0) == 0
+            and (not opening or isinstance(receipt.get('collection'), dict)
+                 and receipt['collection'].get('errors') == []
+                 and receipt['collection'].get('stdout_eof') is True
+                 and receipt['collection'].get('stderr_eof') is True
+                 and receipt['collection'].get('exit') == 0))
+
+
+def closed(code, receipt, run):
+    if not isinstance(receipt, dict):
+        return False
+    terminal, collection = receipt.get('front_door_terminal'), receipt.get('collection')
+    background, owner = receipt.get('async'), receipt.get('owner_terminal')
+    return (type(code) is int and code == 0 and receipt.get('class') == 'closed'
+            and receipt.get('run') == run and receipt.get('physical_close') is True
+            and receipt.get('root') == 'ended' and not receipt.get('consumer_errors')
+            and receipt.get('account_errors') == [] and isinstance(collection, dict)
+            and collection.get('eof') is True and collection.get('errors') == []
+            and isinstance(terminal, dict) and terminal.get('run') == run
+            and type(terminal.get('entry_status')) is int and terminal['entry_status'] in (0, 87)
+            and terminal.get('exit') in (0, 87) and not terminal.get('collection_errors')
+            and not terminal.get('killed') and isinstance(terminal.get('retire'), dict)
+            and terminal['retire'].get('ok') is True and terminal['retire'].get('stop') != 'unknown'
+            and isinstance(terminal.get('live'), dict) and terminal['live'].get('backlog_dropped_total') == 0
+            and isinstance(owner, dict) and owner.get('status') == 'closed'
+            and isinstance(background, dict) and background.get('errors') == []
+            and background.get('unsettled') == 0 and background.get('undelivered') == [])
+
+
 class Native:
     """Each call is an owned original subprocess; no provider/session fabrication."""
     async def call(self, runtime, attempt, policy, context, directory, text, commands, opening=False, close=False):
@@ -309,12 +386,17 @@ class Native:
         # ownership even after exclusion, without admitting new model work.
         guard = _existing() if close else runtime.execution_pool.admission(context['profile'])
         async with guard:
+            caller_current(policy)
+            if not opening:
+                handle_run(context)
             if not close:
+                if not opening and runtime.clock() >= context['created'] + policy['deadline']:
+                    raise Refusal('original whole-root lifetime elapsed; no new root or renewed deadline')
                 runtime.authorize_launch(attempt)
                 with runtime.tx():
                     runtime.db.execute("UPDATE review_calls SET state='launch-intent' WHERE attempt=?",(attempt,))
             try:
-                child = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+                child = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             except OSError:
                 if not close and runtime.attempt(attempt)['begin'] is None:
                     with runtime.tx():
@@ -323,7 +405,27 @@ class Native:
             if not close and runtime.attempt(attempt)['begin'] is None:
                 runtime.begin(attempt, {'process_handle': 'owned-asyncio-subprocess', 'original_collector': runtime.controller,
                                         'identity_scope': 'native caller; not provider root completion'})
+        capture_errors = []
+        async def capture(pipe, name):
+            size = 0
+            try:
+                with (directory / name).open('xb') as stream:
+                    while True:
+                        body = await pipe.read(65536)
+                        if not body:
+                            break
+                        available = max(0, 16777216 - size)
+                        stream.write(body[:available]); size += len(body)
+                        if size > 16777216:
+                            raise Refusal('caller output capture bound exceeded')
+            except (OSError, Refusal) as exc:
+                capture_errors.append(name + ': ' + str(exc))
+                if child.returncode is None:
+                    child.terminate()
+        captures = [asyncio.create_task(capture(child.stdout, 'caller.stdout')),
+                    asyncio.create_task(capture(child.stderr, 'caller.stderr'))]
         timed_out = False
+        code = None
         try:
             # A bound ends only this caller, not a claim that its live root died.
             code = await asyncio.wait_for(asyncio.shield(child.wait()), policy['deadline'] + 100)
@@ -333,6 +435,18 @@ class Native:
         finally:
             if child.returncode is None:
                 code = await end_owned(child, runtime.config['deadlines']['shutdown'])
+            if code is None:
+                code = child.returncode  # Still null if no numeric END was collected.
+            # Pipe EOF is part of original collection, separately bounded from
+            # process END (a descendant may still hold an inherited pipe).
+            try:
+                await asyncio.wait_for(asyncio.gather(*captures), runtime.config['deadlines']['shutdown'])
+            except asyncio.TimeoutError:
+                capture_errors.append('caller pipe EOF unobserved within original shutdown bound')
+            (directory / 'original.json').write_text(encode({
+                'argv': argv, 'actual_END': code, 'caller_bound_exceeded': timed_out,
+                'capture_errors': capture_errors,
+                'meaning': 'owned caller subprocess collection; not model answer or root end'}))
         maximum = runtime.config['limits']['max_result_bytes']
         try:
             receipt_path = regular_path(str(out / 'result.json'))
@@ -340,11 +454,21 @@ class Native:
             if receipt_path.stat().st_size > maximum or final_path.exists() and final_path.stat().st_size > maximum:
                 raise Refusal('original native capture exceeds admitted complete-return bound; retain it')
             receipt = parse_json(receipt_path.read_text())
+            if not isinstance(receipt, dict):
+                raise Refusal('native result must be a public result object')
             answer = final_path.read_text() if final_path.exists() else None
         except (Refusal, OSError, ValueError) as exc:
             receipt, answer = {'class': 'incomplete', 'capture': str(out), 'failure': str(exc)}, None
         if timed_out:
-            receipt = {**receipt, 'class': 'incomplete', 'caller_bound_exceeded': True}
+            capture_errors.append('caller bound exceeded; root cessation unobserved')
+        try:
+            observed = handle_run(context)
+            if receipt.get('handle') != context['handle'] or receipt.get('run') != observed:
+                raise Refusal('caller receipt differs from original owned handle/run')
+        except (OSError, Refusal, ValueError) as exc:
+            capture_errors.append(str(exc))
+        if capture_errors:
+            receipt = {**receipt, 'consumer_errors': capture_errors}
         return code, receipt, answer
 
 
@@ -441,7 +565,8 @@ class Executor:
                     runtime.db.execute('UPDATE review_calls SET receipt=?,answer=? WHERE attempt=?',
                                        (encode(turns), answer, attempt))
                 observed = receipt.get('run')
-                if not observed or context['run'] is not None and observed != context['run']:
+                if (not isinstance(observed, str) or not observed
+                        or context['run'] is not None and observed != context['run']):
                     raise Refusal('actual native root identity missing/changed; no manufactured continuity')
                 context['run'] = observed
                 with runtime.tx():
@@ -456,7 +581,7 @@ class Executor:
                             raise Refusal('ordinary reviewer must remain separate from responsible Root and builders')
                         runtime.db.execute('INSERT OR IGNORE INTO branch_contexts VALUES(?,?,?,?,?,?,?,?,?,NULL)',
                                            (branch['id'],'review',packet['component'],observed,'observed-native-run',context['profile'],runtime.controller,'available',encode(receipt)))
-                if code != 0 or receipt.get('class') != 'answered' or receipt.get('transport', {}).get('errors'):
+                if not answered(code, receipt, answer, observed, opening=opening and len(turns)==1):
                     raise Refusal('original native call incomplete/failed; retained full return and possible live root')
                 returned = parse_json(answer)
                 if (not isinstance(returned, dict) or set(returned) != {'semantic', 'summary', 'report', 'history_entry', 'coverage', 'stage'}
@@ -534,13 +659,13 @@ class Executor:
         with runtime.tx():
             saved = json.loads(runtime.one('SELECT receipt FROM review_calls WHERE attempt=?',(call['attempt'],))['receipt'] or '[]') + [{'close_actual_END': code, 'receipt': receipt}]
             runtime.db.execute('UPDATE review_calls SET receipt=? WHERE attempt=?', (encode(saved), call['attempt']))
-            closed = code == 0 and receipt.get('class') == 'closed' and receipt.get('physical_close') is True
+            did_close = closed(code, receipt, context['run'])
             runtime.db.execute('UPDATE review_contexts SET state=?,closed_at=? WHERE component=?',
-                               ('closed' if closed else 'interrupted', runtime.clock() if closed else None, component))
-            if closed:
+                               ('closed' if did_close else 'interrupted', runtime.clock() if did_close else None, component))
+            if did_close:
                 runtime.db.execute("UPDATE attempts SET cleanup='done' WHERE id IN (SELECT attempt FROM review_calls WHERE component=?)", (component,))
                 runtime.db.execute("UPDATE branch_contexts SET state='closed',closed=? WHERE kind='review' AND address=?",(runtime.clock(),context['run']))
-        if not closed:
+        if not did_close:
             raise Refusal('actual root close/whole async accounting incomplete; original receipt retained')
         from .cleanup import register_artifact
         for path in directory.rglob('*'):
@@ -563,8 +688,8 @@ def collected_proof(runtime, job, attempt):
             or attempt['controller'] != call['collector'] or json.loads(attempt['binding']) != BINDING
             or attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
             or attempt['exit'] != 0 or attempt['capture'] != 'complete' or attempt['error']
-            or not actual or any(t['actual_END'] != 0 or t['receipt'].get('class') != 'answered'
-                                  or t['receipt'].get('run') != context['run'] for t in actual)):
+            or not actual or any(not answered(t['actual_END'], t['receipt'], t.get('full_answer'), context['run'],
+                                             opening=t['receipt'].get('turn', {}).get('input') == 0) for t in actual)):
         raise Refusal('actual continuing Source collector/material/whole return is incomplete')
     return {'kind': 'selected-ordinary-review', 'component': call['component'], 'run': context['run'],
             'collector': call['collector'], 'attempt': attempt['id'], 'calls': actual,

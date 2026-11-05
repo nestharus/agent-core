@@ -312,6 +312,20 @@ class Access:
     def review_task(self, name):
         return name in self.current()[1].get('service', {}).get('reviews', {})
 
+    def owed_control(self, event):
+        """Authenticate the receiving intent, never trust a message exemption flag.
+
+        This only separates already-owned internal control progress from new
+        upstream admission. Store still charges the event and enforces capacity.
+        """
+        self.current()
+        if event.get('processing_capability') != self.key:
+            return False
+        board = (self.boards or {}).get(event['role']) or ProcessingBoard(self.runtime.config, event['role'])
+        board.receiving_intent(self.runtime, event)
+        source = self.runtime.one('SELECT kind FROM outboxes WHERE id=?', (event['source_delivery']['id'],))
+        return source['kind'] in {'alert', 'question', 'effect-request'}
+
     def event(self, event):
         _, selection = self.current()
         if not configuration.event_allowed(self.runtime, event):
@@ -436,6 +450,7 @@ class ProcessingBoard(RetainedBoard):
                     or delivery.get('receiver_grant') != receiver['id']
                     or delivery.get('source_hash') != digest(json.loads(outbox['payload']))
                     or row['payload'] != outbox['payload'] or row['producer'] != outbox['producer']
+                    or row['kind'] != outbox['kind']
                     or row['actor'] != self.config['actor'] or row['recipient'] != receiver['owner']
                     or event['recipient'] != receiver['owner'] or outbox['recipient'] != self.role):
                 raise Refusal('processing receiver requires its exact persisted source/delivery/grant intent')

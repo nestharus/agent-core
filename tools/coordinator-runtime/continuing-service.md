@@ -18,6 +18,7 @@ service = {
   max_inflight: actual concurrently admitted capacity,
   reviews: { EXISTING_SOURCE_TASK: {
     caller: exact installed public native caller,
+    caller_sha256: SHA256 of that exact public executable,
     routes: actual registered Sol6.1-high routes keyed by authorized account,
     deadline: actual native lifetime bound, at most 7200 seconds,
     method: current ordinary unified-reviewer.prompt.md,
@@ -334,3 +335,58 @@ one service/intake/resource owner. No borrowed collector or automatic replay.
 Whole-processing completion plus 24 hours **and every hold** still controls
 retirement. This code path makes no live first-four qualification, native PASS,
 throughput guarantee, deployment or physical-store reclamation claim.
+
+## Public live caller contract and owned control progress
+
+The declared ba440a4c3368-de23d83ac522 package's `bin/oulipoly-native-call`
+has two parsers. Ordinary `--help` describes opening; `--root UNUSED --help`
+describes continuation and close, including `--out`. No wrapper or agent-runner
+entry is required. The public executable SHA256 encountered for this correction
+is `7d8be231fbdee40761128b07b969244b7c799220190858cfc57b0cb97f3616b5`.
+Work must select the actual coherent installation and public byte pin in its
+new service policy. This is source correspondence, not site/account availability,
+served-model evidence, a selected real root or a paid-call qualification.
+
+The executor uses these public operations (operands are descriptions):
+
+```text
+CALLER --route SELECTED_ROUTE --cwd /tmp --live-handle NEW_OWNED_HANDLE --allow-file WHOLE_COMMAND_LIST.json --deadline ROOT_LIFETIME --retention discard --out NEW_CAPTURE --prompt-file INPUT
+CALLER --root SAME_OWNED_HANDLE --wait CALL_BOUND --out NEW_CAPTURE --prompt-file NEXT_INPUT
+CALLER --root SAME_OWNED_HANDLE --wait CALL_BOUND --out NEW_CAPTURE --close
+```
+
+The allow file is a JSON list of whole command strings, containing only the
+selected material facade. The caller writes its new mode0600 handle; the consumer
+checks requester, shape and run correspondence without publishing its token.
+No socket or private platform store is searched. Route/profile membership and
+caller bytes are rechecked before each new input. Close retains original
+ownership when membership no longer admits new inputs. Current configuration
+and processing basis pin the runtime module; the immutable service selection
+pins caller bytes, routes, method and scopes. Changed code/caller needs a fresh
+Work-owned source/configuration/capability selection, never old-session adoption.
+
+Numeric caller END, its result class, this input's admission/ACK/linked text/
+tagged end_turn, live run identity and whole-root closure are different facts.
+The complete result and answer, caller stdout/stderr and consumer capture errors
+remain attributed to each original subprocess. Answered/0 does not mean semantic
+acceptance; closed/0 additionally requires the caller's physical-close, EOF,
+owner/async/entry and retirement account. Partial answers/refusals remain held;
+no repeated input, root replacement, profile/model fallback or inferred END.
+
+`--deadline` bounds the **whole live root**, at most7200 seconds in this public
+installation. `--wait` bounds attachment collection and renews no root lifetime.
+The consumer refuses new input after the original lifetime and retains the
+context for explicit disposition. Indefinite same-root review needs an actual
+public provider lifetime capability and Work decision; this correction supplies
+neither a renewal API nor a fresh-context substitute.
+
+Optional service admission pauses new upstream Board intake. A Board-kind event
+may progress past that pause only when the current capability, persisted exact
+receiving intent, original source/recipient/grants and transport uncertainty
+checks authenticate an already-owned alert/question/effect-request outbox.
+Message fields alone grant no exception. Other internal messages retain their
+existing admission behavior. All event/window/storage/row/byte/debt charges,
+monotonic source positions, failed/partial consumers and original whole-chain
+processing/retention clocks remain. This is no blanket messages exemption or
+capacity refund. Work's admission=None selection needs no such bypass and is
+not evidence of an actual stalled live control.
