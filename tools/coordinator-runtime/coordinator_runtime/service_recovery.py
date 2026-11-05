@@ -89,6 +89,23 @@ def review_basis(store,key):
     return {'basis':digest({'context':context,'calls':calls}),'context':context,'calls':calls}
 
 
+def outstanding_review_call(store,call,context):
+    attempt=store.one('SELECT * FROM attempts WHERE id=?',(call['attempt'],))
+    # Prepared alone proves no refusal: collection of affirmative no-start is
+    # required. A possible launch, missing attempt or future state stays held.
+    no_start=(call['state']=='prepared' and attempt and attempt['begin'] is None
+              and attempt['state']=='not-started' and attempt['collected'] is not None
+              and json.loads(attempt['detail']).get('known_not_started') is True)
+    if no_start:
+        return False
+    # Review history collection precedes the outer caller's collection, and a
+    # collected input can still own an unclosed native context/close intent.
+    settled=(call['state']=='collected' and context['state']=='closed' and attempt
+             and attempt['collected'] is not None and attempt['ended'] is not None
+             and type(attempt['exit']) is int)
+    return not settled
+
+
 def recover_review(store,actor,key,receipt):
     """An owner-confirmed inactive predecessor permits a NEW encounter, with history.
 
@@ -112,7 +129,7 @@ def recover_review(store,actor,key,receipt):
             raise Refusal('interrupted history requires exact original reconciliation first')
         if context['collector']==store.controller and context['state'] in {'opening','live'}:
             raise Refusal('reconnect/close actual idle original, never replace it while owned')
-        if store.one("SELECT attempt FROM review_calls WHERE component=? AND state IN ('owned','admitted-unknown')",(key,)) and receipt['activity']=='inactive':
+        if any(outstanding_review_call(store,call,context) for call in current['calls']):
             # Owner evidence settles activity only, not caller END, processing or
             # unknown effects. Keep every call and raw return in this snapshot.
             if not receipt['remaining_holds']:

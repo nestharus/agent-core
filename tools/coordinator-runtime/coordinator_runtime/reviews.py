@@ -249,7 +249,8 @@ def prompt(policy, acquired, read_command):
             'the controller then requests the remaining procedure work on this SAME live root. '
             'Read the whole permitted history first, preserve findings/dissent/coverage/core files not read '
             'and all limits. Do not run tests, mutate source, launch agents, inspect accounts or acquire '
-            'unselected material. Your only shell command is the supplied read facade. Invoke it repeatedly '
+            'unselected material. Do not load project AGENTS, WORK_LOG or unrelated goal/history for startup. '
+            'Your only shell command is the supplied read facade. Invoke it repeatedly '
             'through end_of_material; each response carries exact source/offset/total/hash. It emits history '
             'first, then current definitions, actual correction diff and pinned source bodies. Subsequent '
             'calls cycle for rereading. Emission is not evidence that you read it. Preserve missing chunks '
@@ -275,7 +276,7 @@ class Native:
         out = directory / 'native'
         argv = [policy['caller']]
         if opening:
-            argv += ['--route', context['route'], '--cwd', policy['components'][context['component']]['repository'],
+            argv += ['--route', context['route'], '--cwd', '/tmp',
                      '--live-handle', context['handle'], '--allow-file', str(allow_path), '--deadline', str(policy['deadline']),
                      '--retention', 'discard']
         else:

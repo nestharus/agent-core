@@ -14,7 +14,7 @@ from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
 from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service
-from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions
+from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions, report_only
 from .inputs import input_routes
 
 
@@ -114,7 +114,10 @@ def job_prompt(store, job, task=None):
                "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "
                "the exact admitted adapter after your original is collected; DONE is preparation, never acceptance. "
                if task.get('ordinary_preparation') else '') +
-            "Read applicable AGENTS and supplied current method. No child/AI launches. No private "
+            ("REPORT-ONLY: use only the explicit supplied reports/current method and task context. "
+             "Do not read project AGENTS, WORK_LOG or unrelated goal/history for startup. "
+             if report_only(task) else "Read applicable AGENTS and supplied current method. ") +
+            "No child/AI launches. No private "
             "profiles/history/credentials, foreign handles, global route changes or background effects. "
             "Current ordinary source access in the explicit task authority is allowed; obsolete source "
             "approval gates are not reinstated. Keep all actionable findings, dissent, failures and UNKNOWNs "
@@ -692,6 +695,11 @@ class Dispatcher:
 
 
 def execution_spec(task, directory):
+    if report_only(task):
+        # Neutral existing cwd avoids project startup discovery. Owned report
+        # outputs remain at the explicit absolute attempt path, if authorized.
+        authority={**task['effect_authority'],'write_roots': [str(directory)] if task['effects']=='owned-artifacts' else []}
+        return {**task,'cwd':'/tmp','effect_authority':authority}
     if task.get('ordinary_preparation'):
         return {**task, 'network': False, 'sandbox': 'read-only',
                 'effect_authority': {**task['effect_authority'], 'write_roots': []}}

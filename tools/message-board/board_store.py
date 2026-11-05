@@ -74,10 +74,23 @@ def retire_coordinator_pointer(conn, delivery, issuer, proof):
     if conn.execute("SELECT notification_id FROM notification_outbox WHERE post_seq=? AND delivery_state!='acknowledged'",(row['post'],)).fetchone():
         raise UserError('original notification uncertainty still owns this output')
     conn.execute('CREATE TABLE IF NOT EXISTS coordinator_pointer_retirement_guard(seq INTEGER PRIMARY KEY,author TEXT NOT NULL,ref TEXT NOT NULL,proof TEXT NOT NULL)')
-    # This explicit interface installs the narrow opt-in trigger. All other
-    # deletes still fail; the exact guard lives only in this transaction.
-    conn.execute('DROP TRIGGER IF EXISTS posts_no_delete')
-    conn.execute("CREATE TRIGGER posts_no_delete BEFORE DELETE ON posts WHEN NOT EXISTS (SELECT 1 FROM coordinator_pointer_retirement_guard g WHERE g.seq=OLD.seq AND g.author=OLD.author AND g.ref=OLD.ref) BEGIN SELECT RAISE(ABORT,'board posts are immutable'); END")
+    # The complete public schema protects all three relationships. Temporarily
+    # qualify only the exact owned self-thread/link, then restore each original
+    # guard before committing. Other rows remain immutable even inside this tx;
+    # an interrupted caller rolls back both data and trigger changes.
+    guards = {
+        'posts_no_delete': ('posts', 'g.seq=OLD.seq AND g.author=OLD.author AND g.ref=OLD.ref'),
+        'thread_posts_no_delete': ('thread_posts', 'g.seq=OLD.post_seq AND g.seq=OLD.thread_id'),
+        'threads_no_delete': ('threads', "g.seq=OLD.thread_id AND g.author=OLD.opener AND OLD.topic='coordinator-runtime'"),
+    }
+    originals = {}
+    for name, (table, predicate) in guards.items():
+        original = conn.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?", (name,)).fetchone()
+        if not original:
+            raise UserError('complete public immutability guards required')
+        originals[name] = original[0]
+        conn.execute(f'DROP TRIGGER {name}')
+        conn.execute(f"CREATE TRIGGER {name} BEFORE DELETE ON {table} WHEN NOT EXISTS (SELECT 1 FROM coordinator_pointer_retirement_guard g WHERE {predicate}) BEGIN SELECT RAISE(ABORT,'board relationships are immutable'); END")
     conn.execute('INSERT INTO coordinator_pointer_retirement_guard VALUES(?,?,?,?)',(post['seq'],post['author'],post['ref'],json.dumps(proof)))
     conn.execute('DELETE FROM notification_attempts WHERE notification_id IN (SELECT notification_id FROM notification_outbox WHERE post_seq=?)',(post['seq'],))
     conn.execute('DELETE FROM notification_outbox WHERE post_seq=?',(post['seq'],))
@@ -86,6 +99,9 @@ def retire_coordinator_pointer(conn, delivery, issuer, proof):
     conn.execute('DELETE FROM threads WHERE thread_id=?',(post['seq'],))
     conn.execute('DELETE FROM posts WHERE seq=?',(post['seq'],))
     conn.execute('DELETE FROM coordinator_pointer_retirement_guard WHERE seq=?',(post['seq'],))
+    for name, sql in originals.items():
+        conn.execute(f'DROP TRIGGER {name}')
+        conn.execute(sql)
     return {'post':post['seq'],'proof':proof,'meaning':'exact qualified owned pointer only; no foreign/canonical source or physical reclamation'}
 
 

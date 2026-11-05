@@ -159,6 +159,9 @@ class SharedCustody:
                 except FileExistsError:
                     if regular_path(str(archive)).read_bytes()!=raw:
                         raise Refusal('interrupted canonical conservation differs; keep both and do not replay')
+                directory_fd=os.open(archive.parent,os.O_RDONLY|os.O_DIRECTORY)
+                try: os.fsync(directory_fd)
+                finally: os.close(directory_fd)
                 info=store.path.stat(); frontier=(str(store.path),info.st_dev,info.st_ino,row['actor'])
                 previous=conn.execute('SELECT * FROM coordinator_scan_frontiers_v1 WHERE runtime=? AND device=? AND inode=? AND actor=?',frontier).fetchone()
                 chain=digest({'previous':previous['chain'] if previous else None,'witness':digest(witness)})
@@ -172,6 +175,7 @@ class SharedCustody:
         # Caller must conserve this return. Crash after the shared commit leaves
         # the archived witness; reconciliation observes absence, never reposts.
         result={'delivery':key,'canonical_archive':str(archive),'archive_hash':digest(witness),'scan_chain':chain,
+                'conserved_at':store.clock(),
                 'meaning':'qualified owned shared rows/pointer retired; required full envelope retained in accountable custody; no platform-store reclamation'}
         with store.tx():
             store.db.execute("UPDATE shared_custody_intents SET state='retired',receipt=? WHERE delivery=?",(encode(result),key))
@@ -195,7 +199,12 @@ class SharedCustody:
                                   (str(store.path),info.st_dev,info.st_ino,store.config['actor'])).fetchone()
             if not frontier or frontier['through']<witness['original']['material']['delivery']['post']:
                 raise Refusal('shared scan conservation unobserved')
-        result={'delivery':key,'canonical_archive':intent['archive'],'archive_hash':digest(witness),'meaning':'exact archived original/shared absence reconciled; no new send or original END inferred'}
+        if intent['state']=='retired' and intent['receipt']:
+            return json.loads(intent['receipt'])
+        # A lost return supplies no original completion clock. Use this actual
+        # observation conservatively; repeated reconciliation preserves it.
+        result={'delivery':key,'canonical_archive':intent['archive'],'archive_hash':digest(witness),
+                'conserved_at':store.clock(),'meaning':'exact archived original/shared absence reconciled; no new send or original END inferred'}
         with store.tx():
             store.db.execute("UPDATE shared_custody_intents SET state='retired',receipt=? WHERE delivery=?",(encode(result),key))
         return result
@@ -208,12 +217,22 @@ class SharedCustody:
         """
         actor=self.store.acting_session(store.config['software_delegation']['grantor'])
         intent=store.one("SELECT * FROM shared_custody_intents WHERE delivery=? AND state='retired'",(key,))
-        if not intent or set(receipt)!={'hash','qualified_at','holds','evidence','originals','custodian'}:
+        if not intent or set(receipt)!={'hash','qualified_at','holds','evidence','originals','custodian','processing'}:
             raise Refusal('exact retired archive and actual original conservation/release required')
         path=regular_path(intent['archive']); witness=json.loads(path.read_text())
         fresh(store,{**receipt,'basis':receipt['hash']},digest(witness))
-        if store.clock()<witness['custody']['qualified_at']+RETENTION:
+        conserved=json.loads(intent['receipt'] or '{}')
+        processing=receipt['processing']
+        completed=processing.get('completed_at') if isinstance(processing,dict) else None
+        if (not isinstance(processing,dict) or set(processing)!={'completed_at','evidence'}
+                or type(completed) not in {int,float} or not math.isfinite(completed)
+                or type(conserved.get('conserved_at')) not in {int,float}
+                or not math.isfinite(conserved['conserved_at'])
+                or conserved.get('archive_hash')!=digest(witness)
+                or not conserved['conserved_at']<=completed<=receipt['qualified_at']
+                or store.clock()<completed+RETENTION):
             raise Refusal('new producer-owned archive copy needs its own completed conservation+24h frontier')
+        required_text(processing['evidence'],'actual archive custodian/consumer processing completion evidence')
         expected={name:digest(value) for name,value in witness['original']['material'].items()}
         if receipt['custodian']!=witness['custody']['custodian'] or not isinstance(receipt['originals'],dict) or set(receipt['originals'])!=set(expected):
             raise Refusal('actual archive custodian and every required original conservation required')

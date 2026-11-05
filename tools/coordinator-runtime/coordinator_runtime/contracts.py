@@ -261,6 +261,12 @@ def validate_task(name, task, config):
         raise Refusal("bounded proposer capacity required")
 
 
+def report_only(task):
+    """Existing typed authority distinguishes explicit reports from source work."""
+    operations=set(task.get('effect_authority',{}).get('operations',[]))
+    return bool(operations) and operations<={'read-reports','consolidate-reports','write-owned-artifacts'} and task.get('effects') in {'none','owned-artifacts'}
+
+
 def scoped_task(name, task, admission):
     """Branch's actual per-package admission narrows configured effect roots.
 

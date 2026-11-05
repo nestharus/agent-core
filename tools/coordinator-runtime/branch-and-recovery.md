@@ -130,6 +130,13 @@ a NEW observed encounter with retained exact prior head/history. It never claims
 same-session continuity or fabricates predecessor END. Known inactive read-only
 Source can release execution occupancy while processing/original/native custody
 remains held. An active original must be addressed/closed normally.
+Every produced unfinished call, including `launch-intent`, unknown future states
+and history-collected inputs with unresolved outer caller/native closure, requires
+explicit nonempty remaining custody for inactive AND unknown dispositions.
+`prepared` alone is not affirmative no-start: the original attempt must actually
+have collected a known prelaunch refusal with no begin. Saved calls, effects,
+leases and original END uncertainty remain; lawful new encounters and independent
+conserved work can proceed without claiming predecessor completion.
 
 History publication writes an exact durable append intent first. After interruption,
 `reconcile-review-history CAP ORIGINAL_ATTEMPT` accepts only exact before/after
@@ -191,15 +198,38 @@ absence and scan frontier after a lost local return. Shared existence or unknown
 bytes remain held. No multi-file/cross-database atomicity is promised and no blind
 send/delete replay follows.
 
-The archive is required custody until genuine conservation/release. After its own
-conservation+24h and all holds, `release-shared-archive ... --receipt FILE` takes
-`hash, qualified_at, holds, evidence, originals, custodian`; originals maps EVERY
+The archive is required custody until genuine conservation/release. The returned
+`conserved_at` is observed after durable archive publication and shared commit;
+it is a lower bound for archive processing, not processing completion. A lost
+local return supplies no original completion clock: reconciliation records its
+later actual observation, and repeated reconciliation preserves that frontier.
+After its own completed conservation/consumer processing+24h and all holds,
+`release-shared-archive ... --receipt FILE` takes
+`hash, qualified_at, holds, evidence, originals, custodian, processing`.
+`processing` is `{completed_at, evidence}` supplied by the real archive custodian
+for actual whole archive/consumer processing, at or after observed `conserved_at`
+and no later than release qualification. The archive ages from that completion,
+never the earlier pre-construction `custody.qualified_at`. Delayed publication,
+fsync or caller END cannot substitute. Old receipts without this frontier remain
+held; do not invent timestamps to upgrade them. Originals maps EVERY
 envelope material key to exact `hash, custodian, evidence` of full original
 conservation. Exact owned identity/bytes are rechecked before copy removal. Its
 full return carries the original witness to the collecting custodian. Complete
 local retirement while that actual receipt/intent remains available. Repeated
 same-journal local/shared reuse never hides still-required history/custody or
 claims physical SQLite/platform shrinkage.
+
+Report-only workers are distinguished by existing typed report authority
+(`read-reports`, `consolidate-reports`, optionally `write-owned-artifacts`),
+without source/effect operations. They use neutral `/tmp` startup, explicitly
+supplied reports/method/context and absolute owned output paths; generic project
+AGENTS and WORK_LOG discovery is excluded, including automatic project docs in
+the app-server request. Actual source/code/effectful workers retain applicable
+project instructions and working context. Ordinary factual Source also starts
+from neutral `/tmp` and keeps its exact pinned read facade, method and permitted
+per-component history, without unrelated goals/startup history. These are startup
+practices, not exact read isolation or a hostile same-uid boundary. They do not
+qualify earlier failed handling or release any held stream.
 
 Root coding workers select `coordinator_runtime.coding` in their genuine branch
 contract. It attempts normal signed commit/push/exact readback even partial, keeps

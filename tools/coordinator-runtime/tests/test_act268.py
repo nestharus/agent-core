@@ -286,6 +286,7 @@ class Shared(Engineering):
         spec=importlib.util.spec_from_file_location('fictional_public_board_store',library)
         public=importlib.util.module_from_spec(spec); spec.loader.exec_module(public)
         class Shell:
+            UserError=public.UserError
             @contextmanager
             def write(inner,conn):
                 conn.execute('BEGIN IMMEDIATE')
@@ -300,26 +301,20 @@ class Shared(Engineering):
         class Board(shared_custody.SharedCustody):
             def __init__(inner):
                 inner.selected={'owner':'fictional-logical-Work'}; inner.store=Shell()
-                inner.conn=sqlite3.connect(self.directory/'fictional-shared.sqlite3',isolation_level=None)
-                inner.conn.row_factory=sqlite3.Row
-                inner.conn.executescript('''
-                  PRAGMA foreign_keys=ON;
-                  CREATE TABLE coordinator_grants_v1(id PRIMARY KEY,runtime,runtime_dev,runtime_ino,actor,owner,issued_by);
-                  CREATE TABLE coordinator_deliveries_v1(id PRIMARY KEY,grant_id,owner,actor,producer,recipient,kind,required,payload,post,notice,state,processed_at);
-                  CREATE TABLE posts(seq INTEGER PRIMARY KEY AUTOINCREMENT,author,recipient,topic,kind,text,ref,reply_to REFERENCES posts(seq),created_at);
-                  CREATE TRIGGER posts_no_delete BEFORE DELETE ON posts BEGIN SELECT RAISE(ABORT,'board posts are immutable'); END;
-                  CREATE TABLE threads(thread_id PRIMARY KEY REFERENCES posts(seq),title);
-                  CREATE TABLE thread_posts(post_seq PRIMARY KEY REFERENCES posts(seq),thread_id REFERENCES threads(thread_id));
-                  CREATE TABLE subscriptions(thread_id REFERENCES threads(thread_id),session);
-                  CREATE TABLE attachments(post_seq REFERENCES posts(seq),path);
-                  CREATE TABLE notification_outbox(notification_id INTEGER PRIMARY KEY AUTOINCREMENT,post_seq REFERENCES posts(seq),thread_id REFERENCES threads(thread_id),delivery_state);
-                  CREATE TABLE notification_attempts(notification_id REFERENCES notification_outbox(notification_id),attempt_number);
-                  CREATE TABLE coordinator_software_deliveries_v1(delivery PRIMARY KEY,payload);
-                  CREATE TABLE coordinator_owner_return_checks_v1(delivery,receipt);
-                  CREATE TABLE coordinator_owner_corrections_v1(delivery,receipt);
-                '''+shared_custody.SCHEMA)
+                # Exercise the complete public schema/migrations and every normal
+                # immutable relationship trigger, not a reduced Board fixture.
+                from coordinator_runtime.board import EXTENSION,DELIVERY_SCHEMA,SOFTWARE_SCHEMA
+                inner.database=public.database(str(self.directory/'fictional-shared.sqlite3'))
+                inner.conn=inner.database.__enter__()
+                inner.conn.executescript(EXTENSION.replace('profile TEXT NOT NULL','profile TEXT')+
+                                        DELIVERY_SCHEMA+SOFTWARE_SCHEMA+shared_custody.SCHEMA)
+                for actor in (self.runtime.config['actor'],'fictional-recipient','fictional-foreign'):
+                    inner.conn.execute("INSERT INTO sessions(session,campaign,role,profile,status,registered_at,last_seen_at) VALUES(?,'fictional','fictional',NULL,'active','fictional time','fictional time')",(actor,))
                 info=self.runtime.path.stat()
-                inner.conn.execute('INSERT INTO coordinator_grants_v1 VALUES(?,?,?,?,?,?,?)',('fictional-original-grant',str(self.runtime.path),info.st_dev,info.st_ino,self.runtime.config['actor'],'fictional-logical-Work','fictional-issuer'))
+                inner.conn.execute('INSERT INTO coordinator_grants_v1 VALUES(?,?,?,?,NULL,?,?,?,?,?,?,?,?,NULL)',
+                    ('fictional-original-grant','fictional-board','Work','fictional-logical-Work',
+                     self.runtime.config['actor'],str(self.runtime.path),info.st_dev,info.st_ino,0,
+                     'fictional-issuer','fictional scope','fictional time'))
             @contextmanager
             def opened(inner,**kwargs): yield inner.conn
             def _delivery_record(inner,conn,row):
@@ -336,11 +331,11 @@ class Shared(Engineering):
         self.runtime.db.execute("UPDATE outboxes SET state='settled',processed_at=1000 WHERE id=?",(key,))
         outbox=self.runtime.one('SELECT * FROM outboxes WHERE id=?',(key,)); conn=board.conn
         post=conn.execute('INSERT INTO posts(author,recipient,topic,kind,text,ref,created_at) VALUES(?,?,?,?,?,?,?)',(self.runtime.config['actor'],'fictional-recipient','coordinator-runtime','handoff','fictional owned pointer','delivery:'+key,'fictional time')).lastrowid
-        conn.execute('INSERT INTO threads VALUES(?,?)',(post,'fictional'))
+        conn.execute('INSERT INTO threads VALUES(?,?,?,?,?)',(post,'fictional','coordinator-runtime',self.runtime.config['actor'],'fictional time'))
         conn.execute('INSERT INTO thread_posts VALUES(?,?)',(post,post))
-        notice=conn.execute("INSERT INTO notification_outbox(post_seq,thread_id,delivery_state) VALUES(?,?,'acknowledged')",(post,post)).lastrowid
-        conn.execute('INSERT INTO coordinator_deliveries_v1 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',(key,'fictional-original-grant','fictional-logical-Work',self.runtime.config['actor'],outbox['producer'],'fictional-recipient','alert','settled',outbox['payload'],post,notice,'settled',1000))
-        conn.execute('INSERT INTO coordinator_software_deliveries_v1 VALUES(?,?)',(key,'fictional whole receiving intent'))
+        notice=conn.execute("INSERT INTO notification_outbox(recipient,post_seq,thread_id,event,title,sender,created_at,delivery_state) VALUES(?,?,?,'open','fictional',?,'fictional time','acknowledged')",('fictional-recipient',post,post,self.runtime.config['actor'])).lastrowid
+        conn.execute('INSERT INTO coordinator_deliveries_v1(id,grant_id,owner,actor,producer,recipient,kind,required,payload,post,notice,state,processed_at,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(key,'fictional-original-grant','fictional-logical-Work',self.runtime.config['actor'],outbox['producer'],'fictional-recipient','alert','settled',outbox['payload'],post,notice,'settled',1000,'fictional time'))
+        # No delegated-software consent is asserted by this recipient-only control.
         return root,key,post
 
     def custody_receipt(self,board,key):
@@ -369,7 +364,7 @@ class Shared(Engineering):
             self.assertIsNone(board.conn.execute('SELECT delivery FROM coordinator_software_deliveries_v1').fetchone())
             self.assertEqual(board.conn.execute('SELECT COUNT(*) FROM coordinator_scan_frontiers_v1').fetchone()[0],1)
             self.runtime.clock=lambda:180000.+n*200000.
-            release={'hash':digest(witness),'qualified_at':self.runtime.clock(),'holds':{h:[] for h in capacity.HOLDS},'evidence':'fictional actual custody release after original conservation','originals':{name:{'hash':digest(value),'custodian':'fictional-original-custodian','evidence':'fictional full original preserved at its actual source'} for name,value in witness['original']['material'].items()},'custodian':'fictional-archive-custodian'}
+            release={'hash':digest(witness),'qualified_at':self.runtime.clock(),'holds':{h:[] for h in capacity.HOLDS},'evidence':'fictional actual custody release after original conservation','originals':{name:{'hash':digest(value),'custodian':'fictional-original-custodian','evidence':'fictional full original preserved at its actual source'} for name,value in witness['original']['material'].items()},'custodian':'fictional-archive-custodian','processing':{'completed_at':result['conserved_at'],'evidence':'fictional completed archive processing frontier'}}
             full=board.release_shared_archive(self.runtime,key,release)
             self.assertEqual(full['original_witness'],witness)
             observed=retirement.basis(self.runtime,root)
@@ -379,7 +374,7 @@ class Shared(Engineering):
         self.assertEqual(board.conn.execute('SELECT count FROM coordinator_scan_frontiers_v1').fetchone()[0],4)
         self.assertEqual(list((self.runtime.home/'shared-custody').iterdir()),[])
         # Ordinary posts remain protected after the narrow public interface.
-        foreign=board.conn.execute("INSERT INTO posts(author,recipient,topic,text,ref) VALUES('fictional-foreign','fictional-recipient','other','keep me','unrelated')").lastrowid
+        foreign=board.conn.execute("INSERT INTO posts(author,recipient,topic,kind,text,ref,created_at) VALUES('fictional-foreign','fictional-recipient','other','status','keep me','unrelated','fictional time')").lastrowid
         with self.assertRaises(sqlite3.IntegrityError): board.conn.execute('DELETE FROM posts WHERE seq=?',(foreign,))
         board.conn.close()
 
@@ -388,7 +383,7 @@ class Shared(Engineering):
         self.runtime.config['delivery']['recipients']['Work']={'session':'fictional-recipient'}
         self.continuing(); board=self.board(); root,key,post=self.create(board,0)
         receipt=self.custody_receipt(board,key)
-        reply=board.conn.execute('INSERT INTO posts(author,recipient,topic,text,reply_to) VALUES(?,?,?,?,?)',('fictional-foreign','fictional-recipient','coordinator-runtime','foreign required body',post)).lastrowid
+        reply=board.conn.execute("INSERT INTO posts(author,recipient,topic,text,reply_to,kind,created_at) VALUES(?,?,?,?,?,'status','fictional time')",('fictional-foreign','fictional-recipient','coordinator-runtime','foreign required body',post)).lastrowid
         with self.assertRaises(Refusal): board.retire_shared_custody(self.runtime,key,receipt)
         self.assertIsNotNone(board.conn.execute('SELECT id FROM coordinator_deliveries_v1 WHERE id=?',(key,)).fetchone())
         self.assertEqual(board.conn.execute('SELECT text FROM posts WHERE seq=?',(reply,)).fetchone()[0],'foreign required body')
