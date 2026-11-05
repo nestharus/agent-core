@@ -229,7 +229,10 @@ def apply(store, root, actor, receipt):
         delete('alert_debt', 'id', members['occurrences'])
         delete('alerts', 'id', members['occurrences'])
         delete('outboxes','id',members['deliveries'])
-        delete('shared_custody_intents','delivery',members['deliveries'])
+        # The conserved archive has its own consumer/retention frontier. Keep
+        # its exact binding and observed conservation receipt after the original
+        # episode retires, so later reconciliation/release needs no lost outbox
+        # or reconstructed authority. This small custody record remains charged.
         blob_candidates = {r['sha256'] for a in members['attempts'] for r in store.rows('SELECT sha256 FROM artifact_custody WHERE attempt=?', (a,))}
         for table, column in [('results','attempt'),('artifact_custody','attempt'),('artifacts','attempt'),('attempt_storage','attempt'),
                               ('routine_runs','attempt'),('routine_stages','attempt'),('file_publications','attempt'),('ordinary_runs','attempt'),('ordinary_tool_records','attempt'),

@@ -55,10 +55,9 @@ all represented notification processing timestamps and addressed settlement.
 Notification events, attempts, decisions, bytes and outboxes remain charged to
 the finite current source allocation. Upstream pause does not exempt these owed
 controls from those limits. No refill, counter refund or live throughput promise
-is implied. Grouped notification retirement is not covered by the existing
-standalone-alert or disposable-episode APIs: they refuse rather than detach a
-member's source/consumer custody. Such cohorts remain held pending a separately
-qualified whole-cohort retirement capability and all original holds. The finite
+is implied. Grouped notification retirement uses the qualified whole-episode
+path and retains the current refusal described below; standalone-alert retirement refuses groups. Unqualified
+cohorts remain held with every member's source/consumer custody. The finite
 operating envelope must include this retained growth.
 
 ## Narrow alert retirement
@@ -94,10 +93,12 @@ reason to replay it. This is cooperative Board fencing and a runtime transaction
 not multi-store atomicity or noncooperating-writer CAS. SQLite page reuse is not
 physical platform-store reclamation.
 
-## Operating envelope and unsupported capability
+## Whole-group retirement and operating envelope
 
-Continuing notification groups use the existing `retirement-basis EVENT` and
-`retire-episode EVENT --receipt PATH` path. The root is the original linked
+Continuing notification groups use the existing
+`processing-retirement-basis CAP EVENT` and
+`processing-retire CAP EVENT --receipt PATH` commands (with the normal
+`coordinator --config CONFIG` prefix). The root is the original linked
 consumer event. Its transitive event/job/delivery cohort now includes every
 `alert_delivery_members` occurrence, full stored payload/hash, exact represented
 debt and consumer frontier. A grouped receipt additionally supplies `occurrences`,
@@ -111,9 +112,25 @@ This path requires the same continuing issuer/capability, genuine original
 receiving/processing/control/settlement evidence, retired queue/artifact material,
 whole downstream completion plus 24 hours, and separately completed shared
 custody conservation. It removes only qualified local rows, including represented
-debt and membership. It does not settle the violation subjects. The external
-custodians still own the truth of their all-hold/conservation qualification;
+debt and membership. The exact shared-custody intent/archive binding survives
+original episode retirement, allowing later independently eligible archive-copy
+release through `release-shared-archive CAP ROLE DELIVERY --receipt PATH`.
+Copy-first release is also supported. Neither order waives the copy's own
+completed processing+24h and all holds; see [archive custody](branch-and-recovery.md).
+The small intent remains charged even after copy release; no automatic metadata
+reclamation is supplied. Episode retirement does not settle violation subjects.
+The external custodians still own the truth of their all-hold/conservation qualification;
 no ACK, DONE, enqueue time or numeric END supplies it.
+
+The software-delivered group lifecycle has an additional current refusal:
+shared conservation removes the persisted receiving intent and shared delivery
+that `processing.event()` still requires to authorize its local consumer during
+episode retirement. A complete shared conservation receipt does not bypass that
+check. Such a group can therefore remain held at `processing-retire` even with
+an aged whole consumer and exact conservation proofs. Preserve its original
+custody and report the refusal; do not recreate shared rows, backfill authority
+or waive current receiving checks. The archive-binding continuity above does
+not by itself resolve this earlier authorization dependency.
 
 Exact debt materializes atomically by observed time and original capability.
 Ambiguous same-time legacy debt is conservatively joined; no history is invented.
