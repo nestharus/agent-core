@@ -583,6 +583,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
                                                      encode(members), self.controller, token, self.clock()))
+        prospective.note_job(self, job)
         self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
                         encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
         if admission and phase == "execution":
@@ -793,6 +794,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response),
                          self.clock(), response["parent"]))
+        from .processing import note_source
+        note_source(self, response_id)
         if task.get("publish_internal_results"):
             self._outbox(job["role"], destination, "result", response, job=job["id"], event=response_id,
                          producer=attempt["session"], key=digest({"response_delivery": response_id}))
@@ -1032,7 +1035,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 "admitted_count_credits": admitted.reserved(self),
                 "allocation_window": windows.current(self) if self.config.get('window_service') else None,
                 "custodian_progress": self.one("SELECT value FROM meta WHERE key='custodian-progress'"),
-                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id)'),
+                "pending_alert_deliveries": self.one('SELECT COUNT(*) AS count FROM alerts a WHERE NOT EXISTS (SELECT 1 FROM outboxes o WHERE o.alert=a.id) AND NOT EXISTS (SELECT 1 FROM alert_delivery_members m WHERE m.occurrence=a.id)'),
                 "operational_errors": self.rows("SELECT * FROM operational_errors WHERE active=1"),
                 "recovery_requests":self.rows('SELECT * FROM recovery_requests'),
                 "recovery_dispositions":self.rows('SELECT * FROM recovery_dispositions'),

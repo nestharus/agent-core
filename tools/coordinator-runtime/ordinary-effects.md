@@ -9,8 +9,20 @@ contain or certify that separate work.
 
 `authorize-prospective --selection /absolute/selection.json` requires actual Work
 context through the existing cooperative actor interface. It writes one explicit
-authority record to the **same** journal, with the current maximum event and job
-row IDs as its boundary. The immutable configuration, journal path/inode, actor,
+authority record to the **same** journal. Job reservations record logical birth
+in their existing write transaction; the selected job frontier survives qualified
+cohort retirement and physical rowid reuse. New epochs mark `job_birth` as
+`observed-v1` internally and require an actual observation for each future job.
+Missing historical birth is never backfilled. Pre-existing epochs retain their
+original rowid interpretation for unobserved jobs; newly observed reservations
+advance beyond their conserved boundaries too. Per-job observations retire only
+with their qualified cohort; their SQLite sequence is never reset. Missing birth
+cannot waive retained authority checks for otherwise future members.
+
+Event boundaries retain their existing meanings: logical source positions for
+an explicitly selected processing bridge, physical event rowids otherwise.
+Job birth changes neither member eligibility nor processing, acceptance or
+retention proof. The immutable configuration, journal path/inode, actor,
 enrollments, original board grants, cursors, source/collector records, old jobs,
 ACKed queues, holds, publication intents, resources and outboxes are preserved.
 The operation neither scans nor replays old board work. Ongoing writers and QA

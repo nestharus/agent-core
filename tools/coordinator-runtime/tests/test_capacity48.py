@@ -61,10 +61,17 @@ class Capacity48(unittest.IsolatedAsyncioTestCase):
                                      'bind': 10, 'task': 60},
                        'delivery': {'alert_role': 'Work', 'alert_recipient': 'Work',
                                     'recipients': {'Work': {'session': OWNER}}}}
-        if self._testMethodName == 'test_alert_count_pressure_has_owned_gap_and_no_silent_prefix':
+        if self._testMethodName in {'test_alert_count_pressure_has_owned_gap_and_no_silent_prefix',
+                                    'test_alert_and_exact_debt_exhaustion_refuses_with_durable_owned_gap'}:
             self.config['limits']['max_alerts'] = 1
+            # Two due occurrences per cadence, two cadences retained in debt.
+            # Production capacities stay unchanged. Exhaustion is separate.
+            self.config['limits']['max_alert_debt'] = (4 if self._testMethodName ==
+                'test_alert_count_pressure_has_owned_gap_and_no_silent_prefix' else 1)
         if self._testMethodName == 'test_byte_pressure_and_late_poll_are_explicit_no_backfill':
             self.config['limits']['max_bytes'] = 1
+        if self._testMethodName == 'test_exact_debt_materializes_only_as_whole_cohort_after_qualified_reclamation':
+            self.config['limits'].update(max_alerts=2, max_alert_debt=2)
         self.store = Store(self.config, clock=lambda: self.now)
         self.addCleanup(self.store.close)
         self.store.enroll('Work', {'owner': OWNER, 'actor': ACTOR, 'id': 'fictional-grant', 'cutover': 0})
@@ -129,10 +136,57 @@ class Capacity48(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state['custodian'], OWNER)
         self.assertEqual((state['gap_since'], state['gap_through'], state['unrepresented']), (1000, 1000, 2))
         self.assertTrue(state['scope'])
+        first = self.store.rows('SELECT * FROM alert_debt ORDER BY id')
+        self.assertEqual(len(first), 2)
+        self.assertEqual({r['subject'] for r in first}, {'unchanged', 'second'})
+        self.assertTrue(all(json.loads(r['payload'])['id'] == r['id'] and r['created'] == self.now for r in first))
         self.now += 60
         await self.runtime().guarded_tick(lambda _: None)
         self.assertGreaterEqual(capacity.service(self.store)['unrepresented'], 4)
+        self.assertEqual([self.store.one('SELECT * FROM alert_debt WHERE id=?',(r['id'],)) for r in first], first)
+        self.assertEqual(len(self.store.rows('SELECT * FROM alert_debt')), 4)
         self.save_before('retained-unmet-gap')
+
+    async def test_alert_and_exact_debt_exhaustion_refuses_with_durable_owned_gap(self):
+        self.store.record_operational_error('second', {'error': 'fictional second violation'})
+        with self.assertRaises(Backpressure) as refusal:
+            self.store.emit_alerts()
+        self.assertEqual(self.store.rows('SELECT * FROM alerts'), [])
+        self.assertEqual(self.store.rows('SELECT * FROM alert_debt'), [])
+        state = capacity.service(self.store)
+        self.assertEqual(state['custodian'], OWNER)
+        self.assertEqual((state['gap_since'],state['gap_through'],state['unrepresented']), (1000,1000,2))
+        self.assertEqual(state['latest'], refusal.exception.observation)
+        self.assertEqual(state['latest']['representation'], 'unavailable')
+        self.assertEqual(state['latest']['due_count'], 2)
+        self.assertEqual(self.store.rows('SELECT * FROM alert_cadence'), [])
+        self.assertTrue(self.store.one("SELECT * FROM operational_errors WHERE subject='unchanged' AND active=1"))
+        self.save_before('retained-explicit-exhaustion')
+
+    async def test_exact_debt_materializes_only_as_whole_cohort_after_qualified_reclamation(self):
+        first=self.store.emit_alerts()[0]['id']
+        current=self.settled(first)
+        self.store.record_operational_error('second', {'error':'fictional second unchanged violation'})
+        self.now+=60
+        self.assertEqual(self.store.emit_alerts(),[])
+        original=self.store.rows('SELECT * FROM alert_debt ORDER BY id')
+        self.assertEqual(len(original),2)
+        self.assertEqual([r['id'] for r in self.store.rows('SELECT * FROM alerts')],[first])
+        self.assertEqual(capacity.deliver_pending(self.store),0)
+        self.assertEqual(self.store.rows('SELECT * FROM alert_debt ORDER BY id'),original)
+        self.now=1000+86400
+        capacity.retire(self.store,first,OWNER,self.release(first),current)
+        self.assertEqual(capacity.deliver_pending(self.store),2)
+        self.assertEqual(self.store.rows('SELECT id,created,payload FROM alerts ORDER BY id'),
+                         [{k:r[k] for k in ('id','created','payload')} for r in original])
+        self.assertEqual(self.store.one('SELECT COUNT(*) AS n FROM alert_debt WHERE represented=1')['n'],2)
+        receipts={r['id']:self.settled(r['id']) for r in original}
+        self.now+=86400
+        for row in original:
+            capacity.retire(self.store,row['id'],OWNER,self.release(row['id']),receipts[row['id']])
+        self.assertEqual(self.store.rows('SELECT * FROM alert_debt'),[])
+        self.assertTrue(self.store.one("SELECT * FROM operational_errors WHERE subject='unchanged' AND active=1"))
+        self.save_before('retained-whole-debt-reclamation')
 
     async def test_partial_delivery_batch_retains_both_due_occurrence_identities(self):
         self.store.record_operational_error('second', {'error': 'fictional second violation'})
@@ -168,8 +222,12 @@ class Capacity48(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.rows('SELECT * FROM events ORDER BY id'), before)
 
     async def test_byte_pressure_and_late_poll_are_explicit_no_backfill(self):
-        self.assertEqual(self.store.emit_alerts(), [])
+        with self.assertRaises(Backpressure) as refusal:
+            self.store.emit_alerts()
         self.assertEqual(capacity.service(self.store)['unrepresented'], 1)
+        self.assertEqual(capacity.service(self.store)['latest'], refusal.exception.observation)
+        self.assertEqual(capacity.service(self.store)['latest']['representation'], 'unavailable')
+        self.assertEqual(self.store.rows('SELECT * FROM alert_debt'), [])
         self.assertEqual(self.store.rows('SELECT * FROM alerts'), [])
 
     async def test_late_poll_and_clock_regression_do_not_fabricate_history(self):

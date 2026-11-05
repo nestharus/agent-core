@@ -126,6 +126,8 @@ class DeliveryJournal:
             self.budget("events", len(encode(event)), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (response_id, job["role"], encode(event), digest(event), self.clock(), event["parent"]))
+            from .processing import note_source
+            note_source(self, response_id)
         classified = self.one("SELECT classification FROM events WHERE id=?", (response_id,))["classification"]
         self.db.execute("UPDATE outboxes SET event=?,state=CASE WHEN state='pending' AND ? IS NULL "
                         "THEN 'classification-pending' ELSE state END WHERE job=? AND event IS NULL AND board_receipt IS NULL",
@@ -206,8 +208,9 @@ class DeliveryJournal:
             self.db.execute("UPDATE outboxes SET state=?,board_receipt=?,error=NULL,processed_at=? WHERE id=?",
                             (receipt["state"], encode(receipt), completed, delivery))
             if row["alert"] and completed is not None:
-                self.db.execute("UPDATE alerts SET processed_at=MAX(COALESCE(processed_at,?),?) WHERE id=?",
-                                (completed, completed, row["alert"]))
+                self.db.execute("UPDATE alerts SET processed_at=MAX(COALESCE(processed_at,?),?) WHERE id=? OR id IN "
+                                "(SELECT occurrence FROM alert_delivery_members WHERE delivery=?)",
+                                (completed, completed, row["alert"], delivery))
             self._owner_settlement(row, receipt)
             if row["event"] and not self.one("SELECT id FROM outboxes WHERE event=? AND (state!='settled' OR hold IS NOT NULL OR processed_at IS NULL)", (row["event"],)):
                 self.db.execute("UPDATE queue SET state='done' WHERE event=? AND phase='delivery'", (row["event"],))
@@ -286,6 +289,8 @@ class DeliveryJournal:
         self.budget("events", len(encode(response)))
         self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                         (response["id"], destination, encode(response), digest(response), self.clock(), response["parent"]))
+        from .processing import note_source
+        note_source(self, response['id'])
         self.db.execute("UPDATE jobs SET state='closed',effects='reconciled',effect_receipt=?,response=?,closed_at=? WHERE id=?",
                         (encode(returned), response["id"], self.clock(), job["id"]))
         self.db.execute("UPDATE queue SET state='done' WHERE job=?", (job["id"],))

@@ -253,6 +253,8 @@ class Dispatcher(ProcessingDispatcher):
                 self.store.budget('events', len(encode(event).encode()))
                 self.store.db.execute('INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)',
                                       (key, 'Reviews', encode(event), digest(event), self.store.clock(), source))
+                from .processing import note_source
+                note_source(self.store, key)
 
     def automatic_cleanup(self):
         # Qualified artifact/event relocation only. Destructive row retirement

@@ -11,12 +11,19 @@ import math
 from .contracts import Backpressure, Refusal, digest, encode, ident, required_text
 
 RETENTION = 86400
+NOTIFICATION = "alert-occurrences-v1"
+NOTIFICATION_LIMIT = 32
+NOTIFICATION_BYTES = 32768
+SINGLE_NOTIFICATION_BYTES = 196608
 # Withheld from ordinary admission, not additional capacity. This small fixed
 # record cannot guarantee writes after disk exhaustion or noncooperating writes.
 PRESSURE_RESERVE = 4096
 HOLDS = {"source", "consumer", "control", "transport", "publication", "resource",
          "recovery", "effect", "privacy"}
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS alert_delivery_members(
+ occurrence TEXT PRIMARY KEY REFERENCES alerts(id),delivery TEXT NOT NULL REFERENCES outboxes(id),
+ source_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS alert_service(
  singleton INTEGER PRIMARY KEY CHECK(singleton=1),last_observed REAL NOT NULL,
  gap_since REAL,gap_through REAL,custodian TEXT NOT NULL,reason TEXT,
@@ -33,6 +40,26 @@ def service(store):
     row = store.one("SELECT * FROM alert_service WHERE singleton=1")
     latest = store.one("SELECT value FROM meta WHERE key='alert-observation'")
     return {**row, 'latest': json.loads(latest['value']) if latest else None} if row else None
+
+
+def preserve_alert_frontier(store):
+    """One constant-size high-water mark; no old occurrence gains new origin."""
+    physical = store.one('SELECT COALESCE(MAX(rowid),0) AS n FROM alerts')['n']
+    saved = store.one("SELECT value FROM meta WHERE key='alert-row-frontier'")
+    frontier = max(physical, int(saved['value']) if saved else 0)
+    store.db.execute("INSERT INTO meta VALUES('alert-row-frontier',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                     (str(frontier),))
+    return frontier
+
+
+def insert_alert(store, occurrence):
+    # The original occurrence ID/time/full body survive debt materialization.
+    # Explicit placement prevents qualified deletion reusing an old boundary.
+    position = preserve_alert_frontier(store) + 1
+    store.db.execute('INSERT INTO alerts(rowid,id,subject,kind,created,payload,processed_at) VALUES(?,?,?,?,?,?,NULL)',
+                     (position, occurrence['id'], occurrence['subject'], occurrence['kind'],
+                      occurrence['created'], encode(occurrence)))
+    preserve_alert_frontier(store)
 
 
 def capture(store):
@@ -64,14 +91,17 @@ def capture(store):
                               (violation['subject'], violation['kind']))
             if not prior or now >= prior['last_created'] + cadence:
                 violations.append(violation)
-        occurrences = [{'id': ident(), 'created': now, **v} for v in violations]
+        # Origin is recorded only at this actual observation, never backfilled
+        # onto historical alerts/debt. It selects custody, not receiving authority.
+        origin = ({'processing_capability': store.processing.current()[0]['id']}
+                  if store.processing else {})
+        occurrences = [{'id': ident(), 'created': now, **v, **origin} for v in violations]
         try:
             store.db.execute('SAVEPOINT alert_cohort')
             emitted = []
             for occurrence in occurrences:
                 store.budget('alerts', len(encode(occurrence).encode()) + 1024)
-                store.db.execute('INSERT INTO alerts VALUES(?,?,?,?,?,NULL)',
-                                 (occurrence['id'], occurrence['subject'], occurrence['kind'], now, encode(occurrence)))
+                insert_alert(store, occurrence)
                 emitted.append(occurrence)
             store.db.execute('RELEASE alert_cohort')
         except Refusal:
@@ -136,19 +166,40 @@ def deliver_pending(store, limit=32):
     """Allocate each original occurrence once; pressure does not erase its ID."""
     if not store.config.get('delivery'):
         return 0
-    for row in store.rows('SELECT * FROM alert_debt WHERE represented=0 ORDER BY created,id LIMIT ?', (limit,)):
+    continuing = store.processing and 'service' in store.processing.current()[1]
+    origin = store.processing.key if continuing else None
+    first = store.one('SELECT * FROM alert_debt WHERE represented=0 AND '
+                      "(? IS NULL OR json_extract(payload,'$.processing_capability')=?) "
+                      'ORDER BY created,id LIMIT 1', (origin, origin))
+    if first:
+        # Exact debt from one observed time/origin is an atomic cohort. Reading
+        # a delivery-sized prefix must not turn a refused cohort into partial
+        # admission. Same-time ambiguous legacy debt is conservatively joined,
+        # never assigned invented observation history. Debt count stays bounded
+        # by its already selected finite capacity; notification pages remain 32.
+        cohort = store.rows('SELECT * FROM alert_debt WHERE represented=0 AND created=? '
+                            "AND json_extract(payload,'$.processing_capability') IS ? ORDER BY id",
+                            (first['created'], json.loads(first['payload']).get('processing_capability')))
         try:
             with store.tx():
-                store.budget('alerts', len(row['payload'].encode()) + 1024)
-                store.db.execute('INSERT INTO alerts VALUES(?,?,?,?,?,NULL)',
-                                 (row['id'], row['subject'], row['kind'], row['created'], row['payload']))
-                store.db.execute('UPDATE alert_debt SET represented=1 WHERE id=?', (row['id'],))
+                for row in cohort:
+                    store.budget('alerts', len(row['payload'].encode()) + 1024)
+                    insert_alert(store, json.loads(row['payload']))
+                    store.db.execute('UPDATE alert_debt SET represented=1 WHERE id=?', (row['id'],))
         except Backpressure:
-            break
+            pass  # All original debt remains; existing owed deliveries proceed.
     role = store.config['delivery'].get('alert_role', 'Work')
     recipient = store.config['delivery'].get('alert_recipient', 'Work')
-    rows = store.rows('SELECT a.* FROM alerts a WHERE NOT EXISTS '
-                      '(SELECT 1 FROM outboxes o WHERE o.alert=a.id) ORDER BY a.created,a.id LIMIT ?', (limit,))
+    from .configuration import selected
+    transition = selected(store) if continuing else None
+    boundary = transition['alert_boundary'] if transition else 0
+    rows = store.rows('SELECT a.* FROM alerts a WHERE a.rowid>? AND '
+                      "(? IS NULL OR json_extract(a.payload,'$.processing_capability')=?) AND NOT EXISTS "
+                      '(SELECT 1 FROM outboxes o WHERE o.alert=a.id) AND NOT EXISTS '
+                      '(SELECT 1 FROM alert_delivery_members m WHERE m.occurrence=a.id) '
+                      'ORDER BY a.created,a.id LIMIT ?', (boundary, origin, origin, limit,))
+    if continuing:
+        return deliver_notifications(store, role, recipient, rows)
     count = 0
     for row in rows:
         try:
@@ -161,7 +212,84 @@ def deliver_pending(store, limit=32):
     return count
 
 
+def deliver_notifications(store, role, recipient, rows):
+    """Bounded full batches, not deduplication: every occurrence keeps its ID.
+
+    Undelivered rows/debt remain pending on pressure. A large occurrence
+    uses one full singleton envelope, within the receiving message bound. No
+    oversized payload is clipped or converted into business-work authority.
+    """
+    count = 0
+    while rows:
+        batch = []
+        for row in rows[:NOTIFICATION_LIMIT]:
+            candidate = batch + [row]
+            payload = notification_payload(store, candidate)
+            if len(encode(payload).encode()) > NOTIFICATION_BYTES:
+                break
+            batch = candidate
+        if not batch:
+            batch = rows[:1]
+            payload = notification_payload(store, batch)
+            if len(encode(payload).encode()) > SINGLE_NOTIFICATION_BYTES:
+                gap(store, store.clock(), store.clock(),
+                    'full occurrence exceeds notification envelope; exact source retained pending delivery',
+                    digest(payload), 0)
+                break
+        else:
+            payload = notification_payload(store, batch)
+        try:
+            with store.tx():
+                key = store._outbox(role, recipient, 'alert', payload, alert=batch[0]['id'],
+                                    key=digest({'alert_occurrences': [r['id'] for r in batch]}))
+                for row in batch:
+                    store.budget(None, 256)
+                    store.db.execute('INSERT INTO alert_delivery_members VALUES(?,?,?)',
+                                     (row['id'], key, digest(json.loads(row['payload']))))
+        except Backpressure:
+            break
+        count += 1
+        rows = rows[len(batch):]
+    return count
+
+
+def notification_payload(store, rows):
+    return {'schema': NOTIFICATION,
+            'source_custodians': {r: value['owner'] for r, value in store.config['roles'].items()}, 'occurrences': [json.loads(r['payload']) for r in rows],
+            'scope': 'Full due occurrences; notification processing alone settles no underlying cause, '
+                     'old source, native ownership, effect, acceptance or hold.'}
+
+
+def notification(store, event):
+    """Authenticate the whole typed notification, never a caller marker alone."""
+    if not store.processing or not event.get('source_delivery'):
+        return None
+    key = event['source_delivery']['id']
+    outbox = store.one('SELECT * FROM outboxes WHERE id=?', (key,))
+    if not outbox or outbox['kind'] != 'alert' or outbox['job'] or outbox['event'] or not outbox['alert']:
+        return None
+    payload = json.loads(outbox['payload'])
+    if payload.get('schema') != NOTIFICATION:
+        return None
+    if not store.processing.owed_control(event) or event['body'] != payload:
+        raise Refusal('notification differs from its exact addressed source')
+    members = store.rows('SELECT occurrence,source_hash FROM alert_delivery_members WHERE delivery=? ORDER BY occurrence', (key,))
+    occurrences = payload.get('occurrences', [])
+    expected = [{'occurrence': r['id'], 'source_hash': digest(r)} for r in occurrences]
+    if (not 1 <= len(occurrences) <= NOTIFICATION_LIMIT or len(encode(payload).encode()) > (SINGLE_NOTIFICATION_BYTES if len(occurrences)==1 else NOTIFICATION_BYTES)
+            or any(r.get('processing_capability') != store.processing.key for r in occurrences)
+            or len({r['id'] for r in occurrences}) != len(occurrences)
+            or sorted(expected, key=lambda r: r['occurrence']) != members
+            or outbox['alert'] != occurrences[0]['id'] or outbox['producer'] != store.config['actor']):
+        raise Refusal('whole original notification membership/attribution is required')
+    return {'delivery': key, 'occurrences': occurrences,
+            'coverage_evidence': 'alert-occurrences:' + digest(occurrences),
+            'source_custodians': payload['source_custodians'], 'scope': payload['scope']}
+
+
 def retirement_basis(store, occurrence):
+    if store.one('SELECT delivery FROM alert_delivery_members WHERE occurrence=?', (occurrence,)):
+        raise Refusal('grouped notification custody requires whole-cohort qualification; standalone retirement is unavailable')
     alert = store.one('SELECT * FROM alerts WHERE id=?', (occurrence,))
     outboxes = store.rows('SELECT * FROM outboxes WHERE alert=? ORDER BY id', (occurrence,))
     if not alert or len(outboxes) != 1:
@@ -169,8 +297,12 @@ def retirement_basis(store, occurrence):
     outbox = outboxes[0]
     if outbox['kind'] != 'alert' or outbox['event'] is not None or outbox['job'] is not None:
         raise Refusal('job/event/other-kind lifecycle is outside standalone alert retirement')
+    debt = store.one('SELECT * FROM alert_debt WHERE id=?', (occurrence,))
+    if debt and (debt['represented'] != 1 or debt['payload'] != outbox['payload']):
+        raise Refusal('exact original represented debt must remain with its source delivery')
     from .frontier import delivery
     return alert, outbox, digest({'configuration': digest(store.config), 'alert': alert, 'outbox': outbox,
+                                  'exact_debt': debt,
                                   'whole_consumer': delivery(store, outbox['id'])})
 
 
@@ -221,8 +353,10 @@ def retire(store, occurrence, actor, receipt, current_delivery):
             raise Refusal('active scoped error remains held')
         # Keep the evidence with the caller's retained exact receipt/output; no
         # unbounded local tombstone journal and no generic delivery deletion.
+        preserve_alert_frontier(store)
         store.db.execute('DELETE FROM delivery_wakeups WHERE delivery=?', (outbox['id'],))
         store.db.execute('DELETE FROM outboxes WHERE id=?', (outbox['id'],))
+        store.db.execute('DELETE FROM alert_debt WHERE id=?', (occurrence,))
         store.db.execute('DELETE FROM alerts WHERE id=?', (occurrence,))
     return {'retired_alert': occurrence, 'retired_delivery': outbox['id'], 'basis': basis,
             'actor': actor, 'receipt': receipt, 'scope': 'runtime rows only; retain this original receipt; no platform reclamation'}

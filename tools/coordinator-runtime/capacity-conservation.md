@@ -23,6 +23,44 @@ within the current byte limit for the small pressure record. Sampled accounting
 and this reserve are not a physical filesystem quota, write reservation or disk
 failure guarantee.
 
+## Continuing-service notification consumption
+
+A current continuing processing selection groups up to 32 exact pending
+occurrences per addressed notification, normally within 32 KiB. A single larger
+occurrence uses its full envelope up to 192 KiB. Larger sources stay exact and
+pending with an explicit service gap; nothing is clipped. Original occurrence
+IDs/times/payloads and debt remain separate, linked by `alert_delivery_members`.
+Only occurrences recorded at birth under the current processing capability and
+within the current configuration boundary enter new notifications. Historical
+alerts and exact debt have no backfilled origin or new-capability reattribution;
+they retain their original custody;
+new due occurrences of their still-real causes continue normally. No cause,
+including a delayed notification's own ACK/backlog, is exempt from observation.
+Zero violations produce no new occurrence or notification.
+
+The actual receiving intent still authenticates source/delivery/recipient/grants,
+managed transport and uncertainty. The received notification has control routes,
+not business-task authority. One fresh Luna LOW classification and durable queue
+precede ACK. A separately collected actual control worker can return
+`mode=notification` only after reading every full occurrence; its evidence binds
+the full occurrence digest. That receipt finishes only this notification queue,
+without reclassification or another Work proposer child. Underlying causes,
+original native/collector ownership, effects, uncertainty and holds remain open
+with their original custodians. An interpretation that needs an actual decision
+retains the ordinary control/Work-return path, with its complete obligations.
+PARTIAL, missing coverage, unknown worker/tool/END, stale source or transport
+uncertainty cannot become processing. The whole consumer frontier still gates
+all represented notification processing timestamps and addressed settlement.
+
+Notification events, attempts, decisions, bytes and outboxes remain charged to
+the finite current source allocation. Upstream pause does not exempt these owed
+controls from those limits. No refill, counter refund or live throughput promise
+is implied. Grouped notification retirement is not covered by the existing
+standalone-alert or disposable-episode APIs: they refuse rather than detach a
+member's source/consumer custody. Such cohorts remain held pending a separately
+qualified whole-cohort retirement capability and all original holds. The finite
+operating envelope must include this retained growth.
+
 ## Narrow alert retirement
 
 Automatic cleanup retains alerts: processing timestamps alone cannot qualify all
@@ -57,6 +95,43 @@ not multi-store atomicity or noncooperating-writer CAS. SQLite page reuse is not
 physical platform-store reclamation.
 
 ## Operating envelope and unsupported capability
+
+Continuing notification groups use the existing `retirement-basis EVENT` and
+`retire-episode EVENT --receipt PATH` path. The root is the original linked
+consumer event. Its transitive event/job/delivery cohort now includes every
+`alert_delivery_members` occurrence, full stored payload/hash, exact represented
+debt and consumer frontier. A grouped receipt additionally supplies `occurrences`,
+using the same exact hash/custodian/evidence/disposition format as `sources` and
+`results`. Every member needs conservation at its original source or actual
+producer-owned disposability. Partial membership, another delivery sharing an
+occurrence, unknown origin, changed source, stale qualification or any hold
+refuses the whole transaction. Standalone alert retirement still refuses groups.
+
+This path requires the same continuing issuer/capability, genuine original
+receiving/processing/control/settlement evidence, retired queue/artifact material,
+whole downstream completion plus 24 hours, and separately completed shared
+custody conservation. It removes only qualified local rows, including represented
+debt and membership. It does not settle the violation subjects. The external
+custodians still own the truth of their all-hold/conservation qualification;
+no ACK, DONE, enqueue time or numeric END supplies it.
+
+Exact debt materializes atomically by observed time and original capability.
+Ambiguous same-time legacy debt is conservatively joined; no history is invented.
+When the alert representation cannot fit the entire cohort, its exact debt stays
+pending while existing deliveries can progress. Exhaustion of both admitted
+representations raises Backpressure after committing the owner-held coverage
+gap. The notification delivery page remains bounded. A constant-size alert row
+high-water mark survives reclamation, retaining configuration frontiers without
+reclassifying old alerts/debt. Event and job logical sequences also survive;
+retirement refunds no original input/window/attempt/allocation charges.
+
+These source paths cover grouped notifications and their linked control/task/
+response queues, existing disposable job/event episodes, and separately qualified
+standalone alerts with represented debt. Canonical role-owned artifacts, unresolved
+ordinary resources/effects, recovery, foreign/shared stores and unqualified old
+episodes remain held. There is no universal queued-item cleanup or autonomous
+all-custodian qualification claim. Source fixtures with synthetic shared-custody
+qualification cannot establish actual shared retirement or real elapsed 24 hours.
 
 Any service commitment needs a bounded due population, all competing producers,
 processing/hold duration, retirement throughput, outage length and observation
