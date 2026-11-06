@@ -799,6 +799,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.gate_result_delivery(row, attempt, result)
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
+            if not task.get('routine_completion'):
+                local_integration.finish_discovery(self, row, attempt, result)
             response = None if row["role"] == "Work" and result["category"] in {"scope", "blocker"} else self._response(row, attempt, task, result)
             if task.get("delivery_required"):
                 self.owner_report(row, attempt, result)
@@ -841,6 +843,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             "body": result, "kind": "response", "grant": None,
         }
         branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
+        if not branch_keys and local_integration.selected(self, job['task']):
+            from .branches import job_branch
+            actual_branch = job_branch(self, job)
+            if actual_branch:
+                branch_keys.add(actual_branch['id'])
         if len(branch_keys)==1:
             response['branch_binding']=next(iter(branch_keys))
         commit = self.one('SELECT state,receipt FROM local_commits WHERE attempt=?', (attempt['id'],))

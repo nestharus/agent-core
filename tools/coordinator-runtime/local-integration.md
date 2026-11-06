@@ -55,6 +55,43 @@ unknown fields, protected ownership/identity fields and prior array members
 remain conserved. Reassignment/acceptance needs separate real authority, not a
 local model statement. Main and Cloud/PR1230 require distinct genuine bindings.
 
+Scalar and list points use an explicit `writable: ["$value"]` for whole-value
+changes. An empty writable list permits no change. Value types stay fixed;
+changing a schema needs a separate authority decision. Prior list members,
+including duplicates, survive. Protected containing fields, nested ownership,
+identity and other admitted views remain protected through alternate lenses.
+`protected: ["$value"]` makes the whole value immutable. These rights do not
+grant ownership acceptance or permit dropping unknown fields/history.
+
+Native points need no JSON consumer or Work-catalog read permission. Their
+bindings address **existing original service interfaces**, for example:
+
+```json
+{"native":"branch","id":"EXISTING-BRANCH-ASSOCIATION"}
+{"native":"review","component":"EXISTING-ORIGINAL-CONTEXT-KEY"}
+{"native":"execution","package":"ADMITTED-PACKAGE","task":"qa-execution"}
+```
+
+The point shape stays the same; native `writable` must be empty because native
+state cannot be replaced by the file publisher. A packet's logical write-set
+still fences native work. Branch/ref changes use the exact original admitted
+association/ref adapter. QA uses its original procedure, resources, candidate
+export, runner and independent acceptance. Reviews uses its selected original
+component, method, collector, context and history. Preparation also runs on the
+ordinary Source service path, binding reports to their actual input revision.
+Native bindings neither issue those authorities nor manufacture acceptance.
+
+Native `incarnation` must equal the branch association's incarnation, the
+review context's original run (handle before a run exists), or the digest of
+the execution admission's original receipt string, respectively. `line` remains
+a separately selected controller identity. Component keys retain their branch
+incarnation meaning; titles, package labels and paths do not supply a line.
+Missing/unavailable originals refuse with a specific dependency. Work can
+observe a native return only with independently issued current coordination
+and every original member/admission check. Other roles retain their own roots
+and native authority. No authoritative file projection or shadow native state
+is created.
+
 An addressed input or typed result may contain:
 
 ```json
@@ -76,6 +113,18 @@ exclusion persists; an unrelated cleanup need not await all QA executions.
 Actual ordinary resource leases and continuing branch/reviewer contexts remain
 binding. No original attempt, source revision or current verdict is refreshed.
 
+File overlap resolves unique selectors to the actual file and material, so two
+different selectors for one record or a parent/child lens conflict. Cooperative
+publication records material mutation generations independently of selector
+names. A change followed by restoration invalidates an older alias decision.
+Native versions retain original histories/turns/executions and possible-effect
+intents; native ref/session/resource exclusion includes original unknown turns.
+New native effects recheck the prepared read-set before creating their original
+intent. Read-only reports keep their original versions so later arrivals
+reconcile. This adds neither hostile-writer CAS nor external ABA detection.
+Generation/history storage and lookup costs require workload qualification;
+this capability supplies no sustained latency or fairness claim.
+
 Missing point metadata selects the central discovery lane. Its separately serialized lane batches new
 candidates and supplies the existing admitted point catalog for identity and
 relationship discovery. It never creates a readiness gate on anchored work. Other admitted same-task
@@ -85,6 +134,10 @@ still require their genuine receiving/coordination authority; discovery cannot
 borrow cross-role access.
 Malformed/unresolved typed bindings retain an operational dependency rather than
 silently losing the event or blocking unrelated candidates.
+Known existing work with no usable selector can explicitly carry
+`integration: {"unresolved_existing": "owned lookup/interface dependency"}`.
+It cannot become a duplicate new record. Missing metadata denotes unanchored
+input, not proof that the work is new; discovery must resolve that distinction.
 
 `TASK_CONTEXT.local_integration` supplies mode, genuine decision authority,
 current basis and the selected method's four steps. Reconciliation and discovery
@@ -103,6 +156,10 @@ Discovery may append new records and propose owners while retaining existing
 records/text. It cannot manufacture accepted ownership. If an explicit
 `new_point_prefix` is selected, `completion.discovered_points` may propose new
 bindings of the same shape under that namespace and an already admitted line.
+An empty point catalog can instead start from controller-selected
+`discovery_lines: [{"line":"GENUINE-LINE", "incarnation":"GENUINE-LIFECYCLE",
+"authority":"ISSUED-NAMESPACE-AUTHORITY-AND-WHY"}]` on the task. No fictitious
+record is required. New bindings must match a selected line **and incarnation**.
 Publication validates stable unique postimage identities, roots/targets and all
 participating task policies before effects. After all duties publish, the service
 records the new bindings with original discovery custody and emits separate
@@ -110,6 +167,13 @@ version-bound point continuations. Tasks share new points only through an
 explicitly common selected prefix. The original discovery source stays held
 while those live identities consume its provenance. No whole-catalog migration
 or automatic identity retirement is selected.
+
+Non-file discovery may link already existing native identities through the same
+namespace/line validation after original completion/effect gates. It creates no
+branch, session, execution, acceptance or permission. It emits scoped native
+continuations with original sources and collectors. Actual new Work records
+still owe all seven file consumers. An unanchored native effect waits for the
+scoped continuation; discovery itself cannot bypass original effect admission.
 
 Under the cooperative publication lock, service rebase checks every relevant
 read/write version and builds new postimages from **current** peer bytes. It
@@ -138,11 +202,15 @@ Work still needs current processing/role/effect authority. Its coordination
 neither grants Branch/QA execution roots nor claims native-owner full read.
 Published responses and delegated handoffs keep their separate receiving duties.
 
-Oversized typed results now retain exact original recovery bytes, witness, blob
+Oversized typed result objects reaching `Store.collect` retain exact original recovery bytes, witness, blob
 custody and collector while their transport remains incomplete. If storage cannot
 admit conservation, collection refuses with the original collector still owning
 it. Encoding/acquisition can precede the transport bound; no memory bound follows.
 No caps increase/refund, birth reset, debt deletion or historical replay occurs.
+The AppServer's earlier text-size filter can refuse a final before that collector
+path. Exclusive-create/file-journal interruption can also need same-original
+manual recovery. Custody and incomplete status remain with that collector; no
+universal oversize recovery, automatic overwrite, deletion or replay is promised.
 Processing, issue resolution and effect settlement remain distinct. Whole
 processing plus 24 hours **and** every hold remains the retirement condition.
 Repeated due violations remain distinct notifications; no violation is silent.

@@ -146,7 +146,14 @@ def job_branch(store, job):
         return None  # Sole role integrator may consolidate several branches.
     keys = {store.event(m['event']).get('branch_binding') for m in json.loads(job['members'])}
     if keys == {None}:
-        return None
+        # A scoped native continuation can start from the original execution
+        # admission, without a packet inventing or duplicating its association.
+        admission = store.one('SELECT receipt FROM admissions WHERE package=?', (job.get('package'),))
+        scope = json.loads(admission['receipt']).get('task_scopes', {}).get(job.get('task'), {}) if admission else {}
+        key = scope.get('branch_binding') if selected(store, job.get('task')) else None
+        if not key:
+            return None
+        keys = {key}
     if len(keys) != 1 or None in keys:
         raise Refusal('a branch execution cannot mix branch lifecycles or unbound members')
     branch=association(store,next(iter(keys)))

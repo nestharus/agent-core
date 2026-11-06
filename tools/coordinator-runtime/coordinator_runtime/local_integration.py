@@ -7,6 +7,7 @@ commit lock. This is neither a model lock nor hostile-writer CAS.
 """
 import copy
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 from .contracts import Refusal, digest, encode, parse_json, required_text, collected_task_result
@@ -18,8 +19,11 @@ CREATE TABLE IF NOT EXISTS local_commits(attempt TEXT PRIMARY KEY,state TEXT NOT
 CREATE TABLE IF NOT EXISTS local_discovered_points(point TEXT PRIMARY KEY,definition TEXT NOT NULL,policy TEXT NOT NULL,source_attempt TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS local_point_commits(point TEXT NOT NULL,generation INTEGER NOT NULL,attempt TEXT NOT NULL,PRIMARY KEY(point,generation));
 CREATE TABLE IF NOT EXISTS local_point_versions(point TEXT PRIMARY KEY,generation INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS local_material_commits(seq INTEGER PRIMARY KEY AUTOINCREMENT,attempt TEXT NOT NULL UNIQUE,footprints TEXT NOT NULL);
 """
 STEPS = ['Observe', 'Frame', 'Decide', 'Act']
+OWNERSHIP = {'owner', 'accepted_owner', 'owner_ack', 'owner_evidence', 'acceptance_receipt', 'accepted'}
+IDENTITY = OWNERSHIP | {'id', 'work_id'}
 
 
 def policy(config):
@@ -34,7 +38,7 @@ def policy(config):
     for name, selected in value['tasks'].items():
         task = config['tasks'].get(name)
         if (not task or not isinstance(selected, dict)
-                or set(selected) - {'new_point_prefix', 'ownership_fields'} != {'capacity', 'discovery_batch', 'points', 'authority', 'method'}
+                or set(selected) - {'new_point_prefix', 'ownership_fields', 'discovery_lines'} != {'capacity', 'discovery_batch', 'points', 'authority', 'method'}
                 or type(selected['capacity']) is not int or not 1 <= selected['capacity'] <= 5
                 or type(selected['discovery_batch']) is not int or not 1 <= selected['discovery_batch'] <= 64
                 or not isinstance(selected['points'], list) or set(selected['points']) - value['points'].keys()
@@ -45,6 +49,13 @@ def policy(config):
             raise Refusal('controller-selected ownership fields must be explicit names')
         if 'new_point_prefix' in selected:
             required_text(selected['new_point_prefix'], 'authorized new point namespace', 128)
+        if 'discovery_lines' in selected and not isinstance(selected['discovery_lines'], list):
+            raise Refusal('discovery lines must be an explicit controller selection list')
+        for line in selected.get('discovery_lines', []):
+            if not isinstance(line, dict) or set(line) != {'line', 'incarnation', 'authority'}:
+                raise Refusal('discovery needs a genuinely controller-selected line/incarnation/authority')
+            for field in line:
+                required_text(line[field], 'discovery '+field, 4000)
         required_text(selected['authority'], 'genuinely delegated routine local decision authority', 4000)
     for key, point in value['points'].items():
         required_text(key, 'stable logical point key', 256)
@@ -62,6 +73,14 @@ def policy(config):
         for field in point['protected'] + point['writable']:
             required_text(field, 'protected ownership/identity field', 256)
         for binding in point['bindings']:
+            if not isinstance(binding, dict):
+                raise Refusal('typed file or native point binding required')
+            if 'native' in binding:
+                from .local_native import validate_binding
+                validate_binding(binding)
+                if point['writable']:
+                    raise Refusal('native state changes use original admitted interfaces, never point replacement rights')
+                continue
             if (not isinstance(binding, dict) or set(binding) != {'target', 'path'}
                     or not isinstance(binding['path'], list) or not binding['path']
                     or not Path(binding['target']).is_absolute() or '..' in Path(binding['target']).parts
@@ -81,6 +100,10 @@ def policy(config):
             roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
             targets = task.get('routine_completion', {}).get('targets')
             for binding in point['bindings']:
+                if 'native' in binding:
+                    from .local_native import validate_task
+                    validate_task(config, name, binding)
+                    continue
                 path = Path(binding['target'])
                 if (not any(path.is_relative_to(Path(root)) for root in roots)
                         or targets is not None and str(path) not in targets
@@ -112,7 +135,7 @@ def allowed_points(store, task):
     return keys
 
 
-def validate_discovered(store, job, answer, bodies):
+def validate_discovered(store, job, answer, bodies, *, native_only=False):
     discovered = answer.get('completion', {}).get('discovered_points', {})
     if not discovered:
         return {}
@@ -128,13 +151,17 @@ def validate_discovered(store, job, answer, bodies):
         if task.get('new_point_prefix') == prefix:
             task['points'].extend(discovered)
     policy(candidate)
-    permitted_lines = {point_definitions(store)[k]['line'] for k in selected(store, job['task'])['points']}
+    if native_only and any('native' not in b for p in discovered.values() for b in p['bindings']):
+        raise Refusal('file discovery requires original complete consumer publication')
+    permitted_lines = {(point_definitions(store)[k]['line'], point_definitions(store)[k]['incarnation'])
+                       for k in selected(store, job['task'])['points']}
+    permitted_lines.update((v['line'], v['incarnation']) for v in selected(store, job['task']).get('discovery_lines', []))
     for key, definition in discovered.items():
         if set(selected(store, job['task']).get('ownership_fields', [])) - set(definition['protected']):
             raise Refusal('discovered points must retain controller-selected ownership protection')
-        if definition['line'] not in permitted_lines:
+        if (definition['line'], definition['incarnation']) not in permitted_lines:
             raise Refusal('discovery cannot introduce another delivery line under existing authority')
-        if any(value is None for value in point_value(definition, bodies)):
+        if any(value is None for value in point_value(definition, bodies, store=store, job=job)):
             raise Refusal('new point needs uniquely resolved stable canonical identity after discovery')
     return discovered
 
@@ -150,6 +177,9 @@ def packet(store, row):
         raw = event['body'].get('integration')
     if raw is None:
         return {'lane': 'discovery', 'reads': [], 'writes': [], 'versions': {}, 'sources': [event['id']]}
+    if isinstance(raw, dict) and set(raw) == {'unresolved_existing'}:
+        required_text(raw['unresolved_existing'], 'owned existing identity/interface dependency', 4000)
+        raise Refusal('known existing work needs identity/interface resolution, not new-work duplication: '+raw['unresolved_existing'])
     if (not isinstance(raw, dict) or set(raw) != {'reads', 'writes', 'versions'}
             or any(not isinstance(raw[k], list) or not all(isinstance(v, str) for v in raw[k])
                    or len(raw[k]) != len(set(raw[k])) for k in ('reads', 'writes'))
@@ -171,13 +201,7 @@ def binding_conflict(store, left, right):
     """Different aliases/parent lenses still address the same logical material."""
     points = point_definitions(store)
     def overlap(a, b):
-        for x in points[a]['bindings']:
-            for y in points[b]['bindings']:
-                if x['target'] == y['target']:
-                    common = min(len(x['path']), len(y['path']))
-                    if x['path'][:common] == y['path'][:common]:
-                        return True
-        return False
+        return any(material_overlap(x, y) for x in footprints(store, points[a]) for y in footprints(store, points[b]))
     return (any(overlap(a, b) for a in left['writes'] for b in set(right['reads']) | set(right['writes']))
             or any(overlap(a, b) for a in right['writes'] for b in left['reads']))
 
@@ -223,16 +247,26 @@ def scope_for(store, job):
 
 def resources(store, scope):
     points = point_definitions(store)
-    return {r for k in set(scope['reads']) | set(scope['writes']) for r in points[k]['resources']}
+    result = {r for k in set(scope['reads']) | set(scope['writes']) for r in points[k]['resources']}
+    from .local_native import snapshot
+    for key in set(scope['reads']) | set(scope['writes']):
+        for binding in points[key]['bindings']:
+            if 'native' in binding:
+                result.update(snapshot(store, binding)[1])
+    return result
 
 
 def available(store, row, members):
     scopes = [packet(store, {**row, 'event': m['event']}) for m in members]
     scope = combine(scopes)
+    native_access(store, row, scope)
     active = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'") if not store.execution_complete(j)]
     if sum(bool(selected(store, j['task'])) for j in active) >= store.config['local_integration']['max_inflight']:
         return False
     wanted = resources(store, scope)
+    from .local_native import busy
+    if busy(store, wanted):
+        return False
     if any(store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (r,)) for r in wanted):
         return False
     for job in active:
@@ -285,6 +319,7 @@ def current_job(store, job):
     if frozen['policy'] != digest(store.config.get('local_integration')):
         raise Refusal('local policy/authority changed; retain recorded revision and return through review')
     scope = json.loads(frozen['scope'])
+    native_access(store, job, scope)
     for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
         queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
         if (not queue or store._input_member(queue) != member
@@ -316,14 +351,88 @@ def locate(document, path, missing=False):
     return value
 
 
-def point_value(point, bodies):
-    return [locate(parse_json(bodies[b['target']]), b['path'], missing=True) for b in point['bindings']]
+def native_access(store, job, scope):
+    from .local_native import authorize
+    for key in set(scope['reads']) | set(scope['writes']):
+        for binding in point_definitions(store)[key]['bindings']:
+            if 'native' in binding:
+                authorize(store, job, binding)
 
 
-def version(store, key, bodies):
+def point_value(point, bodies, *, store=None, job=None):
+    from .local_native import snapshot
+    values = []
+    for binding in point['bindings']:
+        if 'native' not in binding:
+            values.append(locate(parse_json(bodies[binding['target']]), binding['path'], missing=True))
+            continue
+        value = snapshot(store, binding, job)[0]
+        if binding['native'] == 'branch':
+            incarnation = value['association']['incarnation']
+        elif binding['native'] == 'review':
+            incarnation = value['context']['run'] or value['context']['handle']
+        else:
+            incarnation = digest(value['admission']['receipt'])
+        if point['incarnation'] != incarnation:
+            raise Refusal('native point incarnation differs from its actual original lifecycle')
+        values.append(value)
+    return values
+
+
+def material_overlap(left, right):
+    if left['target'] != right['target']:
+        return False
+    common = min(len(left['path']), len(right['path']))
+    return left['path'][:common] == right['path'][:common]
+
+
+def footprints(store, point, bodies=None, job=None):
+    """Resolve selector aliases to actual material, without changing authority.
+
+    Array positions here are observations of an already unique stable selector,
+    never caller-provided identities. Inode changes/reordering invalidate bases.
+    """
+    from .custody import guard_path, read_file, safe_path
+    from .local_native import snapshot
+    result = []
+    for binding in point['bindings']:
+        if 'native' in binding:
+            _, resources = snapshot(store, binding, job)
+            result.extend({'target': ['native', key], 'path': []} for key in sorted(resources))
+            continue
+        target = binding['target']
+        guard_path(store, target)
+        path = safe_path(target, [target])
+        info = path.stat()
+        body = bodies[target] if bodies is not None and target in bodies else read_file(path, store.config['limits'].get('max_artifact_bytes', 33554432))[0]
+        value, resolved = parse_json(body), []
+        for index, segment in enumerate(binding['path']):
+            if isinstance(segment, dict):
+                if not isinstance(value, list):
+                    raise Refusal('stable selector container changed')
+                matches = [(i, v) for i, v in enumerate(value) if isinstance(v, dict) and v.get(segment['field']) == segment['value']]
+                if len(matches) != 1:
+                    raise Refusal('stable point selector is missing or ambiguous')
+                offset, value = matches[0]
+                resolved.append(['member', offset])
+            else:
+                if not isinstance(value, dict) or segment not in value and index != len(binding['path'])-1:
+                    raise Refusal('stable point path missing or schema changed')
+                value = value.get(segment)
+                resolved.append(['field', segment])
+        result.append({'target': ['file', info.st_dev, info.st_ino], 'path': resolved})
+    return result
+
+
+def version(store, key, bodies, job=None):
     point = point_definitions(store)[key]
     row = store.one('SELECT generation FROM local_point_versions WHERE point=?', (key,))
-    return digest({'point': point, 'generation': row['generation'] if row else 0, 'values': point_value(point, bodies)})
+    material = footprints(store, point, bodies, job)
+    generation = max((r['seq'] for r in store.rows('SELECT seq,footprints FROM local_material_commits')
+                      if any(material_overlap(a, b) for a in material for b in json.loads(r['footprints']))), default=0)
+    return digest({'point': point, 'generation': row['generation'] if row else 0,
+                   'material': material, 'material_generation': generation,
+                   'values': point_value(point, bodies, store=store, job=job)})
 
 
 def prepare(store, job, attempt, before):
@@ -333,7 +442,7 @@ def prepare(store, job, attempt, before):
     from .custody import frozen_body
     bodies = {p: frozen_body(store, v['sha256'], path=p)['body'] for p, v in before.items() if v.get('sha256')}
     keys = set(scope['reads']) | set(scope['writes'])
-    versions = {k: version(store, k, bodies) for k in keys}
+    versions = {k: version(store, k, bodies, job) for k in keys}
     stale = any(s['versions'].get(k) != versions[k] for s in scope['inputs'] for k in set(s['reads']) | set(s['writes']))
     basis = {'scope': {**scope, 'mode': 'reconcile' if stale and scope['lane'] == 'anchored' else scope['mode']},
              'versions': versions, 'points': {k: point_definitions(store)[k] for k in keys},
@@ -356,16 +465,79 @@ def prepare_input_basis(store, job, attempt, task):
     keys = set(scope['reads']) | set(scope['writes'])
     points = point_definitions(store)
     roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
-    targets = {b['target'] for k in keys for b in points[k]['bindings']}
+    targets = {b['target'] for k in keys for b in points[k]['bindings'] if 'target' in b}
     maximum = store.config['limits'].get('max_artifact_bytes', 33554432)
     with (snapshot_lock(store) if store.config.get('canonical_publication') else nullcontext()):
         bodies = {p:read_file(safe_path(p, roots), maximum)[0] for p in targets}
-        versions = {k:version(store,k,bodies) for k in keys}
+        versions = {k:version(store,k,bodies,job) for k in keys}
     stale = any(s['versions'].get(k) != versions[k] for s in scope['inputs'] for k in set(s['reads'])|set(s['writes']))
     basis = {'scope':{**scope,'mode':'reconcile' if stale and scope['lane']=='anchored' else scope['mode']},
              'versions':versions,'points':{k:points[k] for k in keys},'policy':digest(store.config['local_integration'])}
     with store.tx():
         store.db.execute('INSERT INTO local_bases VALUES(?,?)', (attempt, encode(basis)))
+
+
+def current_basis(store, job):
+    """Before new native effects, require the decision's actual read revision.
+
+    Read-only reports retain their original revision. An existing native intent
+    is never replayed, and its own mutations are reconciled by its original API.
+    """
+    if not selected(store, job['task']):
+        return
+    row = store.one('SELECT basis FROM local_bases WHERE attempt=?', (job['active_attempt'],))
+    if not row:
+        raise Refusal('scoped native effects need their prepared decision basis')
+    basis = json.loads(row['basis'])
+    current_job(store, job)
+    if basis['scope']['lane'] == 'discovery':
+        raise Refusal('new native effects await a scoped anchored continuation after central discovery')
+    from .custody import guard_path, safe_path, read_file
+    targets = {b['target'] for p in basis['points'].values() for b in p['bindings'] if 'target' in b}
+    bodies = {}
+    for path in targets:
+        guard_path(store, path)
+        bodies[path] = read_file(safe_path(path, [path]), store.config['limits'].get('max_artifact_bytes', 33554432))[0]
+    if any(version(store, key, bodies, job) != expected for key, expected in basis['versions'].items()):
+        raise Refusal('relevant native/relationship read-set is stale; reconcile before new effects')
+
+
+def native_intent(store, job):
+    """Retain possible cooperative mutations even if later bytes are restored."""
+    scope = scope_for(store, job)
+    if not scope:
+        return
+    material = [f for key in scope['writes'] for f in footprints(store, point_definitions(store)[key], job=job)]
+    store.budget(None, len(encode(material).encode())+4096)
+    store.db.execute('INSERT INTO local_material_commits(attempt,footprints) VALUES(?,?)',
+                     (job['active_attempt'], encode(material)))
+
+
+def finish_discovery(store, job, attempt, answer):
+    """Non-file discovery links existing native identities after original gates.
+
+    It creates no branch/ref/session/run, owner acceptance or execution right.
+    Actual new Work records continue through the seven-consumer publisher.
+    """
+    scope = scope_for(store, job)
+    discovered = answer.get('completion', {}).get('discovered_points', {})
+    if not scope or scope['lane'] != 'discovery' or not discovered:
+        return
+    if store.one('SELECT attempt FROM local_commits WHERE attempt=?', (attempt['id'],)):
+        return
+    definitions = validate_discovered(store, job, answer, {}, native_only=True)
+    for point in definitions.values():
+        from .local_native import authorize
+        for binding in point['bindings']:
+            authorize(store, job, binding)
+    basis = store.one('SELECT basis FROM local_bases WHERE attempt=?', (attempt['id'],))
+    if not basis:
+        raise Refusal('native discovery requires original prepared method basis')
+    receipt = {'basis': json.loads(basis['basis']), 'discovered': definitions, 'sources': json.loads(job['members']),
+               'footprints': [], 'state': 'intent', 'meaning': 'existing native references only; no native effect or acceptance'}
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        store.db.execute('INSERT INTO local_commits VALUES(?,?,?)', (attempt['id'], 'intent', encode(receipt)))
+        committed(store, attempt['id'], receipt)
 
 
 def context(store, job):
@@ -401,17 +573,77 @@ def replace(document, path, value):
 
 
 def conserve(before, after, protected):
+    if type(before) is not type(after):
+        raise Refusal('point value type changed; explicit schema/authority decision required')
     if isinstance(before, dict):
         if not isinstance(after, dict) or before.keys() - after.keys():
             raise Refusal('point delta drops unknown/history/source fields')
-        for key, value in before.items():
-            if key in protected and after[key] != value:
+        for key in before.keys() | after.keys():
+            if key in protected and before.get(key) != after.get(key):
                 raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
-            if isinstance(value, dict):
-                conserve(value, after[key], protected)
-            elif isinstance(value, list):
-                if not isinstance(after[key], list) or any(item not in after[key] for item in value):
-                    raise Refusal('point delta drops peer/history/source array members')
+        for key, value in before.items():
+            conserve(value, after[key], protected)
+        for key in after.keys() - before.keys():
+            no_acceptance(after[key], protected & OWNERSHIP)
+    elif isinstance(before, list):
+        # Preserve multiplicity as well as value, including non-object members.
+        remaining = list(after)
+        for item in before:
+            if item not in remaining:
+                raise Refusal('point delta drops peer/history/source array members')
+            remaining.remove(item)
+        for item in remaining:
+            no_acceptance(item, protected & OWNERSHIP)
+
+
+def no_acceptance(value, ownership):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in ownership and child not in (None, False, '', 'unassigned'):
+                raise Refusal('discovery may propose ownership but cannot manufacture acceptance')
+            no_acceptance(child, ownership)
+    elif isinstance(value, list):
+        for child in value:
+            no_acceptance(child, ownership)
+
+
+def validate_delta(before, after, point, binding):
+    protected = set(point['protected']) | IDENTITY
+    # A scalar ownership/identity/history lens must not escape its containing
+    # field's protection just because the configured point ends inside it.
+    ancestors = {s for s in binding['path'] if isinstance(s, str)}
+    if (ancestors & protected or '$value' in protected) and before != after:
+        raise Refusal('local delta cannot change accepted ownership/identity/protected value')
+    if isinstance(before, dict) and isinstance(after, dict):
+        if any(before.get(field) != after.get(field) for field in protected):
+            raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
+        if any(before.get(field) != after.get(field) for field in before.keys() | after.keys() if field not in point['writable']):
+            raise Refusal('point delta changes an unselected/unknown field')
+    elif before != after and '$value' not in point['writable']:
+        raise Refusal('non-object point delta requires explicit $value writable authority')
+    conserve(before, after, protected)
+
+
+def conserve_bound_views(store, original, proposals):
+    """An alternate lens cannot remove another admitted view's protection.
+
+    Compare only files already in this exact publisher's authority. This grants
+    no cross-role catalog reads; writable rights still come from its write-set.
+    """
+    for point in point_definitions(store).values():
+        protected = set(point['protected']) | IDENTITY
+        for binding in point['bindings']:
+            target = binding.get('target')
+            if target not in original:
+                continue
+            before = locate(original[target], binding['path'], missing=True)
+            after = locate(proposals[target], binding['path'], missing=True)
+            if before == after:
+                continue
+            ancestors = {s for s in binding['path'] if isinstance(s, str)}
+            if '$value' in protected or ancestors & protected:
+                raise Refusal('overlapping admitted view retains protected ownership/identity/value')
+            conserve(before, after, protected)
 
 
 def discovery_conservation(before, after, ownership=()):
@@ -483,7 +715,7 @@ def rebase(store, job, attempt, run, task):
         if any(witness[k] != before[target][k] for k in ('dev', 'ino', 'uid', 'gid', 'mode')):
             raise Refusal('canonical identity/ownership changed; re-resolve current point incarnation')
     for key, expected in basis['versions'].items():
-        if version(store, key, bodies) != expected:
+        if version(store, key, bodies, job) != expected:
             raise Refusal('relevant point/relationship/absence read-set is stale; local reconciliation required')
     allocated = publication.stages(store, attempt['id'])
     staged = {}
@@ -499,32 +731,32 @@ def rebase(store, job, attempt, run, task):
         # never waits for this batch; discovery emits point-specific continuations.
         if any(original[p] != bodies[p] for p in order):
             raise Refusal('discovery catalog basis changed; fresh identity/relationship discovery required')
+        conserve_bound_views(store, {p:parse_json(v) for p,v in original.items() if p.endswith('.json')},
+                             {p:parse_json(v) for p,v in staged.items() if p.endswith('.json')})
         for target in order:
             if target.endswith('.json'):
                 discovery_conservation(parse_json(original[target]), parse_json(staged[target]), selected(store, job['task']).get('ownership_fields', []))
             elif original[target] not in staged[target]:
                 raise Refusal('discovery must conserve existing text/history')
         for key in allowed_points(store, job['task']):
-            point_value(point_definitions(store)[key], staged)  # Duplicate stable IDs cannot enter through discovery.
+            point_value(point_definitions(store)[key], staged, store=store, job=job)  # Duplicate stable IDs cannot enter through discovery.
         rebased = staged
     else:
         expected = {p: parse_json(original[p]) for p in order if p.endswith('.json')}
         merged = {p: parse_json(bodies[p]) for p in expected}
         proposals = {p: parse_json(staged[p]) for p in expected}
+        conserve_bound_views(store, expected, proposals)
         for key in basis['scope']['writes']:
             point = basis['points'][key]
             for binding in point['bindings']:
+                if 'native' in binding:
+                    raise Refusal('native mutations require their original admitted effect interface, never file publication')
                 target, path = binding['target'], binding['path']
                 if target not in proposals:
                     raise Refusal('point mutations require JSON bindings; text consumers retain additive supplements')
                 old = locate(expected[target], path)
                 new = locate(proposals[target], path)
-                if isinstance(old, dict) and isinstance(new, dict):
-                    if any(old.get(field) != new.get(field) for field in set(point['protected']) | {'owner','accepted_owner','owner_ack','owner_evidence','id','work_id'}):
-                        raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
-                    if any(old.get(field) != new.get(field) for field in old.keys() | new.keys() if field not in point['writable']):
-                        raise Refusal('point delta changes an unselected/unknown field')
-                conserve(old, new, set(point['protected']) | {'owner', 'accepted_owner', 'owner_ack', 'owner_evidence', 'id', 'work_id'})
+                validate_delta(old, new, point, binding)
                 replace(expected[target], path, new)
                 replace(merged[target], path, new)
         for target in order:
@@ -561,7 +793,10 @@ def rebase(store, job, attempt, run, task):
     if bounded_log.selected(task):
         fresh[policy['bounded_log']['target']] = bounded_log.observe(store, policy['bounded_log'])
     discovered = validate_discovered(store, job, answer, rebased)
-    receipt = {'basis': basis, 'discovered': discovered, 'model_stages': allocated, 'service_stages': service,
+    material = ([{'target': ['file', fresh[p]['dev'], fresh[p]['ino']], 'path': []} for p in order]
+                if basis['scope']['lane'] == 'discovery' else
+                [f for k in basis['scope']['writes'] for f in footprints(store, basis['points'][k], bodies, job)])
+    receipt = {'basis': basis, 'discovered': discovered, 'footprints': material, 'model_stages': allocated, 'service_stages': service,
                'before': fresh, 'sources': json.loads(job['members']), 'state': 'intent'}
     with store.tx():
         store.db.execute('INSERT INTO local_commits VALUES(?,?,?)', (attempt['id'], 'intent', encode(receipt)))
@@ -569,13 +804,15 @@ def rebase(store, job, attempt, run, task):
 
 
 def committed(store, attempt, receipt):
-    with store.tx():
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        store.budget(None, len(encode(receipt.get('footprints', [])).encode())+4096)
+        store.db.execute('INSERT INTO local_material_commits(attempt,footprints) VALUES(?,?)',
+                         (attempt, encode(receipt.get('footprints', []))))
         for key, definition in receipt.get('discovered', {}).items():
             store.db.execute('INSERT INTO local_discovered_points VALUES(?,?,?,?)',
                              (key, encode(definition), digest(store.config['local_integration']), attempt))
         scope = receipt['basis']['scope']
         changed = set(scope['writes'])
-        changed.update(k for k in point_definitions(store) if binding_conflict(store, {'reads':[], 'writes':[k]}, scope))
         for key in changed:
             store.db.execute('INSERT INTO local_point_versions VALUES(?,1) ON CONFLICT(point) DO UPDATE SET generation=generation+1', (key,))
             generation = store.one('SELECT generation FROM local_point_versions WHERE point=?', (key,))['generation']
@@ -583,7 +820,7 @@ def committed(store, attempt, receipt):
         from .custody import read_file, safe_path
         writes = set(receipt['discovered']) | set(scope['writes'])
         keys = writes | set(scope['reads'])
-        targets = {b['target'] for k in keys for b in point_definitions(store)[k]['bindings']}
+        targets = {b['target'] for k in keys for b in point_definitions(store)[k]['bindings'] if 'target' in b}
         bodies = {p:read_file(safe_path(p, list(targets)), store.config['limits'].get('max_artifact_bytes', 33554432))[0] for p in targets}
         versions = {k:version(store,k,bodies) for k in keys}
         continuations = {k:{'reads':sorted(set(scope['reads'])-{k}), 'writes':[k],

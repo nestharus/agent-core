@@ -176,6 +176,11 @@ class Dispatcher(ProcessingDispatcher):
     async def execute_review(self, job, attempt, packet):
         try:
             self.boards[job['role']].bind_software_attempt(self.store, job, attempt, None)
+            from .local_integration import prepare_input_basis
+            from .contracts import scoped_task
+            task = scoped_task(job['task'], self.store.config['tasks'][job['task']],
+                               self.store.one('SELECT * FROM admissions WHERE package=?', (job['package'],)))
+            prepare_input_basis(self.store, job, attempt, task)
             policy = self.store.processing.current()[1]['service']['reviews'][job['task']]
             outcome = await self.reviews.execute(job, attempt, policy, packet)
         except Exception as exc:

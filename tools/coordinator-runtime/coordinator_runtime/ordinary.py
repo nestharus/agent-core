@@ -301,6 +301,9 @@ async def perform(store, board, job):
     if job['hold_reason'] or blocked(store, job):
         raise Refusal('existing job/legacy hold cannot be released by ordinary automation')
     task, p = policy_for(store, job)
+    from .local_integration import current_basis, validate_method
+    current_basis(store, job)
+    validate_method(store, job, attempt, answer)
     admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
     receipt = {'tools': [], 'worker': attempt['session'], 'collector': store.controller,
                'authority': epoch['id'], 'admission_hash': digest(admission['receipt']), 'unknown_effects': ['intent not reconciled']}
@@ -308,6 +311,8 @@ async def perform(store, board, job):
         store.budget(None, p['max_output'] * 16)
         store.db.execute('INSERT INTO ordinary_runs VALUES(?,?,?,?,?,?,?)',
             (attempt['id'], job['id'], epoch['id'], receipt['admission_hash'], encode(p), 'intent', encode(receipt)))
+        from .local_integration import native_intent
+        native_intent(store, job)
         for resource in p['resources']:
             if store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (resource['key'],)):
                 raise Refusal('resource still belongs to another original/unknown effect')
