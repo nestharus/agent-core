@@ -206,6 +206,7 @@ The optional JSON has only these fields:
 {
   "read_roots": {"work-proposer": ["/authorized/exact/report.md"]},
   "neutral_startup": ["work-proposer", "work-integrator"],
+  "package_scoped_cleanup": ["qa-cleanup"],
   "exclusions": ["/known/held/path"],
   "linked_repositories": {
     "branch-integrator": [{"repository": "/authorized/release", "common_git": "/associated/.git"}]
@@ -232,6 +233,20 @@ is not a relabeling as report-only, an exact model read-isolation claim, or a
 change to the genuine coding Root's context. Select neutral startup for every
 coordinator whose startup must use explicit packets. Every scoped/read/startup
 change must belong to the prospective task allowlist.
+
+`package_scoped_cleanup` is an **UNSELECTED opt-in narrowing**, limited to the
+existing software QA cleanup phase. It adds required per-package admission and
+`package_narrowing:true`; reads/writes/procedure must remain under the task's
+existing access roots, writes under its write roots, and ordinary execution
+cannot enter the cleanup receipt. Its configured cwd is a working directory,
+not a new read grant. It changes no role, effect, network, capacity or native
+owner right and must belong to the selected prospective task allowlist.
+Software admission must separately include that exact cleanup task scope and
+evidence. Execution-only admission does not imply cleanup. Preserve actual
+consolidation/cleanup, independent acceptance and current qualification/Branch
+receiving; metadata selection grants none of them. The unchanged ordinary
+acceptor rules may admit a genuinely selected Work actor distinct from the
+actual worker, controller and software actor. No outside-Work/Root gate is added.
 
 A linked-repository pair adds a separate conditional common-Git ceiling for an
 already package-scoped Branch/QA task. It does not add general scope_roots,

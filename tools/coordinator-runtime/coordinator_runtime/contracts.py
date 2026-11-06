@@ -212,6 +212,9 @@ def validate_role(role, selected, profiles):
 def validate_task(name, task, config):
     required_text(name, "task ID", 80)
     role, phase = task["role"], task["phase"]
+    if 'package_narrowing' in task and (task['package_narrowing'] is not True
+            or role != 'QA' or phase != 'cleanup' or not task.get('require_package_scope')):
+        raise Refusal('explicit additional package narrowing belongs only to scoped QA cleanup')
     if role not in config["roles"] or phase not in PHASES:
         raise Refusal("task role/phase outside enrollment")
     if (role == "QA") != (phase in {"execution", "cleanup"}):
@@ -286,6 +289,16 @@ def scoped_task(name, task, admission):
     scope = receipt.get("task_scopes", {}).get(name)
     if not isinstance(scope, dict) or not scope.get("procedure") or not scope.get("resource_evidence"):
         raise Refusal("actual package procedure, resource-owner evidence and task scope are missing")
+    if task.get('package_narrowing'):
+        authority = task['effect_authority']
+        reads = authority['read_roots'] + authority['write_roots']
+        def within(value, ceilings):
+            return isinstance(value, str) and any(Path(value).is_relative_to(Path(p)) for p in ceilings)
+        if (any(not within(p, reads) for p in scope.get('read_roots', []))
+                or any(not within(p, authority['write_roots']) for p in scope.get('write_roots', []))
+                or scope.get('cwd') != task['cwd'] and not within(scope.get('cwd'), reads)
+                or not within(scope.get('procedure'), reads) or scope.get('ordinary_effects')):
+            raise Refusal('cleanup admission may only narrow existing access; cwd/metadata confers no execution rights')
     roots = scope.get("write_roots", []) + scope.get("read_roots", []) + [scope.get("cwd", "")]
     if any(Path(p) == Path(e) or Path(p).is_relative_to(Path(e)) or Path(e).is_relative_to(Path(p))
            for p in roots for e in task.get('scope_exclusions', [])):

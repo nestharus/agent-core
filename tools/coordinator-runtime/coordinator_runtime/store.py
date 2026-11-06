@@ -381,7 +381,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         row = self.attempt(attempt)
         if self.processing:
             self.processing.authorize(row)
-        if row['kind'] == 'input-mapping':
+        if row['kind'] in {'input-mapping', 'input-locator'}:
             from .metadata_lookup import authorize
             authorize(self, row)
         if row['job']:

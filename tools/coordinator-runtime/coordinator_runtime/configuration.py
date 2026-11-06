@@ -186,7 +186,7 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup'}:
         raise Refusal('unsupported prospective scope option')
     if 'local_integration' in options:
         from .local_integration import policy
@@ -254,6 +254,20 @@ def apply_scope_options(original, value, options):
                 or any(Path(e).is_relative_to(path) for e in value.get('artifact_exclusions', []))):
             raise Refusal('future cwd must narrow existing nonexcluded authority; no new resource grant')
         value['tasks'][name]['cwd'] = str(path)
+    cleanup = options.get('package_scoped_cleanup', [])
+    if (not isinstance(cleanup, list) or not all(isinstance(t, str) for t in cleanup)
+            or len(set(cleanup)) != len(cleanup)):
+        raise Refusal('exact prospective package-scoped cleanup task selection required')
+    for name in cleanup:
+        task = value['tasks'].get(name)
+        if not task or task['role'] != 'QA' or task['phase'] != 'cleanup' or task.get('execution') == 'owner':
+            raise Refusal('package-scoped cleanup only narrows the genuine software QA cleanup task')
+        # No added read/write/network/effect/procedure/ordinary permission. The
+        # cwd is only a permitted working directory, not a new read ceiling;
+        # scoped_task separately enforces each existing access root below.
+        roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
+        task.update(require_package_scope=True, package_narrowing=True,
+                    scope_roots=list(dict.fromkeys([*roots, task['cwd']])))
     value['prospective_scope_selection'] = copy.deepcopy(options)
 
 
@@ -301,7 +315,7 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
-    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {}))) - set(tasks):
+    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', []))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')

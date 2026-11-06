@@ -433,6 +433,58 @@ preserved. Limits refuse oversized contexts as owned scope questions. The
 snapshot is bounded by the selected byte/point limits as well as ordinary
 journal/attempt/window budgets; those are not a sustained latency guarantee.
 
+For large selected list parents, opt in to **`"query":true` on that file
+template**. This is a protocol choice, **UNSELECTED** until Work selects the
+actual future configuration and delegation. It requires a nonempty stable
+`member_field`; it does not enumerate mixed dictionary roots as business items.
+An optional `view:["field","nested_field"]` appends that exact object-key path
+after the resolved member selector. This is an explicit field lens, not silent
+evidence truncation. Presence and JSON null remain different. Scalar writes
+still need `$value` authority; ancestor identity/ownership/protection cannot be
+escaped by selecting a narrower lens. Native templates have no file views.
+
+The production protocol for a query scope is:
+
+1. Fresh LOW and durable queue responsibility precede ACK, as above. A separate
+   `input-locator` attempt receives the original source and selected template
+   descriptions, **without backing-file acquisition**. It returns only
+   `{hints:{task:{scope_digest:[stable_member_strings]}}}` in `decision_json`.
+   A hint is not a work proposal, existence/absence finding, revision, novelty
+   decision or permission. It may name a specifically source-related existing
+   work/relationship view; it may not send a whole catalog to a model.
+2. Complete original locator collection binds the worker/controller, current
+   capability, source hash, exact task/template policy and no-tool result.
+   Unknown, malformed, failed or uncollected results stay owned, without replay.
+   Hints outside the selected scopes refuse. Missing hints never mean new work.
+3. On a later normal tick, the service revalidates the original source and
+   current bindings, acquires only the selected permitted backing files, and
+   resolves hinted members uniquely. Their values/absence and versions are a
+   **new observation before the semantic metadata model reads/decides**. An
+   absent/ambiguous member refuses as an owned scope question. Earlier model
+   reads receive no new current stamp. Semantic interpretation remains the
+   existing known / positively-new / unresolved-existing protocol.
+4. Fresh derived LOW precedes task reservation. Actual proposal preparation
+   supplies bounded `observed_values` and versions for its selected points.
+   Changed material reconciles with the earlier mapping revision; the earlier
+   resolution/ACK/source/birth is retained unchanged.
+
+`max_bytes` continues to bound metadata model context, not whole source-file
+size. Backing acquisition uses the existing artifact ceiling (default 32 MiB,
+also bounded by journal byte capacity), cumulatively across selected files for
+one observation. No context cap is raised and no shadow catalog is persisted.
+Projection and prepared-task contexts still refuse over their selected/result
+limits. Explicitly choose useful field lenses when a whole item is too large.
+File acquisition/parsing and original publication snapshots/stages still cost
+bytes and synchronous time. Journal pressure may truthfully hold an otherwise
+valid operation; this protocol supplies no headroom or performance guarantee.
+
+Automatic snapshots start from configured points and this source's expansions;
+they do not union all earlier nonnative derived points. Original running bases,
+later updates and retained point/source custody remain intact. Both processing
+birth and current configuration candidate predicates exclude old/unknown births
+before event payload/result acquisition. Per-candidate authority refusals retain
+their dependency and allow unrelated eligible candidates to continue.
+
 For native templates the single binding is one of
 `{"native":"branch","id":"$source"}`,
 `{"native":"review","component":"$source"}`, or
@@ -445,6 +497,14 @@ its live original context/collector/capability; execution uses the actual
 original OR already-authorized software admission and its stored receipt string.
 All native operand permissions precede material acquisition.
 
+One fixed Work task can select Branch, Reviews, execution and queried file
+templates together. Applicability follows authenticated original source/member
+indexes: an unrelated Branch/QA return is not a Reviews continuation, and a
+package label alone is not an execution relationship. A relevant malformed,
+held, revoked or out-of-scope operand still refuses before material. Work
+coordination and every ordinary source/native/receiving gate remain required;
+neither template selection nor a locator grants those powers.
+
 Derived native definitions record separate `native_incarnations` observed from
 those real objects; their keys include that native lifecycle. The selected
 delivery `line`/`incarnation` remains independent. Prior native lifetimes remain
@@ -454,6 +514,10 @@ journal, not a native/work catalog, and create no native object or acceptance.
 Tasks can share a derived continuation only when they explicitly select the
 same exact lookup template (or the point itself), with all receiver and member
 checks still required. A discovery prefix alone cannot borrow lookup rights.
+The frozen observation retains the actual generating `source_scope`; equal or
+overlapping prefixes confer no other template's rights. Older rows lacking
+that provenance stay with their originating task rather than gaining inferred
+cross-task rights. No old observation is restamped or retroactively certified.
 Primary Source may remain outside local integration and open under its original
 read-only native method before its run is known. Reviews integration can use an
 accepted branch alternative. First QA execution still cannot reserve a slot
@@ -470,3 +534,7 @@ Uncollected/failed metadata attempts likewise retain their original collector;
 they are not automatically relaunched. Derived live identities hold their
 original observation custody against retirement. All other processing+24h,
 privacy/source/consumer/outbox/effect/recovery holds still apply.
+Revocation or prompt-startup refusal through the actual lookup execute entry
+collects a genuinely unstarted attempt as known-not-started with null begin/END,
+without refunding its allocation. Launched/cancelled/uncertain originals retain
+their real collector and unresolved state, never a fabricated numeric END.

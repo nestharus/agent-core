@@ -147,9 +147,14 @@ def allowed_points(store, task):
         lookup_keys = {r['point'] for r in store.rows('SELECT point FROM local_lookup_points')}
         keys.update(k for k in point_definitions(store) if k.startswith(prefix) and k not in lookup_keys)
     scopes = value.get('lookup_scopes', [])
-    for row in store.rows('SELECT point,task FROM local_lookup_points WHERE policy=?', (digest(store.config['local_integration']),)):
-        original = selected(store, row['task']) or {}
-        if row['task'] == task or any(scope in original.get('lookup_scopes', []) and row['point'].startswith(scope['prefix']) for scope in scopes):
+    for row in store.rows('SELECT * FROM local_lookup_points WHERE policy=?', (digest(store.config['local_integration']),)):
+        # The namespace is an identity convention, not the generating grant.
+        # Older observations without provenance remain owned by their original
+        # task; do not infer cross-task rights from a shared/overlapping prefix.
+        record = store.one('SELECT snapshot FROM input_lookups WHERE attempt=?', (row['source_attempt'],))
+        observed = json.loads(record['snapshot']).get(row['task'], {}).get('points', {}).get(row['point'], {}) if record else {}
+        origin = observed.get('source_scope')
+        if row['task'] == task or origin is not None and origin in scopes:
             keys.add(row['point'])
     return keys
 
@@ -639,6 +644,9 @@ def prepare(store, job, attempt, before):
     basis = {'scope': {**scope, 'mode': 'reconcile' if stale and scope['lane'] == 'anchored' else scope['mode']},
              'versions': versions, 'points': {k: point_definitions(store)[k] for k in keys},
              'policy': digest(store.config['local_integration'])}
+    basis['observed_values'] = {k:point_value(basis['points'][k], bodies, store=store, job=job) for k in keys}
+    if len(encode(basis).encode()) > store.config['limits']['max_result_bytes']:
+        raise Refusal('selected point projection exceeds model context; narrow the actual field views')
     store.db.execute('INSERT INTO local_bases VALUES(?,?)', (attempt, encode(basis)))
 
 
@@ -665,6 +673,9 @@ def prepare_input_basis(store, job, attempt, task):
     stale = any(s['versions'].get(k) != versions[k] for s in scope['inputs'] for k in set(s['reads'])|set(s['writes']))
     basis = {'scope':{**scope,'mode':'reconcile' if stale and scope['lane']=='anchored' else scope['mode']},
              'versions':versions,'points':{k:points[k] for k in keys},'policy':digest(store.config['local_integration'])}
+    basis['observed_values'] = {k:point_value(points[k], bodies, store=store, job=job) for k in keys}
+    if len(encode(basis).encode()) > store.config['limits']['max_result_bytes']:
+        raise Refusal('selected point projection exceeds model context; narrow the actual field views')
     with store.tx():
         store.db.execute('INSERT INTO local_bases VALUES(?,?)', (attempt, encode(basis)))
 
@@ -742,10 +753,18 @@ def context(store, job):
             prior.append({**previous, 'source_members':json.loads(commit['receipt'])['sources'],
                           'meaning':'relevant prior decision/source reference; no historical body access or current verdict inferred'})
     neighbors = [store.event(m['event']) for m in scope.get('neighbors', [])]
+    discovery = scope.get('lane') == 'discovery'
+    catalogs = [s for s in selected(store, job['task']).get('lookup_scopes', [])
+                if 'target' in s['point']['bindings'][0]] if discovery else []
+    run = store.one('SELECT before_files FROM routine_runs WHERE attempt=?', (job['active_attempt'],)) if catalogs else None
+    preimages = json.loads(run['before_files']) if run else {}
     return {'basis': basis, 'discovery_neighbors':neighbors, 'prior_point_commits': prior, 'decision_authority': selected(store, job['task'])['authority'], 'steps': STEPS,
+            'discovery_catalog_scopes': catalogs,
+            'discovery_catalog_preimages': {p:v for p,v in preimages.items()
+                if p in {s['point']['bindings'][0]['target'] for s in catalogs}},
             'discovery_points': {k:v for k,v in point_definitions(store).items() if k in allowed_points(store, job['task'])} if basis and
             (basis.get('scope', basis)).get('lane') == 'discovery' else None,
-            'instructions': 'Direct current anchored changes need no global window. Reconcile conflicts/stale bases with the selected Observe/Frame/Decide/Act method; record each step and rationale in completion.integration_steps. Discovery compares existing points and all selected new candidates, preserves unassigned/proposed ownership, emits anchored integration read/write/versions and scoped handoffs. Broader concerns go as point-specific required settled handoffs. No title ownership, acceptance invention or revised review verdict. Edit only supplied stages; the service validates/rebases point deltas. User-owned choices return as scope/blocker.'}
+            'instructions': 'Direct current anchored changes need no global window. Reconcile conflicts/stale bases with the selected Observe/Frame/Decide/Act method; record each step and rationale in completion.integration_steps. Only positive new business uses central discovery against the genuinely selected catalog and other selected new candidates. discovery_points lists previously observed identities, NOT an exhaustive catalog. discovery_catalog_scopes names the selected file/member/field lenses; staged files have the recorded whole preimages. Compare them through bounded reads, not a whole-catalog model package. Missing catalog meaning/evidence remains explicit; neither absent hints nor an incomplete point list proves novelty. Preserve unassigned/proposed ownership, emit scoped continuations, and return consequential choices as scope/blocker. Broader concerns go as point-specific required settled handoffs. No title ownership, acceptance invention or revised review verdict. Edit only supplied stages; the service validates/rebases point deltas.'}
 
 
 def replace(document, path, value):
