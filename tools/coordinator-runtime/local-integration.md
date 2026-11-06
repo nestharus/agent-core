@@ -247,3 +247,132 @@ processing plus 24 hours **and** every hold remains the retirement condition.
 Repeated due violations remain distinct notifications; no violation is silent.
 The public pool remains hot user-controlled across all five enabled profiles;
 no account/private-state probing or fixed-account routing is introduced.
+
+## First ingress: actual owner mapping
+
+An ordinary Board post preserves its SDK text/ref and visible author/recipient;
+JSON text, attachment names and point-shaped refs do **not** become integration
+metadata. Missing metadata is unresolved, with durable queue responsibility and
+an operational dependency. It is not evidence of new work. Fresh Luna LOW
+classification and queue commit still precede notification ACK. A mapping hold
+leaves unrelated known scopes runnable.
+
+The supported operating interface extends the existing **owner input resolution**
+receipt; no new catalog, Store event injection or SQL operation is needed. For an
+active original grant, the actual receiving owner uses:
+
+```sh
+coordinator --config CONFIG input-show EVENT
+coordinator --config CONFIG resolve-input EVENT --receipt RECEIPT.json
+```
+
+`CONFIG`, `EVENT` and `RECEIPT.json` are the actual selected configuration, exact
+visible source event ID and owner-authored receipt file. The complete receipt
+for an already known Work point is shaped as follows (all identities/evidence
+must be supplied from actual authority, not copied from this example):
+
+```json
+{
+  "source_hash":"HASH_RETURNED_BY_INPUT_SHOW",
+  "mode":"route", "task":"work-proposer", "package":null,
+  "related_event":null, "related_job":null,
+  "reason":"Actual original source concerns this existing work and why",
+  "evidence":["Actual independent identity/receiver decision reference"],
+  "remaining_obligations":[],
+  "integration":{"state":"known","reads":["ALREADY-SELECTED-WORK-POINT"],"writes":[]}
+}
+```
+
+Only the optional `integration` request is new. Its exact alternatives are
+`{"state":"known","reads":[...],"writes":[...]}`, `{"state":"new"}` or
+`{"state":"unresolved-existing"}`. Known requires a nonempty union of unique,
+already permitted point keys. The caller cannot supply `versions`. The service
+revalidates each original source/collector/member/hold, current routes and
+receiver scope, then observes versions under the cooperative snapshot lock.
+The observation is stored in the existing `input_resolutions.prior` as
+`integration_observation`; original event bytes/hash and all original members
+remain unchanged. This is additive workflow metadata, with existing journal
+budgets/correction limits, not a production schema migration.
+
+Resolution requires fresh classification before the same original can reserve.
+The mapping is specific to the selected task, policy, admission, grant/enrollment
+and processing capability. Changed bindings refuse; versions are never refreshed
+by classification or reservation. Stale arrivals enter ordinary reconciliation
+at preparation. Existing original anchors and published commit continuations
+cannot be retargeted by resolution, even to another permitted point. An already
+reserved original cannot be remapped or replayed. Existing owner package binding
+remains explicit: Work Board refs do not select packages; any necessary package
+route must first use the existing owner resolution against the authentic admitted
+package, while retaining the original null package/source bytes.
+
+In a stopped, Work-issued software processing epoch, genuine Work can select
+`"input_mappings":["work-proposer","work-integrator","qa-execution"]` in the
+processing selection, narrowed to actual already selected local tasks. This
+optional allowlist changes no task/point/native/admission/effect rights. It is
+compatible with a continuing **future-only** selection: no retained-history
+permission is added. Existing capabilities without this explicit selection do
+not acquire it automatically. The actual receiving owner then uses:
+
+```sh
+coordinator --config CONFIG processing-source CAP EVENT
+coordinator --config CONFIG processing-map-input CAP EVENT --receipt RECEIPT.json
+```
+
+The same complete receipt above selects the exact original allowed receiver
+task/package and typed mapping. The service requires current selected source,
+role/point/grant/admission authority and the actual original receiver owner.
+Work's selection is not another owner's consent. New independent known inputs
+can be mapped under this one current capability while another known scope is
+running; no capability rotation, global readiness/window or historical inquiry
+is needed for each new mapping. Fresh classification remains owed. A held source
+refuses before source-body acquisition by this command. An absent mapping task,
+point, package, scope or grant returns to Work as a dependency. Source selection
+and actual runtime activation remain the genuine operator's separate effects.
+
+The existing exact `processing-owner-source CAP ROLE resolve-input EVENT` and
+`processing-owner-apply CAP --request OWNER-REQUEST.json` path remains available
+where Work has separately selected that exact owner operation. A future-only
+selection still excludes those historical/exact resolve-input operations; use
+its explicitly selected `input_mappings` route for genuinely future inputs.
+Processing control workers keep their existing admitted result contract and do
+not infer mappings from arbitrary message text.
+
+For a genuine collected response or addressed handoff, map the **actual receiving
+event**, after production intake/delivery has conserved it. Internal response
+routes remain `responses`; addressed software routes remain the source job's
+effective current `software_handoffs` (including its bound prospective epoch).
+The original durable Board delivery/receiver intent, original result/attempt,
+every frozen member, collection, payload hash and grants are rechecked before
+point acquisition. A different recipient/task may choose a different permitted
+mapping under its own existing authority. `body.source_result.integration` stays
+original evidence; it is never blindly promoted into a receiver anchor. Anchored
+internal responses and service commit continuations retain their precedence.
+
+For first QA execution, the real Branch owner must first admit the original exact
+package/task/procedure/resources/receipt through the existing owner admission
+interface. Select a permitted `native:execution` binding whose incarnation is
+`digest(admissions.receipt)` over the stored encoded **string**, not a digest of
+the parsed object. Then the actual QA owner resolves its original addressed
+Board/received event to that selected point with the known mapping above, using
+its admitted package and `qa-execution` task. No response edge to QA is invented:
+use genuine addressed Board ingress or an independently selected exact software
+handoff route. Missing and explicitly new/unanchored QA inputs cannot reserve an
+execution or consume `qa_package_owners`. The original ordinary adapter,
+preparation/current-basis checks, leases, independent acceptance and completion
+remain necessary after reservation.
+
+Branch and Reviews can select an already accepted `native:branch` association
+within their own role/package/read roots. Primary read-only Source can remain
+outside `local_integration.tasks` and open its ordinary original root before a
+run identity exists. Its genuine collected return then reaches the selected
+Reviews integrator; no Source Decide/Act or guessed `native:review` run is needed.
+Work reading native returns still needs independently issued Work coordination.
+A point mapping grants none of those upstream/native/branch rights.
+
+Only positively identified new candidates enter central discovery, comparing
+existing catalog and other new packets before emitting anchored scoped outputs.
+The typed new request records the actual owner's reason/evidence; software does
+not prove that semantic judgment. Missing/ambiguous existing identity stays
+unresolved. Routine file preparation freezes versions with the actual source
+snapshot before releasing its cooperative lock or staging; an intervening commit
+cannot stamp newer generations onto an older read.

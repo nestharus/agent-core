@@ -175,16 +175,171 @@ def validate_discovered(store, job, answer, bodies, *, native_only=False):
     return discovered
 
 
+def input_metadata(event):
+    raw = event.get('integration')
+    if raw is None and isinstance(event.get('body'), dict):
+        raw = event['body'].get('integration')
+    return raw
+
+
+def input_authority(store, event, task, package, visiting=None):
+    """Check original custody and conserved routes before point acquisition.
+
+    Receiver mappings do not give a sender's nested text routing authority.
+    Every upstream member remains checked, including unrelated batch leaves.
+    """
+    visiting = set() if visiting is None else visiting
+    key = event['id']
+    state = store.one('SELECT hash,hold FROM events WHERE id=?', (key,))
+    resolution = store.input_resolution(key)
+    effective_package = resolution['receipt']['package'] if resolution and resolution['source_hash'] == digest(event) else event.get('package')
+    if (key in visiting or not state or state['hold'] or state['hash'] != digest(event)
+            or task not in event['allowed_tasks'] or effective_package != package
+            or store.config['tasks'][task]['role'] != event['role']
+            or event['recipient'] != store.enrollment(event['role'])['owner']
+            or store.processing and (task not in store.processing.current()[1]['tasks'] or not store.processing.event(event))):
+        raise Refusal('input mapping needs each original current source/hash/role/package/recipient/hold authority')
+    from .board import Board
+    board = ((store.processing.boards or {}).get(event['role']) if store.processing else None) or Board(store.config, event['role'])
+    board.verify_authority(store)
+    if event.get('kind') == 'board':
+        board.verify_input_source(store, event)
+        return
+    source_id = event.get('source_job')
+    delivery = event.get('source_delivery')
+    outbox = store.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),)) if delivery else None
+    if not source_id and outbox:
+        source_id = outbox['job']
+    if not source_id:
+        raise Refusal('mapping requires an original visible Board source or genuine collected upstream return')
+    source = store.job(source_id)
+    from .software import clean_processing
+    from .contracts import response_tasks
+    from . import prospective
+    if not clean_processing(store, source) or source['package'] != package:
+        raise Refusal('input mapping awaits original collected upstream processing')
+    attempt = store.attempt(source['active_attempt'])
+    answer = collected_task_result(attempt)
+    members = json.loads(source['members'])
+    if not members:
+        raise Refusal('input mapping cannot discard original members')
+    if delivery:
+        # The processing adapter checks exact current grants, receiving intent,
+        # original Board identity, transport uncertainty and payload bytes.
+        if not (board.receiving_intent(store, event) if store.processing else board.verify_input_delivery(store, event)):
+            raise Refusal('addressed mapping needs its actual selected processing receiving adapter')
+        epoch = prospective.for_job(store, source)
+        proof = json.loads(attempt['detail']).get('software_authority', {})
+        if (epoch and proof.get('prospective_epoch') != epoch['id']
+                or not epoch and (proof.get('prospective_epoch') or prospective.requires_authority(store, source))):
+            raise Refusal('input mapping requires current original handoff authority')
+        policy = epoch['policy'] if epoch else store.config['tasks'][source['task']]
+        payload = json.loads(outbox['payload'])
+        link = store.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (outbox['id'],))
+        if (store.processing and (not link or link['event'] != key) or event['body'] != payload
+                or delivery.get('source_hash') != digest(payload)
+                or payload.get('source_result') != answer or payload.get('source_members') != members
+                or payload.get('attempt') != attempt['id'] or payload.get('package') != package
+                or payload.get('original_handoff') not in answer.get('handoffs', [])
+                or task not in policy.get('software_handoffs', {}).get(event['role'], [])):
+            raise Refusal('input mapping differs from exact addressed collected handoff/route')
+    elif (event.get('source_attempt') != attempt['id'] or event.get('source_role') != source['role']
+            or event.get('source_members') != members or event.get('body') != answer
+            or task not in response_tasks(store.config['tasks'][source['task']], answer, store.config)):
+        raise Refusal('input mapping differs from exact collected internal response/route')
+    for member in members:
+        original = store.event(member['event'])
+        if member['hash'] != digest(original) or member['package'] != package:
+            raise Refusal('input mapping must conserve every original member')
+        input_authority(store, original, source['task'], package, visiting | {key})
+
+
+def mapping_binding(store, task, package):
+    return {'policy': digest(store.config.get('local_integration')),
+            'task': digest(store.config['tasks'][task]),
+            'admission': digest(store.one('SELECT * FROM admissions WHERE package=?', (package,))),
+            'enrollment': digest(store.enrollment(store.config['tasks'][task]['role'])),
+            'capability': store.processing.key if store.processing else None}
+
+
+def observe_input(store, event, receipt):
+    """Observe a receiver-owned selector at resolution time, never accept a revision stamp."""
+    task, package, request = receipt['task'], receipt['package'], receipt['integration']
+    if receipt['mode'] != 'route' or not selected(store, task):
+        raise Refusal('typed point mapping requires an already selected exact local receiver task')
+    if input_metadata(event) is not None:
+        raise Refusal('original anchor/commit continuation cannot be retargeted by input resolution')
+    input_authority(store, event, task, package)
+    if not isinstance(request, dict):
+        raise Refusal('typed known/new/unresolved-existing input mapping required')
+    state = request.get('state')
+    if not isinstance(state, str):
+        raise Refusal('typed known/new/unresolved-existing mapping state required')
+    if state in {'new', 'unresolved-existing'} and set(request) == {'state'}:
+        required_text(receipt['reason'], 'new/unresolved identity decision evidence', 4000)
+        packet = {'new_work' if state == 'new' else 'unresolved_existing': receipt['reason']}
+    elif state == 'known' and set(request) == {'state', 'reads', 'writes'}:
+        if any(not isinstance(request[k], list) or len(request[k]) > 64
+               or not all(isinstance(v, str) for v in request[k])
+               or len(request[k]) != len(set(request[k])) for k in ('reads','writes')):
+            raise Refusal('bounded unique receiver read/write point keys required')
+        keys = set(request['reads']) | set(request['writes'])
+        if not keys or keys - allowed_points(store, task):
+            raise Refusal('known mapping exceeds selected receiver points; return missing interface to Work')
+        from .contracts import scoped_task
+        from .custody import guard_path, safe_path, read_file
+        from .publication import snapshot_lock
+        actual = store.config['tasks'][task]
+        row = {'event':event['id'], 'task':task, 'package':package,
+               'role':actual['role'], 'phase':actual['phase']}
+        # Permission-index gates for ALL native operands precede ALL material.
+        from .local_native import authorize_scope
+        points = point_definitions(store)
+        for key in keys:
+            for binding in points[key]['bindings']:
+                if 'native' in binding:
+                    authorize_scope(store, row, binding)
+        actual = scoped_task(task, actual, store.one('SELECT * FROM admissions WHERE package=?', (package,)))
+        roots = actual['effect_authority']['read_roots'] + actual['effect_authority']['write_roots']
+        targets = {b['target'] for k in keys for b in points[k]['bindings'] if 'target' in b}
+        for path in targets:
+            guard_path(store, path)
+            if not any(Path(path).is_relative_to(Path(root)) for root in roots):
+                raise Refusal('known mapping exceeds actual narrowed receiver source scope')
+        with (snapshot_lock(store) if store.config.get('canonical_publication') else nullcontext()):
+            bodies = {p:read_file(safe_path(p, roots), store.config['limits'].get('max_artifact_bytes',33554432))[0] for p in targets}
+            packet = {k:copy.deepcopy(request[k]) for k in ('reads','writes')}
+            packet['versions'] = {k:version(store, k, bodies, row) for k in keys}
+    else:
+        raise Refusal('typed known/new/unresolved-existing mapping; revisions are service-observed only')
+    return {'packet':packet, 'binding':mapping_binding(store, task, package), 'observed':store.clock(),
+            'meaning':'original source retained; receiver selection only, no effect reservation or acceptance'}
+
+
+def resolved_input(store, event, selection):
+    receipt = selection['receipt']
+    observation = selection['prior']['integration_observation']
+    if observation['binding'] != mapping_binding(store, receipt['task'], receipt['package']):
+        raise Refusal('receiver mapping policy/admission/grant/capability changed; original revision retained')
+    return copy.deepcopy(observation['packet'])
+
+
 def packet(store, row):
     """Normalize input without trusting its title, hinted rows or authority."""
     selected_policy = selected(store, row['task'])
     if not selected_policy:
         return None
-    event = store.event(row['event'])
-    raw = event.get('integration')
-    if raw is None and isinstance(event.get('body'), dict):
-        raw = event['body'].get('integration')
+    event = store.routing_event(row['event'])
+    resolution = event.get('owner_resolution')
+    if resolution and 'integration_observation' in resolution['prior']:
+        if resolution['receipt']['task'] != row['task']:
+            raise Refusal('receiver mapping belongs to a different exact task')
+        input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
+    raw = input_metadata(event)
     if raw is None:
+        raise Refusal('unresolved existing/new identity: missing metadata is not proof of new work; actual receiver mapping required')
+    if isinstance(raw, dict) and set(raw) == {'new_work'}:
+        required_text(raw['new_work'], 'positive new-work discovery evidence', 4000)
         return {'lane': 'discovery', 'reads': [], 'writes': [], 'versions': {}, 'sources': [event['id']]}
     if isinstance(raw, dict) and set(raw) == {'unresolved_existing'}:
         required_text(raw['unresolved_existing'], 'owned existing identity/interface dependency', 4000)
@@ -268,6 +423,8 @@ def resources(store, scope):
 def available(store, row, members):
     scopes = [packet(store, {**row, 'event': m['event']}) for m in members]
     scope = combine(scopes)
+    if row['role'] == 'QA' and row['phase'] == 'execution' and scope['lane'] != 'anchored':
+        raise Refusal('first QA execution requires an anchored original admission before reservation')
     native_access(store, row, scope)
     active = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'") if not store.execution_complete(j)]
     if sum(bool(selected(store, j['task'])) for j in active) >= store.config['local_integration']['max_inflight']:

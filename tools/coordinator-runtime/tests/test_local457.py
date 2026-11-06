@@ -179,6 +179,10 @@ class OriginalFlow(unittest.TestCase):
         return job,attempt
 
     def finish(self, job, attempt, answer):
+        if job['task'] == 'rp':
+            # Explicit fixture admission of a new relationship, separate from
+            # the read-only Source report. Absence no longer selects discovery.
+            answer['integration'] = {'new_work':'fictional independently admitted new native relationship'}
         if job['task'] in ('ri','wp'):
             answer['completion'] = {'integration_steps':[{'step':s,'evidence':'fictional attributed '+s} for s in local.STEPS]}
         if job['task'] == 'ri' and self.native_discovery:

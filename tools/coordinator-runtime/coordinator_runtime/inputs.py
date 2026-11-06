@@ -44,11 +44,19 @@ class InputJournal:
         selection=self.input_resolution(event)
         if not selection:return original
         if digest(original)!=selection['source_hash']:raise Refusal('original input no longer matches selected source')
-        return {**original,'original_package':original.get('package'),
-                'package':selection['receipt']['package'],'owner_resolution':selection}
+        derived = {**original,'original_package':original.get('package'),
+                   'package':selection['receipt']['package'],'owner_resolution':selection}
+        if 'integration_observation' in selection['prior']:
+            from .local_integration import resolved_input
+            derived['integration'] = resolved_input(self, original, selection)
+        return derived
 
     def resolve_input(self,event,actor,receipt,*,processing_attempt=None):
         with (nullcontext() if self.db.in_transaction else self.tx()):
+            if isinstance(receipt, dict) and 'integration' in receipt:
+                held = self.one('SELECT hold FROM events WHERE id=?', (event,))
+                if not held or held['hold']:
+                    raise Refusal('unheld exact input required before mapping acquisition')
             row=self.one('SELECT * FROM events WHERE id=?',(event,))
             if not row:raise Refusal('exact existing input required')
             original=self.event(event)
@@ -58,7 +66,7 @@ class InputJournal:
             if actor!=self.enrollment(row['role'])['owner'] and not software:
                 raise Refusal('input resolution belongs to its actual enrolled owner')
             keys={'source_hash','mode','task','package','related_event','related_job','reason','evidence','remaining_obligations'}
-            if not isinstance(receipt,dict) or set(receipt)!=keys:
+            if not isinstance(receipt,dict) or set(receipt)-{'integration'}!=keys:
                 raise Refusal('input resolution needs source_hash/mode/task/package/related_event/related_job/reason/evidence/remaining_obligations')
             if any(receipt[k] is not None and not isinstance(receipt[k],str) for k in ['task','package','related_event','related_job']):
                 raise Refusal('input identities must be text or null')
@@ -85,6 +93,9 @@ class InputJournal:
             windows.charge(self, 'decisions')
             prior={'state':row['state'],'classification':row['classification'],'classifier':row['classifier'],
                    'error':row['error'],'queue':queue,'ack':row['ack'],'ack_receipt':row['ack_receipt']}
+            if 'integration' in receipt:
+                from .local_integration import observe_input
+                prior['integration_observation'] = observe_input(self, original, receipt)
             if software:
                 prior['software_processing'] = software
             self.budget(None,len(encode(receipt).encode())+len(encode(prior).encode())+1024)

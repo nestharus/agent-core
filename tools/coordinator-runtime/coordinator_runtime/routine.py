@@ -85,13 +85,15 @@ def prepare(store, board, job, attempt, task):
         remainder=json.loads(store.attempt(attempt)['detail']).get('publication_remainder')
         if remainder and (before!=remainder['peers'] or digest(grant)!=remainder['grant']):
             raise Refusal('publication remainder peer preimages/grant changed before fresh staging; no replay')
+        # Stamp the read revision with the actual snapshot, under the same
+        # cooperative lock, before staging can allow another service commit.
+        with store.tx():
+            local_integration.prepare(store, job, attempt, before)
     if not all(v['exists'] for v in before.values()):raise Refusal('same-inode method requires existing regular canonical files')
     with store.tx():
         store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
                          (attempt, job['task'], grant['id'], encode(policy), encode(before), 'prepared'))
     publication.prepare(store,attempt,before,policy)
-    with store.tx():
-        local_integration.prepare(store, job, attempt, before)
 
 
 def reconcile(store, board, job):

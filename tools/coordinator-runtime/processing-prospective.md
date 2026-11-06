@@ -11,6 +11,13 @@ qualification and adoption. It does not complete the continuing first-four
 cutover. Neither a longer expiry nor a start-budget increase supplies a
 continuing service or sustainability.
 
+Scoped first ingress has a separately selected
+[`input_mappings` task allowlist and `processing-map-input` owner operation](local-integration.md#first-ingress-actual-owner-mapping).
+It supports genuine future inputs without rotating the capability for each
+mapping, retains original sources and receiver rights, and requires fresh
+classification. Omission grants no mapping authority. This is separate from
+software package admission below and grants no execution or acceptance.
+
 ## Work-scoped admission
 
 Actual original Work may add optional `software_admission` to its exact

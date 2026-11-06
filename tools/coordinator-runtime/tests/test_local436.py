@@ -65,6 +65,8 @@ class LocalTests(unittest.TestCase):
         if not discovery:
             keys = set(reads)|{key}
             source['integration'] = {'reads':list(reads),'writes':[key], 'versions':self.versions(*keys)}
+        else:
+            source['integration'] = {'new_work':'fictional independently admitted new candidate/relationship; not missing metadata'}
         queued(self.store, source)
         return source
 

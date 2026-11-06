@@ -217,13 +217,35 @@ def apply_owner(runtime, boards, key, request, actor):
         return result
 
 
+def map_input(runtime, boards, key, event, actor, receipt):
+    """Current selected receiver mapping without rotating an unrelated service epoch.
+
+    This is original-owner routing, never a grant to the software actor or a
+    replacement for admission, ordinary execution or upstream collection.
+    """
+    runtime.processing = Access(runtime, key, boards)
+    _, selection = runtime.processing.current()
+    state = runtime.one('SELECT role,hold FROM events WHERE id=?', (event,))
+    if not state or state['hold']:
+        raise Refusal('unheld original receiving input required before mapping acquisition')
+    task = receipt.get('task') if isinstance(receipt, dict) else None
+    if (task not in selection.get('input_mappings', []) or task not in selection['tasks']
+            or actor != runtime.config['roles'][state['role']]['owner']
+            or not isinstance(receipt, dict) or receipt.get('mode') != 'route' or 'integration' not in receipt):
+        raise Refusal('explicit current Work-selected mapping task and actual receiving owner required')
+    boards[state['role']].verify_authority(runtime)
+    if not runtime.processing.event(runtime.event(event)):
+        raise Refusal('mapping source outside original selected retained/future boundary')
+    return runtime.resolve_input(event, actor, receipt)
+
+
 def select(runtime, boards, selection):
     keys = {'basis', 'authority', 'expires', 'retained_events', 'recover_controls', 'future_intake', 'tasks',
             'max_starts', 'max_shared_rows', 'max_shared_payload_bytes', 'max_runtime_rows'}
     continuing = isinstance(selection, dict) and 'service' in selection
     if continuing:
         keys = keys - {'expires', 'max_starts'}
-    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'work_coordination', 'service'} != keys:
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'work_coordination', 'service', 'input_mappings'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
@@ -253,6 +275,12 @@ def select(runtime, boards, selection):
         raise Refusal('explicit unique unchanged task allowlist required')
     if set(selection['tasks']) - set(runtime.config['tasks']):
         raise Refusal('processing task is not in original configuration')
+    mappings = selection.get('input_mappings', [])
+    from .local_integration import selected as local_task
+    if (not isinstance(mappings, list) or not all(isinstance(t, str) for t in mappings)
+            or len(mappings) != len(set(mappings)) or set(mappings) - set(selection['tasks'])
+            or any(not local_task(runtime, t) for t in mappings)):
+        raise Refusal('input mappings select only exact already permitted local receiver tasks')
     configuration.validate_processing(runtime, selection)
     operations = selection.get('owner_operations', [])
     if not isinstance(operations, list) or len(operations) > 32:

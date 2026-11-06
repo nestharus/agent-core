@@ -307,6 +307,27 @@ class Board(BoardDelivery, Completion, OwnerControl, Software, SharedCustody):
     def scan_after(self, runtime, grant):
         return runtime.one('SELECT seq FROM cursors WHERE role=?', (self.role,))['seq']
 
+    def verify_input_source(self, runtime, event):
+        """Reobserve only this original visible addressed post; never parse its text as authority."""
+        with self.opened() as conn:
+            grant = self._grant(conn, runtime)
+            recipient = event.get('receipt_recipient', grant['owner'])
+            if event.get('notice') is not None:
+                addressed = conn.execute('SELECT 1 FROM notification_outbox WHERE notification_id=? AND post_seq=? AND recipient=?',
+                                         (event['notice'], event['post'], recipient)).fetchone()
+            else:
+                addressed = conn.execute('SELECT 1 FROM posts WHERE seq=? AND recipient=?',
+                                         (event['post'], recipient)).fetchone()
+            if not addressed:
+                raise Refusal('mapping requires the original addressed post/notification, not visible arbitrary text')
+            row = {'seq':event['post'], 'notification_id':event.get('notice')}
+            if event.get('parent_delivery'):
+                row['parent_delivery'] = event['parent_delivery']
+            observed = self._event(conn, row, grant, runtime)
+            if observed != event:
+                raise Refusal('original visible addressed Board source/grant/body changed; mapping held')
+        return True
+
     def _event(self, conn, row, grant, runtime=None):
         service_reply = "parent_delivery" in row.keys()
         if service_reply and not conn.execute("SELECT 1 FROM coordinator_delivery_grants_v1 WHERE grant_id=?", (grant["id"],)).fetchone():

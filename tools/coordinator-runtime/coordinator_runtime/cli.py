@@ -125,6 +125,10 @@ def parser():
     owner_source.add_argument('role')
     owner_source.add_argument('kind', choices=['admit-package', 'legacy-disposition', 'resolve-input'])
     owner_source.add_argument('target')
+    mapping = sub.add_parser('processing-map-input', help='Actual receiver owner: explicitly Work-selected current task/point mapping; no epoch rotation')
+    mapping.add_argument('capability')
+    mapping.add_argument('event')
+    mapping.add_argument('--receipt', required=True)
     for name in ('processing-status', 'revoke-processing', 'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-admit-source'):
         item = sub.add_parser(name, help='Explicit software capability; no ordinary grant reactivation or native-owner claim')
         item.add_argument('capability')
@@ -400,6 +404,14 @@ def operate(args, store):
         if qualified['cli_version'] != store.config['protocol_cli_version']:
             raise Refusal('offline protocol qualification differs from configured CLI')
         return asyncio.run(service.serve(store, boards, args.capability, print_json))
+    if args.command == 'processing-map-input':
+        from . import processing
+        state = store.one('SELECT role,hold FROM events WHERE id=?', (args.event,))
+        if not state or state['hold']:
+            raise Refusal('unheld exact receiving source required')
+        actor = actual_actor(store.config['roles'][state['role']]['owner'])
+        boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        return processing.map_input(store, boards, args.capability, args.event, actor, read_record(args.receipt))
     if args.command == 'processing-owner-apply':
         from . import processing
         request = read_record(args.request)

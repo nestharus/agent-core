@@ -5,6 +5,12 @@ Work-issued bounded consumption of stopped software duties and separately
 selected future intake in their original journal. It preserves original grant
 revocation, effect holds, real collectors and selected role procedures.
 
+For first scoped Board or collected-return ingress, use the
+[actual-owner mapping interface](local-integration.md#first-ingress-actual-owner-mapping).
+Its explicitly selected `processing-map-input` operation observes permitted
+receiver revisions before reservation. Missing metadata stays unresolved;
+ordinary message text supplies no point or native authority.
+
 The [closed integration lifecycle](closed-integration.md) separates genuinely
 closed Work execution from unresolved original responsibilities. It provides
 explicit retirement and one-use next-window selection without promoting held

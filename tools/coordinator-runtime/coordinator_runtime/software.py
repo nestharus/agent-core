@@ -51,6 +51,39 @@ def clean_processing(runtime, job):
 
 
 class Software:
+    def verify_input_delivery(self, runtime, event):
+        """Revalidate an ordinary prospective receiver's exact persisted intent."""
+        from .board import Board
+        delivery = event.get('source_delivery', {})
+        outbox = runtime.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
+        if not outbox or not outbox['job']:
+            raise Refusal('original software outbox required for receiver mapping')
+        source = Board(self.config, outbox['role'])
+        job = runtime.job(outbox['job'])
+        source_grant = source._software_job_grant(runtime, job)
+        receiver = self.software_authority(runtime, event['allowed_tasks'][0])
+        if source.identity != self.identity:
+            raise Refusal('receiver mapping cannot cross original Board identities')
+        with self.opened() as conn:
+            self._grant(conn, runtime)
+            intent = conn.execute('SELECT * FROM coordinator_software_deliveries_v1 WHERE delivery=?', (outbox['id'],)).fetchone()
+            row = conn.execute('SELECT * FROM coordinator_deliveries_v1 WHERE id=?', (outbox['id'],)).fetchone()
+            if (not row or not intent or json.loads(intent['payload']) != event
+                    or intent['event'] != event['id'] or row['payload'] != outbox['payload']
+                    or row['producer'] != outbox['producer'] or row['kind'] != outbox['kind']
+                    or row['grant_id'] != source_grant['id'] or intent['source_grant'] != source_grant['id']
+                    or intent['receiver_grant'] != receiver['id'] or delivery.get('source_grant') != source_grant['id']
+                    or delivery.get('receiver_grant') != receiver['id']
+                    or delivery.get('source_hash') != digest(json.loads(outbox['payload']))
+                    or row['actor'] != self.config['actor'] or row['recipient'] != receiver['owner']
+                    or event['recipient'] != receiver['owner'] or outbox['recipient'] != self.role):
+                raise Refusal('receiver mapping needs exact original delivery/payload/grant/recipient intent')
+            notice = conn.execute('SELECT * FROM notification_outbox WHERE notification_id=?', (row['notice'],)).fetchone()
+            if (not notice or notice['route'] != 'managed' or notice['delivery_state'] in {'sending','ambiguous'}
+                    or row['transport_started'] or self.control_receipt_status(conn, row)['pending']):
+                raise Refusal('receiver mapping cannot waive original transport/control uncertainty')
+        return True
+
     def software_policies(self):
         return {name: digest(task) for name, task in self.config['tasks'].items() if task['role'] == self.role}
 
