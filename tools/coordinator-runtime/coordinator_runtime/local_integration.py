@@ -168,7 +168,9 @@ def validate_discovered(store, job, answer, bodies, *, native_only=False):
             raise Refusal('discovered points must retain controller-selected ownership protection')
         if (definition['line'], definition['incarnation']) not in permitted_lines:
             raise Refusal('discovery cannot introduce another delivery line under existing authority')
-        if any(value is None for value in point_value(definition, bodies, store=store, job=job)):
+        values = point_value(definition, bodies, store=store, job=job)
+        if any(value is None or 'native' not in binding and not value['exists']
+               for binding, value in zip(definition['bindings'], values)):
             raise Refusal('new point needs uniquely resolved stable canonical identity after discovery')
     return discovered
 

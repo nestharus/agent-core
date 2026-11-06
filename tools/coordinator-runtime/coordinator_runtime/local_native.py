@@ -140,15 +140,33 @@ def authorize_scope(store, row, binding):
 
 
 def review_scope(store, row, binding, role):
+    coordinated = role == 'Work' or role == 'Reviews' and row.get('phase') == 'integrator'
+    originals = original_review_jobs(store, row, set()) if coordinated else [row]
+    relevant = []
+    # Validate every original's current interface and source scope, including
+    # originals for other components. Selecting a lens never drops evidence or
+    # exempts another batch member from its provenance/hold/authority checks.
+    for original in originals:
+        components = review_material_scope(store, original)
+        if binding['component'] in components:
+            if not coordinated and components != {binding['component']}:
+                raise Refusal('native review point differs from original component/material')
+            relevant.append(original)
+    if not relevant:
+        raise Refusal('native review point differs from original component/material')
+    context = store.one('SELECT collector,run FROM review_contexts WHERE component=?', (binding['component'],))
+    if not context or context['collector'] != store.controller:
+        raise Refusal('native review cannot borrow another original collector')
+    # Attached material is checked against each relevant original's authority.
+    for linked in store.rows('SELECT branch FROM branch_contexts WHERE address=?', (context['run'],)):
+        for original in relevant:
+            branch_scope(store, original, linked['branch'])
+
+
+def review_material_scope(store, original):
+    """Resolve logical components only after checking every original operand."""
     from .branches import review_component, job_branch_key
-    members = json.loads(row['members']) if row.get('members') else [{'event': row['event']}]
-    original = row
-    if role == 'Work' or role == 'Reviews' and row.get('phase') == 'integrator':
-        # Coordination consumes the actual original reviewer, not any context
-        # with a guessed name. Consolidation itself is not a native proposer.
-        for source in original_review_jobs(store, row, set()):
-            review_scope(store, source, binding, 'Reviews')
-        return
+    members = json.loads(original['members']) if original.get('members') else [{'event': original['event']}]
     if not store.processing or not store.processing.review_task(original['task']):
         raise Refusal('native review requires its actual selected original review interface')
     policy = store.processing.current()[1]['service']['reviews'][original['task']]
@@ -158,6 +176,7 @@ def review_scope(store, row, binding, role):
     branch = job_branch_key(store, synthetic)
     if branch is not None:
         branch_scope(store, original, branch)
+    components = set()
     for member in members:
         event = store.event(member['event'])
         body = event.get('body')
@@ -166,15 +185,8 @@ def review_scope(store, row, binding, role):
         if not component:
             raise Refusal('native review point differs from original component/material')
         source_roots(store, original, component['repository'])
-        if review_component(branch, packet) != binding['component']:
-            raise Refusal('native review point differs from original component/material')
-    context = store.one('SELECT collector FROM review_contexts WHERE component=?', (binding['component'],))
-    if not context or context['collector'] != store.controller:
-        raise Refusal('native review cannot borrow another original collector')
-    # Attached branch material retains the original review's package/roots.
-    context = store.one('SELECT run FROM review_contexts WHERE component=?', (binding['component'],))
-    for linked in store.rows('SELECT branch FROM branch_contexts WHERE address=?', (context['run'],)):
-        branch_scope(store, original, linked['branch'])
+        components.add(review_component(branch, packet))
+    return components
 
 
 def original_review_jobs(store, row, visiting):
@@ -220,6 +232,13 @@ def original_review_jobs(store, row, visiting):
                      and event.get('source_role') == source['role'] and event.get('body') == answer
                      and row['task'] in response_tasks(store.config['tasks'][source['task']], answer, store.config))
         else:
+            from . import prospective
+            epoch = prospective.for_job(store, source)
+            proof = json.loads(attempt['detail']).get('software_authority', {})
+            if (epoch and proof.get('prospective_epoch') != epoch['id']
+                    or not epoch and (proof.get('prospective_epoch') or prospective.requires_authority(store, source))):
+                raise Refusal('native review original handoff needs its current bound prospective authority')
+            policy = epoch['policy'] if epoch else store.config['tasks'][source['task']]
             delivery = event['source_delivery']
             outbox = store.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
             link = store.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (delivery.get('id'),))
@@ -230,7 +249,7 @@ def original_review_jobs(store, row, visiting):
                      and payload.get('package') == row.get('package')
                      and payload.get('attempt') == attempt['id'] and payload.get('source_result') == answer
                      and payload.get('original_handoff') in answer.get('handoffs', [])
-                     and row['task'] in store.config['tasks'][source['task']].get('software_handoffs', {}).get(row['role'], []))
+                     and row['task'] in policy.get('software_handoffs', {}).get(row['role'], []))
         if not valid:
             raise Refusal('native review original return provenance/collection changed')
         for original in source_members:
