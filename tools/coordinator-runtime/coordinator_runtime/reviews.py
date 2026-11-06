@@ -133,8 +133,15 @@ def proposal_result(returned, component, acquired, collector, attempt, turns):
                                  'that integrator owns the consolidated Work return.'}
 
 
-def method_files(entry):
+def method_files(entry, closure=None, exclusions=()):
     """Resolve only the ordinary prompt's incorporated family/definition homes."""
+    if closure is not None:
+        from . import method_closure
+        if closure != method_closure.VERSION:
+            raise Refusal('unknown selected method closure contract')
+        found = method_closure.files(entry, exclusions)
+        method_closure.require_definitions(entry, found)
+        return found
     entry = regular_path(entry)
     home = entry.parent
     pending, found = [entry], {}
@@ -159,11 +166,11 @@ def validate(runtime, choices):
         task = runtime.config['tasks'].get(name, {})
         if task.get('role') != 'Reviews' or task.get('phase') != 'proposer' or task.get('effects') != 'none':
             raise Refusal('ordinary review requires a selected read-only Reviews proposer')
-        if (set(policy) != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
+        if (set(policy) - {'method_closure'} != {'caller', 'caller_sha256', 'routes', 'deadline', 'method', 'method_files', 'components'}
                 or not 1 <= policy['deadline'] <= 7200):
             raise Refusal('exact native caller/routes/deadline/method/components required')
         caller_current(policy)
-        if method_files(policy['method']) != policy['method_files']:
+        if method_files(policy['method'], policy.get('method_closure'), runtime.config.get('artifact_exclusions', [])) != policy['method_files']:
             raise Refusal('current ordinary definition bodies differ from selected pins')
         if not isinstance(policy['routes'], dict) or set(policy['routes']) - set(runtime.config['profiles']):
             raise Refusal('review routes must name prospectively authorized public profiles')
@@ -515,7 +522,7 @@ class Executor:
             if set(packet['answered_ids'])-prior_observations(runtime,component):
                 raise Refusal('answered IDs must refer to actual preserved prior observations')
             acquired['encounter_recovery']={'same_session_continuity':False,'predecessor':prior} if predecessor else None
-            if method_files(policy['method']) != policy['method_files']:
+            if method_files(policy['method'], policy.get('method_closure'), runtime.config.get('artifact_exclusions', [])) != policy['method_files']:
                 raise Refusal('selected ordinary procedure changed before execution')
             opening = context is None
             facade = runtime.home / 'review-inputs' / digest(component) / 'material.json'

@@ -319,7 +319,7 @@ class Dispatcher:
             epoch = prospective.for_job(self.store, job)
             if self.config.get('software_delegation') or epoch:
                 self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
-            if epoch and epoch['policy']['ordinary_effects']:
+            if ordinary.selected(self.store, self.store.job(job_id)):
                 ordinary.policy_for(self.store, job)
                 task = {**task, 'ordinary_preparation': True}
             local_integration.prepare_input_basis(self.store, job, attempt, task)

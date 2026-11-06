@@ -239,12 +239,13 @@ class Cutover(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(claimed)
         before=self.store.one('SELECT starts FROM processing_capabilities WHERE id=?',(self.key,))['starts']
         self.store.db.execute('UPDATE processing_capabilities SET revoked=? WHERE id=?',(self.now,self.key))
-        with patch.object(self.store,'event',side_effect=AssertionError('revoked startup must not reacquire source')):
+        with patch.object(self.store,'event',side_effect=AssertionError('revoked startup must not reacquire source')) as acquired:
             await lookup.execute(self.dispatch,*claimed)
         row=self.store.attempt(claimed[1]);self.assertEqual(row['state'],'not-started')
         self.assertIsNone(row['begin']);self.assertIsNone(row['ended']);self.assertIsNone(row['exit']);self.assertIsNotNone(row['collected'])
         self.assertEqual(before,self.store.one('SELECT starts FROM processing_capabilities WHERE id=?',(self.key,))['starts'])
         self.assertFalse(any(c['attempt']==claimed[1] for c in self.calls))
+        acquired.assert_not_called()  # Collector may catch the sentinel; attempts still count.
 
     async def test_candidate_authority_refusal_does_not_starve_sibling(self):
         # The real receiving-intent composition is exercised by Mixed below.

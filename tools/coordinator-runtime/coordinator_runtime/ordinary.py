@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS ordinary_tool_records(
 def selected(store, job):
     row = prospective.for_job(store, job)
     if row and row['policy']['ordinary_effects']:
+        if row['policy']['ordinary_effects'] == 'admitted-v1':
+            admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
+            task = scoped_task(job['task'], store.config['tasks'][job['task']], admission)
+            if 'ordinary_effects' not in task['admitted_scope']:
+                if job['task'] != 'branch-integrator':
+                    raise Refusal('QA execution requires its actual admitted ordinary operation')
+                return None  # Explicit per-package receiving; no adapter effect authority.
         return row
     return None
 
@@ -59,12 +66,23 @@ def policy_for(store, job):
     task = scoped_task(job['task'], store.config['tasks'][job['task']], store.one('SELECT * FROM admissions WHERE package=?', (job['package'],)))
     scope = task['admitted_scope']
     p = scope.get('ordinary_effects', {})
+    if not isinstance(p, dict):
+        raise Refusal('admitted ordinary operation must be an explicit object')
     common = {'kind', 'git', 'git_sha256', 'repository', 'source_ref', 'source_head',
               'procedure_sha256', 'resources', 'acceptor', 'acceptance_authority', 'timeout', 'max_output'}
     extra = {'local-ref': {'ref', 'before', 'target'}, 'local-qa': {'command', 'readback', 'known_exits', 'source_capture'},
              'github-run': {'gh', 'gh_sha256', 'repository_slug', 'run_id', 'run_attempt', 'event', 'workflow', 'job_ids'}}
-    if p.get('kind') not in extra or set(p) != common | extra.get(p.get('kind'), set()):
+    if p.get('kind') not in extra or set(p) - {'public_executables'} != common | extra.get(p.get('kind'), set()):
         raise Refusal('explicit supported ordinary procedure and complete exact operands required')
+    if 'public_executables' in p:
+        # Native read-only projections use a scoped job view before a worker
+        # exists. They validate the current ceiling, never manufacture a birth
+        # or attempt. Actual execution still requires the original for_job.
+        ceiling = selected(store, job) if job.get('id') else prospective.current(store, job['task'])
+        if p['kind'] != 'local-qa' or not ceiling or ceiling['policy']['ordinary_effects'] != 'admitted-v1':
+            raise Refusal('public QA executable contract requires explicit admitted-v1 prospective selection')
+        from .public_tools import validate
+        validate(store, p['public_executables'])
     text_fields = ['git', 'git_sha256', 'repository', 'source_ref', 'source_head', 'procedure_sha256', 'acceptor', 'acceptance_authority']
     if any(not isinstance(p[k], str) or not p[k] for k in text_fields):
         raise Refusal('complete typed ordinary source/tool/acceptance operands required')
@@ -103,10 +121,33 @@ def validate_resources(store, p):
         canonical_uuid(resource['owner'])
 
 
-def command_policy(store, command, roots):
-    if set(command) != {'argv', 'executable_sha256', 'stdout'} or not command['argv'] or not all(isinstance(a, str) for a in command['argv']):
+def command_policy(store, command, roots, pin=None):
+    if (set(command) - ({'script_sha256'} if pin else set()) != {'argv', 'executable_sha256', 'stdout'}
+            or not command['argv'] or not all(isinstance(a, str) for a in command['argv'])):
         raise Refusal('exact argv/executable hash/readback oracle required; no shell interpolation')
-    frozen_file(store, command['argv'][0], roots, command['executable_sha256'])
+    if pin is not None:
+        if command['argv'][0] != pin['path'] or command['executable_sha256'] != pin['sha256']:
+            raise Refusal('public executable pin must match the exact admitted command role/argv')
+        argv = command['argv']
+        if pin['path'] == '/usr/bin/python3.12':
+            if len(argv) == 3 and argv[1] == '-B' and 'script_sha256' in command:
+                if not isinstance(command['script_sha256'], str) or not re.fullmatch('[0-9a-f]{64}', command['script_sha256']):
+                    raise Refusal('public Python script requires its complete exact byte pin')
+                frozen_file(store, argv[2], roots, command['script_sha256'])
+            elif (len(argv) in {7, 8} and argv[1:6] == ['-B', '-m', 'unittest', 'discover', '-s']
+                    and (len(argv) == 7 or argv[7] == '-v') and 'script_sha256' not in command):
+                scoped_path(store, argv[6], roots)
+            else:
+                raise Refusal('public Python requires an in-scope pinned script or bounded unittest discovery; no inline code')
+        elif (len(argv) != 7 or argv[1:3] != ['--no-optional-locks', '-C']
+                or argv[4:6] != ['rev-parse', '--verify']
+                or not re.fullmatch(r'refs/(heads|tags)/[A-Za-z0-9_./-]+\^\{commit\}', argv[6])
+                or '..' in argv[6] or 'script_sha256' in command):
+            raise Refusal('public Git command is scoped read-only ref verification only')
+        else:
+            scoped_path(store, argv[3], roots)
+    else:
+        frozen_file(store, command['argv'][0], roots, command['executable_sha256'])
 
 
 def validate_adapter(store, task, p, roots):
@@ -120,8 +161,8 @@ def validate_adapter(store, task, p, roots):
         qa_source.validate(store, p)
         if task['network'] or p['known_exits'] != [0, 1]:
             raise Refusal('local QA supports admitted runner success/known failure only, no network')
-        command_policy(store, p['command'], roots)
-        command_policy(store, p['readback'], roots)
+        command_policy(store, p['command'], roots, p.get('public_executables', {}).get('command'))
+        command_policy(store, p['readback'], roots, p.get('public_executables', {}).get('readback'))
         if not p['readback']['stdout']:
             raise Refusal('independent procedure-specific resource/effect readback oracle required')
     else:

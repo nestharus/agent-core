@@ -195,3 +195,49 @@ Future same-journal software handoffs and scanner intake share the exact source
 handoff identity in either observation order. Distinct handoffs, historical native
 or queued duties and recurring alerts keep their separate responsibilities. No
 configuration-flag migration, retrospective queue deletion or content dedup occurs.
+
+## Prospective admitted operations and public QA executables
+
+Actual Work may explicitly select `ordinary_effects: "admitted-v1"` for a
+package-scoped Branch integrator or QA execution task. This is a task capability
+ceiling. The original package's admitted `ordinary_effects` object selects its
+operation; omitting that object permits the normal separately scoped receiving
+path without selecting an adapter. A present malformed object refuses. Existing
+`true` selections still require an adapter for every applicable package, and
+`false` selections still grant no adapter authority. Existing job births,
+attempts, frozen admissions, grants and selected epochs retain their meaning.
+No selection, admission or effect authority comes from message/model text.
+
+Receiving retains its configured effect reconciliation, original collection,
+source/member/currentness and delivery/release guards. In particular, an
+`owner-reconcile` Branch task still needs its actual role owner's effect/outbox
+receipt even when its admitted receiving scope has no adapter. Absence of an
+adapter does not clear that guard. QA still executes first, receives separate
+independent acceptance for every admitted ordinary operation in its package,
+then performs full narrowed consolidation and fresh qualification before Branch
+receiving. A Branch adapter in that same package remains an acceptance dependency;
+this contract does not waive it. Separate legitimate Branch and QA packages can
+share one continuing prospective epoch without changing global policy per message.
+
+For `local-qa` under `admitted-v1`, an optional `public_executables` object maps
+`command` and/or `readback` to exact `{path, bytes, sha256}` identities. Supported
+canonical installed paths are `/usr/bin/python3.12` and `/usr/bin/git`; no alias,
+parent directory, credential CLI or source-root exemption is selected. Each pin
+has a 32MiB bound, with 64MiB aggregate declared acquisition per validation.
+Complete bytes are streamed through no-follow descriptors, with regular executable,
+size, mode, hash and before/after identity checks. Binary bodies do not become
+source artifacts, evidence text or model context. Existing source, procedure,
+export, result, context and runtime budgets are unchanged.
+
+Each public pin must match that role's `argv[0]` and `executable_sha256`.
+Python supports `-B SCRIPT` with an absolute in-scope script and command field
+`script_sha256`, or `-B -m unittest discover -s DIRECTORY` with optional final
+`-v` and an in-scope directory. Inline code and other interpreter modes refuse.
+Public Git supports only `--no-optional-locks -C REPOSITORY rev-parse --verify
+refs/heads/NAME^{commit}` (or `refs/tags/NAME^{commit}`), with the repository in
+scope. A ref match alone is not an adequate runner/resource completion oracle.
+The actual operator separately supplies authentic procedure intent, scripts,
+resources, source authority and a substantive nonempty readback expectation.
+Public tool identity grants none of those rights. Unpinned external scripts and
+out-of-scope discovery roots refuse before launch. Script bodies keep their
+existing 4MiB evidence-file bound; larger installed interpreters do not raise it.

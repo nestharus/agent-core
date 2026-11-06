@@ -1401,3 +1401,8 @@ at actual permitted body use. Work must never use a metadata-only basis as an
 old-body validation, held-source clearance or native-operation qualification.
 
 Continuous anchored integration and separate new-work discovery are an explicitly selected source capability; see [local-integration.md](local-integration.md) for point policies, concurrent scheduling, seven-duty rebasing and independent Work coordination. Existing retained tasks keep their original bindings until an authorized prospective transition.
+
+Prospective operators can select the versioned [unified method closure](unified-method.md)
+and the per-package operation/public executable contracts in
+[ordinary effects](ordinary-effects.md#prospective-admitted-operations-and-public-qa-executables).
+Both require actual Work's explicit selection; existing epochs keep their original interpretation.

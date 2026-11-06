@@ -87,6 +87,11 @@ def command(store, task, p, association, selected_command):
     if executable.is_relative_to(Path(p['repository'])):
         exported_executable = Path(root) / executable.relative_to(Path(p['repository']))
         frozen_file(store, str(exported_executable), [root], selected_command['executable_sha256'])
+    if 'script_sha256' in selected_command:
+        script = Path(argv[2])  # Validated public Python -B SCRIPT contract.
+        if script.is_relative_to(Path(p['repository'])):
+            exported_script = Path(root) / script.relative_to(Path(p['repository']))
+            frozen_file(store, str(exported_script), [root], selected_command['script_sha256'])
     args = [p['source_capture']['bwrap'], '--unshare-net', '--die-with-parent', '--new-session',
             '--ro-bind', '/usr', '/usr', '--symlink', 'usr/bin', '/bin',
             '--symlink', 'usr/lib', '/lib', '--symlink', 'usr/lib64', '/lib64',

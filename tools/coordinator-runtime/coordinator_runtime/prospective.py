@@ -89,8 +89,8 @@ def validate_policy(store, name, policy, selection):
     enrollment = store.enrollment(task['role'])
     if selection['grants'].get(task['role']) != enrollment['grant_id']:
         raise Refusal('retain actual current enrollment and grant identity')
-    if type(policy['ordinary_effects']) is not bool:
-        raise Refusal('explicit ordinary effects boolean required')
+    if type(policy['ordinary_effects']) is not bool and policy['ordinary_effects'] != 'admitted-v1':
+        raise Refusal('explicit ordinary effects boolean or admitted-v1 ceiling required')
     if not isinstance(policy['software_handoffs'], dict):
         raise Refusal('explicit recipient task map required')
     if policy['ordinary_effects'] and (name not in {'branch-integrator', 'qa-execution'} or not task.get('require_package_scope') or task['effects'] != 'owner-reconcile'):
