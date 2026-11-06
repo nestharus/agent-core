@@ -700,7 +700,11 @@ def main_owned(args):
         if not args.config:
             raise Refusal("--config is required")
         with observations.span("config-load"):
-            config = load_config(args.config)
+            if (args.command == 'processing-service-control' and args.operation == 'stop'
+                    and args.component is None):
+                config = load_config(args.config, withdrawal_only=True)
+            else:
+                config = load_config(args.config)
         if args.command in {"delivery-show", "delivery-stage", "delivery-correct"}:
             board = Board(config, args.role)
             if args.command == "delivery-show":

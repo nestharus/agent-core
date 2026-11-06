@@ -21,6 +21,14 @@ verifies the endpoint peer UID and requires the response's controller to match
 the recorded original. It sends only the existing stop protocol, so an already
 running older endpoint needs no patch or second service.
 
+For this exact component-free stop command, full config loading validates
+`repository_reads` against the original selected `operator_cli` repository,
+without inspecting that repository or rewriting configuration. A separately
+reviewed compatible client can therefore withdraw its owner's original service.
+Read-only source-task shape, role and effect checks remain mandatory. All other
+commands retain executing-checkout validation; the withdrawal validator grants
+no task, source, admission or publication authority.
+
 After authorized source review and deployment selection, the genuine issuer
 runs the corrected client's `coordinator --config ACTUAL_CURRENT_CONFIG
 processing-service-control EXACT_CAP stop`, retaining the old journal/config and
@@ -43,6 +51,11 @@ It also checks wrong/absent actor, cap/issuer/revocation/config/run mismatches,
 continued non-stop refusal and failed endpoint acknowledgements. Native Board
 membership, config validation and dispatcher work are explicit fixture seams;
 these tests do not establish actual service drain or actual original END.
+
+`test_withdrawal571` additionally uses the unpatched config loader, real CLI
+subprocess and real public Board SDK against an entire def41-created journal.
+Its principals, capability/run records and socket peer are isolated fiction;
+the peer's draining reply supplies no actual service or parent END proof.
 
 This avoids making a control request compete with runtime writers merely to
 rebind the configuration. It does not make synchronous workflow operations

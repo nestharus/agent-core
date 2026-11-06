@@ -90,11 +90,11 @@ def model_binding(value):
     return value
 
 
-def load_config(path):
-    return validate_config(parse_json(regular_path(path).read_text()))
+def load_config(path, *, withdrawal_only=False):
+    return validate_config(parse_json(regular_path(path).read_text()), withdrawal_only=withdrawal_only)
 
 
-def validate_config(config):
+def validate_config(config, *, withdrawal_only=False):
     from .admitted import policy
     policy(config)
     from .windows import policy as window_policy
@@ -138,7 +138,7 @@ def validate_config(config):
             raise Refusal('prospective rollout delegation retains actual Work grantor provenance')
         required_text(software['authority'], 'user/Work software delegation authority', 4000)
     for name, task in config["tasks"].items():
-        validate_task(name, task, config)
+        validate_task(name, task, config, withdrawal_only=withdrawal_only)
         if task.get('routine_completion'):
             from .routine import policy_for
             policy_for(task, execution=False)
@@ -212,7 +212,7 @@ def validate_role(role, selected, profiles):
         raise Refusal("QA retains per-package admission from its actual resource owner")
 
 
-def validate_task(name, task, config):
+def validate_task(name, task, config, *, withdrawal_only=False):
     required_text(name, "task ID", 80)
     role, phase = task["role"], task["phase"]
     if 'package_narrowing' in task and (task['package_narrowing'] is not True
@@ -224,7 +224,16 @@ def validate_task(name, task, config):
             or task.get('network') or task['effect_authority']['write_roots']):
         raise Refusal('package-narrowed Branch proposal stays read-only')
     if 'repository_reads' in task:
-        if (task['repository_reads'] != [str(Path(__file__).resolve().parents[3])]
+        repository = Path(__file__).resolve().parents[3]
+        if withdrawal_only:
+            # Exact stop executes no task. Validate the original release's
+            # references without restamping config or touching that checkout.
+            operator = Path(config.get('operator_cli', ''))
+            if (not operator.is_absolute() or '..' in operator.parts
+                    or tuple(operator.parts[-3:]) != ('tools', 'coordinator-runtime', 'coordinator')):
+                raise Refusal('withdrawal requires the exact selected original operator path')
+            repository = operator.parents[2]
+        if (task['repository_reads'] != [str(repository)]
                 or role not in {'Branch', 'Reviews'} or phase != 'proposer'
                 or task['effects'] != 'none' or task['sandbox'] != 'read-only'
                 or task.get('network') or task['effect_authority']['write_roots']

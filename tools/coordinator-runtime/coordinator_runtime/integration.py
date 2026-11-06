@@ -58,9 +58,15 @@ class IntegrationJournal:
     def _work_read_basis(self, job):
         row = self.job(job)
         if (row['role'] != 'Work' or row['phase'] != 'proposer' or row['state'] != 'held'
-                or row['effects'] != 'none' or row['recovery_owner'] is not None
+                or row['effects'] != 'none'
                 or self.one('SELECT job FROM local_jobs WHERE job=?', (job,))):
             raise Refusal('exact held nonwriting Work proposer with unknown local scope required')
+        if (row['recovery_state'] in {'claimed', 'diagnosing'}
+                or row['recovery_owner'] is not None
+                and row['recovery_state'] not in {'awaiting-disposition', 'owner-deferred'}):
+            raise Refusal('retained recovery owner must have no active recovery execution')
+        if self.one('SELECT p.attempt FROM file_publications p JOIN attempts a ON a.id=p.attempt WHERE a.job=? LIMIT 1', (job,)):
+            raise Refusal('publication duties cannot be treated as a nonwriting predecessor')
         frozen = self.one('SELECT task FROM job_resource_policies WHERE job=?', (job,))
         task = json.loads(frozen['task']) if frozen else None
         if not self._work_read_task(task):
@@ -73,8 +79,11 @@ class IntegrationJournal:
             raise Refusal('all related originals need actual begun numeric END and collection')
         if self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'", (job,)):
             raise Refusal('pending owner recovery must be disposed before a read fence')
+        controllers = {row['controller'], *[a['controller'] for a in attempts]}
+        if row['recovery_owner'] is not None:
+            controllers.add(row['recovery_owner'])
         return self._integration_bounded({'job': row, 'policy': digest(task), 'attempts': attempts,
-            'controllers': sorted({row['controller'], *[a['controller'] for a in attempts]})})
+            'controllers': sorted(controllers)})
 
     @staticmethod
     def _work_read_task(task):
@@ -86,7 +95,7 @@ class IntegrationJournal:
                     and task['effect_authority'].get('write_roots') == [])
 
     def fence_work_proposer(self, job, token, actor, receipt):
-        """Permanently prevent old execution; permit only local read coexistence.
+        """Prevent old execution; permit guarded scoped file coexistence.
 
         Unlike integration retirement, this does not release capacity or assert
         execution_complete. PARTIAL, capture defects, source and delivery duties
@@ -104,14 +113,28 @@ class IntegrationJournal:
         return self.one('SELECT * FROM work_read_fences WHERE job=?', (job,))
 
     def work_read_coexists(self, row, scope, source):
-        """Consume an owner fence without acquiring old source or return bodies."""
-        if (row['role'] != 'Work' or row['phase'] != 'proposer'
-                or scope['lane'] != 'anchored' or not scope['reads'] or scope['writes']
-                or not self._work_read_task(self.config['tasks'][row['task']])):
+        """Scoped file work may coexist with a closed nonwriting predecessor.
+
+        The predecessor's unknown *read* scope cannot conflict with a future
+        write once every execution-capable controller is closed and fenced.
+        This says nothing about acceptance of its retained adverse result.
+        Incoming writers still need ordinary local/routine publication rights.
+        """
+        task = self.config['tasks'][row['task']]
+        reader = (row['phase'] == 'proposer' and scope['reads'] and not scope['writes']
+                  and self._work_read_task(task))
+        integrator = (row['phase'] == 'integrator' and task.get('role') == 'Work'
+                      and task.get('phase') == 'integrator' and task.get('execution') is None
+                      and task.get('network', False) is False and task.get('routine_completion')
+                      and task.get('effects') == 'owner-reconcile'
+                      and task.get('sandbox') == 'workspace-write')
+        if (row['role'] != 'Work' or scope['lane'] != 'anchored'
+                or not (scope['reads'] or scope['writes']) or not (reader or integrator)):
             return False
         from .local_integration import point_definitions
         points = point_definitions(self)
-        if any('native' in binding for key in scope['reads'] for binding in points[key]['bindings']):
+        if any('native' in binding for key in set(scope['reads']) | set(scope['writes'])
+               for binding in points[key]['bindings']):
             return False  # Native coordination retains its original exclusion contract.
         fence = self.one('SELECT basis FROM work_read_fences WHERE job=?', (source['id'],))
         if not fence:
