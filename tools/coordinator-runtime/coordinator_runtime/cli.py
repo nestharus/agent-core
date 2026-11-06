@@ -73,7 +73,7 @@ def parser():
     draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
     draft.add_argument('--operator-config', required=True)
     draft.add_argument('--retention-library')
-    draft.add_argument('--scope-options', help='Public JSON: narrow read_roots, neutral_startup, monotonic exclusions, associated linked_repositories')
+    draft.add_argument('--scope-options', help='Public JSON: task_text authority/purpose, narrow read_roots, neutral_startup, monotonic exclusions, associated linked_repositories')
     draft.add_argument('--bounded-work-log', action='store_true', help='Prospective joined six inventory plus bounded log duty; original policies unchanged')
     draft.add_argument('--source-task', '--scope-task', dest='scope_task', action='append', default=[])
     sub.add_parser('current-configuration-status', help='Read current transition receipt; no replay or historical recovery')

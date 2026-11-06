@@ -207,6 +207,12 @@ The optional JSON has only these fields:
   "read_roots": {"work-proposer": ["/authorized/exact/report.md"]},
   "neutral_startup": ["work-proposer", "work-integrator"],
   "package_scoped_cleanup": ["qa-cleanup"],
+  "task_text": {
+    "work-proposer": {
+      "authority": "EXACT EXISTING AUTHORITY TEXT\n\nApproved phase clarification within existing rights.",
+      "purpose": "Bounded phase intent and rationale."
+    }
+  },
   "exclusions": ["/known/held/path"],
   "linked_repositories": {
     "branch-integrator": [{"repository": "/authorized/release", "common_git": "/associated/.git"}]
@@ -233,6 +239,27 @@ is not a relabeling as report-only, an exact model read-isolation claim, or a
 change to the genuine coding Root's context. Select neutral startup for every
 coordinator whose startup must use explicit packets. Every scoped/read/startup
 change must belong to the prospective task allowlist.
+
+`task_text` is an explicit map of existing task IDs to nonempty selections of
+their existing `authority` and/or `purpose` string fields. It adds no task field.
+Selected text uses the existing nonempty 16000-byte text limit. An authority
+replacement must retain the entire prior string verbatim and append a nonempty
+clarification after two newlines; an identical authority is also allowed when
+reconstructing an existing selection. Purpose may be replaced with bounded phase
+intent. Every named task must appear in the basis's prospective `--task` list.
+Unknown tasks, fields, nontext values, blank/oversize text and shortened or
+rewritten authority refuse. Messages and attachments cannot select this option.
+
+Use the actual reviewed clarification and actual existing authority prefix in a
+separate public scope-options file, then pass it to the draft command. Save the
+returned candidate at its declared path, obtain a fresh basis and select using
+the existing Work procedure above. Both drafting and validation reconstruct the
+exact explicit text map. Editing candidate text without that selection refuses;
+typed access/effects, bindings, models, roles, routes, scopes, consumers, limits,
+debts and retention are still controlled by their existing independent fields.
+No selector (or an empty `task_text` map) leaves task text unchanged. This is
+source support for prospective selection, not deployment or evidence that a
+classifier, consumer or receiving encounter succeeded.
 
 `package_scoped_cleanup` is an **UNSELECTED opt-in narrowing**, limited to the
 existing software QA cleanup phase. It adds required per-package admission and

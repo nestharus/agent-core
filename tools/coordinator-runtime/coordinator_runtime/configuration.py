@@ -200,8 +200,9 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'task_text'}:
         raise Refusal('unsupported prospective scope option')
+    select_task_text(original, value, options.get('task_text', {}))
     if 'local_integration' in options:
         from .local_integration import policy
         value['local_integration'] = copy.deepcopy(options['local_integration'])
@@ -291,6 +292,30 @@ def apply_scope_options(original, value, options):
     value['prospective_scope_selection'] = copy.deepcopy(options)
 
 
+def task_text_fields(original, fields):
+    """Validate existing semantic leaves; text cannot replace typed rights."""
+    if not isinstance(fields, dict) or not fields or set(fields) - {'authority', 'purpose'}:
+        raise Refusal('task_text selects only existing authority/purpose text fields')
+    if set(fields) - set(original):
+        raise Refusal('task_text cannot add a task field')
+    for name, text in fields.items():
+        required_text(original[name], 'existing task ' + name)
+        required_text(text, 'selected task ' + name)
+    authority = fields.get('authority', original['authority'])
+    prefix = original['authority'] + '\n\n'
+    if authority != original['authority'] and (not authority.startswith(prefix) or not authority[len(prefix):].strip()):
+        raise Refusal('task_text authority must retain the exact prior bounds and append a clarification paragraph')
+    return fields
+
+
+def select_task_text(original, value, selection):
+    """Explicit semantic-only task selection, reconstructed by validate_changes."""
+    if not isinstance(selection, dict) or set(selection) - set(original['tasks']):
+        raise Refusal('task_text requires an explicit existing task map')
+    for name, fields in selection.items():
+        value['tasks'][name].update(task_text_fields(original['tasks'][name], fields))
+
+
 def select_capacity(original, value, policy):
     """Explicit bounded prospective ceilings; original rows/grants stay charged.
 
@@ -339,6 +364,8 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')
+    if options and set(options.get('task_text', {})) - set(tasks):
+        raise Refusal('every task_text selection needs an explicitly selected prospective task')
     # Scoped_task still narrows each actual package; this grants no writes or
     # Root acceptance. Broad ancestors and peer checkout roots cannot enter.
     if any(root not in value['tasks'][name]['scope_roots'] for name in additions
