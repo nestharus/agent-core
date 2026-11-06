@@ -10,6 +10,16 @@ for that selected file; no repository-parent grant is required. Independent
 Source execution without a package-scoped task retains its selected component
 authority and does not acquire a new package requirement.
 
+An incomplete Source is held before its sole report-integration return is
+created. That new event still requires current Board and processing authority.
+If authority or event capacity refuses it, the hold identifies deferred
+integration and the exact original attempt. The full result/error and original
+review call stay in their existing custody rows; the Source job and its incoming
+event remain unfinished. No integration event is created under revoked rights.
+Later processing requires an explicitly lawful disposition of that retained
+return, without replaying the Source or replacing its original birth. A held
+Source does not itself stop independent currently authorized work.
+
 `execution=owner` describes the task procedure. The external owner-return
 contract belongs to its original same-role `work` delegation. A Source's
 same-role `result` instead keeps its actual software collector receipt, original
@@ -47,5 +57,8 @@ They distinguish current pre-acquisition refusal, honest collector completion,
 completed receiving from pending/UNKNOWN downstream work, and missing receiver
 authority. They establish no provider/native availability, historical debt
 settlement, deployed selection, Source/QA/risk acceptance or customer release.
+The isolated `test_revocation495.py` controls carry QA490-H1's full-capability
+revocation condition and distinguish retained pre-start/partial-call custody,
+normal bound/unbound returns, handback pressure and independent Work progress.
 Existing seven-consumer/protected-field, local processing, discovery, five-profile,
 QA capacity and whole-processing+24h AND all-holds obligations remain separate.

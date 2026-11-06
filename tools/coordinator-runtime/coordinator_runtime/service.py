@@ -229,7 +229,17 @@ class Dispatcher(ProcessingDispatcher):
         # Even a malformed/partial Source return goes whole to the sole report
         # integrator. This informative return cannot complete the Source job.
         if outcome['error'] or not outcome['result'] or outcome['result']['semantic'] != 'DONE':
-            self.review_failure_return(job, attempt, outcome)
+            # Custody/status survives loss of permission to create a new input.
+            # The original attempt/result and review call already retain the
+            # whole return; a refused integration must not leave this job running.
+            pending = ('original Source incomplete; whole return retained in original attempt '
+                       + attempt + ' and review call; sole report integration deferred')
+            self.store.hold_job(job['id'], pending)
+            try:
+                self.review_failure_return(job, attempt, outcome)
+            except Refusal as exc:
+                self.store.hold_job(job['id'], pending + ': ' + str(exc))
+                return
             self.store.hold_job(job['id'], 'original Source incomplete; whole return conserved through sole report integration')
             return
         self.try_finish(job['id'])
@@ -246,6 +256,9 @@ class Dispatcher(ProcessingDispatcher):
                 self.spawn(self.recover(claimed))
 
     def review_failure_return(self, job, attempt, outcome):
+        # A new integration event still exercises current authority, even when
+        # the original collector may lawfully retain its failed/partial return.
+        self.boards[job['role']].verify_authority(self.store)
         task = self.config['tasks'][job['task']]
         from .contracts import response_tasks
         routes = response_tasks(task, {'category': 'proposal'}, self.config)
