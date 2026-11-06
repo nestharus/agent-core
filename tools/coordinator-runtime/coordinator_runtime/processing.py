@@ -245,7 +245,7 @@ def select(runtime, boards, selection):
     continuing = isinstance(selection, dict) and 'service' in selection
     if continuing:
         keys = keys - {'expires', 'max_starts'}
-    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'work_coordination', 'service', 'input_mappings'} != keys:
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'work_coordination', 'service', 'input_mappings', 'metadata_lookup'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
@@ -282,6 +282,8 @@ def select(runtime, boards, selection):
             or any(not local_task(runtime, t) for t in mappings)):
         raise Refusal('input mappings select only exact already permitted local receiver tasks')
     configuration.validate_processing(runtime, selection)
+    from .metadata_lookup import validate_selection
+    validate_selection(runtime, selection)
     operations = selection.get('owner_operations', [])
     if not isinstance(operations, list) or len(operations) > 32:
         raise Refusal('bounded exact owner operations required')
@@ -862,6 +864,11 @@ class ProcessingDispatcher(Dispatcher):
             "AND (e.state='classification-held' OR q.phase='control') AND (" +
             scope + ") ORDER BY e.received,e.id", parameters)
         for row in candidates:
+            from .metadata_lookup import delegated
+            source_event = self.store.event(row['id'])
+            queue = self.store.one('SELECT task FROM queue WHERE event=?', (row['id'],))
+            if delegated(self.store, source_event) and queue and queue['task'] == '@unresolved':
+                continue  # Separate narrow metadata consumer, never broad owner disposition.
             if not self.store.processing.event(self.store.event(row['id'])):
                 continue
             if self.store.one('SELECT event FROM processing_controls WHERE event=?', (row['id'],)):

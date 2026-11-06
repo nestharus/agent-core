@@ -85,6 +85,9 @@ def conserve(store, path, actor, receipt):
 
 
 def eligible_event(store, event):
+    if store.one('SELECT p.point FROM local_lookup_points p JOIN attempts a ON a.id=p.source_attempt '
+                 'WHERE a.event=? LIMIT 1', (event['id'],)):
+        return False  # Derived live identities retain their actual original observation custody.
     if store.one("SELECT name FROM sqlite_master WHERE name='local_discovered_points'") and store.one(
             'SELECT d.point FROM local_discovered_points d JOIN attempts a ON a.id=d.source_attempt '
             'JOIN queue q ON q.job=a.job WHERE q.event=? LIMIT 1', (event['id'],)):

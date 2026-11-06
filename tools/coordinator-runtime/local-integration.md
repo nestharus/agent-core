@@ -376,3 +376,97 @@ not prove that semantic judgment. Missing/ambiguous existing identity stays
 unresolved. Routine file preparation freezes versions with the actual source
 snapshot before releasing its cooperative lock or staging; an intervening commit
 cannot stamp newer generations onto an older read.
+# Prospective automatic metadata lookup (opt-in)
+
+`processing-map-input` / `resolve-input` remain actual-owner bootstrap and
+recovery interfaces. Unattended ordinary processing instead needs a genuine
+Work-selected `metadata_lookup` in the processing selection. **The following
+example is UNSELECTED; source installation does not select any permissions.**
+
+```json
+{"metadata_lookup":{
+  "tasks":["work-proposer","work-integrator","qa-execution"],
+  "authority":"GENUINE WORK MUST SUPPLY the bounded prospective metadata outcome and why",
+  "max_points":16,"max_bytes":65536
+}}
+```
+
+This is separate from `input_mappings` (native receiver owner), general control
+disposition, software package admission, independent Work coordination and
+ordinary effect authorization. It selects only existing local tasks, their
+original roles, routes, roots, grants and package permissions. It applies after
+the original processing source-birth boundary, never to an old unknown attempt.
+The software actor remains itself. It gets no native-owner receipt, package
+consent, assignment/acceptance, native creation, collector or effect authority.
+
+The production tick first obtains fresh Luna LOW classification and a durable
+queue responsibility; those precede ACK. An instanced read-only metadata worker
+then receives permitted point values and service-observed revisions captured
+**before its model read**. It selects known read/write points, positively new
+work, or unresolved-existing meaning. The original source/hash, birth, first
+ACK and classifier attribution survive. A derived route requires another fresh
+LOW classification before reservation. Unknown is never a positive-new signal.
+Only positively new business candidates enter central discovery; known work,
+including metadata newly indexing an existing item, stays in local/pairwise
+reconciliation with scoped outputs. Unrelated known scopes progress in parallel.
+
+Existing selected points can be looked up without additional config. To index
+existing identities that appear later inside an explicitly bounded namespace,
+a task may select `lookup_scopes`. This example is also **UNSELECTED**:
+
+```json
+{"lookup_scopes":[{
+  "prefix":"known-main:","member_field":"id",
+  "point":{"kind":"item","line":"Main","incarnation":"CHOSEN DELIVERY LIFETIME",
+    "bindings":[{"target":"/OWNED/EXAMPLE/catalog.json","path":["items"]}],
+    "resources":[],"protected":["id","owner","accepted_owner"],"writable":["state"]}
+}]}
+```
+
+One exact file target/parent selector per template is supported. A list requires
+the explicitly selected unique string `member_field`; a dictionary requires
+`member_field:null` and uses exact existing keys. The service derives child
+selectors and keys from observed existing material. It never creates a work
+item, infers novelty from a title or accepts ownership. Template protection,
+writable fields, delivery line/incarnation and actual receiver access are
+preserved. Limits refuse oversized contexts as owned scope questions. The
+snapshot is bounded by the selected byte/point limits as well as ordinary
+journal/attempt/window budgets; those are not a sustained latency guarantee.
+
+For native templates the single binding is one of
+`{"native":"branch","id":"$source"}`,
+`{"native":"review","component":"$source"}`, or
+`{"native":"execution","package":"$source","task":"qa-execution"}`;
+`member_field` is null and writable remains empty. `$source` means resolve from
+the original source-related permission indexes, not a model-authored identity
+or a scan of all native contexts. Branch uses the actual admitted/accepted
+association; review uses genuinely collected original component ancestry and
+its live original context/collector/capability; execution uses the actual
+original OR already-authorized software admission and its stored receipt string.
+All native operand permissions precede material acquisition.
+
+Derived native definitions record separate `native_incarnations` observed from
+those real objects; their keys include that native lifecycle. The selected
+delivery `line`/`incarnation` remains independent. Prior native lifetimes remain
+frozen with their original work; new arrivals rederive only their own related
+references. Such definitions are local workflow metadata in the original
+journal, not a native/work catalog, and create no native object or acceptance.
+Tasks can share a derived continuation only when they explicitly select the
+same exact lookup template (or the point itself), with all receiver and member
+checks still required. A discovery prefix alone cannot borrow lookup rights.
+Primary Source may remain outside local integration and open under its original
+read-only native method before its run is known. Reviews integration can use an
+accepted branch alternative. First QA execution still cannot reserve a slot
+until anchored, and retains the admitted adapter/resources/readback and separate
+semantic acceptance. Manual actual-owner APIs remain recovery/bootstrap.
+
+Mapping binding refusal now occurs before classifier/pool reservation. The
+event becomes an owned `mapping-held` dependency with its prior classifier and
+original facts intact; unrelated arrivals continue. A genuine owner may remap
+that unreserved original, including the same intent after a binding change,
+with a new observation and fresh classification. No END is invented, old
+unknown attempts are not cleared, and allocations are never refunded/replayed.
+Uncollected/failed metadata attempts likewise retain their original collector;
+they are not automatically relaunched. Derived live identities hold their
+original observation custody against retirement. All other processing+24h,
+privacy/source/consumer/outbox/effect/recovery holds still apply.

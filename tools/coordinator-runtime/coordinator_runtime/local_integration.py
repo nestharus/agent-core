@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS local_discovered_points(point TEXT PRIMARY KEY,defini
 CREATE TABLE IF NOT EXISTS local_point_commits(point TEXT NOT NULL,generation INTEGER NOT NULL,attempt TEXT NOT NULL,PRIMARY KEY(point,generation));
 CREATE TABLE IF NOT EXISTS local_point_versions(point TEXT PRIMARY KEY,generation INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS local_material_commits(seq INTEGER PRIMARY KEY AUTOINCREMENT,attempt TEXT NOT NULL UNIQUE,footprints TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS local_lookup_points(point TEXT NOT NULL,task TEXT NOT NULL,definition TEXT NOT NULL,policy TEXT NOT NULL,source_attempt TEXT NOT NULL,PRIMARY KEY(point,task));
 """
 STEPS = ['Observe', 'Frame', 'Decide', 'Act']
 OWNERSHIP = {'owner', 'accepted_owner', 'owner_ack', 'owner_evidence', 'acceptance_receipt', 'accepted'}
@@ -38,7 +39,7 @@ def policy(config):
     for name, selected in value['tasks'].items():
         task = config['tasks'].get(name)
         if (not task or not isinstance(selected, dict)
-                or set(selected) - {'new_point_prefix', 'ownership_fields', 'discovery_lines'} != {'capacity', 'discovery_batch', 'points', 'authority', 'method'}
+                or set(selected) - {'new_point_prefix', 'ownership_fields', 'discovery_lines', 'lookup_scopes'} != {'capacity', 'discovery_batch', 'points', 'authority', 'method'}
                 or type(selected['capacity']) is not int or not 1 <= selected['capacity'] <= 5
                 or type(selected['discovery_batch']) is not int or not 1 <= selected['discovery_batch'] <= 64
                 or not isinstance(selected['points'], list) or set(selected['points']) - value['points'].keys()
@@ -57,15 +58,22 @@ def policy(config):
             for field in line:
                 required_text(line[field], 'discovery '+field, 4000)
         required_text(selected['authority'], 'genuinely delegated routine local decision authority', 4000)
+        from .metadata_lookup import validate_scopes
+        validate_scopes(config, name, selected.get('lookup_scopes', []))
     for key, point in value['points'].items():
         required_text(key, 'stable logical point key', 256)
         if (not isinstance(point, dict)
-                or set(point) != {'kind', 'line', 'incarnation', 'bindings', 'resources', 'protected', 'writable'}
+                or set(point) - {'native_incarnations'} != {'kind', 'line', 'incarnation', 'bindings', 'resources', 'protected', 'writable'}
                 or point['kind'] not in {'item', 'relation', 'invariant'}
                 or not isinstance(point['bindings'], list) or not point['bindings']
                 or not isinstance(point['resources'], list) or not isinstance(point['protected'], list)
                 or not isinstance(point['writable'], list)):
             raise Refusal('point needs kind, delivery line, incarnation, bindings, resources and protected ownership fields')
+        if 'native_incarnations' in point and (not isinstance(point['native_incarnations'], list)
+                or len(point['native_incarnations']) != len(point['bindings'])
+                or any((not isinstance(v, str) or not v) if 'native' in b else v is not None
+                       for b, v in zip(point['bindings'], point['native_incarnations']))):
+            raise Refusal('exact separately observed native lifecycles required')
         for field in ('line', 'incarnation'):
             required_text(point[field], 'point '+field, 256)
         for resource in point['resources']:
@@ -123,6 +131,11 @@ def point_definitions(store):
             if row['point'] in result:
                 raise Refusal('discovered point collides with selected original identity')
             result[row['point']] = json.loads(row['definition'])
+    for row in store.rows('SELECT * FROM local_lookup_points WHERE policy=?', (digest(store.config['local_integration']),)):
+        definition = json.loads(row['definition'])
+        if row['point'] in result and result[row['point']] != definition:
+            raise Refusal('lookup point collides with another original identity')
+        result[row['point']] = definition
     return result
 
 
@@ -131,7 +144,13 @@ def allowed_points(store, task):
     keys = set(value['points'])
     prefix = value.get('new_point_prefix')
     if prefix:
-        keys.update(k for k in point_definitions(store) if k.startswith(prefix))
+        lookup_keys = {r['point'] for r in store.rows('SELECT point FROM local_lookup_points')}
+        keys.update(k for k in point_definitions(store) if k.startswith(prefix) and k not in lookup_keys)
+    scopes = value.get('lookup_scopes', [])
+    for row in store.rows('SELECT point,task FROM local_lookup_points WHERE policy=?', (digest(store.config['local_integration']),)):
+        original = selected(store, row['task']) or {}
+        if row['task'] == task or any(scope in original.get('lookup_scopes', []) and row['point'].startswith(scope['prefix']) for scope in scopes):
+            keys.add(row['point'])
     return keys
 
 
@@ -139,6 +158,8 @@ def validate_discovered(store, job, answer, bodies, *, native_only=False):
     discovered = answer.get('completion', {}).get('discovered_points', {})
     if not discovered:
         return {}
+    if isinstance(discovered, dict) and any(isinstance(p, dict) and 'native_incarnations' in p for p in discovered.values()):
+        raise Refusal('separate native lifecycles are service-observed known metadata, never model discovery authority')
     scope = scope_for(store, job)
     prefix = selected(store, job['task']).get('new_point_prefix')
     if (scope['lane'] != 'discovery' or not prefix or not isinstance(discovered, dict)
@@ -353,6 +374,8 @@ def packet(store, row):
     if (not keys or keys - set(allowed_points(store, row['task'])) or set(raw['versions']) != keys
             or any(not isinstance(v, str) for v in raw['versions'].values())):
         raise Refusal('unresolved point/line/incarnation or incomplete version basis; discovery required')
+    if any(store.one('SELECT point FROM local_lookup_points WHERE point=?', (key,)) for key in keys):
+        input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
     return {'lane': 'anchored', **copy.deepcopy(raw), 'sources': [event['id']]}
 
 
@@ -528,7 +551,7 @@ def native_access(store, job, scope):
 def point_value(point, bodies, *, store=None, job=None):
     from .local_native import snapshot
     values = []
-    for binding in point['bindings']:
+    for index, binding in enumerate(point['bindings']):
         if 'native' not in binding:
             absent = object()
             value = locate(parse_json(bodies[binding['target']]), binding['path'], missing=True, missing_value=absent)
@@ -541,7 +564,8 @@ def point_value(point, bodies, *, store=None, job=None):
             incarnation = value['context']['run'] or value['context']['handle']
         else:
             incarnation = digest(value['admission']['receipt'])
-        if point['incarnation'] != incarnation:
+        expected = point.get('native_incarnations', [point['incarnation']]*len(point['bindings']))[index]
+        if expected != incarnation:
             raise Refusal('native point incarnation differs from its actual original lifecycle')
         values.append(value)
     return values
@@ -592,8 +616,8 @@ def footprints(store, point, bodies=None, job=None):
     return result
 
 
-def version(store, key, bodies, job=None):
-    point = point_definitions(store)[key]
+def version(store, key, bodies, job=None, *, definition=None):
+    point = definition if definition is not None else point_definitions(store)[key]
     row = store.one('SELECT generation FROM local_point_versions WHERE point=?', (key,))
     material = footprints(store, point, bodies, job)
     generation = max((r['seq'] for r in store.rows('SELECT seq,footprints FROM local_material_commits')

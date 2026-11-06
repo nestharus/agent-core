@@ -51,7 +51,7 @@ class InputJournal:
             derived['integration'] = resolved_input(self, original, selection)
         return derived
 
-    def resolve_input(self,event,actor,receipt,*,processing_attempt=None):
+    def resolve_input(self,event,actor,receipt,*,processing_attempt=None,mapping_attempt=None):
         with (nullcontext() if self.db.in_transaction else self.tx()):
             if isinstance(receipt, dict) and 'integration' in receipt:
                 held = self.one('SELECT hold FROM events WHERE id=?', (event,))
@@ -61,7 +61,15 @@ class InputJournal:
             if not row:raise Refusal('exact existing input required')
             original=self.event(event)
             software = None
+            frozen_mapping = None
+            if mapping_attempt is not None:
+                if processing_attempt is not None:
+                    raise Refusal('metadata lookup and general control are separate delegations')
+                from .metadata_lookup import proof
+                software, frozen_mapping = proof(self, event, actor, mapping_attempt, receipt)
             if processing_attempt is not None and self.processing and actor == self.config['actor']:
+                if 'integration' in receipt:
+                    raise Refusal('general control is not software metadata delegation')
                 software = self.processing.control_proof(event, processing_attempt, receipt)
             if actor!=self.enrollment(row['role'])['owner'] and not software:
                 raise Refusal('input resolution belongs to its actual enrolled owner')
@@ -79,7 +87,16 @@ class InputJournal:
             if len(encode(receipt).encode())>self.config['limits']['max_result_bytes']:
                 raise Refusal('input decision exceeds admitted result bound')
             previous=self.input_resolution(event)
-            if previous and previous['receipt']==receipt:return previous
+            if previous and previous['receipt']==receipt:
+                observation = previous['prior'].get('integration_observation')
+                if observation is None:
+                    return previous
+                from .local_integration import mapping_binding
+                if observation['binding'] == mapping_binding(self, receipt['task'], receipt['package']):
+                    return previous
+                # Same intent after a genuine binding change is a NEW observed
+                # resolution, with fresh classification and all normal guards.
+                # Never return a stale observation as successful remapping.
             if row['processed_at'] is not None:raise Refusal('processed original cannot be rerouted')
             queue=self.one('SELECT * FROM queue WHERE event=?',(event,))
             if queue and queue['job']:raise Refusal('already reserved/executed source cannot be replayed or rebound')
@@ -95,7 +112,8 @@ class InputJournal:
                    'error':row['error'],'queue':queue,'ack':row['ack'],'ack_receipt':row['ack_receipt']}
             if 'integration' in receipt:
                 from .local_integration import observe_input
-                prior['integration_observation'] = observe_input(self, original, receipt)
+                prior['integration_observation'] = (frozen_mapping if frozen_mapping is not None
+                                                    else observe_input(self, original, receipt))
             if software:
                 prior['software_processing'] = software
             self.budget(None,len(encode(receipt).encode())+len(encode(prior).encode())+1024)
@@ -188,7 +206,7 @@ class InputJournal:
         rows=self.rows("SELECT e.id,e.state,e.classifier,e.error,e.ack,e.processed_at,e.hold,q.task,q.state AS responsibility "
                 "FROM events e LEFT JOIN queue q ON q.event=e.id WHERE e.role=? AND e.processed_at IS NULL "
                 "AND (? IS NULL OR (e.received,e.id)>(?,?)) "
-                "AND (e.state='classification-held' OR q.phase='control' OR e.id IN (SELECT event FROM input_resolutions)) "
+                "AND (e.state IN ('classification-held','mapping-held') OR q.phase='control' OR e.id IN (SELECT event FROM input_resolutions)) "
                 "ORDER BY e.received,e.id LIMIT ?",(role,after,cursor['received'] if cursor else 0,after or '',limit+1))
         return {'role':role,'availability':'Durable records only; no native wake or processing proof',
             'inputs':rows[:limit],'more_inputs':len(rows)>limit,'next_after':rows[limit-1]['id'] if len(rows)>limit else None,

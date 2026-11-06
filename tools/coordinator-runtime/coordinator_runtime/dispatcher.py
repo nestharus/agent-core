@@ -282,6 +282,12 @@ class Dispatcher:
         if claimed:
             self.spawn(self.classify(*claimed))
 
+    def schedule_input_mappings(self):
+        from .metadata_lookup import claim, execute
+        claimed = claim(self.store)
+        if claimed:
+            self.spawn(execute(self, *claimed))
+
     def schedule_job(self, job=None):
         # A failed pool allocation leaves the frozen unstarted job intact.
         # Retry only this controller's reservation, never an existing attempt.
@@ -551,6 +557,7 @@ class Dispatcher:
                 ('receipts', self.receipts), ('reconcile_completed', self.reconcile_completed),
                 ('intake', self.intake), ('schedule_classifications', self.schedule_classifications),
                 ('schedule_classification_recovery', self.schedule_classification_recovery),
+                ('schedule_input_mappings', self.schedule_input_mappings),
                 ('schedule_job', self.schedule_job), ('schedule_recovery', self.schedule_recovery),
                 ('custodian_progress', self.custodian_progress), ('automatic_cleanup', self.automatic_cleanup)):
             # Give owned readers, RPC timers and control connections a turn

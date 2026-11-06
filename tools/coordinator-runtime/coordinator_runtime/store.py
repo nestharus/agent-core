@@ -152,6 +152,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
         self.db.executescript(configuration.SCHEMA + ref_scope.SCHEMA + local_integration.SCHEMA)
+        from .metadata_lookup import SCHEMA as LOOKUP_SCHEMA
+        self.db.executescript(LOOKUP_SCHEMA)
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
@@ -379,6 +381,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         row = self.attempt(attempt)
         if self.processing:
             self.processing.authorize(row)
+        if row['kind'] == 'input-mapping':
+            from .metadata_lookup import authorize
+            authorize(self, row)
         if row['job']:
             self.require_execution_open(row['job'])
         self.require_active_sources(row["event"], row["job"])
@@ -403,16 +408,35 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if not self._classification_available():
                 return None
             scope, parameters = configuration.event_candidate_scope(self)
-            candidates = self.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' AND (" +
+            candidates = self.rows("SELECT e.id,e.role FROM events e WHERE e.state='received' AND e.hold IS NULL AND (" +
                                    scope + ") ORDER BY e.received,e.id", parameters)
-            row = next((e for e in candidates
-                        if self.role_enabled(e['role']) and (not self.processing or self.processing.event(self.event(e['id'])))), None)
-            if not row:
+            row = None
+            for candidate in candidates:
+                if not self.role_enabled(candidate['role']) or self.processing and not self.processing.event(self.event(candidate['id'])):
+                    continue
+                try:
+                    event = self.routing_event(candidate['id'])
+                except Refusal as exc:
+                    # An owned mapping dependency is distinct from an unknown
+                    # launch. Preserve prior classifiers and let unrelated
+                    # sources progress, without repeatedly allocating/failing.
+                    self.db.execute("UPDATE events SET state='mapping-held',error=? WHERE id=?", (str(exc)[:2000], candidate['id']))
+                    self.db.execute("UPDATE queue SET state='owner-resolution-pending' WHERE event=? AND job IS NULL", (candidate['id'],))
+                    self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
+                                    'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
+                                    (candidate['id'],candidate['role'],'input-mapping-dependency',encode({'dependency':str(exc)}),self.clock()))
+                    continue
+                row = candidate
+                break
+            if row is None:
                 return None
+            # Resolve mutable receiver bindings BEFORE any durable reservation
+            # or pool allocation. A refusal has no launched/unknown attempt to
+            # settle and the original remains available for genuine remapping.
             selected = self.config["classifier"]
             attempt = self._attempt("classifier", row["id"], None, selected["binding"], selected["profile"])
             self.db.execute("UPDATE events SET state='classifying',classifier=? WHERE id=?", (attempt, row["id"]))
-        return attempt, self.routing_event(row["id"])
+        return attempt, event
 
     def _classification_available(self):
         service = self.processing and 'service' in self.processing.current()[1]
@@ -432,13 +456,14 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                            "AND (" + scope + ") ORDER BY e.received,e.id LIMIT 1", parameters)
             if not row:
                 return None
+            event = self.routing_event(row["id"])
             selected = self.config["diagnosis"]
             attempt = self._attempt("diagnosis", row["id"], None, selected["binding"], selected["profile"])
             detail = {**json.loads(self.attempt(attempt)["detail"]), "prior_classifier": row["classifier"]}
             self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(detail), attempt))
             self.db.execute("UPDATE events SET state='classifying',classifier=?,recovery_count=1 WHERE id=?",
                             (attempt, row["id"]))
-        return attempt, self.routing_event(row["id"])
+        return attempt, event
 
     def attempt(self, attempt):
         row = self.one("SELECT * FROM attempts WHERE id=?", (attempt,))
