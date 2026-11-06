@@ -239,7 +239,8 @@ class Cutover(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(claimed)
         before=self.store.one('SELECT starts FROM processing_capabilities WHERE id=?',(self.key,))['starts']
         self.store.db.execute('UPDATE processing_capabilities SET revoked=? WHERE id=?',(self.now,self.key))
-        await lookup.execute(self.dispatch,*claimed)
+        with patch.object(self.store,'event',side_effect=AssertionError('revoked startup must not reacquire source')):
+            await lookup.execute(self.dispatch,*claimed)
         row=self.store.attempt(claimed[1]);self.assertEqual(row['state'],'not-started')
         self.assertIsNone(row['begin']);self.assertIsNone(row['ended']);self.assertIsNone(row['exit']);self.assertIsNotNone(row['collected'])
         self.assertEqual(before,self.store.one('SELECT starts FROM processing_capabilities WHERE id=?',(self.key,))['starts'])
@@ -437,8 +438,8 @@ class Mixed(Cutover):
     def qa_scopes(self,cfg,area):
         output=area/'qa-output';output.mkdir()
         runner=area/'runner';readback=area/'readback'
-        runner.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path("source.txt").read_text()=="independent fixture source\\n"\nPath('+repr(str(output/'marker'))+').write_text("source actually executed")\n')
-        readback.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path('+repr(str(output/'marker'))+').read_text()=="source actually executed"\nprint("VERIFIED475")\n')
+        runner.write_text('#!/usr/bin/python3 -B\nfrom pathlib import Path\nassert Path("source.txt").read_text()=="independent fixture source\\n"\nPath('+repr(str(output/'marker'))+').write_text("source actually executed")\n')
+        readback.write_text('#!/usr/bin/python3 -B\nfrom pathlib import Path\nassert Path('+repr(str(output/'marker'))+').read_text()=="source actually executed"\nprint("VERIFIED475")\n')
         runner.chmod(0o700);readback.chmod(0o700)
         acceptor=cfg['roles']['Work']['owner']
         p={'kind':'local-qa','git':'/usr/bin/git','git_sha256':sha('/usr/bin/git'),'repository':str(self.repo),
@@ -610,8 +611,8 @@ class Mixed(Cutover):
             self.git('add','source.txt');self.git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
                 '-c','commit.gpgsign=false','commit','-m','Separate bounded slot fixture')
             head=self.git('rev-parse','HEAD');output=root/'output';output.mkdir()
-            runner=root/'runner';runner.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path("source.txt").read_text()=="independent fixture source\\n"\nPath('+repr(str(output/'marker'))+').write_text("slot")\n');runner.chmod(0o700)
-            readback=root/'readback';readback.write_text('#!/usr/bin/python3\nfrom pathlib import Path\nassert Path('+repr(str(output/'marker'))+').read_text()=="slot"\nprint("SLOT")\n');readback.chmod(0o700)
+            runner=root/'runner';runner.write_text('#!/usr/bin/python3 -B\nfrom pathlib import Path\nassert Path("source.txt").read_text()=="independent fixture source\\n"\nPath('+repr(str(output/'marker'))+').write_text("slot")\n');runner.chmod(0o700)
+            readback=root/'readback';readback.write_text('#!/usr/bin/python3 -B\nfrom pathlib import Path\nassert Path('+repr(str(output/'marker'))+').read_text()=="slot"\nprint("SLOT")\n');readback.chmod(0o700)
             scope=copy.deepcopy(self.qa_task_scopes['qa-execution'])
             scope.update(cwd=str(self.repo),read_roots=[str(root),str(self.procedure)],write_roots=[str(output)])
             p=scope['ordinary_effects'];p.update(repository=str(self.repo),source_head=head,
