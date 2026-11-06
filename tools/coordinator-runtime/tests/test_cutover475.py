@@ -516,9 +516,13 @@ class Mixed(Cutover):
         # Native lifetime != fixed delivery namespace; replaced run refuses.
         point=next(json.loads(r['definition']) for r in self.store.rows('SELECT * FROM local_lookup_points') if r['point'].startswith('native-review:'))
         self.assertEqual(point['incarnation'],'delivery-before-native');self.assertEqual(point['native_incarnations'],[self.transport.run])
-        component=point['bindings'][0]['component'];self.store.db.execute('UPDATE review_contexts SET run=? WHERE component=?',(ident(),component))
-        consumer=self.store.one("SELECT * FROM jobs WHERE task='work-proposer'")
-        with self.assertRaisesRegex(Refusal,'incarnation'):local.point_value(point,{},store=self.store,job=consumer)
+        if self._testMethodName != 'test_one_selection_serves_branch_reviews_qa_work_and_cleanup':
+            # Keep this adverse native replacement in the standalone control.
+            # The later positive QA encounter uses the genuine original live
+            # context; it must not inherit an intentionally damaged predecessor.
+            component=point['bindings'][0]['component'];self.store.db.execute('UPDATE review_contexts SET run=? WHERE component=?',(ident(),component))
+            consumer=self.store.one("SELECT * FROM jobs WHERE task='work-proposer'")
+            with self.assertRaisesRegex(Refusal,'incarnation'):local.point_value(point,{},store=self.store,job=consumer)
         self.assertEqual(digest(self.config),configuration);self.assertEqual(self.key,key)
 
     async def test_software_qa_execution_independent_work_acceptance_cleanup_qualification(self):
@@ -527,11 +531,7 @@ class Mixed(Cutover):
         # from the Work owner, who is explicitly selected as independent acceptor.
         output=self.area/'qa-output'
         acceptor=self.config['roles']['Work']['owner']
-        tasks=['qa-execution','qa-cleanup','work-proposer']
-        prospective.select(self.store,acceptor,{'configuration':digest(self.config),'authority':'Fictional selected ordinary QA resources and cleanup',
-            'expires':self.now+3600,'grants':{r:self.store.enrollment(r)['grant_id'] for r in ['QA','Work']},'tasks':{
-                t:{'task_hash':digest(self.config['tasks'][t]),'software_handoffs':self.config['tasks'][t].get('software_handoffs',{}),'ordinary_effects':t=='qa-execution'} for t in tasks},
-            'processing_capability':self.key})
+        self.select_qa_boundary()
         e=self.post('Run independent specified fixture','QA','qa475-one');self.initial[e['id']]='qa-execution'
         def cleanup(job,attempt,prompt,answer):
             if job['task']=='qa-execution':
@@ -563,6 +563,19 @@ class Mixed(Cutover):
         q=self.store.one("SELECT * FROM processing_admissions WHERE package='qa475-one'")
         self.assertIsNotNone(q);self.assertEqual(self.store.rows('SELECT * FROM processing_owner_operations'),[])
         self.assertEqual(self.store.one('SELECT COUNT(*) AS n FROM qa_package_owners')['n'],1)
+
+    def select_qa_boundary(self):
+        if hasattr(self,'ordinary_epoch'):
+            return self.ordinary_epoch
+        # One authentic prospective epoch BEFORE all encounter source births.
+        # Other roles retain their exact no-ordinary-effect policy. A later QA
+        # selection must not try to relabel already queued Work/Reviews sources.
+        self.ordinary_epoch=prospective.select(self.store,self.config['roles']['Work']['owner'],
+            {'configuration':digest(self.config),'authority':'Fictional fixed four-role policy; ordinary effects only for QA execution',
+                'expires':self.now+3600,'grants':{r:self.store.enrollment(r)['grant_id'] for r in self.config['roles']},
+                'tasks':{t:{'task_hash':digest(policy),'software_handoffs':policy.get('software_handoffs',{}),
+                    'ordinary_effects':t=='qa-execution'} for t,policy in self.config['tasks'].items()},'processing_capability':self.key})
+        return self.ordinary_epoch
 
     async def test_real_receiving_refusal_keeps_valid_qa_progress(self):
         tasks=['branch-proposer','qa-execution','work-proposer']
@@ -797,10 +810,13 @@ class NestedTemplates(Cutover):
 class AllKinds(Mixed):
     async def test_one_selection_serves_branch_reviews_qa_work_and_cleanup(self):
         key=self.key;configuration=digest(self.config)
+        self.select_qa_boundary()
         await self.test_bound_source_open_history_reviews_work_and_mixed_inbox()
         await self.test_software_qa_execution_independent_work_acceptance_cleanup_qualification()
         self.assertEqual(self.key,key);self.assertEqual(digest(self.config),configuration)
         self.assertEqual(self.store.one('SELECT COUNT(*) AS n FROM processing_capabilities')['n'],1)
         self.assertEqual(self.store.rows('SELECT * FROM processing_owner_operations'),[])
+        self.assertEqual(self.store.rows('SELECT id,kind,state FROM attempts WHERE collected IS NULL'),[])
+        self.assertEqual(self.dispatch.runtime_errors,{})
 
 

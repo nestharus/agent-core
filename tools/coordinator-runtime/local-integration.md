@@ -523,6 +523,9 @@ read-only native method before its run is known. Reviews integration can use an
 accepted branch alternative. First QA execution still cannot reserve a slot
 until anchored, and retains the admitted adapter/resources/readback and separate
 semantic acceptance. Manual actual-owner APIs remain recovery/bootstrap.
+The Source execute entry refreshes its post-start job row and binds the actual
+package admission/current attempt, including a genuinely selected prospective
+epoch. A pre-start row or a substituted null admission is not that authority.
 
 Mapping binding refusal now occurs before classifier/pool reservation. The
 event becomes an owned `mapping-held` dependency with its prior classifier and

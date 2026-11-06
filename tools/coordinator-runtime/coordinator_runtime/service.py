@@ -175,6 +175,9 @@ class Dispatcher(ProcessingDispatcher):
 
     async def execute_review(self, job, attempt, packet):
         try:
+            # schedule_candidate passed the pre-start reservation. Bind the
+            # actual current attempt/epoch, as the ordinary task entry does.
+            job = self.store.job(job['id'])
             admission = self.store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
             self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
             from .local_integration import prepare_input_basis
