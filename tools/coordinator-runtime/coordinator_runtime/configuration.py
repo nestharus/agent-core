@@ -200,7 +200,7 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'task_text'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text'}:
         raise Refusal('unsupported prospective scope option')
     select_task_text(original, value, options.get('task_text', {}))
     if 'local_integration' in options:
@@ -221,6 +221,22 @@ def apply_scope_options(original, value, options):
     def safe(p):
         from .resource_scopes import root
         return root(p, value.get('artifact_exclusions', []))
+    repositories = options.get('repository_reads', {})
+    if not isinstance(repositories, dict) or set(repositories) - set(value['tasks']):
+        raise Refusal('exact associated repository read task map required')
+    release_root = str(Path(__file__).resolve().parents[3])
+    for name, roots in repositories.items():
+        task = value['tasks'][name]
+        if (roots != [release_root] or task['role'] not in {'Branch', 'Reviews'}
+                or task['phase'] != 'proposer' or task['effects'] != 'none'
+                or task['sandbox'] != 'read-only' or task.get('network')
+                or task['effect_authority']['write_roots']
+                or 'read-source' not in task['effect_authority']['operations']):
+            raise Refusal('repository reads select only this release repository for an existing read-only source proposer')
+        safe(release_root)
+        # A repository identity operand, NOT a filesystem read root. Material
+        # paths, immutable pins, package/association and context guards stay separate.
+        task['repository_reads'] = list(roots)
     reads = options.get('read_roots', {})
     linked = options.get('linked_repositories', {})
     neutral = options.get('neutral_startup', [])
@@ -279,9 +295,20 @@ def apply_scope_options(original, value, options):
     if (not isinstance(cleanup, list) or not all(isinstance(t, str) for t in cleanup)
             or len(set(cleanup)) != len(cleanup)):
         raise Refusal('exact prospective package-scoped cleanup task selection required')
-    for name in cleanup:
+    proposals = options.get('package_scoped_proposals', [])
+    if (not isinstance(proposals, list) or not all(isinstance(t, str) for t in proposals)
+            or len(set(proposals)) != len(proposals)):
+        raise Refusal('exact prospective package-scoped proposal selection required')
+    for name in proposals:
         task = value['tasks'].get(name)
-        if not task or task['role'] != 'QA' or task['phase'] != 'cleanup' or task.get('execution') == 'owner':
+        if (not task or task['role'] != 'Branch' or task['phase'] != 'proposer'
+                or task['effects'] != 'none' or task['sandbox'] != 'read-only'
+                or task.get('network') or task['effect_authority']['write_roots']
+                or task.get('execution') == 'owner'):
+            raise Refusal('package-scoped proposals only narrow the genuine read-only software Branch proposer')
+    for name in [*cleanup, *proposals]:
+        task = value['tasks'].get(name)
+        if name in cleanup and (not task or task['role'] != 'QA' or task['phase'] != 'cleanup' or task.get('execution') == 'owner'):
             raise Refusal('package-scoped cleanup only narrows the genuine software QA cleanup task')
         # No added read/write/network/effect/procedure/ordinary permission. The
         # cwd is only a permitted working directory, not a new read ceiling;
@@ -360,7 +387,7 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
-    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', []))) - set(tasks):
+    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')

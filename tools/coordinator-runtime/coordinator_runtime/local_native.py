@@ -184,7 +184,7 @@ def review_material_scope(store, original):
         component = policy['components'].get(packet.get('component'))
         if not component:
             raise Refusal('native review point differs from original component/material')
-        source_roots(store, original, component['repository'])
+        source_roots(store, original, component['repository'], repository=True)
         components.add(review_component(branch, packet))
     return components
 
@@ -273,7 +273,7 @@ def original_review_jobs(store, row, visiting):
     return result
 
 
-def source_roots(store, row, paths):
+def source_roots(store, row, paths, *, repository=False):
     paths = [paths] if isinstance(paths, str) else paths
     if store.config['tasks'][row['task']]['role'] == 'Work':
         return  # Independently issued coordination above, never borrowed execution.
@@ -282,15 +282,20 @@ def source_roots(store, row, paths):
         admission = store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),))
         scope = json.loads(admission['receipt']).get('task_scopes', {}).get(row['task'], {}) if admission else {}
         roots = scope.get('read_roots', []) + scope.get('write_roots', [])
+        repositories = [p for p in scope.get('repository_reads', []) if p in task.get('repository_reads', [])]
     else:
         roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
-    if any(not any(Path(value).is_relative_to(Path(p)) for p in roots) for value in paths):
+        repositories = task.get('repository_reads', [])
+    def covered(value, roots, repositories):
+        return (repository and value in repositories
+                or any(Path(value).is_relative_to(Path(p)) for p in roots))
+    if any(not covered(value, roots, repositories) for value in paths):
         raise Refusal('native source outside genuine role read authority')
     # Only now may scoped_task validate physical topology of the allowed scope.
     from .contracts import scoped_task
     actual = scoped_task(row['task'], task, store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),)))
     roots = actual['effect_authority']['read_roots'] + actual['effect_authority']['write_roots']
-    if any(not any(Path(value).is_relative_to(Path(p)) for p in roots) for value in paths):
+    if any(not covered(value, roots, actual.get('repository_reads', [])) for value in paths):
         raise Refusal('native source outside genuine role read authority')
 
 
@@ -299,8 +304,13 @@ def branch_scope(store, row, key):
     branch = store.one('SELECT id,scope,repository,ref FROM branch_associations WHERE id=?', (key,))
     if not branch or branch['scope'] != row.get('package'):
         raise Refusal('native branch point exceeds original admitted package')
-    source_roots(store, row, branch['repository'])
+    source_roots(store, row, branch['repository'], repository=True)
     task = store.config['tasks'][row['task']]
+    if task.get('package_narrowing') and task['role'] == 'Branch':
+        admission = store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),))
+        scope = json.loads(admission['receipt']).get('task_scopes', {}).get(row['task'], {}) if admission else {}
+        if scope.get('branch_binding') != branch['id']:
+            raise Refusal('Branch proposal needs its exact original admitted association')
     if task['role'] == 'Branch' and task['effects'] not in {'none', 'owned-artifacts'}:
         admission = store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),))
         scope = json.loads(admission['receipt']).get('task_scopes', {}).get(row['task'], {}) if admission else {}

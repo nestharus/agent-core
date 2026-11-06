@@ -136,6 +136,21 @@ def permits(runtime, queue):
     if (not admission or admission['owner'] != runtime.config['actor']
             or admission['receipt'] != record['receipt']):
         return False
+    task = runtime.config['tasks'][queue['task']]
+    receiver = task.get('package_narrowing') and task['role'] == 'Branch' and task['phase'] == 'proposer'
+    if receiver:
+        scope = receipt['task_scopes'].get(queue['task'], {})
+        key = scope.get('branch_binding')
+        if not isinstance(key, str) or not key:
+            return False
+        # Original package/role read authority is checked before physical Git
+        # identity. Association acceptance remains a separate genuine operand.
+        from .local_native import branch_scope
+        from .branches import association
+        branch_scope(runtime, queue, key)
+        branch = association(runtime, key)
+        if not branch['accepted']:
+            return False
     coordination = None
     if queue['task'] not in receipt['task_scopes']:
         if not runtime.processing:
@@ -167,8 +182,9 @@ def permits(runtime, queue):
                         or job['package'] != queue['package']):
                     return False
                 if coordination_edge:
-                    upstream = job['role'] in coordination['source_roles'] and job['task'] in receipt['task_scopes']
-                    continuation = job['role'] == 'Work' and job['task'] in coordination['tasks']
+                    upstream = (job['role'] == 'QA' and job['phase'] == 'cleanup' and job['task'] in receipt['task_scopes']
+                                if receiver else job['role'] in coordination['source_roles'] and job['task'] in receipt['task_scopes'])
+                    continuation = not receiver and job['role'] == 'Work' and job['task'] in coordination['tasks']
                     if not (upstream or continuation):
                         return False
                     # The exact configured return route cannot be forged by a
@@ -177,7 +193,9 @@ def permits(runtime, queue):
                     attempt = runtime.attempt(job['active_attempt'])
                     if (attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
                             or attempt['error'] or attempt['capture'] != 'complete'
+                            or receiver and (attempt['job'] != job['id'] or attempt['controller'] != job['controller'])
                             or source.get('body') != collected_task_result(attempt)
+                            or receiver and (source['body'].get('semantic') != 'DONE' or source['body'].get('category') != 'qualification')
                             or queue['task'] not in response_tasks(runtime.config['tasks'][job['task']], source['body'], runtime.config)):
                         return False
                 return all(digest(runtime.event(m['event'])) == m['hash'] and
@@ -204,12 +222,17 @@ def permits(runtime, queue):
                         or attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
                         or attempt['error'] or attempt['capture'] != 'complete'):
                     return False
+                if receiver and (attempt['job'] != job['id'] or attempt['controller'] != job['controller']):
+                    return False
                 if coordination_edge:
                     from . import prospective
                     epoch = prospective.for_job(runtime, job)
                     task = epoch['policy'] if epoch else runtime.config['tasks'][job['task']]
-                    if (job['role'] not in coordination['source_roles'] or job['task'] not in receipt['task_scopes']
-                            or queue['task'] not in task.get('software_handoffs', {}).get('Work', [])):
+                    source_roles = ['QA'] if receiver else coordination['source_roles']
+                    destination = 'Branch' if receiver else 'Work'
+                    if (job['role'] not in source_roles or job['task'] not in receipt['task_scopes']
+                            or receiver and (job['phase'] != 'cleanup' or answer.get('semantic') != 'DONE' or answer.get('category') != 'qualification')
+                            or queue['task'] not in task.get('software_handoffs', {}).get(destination, [])):
                         return False
                 return all(digest(runtime.event(m['event'])) == m['hash'] and
                            not runtime.one('SELECT hold FROM events WHERE id=?', (m['event'],))['hold'] and
@@ -220,7 +243,7 @@ def permits(runtime, queue):
             return bool(source.get('parent')) and ancestry(source['parent'])
         finally:
             visiting.remove(event_id)
-    return ancestry(queue['event'], coordination is not None)
+    return ancestry(queue['event'], coordination is not None or bool(receiver))
 
 
 def admit_pending(runtime):

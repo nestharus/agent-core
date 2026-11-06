@@ -216,8 +216,20 @@ def validate_task(name, task, config):
     required_text(name, "task ID", 80)
     role, phase = task["role"], task["phase"]
     if 'package_narrowing' in task and (task['package_narrowing'] is not True
-            or role != 'QA' or phase != 'cleanup' or not task.get('require_package_scope')):
-        raise Refusal('explicit additional package narrowing belongs only to scoped QA cleanup')
+            or (role, phase) not in {('QA', 'cleanup'), ('Branch', 'proposer')}
+            or not task.get('require_package_scope')):
+        raise Refusal('explicit additional package narrowing belongs only to scoped QA cleanup or Branch proposal')
+    if task.get('package_narrowing') and role == 'Branch' and (
+            task['effects'] != 'none' or task['sandbox'] != 'read-only'
+            or task.get('network') or task['effect_authority']['write_roots']):
+        raise Refusal('package-narrowed Branch proposal stays read-only')
+    if 'repository_reads' in task:
+        if (task['repository_reads'] != [str(Path(__file__).resolve().parents[3])]
+                or role not in {'Branch', 'Reviews'} or phase != 'proposer'
+                or task['effects'] != 'none' or task['sandbox'] != 'read-only'
+                or task.get('network') or task['effect_authority']['write_roots']
+                or 'read-source' not in task['effect_authority']['operations']):
+            raise Refusal('exact release repository identity read requires a read-only source proposer')
     if role not in config["roles"] or phase not in PHASES:
         raise Refusal("task role/phase outside enrollment")
     if (role == "QA") != (phase in {"execution", "cleanup"}):
@@ -292,6 +304,11 @@ def scoped_task(name, task, admission):
     scope = receipt.get("task_scopes", {}).get(name)
     if not isinstance(scope, dict) or not scope.get("procedure") or not scope.get("resource_evidence"):
         raise Refusal("actual package procedure, resource-owner evidence and task scope are missing")
+    repositories = scope.get('repository_reads', [])
+    if (not isinstance(repositories, list) or not all(isinstance(p, str) for p in repositories)
+            or len(set(repositories)) != len(repositories)
+            or set(repositories) - set(task.get('repository_reads', []))):
+        raise Refusal('package repository identities must narrow selected repository reads')
     if task.get('package_narrowing'):
         authority = task['effect_authority']
         reads = authority['read_roots'] + authority['write_roots']
@@ -301,7 +318,7 @@ def scoped_task(name, task, admission):
                 or any(not within(p, authority['write_roots']) for p in scope.get('write_roots', []))
                 or scope.get('cwd') != task['cwd'] and not within(scope.get('cwd'), reads)
                 or not within(scope.get('procedure'), reads) or scope.get('ordinary_effects')):
-            raise Refusal('cleanup admission may only narrow existing access; cwd/metadata confers no execution rights')
+            raise Refusal('cleanup/proposal admission may only narrow existing access; cwd/metadata confers no execution rights')
     roots = scope.get("write_roots", []) + scope.get("read_roots", []) + [scope.get("cwd", "")]
     if any(Path(p) == Path(e) or Path(p).is_relative_to(Path(e)) or Path(e).is_relative_to(Path(p))
            for p in roots for e in task.get('scope_exclusions', [])):
@@ -332,7 +349,10 @@ def scoped_task(name, task, admission):
     if type(network) is not bool or (network and not task.get("network", False)):
         raise Refusal("admission cannot expand selected network authority")
     authority = {**task["effect_authority"], "read_roots": scope.get("read_roots", []), "write_roots": scope.get("write_roots", [])}
-    return {**task, "cwd": scope["cwd"], "network": network, "effect_authority": authority, "admitted_scope": scope}
+    actual = {**task, "cwd": scope["cwd"], "network": network, "effect_authority": authority, "admitted_scope": scope}
+    if 'repository_reads' in task or repositories:
+        actual['repository_reads'] = repositories
+    return actual
 
 
 def classification(answer, event, config):

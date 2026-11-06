@@ -286,6 +286,43 @@ existing AI linked checkout, the known common path is `/home/nes/ai/.git`, not
 an ancestor grant to `/home/nes/ai`. The declared association is checked at use;
 it is not a historical map or deployment qualification.
 
+`repository_reads` is an **unselected opt-in repository identity capability**.
+The scope-options map names existing read-only Branch/Reviews source proposers
+and selects exactly `[RELEASE]`, the repository containing this running release.
+No other ancestor, peer checkout, private root, task role or mutable file tree
+can be selected. Each named task must be in the prospective task allowlist.
+This records `repository_reads` on that task without changing its effect read
+roots. For a package-scoped task the admission must separately select a subset
+in its own `repository_reads` list; absence grants no repository identity read.
+
+Only native Branch association and original Reviews component checks use this
+capability for the exact repository operand. A child file or procedure cannot
+use it as a read root. Actual source material paths and immutable Git pins keep
+their existing authority, history and acquisition guards. The original package,
+accepted association, context, capability, collector, resources and native
+lifecycle are still checked. It grants no general repository filesystem read,
+write, native turn, old-hold disposition or ordinary acceptance.
+
+`package_scoped_proposals: [EXISTING_BRANCH_PROPOSER]` is an **unselected opt-in
+narrowing** for the existing read-only software Branch proposer. It requires
+per-package admission with `package_narrowing:true`. Its reads, writes, cwd and
+procedure obey the same narrowing guard as cleanup; no ordinary adapter can
+enter that proposal scope. Role, phase, binding, capacity and response routes
+stay unchanged. Software admission must explicitly include this proposal task
+alongside the actual QA tasks under the ORIGINAL package. Its scope supplies
+the exact accepted `branch_binding`, and, when needed, the separately selected
+`repository_reads`. No separate Branch package or Work-role substitution is used.
+
+For software-admitted downstream proposals, scheduling checks the original
+accepted association and exact collected QA cleanup qualification return or
+configured Branch handoff, every original member, package, attempt, source
+result and current authority. A body claiming ancestry is insufficient. An
+internal response retains its whole original result; an addressed handoff
+retains the nested whole `source_result`. Actual QA execution and independent
+acceptance remain prerequisites for cleanup qualification. Admission itself
+asserts neither native owner consent nor semantic acceptance. Omitting these
+options preserves the existing direct owner-admission and Work/Reviews routes.
+
 The draft records its source-task list and scope options so exact-delta
 validation can reconstruct them, including read narrowing after source additions.
 Original configs/grants/job policies remain immutable. Configuration basis binds
