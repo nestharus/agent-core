@@ -748,6 +748,58 @@ def revoke(runtime, boards, key):
     return {'revoked': key, 'effects_and_collectors': 'retained; no cancellation or replay'}
 
 
+def diagnostic_source(runtime, boards, key, event):
+    access = Access(runtime, key, boards)
+    _, selection = access.current()
+    position = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event,))
+    if not position or position['position'] <= selection['basis']['event_boundary']:
+        raise Refusal('diagnostics require exact current prospective source frontier; no old-source inventory')
+    original = runtime.event(event)
+    if not access.event(original):
+        raise Refusal('diagnostic source outside exact current processing selection')
+    boards[original['role']].verify_authority(runtime)
+    state = runtime.one('SELECT id,hash,role,state,classifier,ack,processed_at,hold IS NOT NULL AS held, '
+                        'error IS NOT NULL AS error_present FROM events WHERE id=?', (event,))
+    if not state or state['hash'] != digest(original):
+        raise Refusal('diagnostic source no longer matches its original hash')
+    return state, position
+
+
+def source_diagnostics(runtime, boards, key, event):
+    """Exact prospective metadata only; no attempt detail, raw result or history."""
+    state, position = diagnostic_source(runtime, boards, key, event)
+    runs = runtime.rows("SELECT s.controller FROM service_runs s JOIN processing_runs p ON p.controller=s.controller "
+                        "WHERE s.capability=? AND p.capability=? AND s.state='serving' AND s.returned IS NULL "
+                        "AND p.state='owned' LIMIT 2", (key, key))
+    if len(runs) != 1:
+        raise Refusal('one current original service controller required; no liveness inferred')
+    controller = runs[0]['controller']
+    classifier = runtime.one('SELECT id,controller,kind,state,ended,collected,exit,capture,cleanup, '
+                             'error IS NOT NULL AS error_present FROM attempts '
+                             "WHERE id=? AND event=? AND controller=? AND kind IN ('classifier','diagnosis')",
+                             (state['classifier'], event, controller))
+    if state['state'] == 'received':
+        classifier = None  # Stored old pointer is not classification of the new resolution.
+    responsibility = runtime.one('SELECT task,phase,state,job FROM queue WHERE event=?', (event,))
+    mapping = runtime.one('SELECT attempt,resolution IS NOT NULL AS resolution_present,error IS NOT NULL AS error_present '
+                          'FROM input_lookups WHERE event=? AND capability=? AND source_hash=?', (event, key, state['hash']))
+    resolution = runtime.one('SELECT version,source_hash FROM input_resolutions WHERE event=? '
+                             'ORDER BY version DESC LIMIT 1', (event,))
+    if resolution and resolution['source_hash'] != state['hash']:
+        raise Refusal('diagnostic resolution differs from the selected source hash')
+    if (diagnostic_source(runtime, boards, key, event) != (state, position)
+            or runtime.one("SELECT state,returned FROM service_runs WHERE controller=? AND capability=?",
+                           (controller, key)) != {'state': 'serving', 'returned': None}):
+        raise Refusal('diagnostic source/controller changed; inspect again without effect replay')
+    return {'capability': key, 'controller': controller, 'source': state, 'position': position['position'],
+            'classifier': classifier,
+            'classifier_scope': ('awaiting-fresh-classification' if state['state'] == 'received' else
+                                 'current-controller' if classifier else 'unavailable-current-controller'),
+            'responsibility': responsibility, 'mapping': mapping, 'resolution': resolution,
+            'processing_complete': False,
+            'meaning': 'bounded current prospective metadata; END/ACK/empty errors never imply processing or acceptance'}
+
+
 def status(runtime, key):
     row = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
     if not row:

@@ -105,11 +105,12 @@ class Observability(unittest.IsolatedAsyncioTestCase):
         peer = Peer(child, 4096)
         self.addAsyncCleanup(self.close_peer, peer)
         dispatcher = Dispatcher.__new__(Dispatcher)
+        dispatcher.phase_errors = {}
         errors, phases = [], []
         dispatcher.store = SimpleNamespace(clear_operational_error=lambda subject: None,
             record_operational_error=lambda subject, detail: errors.append(subject))
         names = ('receipts', 'reconcile_completed', 'intake', 'schedule_classifications',
-                 'schedule_classification_recovery', 'schedule_job', 'schedule_recovery',
+                 'schedule_classification_recovery', 'schedule_input_mappings', 'schedule_job', 'schedule_recovery',
                  'custodian_progress', 'automatic_cleanup')
         def operation(name):
             def run():

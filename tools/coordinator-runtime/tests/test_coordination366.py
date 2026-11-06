@@ -85,11 +85,12 @@ class Coordination(unittest.IsolatedAsyncioTestCase):
         child = Pipe()
         peer = Peer(child, 4096)
         dispatcher = Dispatcher.__new__(Dispatcher)
+        dispatcher.phase_errors = {}
         phases, cleared, errors, control_seen, reader_seen = [], [], [], [], []
         dispatcher.store = SimpleNamespace(clear_operational_error=cleared.append,
             record_operational_error=lambda subject, detail: errors.append(subject))
         names = ('receipts', 'reconcile_completed', 'intake', 'schedule_classifications',
-                 'schedule_classification_recovery', 'schedule_job', 'schedule_recovery',
+                 'schedule_classification_recovery', 'schedule_input_mappings', 'schedule_job', 'schedule_recovery',
                  'custodian_progress', 'automatic_cleanup')
         def phase(name):
             def operation():
@@ -121,7 +122,7 @@ class Coordination(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(reader_seen, 'matching response must be collected between phases')
             self.assertEqual(phases, list(names)+['capacity', 'pump'])
             self.assertEqual(errors, ['dispatcher-phase:intake'])
-            self.assertEqual(len(cleared), 8)
+            self.assertEqual(cleared, ['dispatcher-phase:' + name for name in names if name != 'intake'])
             self.assertEqual(peer.progress[-1]['state'], 'succeeded')
         finally:
             await asyncio.gather(call, return_exceptions=True)

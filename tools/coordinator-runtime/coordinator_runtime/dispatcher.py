@@ -6,6 +6,7 @@ discover both notices and directed plain posts without claiming their sockets.
 """
 
 import asyncio
+from contextlib import contextmanager
 from . import observations
 from .contracts import scoped_startup
 import json
@@ -42,6 +43,23 @@ DIAGNOSIS_SCHEMA = {
 # Bound examined rows, including rows whose current state needs no delivery work.
 # Filtering before LIMIT could still traverse an arbitrarily large settled tail.
 DELIVERY_PAGE = 16
+DIAGNOSTIC_PHASES = frozenset('''receipts reconcile_completed intake schedule_classifications
+schedule_classification_recovery schedule_input_mappings schedule_job schedule_recovery
+custodian_progress automatic_cleanup capacity delivery dispatcher alerts'''.split())
+
+
+def failure_kind(error):
+    # Never publish exception text, arbitrary class names or dynamic labels.
+    from .contracts import Backpressure
+    if isinstance(error, Backpressure):
+        return 'capacity-held'
+    if isinstance(error, Refusal):
+        return 'authority-held'
+    if isinstance(error, ValueError):
+        return 'invalid-value'
+    if isinstance(error, OSError):
+        return 'io-error'
+    return 'exception'
 
 
 def recovery_prompt(store,job):
@@ -171,6 +189,7 @@ class Dispatcher:
         self.last_alert = 0
         self.last_cleanup = 0
         self.runtime_errors = {}
+        self.phase_errors = {}
         self.acceptance_active = set()
         frontier = self.store.one("SELECT COALESCE(MAX(rowid),0) AS seq FROM outboxes")["seq"]
         self.delivery_fresh = self.store.one("SELECT COALESCE(MAX(seq),0) AS seq FROM delivery_wakeups")["seq"]
@@ -549,6 +568,19 @@ class Dispatcher:
         finally:
             self.acceptance_active.discard(job['id'])
 
+    @contextmanager
+    def phase(self, label):
+        if label not in DIAGNOSTIC_PHASES:
+            raise ValueError('constant dispatcher phase required')
+        try:
+            with observations.span(label) as sequence:
+                yield sequence
+        except Exception as exc:
+            self.phase_errors[label] = failure_kind(exc)
+            raise
+        else:
+            self.phase_errors.pop(label, None)
+
     async def tick(self):
         # One held phase must not prevent independent already-owed progress.
         # Each failure stays separately owned; successful phases clear only
@@ -567,16 +599,16 @@ class Dispatcher:
             subject = 'dispatcher-phase:' + operation.__name__
             phase_sequence = 0
             try:
-                with observations.span(phase) as phase_sequence:
+                with self.phase(phase) as phase_sequence:
                     operation()
                     self.store.clear_operational_error(subject)
             except Exception as exc:
                 with observations.span('phase-error-report', parent=phase_sequence):
                     self.store.record_operational_error(subject, {'error': type(exc).__name__ + ': ' + str(exc)[:1000]})
-        with observations.span("capacity"):
+        with self.phase("capacity"):
             capacity.deliver_pending(self.store)
         await asyncio.sleep(0)
-        with observations.span("delivery"):
+        with self.phase("delivery"):
             await self.pump_deliveries_async()
 
     def custodian_progress(self):
@@ -605,14 +637,15 @@ class Dispatcher:
 
     async def guarded_tick(self, emit):
         try:
-            await self.tick()
-            with observations.span("dispatcher-clear-error"):
-                self.store.clear_operational_error("dispatcher")
+            with self.phase('dispatcher'):
+                await self.tick()
+                with observations.span("dispatcher-clear-error"):
+                    self.store.clear_operational_error("dispatcher")
         except Exception as exc:
             with observations.span("dispatcher-error-report"):
                 self.store.record_operational_error("dispatcher", {"error": f"{type(exc).__name__}: {str(exc)[:1000]}"})
         try:
-            with observations.span("alerts"):
+            with self.phase("alerts"):
                 await self.alerts(emit)
         except Exception as exc:
             with observations.span('alert-error-report'):

@@ -367,7 +367,7 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
                 operation = request.get('operation')
                 if operation == 'status':
                     with observations.span('control-status'):
-                        answer = status(runtime, key)
+                        answer = status(runtime, key, dispatcher)
                 elif operation == 'recover':
                     with observations.span("control-recover"):
                         answer = dispatcher.recover_originals()
@@ -438,8 +438,22 @@ async def control(runtime, key, operation, component=None):
             await writer.wait_closed()
 
 
-def status(runtime, key):
-    return {'capability': key, 'runs': runtime.rows('SELECT * FROM service_runs WHERE capability=?', (key,)),
-            'contexts': runtime.rows('SELECT component,collector,profile,route,run,state,head,history_hash FROM review_contexts WHERE capability=?', (key,)),
-            'uncollected': runtime.rows('SELECT id,controller,kind,state FROM attempts WHERE collected IS NULL'),
-            'meaning': 'actual custody records, not acceptance or a liveness inference'}
+def status(runtime, key, dispatcher):
+    """Current owning process only; no historical errors or native handles."""
+    Access(runtime, key).current()
+    run = runtime.one('SELECT controller,capability,state,started,returned FROM service_runs '
+                      'WHERE controller=? AND capability=?', (runtime.controller, key))
+    if dispatcher.store is not runtime or not run or run['state'] != 'serving' or run['returned'] is not None:
+        raise Refusal('current original serving controller required for phase diagnostics')
+    contexts = runtime.rows('SELECT component,collector,state FROM review_contexts '
+                            'WHERE capability=? AND collector=? ORDER BY component LIMIT 65', (key, runtime.controller))
+    attempts = runtime.rows('SELECT id,controller,kind,state FROM attempts WHERE controller=? '
+                            'AND collected IS NULL ORDER BY id LIMIT 65', (runtime.controller,))
+    Access(runtime, key).current()
+    return {'capability': key, 'controller': runtime.controller, 'runs': [run],
+            'contexts': contexts[:64], 'uncollected': attempts[:64],
+            'contexts_more': len(contexts) > 64, 'uncollected_more': len(attempts) > 64,
+            'phase_errors': dict(dispatcher.phase_errors),
+            'phase_error_scope': 'current owning process; failures until that phase succeeds; no historical import',
+            'processing_complete': False,
+            'meaning': 'bounded current custody/phase facts; empty errors are not processing, acceptance or a liveness inference'}

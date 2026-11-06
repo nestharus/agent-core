@@ -137,6 +137,8 @@ def parser():
             item.add_argument('--enable-models', action='store_true')
         if name in {'processing-source', 'processing-apply-control', 'processing-admit-source'}:
             item.add_argument('event')
+        if name == 'processing-source':
+            item.add_argument('--diagnostics', action='store_true', help='Bounded current prospective source/classifier metadata; no source or capture bodies')
         if name == 'processing-apply-control':
             item.add_argument('--attempt', required=True)
         if name == 'processing-release':
@@ -445,6 +447,8 @@ def operate(args, store):
             boards[store.event(args.event)['role']].verify_authority(store)
             return admit(store, args.event)
         if args.command in {'processing-source', 'processing-apply-control'}:
+            if args.command == 'processing-source' and args.diagnostics:
+                return processing.source_diagnostics(store, boards, args.capability, args.event)
             if not store.processing.event(store.event(args.event)):
                 raise Refusal('source outside exact software processing selection')
             boards[store.event(args.event)['role']].verify_authority(store)
@@ -704,7 +708,8 @@ def main_owned(args):
             print_json(value)
             return 0
         with observations.span('store-open'):
-            store = Store(config, read_only=args.command == 'processing-service-control')
+            store = Store(config, read_only=args.command == 'processing-service-control'
+                          or args.command == 'processing-source' and args.diagnostics)
         try:
             value = operate(args, store)
             if args.command == "processing-service-control":

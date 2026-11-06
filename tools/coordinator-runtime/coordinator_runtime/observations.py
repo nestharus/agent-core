@@ -19,9 +19,9 @@ LABELS = frozenset('''config-load store-open current configuration-current
 source-release source-implementation source-files retained-events retained-outboxes
 retained-source board-authority retained-authority
 board-scan retained-step receipts reconcile_completed intake
-schedule_classifications schedule_classification_recovery schedule_job
+schedule_classifications schedule_classification_recovery schedule_input_mappings schedule_job
 schedule_recovery custodian_progress automatic_cleanup capacity delivery
-phase-error-report dispatcher-clear-error dispatcher-error-report alert-error-report
+dispatcher phase-error-report dispatcher-clear-error dispatcher-error-report alert-error-report
 alerts control-prepare control-connect control-send control-reply control-close control-read
 control-validate control-status control-recover control-stop control-close-review
 control-write service-current service-boards rpc-send-drain rpc-reply-wait rpc-other

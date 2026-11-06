@@ -102,3 +102,55 @@ actor/membership authority and use an independent read-only control client.
 These seams do not prove real authority, production load, provider behavior or
 actual371's cause. Known unrelated QA/Reviews errors and destructor warnings
 remain inherited, not repaired or made green by these checks.
+
+## Current mapping and processing diagnostics
+
+The mapping scheduler has the finite constant `schedule_input_mappings` timing
+label. The active service recorder permits this phase; arbitrary labels remain
+refused. Mapping still requires its original prospective selection, source
+frontier, classified queued responsibility and metadata authority. A successful
+mapping neither processes the source nor replaces the required fresh classifier.
+
+`processing-service-control CAPABILITY status` asks the original foreground
+owner for its current diagnostic facts. The server revalidates the processing
+capability, implementation/configuration and its exact serving controller before
+answering. `phase_errors` contains only fixed phase names and failure categories
+(`capacity-held`, `authority-held`, `invalid-value`, `io-error`, `exception`).
+Each failure stays until that phase succeeds in this process. The dictionary
+has at most fourteen entries, disappears with this owner, and never imports
+historical operational errors. It survives failure to persist an operational
+error; it does not repair that failure or alter alert rows, debt or capacity.
+Status includes only this serving run and up to 64 current-controller contexts
+and uncollected attempt headers, with explicit `*_more` indicators. Native
+profile/route/run handles, socket paths, receipts and historical run inventories
+are omitted. Existing stop/recover/close-review operations retain their separate
+authority and behavior.
+
+`processing-source CAPABILITY EVENT --diagnostics` is the bounded alternative
+to the existing full-source command. It opens an existing journal read-only,
+authenticates the actual Work issuer through the existing command path, validates
+current capability/configuration/source, and checks the exact receiving role and
+prospective source position strictly after that capability's event boundary.
+It requires one recorded serving controller for that capability, and rechecks
+the selected source/controller before returning. The result contains one source
+header (hash, role, state, stored classifier pointer, ACK, hold/error presence,
+processed timestamp), its position, one queue responsibility, latest resolution
+version/hash, current-capability mapping presence/error flags and the selected
+classifier's public collection metadata. Classifier detail, output, error text,
+session/turn/profile fields, mapping snapshots and source bodies are omitted.
+An older-controller classifier is `unavailable-current-controller`; a source
+awaiting classification of a new resolution is `awaiting-fresh-classification`.
+The stored source pointer is evidence of storage, never fresh routing authority.
+The command refuses revoked/changed capabilities and old-frontier sources; it
+does not provide an old-source search, service recovery or replay interface.
+Omitting `--diagnostics` retains the preexisting full-source interface and its
+different output/handling obligations.
+
+Both projections always report `processing_complete: false`: zero errors,
+collected exit zero, mapping, ACK and numeric process END do not prove processing,
+acceptance or liveness. Recorded serving state is custody evidence, not proof
+that a disconnected process is alive. These reads do not coordinate multiple
+files or noncooperating writers, promise an atomic runtime snapshot, expose raw
+capture/private inventory, change retention, or qualify an actual provider/service.
+Focused `test_mapping504` checks use fictional owned journals and isolated Unix
+sockets, with model/identity and persistence-failure seams explicitly fictional.
