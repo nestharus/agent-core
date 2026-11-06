@@ -10,6 +10,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from unittest.mock import patch
 import catalog,board_store
+from support import fixture_publication
 from coordinator_runtime.contracts import *
 from coordinator_runtime.store import Store
 from coordinator_runtime.board import Board
@@ -46,6 +47,7 @@ class Base(unittest.TestCase):
   for task in ['work-integrator','work-proposer']:
    self.config['local_integration']['tasks'][task]={'capacity':2,'discovery_batch':4,'points':['a','b'],'authority':'Fictional exact selected catalog authority','method':str(self.method),'ownership_fields':['owner']}
   routes=self.area/'routes.toml';routes.write_text('[rotation]\nstate_dir = '+encode(str(self.area/'pool-state'))+'\n[providers.codex]\npool = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]\nmanual_profiles = [".codex", ".codex2", ".codex3", ".codex4", ".codex5"]\n');self.config['execution_pool_routes']=str(routes)
+  self.config['canonical_publication']=fixture_publication()
   self.configure_fixture();validate_config(self.config);self.store=Store(self.config);self.addCleanup(self.store.close)
  def configure_fixture(self):pass
  def setup(self):

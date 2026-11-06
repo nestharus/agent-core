@@ -36,6 +36,8 @@ def control_actor(expected):
 def load_helper(board,selection):
     """Never silently substitute the other-owned dirty shared source for baseline."""
     from .board import module_at
+    if not isinstance(selection.get('mode'), str) or selection['mode'] not in MODES:
+        raise Refusal('unsupported control mode; no helper fallback')
     names={'queue_transport.py'}
     if selection['mode']=='active-only-steer':names|={'active_transport.py','active_rpc.py'}
     pins=selection['helper_sources']

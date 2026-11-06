@@ -148,6 +148,9 @@ def validate_config(config):
         method=config.get('canonical_publication',{})
         if method.get('method')!='retention-same-inode-v1' or not isinstance(method.get('library'),str) or not Path(method['library']).is_absolute():
             raise Refusal('explicit selected retention.snapshot_lock library and same-inode method required')
+        if 'source_pins' in method:
+            from .retention_dependency import validate_pins
+            validate_pins(method['source_pins'])
     excluded_paths=config.get('artifact_exclusions',[])
     if not isinstance(excluded_paths,list) or len(excluded_paths)>64 or any(not isinstance(p,str) or not Path(p).is_absolute() or '..' in Path(p).parts for p in excluded_paths):
         raise Refusal('bounded absolute opaque artifact exclusions required')

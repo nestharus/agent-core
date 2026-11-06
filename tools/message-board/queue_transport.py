@@ -211,7 +211,7 @@ def _known_pre_send_failure(output: str, thread_uuid: str, home: Path) -> bool:
 
 def queue_notice(thread_uuid: str, profile: str, notice: str, *,
                  timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-                 runner: Runner = run_bounded) -> EnqueueResult:
+                 runner: Runner = run_bounded, resume: bool = False) -> EnqueueResult:
     """Queue a short notice to an existing UUID through an allowed local profile.
 
     ``profile`` is the recipient's exact registered profile, supplied by the
@@ -219,8 +219,13 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
     uses that existing session's profile and daemon settings. Only trusted
     integration code should supply the optional runner; board data cannot
     choose an executable.
+
+    Explicit ``resume=True`` requests resume on that same UUID/profile. Enqueue
+    acceptance, including a resume warning, never proves wake or processing.
     """
 
+    if type(resume) is not bool:
+        raise ValueError("resume must be an explicit boolean")
     thread_uuid = _uuid(thread_uuid, "thread_uuid")
     home = _profile_home(profile)
     notice = _safe_text(notice, "notice", MAX_NOTICE_CHARS, multiline=True)
@@ -228,6 +233,8 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
         raise ValueError("timeout_seconds must be between 0 and 60 seconds")
 
     argv = [CODEX_COMMAND, "queue", "--thread", thread_uuid, "--message", notice]
+    if resume:
+        argv.append("--resume")
     env = os.environ.copy()
     env["CODEX_HOME"] = str(home)
     try:
@@ -258,6 +265,9 @@ def queue_notice(thread_uuid: str, profile: str, notice: str, *,
         status = "ambiguous"
     reason = {"queued": "queue_accepted", "failed": "queue_rejected",
               "timeout": "sender_timeout", "ambiguous": "unrecognized_queue_response"}[status]
+    if status == "queued" and resume:
+        reason = ("queue_accepted_resume_warning" if "warning" in outcome.output.lower()
+                  else "queue_accepted_resume_requested_unknown")
     return EnqueueResult(status, message_id, outcome.returncode,
                          outcome.output, outcome.output_truncated, reason)
 

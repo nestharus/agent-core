@@ -117,14 +117,46 @@ class OwnerControl(unittest.TestCase):
         self.assertEqual(self.send(prepared['id'],SimpleNamespace()),record)
         self.assertIsNone(self.store.one('SELECT processed_at FROM outboxes WHERE id=?',(key,))['processed_at'])
 
-    def test_queue_resume_and_steer_are_explicit_missing_source_interfaces_not_fallback(self):
-        for mode in ['queue-resume-existing','active-only-steer']:
+    def test_steer_requires_explicit_missing_source_interface_not_fallback(self):
+        for mode in ['active-only-steer']:
             with self.subTest(mode=mode):
                 record=self.prepare(self.delivery(),self.select(mode=mode))
                 with self.assertRaises(Refusal):self.send(record['id'])
                 kept=self.read(record['id'])
                 self.assertEqual(kept['state'],'refused');self.assertEqual(kept['result']['helper_status'],'not-called')
                 self.assertEqual(kept['steps'],[])
+
+    def test_queue_resume_preserves_original_binding_receipt_and_one_shot_claim(self):
+        key=self.delivery();selection=self.select(mode='queue-resume-existing')
+        prepared=self.prepare(key,selection);helper=load_helper(self.boards['Work'],selection)
+        qid=ident();calls=[]
+        def runner(argv,env,timeout,limit):
+            current=self.read(prepared['id'])
+            self.assertEqual(current['state'],'inflight')
+            self.assertEqual(argv,['codex','queue','--thread',selection['recipient'],
+                '--message',current['pointer'],'--resume'])
+            self.assertIn(prepared['attempt'],current['pointer'])
+            self.assertIn(prepared['client_message'],current['pointer'])
+            self.assertEqual(env['CODEX_HOME'],str(Path(self.temp.name)/selection['profile']))
+            calls.append(argv)
+            return helper.CommandOutcome(0,'Queued message '+qid+'\nWarning: resume unavailable')
+        transport=SimpleNamespace(queue_notice=lambda *a,**kw:helper.queue_notice(*a,runner=runner,**kw))
+        with patch.object(helper,'_profile_home',return_value=Path(self.temp.name)/selection['profile']):
+            record=self.send(prepared['id'],transport)
+        self.assertEqual(record['state'],'accepted')
+        self.assertEqual(record['result']['queue_message_id'],qid)
+        self.assertEqual(record['result']['reason'],'queue_accepted_resume_warning')
+        self.assertEqual(self.send(prepared['id'],SimpleNamespace()),record)
+        self.assertEqual(len(calls),1)
+        self.assertIsNone(self.store.one('SELECT processed_at FROM outboxes WHERE id=?',(key,))['processed_at'])
+        with patch.dict(os.environ,{'CODEX_SESSION_ID':selection['recipient']}):
+            board=self.boards['Work']
+            board.delivery_stage(key,'picked-up',{'evidence':['Fictional full durable read']})
+            with self.assertRaisesRegex(Refusal,'queue ID'):
+                board.delivery_stage(key,'processed',{'evidence':['Resume warning is not processing']})
+            processed=board.delivery_stage(key,'processed',{'evidence':['Fictional actual consumer processing'],
+                'transport':{'queue_message_id':qid,'state':'processed','evidence':['Owned queue consumed exact pointer']}})
+        self.assertEqual(processed['state'],'processed')
 
     def test_same_intent_idempotence_and_no_new_intent_over_uncertain_effect(self):
         key=self.delivery();selection=self.select(mode='active-only-steer');record=self.prepare(key,selection)

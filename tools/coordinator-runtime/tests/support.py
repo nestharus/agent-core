@@ -12,6 +12,14 @@ from coordinator_runtime.contracts import LUNA, SOL, digest, ident, validate_con
 from coordinator_runtime.store import Store
 
 
+def fixture_publication():
+    """Owned five-file provider fiction; never selects the actual SDK provider."""
+    from coordinator_runtime.retention_dependency import source_pins
+    library = str(Path(__file__).parent.resolve() / 'fixture_snapshot')
+    return {'method': 'retention-same-inode-v1', 'library': library,
+            'source_pins': source_pins(library, [])}
+
+
 def config_at(directory):
     home = Path(directory)
     pool_routes = home / 'pool-routes.toml'
@@ -45,7 +53,7 @@ def config_at(directory):
         task["responses"].update({"blocker": ["work-proposer"], "scope": ["work-proposer"]})
     value = {"version": 1, "enabled": False, "actor": ident(), "state_dir": str(home / "state"),
              "execution_pool_routes": str(pool_routes),
-             "canonical_publication": {"method":"retention-same-inode-v1","library":str(Path(__file__).parent.resolve()/"fixture_snapshot")},
+             "canonical_publication": fixture_publication(),
              "board_home": str(home / "boards"), "board_library": os.environ.get("COORDINATOR_TEST_BOARD_LIBRARY", str(Path(__file__).resolve().parents[2] / "message-board")),
              "profiles": [".codex", ".codex2", ".codex3", ".codex4", ".codex5"],
              "roles": roles, "tasks": tasks, "classifier": {"binding": copy.deepcopy(LUNA), "profile": ".codex2", "cwd": str(home)},

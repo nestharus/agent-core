@@ -140,12 +140,15 @@ def current(path, maximum, expected_bytes=None):
 
 @contextmanager
 def snapshot_lock(store):
-    from .board import module_at
+    from .retention_dependency import load
     selected=store.config.get('canonical_publication',{})
     if selected.get('method')!='retention-same-inode-v1':
         raise Refusal('selected retention same-inode canonical method required; no replacement fallback')
     with ExitStack() as stack:
-        try:stack.enter_context(module_at(selected['library'],'retention').snapshot_lock())
+        try:
+            provider = load(selected['library'], selected.get('source_pins'),
+                            store.config.get('artifact_exclusions', []))
+            stack.enter_context(provider.snapshot_lock())
         except BlockingIOError:raise
         except (ValueError,OSError) as exc:raise Refusal('selected canonical snapshot lock refused: '+type(exc).__name__) from exc
         yield

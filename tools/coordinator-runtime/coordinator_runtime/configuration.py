@@ -89,6 +89,11 @@ def release(runtime, candidate):
         raise Refusal('current operator and Board SDK must select this same release checkout')
     if candidate.get('canonical_publication', {}).get('method') != 'retention-same-inode-v1':
         raise Refusal('current retention must preserve the same-inode snapshot lock contract')
+    from . import retention_dependency
+    retention = candidate['canonical_publication']
+    retention_dependency.validate_pins(retention.get('source_pins'))
+    sources = retention_dependency.capture(retention['library'], exclusions)
+    retention_dependency.verify(sources, retention.get('source_pins'))
     receive = candidate.get('control_receive', {})
     if receive.get('instructions') != str(directory/'templates/coordinator-receive.md'):
         raise Refusal('current receive instructions must select this release')
@@ -99,7 +104,7 @@ def release(runtime, candidate):
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
-             Path(candidate['canonical_publication']['library'])/'retention.py', operator,
+             *(p for p, _ in sources.values()), operator,
              *branch_release_sources(root)]
     for task in candidate['tasks'].values():
         paths.extend(Path(p) for p in task['templates']
@@ -109,6 +114,9 @@ def release(runtime, candidate):
     for p in sorted(set(paths)):
         refuse_log(p)
         files[str(p)] = hashlib.sha256(regular_path(str(_path(str(p), exclusions))).read_bytes()).hexdigest()
+    if any(files[str(path)] != retention['source_pins'][name]
+           for name, (path, _) in sources.items()):
+        raise Refusal('retention dependencies changed during release acquisition')
     # Membership is user-owned hot control, including an empty paused pool.
     # Pin all other bytes and the exact public location, without touching state.
     control = regular_path(str(_path(candidate['execution_pool_routes'], exclusions)))
@@ -125,6 +133,8 @@ def release(runtime, candidate):
 
 def candidate(runtime, operator_config, scope_tasks, retention_library=None, bounded_work_log=False, scope_options=None):
     """Produce a draft for Work inspection; does not select or write a config."""
+    if scope_options is not None and not isinstance(scope_options, dict):
+        raise Refusal('explicit prospective scope options object required')
     value = copy.deepcopy(runtime.config)
     directory = Path(__file__).resolve().parents[1]
     root = directory.parent.parent
@@ -132,11 +142,15 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
     value.update(board_library=str(root/'tools/message-board'), operator_cli=str(directory/'coordinator'),
                  operator_config=operator_config, profiles=sorted(PROFILES))
     value['release_scope_tasks'] = list(scope_tasks)
-    # Retention is a separately supplied dependency; this repository does not
-    # contain retention.py. Preserve its explicit selector unless Work selects
-    # another actual compatible provider, and pin that public dependency.
+    # Retention is separately supplied. Draft its exact closed dependency map;
+    # this neither selects the draft nor grants tasks new external source roots.
     if retention_library is not None:
         value['canonical_publication']['library'] = retention_library
+    from .retention_dependency import source_pins
+    value['canonical_publication']['source_pins'] = source_pins(
+        value['canonical_publication']['library'],
+        [*value.get('artifact_exclusions', []),
+         *(scope_options or {}).get('exclusions', [])])
     value['control_receive']['instructions'] = str(directory/'templates/coordinator-receive.md')
     for kind in ('classifier', 'diagnosis'):
         value[kind]['cwd'] = str(root)
@@ -218,10 +232,16 @@ def apply_scope_options(original, value, options):
             raise Refusal('nonempty explicit future read roots required')
         allowed = value['tasks'][name]['effect_authority']['read_roots']
         retention = str(Path(value['canonical_publication']['library'])/'retention.py')
+        from .retention_dependency import FILES, validate_pins
+        validate_pins(value['canonical_publication'].get('source_pins'))
+        dependency_files = {str(Path(value['canonical_publication']['library'])/f) for f in FILES}
+        source_task = ('read-source' in value['tasks'][name]['effect_authority']['operations']
+                       and value['tasks'][name].get('phase') != 'cleanup')
         for p in roots:
             path = safe(p)
-            if not (p == retention or any(path.is_relative_to(Path(r)) for r in allowed)):
-                raise Refusal('read roots may only narrow existing/release authority or select exact retention.py')
+            if not (p == retention or source_task and p in dependency_files
+                    or any(path.is_relative_to(Path(r)) for r in allowed)):
+                raise Refusal('read roots may only narrow existing/release authority or select exact pinned retention dependencies for source tasks')
             # No broad ancestor containing a known exclusion is a safe read scope.
             if any(Path(e).is_relative_to(path) for e in value.get('artifact_exclusions', [])):
                 raise Refusal('read root contains a known exclusion; select exact safe inputs')
