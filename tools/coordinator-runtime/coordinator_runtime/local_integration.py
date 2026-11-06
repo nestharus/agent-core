@@ -335,7 +335,7 @@ def current_job(store, job):
             raise Refusal('local member currentness/admission changed')
 
 
-def locate(document, path, missing=False):
+def locate(document, path, missing=False, missing_value=None):
     value = document
     for index, segment in enumerate(path):
         if isinstance(segment, dict):
@@ -343,7 +343,7 @@ def locate(document, path, missing=False):
                 raise Refusal('stable selector container changed')
             matches = [v for v in value if isinstance(v, dict) and v.get(segment['field']) == segment['value']]
             if not matches and missing and index == len(path)-1:
-                return None
+                return missing_value
             if len(matches) != 1:
                 raise Refusal('stable point selector is missing or ambiguous')
             value = matches[0]
@@ -351,7 +351,7 @@ def locate(document, path, missing=False):
             if not isinstance(value, dict):
                 raise Refusal('point object schema changed')
             if segment not in value and missing and index == len(path)-1:
-                return None
+                return missing_value
             if segment not in value:
                 raise Refusal('stable point path missing')
             value = value[segment]
@@ -371,7 +371,9 @@ def point_value(point, bodies, *, store=None, job=None):
     values = []
     for binding in point['bindings']:
         if 'native' not in binding:
-            values.append(locate(parse_json(bodies[binding['target']]), binding['path'], missing=True))
+            absent = object()
+            value = locate(parse_json(bodies[binding['target']]), binding['path'], missing=True, missing_value=absent)
+            values.append({'exists': value is not absent, 'value': None if value is absent else value})
             continue
         value = snapshot(store, binding, job)[0]
         if binding['native'] == 'branch':
@@ -586,6 +588,11 @@ def typed_equal(left, right):
     return left == right
 
 
+def field_equal(before, after, key):
+    """Field rights conserve presence as well as the typed JSON value."""
+    return (key in before) == (key in after) and (key not in before or typed_equal(before[key], after[key]))
+
+
 def conserve(before, after, protected, ownership=OWNERSHIP):
     if type(before) is not type(after):
         raise Refusal('point value type changed; explicit schema/authority decision required')
@@ -593,7 +600,7 @@ def conserve(before, after, protected, ownership=OWNERSHIP):
         if not isinstance(after, dict) or before.keys() - after.keys():
             raise Refusal('point delta drops unknown/history/source fields')
         for key in before.keys() | after.keys():
-            if key in protected and not typed_equal(before.get(key), after.get(key)):
+            if key in protected and not field_equal(before, after, key):
                 raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
         for key, value in before.items():
             conserve(value, after[key], protected, ownership)
@@ -630,9 +637,9 @@ def validate_delta(before, after, point, binding, ownership=OWNERSHIP):
     if (ancestors & protected or '$value' in protected) and not typed_equal(before, after):
         raise Refusal('local delta cannot change accepted ownership/identity/protected value')
     if isinstance(before, dict) and isinstance(after, dict):
-        if any(not typed_equal(before.get(field), after.get(field)) for field in protected):
+        if any(not field_equal(before, after, field) for field in protected):
             raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
-        if any(not typed_equal(before.get(field), after.get(field)) for field in before.keys() | after.keys() if field not in point['writable']):
+        if any(not field_equal(before, after, field) for field in before.keys() | after.keys() if field not in point['writable']):
             raise Refusal('point delta changes an unselected/unknown field')
     elif not typed_equal(before, after) and '$value' not in point['writable']:
         raise Refusal('non-object point delta requires explicit $value writable authority')
@@ -651,14 +658,18 @@ def conserve_bound_views(store, original, proposals, ownership=OWNERSHIP):
             target = binding.get('target')
             if target not in original:
                 continue
-            before = locate(original[target], binding['path'], missing=True)
-            after = locate(proposals[target], binding['path'], missing=True)
+            absent = object()
+            before = locate(original[target], binding['path'], missing=True, missing_value=absent)
+            after = locate(proposals[target], binding['path'], missing=True, missing_value=absent)
             if typed_equal(before, after):
                 continue
             ancestors = {s for s in binding['path'] if isinstance(s, str)}
             if '$value' in protected or ancestors & protected:
                 raise Refusal('overlapping admitted view retains protected ownership/identity/value')
-            conserve(before, after, protected, ownership)
+            if before is absent:
+                no_acceptance(after, ownership)
+            else:
+                conserve(before, after, protected, ownership)
 
 
 def discovery_conservation(before, after, ownership=()):

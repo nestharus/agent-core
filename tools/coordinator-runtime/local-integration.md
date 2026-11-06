@@ -62,6 +62,11 @@ including duplicates, survive with their JSON types recursively intact. A boolea
 member cannot be spent as an integer (including inside arrays/objects); matching
 consumes one occurrence, and genuinely new members may still append. The same
 typed comparison guards protected views, write-sets and current-byte reuse.
+Object field rights also conserve presence: an absent unselected or protected
+field cannot be created as JSON null. Explicit null remains valid in selected
+ordinary fields and neutral/proposal additions within their actual rights.
+File-point revisions encode presence separately from the value, so an absent
+field and a present null cannot share the same revision.
 Protected containing fields, nested ownership,
 identity and other admitted views remain protected through alternate lenses.
 `protected: ["$value"]` makes the whole value immutable. These rights do not
@@ -106,8 +111,13 @@ jobless revision observations are controller-side observations of already select
 bindings, not a discovery authorization interface. Original association identity,
 method/resource, context/collector/capability and effect checks still follow.
 Work reads original Reviews returns through their actual source/member lineage,
-including later Work continuations; it cannot select an unrelated review context
-by supplying a component name. No Work execution scope is inserted upstream.
+through sole Reviews consolidation and later Work continuations. Each edge keeps
+its actual collected result/attempt, frozen members, package, hashes, holds and
+current authority. Consolidation follows the original native proposer interface;
+it does not become that proposer or acquire its execution rights. An unrelated
+component name cannot select another context. Effective event or admission-fallback
+branch operands receive the same scope gate; logical component-key comparison
+does not resolve Git identity. No Work execution scope is inserted upstream.
 
 An addressed input or typed result may contain:
 

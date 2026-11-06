@@ -140,12 +140,12 @@ def authorize_scope(store, row, binding):
 
 
 def review_scope(store, row, binding, role):
-    from .branches import review_key
+    from .branches import review_component, job_branch_key
     members = json.loads(row['members']) if row.get('members') else [{'event': row['event']}]
     original = row
-    if role == 'Work':
+    if role == 'Work' or role == 'Reviews' and row.get('phase') == 'integrator':
         # Coordination consumes the actual original reviewer, not any context
-        # with a guessed name. permits() above checked every return's ancestry.
+        # with a guessed name. Consolidation itself is not a native proposer.
         for source in original_review_jobs(store, row, set()):
             review_scope(store, source, binding, 'Reviews')
         return
@@ -153,6 +153,11 @@ def review_scope(store, row, binding, role):
         raise Refusal('native review requires its actual selected original review interface')
     policy = store.processing.current()[1]['service']['reviews'][original['task']]
     synthetic = {**original, 'members': json.dumps(members)}
+    # job_branch also selects an owner-admission fallback. Authorize the exact
+    # effective operand before review_key can resolve its physical identity.
+    branch = job_branch_key(store, synthetic)
+    if branch is not None:
+        branch_scope(store, original, branch)
     for member in members:
         event = store.event(member['event'])
         body = event.get('body')
@@ -161,10 +166,7 @@ def review_scope(store, row, binding, role):
         if not component:
             raise Refusal('native review point differs from original component/material')
         source_roots(store, original, component['repository'])
-        branch = event.get('branch_binding')
-        if branch:
-            branch_scope(store, original, branch)
-        if review_key(store, synthetic, packet) != binding['component']:
+        if review_component(branch, packet) != binding['component']:
             raise Refusal('native review point differs from original component/material')
     context = store.one('SELECT collector FROM review_contexts WHERE component=?', (binding['component'],))
     if not context or context['collector'] != store.controller:
@@ -178,7 +180,8 @@ def review_scope(store, row, binding, role):
 def original_review_jobs(store, row, visiting):
     """Follow only the original return/member provenance already permissioned."""
     result = []
-    members = json.loads(row['members']) if row.get('members') else [{'event':row['event']}]
+    members = (json.loads(row['members']) if row.get('members') else
+               [{'event':row['event'], 'hash':store.one('SELECT hash FROM events WHERE id=?', (row['event'],))['hash']}])
     for member in members:
         key = member['event']
         if key in visiting:
@@ -191,9 +194,54 @@ def original_review_jobs(store, row, visiting):
         source = store.job(job) if job else None
         if not source or source.get('package') != row.get('package'):
             raise Refusal('native review needs its actual original component return')
+        task = store.config['tasks'].get(source['task'], {})
+        if task.get('role') != source['role'] or task.get('phase') != source['phase']:
+            raise Refusal('native review original role interface changed')
         if source['role'] == 'Work':
+            coordination = store.processing.current()[1].get('work_coordination', {}) if store.processing else {}
+            if source['task'] not in coordination.get('tasks', []) or 'Reviews' not in coordination.get('source_roles', []):
+                raise Refusal('native review continuation requires current independent Work coordination')
+        source_members = json.loads(source['members'])
+        attempt = store.attempt(source['active_attempt']) if source.get('active_attempt') else None
+        from .contracts import collected_task_result, response_tasks, digest
+        if (digest(event) != member.get('hash')
+                or event.get('package') != row.get('package')
+                or member.get('package', row.get('package')) != row.get('package')
+                or store.one('SELECT hold FROM events WHERE id=?', (key,))['hold']
+                or not attempt or attempt['collected'] is None or attempt['ended'] is None
+                or attempt['exit'] != 0 or attempt['error'] or attempt['capture'] != 'complete'
+                or not source_members
+                or store.processing and not store.processing.event(event)):
+            raise Refusal('native review original return provenance/collection changed')
+        answer = collected_task_result(attempt)
+        if event.get('source_job'):
+            valid = (event.get('source_members') == source_members
+                     and event.get('source_attempt') == attempt['id']
+                     and event.get('source_role') == source['role'] and event.get('body') == answer
+                     and row['task'] in response_tasks(store.config['tasks'][source['task']], answer, store.config))
+        else:
+            delivery = event['source_delivery']
+            outbox = store.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
+            link = store.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (delivery.get('id'),))
+            payload = json.loads(outbox['payload']) if outbox else {}
+            valid = (link and link['event'] == key and event.get('body') == payload
+                     and delivery.get('source_hash') == digest(payload)
+                     and payload.get('source_members') == source_members
+                     and payload.get('package') == row.get('package')
+                     and payload.get('attempt') == attempt['id'] and payload.get('source_result') == answer
+                     and payload.get('original_handoff') in answer.get('handoffs', [])
+                     and row['task'] in store.config['tasks'][source['task']].get('software_handoffs', {}).get(row['role'], []))
+        if not valid:
+            raise Refusal('native review original return provenance/collection changed')
+        for original in source_members:
+            if (digest(store.event(original['event'])) != original['hash']
+                    or store.event(original['event']).get('package') != row.get('package')
+                    or store.one('SELECT hold FROM events WHERE id=?', (original['event'],))['hold']
+                    or store.processing and not store.processing.event(store.event(original['event']))):
+                raise Refusal('native review original member authority/hash/hold changed')
+        if source['role'] == 'Work' or source['role'] == 'Reviews' and source['phase'] == 'integrator':
             result.extend(original_review_jobs(store, source, visiting | {key}))
-        elif source['role'] == 'Reviews':
+        elif source['role'] == 'Reviews' and source['phase'] == 'proposer':
             result.append(source)
         else:
             raise Refusal('native review needs its actual original component return')

@@ -138,7 +138,8 @@ def route(store, key):
             'meaning':'association/history only; responsible Root delegates builders; each future turn needs current admission'}
 
 
-def job_branch(store, job):
+def job_branch_key(store, job):
+    """Select the logical operand without resolving repository/Git identity."""
     if not job or 'members' not in job:
         return None  # Legacy standalone executor has no branch association.
     from .local_integration import selected
@@ -156,7 +157,14 @@ def job_branch(store, job):
         keys = {key}
     if len(keys) != 1 or None in keys:
         raise Refusal('a branch execution cannot mix branch lifecycles or unbound members')
-    branch=association(store,next(iter(keys)))
+    return next(iter(keys))
+
+
+def job_branch(store, job):
+    key = job_branch_key(store, job)
+    if key is None:
+        return None
+    branch=association(store,key)
     if any(store.event(m['event']).get('package')!=branch['scope'] for m in json.loads(job['members'])):
         raise Refusal('branch association cannot expand the original admitted scope; return to Work')
     return branch
@@ -201,10 +209,15 @@ def board_review(store,body):
     return {'packet':wire['review'],'branch':branch}
 
 
+def review_component(branch_key, packet):
+    """Logical identity only; callers authorize before acquiring material."""
+    return ('branch:' + digest({'branch':branch_key,'component':packet.get('component')})
+            if branch_key is not None else packet.get('component'))
+
+
 def review_key(store, job, packet):
     branch = job_branch(store,job)
-    return ('branch:' + digest({'branch':branch['id'],'component':packet.get('component')})
-            if branch else packet.get('component'))
+    return review_component(branch['id'] if branch else None, packet)
 
 
 def review_policy(store, job, policy, packet):
