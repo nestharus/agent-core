@@ -449,6 +449,9 @@ The production protocol for a query scope is:
    `input-locator` attempt receives the original source and selected template
    descriptions, **without backing-file acquisition**. It returns only
    `{hints:{task:{scope_digest:[stable_member_strings]}}}` in `decision_json`.
+   Each string is the raw `member_field` value. The template `prefix` decorates
+   generated point keys, not member values; the service never strips prefixes
+   or translates unknown aliases into members.
    A hint is not a work proposal, existence/absence finding, revision, novelty
    decision or permission. It may name a specifically source-related existing
    work/relationship view; it may not send a whole catalog to a model.
@@ -460,13 +463,29 @@ The production protocol for a query scope is:
    current bindings, acquires only the selected permitted backing files, and
    resolves hinted members uniquely. Their values/absence and versions are a
    **new observation before the semantic metadata model reads/decides**. An
-   absent/ambiguous member refuses as an owned scope question. Earlier model
+   absent/ambiguous member has no point and is retained in `unresolved` with
+   its scope, exact hint and status. Other uniquely matched members progress
+   without requiring unrelated rows to have valid or unique identities.
+   Unresolved relationships survive in the snapshot, frozen resolution and a
+   once-only attributed Work question created before semantic interpretation,
+   including when that original later fails or known members are mapped. They cannot
+   authorize new business. A solely ambiguous member remains unresolved; no
+   title or alias chooses an owner or row. Earlier model
    reads receive no new current stamp. Semantic interpretation remains the
    existing known / positively-new / unresolved-existing protocol.
 4. Fresh derived LOW precedes task reservation. Actual proposal preparation
    supplies bounded `observed_values` and versions for its selected points.
    Changed material reconciles with the earlier mapping revision; the earlier
    resolution/ACK/source/birth is retained unchanged.
+
+`processing-source CAPABILITY EVENT --diagnostics` exposes only the exact
+current prospective source: original locator and mapping collection metadata,
+hint presence/count, unresolved relationships, source-bound observation/mapping
+dependency, reservation and task attempt start/collection. The dependency is
+kept separately from later generic reservation errors. No raw model result,
+prompt, native session, backing values or old-source inventory is returned.
+Collection, mapping, reservation, task start and acceptance remain distinct;
+these diagnostics never assert whole processing or genuine acceptance.
 
 `max_bytes` continues to bound metadata model context, not whole source-file
 size. Backing acquisition uses the existing artifact ceiling (default 32 MiB,

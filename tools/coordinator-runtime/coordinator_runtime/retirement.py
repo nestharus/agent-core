@@ -249,7 +249,7 @@ def apply(store, root, actor, receipt):
         delete('jobs','id',members['jobs'])
         for table, column in [('queue','event'),('input_resolutions','event'),('source_custody','event'),('duty_accounts','event'),
                               ('processing_controls','event'),('processing_control_returns','source'),('processing_source_positions','event'),
-                              ('input_lookups','event'),('input_locators','event')]:
+                              ('input_lookups','event'),('input_locators','event'),('input_dependencies','event')]:
             delete(table,column,members['events'])
         # Remove child links inside this already-joined disposable cohort before
         # deleting rows under SQLite's immediate foreign-key checks.

@@ -781,8 +781,42 @@ def source_diagnostics(runtime, boards, key, event):
     if state['state'] == 'received':
         classifier = None  # Stored old pointer is not classification of the new resolution.
     responsibility = runtime.one('SELECT task,phase,state,job FROM queue WHERE event=?', (event,))
-    mapping = runtime.one('SELECT attempt,resolution IS NOT NULL AS resolution_present,error IS NOT NULL AS error_present '
-                          'FROM input_lookups WHERE event=? AND capability=? AND source_hash=?', (event, key, state['hash']))
+    def metadata_record(table, kind):
+        # Project metadata in SQL: never acquire the frozen backing values,
+        # request, raw model return or error body merely to diagnose progress.
+        fields = ("r.hints IS NOT NULL AS hints_present, (SELECT COALESCE(SUM(json_array_length(m.value)),0) "
+                  "FROM json_each(r.hints) t,json_each(t.value) m) AS hint_count" if kind == 'input-locator' else
+                  "r.resolution IS NOT NULL AS resolution_present, (SELECT json_group_object(t.key, "
+                  "json(COALESCE(json_extract(t.value,'$.unresolved'),'[]'))) FROM json_each(r.snapshot) t) AS unresolved")
+        record = runtime.one(f'SELECT r.attempt,r.error IS NOT NULL AS error_present,{fields} '
+                             f'FROM {table} r JOIN attempts a ON a.id=r.attempt '
+                             'WHERE r.event=? AND r.capability=? AND r.source_hash=? '
+                             'AND a.event=? AND a.controller=? AND a.kind=?',
+                             (event, key, state['hash'], event, controller, kind))
+        if not record:
+            return None
+        attempt = runtime.one('SELECT id,kind,state,begin,ended,collected,exit,capture,cleanup, '
+                              'error IS NOT NULL AS error_present FROM attempts WHERE id=?', (record['attempt'],))
+        result = {'attempt':record['attempt'], 'collection':attempt, 'error_present':bool(record['error_present'])}
+        if kind == 'input-locator':
+            result['hints_present'] = bool(record['hints_present'])
+            result['hint_count'] = record['hint_count'] if record['hints_present'] else None
+        else:
+            result['resolution_present'] = bool(record['resolution_present'])
+            result['unresolved_relationships'] = json.loads(record['unresolved'])
+        return result
+    locator = metadata_record('input_locators', 'input-locator')
+    mapping = metadata_record('input_lookups', 'input-mapping')
+    dependency = runtime.one('SELECT stage,detail,observed FROM input_dependencies '
+                             'WHERE event=? AND capability=? AND source_hash=? AND controller=?',
+                             (event, key, state['hash'], controller))
+    if dependency:
+        dependency['detail'] = json.loads(dependency['detail'])
+    job = runtime.one('SELECT id,task,state,active_attempt FROM jobs WHERE id=? AND controller=?',
+                      (responsibility['job'], controller)) if responsibility else None
+    if job and job['active_attempt']:
+        job['attempt'] = runtime.one('SELECT id,state,begin,ended,collected,exit,capture FROM attempts '
+                                     'WHERE id=? AND job=? AND controller=?', (job['active_attempt'], job['id'], controller))
     resolution = runtime.one('SELECT version,source_hash FROM input_resolutions WHERE event=? '
                              'ORDER BY version DESC LIMIT 1', (event,))
     if resolution and resolution['source_hash'] != state['hash']:
@@ -795,7 +829,8 @@ def source_diagnostics(runtime, boards, key, event):
             'classifier': classifier,
             'classifier_scope': ('awaiting-fresh-classification' if state['state'] == 'received' else
                                  'current-controller' if classifier else 'unavailable-current-controller'),
-            'responsibility': responsibility, 'mapping': mapping, 'resolution': resolution,
+            'responsibility': responsibility, 'locator':locator, 'mapping': mapping, 'dependency':dependency,
+            'job':job, 'resolution': resolution,
             'processing_complete': False,
             'meaning': 'bounded current prospective metadata; END/ACK/empty errors never imply processing or acceptance'}
 
