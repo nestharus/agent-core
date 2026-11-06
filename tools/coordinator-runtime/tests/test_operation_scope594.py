@@ -308,6 +308,8 @@ class OperationScope(unittest.TestCase):
     def test_lease_expiry_does_not_follow_observation(self):
         self.s.clock = lambda: 2001
         self.assertTrue(self.blocked())
+        # Cleanup acquires no execution lease and still reads only source.
+        self.assertFalse(self.blocked({**self.row, 'phase': 'cleanup', 'task': 'qa-cleanup'}))
 
     def test_exclusion_precedes_metadata_and_symlink_is_not_independence(self):
         observation = self.record['operation_observation']

@@ -160,10 +160,13 @@ def observed_operation(runtime, row, record, admission, cap, selection):
         if (not frozen or parse_json(frozen['task']) != observation['tasks'][row['task']]['policy']
                 or not frozen['admission'] or parse_json(frozen['admission']) != admission):
             raise Refusal('original frozen job policy/admission must stay unchanged')
-    # Exact lease declarations are frozen too; expiry is independently current.
+    # Lease declarations stay frozen for both tasks. Only execution acquires
+    # them; source-only cleanup retains its own admission/acceptance guards and
+    # cannot renew or use an expired execution output lease by reference.
     from .ordinary import validate_resources
     operation = scopes['qa-execution']['ordinary_effects']
-    validate_resources(runtime, operation)
+    if row['task'] == 'qa-execution':
+        validate_resources(runtime, operation)
     return operation
 
 
