@@ -17,8 +17,59 @@ CREATE TABLE IF NOT EXISTS coordinator_software_deliveries_v1(
 """
 
 
+def report_routes(runtime, job, answer):
+    """Existing reporting edges only; qualification and execution are separate."""
+    from .contracts import response_tasks
+    source = runtime.config['tasks'][job['task']]
+    routes = response_tasks(source, answer, runtime.config)
+    edges = {('Work', 'proposer', 'Work', 'integrator'),
+             ('Reviews', 'proposer', 'Reviews', 'integrator'),
+             ('Reviews', 'integrator', 'Work', 'proposer'),
+             ('QA', 'execution', 'QA', 'cleanup')}
+    if source.get('routine_completion') or len(routes) != 1:
+        return []
+    return routes if all((job['role'], job['phase'], runtime.config['tasks'][t]['role'],
+                         runtime.config['tasks'][t]['phase']) in edges for t in routes) else []
+
+
+def collected_report(runtime, job, task):
+    """Transfer a complete report with its adverse evidence, never accept effects.
+
+    The caller must also authenticate the exact envelope and original rights.
+    Incomplete collection, a held source or unsettled actual effects still fail.
+    A failed captured command is evidence in a report, not missing capture.
+    """
+    proof = _processing(runtime, job, report_task=task)
+    if proof:
+        proof['meaning'] = 'collected report transfer only; findings, unknowns, effects and acceptance unchanged'
+    return proof
+
+
+def report_delivery(runtime, job, outbox):
+    """Publish the already-created exact response to its same assigned reader.
+
+    This is a routing intent, not an owner callback or settlement proof. Work
+    requests, qualifications and arbitrary nested handoffs keep normal guards.
+    """
+    if outbox['kind'] != 'result' or not job['response']:
+        return []
+    event = runtime.event(job['response'])
+    routes = report_routes(runtime, job, collected_task_result(runtime.attempt(job['active_attempt'])))
+    if (not routes or json.loads(outbox['payload']) != event or event.get('kind') != 'response'
+            or event.get('source_job') != job['id'] or event.get('source_attempt') != job['active_attempt']
+            or event.get('source_members') != json.loads(job['members'])
+            or event.get('allowed_tasks') != routes or event.get('role') != outbox['recipient']
+            or outbox['event'] != event['id'] or not collected_report(runtime, job, routes[0])):
+        return []
+    return routes
+
+
 def clean_processing(runtime, job):
     """Local processing, not descendant completion or semantic acceptance."""
+    return _processing(runtime, job)
+
+
+def _processing(runtime, job, report_task=None):
     if (not job['active_attempt'] or job['state'] not in {'awaiting-delivery', 'closed'}
             or job['hold_reason'] or job['effects'] not in {'none', 'reconciled'}):
         return None
@@ -28,6 +79,14 @@ def clean_processing(runtime, job):
     if not reviewed:
         canonical_uuid(attempt['session'])
     answer = collected_task_result(attempt)
+    if report_task is not None and report_task not in report_routes(runtime, job, answer):
+        return None
+    if report_task is not None:
+        recorded = runtime.one('SELECT * FROM results WHERE attempt=?', (attempt['id'],))
+        if (attempt['state'] != 'collected' or attempt['kind'] != 'task'
+                or attempt['job'] != job['id'] or attempt['controller'] != job['controller']
+                or not recorded or any(recorded[k] != attempt[k] for k in ('job','result','exit','capture','error'))):
+            return None
     tools = json.loads(attempt['detail']).get('tool_completion', {})
     if (attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
             or attempt['exit'] != 0 or attempt['capture'] != 'complete' or attempt['error']
@@ -40,7 +99,7 @@ def clean_processing(runtime, job):
     if runtime.config['tasks'][job['task']].get('routine_completion'):
         from .readiness import assess
         assess(runtime, attempt)
-    elif (not runtime.one("SELECT attempt FROM ordinary_runs WHERE attempt=? AND state='reconciled'", (attempt['id'],)) and
+    elif (report_task is None and not runtime.one("SELECT attempt FROM ordinary_runs WHERE attempt=? AND state='reconciled'", (attempt['id'],)) and
           (answer['failures'] or answer['unknowns'] or tools.get('nonzero_completions')
           or any(item.get('status') == 'failed' for item in tools.get('items', [])))):
         return None
@@ -213,15 +272,19 @@ class Software:
         if not self.config.get('software_delegation') and not json.loads(runtime.attempt(job['active_attempt'])['detail']).get('software_authority'):
             return False
         grant = self._software_job_grant(runtime, job)
-        if not clean_processing(runtime, job):
+        clean = clean_processing(runtime, job)
+        report = report_delivery(runtime, job, outbox) if not clean else []
+        if not clean and not report:
             return False
-        if outbox['recipient'] == self.role and outbox['kind'] == 'result':
+        if clean and outbox['recipient'] == self.role and outbox['kind'] == 'result':
             # Existing callback does real collection. Do not mint a new native
             # receive duty; any already recorded control duty is still reported.
             return self.complete_own_delivery(runtime, outbox) is not None
         epoch = prospective.for_job(runtime, job)
         policy = epoch['policy'] if epoch else self.config['tasks'][job['task']]
-        routes = policy.get('software_handoffs', {}).get(outbox['recipient'])
+        if report and outbox['recipient'] != self.role and set(report) - set(policy.get('software_handoffs', {}).get(outbox['recipient'], [])):
+            return False  # Reporting cannot create cross-role software handoff rights.
+        routes = report or policy.get('software_handoffs', {}).get(outbox['recipient'])
         receiver = boards.get(outbox['recipient'])
         if not routes or not receiver:
             return False

@@ -572,7 +572,9 @@ def outbox_allowed(runtime, outbox):
 @observations.observe('source-release')
 def assert_release(runtime):
     transition = selected(runtime)
-    if transition and release(runtime, runtime.config) != transition['basis']['release']:
+    from .report_repair import selected_release
+    expected = selected_release(runtime) or (transition['basis']['release'] if transition else None)
+    if expected and release(runtime, runtime.config) != expected:
         raise Refusal('selected public release/dependencies changed; duties held pending an explicit current transition')
 
 

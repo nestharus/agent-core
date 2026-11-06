@@ -239,14 +239,21 @@ def input_authority(store, event, task, package, visiting=None):
     if not source_id:
         raise Refusal('mapping requires an original visible Board source or genuine collected upstream return')
     source = store.job(source_id)
-    from .software import clean_processing
+    from .software import clean_processing, collected_report
     from .contracts import response_tasks
     from . import prospective
     from .review_returns import proof as report_proof
     report = report_proof(store, event, task)
-    if (not report and not clean_processing(store, source)) or source['package'] != package:
+    if (not report and not (collected_report(store, source, task) or clean_processing(store, source))) or source['package'] != package:
         raise Refusal('input mapping awaits original collected upstream processing')
     attempt = store.attempt(source['active_attempt'])
+    # Report routing retains the genuine launch epoch, actor, package and
+    # method rights. A DONE/category/local_defect marker grants none of these.
+    if store.processing:
+        store.processing.authorize(attempt)
+    if json.loads(attempt['detail']).get('software_authority') or prospective.requires_authority(store, source):
+        source_board = ((store.processing.boards or {}).get(source['role']) if store.processing else None) or Board(store.config, source['role'])
+        source_board._software_job_grant(store, source)
     answer = collected_task_result(attempt)
     members = json.loads(source['members'])
     if not members:
@@ -272,6 +279,7 @@ def input_authority(store, event, task, package, visiting=None):
                 or task not in policy.get('software_handoffs', {}).get(event['role'], [])):
             raise Refusal('input mapping differs from exact addressed collected handoff/route')
     elif not report and (event.get('source_attempt') != attempt['id'] or event.get('source_role') != source['role']
+            or event.get('author') != attempt['session'] or event.get('parent') != members[0]['event']
             or event.get('source_members') != members or event.get('body') != answer
             or task not in response_tasks(store.config['tasks'][source['task']], answer, store.config)):
         raise Refusal('input mapping differs from exact collected internal response/route')
@@ -359,9 +367,14 @@ def packet(store, row):
         return None
     event = store.routing_event(row['event'])
     resolution = event.get('owner_resolution')
-    if resolution and 'integration_observation' in resolution['prior']:
+    mapped = resolution and 'integration_observation' in resolution['prior']
+    if mapped:
         if resolution['receipt']['task'] != row['task']:
             raise Refusal('receiver mapping belongs to a different exact task')
+    delegated_report = (store.processing or store.config.get('software_delegation')) and (event.get('source_job') or event.get('source_delivery'))
+    if mapped or delegated_report:
+        # Existing anchors conserve revisions; they do not bypass the same
+        # original collection/rights checks used for a fresh receiver mapping.
         input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
     raw = input_metadata(event)
     if raw is None:

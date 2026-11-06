@@ -162,9 +162,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         from .reviews import SCHEMA as REVIEW_SCHEMA
         from .service import SCHEMA as SERVICE_SCHEMA
         from .review_returns import SCHEMA as REPORT_RETURN_SCHEMA
+        from .report_repair import SCHEMA as REPORT_REPAIR_SCHEMA
         from .branches import SCHEMA as BRANCH_SCHEMA
         from .service_recovery import SCHEMA as SERVICE_RECOVERY_SCHEMA
-        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA + REPORT_RETURN_SCHEMA)
+        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA + REPORT_RETURN_SCHEMA + REPORT_REPAIR_SCHEMA)
         self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
         windows.prepare_revision(self)
 
@@ -648,7 +649,11 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         except Refusal as exc:
             self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
                             'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
-                            (row['event'], role, 'local-integration-dependency', encode({'dependency':str(exc)}), self.clock()))
+                            (row['event'], role, 'local-integration-dependency', encode({
+                                'dependency':str(exc), 'controller':self.controller,
+                                'capability':self.processing.key if self.processing else None,
+                                'source_hash':digest(self.event(row['event'])),
+                                'queue':row['id'], 'task':row['task']}), self.clock()))
             return None
         if self.processing and any(not self.processing.task(self.one('SELECT * FROM queue WHERE id=?', (m['queue'],))) for m in members):
             return None
@@ -794,9 +799,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 detail = json.loads(attempt['detail'])
                 tools = detail.get('tool_completion', {})
                 from .reviews import collected_proof
+                from .software import report_routes
                 reviewed = collected_proof(self, row, attempt)
                 if (not detail.get('software_authority') or not (reviewed or tools.get('complete'))
-                        or (not task.get('routine_completion') and (tools.get('nonzero_completions')
+                        or (not task.get('routine_completion') and not report_routes(self, row, result) and (tools.get('nonzero_completions')
                             or any(item.get('status') == 'failed' for item in tools.get('items', []))))):
                     reason = 'Prospective software task lacks complete launch-authority/tool capture; retain original effects and custody'
                     self.failure_delivery(row, attempt, task, reason)

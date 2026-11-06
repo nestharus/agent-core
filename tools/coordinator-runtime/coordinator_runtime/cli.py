@@ -70,6 +70,14 @@ def parser():
     sub.add_parser("status")
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
+    for command in ('collected-report-repair-basis', 'select-collected-report-repair'):
+        repair = sub.add_parser(command, help='Actual Work: stopped SAME-owner code pins and already-queued report; no epoch rotation')
+        if command == 'collected-report-repair-basis':
+            repair.add_argument('capability')
+            repair.add_argument('event')
+            repair.add_argument('--controller', required=True)
+        else:
+            repair.add_argument('--selection', required=True)
     draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
     draft.add_argument('--operator-config', required=True)
     draft.add_argument('--retention-library')
@@ -318,6 +326,14 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'collected-report-repair-basis', 'select-collected-report-repair'}:
+        from . import processing, report_repair, configuration
+        boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        if args.command == 'collected-report-repair-basis':
+            with configuration.stopped(store), store.tx():
+                return report_repair.basis(store, boards, args.capability, args.event, args.controller, actor)
+        return report_repair.apply(store, boards, actor, read_record(args.selection))
     if args.command == 'integration-management-basis':
         from . import integration_management
         actor = actual_actor(store.config['roles']['Work']['owner'])
