@@ -129,7 +129,7 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
         except Refusal as exc:issues.append(str(exc))
     if not isinstance(answer,dict) or answer.get('semantic')!='DONE':return None,[],issues
     proof=answer.get('completion')
-    if not isinstance(proof,dict) or not {'version','local','failures','unknowns','tools'}<=set(proof) or set(proof)-{'version','local','failures','unknowns','tools','reported_commands'}:
+    if not isinstance(proof,dict) or not {'version','local','failures','unknowns','tools'}<=set(proof) or set(proof)-{'version','local','failures','unknowns','tools','reported_commands','integration_steps','discovered_points'}:
         return None,[],issues+['explicit completion fields/version1 required; original return retained']
     if type(proof['version']) is not int or proof['version']!=1 or not isinstance(proof['local'],str) or proof['local'] not in {'ready','blocked'}:
         return proof,[],issues+['typed version1 local ready/blocked assessment required']

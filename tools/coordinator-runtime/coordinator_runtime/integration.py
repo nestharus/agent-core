@@ -374,6 +374,9 @@ class IntegrationJournal:
 
     def integration_launch_current(self, job):
         self.require_execution_open(job['id'])
+        from .local_integration import scope_for
+        if scope_for(self, job) is not None:
+            return  # Point-specific holds/currentness replace unrelated historical debt acquisition.
         if job['role'] != 'Work' or job['phase'] != 'integrator' or not self.integration_debt():
             return
         permit = self.one('SELECT * FROM integration_windows WHERE job=?', (job['id'],))

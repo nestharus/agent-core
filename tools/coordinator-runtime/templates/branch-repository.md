@@ -1,5 +1,19 @@
 # Actual Branch repository and stack organization task
 
+When TASK_CONTEXT.local_integration is present, apply its current point bindings,
+read/write versions, routine decision authority and supplied four-step method.
+A current anchored packet commits directly; conflicting/stale packets reconcile
+locally and return point-specific updates. Genuinely new/unanchored candidates
+use the central discovery lane and then emit anchored continuations. The older
+single-integrator/window/whole-role phase wording below applies only when this
+mode is absent. It creates no global readiness gate in the selected local mode.
+Preserve original review contexts, collectors, methods, source revisions and all
+relevant CI/QA/acceptance/final-risk gates. Later arrivals are continuations, not
+newly completed work or a current review verdict. Actual Root builders still
+commit AND push. Source-only capability is not live adoption or qualification.
+See local-integration.md in the selected source for the service boundary.
+
+
 Use the actual current Branch successor identity in TASK_CONTEXT, not the retired
 identity in a historical lower brief. Preserve current originals, exact refs,
 worktree/index/WIP custody, signed raw units and dependencies. Do not import,

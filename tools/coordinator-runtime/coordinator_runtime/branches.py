@@ -141,7 +141,8 @@ def route(store, key):
 def job_branch(store, job):
     if not job or 'members' not in job:
         return None  # Legacy standalone executor has no branch association.
-    if job.get('phase') in {'integrator','cleanup'}:
+    from .local_integration import selected
+    if job.get('phase') in {'integrator','cleanup'} and not selected(store, job['task']):
         return None  # Sole role integrator may consolidate several branches.
     keys = {store.event(m['event']).get('branch_binding') for m in json.loads(job['members'])}
     if keys == {None}:

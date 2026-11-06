@@ -309,3 +309,37 @@ def materialize(store, events, attempt, task=None):
                                      (encode({'basis': 'existing exact artifact_blobs', 'sha256': w['sha256']}), str(path)))
             result.append({**w, 'frozen_path': str(path)})
     return result
+
+
+def conserve_oversize_result(store, attempt, body):
+    """Conserve a refused transport result as exact owned recovery material.
+
+    Called inside collection's transaction. The result is never silently replaced
+    by a successful small projection. Storage admission still applies; refusal
+    leaves collection outstanding with the original collector, without cap credit.
+    This does not bound the earlier encoding/acquisition memory cost.
+    """
+    store.budget(None, len(body)*2+4096)
+    root = store.home/'artifacts'/attempt
+    safe_path(str(root), [str(store.home/'artifacts')])
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = root/'oversize-result.json'
+    fd = os.open(path, os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd,'wb') as output:
+        output.write(body); output.flush(); os.fsync(output.fileno())
+    directory = os.open(root, os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try: os.fsync(directory)
+    finally: os.close(directory)
+    conserved, witness = read_file(path, len(body))
+    if conserved != body:
+        raise Refusal('oversize result conservation readback failed; original custody remains held')
+    row = store.attempt(attempt)
+    owner = store.config['roles'][store.job(row['job'])['role']]['owner'] if row['job'] else store.config['actor']
+    store.db.execute('INSERT OR IGNORE INTO artifact_blobs VALUES(?,?)', (witness['sha256'], body))
+    store.db.execute('INSERT INTO artifact_custody VALUES(?,?,?,?,?,?)',
+                     (attempt, str(path), 'runtime-owned', owner, encode(witness), witness['sha256']))
+    store.db.execute('INSERT INTO artifacts(path,attempt,dev,ino,size,mtime,sha256) VALUES(?,?,?,?,?,?,?)',
+                     (str(path), attempt, witness['dev'], witness['ino'], witness['size'], witness['mtime'], witness['sha256']))
+    return {'path':str(path), 'sha256':witness['sha256'], 'bytes':len(body),
+            'custody':'artifact_blobs', 'collector':row['controller'], 'owner':owner,
+            'meaning':'original result conserved; transport refused, processing/effects unresolved'}

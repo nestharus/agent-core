@@ -1,5 +1,10 @@
 # Bounded catalog and exact prospective Branch operation
 
+An explicitly selected [local integration policy](local-integration.md) supersedes
+legacy singleton/window and cross-package QA phase requirements for its future
+anchored paths. All seven duties, actual contexts and applicable gates persist;
+this source option supplies no adoption or historical replay authority.
+
 This is a source/operator contract, not a live operating receipt. Work retains
 purpose and decisions. The responsible accepting Root delegates builders/testers;
 ordinary continuing review remains separate. Existing Work/Branch/Reviews sole

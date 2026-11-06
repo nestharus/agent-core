@@ -1393,3 +1393,5 @@ SQLite SQL mutation tokens do not attest incremental blob writes, direct file
 rewrites or noncooperating writers; applicable body-integrity guards still run
 at actual permitted body use. Work must never use a metadata-only basis as an
 old-body validation, held-source clearance or native-operation qualification.
+
+Continuous anchored integration and separate new-work discovery are an explicitly selected source capability; see [local-integration.md](local-integration.md) for point policies, concurrent scheduling, seven-duty rebasing and independent Work coordination. Existing retained tasks keep their original bindings until an authorized prospective transition.

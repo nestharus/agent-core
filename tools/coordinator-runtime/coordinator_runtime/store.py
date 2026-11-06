@@ -26,7 +26,7 @@ from .recovery import RecoveryJournal, SCHEMA as RECOVERY_SCHEMA
 from .inputs import InputJournal, CONTROL_ROUTES, SCHEMA as INPUT_SCHEMA
 from .execution_pool import ExecutionPool
 from .integration import IntegrationJournal, SCHEMA as INTEGRATION_SCHEMA
-from . import prospective, ordinary, capacity, admitted, windows, custodian_service, configuration, ref_scope
+from . import prospective, ordinary, capacity, admitted, windows, custodian_service, configuration, ref_scope, local_integration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -145,12 +145,13 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("unversioned existing runtime cannot be silently adopted")
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
+        local_integration.policy(config)
         admitted.policy(config)
         windows.policy(config)
         custodian_service.policy(config)
         self.db.executescript(SCHEMA + DELIVERY_SCHEMA + CUSTODY_SCHEMA + ROUTINE_SCHEMA + STORAGE_SCHEMA + PUBLICATION_SCHEMA + RECOVERY_SCHEMA + INPUT_SCHEMA + INTEGRATION_SCHEMA + prospective.SCHEMA + ordinary.SCHEMA + capacity.SCHEMA + admitted.SCHEMA + windows.SCHEMA + custodian_service.SCHEMA)
         self.db.execute("PRAGMA user_version=1")
-        self.db.executescript(configuration.SCHEMA + ref_scope.SCHEMA)
+        self.db.executescript(configuration.SCHEMA + ref_scope.SCHEMA + local_integration.SCHEMA)
         self._bind_config()
         from .processing import SCHEMA as PROCESSING_SCHEMA
         self.db.executescript(PROCESSING_SCHEMA)
@@ -387,6 +388,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             return
         job = self.job(row['job'])
         self.integration_launch_current(job)
+        local_integration.current_job(self, job)
         if (self.config.get('software_delegation')
                 or 'software_authority' in json.loads(row['detail'])
                 or prospective.requires_authority(self, job)):
@@ -485,8 +487,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             result = outcome.get("result")
             result_json = encode(result) if result is not None else None
             if result_json and len(result_json.encode()) > self.config["limits"]["max_result_bytes"]:
-                outcome = {**outcome, "error": "typed result exceeded bounded capture; original responsibility held",
-                           "capture": "incomplete"}
+                from .custody import conserve_oversize_result
+                recovery = conserve_oversize_result(self, attempt, result_json.encode())
+                outcome = {**outcome, "error": "typed result exceeded bounded capture; exact original recovery custody retained",
+                           "capture": "incomplete", "detail": {**outcome.get("detail", {}), "oversize_result": recovery}}
                 result, result_json = None, None
             no_start = bool(outcome.get("detail", {}).get("known_not_started")) and row["begin"] is None
             ended = self.clock() if outcome.get("exit") is not None else None
@@ -584,19 +588,21 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if task.get("require_package_scope") and not self.one("SELECT package FROM admissions WHERE package=?", (row["package"],)):
             return None
         outstanding = self.rows("SELECT * FROM jobs WHERE role=? AND phase=? AND state!='closed'", (role, phase))
+        local = local_integration.selected(self, row["task"])
         active = sum(not self.execution_complete(job) for job in outstanding)
-        if active >= self._capacity(task):
+        limit = min(5, local["capacity"]) if local else self._capacity(task)
+        if active >= limit:
             return None
         if task.get("require_package_scope") and any(j["package"] == row["package"] for j in outstanding):
             return None  # Unsettled responsibility in the same admitted scope stays fenced.
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
-        if role == 'QA' and (self.config.get('window_service') or self.processing):
+        if role == 'QA' and not local and (self.config.get('window_service') or self.processing):
             other = 'cleanup' if phase == 'execution' else 'execution'
             if any(not self.execution_complete(j) for j in self.rows(
                     "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
                 return None  # First phase (<=5 separate packages), then one consolidation slot.
-        if role == "QA" and phase == "execution" and self.one(
+        if role == "QA" and (phase == "execution" or local) and self.one(
                 "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
             return None
         admission = self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)) if role == "QA" else None
@@ -606,10 +612,20 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if prior and any(self.dependency_hold(m["event"]) for m in json.loads(self.job(prior["job"])["members"])):
             return None
         try:
-            window = self.integration_window(row)
+            window = None if local else self.integration_window(row)
         except Refusal:
             return None
-        members = json.loads(window['basis'])['members'] if window else self._members(row)
+        try:
+            members = local_integration.members(self, row) if local else (json.loads(window['basis'])['members'] if window else self._members(row))
+            if local and not local_integration.available(self, row, members):
+                return None
+        except Refusal as exc:
+            self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
+                            'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
+                            (row['event'], role, 'local-integration-dependency', encode({'dependency':str(exc)}), self.clock()))
+            return None
+        if self.processing and any(not self.processing.task(self.one('SELECT * FROM queue WHERE id=?', (m['queue'],))) for m in members):
+            return None
         packages = {member["package"] for member in members}
         package = next(iter(packages)) if len(packages) == 1 else None
         self.budget("jobs", event=row['event'])
@@ -617,6 +633,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
                                                      encode(members), self.controller, token, self.clock()))
+        local_integration.record_job(self, self.job(job))
         prospective.note_job(self, job)
         self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
                         encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
@@ -653,6 +670,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             row = self.job(job, token)
             self.integration_launch_current(row)
+            local_integration.current_job(self, row)
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("only original reservation controller may launch once")
             task = self.config["tasks"][row["task"]]
@@ -741,6 +759,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,'Invalid inner task contract: '+str(exc))
                 self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?",(str(exc),job))
                 return None
+            local_integration.validate_method(self, row, attempt, result)
             if result["semantic"] != "DONE":
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
@@ -824,16 +843,26 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
         if len(branch_keys)==1:
             response['branch_binding']=next(iter(branch_keys))
-        self.budget("events", len(encode(response).encode()), job=job['id'])
-        self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
-                        (response["id"], destination, encode(response), digest(response),
-                         self.clock(), response["parent"]))
+        commit = self.one('SELECT state,receipt FROM local_commits WHERE attempt=?', (attempt['id'],))
+        updates = json.loads(commit['receipt']).get('continuations', {}) if commit and commit['state']=='published' else {}
+        basis = self.one('SELECT basis FROM local_bases WHERE attempt=?', (attempt['id'],))
+        if not updates and basis:
+            frozen = json.loads(basis['basis'])
+            if frozen['scope']['lane'] == 'anchored':
+                response['integration'] = {k:frozen['scope'][k] for k in ('reads','writes')}
+                response['integration']['versions'] = frozen['versions']
+        outputs = [{**response, 'id': response_id if index == 0 else digest({'response':attempt['id'], 'point':key}),
+                    'integration':binding} for index,(key,binding) in enumerate(sorted(updates.items()))] if updates else [response]
         from .processing import note_source
-        note_source(self, response_id)
-        if task.get("publish_internal_results"):
-            self._outbox(job["role"], destination, "result", response, job=job["id"], event=response_id,
-                         producer=attempt["session"], key=digest({"response_delivery": response_id}))
-        return response["id"]
+        for output in outputs:
+            self.budget("events", len(encode(output).encode()), job=job['id'])
+            self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
+                            (output['id'], destination, encode(output), digest(output), self.clock(), output['parent']))
+            note_source(self, output['id'])
+            if task.get("publish_internal_results"):
+                self._outbox(job["role"], destination, "result", output, job=job['id'], event=output['id'],
+                             producer=attempt['session'], key=digest({'response_delivery':output['id']}))
+        return outputs[0]['id']
 
     def complete_events(self):
         """Completion includes descendants, durable handoffs and receipt outcomes."""

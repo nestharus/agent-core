@@ -85,6 +85,10 @@ def conserve(store, path, actor, receipt):
 
 
 def eligible_event(store, event):
+    if store.one("SELECT name FROM sqlite_master WHERE name='local_discovered_points'") and store.one(
+            'SELECT d.point FROM local_discovered_points d JOIN attempts a ON a.id=d.source_attempt '
+            'JOIN queue q ON q.job=a.job WHERE q.event=? LIMIT 1', (event['id'],)):
+        return False  # Live discovered identities still consume their original source/decision custody.
     from .branches import event_held
     if event_held(store,event['id']):
         return False

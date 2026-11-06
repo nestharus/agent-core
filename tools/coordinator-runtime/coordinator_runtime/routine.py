@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .contracts import Refusal, encode, collected_task_result, digest
 from .custody import safe_path, read_file
-from . import publication, readiness, bounded_log
+from . import publication, readiness, bounded_log, local_integration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS routine_runs(
@@ -90,6 +90,8 @@ def prepare(store, board, job, attempt, task):
         store.db.execute('INSERT INTO routine_runs VALUES(?,?,?,?,?,NULL,?,NULL)',
                          (attempt, job['task'], grant['id'], encode(policy), encode(before), 'prepared'))
     publication.prepare(store,attempt,before,policy)
+    with store.tx():
+        local_integration.prepare(store, job, attempt, before)
 
 
 def reconcile(store, board, job):
@@ -105,9 +107,11 @@ def reconcile(store, board, job):
     from .resource_scopes import blocked
     if grant['id'] != run['grant_id'] or blocked(store, job) or job['hold_reason']:
         return False
-    answer = collected_task_result(attempt)
     if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['capture'] != 'complete'
-            or attempt['error'] or answer.get('semantic') != 'DONE'):
+            or attempt['error']):
+        return False
+    answer = collected_task_result(attempt)
+    if answer.get('semantic') != 'DONE':
         return False
     tools = json.loads(attempt['detail']).get('tool_completion')
     if not tools or not tools['complete']:
@@ -134,7 +138,8 @@ def reconcile(store, board, job):
                'basis': 'role-granted staged model writer and exact service publication; bounded pre/post custody and tool completion',
                'before': before, 'after': after, 'publication':published,
                'tool_completion': tools, 'local_readiness':local, 'unknown_effects': [],
-               'completion_transition': grant.get('completion_transition')}
+               'completion_transition': grant.get('completion_transition'),
+               'local_commit': store.one('SELECT * FROM local_commits WHERE attempt=?', (attempt['id'],))}
     with store.tx():
         store.db.execute("UPDATE jobs SET effects='reconciled',effect_receipt=? WHERE id=? AND active_attempt=?",
                          (encode(receipt), job['id'], attempt['id']))

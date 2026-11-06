@@ -126,6 +126,8 @@ def validate_config(config):
         raise Refusal("runtime state cannot be inside or encompass profile/session stores")
     for role, selected in config["roles"].items():
         validate_role(role, selected, profiles)
+    from .local_integration import policy as local_policy
+    local_policy(config)
     software = config.get('software_delegation')
     if software is not None:
         if (not isinstance(software, dict) or set(software) != {'grantor', 'authority', 'boundary'}
@@ -352,7 +354,7 @@ def classification(answer, event, config):
 
 
 TASK_REQUIRED = {'semantic','summary','findings','failures','unknowns','artifacts','category'}
-TASK_OPTIONAL = {'handoffs','no_handoff_reason','completion'}
+TASK_OPTIONAL = {'handoffs','no_handoff_reason','completion','integration'}
 TASK_ARRAYS = ('findings','failures','unknowns','artifacts','handoffs')
 TASK_SEMANTICS = {'DONE','PARTIAL','FAILED','UNKNOWN'}
 TASK_CATEGORIES = {'proposal','consolidated','qualification','scope','blocker','complete'}
@@ -422,7 +424,7 @@ def task_result_instructions():
         'summary is nonempty text (at most16000 UTF-8 bytes); findings/failures/unknowns/artifacts are explicit lists, '
         'including honest empties, never invented empties to obtain DONE. PARTIAL/FAILED/UNKNOWN must retain '
         'failures or unknowns. Optional handoffs is a list of at most16; no_handoff_reason is text (or null when '
-        'handoffs is nonempty); completion is an object. '
+        'handoffs is nonempty); completion is an object. Optional integration={reads:[stable point keys],writes:[stable point keys],versions:{key:service version}} binds scoped continuations; it grants no authority. '
         'Artifacts: at most64 explicit absolute path strings or {path:ABSOLUTE_PATH,...metadata}; '
         'groups use {files:[LEAVES_OR_GROUPS],...metadata}, nonempty files, no group path, depth at most4 '
         'and at most64 total leaves. Keep common/kind/hash/byte/anchor/read-extent metadata intact; '
@@ -484,6 +486,7 @@ def task_result_issues(answer):
             and not (answer['no_handoff_reason'] is None and isinstance(answer.get('handoffs'),list) and answer['handoffs'])):
         issues.append('no_handoff_reason must be text; null is allowed only with nonempty handoffs')
     if 'completion' in answer and not isinstance(answer['completion'],dict):issues.append('completion must be an object')
+    if 'integration' in answer and not isinstance(answer['integration'],dict):issues.append('integration must be a normalized point metadata object')
     return issues
 
 

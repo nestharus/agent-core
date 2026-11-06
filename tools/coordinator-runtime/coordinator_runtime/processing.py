@@ -223,7 +223,7 @@ def select(runtime, boards, selection):
     continuing = isinstance(selection, dict) and 'service' in selection
     if continuing:
         keys = keys - {'expires', 'max_starts'}
-    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'service'} != keys:
+    if not isinstance(selection, dict) or set(selection) - {'owner_operations', 'control_recognitions', 'software_admission', 'work_coordination', 'service'} != keys:
         raise Refusal('exact processing basis/authority/expiry/sources/tasks/start and residency limits required')
     issuer = boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
     required_text(selection['authority'], 'actual scoped Work processing delegation', 4000)
@@ -275,6 +275,7 @@ def select(runtime, boards, selection):
     for event, recognition in recognitions.items():
         validate_recognition(runtime, event, recover[event], recognition)
     from . import processing_admission
+    processing_admission.validate_coordination(runtime, selection)
     processing_admission.validate(runtime, selection)
     if continuing:
         from .service import validate

@@ -13,7 +13,7 @@ from contextlib import contextmanager, ExitStack
 from .contracts import Refusal, encode, digest
 from .custody import capture, read_file, safe_path, frozen_body, refuse_log
 from .cleanup import open_parent
-from . import bounded_log
+from . import bounded_log, local_integration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS routine_stages(attempt TEXT,target TEXT,path TEXT,PRIMARY KEY(attempt,target));
@@ -156,7 +156,22 @@ def publish(store, board, job, attempt, run, task):
     require_current_job(store, job)
     store.require_execution_open(job['id'])
     with snapshot_lock(store):
-        return locked_publish(store,board,job,attempt,run,task)
+        known = store.one('SELECT * FROM local_commits WHERE attempt=?', (attempt['id'],))
+        if known and known['state'] == 'published':
+            local_integration.current_job(store, job)
+            store.authorize_launch(attempt['id'])
+            if board.completion_authority(store, job['task'])['id'] != run['grant_id']:
+                raise Refusal('publication grant changed before known-effect receipt join')
+            rows = store.rows('SELECT target,state,proposed_sha,witness,error FROM file_publications WHERE attempt=?', (attempt['id'],))
+            if {r['target'] for r in rows} != set(json.loads(run['policy'])['targets']) or any(r['state'] != 'published' for r in rows):
+                raise Refusal('known local publication lacks complete duty receipts')
+            return [{**r, 'method':'previously observed local publication; receipt join only, no effect replay'} for r in rows]
+        rebased, local = local_integration.rebase(store, job, attempt, run, task)
+        result = locked_publish(store,board,job,attempt,rebased,task,
+                                service_stages=local[0] if local else None)
+        if local:
+            local_integration.committed(store, attempt['id'], local[1])
+        return result
 
 
 def write_same_inode(fd, body):
@@ -168,7 +183,7 @@ def write_same_inode(fd, body):
     os.ftruncate(fd,len(body));os.fsync(fd)
 
 
-def locked_publish(store, board, job, attempt, run, task):
+def locked_publish(store, board, job, attempt, run, task, service_stages=None):
     store.require_execution_open(job['id'])
     if job['controller']!=store.controller or attempt['controller']!=store.controller:
         raise Refusal('only original owned collector publishes its staged effects')
@@ -182,7 +197,7 @@ def locked_publish(store, board, job, attempt, run, task):
         if any(store.one('SELECT hold FROM events WHERE id=?',(m['event'],))['hold'] for m in json.loads(job['members'])):
             raise Refusal('source/resource/recovery hold fences publication')
     fence()
-    before=json.loads(run['before_files']);allocated=stages(store,attempt['id'])
+    before=json.loads(run['before_files']);allocated={**stages(store,attempt['id']), **(service_stages or {})}
     policy=json.loads(run['policy'])
     order=policy['targets']
     if set(allocated)!=set(before) or set(order)!=set(before):raise Refusal('exact staged publication mapping unavailable')
@@ -194,7 +209,7 @@ def locked_publish(store, board, job, attempt, run, task):
     # Validate every preimage/proposal under the cooperative canonical lock.
     for target in order:
         path=allocated[target]
-        body,witness=read_file(safe_path(path,[str(store.home/'artifacts'/attempt['id']/'staged')]),maximum)
+        body,witness=read_file(safe_path(path,[str(store.home/'artifacts'/attempt['id']/('local-commit' if service_stages and target in service_stages else 'staged'))]),maximum)
         held=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],path))
         if not held or held['sha256']!=witness['sha256']:raise Refusal('proposed file lacks exact durable custody')
         proposed[target]=(body,witness)

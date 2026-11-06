@@ -186,8 +186,12 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration'}:
         raise Refusal('unsupported prospective scope option')
+    if 'local_integration' in options:
+        from .local_integration import policy
+        value['local_integration'] = copy.deepcopy(options['local_integration'])
+        policy(value)
     select_capacity(original, value, options.get('capacity'))
     exclusions = options.get('exclusions', [])
     if not isinstance(exclusions, list):
@@ -299,6 +303,8 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('every added scope needs an explicitly selected prospective task')
     if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
+    if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
+        raise Refusal('every future local integration policy needs an explicitly selected prospective task')
     # Scoped_task still narrows each actual package; this grants no writes or
     # Root acceptance. Broad ancestors and peer checkout roots cannot enter.
     if any(root not in value['tasks'][name]['scope_roots'] for name in additions

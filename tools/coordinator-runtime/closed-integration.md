@@ -1,5 +1,10 @@
 # Closed Work integration execution
 
+An explicitly selected [local integration policy](local-integration.md) supersedes
+legacy singleton/window and cross-package QA phase requirements for its future
+anchored paths. All seven duties, actual contexts and applicable gates persist;
+this source option supplies no adoption or historical replay authority.
+
 This source capability separates execution exclusivity from enduring source,
 effect, publication and delivery custody. A malformed or blocked held Work
 integrator may have genuinely closed even when its effects remain UNKNOWN.

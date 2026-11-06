@@ -15,7 +15,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service
+from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service, local_integration
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions, report_only
 from .inputs import input_routes
 
@@ -111,7 +111,8 @@ def job_prompt(store, job, task=None):
                "allowed_handoffs": task.get("allowed_handoffs", []), "admitted_scope": task.get("admitted_scope"),
                "prior_owned_context": json.loads(attempt["detail"]),
                "integration_window": store.integration_context(job['id']),
-               "conserved_integration_debt": store.integration_debt() if job['role']=='Work' and job['phase']=='integrator' else [],
+               "local_integration": local_integration.context(store, job),
+               "conserved_integration_debt": store.integration_debt() if not local_integration.selected(store, job['task']) and job['role']=='Work' and job['phase']=='integrator' else [],
                "inherited_failure_sources": readiness.failure_sources(store,attempt['id']) if task.get('routine_completion') else [],
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
@@ -315,6 +316,7 @@ class Dispatcher:
             if epoch and epoch['policy']['ordinary_effects']:
                 ordinary.policy_for(self.store, job)
                 task = {**task, 'ordinary_preparation': True}
+            local_integration.prepare_input_basis(self.store, job, attempt, task)
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']
                 while True:

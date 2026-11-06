@@ -102,28 +102,125 @@ def admit(runtime, event_id):
                 'native_owner_consent': False, 'existing_holds': 'unchanged'}
 
 
+def validate_coordination(runtime, selection):
+    value = selection.get('work_coordination')
+    if value is None:
+        return
+    if (not isinstance(value, dict) or set(value) != {'authority', 'tasks', 'source_roles'}
+            or not isinstance(value['tasks'], list) or not value['tasks']
+            or not isinstance(value['source_roles'], list) or not value['source_roles']
+            or set(value['source_roles']) - {'Branch', 'QA', 'Reviews'}):
+        raise Refusal('independent Work coordination authority, exact routes and upstream roles required')
+    required_text(value['authority'], 'current independent Work coordination authority', 4000)
+    for name in value['tasks']:
+        task = runtime.config['tasks'].get(name)
+        if (name not in selection['tasks'] or not task or task['role'] != 'Work'
+                or task.get('require_package_scope') or task.get('execution') == 'owner'):
+            raise Refusal('coordination selects existing independently authorized Work tasks, not execution admission')
+
+
 def permits(runtime, queue):
-    """An admitted new package cannot unlock an older same-name responsibility."""
+    """Conserve package/source ancestry while checking each real upstream member.
+
+    Current Work coordination authority can consume a genuine role return. It
+    never adds a Work task to the Branch/QA execution admission or grants effects.
+    Actual processing and software launch grants remain independently required.
+    """
+    if runtime.routing_event(queue['event']).get('package') != queue['package']:
+        return False
     record = runtime.one('SELECT * FROM processing_admissions WHERE package=?', (queue['package'],))
     if not record:
         return True  # Original owner admissions retain their existing path.
     admission = runtime.one('SELECT * FROM admissions WHERE package=?', (queue['package'],))
     receipt = json.loads(record['receipt'])
     if (not admission or admission['owner'] != runtime.config['actor']
-            or admission['receipt'] != record['receipt'] or queue['task'] not in receipt['task_scopes']):
+            or admission['receipt'] != record['receipt']):
         return False
-    # An exact descendant inherits the same package scope, never another source
-    # with a coincidentally matching ref. Cycle detection is not a depth cap.
-    current, visited = queue['event'], set()
-    while current and current not in visited:
-        visited.add(current)
-        source = runtime.event(current)
-        if current == record['event']:
-            return digest(source) == receipt['software_admission']['source_hash']
-        if source.get('package') != queue['package']:
+    coordination = None
+    if queue['task'] not in receipt['task_scopes']:
+        if not runtime.processing:
             return False
-        current = source.get('parent')
-    return False
+        selection = runtime.processing.current()[1]
+        coordination = selection.get('work_coordination')
+        if not coordination or queue['task'] not in coordination['tasks']:
+            return False
+        validate_coordination(runtime, selection)
+    visiting = set()
+    def ancestry(event_id, coordination_edge=False):
+        if event_id in visiting:
+            return False
+        visiting.add(event_id)
+        try:
+            source = runtime.event(event_id)
+            if source.get('package') != queue['package']:
+                return False
+            if event_id == record['event']:
+                return digest(source) == receipt['software_admission']['source_hash']
+            # Software-generated returns bind every member to its actual frozen
+            # source job/attempt. Parent-only traversal loses later members.
+            if source.get('source_job'):
+                job = runtime.job(source['source_job'])
+                members = json.loads(job['members'])
+                if (source.get('source_members') != members or not members
+                        or source.get('source_attempt') != job['active_attempt']
+                        or source.get('source_role') != job['role']
+                        or job['package'] != queue['package']):
+                    return False
+                if coordination_edge:
+                    upstream = job['role'] in coordination['source_roles'] and job['task'] in receipt['task_scopes']
+                    continuation = job['role'] == 'Work' and job['task'] in coordination['tasks']
+                    if not (upstream or continuation):
+                        return False
+                    # The exact configured return route cannot be forged by a
+                    # body claiming to be a result from an unrelated role.
+                    from .contracts import response_tasks, collected_task_result
+                    attempt = runtime.attempt(job['active_attempt'])
+                    if (attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
+                            or attempt['error'] or attempt['capture'] != 'complete'
+                            or source.get('body') != collected_task_result(attempt)
+                            or queue['task'] not in response_tasks(runtime.config['tasks'][job['task']], source['body'], runtime.config)):
+                        return False
+                return all(digest(runtime.event(m['event'])) == m['hash'] and
+                           not runtime.one('SELECT hold FROM events WHERE id=?', (m['event'],))['hold'] and
+                           (not runtime.processing or runtime.processing.event(runtime.event(m['event']))) and
+                           ancestry(m['event']) for m in members)
+            if source.get('source_delivery'):
+                delivery = source['source_delivery']
+                outbox = runtime.one('SELECT * FROM outboxes WHERE id=?', (delivery.get('id'),))
+                link = runtime.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (delivery.get('id'),))
+                if not outbox or not outbox['job'] or not link or link['event'] != event_id:
+                    return False
+                payload = json.loads(outbox['payload'])
+                job = runtime.job(outbox['job'])
+                members = json.loads(job['members'])
+                attempt = runtime.attempt(job['active_attempt'])
+                from .contracts import collected_task_result
+                answer = collected_task_result(attempt)
+                if (source.get('body') != payload or delivery.get('source_hash') != digest(payload)
+                        or payload.get('source_members') != members or not members
+                        or payload.get('package') != queue['package'] or job['package'] != queue['package']
+                        or payload.get('attempt') != attempt['id'] or payload.get('source_result') != answer
+                        or payload.get('original_handoff') not in answer.get('handoffs', [])
+                        or attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
+                        or attempt['error'] or attempt['capture'] != 'complete'):
+                    return False
+                if coordination_edge:
+                    from . import prospective
+                    epoch = prospective.for_job(runtime, job)
+                    task = epoch['policy'] if epoch else runtime.config['tasks'][job['task']]
+                    if (job['role'] not in coordination['source_roles'] or job['task'] not in receipt['task_scopes']
+                            or queue['task'] not in task.get('software_handoffs', {}).get('Work', [])):
+                        return False
+                return all(digest(runtime.event(m['event'])) == m['hash'] and
+                           not runtime.one('SELECT hold FROM events WHERE id=?', (m['event'],))['hold'] and
+                           (not runtime.processing or runtime.processing.event(runtime.event(m['event']))) and
+                           ancestry(m['event']) for m in members)
+            if coordination_edge:
+                return False  # Message-authored lineage is no automatic return.
+            return bool(source.get('parent')) and ancestry(source['parent'])
+        finally:
+            visiting.remove(event_id)
+    return ancestry(queue['event'], coordination is not None)
 
 
 def admit_pending(runtime):

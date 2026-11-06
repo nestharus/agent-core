@@ -1,5 +1,19 @@
 # Actual selected Reviews procedure and report integration
 
+When TASK_CONTEXT.local_integration is present, apply its current point bindings,
+read/write versions, routine decision authority and supplied four-step method.
+A current anchored packet commits directly; conflicting/stale packets reconcile
+locally and return point-specific updates. Genuinely new/unanchored candidates
+use the central discovery lane and then emit anchored continuations. The older
+single-integrator/window/whole-role phase wording below applies only when this
+mode is absent. It creates no global readiness gate in the selected local mode.
+Preserve original review contexts, collectors, methods, source revisions and all
+relevant CI/QA/acceptance/final-risk gates. Later arrivals are continuations, not
+newly completed work or a current review verdict. Actual Root builders still
+commit AND push. Source-only capability is not live adoption or qualification.
+See local-integration.md in the selected source for the service boundary.
+
+
 For execution=owner the real existing Reviews owner receives an addressed work
 request. This is not a replacement app-server review or new model policy. The
 owner retains actual selected Source/reviewer bindings, original contexts,
