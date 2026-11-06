@@ -470,7 +470,8 @@ def available(store, row, members):
         if not prior:
             if job['role'] == row['role']:
                 from .review_returns import observes_source
-                if not observes_source(store, row, members, scope, job):
+                if not (observes_source(store, row, members, scope, job)
+                        or store.work_read_coexists(row, scope, job)):
                     return False  # Unknown earlier material remains fenced.
             continue
         if scope['lane'] == prior['lane'] == 'discovery':
@@ -490,6 +491,11 @@ def record_job(store, job):
     if not selected(store, job['task']):
         return
     scope = combine([packet(store, {'task': job['task'], 'event': m['event']}) for m in json.loads(job['members'])])
+    fences = [prior['id'] for prior in store.rows("SELECT * FROM jobs WHERE role=? AND state!='closed'", (job['role'],))
+              if prior['id'] != job['id'] and not store.execution_complete(prior)
+              and scope_for(store, prior) is None and store.work_read_coexists(job, scope, prior)]
+    if fences:
+        scope['read_fences'] = fences
     if scope['lane'] == 'discovery':
         # Cross-package candidates are read-only discovery inputs, not execution
         # members. Their package/admission and processing duties stay original.
@@ -518,6 +524,9 @@ def current_job(store, job):
         raise Refusal('local policy/authority changed; retain recorded revision and return through review')
     scope = json.loads(frozen['scope'])
     native_access(store, job, scope)
+    for source in scope.get('read_fences', []):
+        if not store.work_read_coexists(job, scope, store.job(source)):
+            raise Refusal('Work read fence or current read-only authority changed')
     for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
         queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
         if (not queue or store._input_member(queue) != member

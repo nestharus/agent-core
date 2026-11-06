@@ -4,6 +4,64 @@ This source capability retains the existing file consumers, seven Work duties,
 review/QA/CI/acceptance/risk gates and original collectors. It establishes no live
 adoption, policy ownership, model efficacy, latency or receiving qualification.
 
+## Held proposer and fresh read coordination
+
+An old held Work proposer with no local scope continues to fence incoming
+same-role material. Collected numeric END, PARTIAL, model DONE, a read-only task
+name or an absent scope do not remove that fence. No scope is invented for it.
+
+The actual Work owner can separately select `work-read-closure-basis JOB --token
+TOKEN` and `fence-work-proposer JOB --token TOKEN --receipt FILE`. Both retain
+the ordinary original Work authority checks, or accept `--management FILE`
+through the existing current, exact, operation-local management protocol.
+Management must name the exact proposer job, token, related event IDs and source
+roles, with its genuine current authority/purpose, configuration/release/original
+grant binding and expiry. Future-intake processing authority alone is insufficient;
+these commands neither select processing nor revive original grants. Record
+acquisition itself needs independently authorized access. Old integrator routes
+remain integrator-only.
+
+The basis requires held Work/proposer, no local scope, effects=none, no recovery
+owner or pending recovery request, and an original frozen read-only/no-effect,
+nonnetworked nonnative task with no write roots or routine publication. Every
+related attempt, including diagnoses, must have genuine begun numeric END and
+collection; the active original must be a task. The basis includes the unchanged
+job and exact attempt collection/semantic/capture/error metadata plus the frozen
+policy digest and all original controller identities. It reads no result or
+capture body. Partial semantics and incomplete captures remain admissible *debt*,
+not success.
+
+The receipt has exactly `basis`, `reason` and `controllers`. Each controller
+entry has exactly `controller`, `collector`, integer `end`, `collected:true`,
+`writers_closed:true` and a nonempty bounded `evidence` list. The actual original
+collectors must supply authentic whole controller, descendant and launch-capable
+writer closure facts. Numeric task END does not supply them. These are attributed
+owner assertions; software validates their binding, not their external truth.
+Unavailable closure/authority facts remain explicit dependencies. Never fabricate
+them or acquire excluded captures to fill the receipt.
+
+Recording the receipt permanently refuses further launch, begin, callback,
+finish or recovery execution of that exact predecessor through the existing
+execution-open gate. It changes no old job/attempt/result/source/queue/outbox,
+effect, consumer, custody, privacy or retention row. It does **not** change
+`execution_complete`, release capacity/resources, complete processing, accept a
+return or authorize old-job replay. All original custodians and duties remain.
+
+Only an anchored, nonempty **file read** packet for a selected read-only,
+nonnetworked, no-effect Work proposer may coexist with such a fence. Writes,
+discovery, native points and other roles/phases keep their existing exclusions.
+Each blocking predecessor needs its own exact receipt. Phase/shared limits still
+count both held jobs; native busy checks, ordinary resource leases, known-scope
+conflicts and ordinary source/member/admission gates remain in force. Reservation
+records the exact fences in its local scope and launch revalidates them, the
+frozen old metadata and current incoming read-only authority. A changed basis
+refuses; it never reinterprets old debt or stamps a new revision on an old read.
+Stale incoming versions still require the selected reconciliation method, and
+later writing/integration/publication requires its genuine rights and ordinary
+acceptance, including all seven joined consumer receipts. Cleanup still requires
+actual whole-processing completion +24h and every hold. This capability supplies
+no live admission, controller closure or rollout acceptance credit.
+
 A controller selects `local_integration` explicitly in configuration. Existing
 unselected journals/tasks retain their historical contracts. The supported
 current-configuration draft accepts it as an explicit

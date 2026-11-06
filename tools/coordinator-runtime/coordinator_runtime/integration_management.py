@@ -12,7 +12,9 @@ from . import configuration, processing
 from .contracts import Refusal, digest, encode, required_text
 
 OPERATIONS = {'integration-closure-basis', 'retire-integration',
-              'integration-window-basis', 'select-integration-window'}
+              'integration-window-basis', 'select-integration-window',
+              'work-read-closure-basis', 'fence-work-proposer'}
+READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer'}
 
 
 def basis(runtime, roles, actor, authority, purpose):
@@ -47,7 +49,7 @@ def basis(runtime, roles, actor, authority, purpose):
 
 
 def target(command, args, receipt):
-    if command in {'integration-closure-basis', 'retire-integration'}:
+    if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS:
         return {'job': args.job, 'token': args.token}
     if command == 'integration-window-basis':
         return {'task': args.task, 'events': args.events}
@@ -103,7 +105,7 @@ class Access:
                     or len(set(values)) != len(values)):
                 raise Refusal('distinct explicit management record identities required')
         runtime = self.runtime
-        if command in {'integration-closure-basis', 'retire-integration'}:
+        if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS:
             jobs, events = {selected['job']}, set()
         else:
             task = runtime.config['tasks'].get(selected['task'])
@@ -117,8 +119,9 @@ class Access:
         roles = {'Work'}
         for job in jobs:
             row = runtime.one('SELECT role,phase,members FROM jobs WHERE id=?', (job,))
-            if not row or row['role'] != 'Work' or row['phase'] != 'integrator':
-                raise Refusal('management job must be an exact Work integrator')
+            phase = 'proposer' if command in READ_FENCE_OPERATIONS else 'integrator'
+            if not row or row['role'] != 'Work' or row['phase'] != phase:
+                raise Refusal('management job must be an exact Work '+phase)
             events.update(m['event'] for m in json.loads(row['members']))
         if set(declared['events']) != events:
             raise Refusal('related input scope differs; no implicit source/body acquisition')
@@ -147,7 +150,7 @@ def execute(runtime, command, selected, selection, actor, operation):
         try:
             outcome = operation()
             access.current()
-            if command in {'retire-integration', 'select-integration-window'}:
+            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer'}:
                 key = digest(selection)
                 runtime.budget(None, len(encode(selection).encode()) + len(encode(outcome).encode()))
                 runtime.db.execute('INSERT INTO integration_management_operations VALUES(?,?,?,?,?)',

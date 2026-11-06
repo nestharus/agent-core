@@ -235,13 +235,13 @@ def parser():
     recovery.add_argument('--token',required=True)
     recovery.add_argument('--attempt',required=True)
     recovery.add_argument('--receipt',required=True,help='use-diagnosis: exact diagnosis/selection with remaining:null; optional qualified publication_remainder basis and collector_continuity; remaining-work requests fresh diagnosis')
-    for command in ('integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start'):
+    for command in ('integration-closure-basis', 'retire-integration', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'):
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
         integration.add_argument('--token', required=True)
-        if command in {'integration-closure-basis', 'retire-integration'}:
+        if command in {'integration-closure-basis', 'retire-integration', 'work-read-closure-basis', 'fence-work-proposer'}:
             integration.add_argument('--management', help='Explicit current paused-owner operation selection; no processing access')
-        if command in {'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start'}:integration.add_argument('--receipt', required=True)
+        if command in {'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start', 'fence-work-proposer'}:integration.add_argument('--receipt', required=True)
     window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
     window.add_argument('task')
     window.add_argument('--events', nargs='+', required=True)
@@ -482,7 +482,7 @@ def operate(args, store):
         if args.command == 'revoke-retained':
             return board.revoke_retained(store, args.capability)
         return board.retained_step(store, args.capability)
-    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start'}:
+    if args.command in {'integration-closure-basis', 'retire-integration', 'integration-window-basis', 'select-integration-window', 'integration-prestart-basis', 'withdraw-integration-prestart', 'integration-no-start-basis', 'withdraw-integration-no-start', 'work-read-closure-basis', 'fence-work-proposer'}:
         if getattr(args, 'management', None):
             from . import integration_management
             actor = actual_actor(store.config['roles']['Work']['owner'])
@@ -673,12 +673,14 @@ def integration_operation(args, store, actor, receipt=None):
     if args.command == 'integration-no-start-basis':return store.integration_no_start_basis(args.job, args.token)
     if args.command == 'integration-prestart-basis':return store.integration_prestart_basis(args.job, args.token)
     if args.command == 'integration-closure-basis':return store.integration_closure_basis(args.job, args.token)
+    if args.command == 'work-read-closure-basis':return store.work_read_closure_basis(args.job, args.token)
     if args.command == 'integration-window-basis':return store.integration_window_basis(args.task, args.events)
     if receipt is None:
         receipt = read_record(args.receipt)
     if args.command == 'withdraw-integration-no-start':return store.withdraw_integration_no_start(args.job, args.token, actor, receipt)
     if args.command == 'withdraw-integration-prestart':return store.withdraw_integration_prestart(args.job, args.token, actor, receipt)
     if args.command == 'retire-integration':return store.retire_integration(args.job, args.token, actor, receipt)
+    if args.command == 'fence-work-proposer':return store.fence_work_proposer(args.job, args.token, actor, receipt)
     return store.select_integration_window(actor, receipt)
 
 

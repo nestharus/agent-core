@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS integration_prestart_dispositions(
 CREATE TABLE IF NOT EXISTS integration_management_operations(
  id TEXT PRIMARY KEY,actor TEXT NOT NULL,selection TEXT NOT NULL,
  outcome TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS work_read_fences(
+ job TEXT PRIMARY KEY,actor TEXT NOT NULL,basis TEXT NOT NULL,
+ receipt TEXT NOT NULL,created REAL NOT NULL);
 """
 
 
@@ -34,8 +37,107 @@ class IntegrationJournal:
                 or self.one('SELECT * FROM integration_prestart_dispositions WHERE job=?', (job,)))
 
     def require_execution_open(self, job):
-        if self.integration_retired(job):
+        if self.integration_retired(job) or self.one('SELECT job FROM work_read_fences WHERE job=?', (job,)):
             raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
+
+    def work_read_closure_basis(self, job, token):
+        """Exact terminal proposer metadata, without interpreting its return.
+
+        Closure facts about controllers and writers must come from their actual
+        custodians. This basis supplies none of those external facts.
+        """
+        self.job(job, token)
+        management = getattr(self, 'integration_management', None)
+        if management:
+            for role in self.source_roles(job=job):
+                management.enrollment(role)
+        else:
+            self.require_active_sources(job=job)
+        return self._work_read_basis(job)
+
+    def _work_read_basis(self, job):
+        row = self.job(job)
+        if (row['role'] != 'Work' or row['phase'] != 'proposer' or row['state'] != 'held'
+                or row['effects'] != 'none' or row['recovery_owner'] is not None
+                or self.one('SELECT job FROM local_jobs WHERE job=?', (job,))):
+            raise Refusal('exact held nonwriting Work proposer with unknown local scope required')
+        frozen = self.one('SELECT task FROM job_resource_policies WHERE job=?', (job,))
+        task = json.loads(frozen['task']) if frozen else None
+        if not self._work_read_task(task):
+            raise Refusal('original frozen read-only nonwriting Work proposer policy required')
+        attempts = self.rows('SELECT id,kind,job,controller,begin,ended,collected,exit,state,capture,semantic,error '
+                             'FROM attempts WHERE job=? ORDER BY rowid', (job,))
+        if (not attempts or not any(a['id'] == row['active_attempt'] and a['kind'] == 'task' for a in attempts)
+                or any(a['state'] != 'collected' or a['begin'] is None or a['ended'] is None
+                       or a['collected'] is None or type(a['exit']) is not int for a in attempts)):
+            raise Refusal('all related originals need actual begun numeric END and collection')
+        if self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'", (job,)):
+            raise Refusal('pending owner recovery must be disposed before a read fence')
+        return self._integration_bounded({'job': row, 'policy': digest(task), 'attempts': attempts,
+            'controllers': sorted({row['controller'], *[a['controller'] for a in attempts]})})
+
+    @staticmethod
+    def _work_read_task(task):
+        return bool(isinstance(task, dict) and task.get('role') == 'Work' and task.get('phase') == 'proposer'
+                    and task.get('sandbox') == 'read-only' and task.get('effects') == 'none'
+                    and task.get('network', False) is False and task.get('execution') is None
+                    and not task.get('routine_completion')
+                    and isinstance(task.get('effect_authority'), dict)
+                    and task['effect_authority'].get('write_roots') == [])
+
+    def fence_work_proposer(self, job, token, actor, receipt):
+        """Permanently prevent old execution; permit only local read coexistence.
+
+        Unlike integration retirement, this does not release capacity or assert
+        execution_complete. PARTIAL, capture defects, source and delivery duties
+        remain exactly where they were. Evidence is attributed, not a census.
+        """
+        with self._integration_transaction():
+            self._integration_owner(actor)
+            self.require_execution_open(job)
+            basis = self.work_read_closure_basis(job, token)
+            self._integration_controller_closures(basis, receipt)
+            self._integration_bounded(receipt)
+            self.budget(None, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            self.db.execute('INSERT INTO work_read_fences VALUES(?,?,?,?,?)',
+                (job, actor, encode(basis), encode(receipt), self.clock()))
+        return self.one('SELECT * FROM work_read_fences WHERE job=?', (job,))
+
+    def work_read_coexists(self, row, scope, source):
+        """Consume an owner fence without acquiring old source or return bodies."""
+        if (row['role'] != 'Work' or row['phase'] != 'proposer'
+                or scope['lane'] != 'anchored' or not scope['reads'] or scope['writes']
+                or not self._work_read_task(self.config['tasks'][row['task']])):
+            return False
+        from .local_integration import point_definitions
+        points = point_definitions(self)
+        if any('native' in binding for key in scope['reads'] for binding in points[key]['bindings']):
+            return False  # Native coordination retains its original exclusion contract.
+        fence = self.one('SELECT basis FROM work_read_fences WHERE job=?', (source['id'],))
+        if not fence:
+            return False
+        return json.loads(fence['basis']) == self._work_read_basis(source['id'])
+
+    def _integration_controller_closures(self, basis, receipt):
+        if not isinstance(receipt, dict) or set(receipt) != {'basis', 'controllers', 'reason'}:
+            raise Refusal('exact closure basis, controller closures and reason required')
+        if receipt['basis'] != basis:
+            raise Refusal('closure basis changed; no stale fence')
+        required_text(receipt['reason'], 'execution fence reason', 4000)
+        closures = receipt['controllers']
+        if not isinstance(closures, list) or len(closures) != len(basis['controllers']):
+            raise Refusal('every original controller must be genuinely closed')
+        found = []
+        for item in closures:
+            if not isinstance(item, dict) or set(item) != {'controller', 'collector', 'end', 'collected', 'writers_closed', 'evidence'}:
+                raise Refusal('exact controller/collector/END and writer closure evidence required')
+            required_text(item['collector'], 'actual controller collector', 128)
+            if type(item['end']) is not int or item['collected'] is not True or item['writers_closed'] is not True:
+                raise Refusal('controller END alone cannot establish writer closure')
+            self._integration_evidence(item['evidence'])
+            found.append(item['controller'])
+        if sorted(found) != basis['controllers']:
+            raise Refusal('conflicting/missing controller closures')
 
     def _integration_owner(self, actor):
         if actor != self._integration_enrollment('Work')['owner']:
