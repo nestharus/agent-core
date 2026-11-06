@@ -161,9 +161,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         migrate_links(self)
         from .reviews import SCHEMA as REVIEW_SCHEMA
         from .service import SCHEMA as SERVICE_SCHEMA
+        from .review_returns import SCHEMA as REPORT_RETURN_SCHEMA
         from .branches import SCHEMA as BRANCH_SCHEMA
         from .service_recovery import SCHEMA as SERVICE_RECOVERY_SCHEMA
-        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA)
+        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA + REPORT_RETURN_SCHEMA)
         self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
         windows.prepare_revision(self)
 

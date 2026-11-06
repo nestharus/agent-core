@@ -242,7 +242,9 @@ def input_authority(store, event, task, package, visiting=None):
     from .software import clean_processing
     from .contracts import response_tasks
     from . import prospective
-    if not clean_processing(store, source) or source['package'] != package:
+    from .review_returns import proof as report_proof
+    report = report_proof(store, event, task)
+    if (not report and not clean_processing(store, source)) or source['package'] != package:
         raise Refusal('input mapping awaits original collected upstream processing')
     attempt = store.attempt(source['active_attempt'])
     answer = collected_task_result(attempt)
@@ -269,7 +271,7 @@ def input_authority(store, event, task, package, visiting=None):
                 or payload.get('original_handoff') not in answer.get('handoffs', [])
                 or task not in policy.get('software_handoffs', {}).get(event['role'], [])):
             raise Refusal('input mapping differs from exact addressed collected handoff/route')
-    elif (event.get('source_attempt') != attempt['id'] or event.get('source_role') != source['role']
+    elif not report and (event.get('source_attempt') != attempt['id'] or event.get('source_role') != source['role']
             or event.get('source_members') != members or event.get('body') != answer
             or task not in response_tasks(store.config['tasks'][source['task']], answer, store.config)):
         raise Refusal('input mapping differs from exact collected internal response/route')
@@ -467,7 +469,9 @@ def available(store, row, members):
         prior = scope_for(store, job)
         if not prior:
             if job['role'] == row['role']:
-                return False  # Unknown earlier material remains fenced.
+                from .review_returns import observes_source
+                if not observes_source(store, row, members, scope, job):
+                    return False  # Unknown earlier material remains fenced.
             continue
         if scope['lane'] == prior['lane'] == 'discovery':
             return False

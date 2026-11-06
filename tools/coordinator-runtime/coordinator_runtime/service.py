@@ -269,12 +269,19 @@ class Dispatcher(ProcessingDispatcher):
                  'author': self.store.attempt(attempt)['session'], 'kind': 'response', 'parent': source,
                  'package': job['package'], 'allowed_tasks': routes, 'notice': None, 'board_id': None, 'grant': None,
                  'source_job': job['id'], 'source_attempt': attempt,
+                 'source_role': job['role'], 'source_members': json.loads(job['members']),
                  'body': {'status': 'PARTIAL', 'full_original_call': call, 'full_original_outcome': outcome,
                           'meaning': 'Source incomplete; sole integrator must preserve all reports, dissent and gaps'}}
-        branch=self.store.event(source).get('branch_binding')
+        from .branches import job_branch_key
+        branch=job_branch_key(self.store, job)
         if branch:
             event['branch_binding']=branch
         with self.store.tx():
+            if (self.store.processing.current()[1].get('service', {}).get('report_tasks') == routes
+                    and outcome.get('result') and outcome['result'].get('semantic') == 'PARTIAL'
+                    and outcome.get('exit') == 0 and outcome.get('capture') == 'complete' and not outcome.get('error')):
+                from .review_returns import record
+                record(self.store, event, self.store.job(job['id']), self.store.attempt(attempt), outcome)
             if not self.store.one('SELECT id FROM events WHERE id=?', (key,)):
                 self.store.budget('events', len(encode(event).encode()))
                 self.store.db.execute('INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)',

@@ -226,7 +226,11 @@ def original_review_jobs(store, row, visiting):
                 or store.processing and not store.processing.event(event)):
             raise Refusal('native review original return provenance/collection changed')
         answer = collected_task_result(attempt)
-        if event.get('source_job'):
+        from .review_returns import proof as report_proof
+        report = report_proof(store, event, row['task'])
+        if report:
+            valid = True  # Exact original PARTIAL report receipt, never Source completion.
+        elif event.get('source_job'):
             valid = (event.get('source_members') == source_members
                      and event.get('source_attempt') == attempt['id']
                      and event.get('source_role') == source['role'] and event.get('body') == answer
