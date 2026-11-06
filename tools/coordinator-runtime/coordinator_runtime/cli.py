@@ -390,6 +390,8 @@ def operate(args, store):
         with observations.span('control-prepare'):
             boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
             actor = boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
+            if args.command == 'processing-service-control' and args.operation == 'stop':
+                return asyncio.run(service.control(store, args.capability, 'stop', args.component, stop_owner=actor))
             store.processing = processing.Access(store, args.capability, boards)
             _, selection = store.processing.current()
         if 'service' not in selection:

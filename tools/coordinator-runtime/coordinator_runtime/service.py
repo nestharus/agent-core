@@ -17,7 +17,7 @@ import struct
 from .contracts import Refusal, digest, encode, required_text
 from .processing import ProcessingDispatcher, Access, apply_control
 from . import reviews, resource_scopes, windows
-from .configuration import owned_service_conflict
+from .configuration import owned_service_conflict, assert_current
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS service_runs(
@@ -429,16 +429,56 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
         os.close(lock)
 
 
-async def control(runtime, key, operation, component=None):
+def stop_authority(runtime, key, actor):
+    """Authenticate withdrawal of this original, never authority to do work.
+
+    Release/implementation pins deliberately do not participate: a required
+    dependency change must not strand its owner. Configuration, issuer,
+    revocation and original-run bindings still apply. No journal write occurs.
+    The CLI authenticates the actor through the existing Work session checker.
+    """
+    assert_current(runtime)
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    if not cap or cap['revoked'] is not None or actor != cap['issuer'] or actor != runtime.config['software_delegation']['grantor']:
+        raise Refusal('stop requires the authenticated current Work issuer and unrevoked exact capability')
+    selection = json.loads(cap['selection'])
+    if not isinstance(selection.get('service'), dict) or selection['basis']['configuration'] != digest(runtime.config):
+        raise Refusal('stop requires the selected continuing capability and unchanged journal configuration')
+    runs = runtime.rows("SELECT s.controller FROM service_runs s JOIN processing_runs p ON p.controller=s.controller "
+                        "AND p.capability=s.capability WHERE s.capability=? AND s.state='serving' "
+                        "AND s.returned IS NULL AND p.state='owned' LIMIT 2", (key,))
+    if len(runs) != 1:
+        raise Refusal('stop requires one recorded original owning service; no replacement or inferred END')
+    return runs[0]['controller']
+
+
+async def control(runtime, key, operation, component=None, *, stop_owner=None):
+    controller = None
+    if stop_owner is not None:
+        if operation != 'stop' or component is not None:
+            raise Refusal('owner withdrawal permits only stop without a component')
+        controller = stop_authority(runtime, key, stop_owner)
     with observations.span('control-connect'):
         reader, writer = await asyncio.open_unix_connection(endpoint(runtime, key), limit=runtime.config['limits']['max_bytes'])
     try:
+        if controller is not None:
+            peer = writer.get_extra_info('socket')
+            _, uid, _ = struct.unpack('3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+            if uid != os.getuid() or stop_authority(runtime, key, stop_owner) != controller:
+                raise Refusal('original endpoint peer or current owner binding changed before stop')
         with observations.span('control-send'):
             writer.write((encode({'capability': key, 'operation': operation, **({'component': component} if component else {})}) + '\n').encode())
             await writer.drain()
         with observations.span('control-reply'):
             answer = await reader.readline()  # Actual original notification, no polling.
-            return json.loads(answer)
+            value = json.loads(answer)
+            if controller is not None:
+                if (not isinstance(value, dict) or value.get('error') or value.get('controller') != controller
+                        or value.get('state') != 'draining; parent still owes this original numeric END'):
+                    raise Refusal('original stop acknowledgement absent/mismatched; effects and actual END remain unknown')
+                value.update(process_END=None, processing_complete=False,
+                             release_currentness='not established; authenticated stop-only owner control')
+            return value
     finally:
         with observations.span('control-close'):
             writer.close()
