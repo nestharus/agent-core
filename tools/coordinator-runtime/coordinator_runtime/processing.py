@@ -810,11 +810,7 @@ def source_diagnostics(runtime, boards, key, event):
         return result
     locator = metadata_record('input_locators', 'input-locator')
     mapping = metadata_record('input_lookups', 'input-mapping')
-    dependency = runtime.one('SELECT stage,detail,observed FROM input_dependencies '
-                             'WHERE event=? AND capability=? AND source_hash=? AND controller=?',
-                             (event, key, state['hash'], controller))
-    if dependency:
-        dependency['detail'] = json.loads(dependency['detail'])
+    dependency = dependency_observation(runtime, key, event, state, controller)
     job = runtime.one('SELECT id,task,state,active_attempt FROM jobs WHERE id=? AND controller=?',
                       (responsibility['job'], controller)) if responsibility else None
     if job and job['active_attempt']:
@@ -839,6 +835,75 @@ def source_diagnostics(runtime, boards, key, event):
             'job':job, 'resolution': resolution,
             'processing_complete': False,
             'meaning': 'bounded current prospective metadata; END/ACK/empty errors never imply processing or acceptance'}
+
+
+def dependency_observation(runtime, key, event, state, controller):
+    """Project a recorded refusal, without acquiring its arbitrary error body."""
+    # Literal public reasons from the metadata worker. This is an allowlist,
+    # not a prefix match or a promise that every exception is understood.
+    safe = (
+        'lookup needs its original fresh classified prospective unreserved responsibility',
+        'lookup cannot widen original task/package/member authority',
+        'cyclic source applicability',
+        'lookup scope exceeds independently narrowed receiver roots',
+        'lookup scope exceeds actual consumer targets',
+        'metadata backing acquisition limit; return scope question',
+        'ambiguous existing-member identity; no lookup duplication',
+        'lookup parent requires its explicitly selected stable member representation',
+        'known point identity/lifecycle changed; original metadata retained',
+        'overlapping lookup templates disagree on the same identity',
+        'metadata point limit; narrower genuine scope required',
+        'bounded metadata context exceeded; original remains owned',
+        'locator authority/source changed; original hints retained',
+        'locator template context exceeds selected limit',
+        'combined metadata context exceeds selected limit',
+        'unresolved metadata needs the original task permitted Work question route',
+        'incomplete metadata interpretation remains with original collector; no automatic replay',
+        'metadata result needs exact task/integration/reason/evidence/remaining_obligations',
+        'original metadata handoff binding changed',
+        'metadata handoff authority changed before model read',
+        'metadata resolution needs its exact actual software worker/collection/prospective authority',
+        'metadata policy/admission/grant changed; no post-result restamping',
+        'typed metadata interpretation required',
+        'bounded unique observed point selections required',
+        'model metadata suggestions confer no unobserved point authority',
+        'original point definition changed',
+        'unresolved locator relationships cannot authorize new business',
+        'known, positively new or unresolved-existing required; unknown never means new',
+        'locator hints need their actual complete original software collection; no replay',
+        'locator cannot supply an unselected task or semantic decision',
+        'locator cannot supply an unselected exact scope',
+        'bounded unique stable-member hints required',
+        'locator member count exceeds selected context scope',
+    )
+    placeholders = ','.join('?' for _ in safe)
+    # Filter before crossing the SQL return boundary. Stage and attempt are
+    # also untrusted stored detail: only known stages and an actual matching
+    # metadata-worker attempt may leave the journal. Preserve the stored row.
+    row = runtime.one(
+        "SELECT CASE WHEN d.stage IN ('observation','locator','mapping') THEN d.stage "
+        "ELSE 'unknown' END AS stage,d.observed, "
+        f"CASE WHEN json_valid(d.detail) THEN CASE WHEN json_extract(d.detail,'$.dependency') "
+        f"IN ({placeholders}) THEN json_extract(d.detail,'$.dependency') END END AS reason, "
+        "CASE WHEN json_valid(d.detail) THEN json_extract(d.detail,'$.attempt') IS NOT NULL "
+        "ELSE 0 END AS attempt_recorded,a.id AS attempt "
+        "FROM input_dependencies d LEFT JOIN attempts a "
+        "ON a.id=CASE WHEN json_valid(d.detail) THEN json_extract(d.detail,'$.attempt') END "
+        "AND a.event=d.event AND a.controller=d.controller "
+        "AND a.kind=CASE d.stage WHEN 'locator' THEN 'input-locator' "
+        "WHEN 'mapping' THEN 'input-mapping' END "
+        "WHERE d.event=? AND d.capability=? AND d.source_hash=? AND d.controller=?",
+        (*safe, event, key, state['hash'], controller))
+    if not row:
+        return None
+    return {'stage': row['stage'], 'observed': row['observed'],
+            'detail': {'dependency': row['reason'] if row['reason'] is not None else
+                       'metadata dependency refused; detail outside bounded public vocabulary',
+                       'reason_known': row['reason'] is not None, 'attempt': row['attempt'],
+                       'attempt_scope': ('current-source-controller' if row['attempt'] else
+                                         'unavailable-current-source-controller' if row['attempt_recorded'] else
+                                         'unrecorded')},
+            'meaning': 'exact source/hash/capability/controller observation; not fresh progress or acceptance'}
 
 
 def reservation_observation(runtime, key, event, state, responsibility, controller):
