@@ -84,6 +84,13 @@ coordinator --config ACTUAL_CONFIG processing-service-control CAP close-review -
 coordinator --config ACTUAL_CONFIG processing-service-control CAP stop
 ```
 
+Only `stop` uses the [withdrawal-only owner contract](startup-control.md) when a
+required dependency or implementation has changed. It preserves actual Work
+authentication, the active capability, current journal configuration and exact
+original controller. Other controls and all work/effect authority retain release
+currentness checks. A stop acknowledgement establishes neither current release
+validity nor this original's actual numeric END.
+
 The Linux abstract Unix endpoint avoids moving long journal paths. It checks peer
 uid and the exact capability; the CLI separately checks genuine Work. It is not a
 hostile same-uid security boundary. `recover` reconciles original collected

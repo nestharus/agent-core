@@ -3,10 +3,46 @@
 `processing-service-control` opens the existing runtime journal read-only. It
 checks its initialized schema and current configuration without initializing,
 migrating or taking a write transaction. The existing Work actor, processing
-capability, source/configuration and continuing-service checks still precede the
-request to the original Unix socket. The original endpoint retains its same-UID
+capability, configuration and continuing-service checks precede every request
+to the original Unix socket. Status, recovery and close-review additionally
+require the selected release and implementation to remain current. The original endpoint retains its same-UID
 and exact-capability checks. A successful stop response means draining; the
 parent still owes the original numeric process END and subsequent disposition.
+
+`processing-service-control CAP stop` has a separate, withdrawal-only authority
+check. A required public dependency update (including an added privacy hold) or
+changed implementation cannot strand the authenticated original Work issuer.
+Stop still requires the exact unrevoked capability, unchanged current journal
+configuration, a continuing selection and exactly one matching original service
+run in `serving` with an `owned` processing run and no recorded return. The CLI
+opens only the existing read-only journal and authenticates Work using the
+existing session checker. It checks that authority again after connecting,
+verifies the endpoint peer UID and requires the response's controller to match
+the recorded original. It sends only the existing stop protocol, so an already
+running older endpoint needs no patch or second service.
+
+After authorized source review and deployment selection, the genuine issuer
+runs the corrected client's `coordinator --config ACTUAL_CURRENT_CONFIG
+processing-service-control EXACT_CAP stop`, retaining the old journal/config and
+original collector. No identity environment is fabricated. `--component` is
+refused for stop. The acknowledged response reports `process_END: null`,
+`processing_complete: false` and release currentness as unestablished. It does
+not bless the old release, clear a hold, revoke a grant, release a run or authorize
+admission, recovery, publication or any other effect. A refused/mismatched or
+lost reply leaves stop effects unknown; there is no automatic retry, signal or
+socket fallback. The original parent must collect its same actual process and
+whole return, then use the existing guarded release/transition procedures under
+their own current authority. A revoked capability, changed journal config,
+returned/missing original or unavailable endpoint is a bounded refusal requiring
+outside disposition, never permission to borrow another owner or infer END.
+
+The isolated `test_owned_drain555` checks real release-file pin invalidation,
+owner stop through the normal CLI/socket, read-only control during a WAL writer,
+actual collection of its own stdio child and conservation of source/ACK/holds.
+It also checks wrong/absent actor, cap/issuer/revocation/config/run mismatches,
+continued non-stop refusal and failed endpoint acknowledgements. Native Board
+membership, config validation and dispatcher work are explicit fixture seams;
+these tests do not establish actual service drain or actual original END.
 
 This avoids making a control request compete with runtime writers merely to
 rebind the configuration. It does not make synchronous workflow operations
