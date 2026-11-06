@@ -2,7 +2,8 @@
 import asyncio
 import copy
 import json
-from types import SimpleNamespace
+from contextlib import contextmanager
+from types import MethodType, SimpleNamespace
 import time
 import unittest
 from unittest.mock import patch
@@ -11,6 +12,7 @@ from coordinator_runtime.appserver import Peer
 from coordinator_runtime.contracts import Refusal, SOL, digest, encode, ident
 from coordinator_runtime import metadata_lookup as lookup
 from coordinator_runtime.dispatcher import Dispatcher
+from coordinator_runtime.inputs import InputJournal
 
 
 class Pipe:
@@ -162,7 +164,8 @@ class MappingCompletionContract(unittest.TestCase):
         self.definition = {'kind':'item', 'line':'fictional', 'incarnation':'one',
             'bindings':[{'target':'/fixtures/catalog.json','path':['rollout']}],
             'resources':[], 'protected':['owner'], 'writable':[]}
-        config = {'actor':ident(), 'tasks':{'work-proposer':{'role':'Work', 'effects':'none'}},
+        config = {'actor':ident(), 'limits':{'max_result_bytes':65536},
+            'tasks':{'work-proposer':{'role':'Work', 'effects':'none'}},
             'local_integration':{'points':{'known':self.definition},
                                  'tasks':{'work-proposer':{'points':['known']}}}}
         self.enrollment = {'owner':self.source['recipient']}
@@ -196,7 +199,7 @@ class MappingCompletionContract(unittest.TestCase):
             enrollment=lambda role:self.enrollment, one=self.one, rows=self.rows,
             attempt=lambda attempt:self.row if attempt=='mapping' else {'collected':1})
         self.unresolved = [{'scope':'fictional-scope', 'member':'missing', 'status':'absent'}]
-        self.snapshot = {'points':{'known':{'definition':copy.deepcopy(self.definition), 'version':{'frozen':'v1'},
+        self.snapshot = {'points':{'known':{'definition':copy.deepcopy(self.definition), 'version':digest('fictional-v1'),
                                           'value':{'exists':True, 'owner':None}}},
             'unresolved':self.unresolved, 'binding':local.mapping_binding(self.store,'work-proposer',None),
             'observed':1}
@@ -204,7 +207,8 @@ class MappingCompletionContract(unittest.TestCase):
                        'source_hash':digest(self.source), 'snapshot':encode({'work-proposer':self.snapshot})}
         self.receipt = {'task':'work-proposer', 'integration':{'state':'known','reads':['known'],'writes':[]},
             'reason':'Independently authorized read-only proposal for the uniquely observed rollout.',
-            'evidence':{'owner_observation':{'exists':False,'value':None}, 'unresolved_existing':self.unresolved},
+            'evidence':['Observed existing rollout; owner value is absent, not consent.',
+                        'Related missing member remains unresolved-existing, not new work.'],
             'remaining_obligations':['Work must resolve the absent owner and missing relationship.']}
         self.answer = {'semantic':'DONE', 'summary':'Completed known/unresolved split interpretation.',
                        'decision_json':encode(self.receipt)}
@@ -256,7 +260,8 @@ class MappingCompletionContract(unittest.TestCase):
         self.assertEqual(receipt['evidence'],self.receipt['evidence'])
         self.assertEqual(receipt['remaining_obligations'],self.receipt['remaining_obligations'])
         self.assertEqual(observation['unresolved'],self.unresolved)
-        self.assertEqual(observation['packet'],{'reads':['known'],'writes':[], 'versions':{'known':{'frozen':'v1'}}})
+        self.assertEqual(observation['packet'],{'reads':['known'],'writes':[],
+                                             'versions':{'known':self.snapshot['points']['known']['version']}})
         self.assertFalse(provenance['native_owner_receipt'])
         self.assertEqual(self.board_checks,['authority','source'])
         self.assertEqual((self.row,self.record,self.source,self.state,self.queue),before)
@@ -319,3 +324,198 @@ class MappingCompletionContract(unittest.TestCase):
         self.record['snapshot'] = encode({'work-proposer':self.snapshot})
         with self.assertRaisesRegex(Refusal,'original point definition changed'):
             self.proof()
+
+    def wire_journal(self):
+        """531: real journal methods over explicit fictional row/write adapters.
+
+        No database/SQL engine, filesystem consumer, Board or scheduler runs.
+        Unexpected queries/writes fail, and the adapter rolls back failed calls.
+        """
+        store = self.store
+        self.resolutions, self.job_scopes, self.writes = [], {}, []
+        self.state.update(role='Work', error=None, ack=None, ack_receipt=None)
+        self.store.config['limits'] = {'max_result_bytes':65536}
+        self.store.config['local_integration']['tasks']['work-proposer']['authority'] = 'Fictional read-only proposal.'
+        # This fixture config changed before observation, never restamp a result.
+        self.snapshot['binding'] = self.local.mapping_binding(store,'work-proposer',None)
+        self.record['snapshot'] = encode({'work-proposer':self.snapshot})
+        original_one = store.one
+
+        def one(sql, args=()):
+            if 'FROM input_resolutions' in sql:
+                matches = [r for r in self.resolutions if r['event'] == args[0]
+                           and (len(args) == 1 or r['version'] == args[1])]
+                return copy.deepcopy(matches[-1]) if matches else None
+            if 'FROM local_jobs' in sql:
+                return copy.deepcopy(self.job_scopes.get(args[0]))
+            if sql == 'SELECT point FROM local_lookup_points WHERE point=?':
+                return None
+            if 'FROM local_point_commits' in sql:
+                return None
+            return original_one(sql,args)
+
+        def execute(sql, args):
+            self.writes.append(sql)
+            if sql == 'INSERT INTO input_resolutions VALUES(?,?,?,?,?,?,?)':
+                self.resolutions.append(dict(zip(
+                    ['event','version','source_hash','actor','receipt','prior','created'],args)))
+            elif sql == "UPDATE events SET state='received' WHERE id=?":
+                self.assertEqual(args,(self.source['id'],))
+                self.state['state'] = 'received'
+            elif sql == "UPDATE queue SET state='owner-resolution-pending' WHERE event=?":
+                self.assertEqual(args,(self.source['id'],))
+                self.queue['state'] = 'owner-resolution-pending'
+            elif sql == 'INSERT INTO local_jobs VALUES(?,?,?)':
+                self.job_scopes[args[0]] = dict(zip(['job','policy','scope'],args))
+            else:
+                self.fail('Unexpected fictional journal write: '+sql)
+
+        @contextmanager
+        def tx():
+            before = copy.deepcopy((self.state,self.queue,self.resolutions,self.job_scopes,self.writes))
+            store.db.in_transaction = True
+            try:
+                yield
+            except Exception:
+                self.state,self.queue,self.resolutions,self.job_scopes,self.writes = before
+                raise
+            finally:
+                store.db.in_transaction = False
+
+        store.one, store.tx = one, tx
+        store.db = SimpleNamespace(in_transaction=False, execute=execute)
+        store.clock = lambda:4
+        store.budget = lambda *args, **kwargs:None
+        for name in ['input_resolution','routing_event','resolve_input','validate_input_selection']:
+            setattr(store,name,MethodType(getattr(InputJournal,name),store))
+        return store
+
+    def resolve_wire(self):
+        receipt = lookup.decision(self.store,self.source['id'],'mapping')
+        return self.store.resolve_input(self.source['id'],self.store.config['actor'],receipt,
+                                        mapping_attempt='mapping')
+
+    def test_wire_prompt_names_actual_consumer_types_and_service_owned_versions(self):
+        prompt = lookup.mapping_prompt(self.store,self.source['id'],'mapping')
+        for clause in ['task must be an exact delegated task string',
+                       'summary and reason must be nonblank text of at most 16000 UTF-8 bytes each',
+                       'evidence must be a nonempty list of at most 32 nonblank strings',
+                       'remaining_obligations must be a list of at most 32 nonblank strings',
+                       'each at most 4000 UTF-8 bytes', 'do not drop questions to fit the bounds',
+                       'service binds source/package', 'frozen string versions and mapping basis',
+                       'do not supply or restamp versions', 'at most 64 unique observed point-key strings']:
+            with self.subTest(clause=clause):
+                self.assertTrue(clause in prompt,'Missing wire-contract instruction: '+clause)
+        payload = json.loads(prompt.split('\n',1)[1])
+        with self.subTest(clause='max_result_bytes payload'):
+            self.assertEqual(payload.get('max_result_bytes'),self.store.config['limits']['max_result_bytes'])
+
+    def test_wire_split_reaches_resolution_packet_and_read_only_job_scope(self):
+        store = self.wire_journal()
+        originals = copy.deepcopy((self.source,self.row,self.record))
+        resolution = self.resolve_wire()
+        frozen = resolution['prior']['integration_observation']
+        self.assertEqual(resolution['receipt']['evidence'],self.receipt['evidence'])
+        self.assertEqual(resolution['receipt']['remaining_obligations'],self.receipt['remaining_obligations'])
+        self.assertEqual(frozen['unresolved'],self.unresolved)
+        self.assertEqual(frozen['binding'],self.snapshot['binding'])
+        self.assertEqual(frozen['observed'],self.snapshot['observed'])
+        self.assertFalse(resolution['prior']['software_processing']['native_owner_receipt'])
+        self.assertEqual(self.state['state'],'received')  # Fresh classification still required.
+        self.assertEqual(self.queue,{'job':None,'state':'owner-resolution-pending'})
+        routed = store.routing_event(self.source['id'])
+        self.assertEqual(routed['owner_resolution'],resolution)
+        row = {'event':self.source['id'],'task':'work-proposer','package':None}
+        packet = self.local.packet(store,row)
+        self.assertEqual(packet,{'lane':'anchored','reads':['known'],'writes':[],
+            'versions':{'known':self.snapshot['points']['known']['version']},'sources':[self.source['id']]})
+        job = {'id':'fictional-job','task':'work-proposer','active_attempt':None,
+               'members':encode([{'event':self.source['id'],'input_resolution':1}])}
+        self.local.record_job(store,job)
+        context = self.local.context(store,job)
+        self.assertEqual(context['basis']['inputs'],[packet])
+        self.assertEqual(context['basis']['writes'],[])
+        self.assertEqual(store.input_resolution(self.source['id'],1),resolution)
+        self.assertEqual((self.source,self.row,self.record),originals)
+        self.assertEqual(len(self.writes),4)  # Resolution, two routing states, job scope only.
+
+    def test_wire_list_bounds_accept_exact_limits_and_refuse_invalid_items(self):
+        self.wire_journal()
+        bounded = {**self.receipt,'evidence':['é'*2000]+['observed']*31,
+                   'remaining_obligations':['q'*4000]+['question']*31}
+        self.row['result'] = encode({**self.answer,'decision_json':encode(bounded)})
+        self.assertEqual(self.resolve_wire()['receipt']['evidence'],bounded['evidence'])
+        for key in ['evidence','remaining_obligations']:
+            for value in [{'observed':'object'},'text',None,[''],['   '],[None],[7],[False],[{}],[['nested']],
+                          ['x'*4001],['é'*2001],['x']*33] + ([[]] if key == 'evidence' else []):
+                with self.subTest(key=key,shape=type(value).__name__):
+                    self.setUp()
+                    self.wire_journal()
+                    self.row['result'] = encode({**self.answer,'decision_json':encode({**self.receipt,key:value})})
+                    before = copy.deepcopy((self.source,self.row,self.record,self.state,self.queue))
+                    with self.assertRaises(Refusal):
+                        self.resolve_wire()
+                    self.assertEqual(self.resolutions,[])
+                    self.assertEqual(self.writes,[])
+                    self.assertEqual((self.source,self.row,self.record,self.state,self.queue),before)
+        self.setUp()
+        self.wire_journal()
+        self.row['result'] = encode({**self.answer,'decision_json':encode({**self.receipt,'remaining_obligations':[]})})
+        self.assertEqual(self.resolve_wire()['receipt']['remaining_obligations'],[])
+
+    def test_wire_incomplete_malformed_and_result_budget_refuse_without_writes(self):
+        variants = [{**self.answer,'semantic':s} for s in ['UNKNOWN','PARTIAL','FAILED']]
+        variants += [{**self.answer,'decision_json':'{"task":1,"task":2}'},
+                     {**self.answer,'decision_json':'{'},
+                     {**self.answer,'decision_json':encode({**self.receipt,'versions':{}})}]
+        for answer in variants:
+            with self.subTest(semantic=answer['semantic']):
+                self.setUp()
+                self.wire_journal()
+                self.row['result'] = encode(answer)
+                with self.assertRaises((Refusal,ValueError)):
+                    self.resolve_wire()
+                self.assertEqual(self.resolutions,[])
+                self.assertEqual(self.writes,[])
+                self.assertEqual(self.state['state'],'queued')
+        self.setUp()
+        self.wire_journal()
+        self.store.config['limits']['max_result_bytes'] = 100
+        with self.assertRaisesRegex(Refusal,'admitted result bound'):
+            self.resolve_wire()
+        self.assertEqual(self.writes,[])
+
+    def test_wire_source_capture_config_and_rights_refusals_survive_full_resolution(self):
+        for fault in ['capture','source','config','rights','delegation']:
+            with self.subTest(fault=fault):
+                self.setUp()
+                self.wire_journal()
+                if fault == 'capture': self.row['capture'] = 'partial'
+                elif fault == 'source': self.record['source_hash'] = 'changed'
+                elif fault == 'config': self.store.config['tasks']['work-proposer']['effects'] = 'changed'
+                elif fault == 'rights': self.rights = False
+                else: self.current = False
+                with self.assertRaises(Refusal):
+                    self.resolve_wire()
+                self.assertEqual(self.resolutions,[])
+                self.assertEqual(self.writes,[])
+
+    def test_wire_version_type_and_post_resolution_binding_or_rights_still_refuse_packet(self):
+        for fault in ['version','binding','rights']:
+            with self.subTest(fault=fault):
+                self.setUp()
+                store = self.wire_journal()
+                if fault == 'version':
+                    # Adverse fictional service observation, not a model-supplied stamp.
+                    self.snapshot['points']['known']['version'] = {'wrong':'object'}
+                    self.record['snapshot'] = encode({'work-proposer':self.snapshot})
+                resolution = self.resolve_wire()
+                if fault == 'binding': store.config['tasks']['work-proposer']['effects'] = 'changed'
+                elif fault == 'rights': self.rights = False
+                before = copy.deepcopy((self.resolutions,self.writes))
+                message = {'version':'incomplete version basis','binding':'mapping policy/admission',
+                           'rights':'rights withdrawn'}[fault]
+                with self.assertRaisesRegex(Refusal,message):
+                    self.local.packet(store,{'event':self.source['id'],'task':'work-proposer','package':None})
+                self.assertEqual((self.resolutions,self.writes),before)
+                self.assertEqual(store.input_resolution(self.source['id']),resolution)
