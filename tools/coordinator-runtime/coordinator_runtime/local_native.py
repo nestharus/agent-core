@@ -58,6 +58,8 @@ def branch_snapshot(store, key, own=None):
 def snapshot(store, binding, job=None):
     """Original records and append history retain intervening service changes."""
     validate_binding(binding)
+    if job is not None:
+        authorize_scope(store, job, binding)
     own = job.get('active_attempt') if job else None
     kind = binding['native']
     if kind == 'branch':
@@ -104,7 +106,8 @@ def snapshot(store, binding, job=None):
     return {'admission': admission, 'scope': scope, 'runs': runs, 'acceptance': acceptance}, resources
 
 
-def authorize(store, row, binding):
+def authorize_scope(store, row, binding):
+    """Only trusted permission-index metadata before any native acquisition."""
     validate_binding(binding)
     validate_task(store.config, row['task'], binding)
     role = store.config['tasks'][row['task']]['role']
@@ -121,40 +124,123 @@ def authorize(store, row, binding):
     if kind == 'execution':
         if binding['package'] != row.get('package'):
             raise Refusal('native execution cannot borrow another package admission')
+        admission = store.one('SELECT receipt FROM admissions WHERE package=?', (binding['package'],))
+        scope = json.loads(admission['receipt']).get('task_scopes', {}).get(binding['task'], {}) if admission else {}
+        repository = scope.get('ordinary_effects', {}).get('repository')
+        if not repository:
+            raise Refusal('native execution needs its actual admitted procedure/resources; no fake Work task')
+        paths = [repository, scope.get('procedure')]
+        if not all(isinstance(p, str) and p for p in paths):
+            raise Refusal('native execution needs actual admitted source/procedure paths')
+        source_roots(store, row, paths)
     if kind == 'branch':
-        from .branches import association
-        branch = association(store, binding['id'])
-        if branch['scope'] != row.get('package'):
-            raise Refusal('native branch point exceeds original admitted package')
-        if role != 'Work':
-            from .contracts import scoped_task
-            task = store.config['tasks'][row['task']]
-            if task.get('require_package_scope'):
-                task = scoped_task(row['task'], task, store.one('SELECT * FROM admissions WHERE package=?', (row['package'],)))
-            roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
-            if not any(Path(branch['repository']).is_relative_to(Path(p)) for p in roots):
-                raise Refusal('native branch source outside genuine role read authority')
-            if role == 'Branch' and task['effects'] not in {'none', 'owned-artifacts'}:
-                scope = task.get('admitted_scope', {})
-                p = scope.get('ordinary_effects', {})
-                if (scope.get('branch_binding') != branch['id'] or p.get('kind') != 'local-ref'
-                        or p.get('repository') != branch['repository'] or p.get('ref') != branch['ref']):
-                    raise Refusal('native branch effect needs its original exact association/ref admission')
-    if kind == 'review' and role != 'Work':
-        if not store.processing or not store.processing.review_task(row['task']):
-            raise Refusal('native review requires its actual selected original review interface')
-        context = store.one('SELECT * FROM review_contexts WHERE component=?', (binding['component'],))
-        if not context or context['collector'] != store.controller:
-            raise Refusal('native review cannot borrow another original collector')
-        # Bind the actual review packet/component, including branch incarnation.
-        from .branches import review_key
-        members = json.loads(row['members']) if row.get('members') else [{'event': row['event']}]
-        synthetic = {**row, 'members': json.dumps(members)}
-        for member in members:
-            body = store.event(member['event']).get('body')
-            packet = body.get('review', {}) if isinstance(body, dict) else {}
-            if review_key(store, synthetic, packet) != binding['component']:
-                raise Refusal('native review point differs from original component/material')
+        branch_scope(store, row, binding['id'])
+    if kind == 'review':
+        review_scope(store, row, binding, role)
+
+
+def review_scope(store, row, binding, role):
+    from .branches import review_key
+    members = json.loads(row['members']) if row.get('members') else [{'event': row['event']}]
+    original = row
+    if role == 'Work':
+        # Coordination consumes the actual original reviewer, not any context
+        # with a guessed name. permits() above checked every return's ancestry.
+        for source in original_review_jobs(store, row, set()):
+            review_scope(store, source, binding, 'Reviews')
+        return
+    if not store.processing or not store.processing.review_task(original['task']):
+        raise Refusal('native review requires its actual selected original review interface')
+    policy = store.processing.current()[1]['service']['reviews'][original['task']]
+    synthetic = {**original, 'members': json.dumps(members)}
+    for member in members:
+        event = store.event(member['event'])
+        body = event.get('body')
+        packet = body.get('review', {}) if isinstance(body, dict) else {}
+        component = policy['components'].get(packet.get('component'))
+        if not component:
+            raise Refusal('native review point differs from original component/material')
+        source_roots(store, original, component['repository'])
+        branch = event.get('branch_binding')
+        if branch:
+            branch_scope(store, original, branch)
+        if review_key(store, synthetic, packet) != binding['component']:
+            raise Refusal('native review point differs from original component/material')
+    context = store.one('SELECT collector FROM review_contexts WHERE component=?', (binding['component'],))
+    if not context or context['collector'] != store.controller:
+        raise Refusal('native review cannot borrow another original collector')
+    # Attached branch material retains the original review's package/roots.
+    context = store.one('SELECT run FROM review_contexts WHERE component=?', (binding['component'],))
+    for linked in store.rows('SELECT branch FROM branch_contexts WHERE address=?', (context['run'],)):
+        branch_scope(store, original, linked['branch'])
+
+
+def original_review_jobs(store, row, visiting):
+    """Follow only the original return/member provenance already permissioned."""
+    result = []
+    members = json.loads(row['members']) if row.get('members') else [{'event':row['event']}]
+    for member in members:
+        key = member['event']
+        if key in visiting:
+            raise Refusal('native review original return ancestry is cyclic')
+        event = store.event(key)
+        job = event.get('source_job')
+        if not job and event.get('source_delivery'):
+            outbox = store.one('SELECT job FROM outboxes WHERE id=?', (event['source_delivery'].get('id'),))
+            job = outbox['job'] if outbox else None
+        source = store.job(job) if job else None
+        if not source or source.get('package') != row.get('package'):
+            raise Refusal('native review needs its actual original component return')
+        if source['role'] == 'Work':
+            result.extend(original_review_jobs(store, source, visiting | {key}))
+        elif source['role'] == 'Reviews':
+            result.append(source)
+        else:
+            raise Refusal('native review needs its actual original component return')
+    if not result:
+        raise Refusal('native review needs its actual original component return')
+    return result
+
+
+def source_roots(store, row, paths):
+    paths = [paths] if isinstance(paths, str) else paths
+    if store.config['tasks'][row['task']]['role'] == 'Work':
+        return  # Independently issued coordination above, never borrowed execution.
+    task = store.config['tasks'][row['task']]
+    if task.get('require_package_scope'):
+        admission = store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),))
+        scope = json.loads(admission['receipt']).get('task_scopes', {}).get(row['task'], {}) if admission else {}
+        roots = scope.get('read_roots', []) + scope.get('write_roots', [])
+    else:
+        roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
+    if any(not any(Path(value).is_relative_to(Path(p)) for p in roots) for value in paths):
+        raise Refusal('native source outside genuine role read authority')
+    # Only now may scoped_task validate physical topology of the allowed scope.
+    from .contracts import scoped_task
+    actual = scoped_task(row['task'], task, store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),)))
+    roots = actual['effect_authority']['read_roots'] + actual['effect_authority']['write_roots']
+    if any(not any(Path(value).is_relative_to(Path(p)) for p in roots) for value in paths):
+        raise Refusal('native source outside genuine role read authority')
+
+
+def branch_scope(store, row, key):
+    # Do not call association here: it resolves physical Git identity.
+    branch = store.one('SELECT id,scope,repository,ref FROM branch_associations WHERE id=?', (key,))
+    if not branch or branch['scope'] != row.get('package'):
+        raise Refusal('native branch point exceeds original admitted package')
+    source_roots(store, row, branch['repository'])
+    task = store.config['tasks'][row['task']]
+    if task['role'] == 'Branch' and task['effects'] not in {'none', 'owned-artifacts'}:
+        admission = store.one('SELECT receipt FROM admissions WHERE package=?', (row.get('package'),))
+        scope = json.loads(admission['receipt']).get('task_scopes', {}).get(row['task'], {}) if admission else {}
+        p = scope.get('ordinary_effects', {})
+        if (scope.get('branch_binding') != branch['id'] or p.get('kind') != 'local-ref'
+                or p.get('repository') != branch['repository'] or p.get('ref') != branch['ref']):
+            raise Refusal('native branch effect needs its original exact association/ref admission')
+
+
+def authorize(store, row, binding):
+    # snapshot performs scope authorization before material acquisition.
     snapshot(store, binding, row)
 
 

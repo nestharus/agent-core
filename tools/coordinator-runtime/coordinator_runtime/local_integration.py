@@ -156,6 +156,13 @@ def validate_discovered(store, job, answer, bodies, *, native_only=False):
     permitted_lines = {(point_definitions(store)[k]['line'], point_definitions(store)[k]['incarnation'])
                        for k in selected(store, job['task'])['points']}
     permitted_lines.update((v['line'], v['incarnation']) for v in selected(store, job['task']).get('discovery_lines', []))
+    # Authorize every native operand before snapshotting any candidate. This
+    # shared gate covers both file and non-file discovery/registration.
+    from .local_native import authorize_scope
+    for definition in discovered.values():
+        for binding in definition['bindings']:
+            if 'native' in binding:
+                authorize_scope(store, job, binding)
     for key, definition in discovered.items():
         if set(selected(store, job['task']).get('ownership_fields', [])) - set(definition['protected']):
             raise Refusal('discovered points must retain controller-selected ownership protection')
@@ -526,10 +533,6 @@ def finish_discovery(store, job, attempt, answer):
     if store.one('SELECT attempt FROM local_commits WHERE attempt=?', (attempt['id'],)):
         return
     definitions = validate_discovered(store, job, answer, {}, native_only=True)
-    for point in definitions.values():
-        from .local_native import authorize
-        for binding in point['bindings']:
-            authorize(store, job, binding)
     basis = store.one('SELECT basis FROM local_bases WHERE attempt=?', (attempt['id'],))
     if not basis:
         raise Refusal('native discovery requires original prepared method basis')
@@ -572,28 +575,40 @@ def replace(document, path, value):
         parent[leaf] = value
 
 
-def conserve(before, after, protected):
+def typed_equal(left, right):
+    """JSON equality conserves types recursively, including bool/int and counts."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(typed_equal(v, right[k]) for k, v in left.items())
+    if isinstance(left, list):
+        return len(left) == len(right) and all(typed_equal(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def conserve(before, after, protected, ownership=OWNERSHIP):
     if type(before) is not type(after):
         raise Refusal('point value type changed; explicit schema/authority decision required')
     if isinstance(before, dict):
         if not isinstance(after, dict) or before.keys() - after.keys():
             raise Refusal('point delta drops unknown/history/source fields')
         for key in before.keys() | after.keys():
-            if key in protected and before.get(key) != after.get(key):
+            if key in protected and not typed_equal(before.get(key), after.get(key)):
                 raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
         for key, value in before.items():
-            conserve(value, after[key], protected)
+            conserve(value, after[key], protected, ownership)
         for key in after.keys() - before.keys():
-            no_acceptance(after[key], protected & OWNERSHIP)
+            no_acceptance({key: after[key]}, ownership)
     elif isinstance(before, list):
         # Preserve multiplicity as well as value, including non-object members.
         remaining = list(after)
         for item in before:
-            if item not in remaining:
+            match = next((i for i, value in enumerate(remaining) if typed_equal(item, value)), None)
+            if match is None:
                 raise Refusal('point delta drops peer/history/source array members')
-            remaining.remove(item)
+            remaining.pop(match)
         for item in remaining:
-            no_acceptance(item, protected & OWNERSHIP)
+            no_acceptance(item, ownership)
 
 
 def no_acceptance(value, ownership):
@@ -607,48 +622,48 @@ def no_acceptance(value, ownership):
             no_acceptance(child, ownership)
 
 
-def validate_delta(before, after, point, binding):
-    protected = set(point['protected']) | IDENTITY
+def validate_delta(before, after, point, binding, ownership=OWNERSHIP):
+    protected = set(point['protected']) | IDENTITY | set(ownership)
     # A scalar ownership/identity/history lens must not escape its containing
     # field's protection just because the configured point ends inside it.
     ancestors = {s for s in binding['path'] if isinstance(s, str)}
-    if (ancestors & protected or '$value' in protected) and before != after:
+    if (ancestors & protected or '$value' in protected) and not typed_equal(before, after):
         raise Refusal('local delta cannot change accepted ownership/identity/protected value')
     if isinstance(before, dict) and isinstance(after, dict):
-        if any(before.get(field) != after.get(field) for field in protected):
+        if any(not typed_equal(before.get(field), after.get(field)) for field in protected):
             raise Refusal('local delta cannot change accepted ownership/identity; explicit owner policy needed')
-        if any(before.get(field) != after.get(field) for field in before.keys() | after.keys() if field not in point['writable']):
+        if any(not typed_equal(before.get(field), after.get(field)) for field in before.keys() | after.keys() if field not in point['writable']):
             raise Refusal('point delta changes an unselected/unknown field')
-    elif before != after and '$value' not in point['writable']:
+    elif not typed_equal(before, after) and '$value' not in point['writable']:
         raise Refusal('non-object point delta requires explicit $value writable authority')
-    conserve(before, after, protected)
+    conserve(before, after, protected, ownership)
 
 
-def conserve_bound_views(store, original, proposals):
+def conserve_bound_views(store, original, proposals, ownership=OWNERSHIP):
     """An alternate lens cannot remove another admitted view's protection.
 
     Compare only files already in this exact publisher's authority. This grants
     no cross-role catalog reads; writable rights still come from its write-set.
     """
     for point in point_definitions(store).values():
-        protected = set(point['protected']) | IDENTITY
+        protected = set(point['protected']) | IDENTITY | set(ownership)
         for binding in point['bindings']:
             target = binding.get('target')
             if target not in original:
                 continue
             before = locate(original[target], binding['path'], missing=True)
             after = locate(proposals[target], binding['path'], missing=True)
-            if before == after:
+            if typed_equal(before, after):
                 continue
             ancestors = {s for s in binding['path'] if isinstance(s, str)}
             if '$value' in protected or ancestors & protected:
                 raise Refusal('overlapping admitted view retains protected ownership/identity/value')
-            conserve(before, after, protected)
+            conserve(before, after, protected, ownership)
 
 
 def discovery_conservation(before, after, ownership=()):
-    ownership = set(ownership) | {'owner', 'accepted_owner', 'owner_ack', 'owner_evidence', 'accepted'}
-    conserve(before, after, ownership)
+    ownership = set(ownership) | OWNERSHIP
+    conserve(before, after, ownership, ownership)
     def proposed(value):
         if isinstance(value, dict):
             for key, child in value.items():
@@ -663,7 +678,7 @@ def discovery_conservation(before, after, ownership=()):
             else: discovery_conservation(before[key], value, ownership)
     elif isinstance(before, list) and isinstance(after, list):
         for value in after:
-            if value not in before: proposed(value)
+            if not any(typed_equal(value, old) for old in before): proposed(value)
 
 
 def validate_method(store, job, attempt, answer):
@@ -725,6 +740,7 @@ def rebase(store, job, attempt, run, task):
         if not held or held['sha256'] != witness['sha256']:
             raise Refusal('local model stage lacks exact durable custody')
         staged[target] = body
+    ownership = OWNERSHIP | set(selected(store, job['task']).get('ownership_fields', []))
     rebased = dict(bodies)
     if basis['scope']['lane'] == 'discovery':
         # Unanchored changes still require current full preimages. Anchored work
@@ -732,7 +748,7 @@ def rebase(store, job, attempt, run, task):
         if any(original[p] != bodies[p] for p in order):
             raise Refusal('discovery catalog basis changed; fresh identity/relationship discovery required')
         conserve_bound_views(store, {p:parse_json(v) for p,v in original.items() if p.endswith('.json')},
-                             {p:parse_json(v) for p,v in staged.items() if p.endswith('.json')})
+                             {p:parse_json(v) for p,v in staged.items() if p.endswith('.json')}, ownership)
         for target in order:
             if target.endswith('.json'):
                 discovery_conservation(parse_json(original[target]), parse_json(staged[target]), selected(store, job['task']).get('ownership_fields', []))
@@ -745,7 +761,7 @@ def rebase(store, job, attempt, run, task):
         expected = {p: parse_json(original[p]) for p in order if p.endswith('.json')}
         merged = {p: parse_json(bodies[p]) for p in expected}
         proposals = {p: parse_json(staged[p]) for p in expected}
-        conserve_bound_views(store, expected, proposals)
+        conserve_bound_views(store, expected, proposals, ownership)
         for key in basis['scope']['writes']:
             point = basis['points'][key]
             for binding in point['bindings']:
@@ -756,14 +772,14 @@ def rebase(store, job, attempt, run, task):
                     raise Refusal('point mutations require JSON bindings; text consumers retain additive supplements')
                 old = locate(expected[target], path)
                 new = locate(proposals[target], path)
-                validate_delta(old, new, point, binding)
+                validate_delta(old, new, point, binding, ownership)
                 replace(expected[target], path, new)
                 replace(merged[target], path, new)
         for target in order:
             if target in expected:
-                if expected[target] != proposals[target]:
+                if not typed_equal(expected[target], proposals[target]):
                     raise Refusal('staged change exceeds resolved point write-set')
-                rebased[target] = bodies[target] if merged[target] == parse_json(bodies[target]) else (encode(merged[target])+'\n').encode()
+                rebased[target] = bodies[target] if typed_equal(merged[target], parse_json(bodies[target])) else (encode(merged[target])+'\n').encode()
             elif staged[target] == original[target]:
                 rebased[target] = bodies[target]
             elif staged[target].endswith(original[target]) and original[target]:
@@ -772,6 +788,7 @@ def rebase(store, job, attempt, run, task):
                 rebased[target] = bodies[target] + staged[target][len(original[target]):]
             else:
                 raise Refusal('text consumer must conserve peer text with an additive supplement')
+    discovered = validate_discovered(store, job, answer, rebased)
     # Materialize new immutable service stages, preserving model postimages and
     # input custody. Publication validates both mapping and exact fresh preimages.
     root = store.home/'artifacts'/attempt['id']/'local-commit'
@@ -792,7 +809,6 @@ def rebase(store, job, attempt, run, task):
         store.db.execute('INSERT OR IGNORE INTO artifact_blobs VALUES(?,?)', (witness['sha256'], bodies[target]))
     if bounded_log.selected(task):
         fresh[policy['bounded_log']['target']] = bounded_log.observe(store, policy['bounded_log'])
-    discovered = validate_discovered(store, job, answer, rebased)
     material = ([{'target': ['file', fresh[p]['dev'], fresh[p]['ino']], 'path': []} for p in order]
                 if basis['scope']['lane'] == 'discovery' else
                 [f for k in basis['scope']['writes'] for f in footprints(store, basis['points'][k], bodies, job)])

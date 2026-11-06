@@ -58,7 +58,11 @@ local model statement. Main and Cloud/PR1230 require distinct genuine bindings.
 Scalar and list points use an explicit `writable: ["$value"]` for whole-value
 changes. An empty writable list permits no change. Value types stay fixed;
 changing a schema needs a separate authority decision. Prior list members,
-including duplicates, survive. Protected containing fields, nested ownership,
+including duplicates, survive with their JSON types recursively intact. A boolean
+member cannot be spent as an integer (including inside arrays/objects); matching
+consumes one occurrence, and genuinely new members may still append. The same
+typed comparison guards protected views, write-sets and current-byte reuse.
+Protected containing fields, nested ownership,
 identity and other admitted views remain protected through alternate lenses.
 `protected: ["$value"]` makes the whole value immutable. These rights do not
 grant ownership acceptance or permit dropping unknown fields/history.
@@ -91,6 +95,19 @@ observe a native return only with independently issued current coordination
 and every original member/admission check. Other roles retain their own roots
 and native authority. No authoritative file projection or shadow native state
 is created.
+
+Both file and non-file discovery authorize every native operand before taking
+any candidate snapshot or registering a reference/continuation. Exact trusted
+permission-index lookups (package, repository operand, admitted roots, component,
+collector and current member/coordination authority) precede physical repository,
+procedure/tool, ref and history acquisition. A wrong incarnation is no permission
+to inspect another scope. Snapshots with an acting job use this same scope gate;
+jobless revision observations are controller-side observations of already selected
+bindings, not a discovery authorization interface. Original association identity,
+method/resource, context/collector/capability and effect checks still follow.
+Work reads original Reviews returns through their actual source/member lineage,
+including later Work continuations; it cannot select an unrelated review context
+by supplying a component name. No Work execution scope is inserted upstream.
 
 An addressed input or typed result may contain:
 
@@ -149,7 +166,11 @@ source, dissent and actual answer recipient. Methods never gain new authority.
 
 `ownership_fields` names the controller-known acceptance/ownership fields for
 its consumer schemas; new records cannot invent those bindings and new point
-definitions must protect them. Unknown schema meanings remain a qualification
+definitions must protect them. This complete vocabulary also applies inside
+new list members and newly added allowed objects on anchored points, including
+through alternate views. Built-in ownership names remain protected. Neutral
+values and separately named proposal text may be added under genuine write
+rights; the spelling of proposal text does not itself establish accepted ownership. Unknown schema meanings remain a qualification
 question for actual Work.
 
 Discovery may append new records and propose owners while retaining existing
