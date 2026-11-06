@@ -1,5 +1,9 @@
 # Opt-in coordinator runtime
 
+[Source authority and receiving completion](receiving-causality.md) describes
+the pre-acquisition task boundary, software versus external-owner receipts and
+the per-edge completion proof for published responses.
+
 The [explicit software processing interface](owner-processing.md) supports
 Work-issued bounded consumption of stopped software duties and separately
 selected future intake in their original journal. It preserves original grant

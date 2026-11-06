@@ -494,6 +494,22 @@ class Executor:
 
     async def execute(self, job, attempt, policy, packet):
         runtime = self.runtime
+        if job.get('task'):
+            runtime.authorize_launch(attempt)
+            task = runtime.config['tasks'][job['task']]
+            if task.get('require_package_scope'):
+                from .contracts import scoped_task
+                task = scoped_task(job['task'], task, runtime.one(
+                    'SELECT * FROM admissions WHERE package=?', (job.get('package'),)))
+                selected = policy['components'].get(packet.get('component'), {})
+                repository = Path(selected.get('repository', ''))
+                reads = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
+                paths = selected.get('paths', []) + selected.get('relationship_paths', [])
+                if (not repository.is_absolute() or not paths
+                        or any(Path(p).is_absolute() or '..' in Path(p).parts
+                               or not any((repository / p).is_relative_to(Path(r)) for r in reads)
+                               for p in paths)):
+                    raise Refusal('bound Source material paths outside current delegated task read authority')
         from .branches import review_key,review_policy,job_branch
         component = review_key(runtime,job,packet)
         policy = review_policy(runtime,job,policy,packet)

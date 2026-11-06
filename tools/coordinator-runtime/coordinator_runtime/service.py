@@ -180,6 +180,9 @@ class Dispatcher(ProcessingDispatcher):
             job = self.store.job(job['id'])
             admission = self.store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
             self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
+            # Acquisition is an exercise of the bound task, before any model
+            # input. Recheck the exact current proof at this boundary too.
+            self.store.authorize_launch(attempt)
             from .local_integration import prepare_input_basis
             from .contracts import scoped_task
             task = scoped_task(job['task'], self.store.config['tasks'][job['task']],

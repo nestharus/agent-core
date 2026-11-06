@@ -704,7 +704,11 @@ class Dispatcher:
         if not board or not hasattr(board, "post_delivery"):
             return
         job = self.store.job(outbox["job"]) if outbox["job"] else None
-        owner_procedure = job and self.config["tasks"][job["task"]].get("execution") == "owner"
+        # Only the original delegated work request carries an external owner
+        # return. Source collector results and later handoffs retain their own
+        # software receipts even when the producing task uses execution=owner.
+        owner_procedure = (job and outbox['kind'] == 'work' and outbox['recipient'] == job['role']
+                           and self.config["tasks"][job["task"]].get("execution") == "owner")
         attempted=False
         try:
             if not outbox["board_receipt"]:

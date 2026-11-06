@@ -902,8 +902,22 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             changed = True
             while changed:
                 self.complete_input_controls()
-                cursor = self.db.execute("UPDATE events SET state='processed',processed_at=? "
-                    "WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
+                cursor = self.db.execute("UPDATE events SET state='processed',processed_at=? " + self._completion_where(),
+                                         (self.clock(), None, None, None))
+                changed = cursor.rowcount > 0
+
+    def completion_candidates(self, event=None, incoming=None):
+        """Current whole-event obligations, optionally before its incoming receipt.
+
+        Only frontier's exact published-response edge may supply incoming. This
+        is evidence for that receipt, never permission to mark an event early.
+        All consumers, descendant events and their outgoing duties still join.
+        """
+        return self.rows("SELECT id FROM events " + self._completion_where(), (incoming, event, event))
+
+    @staticmethod
+    def _completion_where():
+        return ("WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
                     "AND NOT EXISTS (SELECT 1 FROM input_resolutions ir WHERE ir.event=events.id "
                     "AND ir.version=(SELECT MAX(v.version) FROM input_resolutions v WHERE v.event=events.id) "
                     "AND json_array_length(json_extract(ir.receipt,'$.remaining_obligations'))>0) "
@@ -911,6 +925,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     "AND NOT EXISTS (SELECT 1 FROM file_publications fp JOIN attempts a ON a.id=fp.attempt JOIN queue q ON q.job=a.job WHERE q.event=events.id AND fp.state!='published') "
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
                     "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "
+                    "AND o.id!=COALESCE(?, '') "
                     "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled')) "
                     "AND NOT EXISTS (SELECT 1 FROM file_publications p JOIN attempts a ON a.id=p.attempt "
                     "JOIN integration_prestart_dispositions d ON d.job=a.job JOIN jobs w ON w.id=d.job,json_each(w.members) wm "
@@ -929,9 +944,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     "WHERE json_extract(m.value,'$.event')=events.id AND "
                     "NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=j.id) AND "
                     "(j.state!='closed' OR (j.response IS NOT NULL AND NOT EXISTS "
-                    "(SELECT 1 FROM events r WHERE r.id=j.response AND r.processed_at IS NOT NULL))))",
-                    (self.clock(),))
-                changed = cursor.rowcount > 0
+                    "(SELECT 1 FROM events r WHERE r.id=j.response AND r.processed_at IS NOT NULL)))) "
+                    "AND (? IS NULL OR id=?)")
 
     def claim_recovery(self, job):
         with self.tx():

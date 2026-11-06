@@ -306,15 +306,17 @@ class Software:
                  'event': event['id'], 'event_hash': digest(event), 'classifier': classifier['id'], 'queue': queue['id'],
                  'native_receipt': False, 'genuine_owner_full_read': False}
         processed = None
-        if queue['job']:
+        if queue['job'] and runtime.job(queue['job'])['active_attempt']:
             consumer = runtime.job(queue['job'])
             receiver._software_job_grant(runtime, consumer)
             if consumer['task'] not in routes or not any(m['event'] == event['id'] and m['hash'] == digest(event)
                                                         for m in json.loads(consumer['members'])):
                 raise Refusal('receiver did not process this exact frozen source under the selected route')
             processed = clean_processing(runtime, consumer)
-            if processed and runtime.processing and (state['processed_at'] is None or runtime.dependency_hold(event['id'])):
-                processed = None  # Delivery cannot outrun the whole receiving chain.
+            if processed and runtime.processing:
+                from .frontier import delivery
+                if not delivery(runtime, outbox['id'])['complete']:
+                    processed = None  # Delivery cannot outrun the whole receiving chain.
             if processed:
                 proof.update(consumer_job=consumer['id'], processing=processed)
         with self.opened() as conn:
