@@ -1268,9 +1268,23 @@ fabricate reading, consent or a native owner's receipt.\n''' +
             self.store.record_operational_error(event, {'dependency': str(exc), 'attempt': attempt}, original['role'], 'processing-control-dependency')
 
 
-def _apply_control(runtime, event, attempt):
+def _apply_control(runtime, event, attempt, *, terminal_request=None):
     """Recover an exact collected disposition, never relaunch its original."""
     runtime.processing.current()
+    disposition = runtime.one('SELECT * FROM plain_control_dispositions WHERE event=?', (event,))
+    if disposition:
+        from .plain_control import validate
+        request = json.loads(disposition['request'])
+        validate(runtime, event, attempt, request, authenticate=False)
+        resolution = runtime.input_resolution(event)
+        if (disposition['capability'] != runtime.processing.key
+                or disposition['resolution_hash'] != digest(resolution)
+                or terminal_request is not None and terminal_request != request):
+            raise Refusal('exact original plain-control disposition changed')
+        return resolution
+    if terminal_request is not None:
+        from .plain_control import validate
+        validate(runtime, event, attempt, terminal_request)
     row = runtime.attempt(attempt)
     result = json.loads(row['result'] or 'null') or {}
     receipt = parse_json(result.get('decision_json', 'null'))
@@ -1278,8 +1292,10 @@ def _apply_control(runtime, event, attempt):
     receipt, _ = control_receipt(runtime, event, row, result, receipt)
     # The typed stopped-original path already owns the whole return transaction.
     with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        if terminal_request is not None:
+            validate(runtime, event, attempt, terminal_request)
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
-        if receipt['mode'] != 'notification':
+        if receipt['mode'] != 'notification' and terminal_request is None:
             control_return(runtime, event, attempt, result, resolution)
         runtime.db.execute('UPDATE processing_controls SET resolution=?,error=NULL WHERE event=?', (encode(resolution), event))
     return resolution

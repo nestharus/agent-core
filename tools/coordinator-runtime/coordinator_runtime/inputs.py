@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS input_resolutions(
  event TEXT NOT NULL,version INTEGER NOT NULL,source_hash TEXT NOT NULL,actor TEXT NOT NULL,
  receipt TEXT NOT NULL,prior TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(event,version));
 """
+from .plain_control import SCHEMA as PLAIN_CONTROL_SCHEMA
+SCHEMA += PLAIN_CONTROL_SCHEMA
 CONTROL_ROUTES={'@control','@unresolved','@coalesce'}
 
 
