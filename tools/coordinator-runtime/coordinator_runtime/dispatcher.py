@@ -16,7 +16,7 @@ import time
 from .appserver import AppServer
 from .board import Board
 from .cleanup import register_artifact, sweep
-from . import custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service, local_integration
+from . import native_review_scope, custody, routine, publication, readiness, prospective, ordinary, capacity, progress, custodian_service, local_integration
 from .contracts import Refusal, classification, digest, encode, regular_path, scoped_task, task_result_instructions, report_only
 from .inputs import input_interpretation, input_routes
 
@@ -377,6 +377,7 @@ class Dispatcher:
         directory = self.store.home / "artifacts" / attempt
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
+            native_review_scope.admit(self.store, job)
             local_integration.current_sources(self.store, job)
             admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))
             task = scoped_task(job["task"], task, admission)
@@ -391,6 +392,7 @@ class Dispatcher:
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']
                 while True:
+                    native_review_scope.admit(self.store, job)
                     try:
                         routine.prepare(self.store,self.boards[job['role']],job,attempt,task);break
                     except BlockingIOError:
@@ -402,6 +404,11 @@ class Dispatcher:
             outcome = {"exit": None, "capture": "not-started", "cleanup": "no-session-created", "result": None,
                        "error": str(exc), "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         self.store.collect(attempt, outcome)
+        try:
+            native_review_scope.admit(self.store, self.store.job(job_id))
+        except (Refusal, OSError) as exc:
+            self.store.hold_job(job_id, exc)
+            return  # Original outcome was collected; retain every pending duty.
         try:
             self.inventory_artifacts(attempt, outcome, task)
         except (Refusal, OSError) as exc:
@@ -415,6 +422,7 @@ class Dispatcher:
                                       (job_id, attempt))
         try:
             await ordinary.perform(self.store, self.boards[job['role']], self.store.job(job_id))
+            native_review_scope.admit(self.store, self.store.job(job_id))
             local_integration.current_sources(self.store, self.store.job(job_id))
             if (ordinary.needs_acceptance(self.store, job['package'])
                     and isinstance(outcome.get('result'), dict) and outcome['result'].get('category') == 'qualification'):

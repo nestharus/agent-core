@@ -14,7 +14,7 @@ from coordinator_runtime import plain_control, processing
 from coordinator_runtime.contracts import Refusal, SOL, digest, encode
 
 class Terminal817(ReportTransport):
-    def original(self, obligations=(), plain_scope=None):
+    def original(self, obligations=(), plain_scope=None, control_task=None):
         b=self.boards['Reviews']
         args=b.store.parser().parse_args(['open','--session',self.source_sender,'--topic','fixture',
             '--kind','finding','--text','Interpret this status only. No new workflow or effect. Original duties stay with their owners.',
@@ -28,7 +28,7 @@ class Terminal817(ReportTransport):
         with self.store.tx():
             attempt=self.store._attempt('input-control',source['id'],None,SOL,'.codex')
             self.store.db.execute('INSERT INTO processing_controls VALUES(?,?,?,?,NULL,NULL)',(source['id'],self.cap,attempt,digest(source)))
-        receipt=dict(source_hash=digest(source),mode='control',task=None,package=None,related_event=None,related_job=None,
+        receipt=dict(source_hash=digest(source),mode='control',task=control_task,package=None,related_event=None,related_job=None,
             reason='Whole status interpreted with no newly assigned work/effect',evidence=['Whole explicit status source'],remaining_obligations=list(obligations))
         if plain_scope is not None:receipt['plain_control']=plain_scope
         result=dict(semantic='DONE',summary='Bounded status interpretation completed',decision_json=encode(receipt))

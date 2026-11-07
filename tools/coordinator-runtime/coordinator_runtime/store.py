@@ -424,6 +424,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.require_attempt_execution_open(attempt)
         with (nullcontext() if self.db.in_transaction else self.tx()):
             self.require_attempt_execution_open(attempt)
+            link = self.one('SELECT job FROM attempts WHERE id=?', (attempt,))
+            if link and link['job']:
+                from .native_review_scope import admit
+                admit(self, self.job(link['job']))
             self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if self.processing:
@@ -577,6 +581,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def begin(self, attempt, detail):
         with self.tx():
             self.require_attempt_execution_open(attempt)
+            link = self.one('SELECT job FROM attempts WHERE id=?', (attempt,))
+            if link and link['job']:
+                from .native_review_scope import admit
+                admit(self, self.job(link['job']))
             self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if row['job']:
@@ -941,6 +949,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             self.require_execution_open(job)
             row = self.job(job, token)
+            from .native_review_scope import admit
+            admit(self, row)
             self.integration_launch_current(row)
             local_integration.current_job(self, row)
             if row["controller"] != self.controller or row["state"] != "reserved":

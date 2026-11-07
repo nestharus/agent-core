@@ -526,6 +526,8 @@ class Access:
             raise Refusal('input outside exact retained/future processing selection')
         if job:
             item = self.runtime.job(job)
+            from .native_review_scope import admit
+            admit(self.runtime, item)
             if item['task'] not in selection['tasks'] or any(not self.event(self.runtime.event(m['event'])) for m in json.loads(item['members'])):
                 raise Refusal('frozen job outside processing selection; no old job replay')
         self.runtime.db.execute('UPDATE processing_capabilities SET starts=starts+1 WHERE id=?', (self.key,))
@@ -1113,9 +1115,41 @@ def control_receipt(runtime, event, row, result, receipt):
     runtime.processing.current()  # Before each current source/binding read group.
     state = runtime.one('SELECT hash,hold,processed_at FROM events WHERE id=?', (event,))
     queue = runtime.one('SELECT * FROM queue WHERE event=?', (event,))
-    if (not state or state['hold'] or state['processed_at'] is not None
-            or not queue or queue['task'] != '@control' or queue['phase'] != 'control'
-            or queue['state'] != 'awaiting-owner' or queue['job'] is not None
+    derived = {**receipt, 'task': None}
+    syntax = {'version': 'software-control-queue-marker-v1',
+              'meaning': 'SOFTWARE-DERIVED SYNTAX; no model rewrite, native receipt or underlying settlement',
+              'attempt': row['id'], 'source_hash': receipt['source_hash'],
+              'capability': runtime.processing.key, 'controller': row['controller'],
+              'binding': json.loads(row['binding']),
+              'raw_result_sha256': hashlib.sha256(row['result'].encode()).hexdigest(),
+              'result_hash': digest(result), 'original_receipt_hash': digest(receipt),
+              'derived_receipt_hash': digest(derived), 'from_task': '@control', 'to_task': None}
+    # Only a previously applied exact syntax proof permits durable normalization.
+    # A new marker still requires the original awaiting-owner responsibility.
+    resolution = runtime.input_resolution(event)
+    durable = False
+    if resolution:
+        proof = resolution['prior'].get('software_processing', {})
+        saved = proof.get('syntax_derivation')
+        if isinstance(saved, dict) and saved.get('version') == 'plain-control-scope-envelope-v1':
+            raw = json.loads(result['decision_json'])
+            if saved != {'version':'plain-control-scope-envelope-v1','original_receipt_hash':digest(raw),
+                         'derived_receipt_hash':digest(derived),'syntax':syntax}:
+                raise Refusal('applied marker envelope differs from exact original syntax proof')
+            saved = saved['syntax']
+        durable = (resolution['source_hash'] == receipt['source_hash']
+                   and resolution['receipt'] == derived and saved == syntax
+                   and proof.get('attempt') == row['id']
+                   and proof.get('source_hash') == receipt['source_hash']
+                   and proof.get('result_hash') == digest(result)
+                   and proof.get('native_owner_receipt') is False)
+        if not durable:
+            raise Refusal('applied marker differs from exact original canonical resolution')
+    if (not state or state['hold'] or (state['processed_at'] is not None and not durable)
+            or not queue or queue['phase'] != 'control'
+            or (queue['task'] not in ('@control','@unresolved') if durable else
+                queue['task'] != '@control' or queue['state'] != 'awaiting-owner')
+            or queue['job'] is not None
             or queue['package'] is not None or (row['controller'] != runtime.controller
                 and not __import__(__package__+'.report_repair', fromlist=['released_control']).released_control(runtime, event, row))
             or json.loads(row['detail']).get('processing_capability') != runtime.processing.key
@@ -1126,15 +1160,7 @@ def control_receipt(runtime, event, row, result, receipt):
     if (source['kind'] != 'board' or source['role'] != queue['role'] or digest(source) != state['hash']
             or not runtime.processing.event(source)):
         raise Refusal('control marker syntax requires the exact selected current board source')
-    derived = {**receipt, 'task': None}
-    return derived, {'version': 'software-control-queue-marker-v1',
-                     'meaning': 'SOFTWARE-DERIVED SYNTAX; no model rewrite, native receipt or underlying settlement',
-                     'attempt': row['id'], 'source_hash': state['hash'],
-                     'capability': runtime.processing.key, 'controller': row['controller'],
-                     'binding': json.loads(row['binding']),
-                     'raw_result_sha256': hashlib.sha256(row['result'].encode()).hexdigest(),
-                     'result_hash': digest(result), 'original_receipt_hash': digest(receipt),
-                     'derived_receipt_hash': digest(derived), 'from_task': '@control', 'to_task': None}
+    return derived, syntax
 
 
 def validate_recognition(runtime, event, attempt, recognition):

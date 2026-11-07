@@ -5,6 +5,7 @@ Resource evidence is an attributed Work/owner account, never inferred from names
 """
 import json
 import math
+from contextlib import nullcontext
 from .contracts import Refusal, digest, encode, required_text
 
 
@@ -103,10 +104,13 @@ def _metadata(runtime, row, record):
     # native receipt/answer, or source event during metadata admission.
     for current_job in [job] + ([runtime.job(row['id'])] if row.get('active_attempt') else []):
         source_metadata(runtime, current_job)
-        authority = runtime.one("SELECT job,json_extract(detail,'$.processing_capability') AS capability, "
+        authority = runtime.one("SELECT job,controller,kind,json_extract(detail,'$.software_authority') AS software, json_extract(detail,'$.processing_capability') AS capability, "
             "json_extract(detail,'$.software_authority.prospective_epoch') AS epoch "
             "FROM attempts WHERE id=?", (current_job['active_attempt'],))
-        if (current_job['hold_reason'] or not authority or not authority['epoch'] or authority['job'] != current_job['id']
+        preparing = (authority and current_job['id'] == row.get('id')
+                     and authority['controller'] == runtime.controller and authority['kind'] == 'task'
+                     and authority['software'] is None and current_job['state'] == 'running')
+        if (current_job['hold_reason'] or not authority or (not authority['epoch'] and not preparing) or authority['job'] != current_job['id']
                 or authority['capability'] != cap['id']):
             raise Refusal('original current unheld native job authority required before bodies')
         rights = prospective.current(runtime, current_job['task'], authority['epoch'])
@@ -185,3 +189,23 @@ def eligible(runtime, row, record):
         if blocked(runtime, row):
             raise Refusal('current native return authority/resources changed')
         return record['native_review_return']['relevant_roots']
+
+
+def admit(runtime, row):
+    """Reacquire current native admission at each synchronous body-read group.
+
+    Call within the caller's transaction; never carry admission over an await.
+    Other configured routes retain their existing admission rules.
+    """
+    configured = runtime.config['tasks'].get(row['task'], {})
+    if (not runtime.processing or configured.get('role') != 'Reviews'
+            or configured.get('phase') != 'integrator'):
+        return
+    from .resource_scopes import blocked
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        selected = runtime.processing.current()[1]
+        if 'native_review_return' not in selected.get('service', {}).get('legacy_resources', {}).get('Reviews', {}):
+            return
+        current = runtime.job(row['id']) if row.get('id') else row
+        if blocked(runtime, current):
+            raise Refusal('current native physical admission refused before protected acquisition')
