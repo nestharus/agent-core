@@ -4,9 +4,10 @@ import math
 import re
 import os
 import subprocess
+import sqlite3
 from pathlib import Path
 
-from .contracts import PROFILES, Refusal, digest, required_text, scoped_task, qa_branch_sequence
+from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, required_text, scoped_task, qa_branch_sequence
 
 
 def root(value, exclusions=(), *, metadata=True):
@@ -30,6 +31,115 @@ def overlaps(left, right):
     def identity(path):
         return (path.stat().st_dev, path.stat().st_ino) if path.exists() else None
     return identity(left) in ancestors(right) or identity(right) in ancestors(left)
+
+
+def access_modes(task, exclusions):
+    """Configured access, including staged publication rights, not effect success.
+
+    execution_spec relocates owned/staged writes to an attempt directory. Its
+    configured cwd is therefore only a read dependency. A direct workspace-write
+    task can write its cwd; canonical write roots survive staging and fencing.
+    """
+    authority = task['effect_authority']
+    reads, writes = authority['read_roots'], authority['write_roots']
+    operations = authority['operations']
+    if (not isinstance(reads, list) or not isinstance(writes, list)
+            or not isinstance(operations, list) or not operations or set(operations) - OPERATIONS
+            or task.get('sandbox') not in {'read-only', 'workspace-write'}
+            or task.get('effects') not in {'none', 'owned-artifacts', 'owner-reconcile'}
+            or task.get('execution') == 'owner'
+            or type(task.get('network', False)) is not bool or task.get('network')
+            or 'organize-authorized-refs' in operations):
+        raise Refusal('unknown or external original resource authority remains held')
+    ordinary = task.get('admitted_scope', {}).get('ordinary_effects')
+    if ordinary is not None and not isinstance(ordinary, dict):
+        raise Refusal('opaque original ordinary authority')
+    if 'execute-admitted-qa' in operations and (not ordinary or ordinary.get('kind') != 'local-qa'):
+        raise Refusal('unmapped original QA operation remains held')
+    if ordinary and (ordinary.get('kind') != 'local-qa' or 'execute-admitted-qa' not in operations):
+        raise Refusal('unknown original external/ref operation remains held')
+    if task['effects'] == 'none' and (writes or task['sandbox'] != 'read-only'):
+        raise Refusal('inconsistent original read-only authority')
+    if task['effects'] == 'owned-artifacts' and (writes or task['sandbox'] != 'workspace-write'):
+        raise Refusal('unmapped original owned-artifact authority')
+    reads = [*reads, task['cwd']]
+    writes = list(writes)
+    if task.get('routine_completion'):
+        targets = task['routine_completion'].get('targets') if isinstance(task['routine_completion'], dict) else None
+        if (not isinstance(targets, list) or not targets
+                or any(not isinstance(p, str) or not any(Path(p).is_relative_to(Path(w)) for w in writes) for p in targets)):
+            raise Refusal('unmapped original canonical publication targets')
+    if (task['sandbox'] == 'workspace-write' and task['effects'] == 'owner-reconcile'
+            and not task.get('routine_completion')):
+        writes.append(task['cwd'])
+    # Check the whole map lexically before touching any of its metadata.
+    for value in reads + writes:
+        root(value, exclusions, metadata=False)
+    return ([root(p, exclusions) for p in reads], [root(p, exclusions) for p in writes])
+
+
+def original_modes(runtime, job):
+    """Project only the immutable access map; never acquire old task/return bodies.
+
+    Missing originals refuse. Neither a current configuration/admission nor a
+    permanent execution fence can restamp retained publication/effect debt.
+    """
+    fields = ('cwd', 'sandbox', 'effects', 'network', 'execution', 'require_package_scope',
+              'scope_roots', 'package_narrowing', 'scope_exclusions',
+              'linked_repositories', 'repository_reads')
+    paths = ['$.' + k for k in fields] + ['$.effect_authority.' + k for k in ('read_roots', 'write_roots', 'operations')]
+    prefix = '$.task_scopes.' + json.dumps(job['task'])
+    scope_fields = ('cwd', 'read_roots', 'write_roots', 'network', 'procedure', 'repository_reads')
+    scope_paths = [prefix + '.' + k for k in scope_fields] + [prefix + '.ordinary_effects.kind']
+    receipt = "json_extract(admission,'$.receipt')"
+    frozen = runtime.one('SELECT json_extract(task,' + ','.join('?' for _ in paths) + ') AS access, '
+        "json_type(task,'$.routine_completion') AS completion, json_extract(task,'$.routine_completion.targets') AS targets, "
+        'json_extract(' + receipt + ',' + ','.join('?' for _ in scope_paths) + ') AS scope, '
+        'json_type(' + receipt + ',?) AS ordinary, '
+        'length(json_extract(' + receipt + ',?))>0 AS evidence '
+        'FROM job_resource_policies WHERE job=?', (*paths, *scope_paths, prefix + '.ordinary_effects', prefix + '.resource_evidence', job['id']))
+    if not frozen or not frozen['access']:
+        raise Refusal('missing original frozen resource map')
+    values = json.loads(frozen['access'])
+    task = {k: v for k, v in zip(fields, values) if v is not None}
+    task['effect_authority'] = dict(zip(('read_roots', 'write_roots', 'operations'), values[len(fields):]))
+    if frozen['completion'] not in {None, 'null', 'object'}:
+        raise Refusal('unknown original publication map')
+    if frozen['completion'] == 'object':
+        task['routine_completion'] = {'targets': json.loads(frozen['targets']) if frozen['targets'] else None}
+    admission = None
+    if task.get('require_package_scope'):
+        if not frozen['scope'] or not frozen['evidence']:
+            raise Refusal('missing original admitted resource map')
+        values = json.loads(frozen['scope'])
+        scope = {k: v for k, v in zip(scope_fields, values) if v is not None}
+        # Only presence is needed by scoped_task; no old evidence body is read.
+        scope['resource_evidence'] = True
+        if frozen['ordinary'] not in {None, 'null', 'object'}:
+            raise Refusal('opaque original ordinary operation')
+        if frozen['ordinary'] == 'object':
+            scope['ordinary_effects'] = {'kind': values[-1]}
+        admission = {'receipt': json.dumps({'task_scopes': {job['task']: scope}})}
+        if scope_excluded(runtime, job['task'], admission):
+            raise Refusal('original admitted scope excluded before metadata')
+        for value in scope.get('read_roots', []) + scope.get('write_roots', []) + [scope.get('cwd')]:
+            root(value, runtime.config.get('artifact_exclusions', []), metadata=False)
+    task = scoped_task(job['task'], task, admission)
+    reads, writes = access_modes(task, runtime.config.get('artifact_exclusions', []))
+    # The runtime creates fresh per-attempt writable staging; these original
+    # directories stay charged without acquiring their names, contents or sizes.
+    staging = []
+    if task['effects'] != 'none':
+        for attempt in runtime.rows("SELECT id FROM attempts WHERE job=? AND kind='task'", (job['id'],)):
+            canonical_uuid(attempt['id'])
+            staging.append(root(str(runtime.home/'artifacts'/attempt['id']), runtime.config.get('artifact_exclusions', [])))
+        writes.extend(staging)
+    # A retained publication is a write dependency even after execution closure.
+    for item in runtime.rows('SELECT p.target,p.temp FROM file_publications p JOIN attempts a ON a.id=p.attempt WHERE a.job=?', (job['id'],)):
+        for value in (item['target'], item['temp']):
+            if value is not None:
+                writes.append(root(value, runtime.config.get('artifact_exclusions', [])))
+    return reads, writes, staging
 
 
 def validate(runtime, policy, selection=None):
@@ -229,7 +339,7 @@ def qa_operation(runtime, row, record, account=None):
         root(path, exclusions)
     # A queue ID is not a job ID. Public policy validation supports a genuine
     # pre-reservation projection; never fabricate an attempt/birth/launch proof.
-    current = runtime.one('SELECT * FROM jobs WHERE id=?', (row.get('id'),))
+    current = runtime.one('SELECT id,role,phase,task,package,active_attempt,members FROM jobs WHERE id=?', (row.get('id'),))
     if current:
         if any(current[k] != row[k] for k in ('role', 'phase', 'task', 'package')):
             raise Refusal('original QA job identity differs')
@@ -260,28 +370,9 @@ def qa_operation(runtime, row, record, account=None):
             or git('rev-parse', '--verify', p['source_head'] + '^{tree}') != policy['source']['tree']
             or git('show', '-s', '--format=%P', p['source_head']).split() != policy['source']['parents']):
         raise Refusal('current exact QA source/ref/tree/ordered parent differs')
-    # No unfamiliar lease can be treated as an empty relevant set. The
-    # original immutable policy maps a foreign lease, not its resource label.
-    own = current['active_attempt'] if current and all(current[k] == row[k] for k in ('role', 'task', 'package')) else None
-    held = list(policy['relevant_roots'])
-    for lease in runtime.rows('SELECT * FROM ordinary_resources'):
-        if own and lease['attempt'] == own:
-            continue
-        run = runtime.one('SELECT * FROM ordinary_runs WHERE attempt=?', (lease['attempt'],))
-        frozen = runtime.one('SELECT * FROM job_resource_policies WHERE job=?', (run['job'],)) if run else None
-        job = runtime.one('SELECT * FROM jobs WHERE id=?', (run['job'],)) if run else None
-        if not frozen or not frozen['admission'] or not job:
-            raise Refusal('unmapped original resource lease remains unknown')
-        prior_admission = json.loads(frozen['admission'])
-        if scope_excluded(runtime, job['task'], prior_admission):
-            raise Refusal('original lease scope excluded before metadata')
-        prior = scoped_task(job['task'], json.loads(frozen['task']), prior_admission)
-        policy = prior['admitted_scope'].get('ordinary_effects', {})
-        if (json.loads(run['policy']) != policy
-                or lease['resource'] not in {r['key'] for r in policy.get('resources', [])}):
-            raise Refusal('lease lacks its original frozen operation map')
-        held += prior['effect_authority']['read_roots'] + prior['effect_authority']['write_roots'] + [prior['cwd']]
-    return held
+    # Foreign leases are mapped in blocked for every route, including Reviews.
+    # Unmoded attributed relevant roots remain exclusive dependencies.
+    return list(policy['relevant_roots'])
 
 
 def blocked(runtime, row, task=None):
@@ -339,35 +430,74 @@ def blocked(runtime, row, task=None):
     if task.get('network') or 'organize-authorized-refs' in task['effect_authority'].get('operations', []):
         return True  # Path separation alone cannot prove external/shared-ref independence.
     exclusions = runtime.config.get('artifact_exclusions', [])
-    selected = [root(p, exclusions) for p in task['effect_authority']['read_roots'] + task['effect_authority']['write_roots'] + [task['cwd']]]
-    held = [root(p, exclusions) for p in record['roots'] + operation_held]
-    # Actual unresolved local jobs retain their original roots across roles,
-    # including reservations with no attempt/ordinary lease. This is local
-    # responsibility, not a census or clearance of external legacy inventory.
-    for job in runtime.rows("SELECT * FROM jobs WHERE effects NOT IN ('none','reconciled')"):
-        if row.get('id') == job['id']:
-            continue  # Reconcile this operation against OTHER unresolved owners.
-        frozen = runtime.one('SELECT * FROM job_resource_policies WHERE job=?', (job['id'],))
-        try:
-            if frozen:
-                prior = json.loads(frozen['task'])
-                prior_admission = json.loads(frozen['admission']) if frozen['admission'] else None
+    try:
+        reads, writes = access_modes(task, exclusions)
+        future_staging = None
+        if task['sandbox'] == 'workspace-write' and task['effects'] != 'none':
+            directory = root(str(runtime.home/'artifacts'), exclusions)
+            if row.get('active_attempt'):
+                canonical_uuid(row['active_attempt'])
+                directory /= row['active_attempt']
+                writes.append(root(str(directory), exclusions))
             else:
-                from .configuration import task_for_job
-                prior = task_for_job(runtime, job)
-                if prior.get('require_package_scope'):
-                    return True  # Never launder missing original scope through current admission.
-                prior_admission = None
-            if scope_excluded(runtime, job['task'], prior_admission):
+                future_staging = directory
+        held_reads = []
+        held_writes = [root(p, exclusions) for p in record['roots'] + operation_held]
+        original_staging = []
+        mapped = {}
+
+        def retain(job):
+            if job['id'] not in mapped:
+                mapped[job['id']] = original_modes(runtime, job)
+                r, w, staging = mapped[job['id']]
+                held_reads.extend(r)
+                held_writes.extend(w)
+                original_staging.extend(staging)
+
+        # These scalar identities select immutable maps, never old return,
+        # capture, error, receipt or full job/task bodies. UNKNOWN is unchanged.
+        for job in runtime.rows("SELECT id,task FROM jobs WHERE effects NOT IN ('none','reconciled')"):
+            if row.get('id') != job['id']:
+                retain(job)
+        # Effect reconciliation alone cannot clear an interrupted or incomplete
+        # publication. These scalar state predicates acquire no receipt bodies.
+        for job in runtime.rows('SELECT j.id,j.task FROM jobs j WHERE '
+                "EXISTS (SELECT 1 FROM attempts a JOIN routine_runs r ON r.attempt=a.id WHERE a.job=j.id AND r.state IS NOT 'reconciled') OR "
+                "EXISTS (SELECT 1 FROM attempts a JOIN file_publications p ON p.attempt=a.id WHERE a.job=j.id AND (p.state IS NOT 'published' OR p.error IS NOT NULL))"):
+            if row.get('id') != job['id']:
+                retain(job)
+        # An orphan/opaque lease is globally unknown, even on a report route.
+        for lease in runtime.rows('SELECT resource,attempt FROM ordinary_resources'):
+            job = runtime.one('SELECT j.id,j.task FROM ordinary_runs r JOIN jobs j ON j.id=r.job WHERE r.attempt=?', (lease['attempt'],))
+            if not job:
                 return True
-            prior = scoped_task(job['task'], prior, prior_admission)
-            authority = prior['effect_authority']
-            if prior.get('network') or 'organize-authorized-refs' in authority.get('operations', []):
-                return True  # Path separation cannot map unresolved external/shared-ref effects.
-            held.extend(root(p, exclusions) for p in authority['read_roots'] + authority['write_roots'] + [prior['cwd']])
-        except (Refusal, OSError, KeyError, TypeError, ValueError):
-            return True
-    return not selected or any(overlaps(a, b) for a in selected for b in held)
+            if job['id'] == row.get('id'):
+                continue
+            path = '$.task_scopes.' + json.dumps(job['task']) + '.ordinary_effects'
+            original = runtime.one('SELECT json(r.policy)=json(json_extract(json_extract(f.admission,\'$.receipt\'),?)) AS matches '
+                'FROM ordinary_runs r JOIN job_resource_policies f ON f.job=r.job WHERE r.attempt=? '
+                "AND EXISTS (SELECT 1 FROM json_each(r.policy,'$.resources') k WHERE json_extract(k.value,'$.key')=?)",
+                (path, lease['attempt'], lease['resource']))
+            if not original or not original['matches']:
+                return True
+            retain(job)
+        if future_staging:
+            # A fresh attempt has a new PRIMARY KEY UUID and mkdir(exist_ok=False).
+            # Its direct child cannot be an original attempt's directory. Broad
+            # parent access and unmapped descendants still conflict; this is no
+            # grant to write the artifacts parent or a release of old staging.
+            for directory in original_staging:
+                if directory.exists() and any(parent.exists() and directory.samefile(parent)
+                        for parent in (future_staging, *future_staging.parents)):
+                    return True  # An ancestor bind alias is not a distinct child.
+            for held in held_reads + held_writes:
+                if (not any(held.is_relative_to(p) for p in original_staging)
+                        and overlaps(future_staging, held)):
+                    return True
+        return not (reads or writes) or (any(overlaps(a, b) for a in writes for b in held_reads + held_writes)
+                                        or any(overlaps(a, b) for a in reads for b in held_writes))
+    except (Refusal, OSError, KeyError, TypeError, ValueError, sqlite3.Error):
+        return True
 
 
 def qa_cleanup(runtime, row, record, account):
