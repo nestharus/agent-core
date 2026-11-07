@@ -12,10 +12,14 @@ from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, re
 
 def root(value, exclusions=(), *, metadata=True):
     path = Path(required_text(value, 'resource root', 4000))
-    if not path.is_absolute() or '..' in path.parts:
+    if not path.is_absolute() or '..' in path.parts or path.anchor == '//':
         raise Refusal('absolute resource root required')
-    if any(path == Path(p) or path.is_relative_to(Path(p)) or Path(p).is_relative_to(path)
-           for p in [*exclusions, *[Path.home()/p for p in PROFILES]]):
+    excluded = [Path(p) for p in [*exclusions, *[Path.home()/p for p in PROFILES]]]
+    # Like the release guard, refuse POSIX's distinct // anchor on both sides
+    # before Linux can interpret it as a canonical excluded location.
+    if any(p.anchor == '//' for p in excluded):
+        raise Refusal('canonical single-root resource exclusions required')
+    if any(path == p or path.is_relative_to(p) or p.is_relative_to(path) for p in excluded):
         raise Refusal('resource overlaps an excluded store before metadata')
     if metadata and any(p.is_symlink() for p in (path, *path.parents)):
         raise Refusal('resource aliases need their actual custodian; no symlink inference')
