@@ -110,6 +110,7 @@ class ReportBudget782(transport.ReportTransport):
         from coordinator_runtime import processing, prospective
         from coordinator_runtime.contracts import digest
         from test_qa629_repairs import actor
+        self.assertFalse(report_scope.selected_intake(self.store, dict(body=dict(original=[]))))
         receipt = self.reports[0]
         receipt['reports'][0]['body'] += 'Original adverse qualification Ω. '*6000
         self.assertGreater(len(encode(receipt).encode()), 262144)

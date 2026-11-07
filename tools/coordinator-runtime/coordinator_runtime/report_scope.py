@@ -273,6 +273,8 @@ def selected_intake(runtime, event):
         return False
     cap, selection = runtime.processing.current()
     receipt = event.get('body', {}).get('original', {}) if isinstance(event.get('body'), dict) else {}
+    if not isinstance(receipt, dict):
+        return False
     policy = selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {}).get('reviews_report')
     if not policy:
         return False
