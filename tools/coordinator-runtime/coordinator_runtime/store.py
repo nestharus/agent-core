@@ -1303,9 +1303,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def adopt_collected(self, job):
         """Transfer closure work only, never an active process handle or unknown attempt."""
-        with self.tx():
+        with (nullcontext() if self.db.in_transaction else self.tx()):
             self.require_execution_open(job)
             row = self.job(job)
+            local_integration.current_sources(self, row)
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
             if row["state"] == "closed" or row["recovery_owner"] and row['recovery_state']!='awaiting-disposition':
@@ -1313,9 +1314,22 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if row['recovery_owner']:
                 diag=self.current_diagnosis(row)
                 no_start=diag and diag['state']=='not-started' and json.loads(diag['detail']).get('known_not_started')
-                if not diag or diag['collected'] is None or diag['ended'] is None and not no_start:
+                pending=self.one("SELECT detail FROM operational_errors WHERE subject=? AND active=1 "
+                    "AND kind='recovery-admission-pending'", ('recovery-admission:'+job,))
+                metadata=json.loads(pending['detail']) if pending else {}
+                unallocated=(not diag and pending and metadata.get('diagnosis') is None
+                    and metadata.get('job')==row['id'] and metadata.get('attempt')==row['active_attempt']
+                    and metadata.get('reservation')==row['token']
+                    and all(metadata.get(k)==row[k] for k in ('controller','recovery_owner','recovery_count')))
+                if unallocated:
+                    # A real foreign recovery claim may suspend before it has
+                    # any diagnosis. Its marker proves responsibility, not END:
+                    # every related original must separately be closed.
+                    if self.one('SELECT id FROM attempts WHERE job=? AND (ended IS NULL OR collected IS NULL OR exit IS NULL)', (job,)):
+                        raise Refusal('unknown related original retains its actual collector')
+                elif not diag or diag['collected'] is None or diag['ended'] is None and not no_start:
                     raise Refusal('unknown recovery diagnosis prevents closure transfer')
-            if attempt["ended"] is None or not attempt["collected"]:
+            if attempt["ended"] is None or not attempt["collected"] or type(attempt['exit']) is not int:
                 raise Refusal("unknown/live original cannot transfer closure")
             if task["effects"] == "owner-reconcile" and row["effects"] != "reconciled":
                 raise Refusal("actual external effect owner must reconcile before closure transfer")

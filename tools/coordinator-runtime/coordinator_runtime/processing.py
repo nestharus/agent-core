@@ -1115,7 +1115,7 @@ class ProcessingDispatcher(Dispatcher):
         # advance here; ordinary recovery entry points remain separately owned.
         self.reconcile_classifications()
         for job in self.store.rows('SELECT * FROM jobs WHERE controller=? AND active_attempt IS NOT NULL', (self.store.controller,)):
-            attempt = self.store.attempt(job['active_attempt'])
+            attempt = self.store.one('SELECT collected FROM attempts WHERE id=?', (job['active_attempt'],))
             if attempt['collected'] is not None:
                 self.reconcile_collected(job)
         self.store.complete_events()
