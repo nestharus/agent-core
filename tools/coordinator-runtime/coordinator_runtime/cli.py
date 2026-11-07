@@ -260,7 +260,7 @@ def parser():
         integration = sub.add_parser(command, help='Actual Work: closed execution only; all original duties retained')
         integration.add_argument('job')
         integration.add_argument('--token', required=True)
-        if command in {'work-read-metadata-closure-basis', 'fence-work-proposer-metadata', 'integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'work-read-closure-basis', 'fence-work-proposer'}:
+        if command in {'work-read-metadata-closure-basis', 'fence-work-proposer-metadata', 'integration-metadata-closure-basis', 'retire-integration-metadata', 'integration-closure-basis', 'retire-integration', 'work-read-closure-basis', 'fence-work-proposer', 'integration-no-start-basis', 'withdraw-integration-no-start'}:
             integration.add_argument('--management', help='Explicit current paused-owner operation selection; no processing access')
         if command in {'fence-work-proposer-metadata', 'retire-integration-metadata', 'retire-integration', 'withdraw-integration-prestart', 'withdraw-integration-no-start', 'fence-work-proposer'}:integration.add_argument('--receipt', required=True)
     window = sub.add_parser('integration-window-basis', help='Exact new inputs and conserved debt; no launch')
