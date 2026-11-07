@@ -212,16 +212,23 @@ class SourceSelection(unittest.TestCase):
         self.apply()
 
     def test_original_end_service_and_uncollected_attempt_are_not_inferred(self):
+        # 729: lifecycle evidence belongs to this outgoing generation. The
+        # prior configuration's original remains historical, not a global gate.
+        key = processing.select(self.runtime, self.f.boards, self.f.processing_selection())['capability']
+        self.runtime.db.execute("INSERT INTO processing_runs VALUES('fictional-outgoing707',?,'owned',1000)", (key,))
+        processing.revoke(self.runtime, self.f.boards, key)
+        processing.release(self.runtime, self.f.boards, key, 'fictional-outgoing707',
+                           {'actual_END': 0, 'evidence': ['fictional outgoing parent collection']})
         self.change()
-        released = self.runtime.one('SELECT state FROM processing_runs')['state']
+        released = self.runtime.one("SELECT state FROM processing_runs WHERE controller='fictional-outgoing707'")['state']
         for state in ('owned', '{}', '{"parent_END":{"actual_END":true,"evidence":["fictional"]}}'):
-            self.runtime.db.execute('UPDATE processing_runs SET state=?', (state,))
+            self.runtime.db.execute("UPDATE processing_runs SET state=? WHERE controller='fictional-outgoing707'", (state,))
             with self.assertRaisesRegex(Refusal, 'numeric parent END'): self.apply()
-        self.runtime.db.execute('UPDATE processing_runs SET state=?', (released,))
-        self.runtime.db.execute("INSERT INTO service_runs VALUES('fictional-old-collector',?,'fictional.sock','running',900,NULL,NULL)", (self.f.oldkey,))
+        self.runtime.db.execute("UPDATE processing_runs SET state=? WHERE controller='fictional-outgoing707'", (released,))
+        self.runtime.db.execute("INSERT INTO service_runs VALUES('fictional-outgoing707',?,'fictional.sock','running',900,NULL,NULL)", (key,))
         with self.assertRaisesRegex(Refusal, 'numeric parent END'): self.apply()
         self.runtime.db.execute("UPDATE service_runs SET state='returned-awaiting-parent-END',returned=1000")
-        self.runtime.db.execute("UPDATE attempts SET controller='fictional-old-collector'")
+        self.runtime.db.execute("UPDATE attempts SET controller='fictional-outgoing707'")
         with self.assertRaisesRegex(Refusal, 'numeric parent END'): self.apply()
 
     def test_policy_change_cannot_enter_source_only_path_and_budget_failure_rolls_back(self):

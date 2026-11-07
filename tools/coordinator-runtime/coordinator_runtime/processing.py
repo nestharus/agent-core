@@ -84,7 +84,8 @@ def basis(runtime, boards, *, future_only=False, selected_retained=None):
             **({'mode':'selected-retained-source-v1', 'selected_retained':selected_retained,
                 'journal_revision':windows.revision(runtime),
                 'allocation':windows.basis(runtime) if runtime.config.get('window_service') else None} if narrow else {}),
-            **({'configuration_transition': {k: version[k] for k in ('position', 'previous', 'current', 'original', 'issuer')}} if version else {}),
+            **({'configuration_transition': {**{k: version[k] for k in ('position', 'previous', 'current', 'original', 'issuer')},
+                                             'source_selection': version.get('source_selection', 0)}} if version else {}),
             **({'future_only': True, 'journal_revision': windows.revision(runtime),
                 'allocation': windows.basis(runtime) if runtime.config.get('window_service') else None} if future_only else {}),
             'roles': {r: {'original': (b.selected_basis(runtime, selected_retained) if narrow else

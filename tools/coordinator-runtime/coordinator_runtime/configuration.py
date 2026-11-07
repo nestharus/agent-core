@@ -588,18 +588,97 @@ def source_change(runtime, after, tasks):
 
 
 def source_originals_stopped(runtime):
-    """Use existing original processing-release receipts, never infer END from lock."""
-    if runtime.one("SELECT controller FROM service_runs WHERE state!='returned-awaiting-parent-END' "
-                   'OR returned IS NULL OR controller NOT IN (SELECT controller FROM processing_runs) LIMIT 1'):
-        raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
-    for run in runtime.rows('SELECT controller,state FROM processing_runs'):
+    """Close the outgoing source generation, retaining unrelated original duties.
+
+    Resolve relationships from public version/source metadata before acquiring
+    any lifecycle state. Legacy bases have no source ordinal: their immutable
+    implementation must identify exactly one selected generation. The stop
+    lock and separate active-authority guards still apply to every selection.
+    """
+    version = version_metadata(runtime)
+    configuration = digest(runtime.config)
+    ambiguous = 'source-only selection requires unambiguous outgoing source/configuration generation'
+    if not version or version['current'] != configuration:
+        raise Refusal(ambiguous)
+    generations = {}
+    for row in runtime.rows(
+            "SELECT 0 AS ordinal,json_extract(selection,'$.basis.release.root') AS root,"
+            "json_extract(selection,'$.basis.release.files') AS files FROM configuration_transitions WHERE position=? "
+            "UNION ALL SELECT position,json_extract(selection,'$.basis.release.root'),"
+            "json_extract(selection,'$.basis.release.files') FROM configuration_source_selections WHERE configuration_position=?",
+            (version['position'], version['position'])):
+        try:
+            root = Path(row['root'])/'tools/coordinator-runtime/coordinator_runtime'
+            files = json.loads(row['files'])
+            implementation = {Path(p).name: h for p, h in files.items()
+                              if Path(p).parent == root and Path(p).suffix == '.py'}
+        except (ValueError, TypeError, AttributeError):
+            raise Refusal(ambiguous)
+        if not implementation or row['ordinal'] in generations:
+            raise Refusal(ambiguous)
+        generations[row['ordinal']] = implementation
+    outgoing = version.get('source_selection', 0)
+    if outgoing not in generations:
+        raise Refusal(ambiguous)
+    # Exclude other exact configuration digests in SQL, before returning even
+    # their implementation metadata. Missing/inconsistent relationships refuse;
+    # a free cooperative lock or revoked capability cannot qualify them.
+    originals = runtime.rows(
+        "WITH originals AS (SELECT controller,capability FROM processing_runs UNION "
+        "SELECT controller,capability FROM service_runs), metadata AS ("
+        "SELECT o.controller,o.capability,json_extract(c.selection,'$.basis.configuration') AS configuration,"
+        "json_extract(c.selection,'$.basis.configuration_transition.position') AS position,"
+        "json_extract(c.selection,'$.basis.configuration_transition.current') AS current,"
+        "json_type(c.selection,'$.basis.configuration_transition.position') AS position_type,"
+        "json_extract(c.selection,'$.basis.configuration_transition.source_selection') AS ordinal,"
+        "json_type(c.selection,'$.basis.configuration_transition.source_selection') AS ordinal_type,"
+        "json_extract(c.selection,'$.basis.implementation') AS implementation "
+        "FROM originals o LEFT JOIN processing_capabilities c ON c.id=o.capability) "
+        "SELECT * FROM metadata WHERE configuration=? OR current=? OR typeof(configuration)!='text' "
+        "OR length(configuration)!=64 OR configuration GLOB '*[^0-9a-f]*'",
+        (configuration, configuration))
+    relevant = []
+    for original in originals:
+        if (original['configuration'] != configuration or original['position_type'] != 'integer'
+                or original['position'] != version['position']
+                or original['current'] != configuration):
+            raise Refusal(ambiguous)
+        try:
+            implementation = json.loads(original['implementation'])
+        except (ValueError, TypeError):
+            raise Refusal(ambiguous)
+        ordinal = original['ordinal']
+        if ordinal is None:
+            if original['ordinal_type'] is not None:
+                raise Refusal(ambiguous)
+            matches = [n for n, pins in generations.items() if implementation == pins]
+            if len(matches) != 1:
+                raise Refusal(ambiguous)
+            ordinal = matches[0]
+        elif original['ordinal_type'] != 'integer':
+            raise Refusal(ambiguous)
+        if type(ordinal) is not int or generations.get(ordinal) != implementation:
+            raise Refusal(ambiguous)
+        if ordinal == outgoing:
+            relevant.append((original['controller'], original['capability']))
+    # Validate the complete relevant relationship set before the first state
+    # read, including service-only or mismatched-capability originals.
+    for controller, capability in relevant:
+        if (not runtime.one('SELECT controller FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
+                or runtime.one('SELECT controller FROM service_runs WHERE controller=? AND capability!=?', (controller, capability))):
+            raise Refusal(ambiguous)
+    for controller, capability in relevant:
+        service = runtime.one('SELECT state,returned FROM service_runs WHERE controller=? AND capability=?', (controller, capability))
+        run = runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
         try:
             receipt = json.loads(run['state'])['parent_END']
         except (ValueError, KeyError, TypeError):
             receipt = None
         if (not isinstance(receipt, dict) or type(receipt.get('actual_END')) is not int
-                or not receipt.get('evidence')
-                or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (run['controller'],))):
+                or not isinstance(receipt.get('evidence'), list) or not receipt['evidence']
+                or any(not isinstance(e, str) or not e.strip() for e in receipt['evidence'])
+                or service and (service['state'] != 'returned-awaiting-parent-END' or service['returned'] is None)
+                or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (controller,))):
             raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
 
 
