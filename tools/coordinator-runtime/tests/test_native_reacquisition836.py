@@ -12,6 +12,10 @@ class Reacquisition836(NativeReturn):
         # Supported central integration, the CLOSED833 frozen-launch witness.
         self.config['local_integration']['tasks'].pop('reviews-integrator')
 
+    def configure_selection(self, selection):
+        super().configure_selection(selection)
+        selection['metadata_lookup']['tasks'].remove('reviews-integrator')
+
     def frozen(self):
         self.source()
         asyncio.run(self.phase('schedule_classifications'))
