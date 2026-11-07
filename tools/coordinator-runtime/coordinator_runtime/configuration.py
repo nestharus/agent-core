@@ -12,6 +12,8 @@ import hashlib
 from importlib.util import cache_from_source
 import json
 import os
+import re
+import subprocess
 from pathlib import Path
 
 from .contracts import Refusal, digest, encode, regular_path, required_text, validate_config, parse_json, PROFILES, scoped_startup
@@ -287,16 +289,162 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
     if set(scope_tasks) - set(value['tasks']):
         raise Refusal('unknown task in current configuration draft')
     if scope_options is not None:
-        apply_scope_options(runtime.config, value, scope_options)
+        apply_scope_options(runtime.config, value, scope_options, runtime=runtime)
     for task in value['tasks'].values():
         if task.get('require_package_scope'):
             task['scope_exclusions'] = list(value.get('artifact_exclusions', []))
     return value
 
 
-def apply_scope_options(original, value, options):
+def read_ceiling_extensions(runtime, original, value, entries):
+    """Exact pinned files only; source-owner testimony is attributed, not authenticated.
+
+    Draft checks local enrollment; basis/apply additionally validate the actual
+    original Board grant through the unchanged ProcessingBoard bridge.
+    """
+    from .resource_scopes import root
+    if not isinstance(entries, dict) or set(entries) - set(original['tasks']):
+        raise Refusal('read ceiling extensions require existing tasks')
+    if not entries:
+        return
+    if runtime is None:
+        raise Refusal('read ceiling extension requires the current enrolled runtime')
+    assert_current(runtime)
+    exclusions = value.get('artifact_exclusions', [])
+    def path(text, *, metadata=False):
+        p = root(text, exclusions, metadata=False)
+        if (str(p) != text or p.anchor == '//' or
+                set(p.parts) & {'AGENTS.md', 'WORK_LOG.md', '.ssh', '.aws', '.config', '.local'}):
+            raise Refusal('exact canonical public material path required')
+        return root(text, exclusions) if metadata else p
+    def sha(text):
+        if not isinstance(text, str) or not re.fullmatch('[0-9a-f]{64}', text):
+            raise Refusal('exact material SHA256 required')
+    for name, entry in entries.items():
+        fields = {'configuration', 'role_owner', 'original_grant', 'authority',
+                  'source_authority', 'read_roots', 'repository_reads', 'components', 'source', 'safe_files'}
+        if not isinstance(entry, dict) or set(entry) != fields:
+            raise Refusal('exact read ceiling binding and pinned material required')
+        task, prior = value['tasks'][name], original['tasks'][name]
+        owner = prior['effect_authority']['owner']
+        enrolled = runtime.one('SELECT owner,grant_id,intake FROM enrollments WHERE role=?', (prior['role'],))
+        if (entry['configuration'] != digest(original) or entry['role_owner'] != owner
+                or owner != original['roles'][prior['role']]['owner'] or not enrolled
+                or enrolled['owner'] != owner or enrolled['grant_id'] != entry['original_grant']
+                or enrolled['intake'] != 0):
+            raise Refusal('read ceiling requires exact current configuration, owner and stopped original grant')
+        if not set(prior['effect_authority']['operations']) & {'read-source', 'read-reports'}:
+            raise Refusal('existing source/report authority required')
+        required_text(entry['authority'], 'attributed Work read ceiling choice', 4000)
+        required_text(entry['source_authority'], 'attributed concrete source-owner binding', 4000)
+        roots, safe_files, source = entry['read_roots'], entry['safe_files'], entry['source']
+        if (not isinstance(roots, list) or not 1 <= len(roots) <= 64
+                or not all(isinstance(p, str) for p in roots) or len(set(roots)) != len(roots)
+                or not isinstance(safe_files, dict) or not isinstance(entry['components'], dict)
+                or not isinstance(entry['repository_reads'], list)):
+            raise Refusal('bounded exact material lists required')
+        files = dict(safe_files)
+        repository = None
+        # Complete lexical exclusion checks precede all material metadata.
+        for p, pin in safe_files.items():
+            path(p); sha(pin)
+        if source is not None:
+            if (not isinstance(source, dict) or set(source) != {'repository', 'commit', 'files'}
+                    or not isinstance(source['commit'], str) or not re.fullmatch('[0-9a-f]{40}', source['commit'])
+                    or not isinstance(source['files'], dict) or not source['files']
+                    or not entry['components']):
+                raise Refusal('exact immutable repository/component/file binding required')
+            if 'read-source' not in prior['effect_authority']['operations']:
+                raise Refusal('repository source needs existing read-source authority')
+            repository = path(source['repository'])
+            path(str(repository/'.git'))
+            component_files = []
+            for component, members in entry['components'].items():
+                required_text(component, 'source component', 128)
+                if not isinstance(members, list) or not members or not all(isinstance(p, str) for p in members):
+                    raise Refusal('exact component file list required')
+                component_files.extend(members)
+            if set(component_files) != set(source['files']):
+                raise Refusal('components must bind every exact tracked file')
+            source_bytes = 0
+            for relative, pin in source['files'].items():
+                p = Path(relative)
+                if (p.is_absolute() or str(p) != relative or '..' in p.parts
+                        or relative.startswith('-') or '.git' in p.parts):
+                    raise Refusal('exact repository-relative material file required')
+                absolute = str(repository/p)
+                path(absolute); sha(pin)
+                if absolute in files:
+                    raise Refusal('source and safe report bindings must be distinct')
+                files[absolute] = pin
+        elif entry['components'] or entry['repository_reads']:
+            raise Refusal('repository identities/components need exact immutable source material')
+        if set(roots) != set(files) or len(files) > 64:
+            raise Refusal('read roots must equal the exact pinned material files')
+        for p in roots:
+            path(p)
+            if '.git' in Path(p).parts:
+                raise Refusal('Git metadata is not source material')
+        identities = entry['repository_reads']
+        if identities and (identities != [str(repository)] or prior['role'] not in {'Branch', 'Reviews'}
+                or prior['phase'] != 'proposer' or prior['effects'] != 'none'
+                or prior['sandbox'] != 'read-only' or prior.get('network')
+                or prior['effect_authority']['write_roots']):
+            raise Refusal('repository identities require an existing read-only source proposer')
+        if source is not None:
+            path(str(repository), metadata=True)
+            gitdir = path(str(repository/'.git'), metadata=True)
+            if not gitdir.is_dir():
+                raise Refusal('read extension currently requires a standalone repository; linked Git needs separate owner binding')
+            def git(*args):
+                try:
+                    return subprocess.run(['git', '--no-replace-objects', '--literal-pathspecs', '-C', str(repository), *args],
+                                          check=True, capture_output=True, timeout=10).stdout
+                except (subprocess.SubprocessError, OSError) as exc:
+                    raise Refusal('immutable tracked material unavailable') from exc
+            for relative in ('objects', 'objects/info', 'objects/pack', 'objects/info/alternates', 'objects/info/http-alternates'):
+                checked = path(str(gitdir/relative), metadata=True)
+                if relative.endswith(('alternates', 'http-alternates')) and checked.exists():
+                    raise Refusal('external Git object stores need separate concrete owner binding')
+            if git('cat-file', '-t', source['commit']).strip() != b'commit':
+                raise Refusal('source requires an immutable commit object')
+            for relative, pin in source['files'].items():
+                record = git('ls-tree', '-z', source['commit'], '--', relative)
+                try:
+                    metadata, actual = record[:-1].split(b'\t')
+                    mode, kind, oid = metadata.decode().split()
+                except (ValueError, UnicodeError) as exc:
+                    raise Refusal('exact tracked regular file required') from exc
+                if (not record.endswith(b'\0') or actual != relative.encode()
+                        or mode not in {'100644', '100755'} or kind != 'blob'):
+                    raise Refusal('only exact tracked regular immutable files may extend reads')
+                size = int(git('cat-file', '-s', oid))
+                source_bytes += size
+                if size > 1048576 or source_bytes > 4194304:
+                    raise Refusal('immutable source blob exceeds material bound')
+                if hashlib.sha256(git('cat-file', 'blob', oid)).hexdigest() != pin:
+                    raise Refusal('tracked immutable source differs from selected material')
+        total = 0
+        for p, pin in files.items():
+            checked = path(p, metadata=True)
+            regular = regular_path(str(checked))
+            size = regular.stat().st_size
+            total += size
+            if size > 1048576 or total > 4194304:
+                raise Refusal('read extension material exceeds bounded acquisition')
+            from .custody import read_file
+            if hashlib.sha256(read_file(regular, 1048576)[0]).hexdigest() != pin:
+                raise Refusal('read ceiling material changed from its exact pin')
+        task['effect_authority']['read_roots'] = list(dict.fromkeys([*task['effect_authority']['read_roots'], *roots]))
+        if task.get('package_narrowing'):
+            task['scope_roots'] = list(dict.fromkeys([*task['scope_roots'], *roots]))
+        if identities:
+            task['repository_reads'] = list(dict.fromkeys([*task.get('repository_reads', []), *identities]))
+
+
+def apply_scope_options(original, value, options, *, runtime=None):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
+    if not isinstance(options, dict) or set(options) - {'read_ceiling_extensions', 'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
         raise Refusal('unsupported prospective scope option')
     select_task_text(original, value, options.get('task_text', {}))
     operations = options.get('operations', {})
@@ -329,19 +477,23 @@ def apply_scope_options(original, value, options):
     def safe(p):
         from .resource_scopes import root
         return root(p, value.get('artifact_exclusions', []))
+    read_ceiling_extensions(runtime, original, value, options.get('read_ceiling_extensions', {}))
     repositories = options.get('repository_reads', {})
     if not isinstance(repositories, dict) or set(repositories) - set(value['tasks']):
         raise Refusal('exact associated repository read task map required')
     release_root = str(Path(__file__).resolve().parents[3])
     for name, roots in repositories.items():
         task = value['tasks'][name]
-        if (roots != [release_root] or task['role'] not in {'Branch', 'Reviews'}
+        admitted = options.get('read_ceiling_extensions', {}).get(name, {}).get('repository_reads', [])
+        if (not isinstance(roots, list) or not roots or len(set(roots)) != len(roots)
+                or set(roots) - {release_root, *admitted} or task['role'] not in {'Branch', 'Reviews'}
                 or task['phase'] != 'proposer' or task['effects'] != 'none'
                 or task['sandbox'] != 'read-only' or task.get('network')
                 or task['effect_authority']['write_roots']
                 or 'read-source' not in task['effect_authority']['operations']):
-            raise Refusal('repository reads select only this release repository for an existing read-only source proposer')
-        safe(release_root)
+            raise Refusal('repository reads require release or exact extended identities and a read-only source proposer')
+        for repository in roots:
+            safe(repository)
         # A repository identity operand, NOT a filesystem read root. Material
         # paths, immutable pins, package/association and context guards stay separate.
         task['repository_reads'] = list(roots)
@@ -508,7 +660,7 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('unsupported current configuration delta; only coherent selectors and exact release scopes may change')
     if any(name not in tasks for name in additions):
         raise Refusal('every added scope needs an explicitly selected prospective task')
-    if options and (set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
+    if options and (set(options.get('read_ceiling_extensions', {})) | set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
     if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')

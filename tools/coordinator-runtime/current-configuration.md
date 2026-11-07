@@ -326,9 +326,8 @@ it is not a historical map or deployment qualification.
 
 `repository_reads` is an **unselected opt-in repository identity capability**.
 The scope-options map names existing read-only Branch/Reviews source proposers
-and selects exactly `[RELEASE]`, the repository containing this running release.
-No other ancestor, peer checkout, private root, task role or mutable file tree
-can be selected. Each named task must be in the prospective task allowlist.
+and selects `[RELEASE]` or a subset of the exact identities admitted for that task
+by `read_ceiling_extensions`. Each named task must be in the prospective task allowlist.
 This records `repository_reads` on that task without changing its effect read
 roots. For a package-scoped task the admission must separately select a subset
 in its own `repository_reads` list; absence grants no repository identity read.
@@ -340,6 +339,53 @@ their existing authority, history and acquisition guards. The original package,
 accepted association, context, capability, collector, resources and native
 lifecycle are still checked. It grants no general repository filesystem read,
 write, native turn, old-hold disposition or ordinary acceptance.
+
+`read_ceiling_extensions` is a normal configuration transition for existing
+source/report-authorized tasks. Every affected task must appear in the fresh
+`current-configuration-basis --task` selection. For example (pins are placeholders):
+
+```json
+{"read_ceiling_extensions":{"branch-proposer":{
+  "configuration":"CURRENT_DIGEST", "role_owner":"UNCHANGED_OWNER",
+  "original_grant":"ACTUAL_ORIGINAL_GRANT_ID",
+  "authority":"Attributed genuine Work choice and rationale",
+  "source_authority":"Attributed concrete source owner's repository/component/material binding",
+  "read_roots":["/exact/repository/src/component.py","/exact/safe/procedure.md"],
+  "repository_reads":["/exact/repository"],
+  "components":{"component":["src/component.py"]},
+  "source":{"repository":"/exact/repository","commit":"FULL_40_HEX_COMMIT",
+            "files":{"src/component.py":"SHA256"}},
+  "safe_files":{"/exact/safe/procedure.md":"SHA256"}
+}}}
+```
+
+The compatible shape deliberately requires additional pins beyond authority
+strings: exact regular tracked files at one immutable commit in a standalone
+repository, and/or explicitly supplied safe report/procedure files. For reports
+alone use `source:null`, `components:{}`, `repository_reads:[]`. Roots equal these
+files exactly (maximum 64, 1 MiB each, 4 MiB total per task); directories, Git
+metadata, startup AGENTS/WORK_LOG, profile/excluded/ancestor and symlink paths
+are refused before material acquisition. A linked worktree currently requires
+a separate concrete source-owner Git binding and is unsupported by this option.
+Tracked source is verified before working-file bytes are read; no untracked
+body discovery is used. Repository identities confer no directory access.
+
+The extension adds the same exact files to package-narrowing `scope_roots`;
+actual admissions must still narrow read/procedure/repository rights. It keeps
+cwd, writes, sandbox, network, operations, model, owners, recipients and capacity
+unchanged. Separate existing narrowing options can further restrict reads/cwd.
+It does not add QA execution authority. Original grants, revocations, frozen
+historical policies and current-to-original configuration bridging stay intact.
+
+Draft validates current digest and enrolled owner/grant; normal basis/apply
+revalidate material, actual original Board bindings, issuer and the whole fresh
+journal basis. Only the existing genuine Work issuer can select. Neither the
+Work/source authority text nor a safe-file hash authenticates an external source
+owner's consent or proves absence of secrets. That owner supplies the public
+material classification and concrete binding; Work selects it. Filesystem/Git
+immutability and absence of hidden Git object-store indirection are cooperative
+owner obligations, not OS read isolation or noncooperating-writer CAS. Preserve
+all known exclusions. This policy change cannot use source-only/fixed8 repair.
 
 `package_scoped_proposals: [EXISTING_BRANCH_PROPOSER]` is an **unselected opt-in
 narrowing** for the existing read-only software Branch proposer. It requires

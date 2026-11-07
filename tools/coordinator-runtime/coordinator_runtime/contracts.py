@@ -262,12 +262,18 @@ def validate_task(name, task, config, *, withdrawal_only=False):
                     or tuple(operator.parts[-3:]) != ('tools', 'coordinator-runtime', 'coordinator')):
                 raise Refusal('withdrawal requires the exact selected original operator path')
             repository = operator.parents[2]
-        if (task['repository_reads'] != [str(repository)]
+        extension = config.get('prospective_scope_selection', {}).get('read_ceiling_extensions', {}).get(name, {})
+        admitted = extension.get('repository_reads', [])
+        if (not isinstance(task['repository_reads'], list) or not task['repository_reads']
+                or not all(isinstance(p, str) for p in task['repository_reads'])
+                or len(set(task['repository_reads'])) != len(task['repository_reads'])
+                or not isinstance(admitted, list) or not all(isinstance(p, str) for p in admitted)
+                or set(task['repository_reads']) - {str(repository), *admitted}
                 or role not in {'Branch', 'Reviews'} or phase != 'proposer'
                 or task['effects'] != 'none' or task['sandbox'] != 'read-only'
                 or task.get('network') or task['effect_authority']['write_roots']
                 or 'read-source' not in task['effect_authority']['operations']):
-            raise Refusal('exact release repository identity read requires a read-only source proposer')
+            raise Refusal('release or explicitly extended repository identity requires a read-only source proposer')
     if role not in config["roles"] or phase not in PHASES:
         raise Refusal("task role/phase outside enrollment")
     if (role == "QA") != (phase in {"execution", "cleanup"}):
