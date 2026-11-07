@@ -390,6 +390,16 @@ def input_authority(store, event, task, package, visiting=None, *, receiver=None
     return attributed_lineage
 
 
+def require_known_mapping(attributed, state):
+    """Attributed report ancestry supports existing Work decisions only.
+
+    Keep the semantic restriction shared by owner, delegated and packet paths;
+    authentic collection is not evidence that new work may be discovered.
+    """
+    if attributed and state != 'known':
+        raise Refusal('attributed ancestry requires an existing known-point Work decision')
+
+
 def mapping_binding(store, task, package):
     return {'policy': digest(store.config.get('local_integration')),
             'task': digest(store.config['tasks'][task]),
@@ -406,8 +416,7 @@ def observe_input(store, event, receipt):
     if input_metadata(event) is not None:
         raise Refusal('original anchor/commit continuation cannot be retargeted by input resolution')
     attributed = input_authority(store, event, task, package)
-    if attributed and (not isinstance(request, dict) or request.get('state') != 'known'):
-        raise Refusal('attributed ancestry requires an existing known-point Work decision')
+    require_known_mapping(attributed, request.get('state') if isinstance(request, dict) else None)
     if not isinstance(request, dict):
         raise Refusal('typed known/new/unresolved-existing input mapping required')
     state = request.get('state')
@@ -476,11 +485,13 @@ def packet(store, row):
         if resolution['receipt']['task'] != row['task']:
             raise Refusal('receiver mapping belongs to a different exact task')
     delegated_report = (store.processing or store.config.get('software_delegation')) and (event.get('source_job') or event.get('source_delivery'))
+    attributed = False
     if mapped or delegated_report:
         # Existing anchors conserve revisions; they do not bypass the same
         # original collection/rights checks used for a fresh receiver mapping.
-        input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
+        attributed = input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
     raw = input_metadata(event)
+    require_known_mapping(attributed, 'known' if isinstance(raw, dict) and set(raw) == {'reads', 'writes', 'versions'} else None)
     if raw is None:
         raise Refusal('unresolved existing/new identity: missing metadata is not proof of new work; actual receiver mapping required')
     if isinstance(raw, dict) and set(raw) == {'new_work'}:

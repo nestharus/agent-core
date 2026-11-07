@@ -124,10 +124,11 @@ def guard(store, event, task, package):
             or local.input_metadata(event) is not None or store.input_resolution(event['id']) is not None
             or task not in delegated_tasks(store, event)):
         raise Refusal('lookup needs its original fresh classified prospective unreserved responsibility')
-    local.input_authority(store, event, task, package)
+    attributed = local.input_authority(store, event, task, package)
     row = {'event': event['id'], 'task': task, 'package': package}
     if not store.processing.task(row):
         raise Refusal('lookup cannot widen original task/package/member authority')
+    return attributed
 
 
 def native_bindings(store, row, template):
@@ -495,11 +496,12 @@ def proof(store, event, actor, attempt, receipt):
             or decision(store, event, attempt) != receipt):
         raise Refusal('metadata resolution needs its exact actual software worker/collection/prospective authority')
     canonical_uuid(row['session'])
-    guard(store, original, receipt['task'], receipt['package'])
+    attributed = guard(store, original, receipt['task'], receipt['package'])
+    request = receipt['integration']
+    local.require_known_mapping(attributed, request.get('state') if isinstance(request, dict) else None)
     snapshot = json.loads(record['snapshot']).get(receipt['task'])
     if not snapshot or snapshot['binding'] != local.mapping_binding(store, receipt['task'], receipt['package']):
         raise Refusal('metadata policy/admission/grant changed; no post-result restamping')
-    request = receipt['integration']
     if not isinstance(request, dict):
         raise Refusal('typed metadata interpretation required')
     if request.get('state') == 'known' and set(request) == {'state','reads','writes'}:
