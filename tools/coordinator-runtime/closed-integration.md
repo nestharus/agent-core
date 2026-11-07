@@ -248,8 +248,9 @@ route. Every related task attempt must have an affirmative original-controller
 collection of `known_not_started: true` and explicit resume disposition, with
 no begin, session, turn, semantic result, numeric exit or process END. Missing
 begin or missing END alone never qualifies. Uncollected attempts, conflicting
-task native observations, pending owner recovery selections and missing consumed
-windows refuse. Related read-only diagnoses must either qualify as no-start or
+task native observations and pending owner recovery selections refuse. The global
+route requires its exact consumed window; the narrowly scoped local alternative
+below requires the original local reservation instead. Related read-only diagnoses must either qualify as no-start or
 have their actual begin, numeric END and collection retained. Their having
 run does not manufacture an END for an unlaunched task or strand that task. A claimed recovery controller is included even if it has not
 allocated a diagnosis; an uncollected diagnosis cannot be bypassed.
@@ -279,6 +280,73 @@ duties remain processing/retirement dependencies through the original frozen
 members after queue reassignment; unrelated UNKNOWN debt does not consume all
 future execution capacity. Withdrawal supplies neither processing nor cleanup,
 and no lifetime budget credit is granted.
+
+For a held, allocated **local** Work integrator with no global window, the same
+two commands select `integration-local-no-start-metadata-v1`. This alternative
+requires the exact token, frozen members/hash/current mapping, reserved queue
+ownership and task/phase/package identity; unchanged original task and local
+policy; and the original anchored per-input read/write/version scope. Only
+workspace-write, no-network, file-witness routine Work integration qualifies.
+Unknown, discovery, report-only, native and ordinary-effect lanes refuse.
+Prepared point definitions must match current file-only bindings. Dynamic points
+also require their original prepared binding and exact current task/namespace
+registration. No canonical target, point value or generating job is acquired.
+
+Every task attempt must be affirmatively collected as not-started with explicit
+`known_not_started: true`, a nonempty text resume disposition, `not-started`
+capture and `no-session-created` cleanup, and no begin/END/exit/session/turn/
+semantic/result. Diagnoses require that same no-start proof or their genuine
+finite ordered begin, numeric END and collection. A running job, pending or
+unknown recovery authority, collection handoff, response, effect receipt,
+publication intent, local commit or ordinary-effect record refuses. The initial
+job effect status `unknown` is retained, not reconciled. A retained claimed or
+diagnosing recovery label does not prove an active process or authorize bypass:
+all related originals must qualify and every controller still needs the owner's
+explicit actual closed-writers/no-task-launch testimony, including stopped
+service/parent/children/callback facts where applicable. SQLite and actor strings
+cannot authenticate those external facts.
+
+The local basis projects only the selected job's identity/lifecycle/absence
+predicates, frozen members and local scope/point metadata, exact queues/sources,
+mapping version/hash, enrollments and attempt no-start/closure predicates. It
+never calls the global debt collector or reads other jobs, result bodies,
+outboxes, custody bodies, historical recovery receipts, captures or canonical
+files. Whole selected member/scope metadata is transported and SQLite evaluates
+selected JSON/policy predicates internally; this is not exact physical read
+isolation or validation of opaque retained bodies. The existing cooperative
+journal revision binds omitted duties, so even an opaque or unrelated protocol
+mutation requires a fresh receipt. It is not hostile-writer CAS.
+
+For paused intake, supply the existing `--management` selection on either
+no-start command. This uses the existing metadata management basis and exact
+operation/job/token/source-record set, original stopped Work-issued grants and
+current implementation/configuration pins. Processing capabilities grant no
+substitute authority. Paused no-start management refuses nonlocal/global jobs
+before any debt acquisition. The append, queue return and management audit
+serialize in one transaction; audit failure rolls everything back. The existing
+metadata journal capacity check avoids old artifact/capture accounting. It
+grants no execution admission or budget credit.
+
+After fresh basis comparison, controller receipts and a second basis check,
+withdrawal appends the existing permanent prestart disposition and returns just
+the exact reserved queues to `queued` with `job=NULL`. All original local scopes,
+point snapshots, attempts, diagnoses, results, holds, custody, recovery, outboxes,
+UNKNOWNs and charges survive. No new job is created and no processing/retention
+clock starts. A later separately requested reservation/launch must pass its own
+current Source, capability, epoch, mapping, point and ordinary guards; global
+successors retain their existing fresh-window requirements.
+
+Owned fictional local controls:
+`python3 -I -B tests/test_local_no_start708.py --fixtures ABSOLUTE_NEW_OWNED_ROOT`.
+`--legacy` exercises the existing test77 global guards with real Store/transactions;
+only its environmental `/proc` preamble is replaced by supplied admission and
+owned fixture accounting, with a 1 KiB explicit fictional publication bound.
+The legacy positive conservation control additionally checks that cooperative
+revision witnesses advance. Its duty/authority/refusal assertions remain.
+`--management-guards` runs the existing management406 controls. Run under
+read-only source mounts, network/PID isolation and an empty `/proc`; all writable
+fixtures are newly authored and retained. None qualifies actual owner/controller
+facts, rollout, native operation, provider behavior or live lifecycle repair.
 
 Initial, diagnosis and recovered successor prompts load the authoritative
 integration-window receipt from the journal. Handoff also records it in the

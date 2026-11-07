@@ -15,10 +15,13 @@ OPERATIONS = {'integration-closure-basis', 'retire-integration',
               'integration-window-basis', 'select-integration-window',
               'work-read-closure-basis', 'fence-work-proposer',
               'integration-metadata-closure-basis', 'retire-integration-metadata',
-              'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
+              'work-read-metadata-closure-basis', 'fence-work-proposer-metadata',
+              'integration-no-start-basis', 'withdraw-integration-no-start'}
+LOCAL_NO_START_OPERATIONS = {'integration-no-start-basis', 'withdraw-integration-no-start'}
 READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer'}
 METADATA_READ_FENCE_OPERATIONS = {'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
-METADATA_OPERATIONS = {'integration-metadata-closure-basis', 'retire-integration-metadata'} | METADATA_READ_FENCE_OPERATIONS
+METADATA_OPERATIONS = ({'integration-metadata-closure-basis', 'retire-integration-metadata'}
+                       | METADATA_READ_FENCE_OPERATIONS | LOCAL_NO_START_OPERATIONS)
 METADATA_MANAGEMENT = 'integration-metadata-management-v1'
 
 
@@ -157,6 +160,9 @@ class Access:
                     or len(set(values)) != len(values)):
                 raise Refusal('distinct explicit management record identities required')
         runtime = self.runtime
+        if command in LOCAL_NO_START_OPERATIONS and not runtime.one(
+                'SELECT job FROM local_jobs WHERE job=?', (selected['job'],)):
+            raise Refusal('paused no-start management requires an exact local reservation; no global debt acquisition')
         if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS | METADATA_OPERATIONS:
             jobs, events = {selected['job']}, set()
         else:
@@ -207,7 +213,7 @@ def execute(runtime, command, selected, selection, actor, operation):
         try:
             outcome = operation()
             access.current()
-            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata', 'fence-work-proposer-metadata'}:
+            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata', 'fence-work-proposer-metadata', 'withdraw-integration-no-start'}:
                 key = digest(selection)
                 if command in METADATA_OPERATIONS:
                     from .selected_source import custody_budget

@@ -70,6 +70,9 @@ class Controls(base.Controls):
         self.dispose(j)
         after=self.snapshot()
         for table in before:
+            if table == 'allocation_revision':
+                self.assertNotEqual(before[table],after[table])  # Cooperative mutation witnesses must advance.
+                continue
             if table not in {'jobs','queue','integration_prestart_dispositions'}:self.assertEqual(before[table],after[table],table)
         job=s.job(j['id']);self.assertEqual('fictional retained owner hold',job['hold_reason'])
         self.assertEqual(before['jobs'][-1]['effects'],job['effects'])

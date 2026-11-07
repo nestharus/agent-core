@@ -13,6 +13,7 @@ from .integration_evidence import attempt_view, fence_view, shared_debt_view
 
 METADATA_CLOSURE = 'integration-execution-closure-metadata-v1'
 METADATA_READ_FENCE = 'work-anchored-read-fence-metadata-v1'
+LOCAL_NO_START = 'integration-local-no-start-metadata-v1'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS integration_retirements(
@@ -407,6 +408,9 @@ class IntegrationJournal:
         A caller must additionally close every controller capable of launching.
         No stale window refresh, fabricated END or effect reconciliation occurs.
         """
+        if self.one('SELECT job FROM local_jobs WHERE job=?', (job,)):
+            with (nullcontext() if self.db.in_transaction else self.tx()):
+                return self._integration_local_no_start_basis(job, token)
         self.require_execution_open(job)
         row = self.job(job, token)
         if (row['role'] != 'Work' or row['phase'] != 'integrator'
@@ -435,6 +439,178 @@ class IntegrationJournal:
             'recovery_dispositions': self.rows('SELECT * FROM recovery_dispositions WHERE job=? ORDER BY rowid', (job,))})
         return self._integration_bounded(basis)
 
+    def _integration_local_no_start_basis(self, job, token, *, operation='integration-no-start-basis'):
+        """Only this frozen file reservation; no debt, return or capture census.
+
+        SQL projects selected metadata and tests opaque policy/absence predicates
+        internally. The cooperative revision binds omitted duties, without
+        validating their bodies or authenticating external controller closure.
+        """
+        from . import windows, local_integration as local, routine
+        if self.processing is not None:
+            raise Refusal('local no-start requires genuine Work owner, not processing substitution')
+        management = getattr(self, 'integration_management', None)
+        if management and (management.actor != self.config['roles']['Work']['owner']
+                or management.selection['operation'] != operation
+                or management.selection['target'] != {'job':job, 'token':token}):
+            raise Refusal('local no-start outside exact owner operation/job/token authority')
+        row = self.one('SELECT id,role,phase,task,package,token,controller,state,active_attempt,effects,'
+            'recovery_owner,recovery_state,recovery_count,response IS NOT NULL AS response,'
+            'closed_at,effect_receipt IS NOT NULL AS effect_receipt,'
+            'collection_handoff IS NOT NULL AS collection_handoff FROM jobs WHERE id=? AND token=?', (job,token))
+        if (not row or row['role'] != 'Work' or row['phase'] != 'integrator' or row['state'] != 'held'
+                or not row['active_attempt'] or row['response'] or row['closed_at'] is not None
+                or row['effects'] != 'unknown' or row['effect_receipt'] or row['collection_handoff']):
+            raise Refusal('exact held allocated local Work integrator without effect/response/handoff required')
+        for table in ('integration_retirements','integration_prestart_dispositions','work_read_fences'):
+            if self.one('SELECT job FROM '+table+' WHERE job=?', (job,)):
+                raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
+        if self.one('SELECT id FROM integration_windows WHERE job=?', (job,)):
+            raise Refusal('local no-start cannot substitute for a consumed global window')
+        task = self.config['tasks'].get(row['task'], {})
+        selected = local.selected(self, row['task'])
+        if (task.get('role') != 'Work' or task.get('phase') != 'integrator'
+                or task.get('sandbox') != 'workspace-write' or task.get('execution') is not None
+                or task.get('network', False) is not False or task.get('effects') != 'owner-reconcile'
+                or task.get('ordinary_effects') or not selected
+                or not isinstance(task.get('routine_completion'), dict)
+                or task['routine_completion'].get('kind') != 'file-witness'):
+            raise Refusal('original file-only routine local Work integration policy required')
+        routine.policy_for(task, execution=False)  # Lexical policy validation, no target metadata or reads.
+        frozen = self.one('SELECT task=? AS current FROM job_resource_policies WHERE job=?', (encode(task),job))
+        if not frozen or not frozen['current']:
+            raise Refusal('current task cannot replace the immutable original local task policy')
+        original = self.one('SELECT policy,scope FROM local_jobs WHERE job=?', (job,))
+        if not original or original['policy'] != digest(self.config.get('local_integration')):
+            raise Refusal('original local scope/policy binding changed')
+        try:
+            scope = json.loads(original['scope'])
+            members = json.loads(self.one('SELECT members FROM jobs WHERE id=?', (job,))['members'])
+            if (not isinstance(scope, dict) or scope.get('lane') != 'anchored'
+                    or scope.get('mode') not in {'direct','reconcile'}
+                    or any(not isinstance(scope.get(k), list) or not all(isinstance(v,str) and v for v in scope[k])
+                           or len(set(scope[k])) != len(scope[k]) for k in ('reads','writes','sources'))
+                    or not (scope['reads'] or scope['writes']) or scope.get('neighbors')
+                    or not isinstance(members,list) or not members
+                    or any(not isinstance(m,dict) or set(m) - {'input_resolution'} != {'queue','event','hash','package'}
+                           or any(not isinstance(m[k],str) or not m[k] for k in ('queue','event','hash'))
+                           or m['package'] != row['package'] for m in members)
+                    or scope['sources'] != [m['event'] for m in members]):
+                raise Refusal('exact frozen anchored local members and scope required; no broad/report/discovery lane')
+            inputs = scope.get('inputs')
+            if (not isinstance(inputs,list) or len(inputs) != len(members)
+                    or any(not isinstance(s,dict) or set(s) != {'lane','reads','writes','versions','sources'}
+                           or s['lane'] != 'anchored' or s['sources'] != [m['event']]
+                           or any(not isinstance(s[k],list) or not all(isinstance(v,str) and v for v in s[k])
+                                  or len(set(s[k])) != len(s[k]) for k in ('reads','writes'))
+                           or not (s['reads'] or s['writes']) or not isinstance(s['versions'],dict)
+                           or set(s['versions']) != set(s['reads']) | set(s['writes'])
+                           or not all(isinstance(v,str) and v for v in s['versions'].values())
+                           for s,m in zip(inputs,members))
+                    or any(set(scope[k]) != {p for s in inputs for p in s[k]} for k in ('reads','writes'))):
+                raise Refusal('complete original per-input point/version mapping required')
+        except (ValueError, TypeError, KeyError):
+            raise Refusal('malformed original local scope/members; retain reservation') from None
+        queues = self.rows('SELECT id,event,role,phase,task,package,state,job FROM queue WHERE job=? ORDER BY rowid', (job,))
+        if (len(queues) != len(members) or len({m['queue'] for m in members}) != len(members)
+                or len({m['event'] for m in members}) != len(members)
+                or {q['id'] for q in queues} != {m['queue'] for m in members}
+                or any(q['role'] != 'Work' or q['phase'] != 'integrator' or q['task'] != row['task']
+                       or q['state'] != 'reserved' or q['package'] != row['package']
+                       or not any(m['queue'] == q['id'] and m['event'] == q['event'] for m in members) for q in queues)):
+            raise Refusal('exact pending queue ownership required; no partial release')
+        sources = []
+        for member in members:
+            source = self.one('SELECT id,role,hash,processed_at,state,ack,hold IS NOT NULL AS held FROM events WHERE id=?', (member['event'],))
+            mapping = self.one('SELECT version,source_hash FROM input_resolutions WHERE event=? ORDER BY version DESC LIMIT 1', (member['event'],))
+            if (not source or source['role'] != row['role'] or source['hash'] != member['hash'] or source['processed_at'] is not None
+                    or source['state'] != 'queued'
+                    or (mapping['version'] if mapping else None) != member.get('input_resolution')
+                    or mapping and mapping['source_hash'] != member['hash']):
+                raise Refusal('original pending source/hash/current mapping differs from frozen members')
+            sources.append(source)
+        enrollments = []
+        for role in sorted({'Work'} | {s['role'] for s in sources}):
+            enrollment = management.enrollment(role) if management else self.one(
+                'SELECT role,owner,profile,grant_id,cutover,intake FROM enrollments WHERE role=? AND intake=1', (role,))
+            if role not in self.config['roles'] or not enrollment or enrollment['owner'] != self.config['roles'][role]['owner']:
+                raise Refusal('actual current source owner enrollment required')
+            enrollments.append({k:enrollment[k] for k in ('role','owner','profile','grant_id','cutover','intake')})
+        if (row['recovery_state'] not in {None,'claimed','diagnosing','awaiting-disposition','owner-deferred','handed-off'}
+                or (row['recovery_owner'] is None) != (row['recovery_state'] is None)
+                or type(row['recovery_count']) is not int or row['recovery_count'] < 0
+                or (row['recovery_owner'] is None) != (row['recovery_count'] == 0)
+                or self.one("SELECT id FROM recovery_requests WHERE job=? AND state='pending'", (job,))):
+            raise Refusal('pending/unknown recovery authority must retain its disposition')
+        attempts = self.rows('SELECT id,kind,controller,state,begin,ended,exit,collected,capture,cleanup,'
+            'session IS NOT NULL AS session,turn IS NOT NULL AS turn,semantic IS NOT NULL AS semantic,'
+            'result IS NOT NULL AS result,CASE WHEN json_valid(detail) THEN '
+            "json_type(detail,'$.known_not_started')='true' END AS known_not_started,"
+            "CASE WHEN json_valid(detail) AND json_type(detail,'$.resume_disposition')='text' "
+            "THEN length(trim(json_extract(detail,'$.resume_disposition')))>0 END AS resume_disposition "
+            'FROM attempts WHERE job=? ORDER BY rowid', (job,))
+        active = next((a for a in attempts if a['id'] == row['active_attempt']), None)
+        if not active or active['kind'] != 'task' or active['controller'] != row['controller']:
+            raise Refusal('exact original active task/controller required')
+        for a in attempts:
+            if (type(a['collected']) not in {int,float} or not math.isfinite(a['collected']) or a['collected'] < 0
+                    or a['kind'] not in {'task','diagnosis'}):
+                raise Refusal('every related original needs affirmative collection')
+            if a['kind'] == 'diagnosis' and a['state'] == 'collected':
+                if (type(a['exit']) is not int or any(type(a[k]) not in {int,float} or not math.isfinite(a[k])
+                        or a[k] < 0 for k in ('begin','ended')) or not a['begin'] <= a['ended'] <= a['collected']):
+                    raise Refusal('read-only diagnosis needs actual begun numeric END and collection')
+            elif (a['state'] != 'not-started' or any(a[k] is not None for k in ('begin','ended','exit'))
+                    or any(a[k] for k in ('session','turn','semantic','result'))
+                    or a['known_not_started'] != 1 or a['resume_disposition'] != 1
+                    or a['capture'] != 'not-started' or a['cleanup'] != 'no-session-created'):
+                raise Refusal('affirmative collected no-start required; missing begin/END is not proof')
+        for table in ('file_publications','local_commits','local_point_commits','local_material_commits',
+                      'ordinary_runs','ordinary_tool_records'):
+            if self.one('SELECT 1 AS present FROM '+table+' p JOIN attempts a ON a.id=p.attempt WHERE a.job=? LIMIT 1', (job,)):
+                raise Refusal('publication/local commit/ordinary effects cannot borrow local no-start')
+        if self.one("SELECT 1 AS present FROM routine_runs r JOIN attempts a ON a.id=r.attempt WHERE a.job=? "
+                    "AND (r.state!='prepared' OR r.after_files IS NOT NULL OR r.receipt IS NOT NULL) LIMIT 1", (job,)):
+            raise Refusal('routine effects cannot borrow local no-start')
+        # Static points are frozen by local_jobs.policy. Dynamic points also
+        # need their original prepared snapshot, never a new namespace inference.
+        snapshots = self.rows("SELECT b.attempt,CASE WHEN json_valid(b.basis) THEN json_extract(b.basis,'$.policy') END AS policy,"
+            "CASE WHEN json_valid(b.basis) THEN json_extract(b.basis,'$.points') END AS points "
+            'FROM local_bases b JOIN attempts a ON a.id=b.attempt WHERE a.job=? ORDER BY b.rowid', (job,))
+        points = {}
+        for key in sorted(set(scope['reads']) | set(scope['writes'])):
+            point = self.config['local_integration']['points'].get(key)
+            if key not in selected['points']:
+                dynamic = self.one('SELECT definition FROM local_lookup_points WHERE point=? AND task=? AND policy=?',
+                    (key,row['task'],original['policy']))
+                if not dynamic and selected.get('new_point_prefix') and key.startswith(selected['new_point_prefix']):
+                    dynamic = self.one('SELECT definition FROM local_discovered_points WHERE point=? AND policy=?', (key,original['policy']))
+                try:
+                    point = json.loads(dynamic['definition']) if dynamic else None
+                except (ValueError, TypeError):
+                    raise Refusal('malformed original dynamic point binding; retain reservation') from None
+                if not snapshots:
+                    raise Refusal('dynamic local point needs its immutable original prepared binding')
+            if (not isinstance(point,dict) or not point.get('bindings')
+                    or any(not isinstance(b,dict) or set(b) != {'target','path'}
+                           or b['target'] not in task['routine_completion']['targets'] for b in point['bindings'])):
+                raise Refusal('exact current file-only local point bindings required; no native exception')
+            points[key] = point
+        for snapshot in snapshots:
+            # Compare the exact selected definition encoding without opening any
+            # observed values/preimages from the original prepared snapshot.
+            if snapshot['policy'] != original['policy'] or snapshot['points'] != encode(points):
+                raise Refusal('original prepared point bindings changed; no refreshed withdrawal authority')
+        controllers = {row['controller'], *[a['controller'] for a in attempts]}
+        if row['recovery_owner'] is not None:
+            controllers.add(row['recovery_owner'])
+        for controller in controllers:
+            required_text(controller, 'actual launch-capable controller', 128)
+        return self._integration_bounded({'schema':LOCAL_NO_START, 'configuration':digest(self.config),
+            'job':row, 'members':members, 'local':{'policy':original['policy'],'scope':scope,'points':points},
+            'queue':queues, 'sources':sources, 'enrollments':enrollments, 'attempts':attempts,
+            'controllers':sorted(controllers), 'journal_revision':windows.revision(self)})
+
     def _integration_no_start_attempt(self, attempt):
         if attempt['kind'] not in {'task', 'diagnosis'} or attempt['collected'] is None:
             return False
@@ -455,9 +631,15 @@ class IntegrationJournal:
         not authenticated by SQLite. The authority-checked CLI supplies the owner.
         Cooperating begin/allocation and this disposition serialize in one tx.
         """
-        with self.tx():
-            self._integration_owner(actor)
-            basis = self.integration_no_start_basis(job, token)
+        with self._integration_transaction():
+            local = self.one('SELECT job FROM local_jobs WHERE job=?', (job,))
+            if local:
+                if actor != self.config['roles']['Work']['owner']:
+                    raise Refusal('actual current Work owner required')
+                basis = self._integration_local_no_start_basis(job, token, operation='withdraw-integration-no-start')
+            else:
+                self._integration_owner(actor)
+                basis = self.integration_no_start_basis(job, token)
             if not isinstance(receipt, dict) or set(receipt) != {'basis', 'reason', 'controllers'}:
                 raise Refusal('exact no-start basis, reason and controller closures required')
             if receipt['basis'] != basis:
@@ -479,7 +661,14 @@ class IntegrationJournal:
             if sorted(found) != basis['controllers']:
                 raise Refusal('conflicting/missing controller closures')
             self._integration_bounded(receipt)
-            self.budget(None, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            incoming = len(encode(basis).encode()) + len(encode(receipt).encode())
+            if local:
+                from .selected_source import custody_budget
+                custody_budget(self, incoming)
+                if self._integration_local_no_start_basis(job, token, operation='withdraw-integration-no-start') != basis:
+                    raise Refusal('local no-start basis changed; fresh owner decision required')
+            else:
+                self.budget(None, incoming)
             self.db.execute('INSERT INTO integration_prestart_dispositions VALUES(?,?,?,?,?)',
                 (job, actor, encode(basis), encode(receipt), self.clock()))
             self.db.execute("UPDATE jobs SET state='held',hold_reason=COALESCE(hold_reason,?) WHERE id=?",
