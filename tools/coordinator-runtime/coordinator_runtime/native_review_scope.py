@@ -53,8 +53,8 @@ def validate(runtime, role, record, selection=None):
 
 
 def _metadata(runtime, row, record):
-    from . import prospective, reviews, local_integration
-    from .report_scope import source_metadata, source_events, execution_report
+    from . import prospective
+    from .report_scope import source_metadata
     cap, selected = runtime.processing.current()
     validate(runtime, row['role'], record, selected)
     p = record['native_review_return']
@@ -106,7 +106,7 @@ def _metadata(runtime, row, record):
         authority = runtime.one("SELECT job,json_extract(detail,'$.processing_capability') AS capability, "
             "json_extract(detail,'$.software_authority.prospective_epoch') AS epoch "
             "FROM attempts WHERE id=?", (current_job['active_attempt'],))
-        if (current_job['hold_reason'] or not authority or authority['job'] != current_job['id']
+        if (current_job['hold_reason'] or not authority or not authority['epoch'] or authority['job'] != current_job['id']
                 or authority['capability'] != cap['id']):
             raise Refusal('original current unheld native job authority required before bodies')
         rights = prospective.current(runtime, current_job['task'], authority['epoch'])
