@@ -10,7 +10,8 @@ from coordinator_runtime import local_integration as local, report_repair
 class NativeToWork(NativeReturn):
     def configure_fixture(self):
         super().configure_fixture()
-        self.config['local_integration']['tasks']['work-proposer'].update(points=['a'], lookup_scopes=[])
+        for task in ('reviews-integrator','work-proposer'):
+            self.config['local_integration']['tasks'][task].update(points=['a'], lookup_scopes=[])
 
     def test_native_whole_integrator_return_maps_real_work_point(self):
         self.test_whole_native_return_and_real_integrator_transport()
@@ -18,11 +19,8 @@ class NativeToWork(NativeReturn):
         event = self.store.event(job['response'])
         original = {t:self.store.rows('SELECT * FROM '+t) for t in
                     ('events','attempts','results','processing_source_positions','review_calls')}
-        with self.store.tx():
-            observed = local.observe_input(self.store, event, dict(mode='route', task='work-proposer',
-                package='pkg', integration=dict(state='known',reads=['a'],writes=[]),
-                reason='Independent fictional Work reads the known status point'))
-        self.assertEqual(observed['packet']['reads'], ['a'])
+        observed = local.packet(self.store, dict(event=event['id'],task='work-proposer',package='pkg'))
+        self.assertEqual(observed['reads'], ['a'])
         for table, rows in original.items():
             self.assertEqual(rows, self.store.rows('SELECT * FROM '+table), table)
         # Continue through the real delegated mapping and Work task collection.
