@@ -52,7 +52,7 @@ def validate(runtime, role, record, selection=None):
             raise Refusal('exact current selected native method/component required')
 
 
-def eligible(runtime, row, record):
+def _metadata(runtime, row, record):
     from . import prospective, reviews, local_integration
     from .report_scope import source_metadata, source_events, execution_report
     cap, selected = runtime.processing.current()
@@ -99,6 +99,38 @@ def eligible(runtime, row, record):
         birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (original['id'],))
         if not birth or birth['position'] <= selected['basis']['event_boundary']:
             raise Refusal('fresh current source birth required before bodies')
+    # Project scalar original authority only; never load an attempt result,
+    # native receipt/answer, or source event during metadata admission.
+    for current_job in [job] + ([runtime.job(row['id'])] if row.get('active_attempt') else []):
+        source_metadata(runtime, current_job)
+        authority = runtime.one("SELECT job,json_extract(detail,'$.processing_capability') AS capability, "
+            "json_extract(detail,'$.software_authority.prospective_epoch') AS epoch "
+            "FROM attempts WHERE id=?", (current_job['active_attempt'],))
+        if (current_job['hold_reason'] or not authority or authority['job'] != current_job['id']
+                or authority['capability'] != cap['id']):
+            raise Refusal('original current unheld native job authority required before bodies')
+        rights = prospective.current(runtime, current_job['task'], authority['epoch'])
+        if (not rights or rights['policy']['ordinary_effects'] is not False
+                or prospective.job_position(runtime, current_job, rights) <= rights['job_boundary']
+                or any(prospective.event_position(runtime, member['event'], rights) <= rights['event_boundary']
+                       for member in json.loads(current_job['members']))):
+            raise Refusal('original current native task/member epoch required before bodies')
+    return cap, selected, job
+
+
+def preflight(runtime, row, record):
+    """Body-free current policy, scopes and ALL source/member hold checks."""
+    _metadata(runtime, row, record)
+    return record['native_review_return']['relevant_roots']
+
+
+def _authenticate(runtime, row, record):
+    # Only resource_scopes calls this after its full physical admission, in the
+    # same transaction. Repeat metadata admission before the body read group.
+    from . import prospective, reviews, local_integration
+    from .report_scope import source_events, execution_report
+    cap, selected, job = _metadata(runtime, row, record)
+    p = record['native_review_return']
     attempt = runtime.attempt(job['active_attempt'])
     runtime.processing.authorize(attempt)
     if not prospective.for_job(runtime, job):
@@ -142,3 +174,14 @@ def eligible(runtime, row, record):
     if encode(answer) != encode(expected):
         raise Refusal('whole original native return conservation required')
     return p['relevant_roots']
+
+
+def eligible(runtime, row, record):
+    """Public entry: physical admission and whole authentication are inseparable."""
+    from contextlib import nullcontext
+    from .resource_scopes import blocked
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        preflight(runtime, row, record)
+        if blocked(runtime, row):
+            raise Refusal('current native return authority/resources changed')
+        return record['native_review_return']['relevant_roots']

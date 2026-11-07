@@ -5,6 +5,7 @@ import re
 import os
 import subprocess
 import sqlite3
+from contextlib import nullcontext
 from pathlib import Path
 
 from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, encode, required_text, scoped_task, qa_branch_sequence
@@ -379,6 +380,13 @@ def qa_operation(runtime, row, record, account=None):
 
 
 def blocked(runtime, row, task=None):
+    # Serialize metadata, physical admission and protected authentication with
+    # cooperative policy/hold/resource changes, including direct callers.
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        return _blocked(runtime, row, task)
+
+
+def _blocked(runtime, row, task=None):
     if qa_branch_sequence(runtime.config) and row['task'] == 'branch-integrator':
         try:
             from .ordinary import branch_dependency
@@ -416,8 +424,8 @@ def blocked(runtime, row, task=None):
             return True
     elif 'native_review_return' in record:
         try:
-            from .native_review_scope import eligible
-            operation_held = eligible(runtime, row, record)
+            from .native_review_scope import preflight
+            operation_held = preflight(runtime, row, record)
         except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
     elif 'reviews_report' in record:
@@ -503,8 +511,14 @@ def blocked(runtime, row, task=None):
                 if (not any(held.is_relative_to(p) for p in original_staging)
                         and overlaps(future_staging, held)):
                     return True
-        return not (reads or writes) or (any(overlaps(a, b) for a in writes for b in held_reads + held_writes)
+        conflict = not (reads or writes) or (any(overlaps(a, b) for a in writes for b in held_reads + held_writes)
                                         or any(overlaps(a, b) for a in reads for b in held_writes))
+        if conflict:
+            return True
+        if 'native_review_return' in record:
+            from .native_review_scope import _authenticate
+            _authenticate(runtime, row, record)
+        return False
     except (Refusal, OSError, KeyError, TypeError, ValueError, sqlite3.Error):
         return True
 

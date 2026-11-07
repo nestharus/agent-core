@@ -396,8 +396,12 @@ def bounded_members(runtime, row, rows):
     record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
     if 'native_review_return' in record:
         from .native_review_scope import eligible as native_eligible
-        native_eligible(runtime, row, record)
-        return [row]  # Exact whole return; other current reports remain queued.
+        with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+            native_eligible(runtime, row, record)
+            incoming = conserved_inputs(runtime, row)
+            if not fits_return(runtime, incoming, transport=True):
+                raise Refusal('whole native report has no complete transport with selected new analysis headroom')
+            return [row]  # Exact whole return; other current reports remain queued.
     if 'reviews_report' not in record:
         return rows
     chosen, reports = [], []
