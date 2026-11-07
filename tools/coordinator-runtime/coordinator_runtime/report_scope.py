@@ -133,8 +133,12 @@ def integration_inputs(runtime, row):
 
 def validate_result(runtime, row, result):
     reports = integration_inputs(runtime, row)
-    if reports is not None and {'collected_reports': reports} not in result['findings']:
-        raise Refusal('consolidation must conserve exact whole original report envelopes and qualifications')
+    if reports is not None:
+        # Use the source pins' canonical JSON identity: Python equality conflates
+        # booleans/numbers and numeric representations that encode distinctly.
+        expected = encode({'collected_reports': reports})
+        if not any(encode(finding) == expected for finding in result['findings']):
+            raise Refusal('consolidation must conserve exact whole original report envelopes and qualifications')
 
 
 def complete_return(reports):
