@@ -51,11 +51,13 @@ class ProtocolAbnormalEND(unittest.TestCase):
         return configuration.apply(self.s, self.boards, value, self.p.selection(value))
 
     def snapshot(self):
-        # The fixture owns this exact database. Compare all old records, including
-        # unknown effect/source/privacy/retention duties, before and after apply.
+        # The fixture owns this exact database. Compare all original duties;
+        # exclude only the appended transition and normal allocation mutation
+        # witnesses advanced by basis capture (as in the source-only fixture).
         return {r['name']:self.s.rows('SELECT * FROM "'+r['name']+'"')
                 for r in self.s.rows("SELECT name FROM sqlite_master WHERE type='table'")
-                if r['name'] not in {'configuration_transitions', 'sqlite_sequence'}}
+                if r['name'] not in {'configuration_transitions', 'sqlite_sequence',
+                                     'allocation_revision', 'allocation_revision_tokens'}}
 
     def test_abnormal_END2_serving_null_upgrades_without_changing_old_unknowns(self):
         key = self.original()
