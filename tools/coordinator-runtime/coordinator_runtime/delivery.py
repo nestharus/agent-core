@@ -333,7 +333,7 @@ class DeliveryJournal:
 
     def dependency_hold(self, event):
         dependent = self.dependents(event)
-        if any(row["hold"] or row["processed_at"] is None for row in dependent):
+        if any(row["hold"] is not None or row["processed_at"] is None for row in dependent):
             return True
         ids = {row["id"] for row in dependent}
         jobs = self.rows("SELECT * FROM jobs")

@@ -445,7 +445,11 @@ class Dispatcher:
                     self.store.failure_delivery(job,attempt,self.config['tasks'][job['task']],str(exc))
 
     async def recover(self, job):
-        attempt = self.store.diagnosis_attempt(job["id"])
+        try:
+            attempt = self.store.diagnosis_attempt(job["id"])
+        except (Refusal, OSError) as exc:
+            self.store.pending_recovery_admission(job, exc)
+            return  # No diagnosis/session/outcome existed; never fabricate END.
         try:
             prompt=recovery_prompt(self.store,job)
             spec = {"cwd": self.config["diagnosis"]["cwd"], "sandbox": "read-only"}
@@ -462,6 +466,11 @@ class Dispatcher:
         if self.store.integration_retirement_recorded(job_id):return
         job=self.store.job(job_id)
         if job['recovery_state']!='diagnosing':return
+        try:
+            local_integration.current_sources(self.store, job)
+        except Refusal as exc:
+            self.store.pending_recovery_admission(job, exc, diagnosis)
+            return
         old=self.store.attempt(job['active_attempt'])
         current=self.store.current_diagnosis(job)
         if not current or current['id']!=diagnosis:return  # A late old callback cannot dispose a newer pending diagnosis.
@@ -479,6 +488,11 @@ class Dispatcher:
             self.spawn(self.execute(job_id, replacement))
         except Refusal as exc:
             self.runtime_errors[job_id] = str(exc)
+            try:
+                local_integration.current_sources(self.store, self.store.job(job_id))
+            except Refusal as admission:
+                self.store.pending_recovery_admission(job, admission, diagnosis)
+                return
             diag=self.store.attempt(diagnosis)
             if diag['collected'] is not None:
                 with self.store.tx():self.store.retain_recovery_disposition(job,diag,exc)
@@ -510,6 +524,11 @@ class Dispatcher:
                                 "AND NOT EXISTS (SELECT 1 FROM integration_retirements r WHERE r.job=jobs.id) "
                                 "AND NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=jobs.id)", (self.store.controller,))
         for job in ready:
+            try:
+                local_integration.current_sources(self.store, job)
+            except Refusal as exc:
+                self.store.pending_recovery_admission(job, exc)
+                continue
             try:
                 diagnosis=self.store.current_diagnosis(job)
                 if diagnosis and diagnosis['collected'] is not None:self.advance_recovery(job['id'],diagnosis['id'])
@@ -565,6 +584,9 @@ class Dispatcher:
 
     def reconcile_collected(self, job):
         if self.store.integration_retirement_recorded(job['id']):return
+        if self.store.one("SELECT subject FROM operational_errors WHERE subject=? AND active=1",
+                          ('recovery-admission:'+job['id'],)):
+            return  # Metadata-only pending custody awaits an explicit owner request, even after hold release.
         if ordinary.awaiting_acceptance(self.store, job):
             if (job['controller'] == self.store.controller and not job['hold_reason']
                     and job['id'] not in self.acceptance_active and ordinary.accepted_runs(self.store, job['package'])):

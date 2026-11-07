@@ -1,5 +1,6 @@
 """Actual-owner requests and explicit collected-closure continuity, never a replay CLI."""
 
+from contextlib import nullcontext
 import json
 
 from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, required_text
@@ -16,13 +17,57 @@ CREATE TABLE IF NOT EXISTS recovery_dispositions(
 
 
 class RecoveryJournal:
+    def pending_recovery_admission(self, job, reason, diagnosis=None):
+        """Retain a refused NEW group without acquiring prior result/context.
+
+        This is pending custody, not an informative diagnosis disposition. The
+        existing owner request path may continue after fresh source admission;
+        the committed claim/credit and every original duty remain unchanged.
+        """
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            self.require_execution_open(job['id'])
+            current = self.job(job['id'])
+            if (current['token'] != job['token'] or current['active_attempt'] != job['active_attempt']
+                    or current['controller'] != self.controller or current['recovery_owner'] != self.controller
+                    or current['recovery_state'] not in {'claimed', 'diagnosing'}):
+                raise Refusal('pending recovery remains with the exact original recovery owner')
+            diag = None
+            if current['recovery_state'] == 'diagnosing':
+                # Only metadata: do not call attempt/current_diagnosis, which
+                # acquire result bodies (including their legacy fallback).
+                diag = self.one("SELECT id,controller,state,ended,collected,exit FROM attempts WHERE job=? "
+                    "AND kind='diagnosis' AND json_extract(detail,'$.prior_task_attempt')=? "
+                    "ORDER BY created DESC,rowid DESC LIMIT 1", (current['id'], current['active_attempt']))
+                if not diag:
+                    # Legacy lineage is NOT established here. Merely suspend
+                    # the local recovery; later owner use retains all guards.
+                    diag = self.one("SELECT id,controller,state,ended,collected,exit FROM attempts WHERE job=? "
+                        "AND kind='diagnosis' AND json_extract(detail,'$.prior_task_attempt') IS NULL "
+                        "ORDER BY created DESC,rowid DESC LIMIT 1", (current['id'],))
+                if not diag or diag['collected'] is None or diag['ended'] is None and diag['state'] != 'not-started':
+                    return  # Already admitted live/unknown operation keeps its original collector.
+                if (diagnosis is not None and diag['id'] != diagnosis
+                        or diag['controller'] != current['recovery_owner']):
+                    raise Refusal('unknown/stale diagnosis retains its actual collector; no pending disposition')
+            elif diagnosis is not None:
+                raise Refusal('unallocated recovery has no diagnosis')
+            detail = dict(job=current['id'], attempt=current['active_attempt'], reservation=current['token'],
+                     controller=current['controller'], recovery_owner=current['recovery_owner'],
+                     recovery_count=current['recovery_count'], diagnosis=diag, error=str(reason),
+                     next='Actual role owner: after source admission, request-recovery remaining-work, '
+                          'use-diagnosis when qualified, redispose, or defer; no automatic retry/credit refund.')
+            self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
+                'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
+                ('recovery-admission:'+current['id'], current['role'], 'recovery-admission-pending',
+                 encode(detail), self.clock()))
+            self.db.execute("UPDATE jobs SET recovery_state='awaiting-disposition' WHERE id=?", (current['id'],))
+
     def request_recovery(self,job,token,attempt,actor,receipt,*,publication_board=None):
         """Queue one exact, bounded owner decision; launch/collection stay outside."""
         with self.tx():
             self.require_execution_open(job)
             row=self.job(job,token)
-            if isinstance(receipt, dict) and receipt.get('mode') == 'remaining-work':
-                local_integration.current_sources(self, row)
+            local_integration.current_sources(self, row)
             old=self.attempt(attempt)
             self.require_active_sources(job=job)
             if actor!=self.enrollment(row['role'])['owner']:
@@ -103,8 +148,7 @@ class RecoveryJournal:
             self.require_execution_open(current['job'])
             row=self.job(current['job'])
             receipt=json.loads(current['receipt'])
-            if receipt.get('mode') == 'remaining-work':
-                local_integration.current_sources(self, row)
+            local_integration.current_sources(self, row)
             old=self.attempt(current['attempt'])
             self.require_active_sources(job=row['id'])
             continuity=receipt['mode']=='use-diagnosis' and 'collector_continuity' in receipt
@@ -121,6 +165,7 @@ class RecoveryJournal:
                              'retained_diagnosis':json.loads(current['result'])['retained_diagnosis'],'successor':successor,
                              'collector_continuity':transfer,
                              'meaning':'one remaining attempt allocated in same job; no diagnosis/model start/publication/acceptance claim'}),request))
+                self.db.execute('UPDATE operational_errors SET active=0 WHERE subject=?', ('recovery-admission:'+row['id'],))
                 return {**current,'receipt':receipt,'successor':successor}
             if row['recovery_state'] in {'claimed','diagnosing'}:
                 diag=self.current_diagnosis(row)
@@ -137,6 +182,7 @@ class RecoveryJournal:
             self.db.execute("UPDATE recovery_requests SET state='consumed',result=? WHERE id=?",
                             (encode({'collector':self.controller,'at':self.clock(),
                                      'prior_job':row,'prior_capture':old['capture'],'prior_error':old['error']}),request))
+            self.db.execute('UPDATE operational_errors SET active=0 WHERE subject=?', ('recovery-admission:'+row['id'],))
         return {**current,'receipt':receipt}
 
     def validate_collector_continuity(self,row,continuity):
@@ -179,6 +225,7 @@ class RecoveryJournal:
 
     def retained_diagnosis_witness(self,row,receipt,*,request=None,publication_board=None):
         """Reaffirm qualified same-purpose evidence, not a fresh diagnosis or forced state."""
+        local_integration.current_sources(self, row)
         if row['state']!='held' or row['recovery_state']!='awaiting-disposition':
             raise Refusal('retained diagnosis use requires the exact held awaiting-disposition job; defer/successor/current recovery remains binding')
         old=self.attempt(row['active_attempt'])
@@ -229,6 +276,7 @@ class RecoveryJournal:
         from .publication import remainder_basis
         with self.tx():
             row=self.job(job,token)
+            local_integration.current_sources(self, row)
             if row['active_attempt']!=attempt:raise Refusal('publication basis needs exact active original')
             diag=self.current_diagnosis(row)
             if not diag or diag['id']!=diagnosis:raise Refusal('publication basis needs exact retained diagnosis')
@@ -303,6 +351,11 @@ class RecoveryJournal:
         """Collected diagnosis is evidence for a next owner decision, never success."""
         self.require_execution_open(job['id'])
         current=self.job(job['id'])
+        try:
+            local_integration.current_sources(self, current)
+        except Refusal as exc:
+            self.pending_recovery_admission(job, exc, diag['id'] if diag else None)
+            return
         if current['active_attempt']!=job['active_attempt'] or current['recovery_state']!='diagnosing':
             raise Refusal('stale diagnosis cannot change a successor recovery reservation')
         if not diag or diag['collected'] is None or (diag['ended'] is None and diag['state']!='not-started'):
@@ -333,6 +386,7 @@ class RecoveryJournal:
         """Also exposes the public next step for already-collected old bad diagnoses."""
         self.require_execution_open(job['id'])
         if job['recovery_state']!='diagnosing':return
+        local_integration.current_sources(self, job)
         if not self.owns_disposition(job,self.attempt(job['active_attempt'])):return
         diag=self.current_diagnosis(job)
         if not diag or diag['collected'] is None:return

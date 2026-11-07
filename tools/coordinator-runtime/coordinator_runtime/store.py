@@ -1233,6 +1233,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if not self.db.in_transaction:raise Refusal('handoff requires the owned journal write transaction')
         self.require_execution_open(job)
         row=self.job(job)
+        local_integration.current_sources(self, row)
         old,diag=self.attempt(row['active_attempt']),self.attempt(diagnosis)
         continuity=None
         publication=None
