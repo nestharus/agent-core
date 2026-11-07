@@ -18,6 +18,7 @@ from coordinator_runtime.contracts import Refusal, digest, encode, ident
 
 
 class SoftwareRoutes643(Fixture, unittest.IsolatedAsyncioTestCase):
+    package_count = 5
     async def asyncSetUp(self):
         self.packages = {}
         self.bootstrap(self.configure)
@@ -46,7 +47,7 @@ class SoftwareRoutes643(Fixture, unittest.IsolatedAsyncioTestCase):
             history='Whole first fictional encounter; no native adoption',method_pin='fiction-method-HIGH',
             coverage={'read':['architecture'],'unread':['family9'],'qualification':'PARTIAL'},effects='known-report-only')
         self.scopes={};self.operations=[]
-        for i in range(1,6): self.package(i)
+        for i in range(1,self.package_count+1): self.package(i)
 
     def package(self, i):
         key=f'future-qa-{i}'
@@ -104,7 +105,7 @@ class SoftwareRoutes643(Fixture, unittest.IsolatedAsyncioTestCase):
         self.selection=dict(basis=processing.basis(self.store,self.boards),authority='Actual fictional Work finite duties',
             retained_events=[],recover_controls={},future_intake=True,tasks=list(self.config['tasks']),
             max_shared_rows=1000,max_shared_payload_bytes=1000000,max_runtime_rows=1000,
-            software_admission=dict(authority='Typed finite Work topic/scope/procedure authority',max_packages=5,scopes=self.scopes),
+            software_admission=dict(authority='Typed finite Work topic/scope/procedure authority',max_packages=self.package_count,scopes=self.scopes),
             work_coordination=dict(authority='Genuine Work consumes actual role reports',tasks=['work-proposer','work-integrator'],source_roles=['QA','Reviews','Branch']),
             service=dict(max_inflight=8,reviews={},report_tasks=['reviews-integrator'],legacy_resources=records))
         with actor(self.boards['Work'].store,self.issuer):

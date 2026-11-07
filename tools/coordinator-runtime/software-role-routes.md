@@ -10,7 +10,9 @@ still apply. An attributed account is evidence, not an authority source.
 
 `service.legacy_resources.QA` retains its original four fields, including
 `unbounded: true` and the exact `original_hold`. It may additionally select
-`qa_operations`, a list of one to five distinct package accounts. The older
+`qa_operations`, a list of one to seven distinct package accounts. Seven permits
+five executing packages, one accepted package in cleanup, and one waiting
+execution; it does not increase the execution or cleanup slot limits. The older
 singular `qa_operation` remains supported; select exactly one representation.
 Each list member uses the existing `statement`, `binding`, and `policy` contract.
 All source/ref/tree/ordered-parent, resource-owner, procedure, executable, input,
@@ -52,7 +54,13 @@ The cleanup task must retain `package_narrowing`, `owned-artifacts`, no network
 and no ordinary effects. Its scope only narrows the configured report rights;
 owned output still uses the runtime's fresh attempt directory. Select both
 execution and cleanup task scopes in that topic. Keep five execution slots and
-one cleanup slot; the existing execution-then-consolidation phase rule remains.
+one cleanup slot. For the exact finite Work-selected operation route validated
+against the retained hold, those slots are independent: accepted cleanup A may
+reserve while disjoint execution B is active, and execution may reserve while
+another package holds cleanup. The legacy global phase barrier remains for
+routes without that operation-relative qualification. Same-package outstanding
+responsibility, actual overlapping or unknown resources, and all current source,
+admission, report, acceptance and authority fences still apply.
 
 Cleanup requires exactly this package's independently accepted, successful,
 reconciled execution and authentic complete original service response. Fresh

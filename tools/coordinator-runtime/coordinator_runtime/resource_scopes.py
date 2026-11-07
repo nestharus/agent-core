@@ -77,8 +77,10 @@ def scope_excluded(runtime, name, admission):
 def qa_accounts(record):
     if 'qa_operations' in record:
         values = record['qa_operations']
-        if ('qa_operation' in record or not isinstance(values, list) or not 1 <= len(values) <= 5):
-            raise Refusal('one to five independent selected QA operation policies required')
+        # Five executing + one accepted cleanup + one waiting execution need
+        # seven exact package accounts, without increasing either phase slot.
+        if ('qa_operation' in record or not isinstance(values, list) or not 1 <= len(values) <= 7):
+            raise Refusal('one to seven independent selected QA operation policies required')
         return values
     return [record['qa_operation']] if 'qa_operation' in record else []
 

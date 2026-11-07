@@ -655,7 +655,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
         enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
         held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
-        from .resource_scopes import blocked
+        from .resource_scopes import blocked, qa_accounts
         if (not enrollment or not self.role_enabled(role)
                 or self.processing and not self.processing.task(row)
                 or self.processing and task.get('execution') == 'owner' and not self.processing.review_task(row['task'])
@@ -676,10 +676,19 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
             return None
         if role == 'QA' and not local and (self.config.get('window_service') or self.processing):
+            # The retained-hold check above has already validated this exact
+            # Work-selected operation, acceptance/report (for cleanup), current
+            # source/rights and unresolved resource maps. Its phase capacities
+            # are independent; unrelated execution must not delay accepted
+            # consolidation, or vice versa. Keep the legacy barrier for routes
+            # without that finite operation-relative qualification.
+            record = (self.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('QA', {})
+                      if self.processing else {})
+            separate_slots = (enrollment['legacy_hold'] and phase in held_phases and qa_accounts(record))
             other = 'cleanup' if phase == 'execution' else 'execution'
-            if any(not self.execution_complete(j) for j in self.rows(
+            if not separate_slots and any(not self.execution_complete(j) for j in self.rows(
                     "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
-                return None  # First phase (<=5 separate packages), then one consolidation slot.
+                return None
         if role == "QA" and (phase == "execution" or local) and self.one(
                 "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
             return None
