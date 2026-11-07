@@ -17,6 +17,12 @@ CREATE TRIGGER IF NOT EXISTS collected_report_repairs_no_update BEFORE UPDATE ON
  BEGIN SELECT RAISE(ABORT,'immutable collected report repair'); END;
 CREATE TRIGGER IF NOT EXISTS collected_report_repairs_no_delete BEFORE DELETE ON collected_report_repairs
  BEGIN SELECT RAISE(ABORT,'immutable collected report repair'); END;
+CREATE TABLE IF NOT EXISTS same_authority_source_repairs_v1(
+ capability TEXT PRIMARY KEY,request TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS source_repairs_v1_no_update BEFORE UPDATE ON same_authority_source_repairs_v1
+ BEGIN SELECT RAISE(ABORT,'immutable same authority source repair'); END;
+CREATE TRIGGER IF NOT EXISTS source_repairs_v1_no_delete BEFORE DELETE ON same_authority_source_repairs_v1
+ BEGIN SELECT RAISE(ABORT,'immutable same authority source repair'); END;
 """
 # This interface cannot select policy, templates, SDK, provider or scheduler
 # changes. A different repair requires a separate decision/interface.
@@ -32,6 +38,9 @@ def record(runtime, key):
 
 
 def pins(runtime, key, selection, implementation):
+    continuing = source_record(runtime, key)
+    if continuing:
+        return source_pins(runtime, key, selection, implementation, continuing)
     receipt = record(runtime, key)
     if not receipt:
         return False
@@ -43,6 +52,16 @@ def pins(runtime, key, selection, implementation):
 
 
 def selected_release(runtime):
+    # Paused metadata management has no processing Access. The new protocol
+    # may resolve its code pins, but never lends that caller processing rights.
+    cap = source_capability(runtime)
+    if cap:
+        request = source_record(runtime, cap['id'])
+        selection = json.loads(cap['selection'])
+        if request:
+            if not source_identity(runtime, cap, selection, request):
+                raise Refusal('source repair current capability/configuration/selection identity changed')
+            return request['basis']['release']
     if not runtime.processing:
         return None
     receipt = record(runtime, runtime.processing.key)
@@ -121,6 +140,8 @@ def report(runtime, key, event, controller, selection):
 def basis(runtime, boards, key, event, controller, actor):
     from . import processing
     owner(runtime, boards, actor)
+    if source_record(runtime, key):
+        raise Refusal('distinct source repair already selected; legacy report repair cannot supersede it')
     configuration.assert_current(runtime)
     cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
     if not cap or cap['revoked'] is not None or cap['issuer'] != actor:
@@ -208,3 +229,276 @@ def receipt(key, selected):
     return {'capability':key, 'event':selected['report']['event'], 'queue':selected['report']['queue']['id'],
             'configuration':selected['configuration'], 'producer_replay':False,
             'meaning':'same authority and queued consumer; code pins only; no acceptance, debt reset or capacity renewal'}
+
+
+# A distinct, single repair point. Reuse the existing installed module/schema
+# loader and pin hooks; no new import footprint or authorize-arbitrary-code flag.
+SOURCE_VERSION = 'same-authority-source-repair-v1'
+SOURCE_MODULES = {'configuration.py', 'integration.py', 'integration_management.py',
+                  'resource_scopes.py', 'cli.py', 'report_repair.py'}
+
+
+def source_record(runtime, key):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='same_authority_source_repairs_v1'"):
+        return None
+    row = runtime.one('SELECT request FROM same_authority_source_repairs_v1 WHERE capability=?', (key,))
+    return json.loads(row['request']) if row else None
+
+
+def source_capability(runtime):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='processing_capabilities'"):
+        return None
+    if runtime.processing:
+        return runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (runtime.processing.key,))
+    return runtime.one('SELECT * FROM processing_capabilities WHERE revoked IS NULL')
+
+
+def source_identity(runtime, cap, selection, request):
+    selected = request['basis']
+    return (selected['schema'] == SOURCE_VERSION and cap['revoked'] is None
+            and cap['id'] == selected['capability'] and cap['issuer'] == runtime.config['roles']['Work']['owner']
+            and selected['configuration'] == digest(runtime.config)
+            and selection['basis']['configuration'] == selected['configuration']
+            and digest(configuration.version_metadata(runtime)) == selected['configuration_version']
+            and digest(selection) == selected['selection_hash']
+            and selection['basis']['implementation'] == selected['old_implementation'])
+
+
+def source_pins(runtime, key, selection, implementation, request):
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    return bool(cap and source_identity(runtime, cap, selection, request)
+                and request['basis']['implementation'] == implementation)
+
+
+def source_compatible(before, after, old, new, modules):
+    if (not isinstance(modules, list) or not modules or any(not isinstance(m, str) for m in modules)
+            or modules != sorted(set(modules)) or set(modules) - SOURCE_MODULES):
+        raise Refusal('exact sorted public module delta within source-repair-v1 required')
+    if set(before) != set(after) or any(before[k] != after[k] for k in before if k != 'files'):
+        raise Refusal('source repair keeps exact release location, hot pool control and non-code dependencies')
+    if set(before['files']) != set(after['files']) or set(old) != set(new):
+        raise Refusal('source repair cannot add/remove modules or dependencies; no implicit module acquisition')
+    root = Path(before['root'])/'tools/coordinator-runtime/coordinator_runtime'
+    for name in old:
+        path = str(root/name)
+        if before['files'].get(path) != old[name] or after['files'].get(path) != new[name]:
+            raise Refusal('release and original/current implementation pins must agree')
+    changed = sorted(name for name in old if old[name] != new[name])
+    paths = sorted(p for p in before['files'] if before['files'][p] != after['files'][p])
+    if changed != modules or paths != sorted(str(root/name) for name in modules):
+        raise Refusal('source repair requires precisely the selected module delta; templates/policy stay frozen')
+    return paths
+
+
+def source_anchor(runtime, key, event, selection):
+    """Explicit queued source metadata only, before any source-body read.
+
+    Recorded hashes are operands, not proof that the current body matches.
+    Application authenticates the bytes under real Access and rolls back on
+    failure. No payload/error/result inventory or source restamping is used.
+    """
+    state = runtime.one('SELECT id,role,hash,state,hold IS NOT NULL AS held,processed_at FROM events WHERE id=?', (event,))
+    queue = runtime.one('SELECT * FROM queue WHERE event=?', (event,))
+    birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event,))
+    if (not state or state['held'] or state['processed_at'] is not None or state['state'] != 'queued'
+            or not queue or queue['state'] != 'queued' or queue['job'] is not None or not birth
+            or queue['task'] not in selection['tasks'] or queue['role'] != state['role']
+            or queue['phase'] != runtime.config['tasks'][queue['task']]['phase']
+            or runtime.one('SELECT jobs.id FROM jobs, json_each(jobs.members) AS m '
+                           "WHERE json_extract(m.value,'$.event')=? LIMIT 1", (event,))):
+        raise Refusal('source repair requires exact unheld queued UNSTARTED source, with no frozen job membership')
+    from .selected_source import selected_pins, snapshot
+    retained = next((p for p in selected_pins(selection) if p['event'] == event), None)
+    if retained:
+        mapping = snapshot(runtime, retained)
+    else:
+        transition = configuration.selected(runtime)
+        boundary = max(selection['basis']['event_boundary'], transition['event_boundary'])
+        if birth['position'] <= boundary:
+            raise Refusal('historical source cannot acquire current code-repair authority')
+        mapping = None
+    header = runtime.one("SELECT json_extract(payload,'$.kind') AS kind,"
+                         "json_extract(payload,'$.processing_report') AS report,"
+                         "json_extract(payload,'$.source_job') AS producer,"
+                         "json_extract(payload,'$.source_delivery') AS delivery,"
+                         "json_extract(payload,'$.processing_capability') AS receiving "
+                         'FROM events WHERE id=?', (event,))
+    if header['producer'] or header['delivery'] or header['receiving']:
+        raise Refusal('source-repair-v1 supports original Board or attributed report anchors only')
+    admission = runtime.one('SELECT * FROM processing_admissions WHERE event=?', (event,))
+    resolution = runtime.one('SELECT * FROM processing_admission_resolutions WHERE event=?', (event,))
+    applied = runtime.one('SELECT * FROM admissions WHERE package=?', (queue['package'],)) if queue['package'] else None
+    report_input = runtime.one('SELECT * FROM processing_report_inputs WHERE event=?', (event,))
+    route = runtime.one("SELECT version,source_hash,actor,json_extract(receipt,'$.mode') AS mode,"
+                        "json_extract(receipt,'$.task') AS task,json_extract(receipt,'$.package') AS package,"
+                        "json_extract(prior,'$.integration_observation.packet') AS packet "
+                        'FROM input_resolutions WHERE event=? ORDER BY version DESC LIMIT 1', (event,))
+    if route and (route['source_hash'] != state['hash'] or route['mode'] != 'route'
+                  or route['task'] != queue['task'] or route['package'] != queue['package']):
+        raise Refusal('source repair cannot replace a current frozen input mapping')
+    if header['kind'] == 'board' and header['report'] is None and report_input is None:
+        if queue['package'] is not None and (not admission or not resolution or not applied
+                or admission['capability'] != key or resolution['capability'] != key
+                or admission['package'] != queue['package'] or resolution['package'] != queue['package']
+                or resolution['admission_hash'] != digest(applied) or resolution['source_hash'] != state['hash']):
+            raise Refusal('packaged Board source requires unchanged same-capability resolved software admission')
+        kind = 'board'
+    elif (not retained and header['kind'] == 'response' and header['report'] == key and report_input
+            and report_input['capability'] == key and report_input['source_hash'] == state['hash']
+            and queue['package'] is None and admission is None and resolution is None):
+        kind = 'attributed-report'
+    else:
+        raise Refusal('source repair requires original Board or whole Work-attributed report metadata')
+    return {'event':event, 'hash':state['hash'], 'position':birth['position'], 'kind':kind,
+            'queue':queue, 'mapping':mapping, 'route':route, 'admission_hash':digest(admission),
+            'resolution':resolution, 'applied_hash':digest(applied), 'report_input':report_input,
+            'task_hash':digest(runtime.config['tasks'][queue['task']])}
+
+
+def source_basis(runtime, boards, key, events, controller, actor, modules, purpose):
+    """Caller holds the cooperative stop lock and journal write transaction."""
+    from . import processing
+    owner(runtime, boards, actor)
+    required_text(purpose, 'explicit current Work source-repair purpose', 4000)
+    configuration.assert_current(runtime)
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    if (not cap or cap['revoked'] is not None or cap['issuer'] != actor
+            or actor != runtime.config['software_delegation']['grantor']
+            or set(boards) != {'Work','Reviews','QA','Branch'} or set(boards) != set(runtime.config['roles'])):
+        raise Refusal('same genuine current Work capability and exact four original roles required')
+    selection = json.loads(cap['selection'])
+    if ('service' not in selection or not selection['future_intake']
+            or selection['basis']['configuration'] != digest(runtime.config)):
+        raise Refusal('unchanged continuing capability/configuration required; no finite grant conversion')
+    if record(runtime, key) or source_record(runtime, key):
+        raise Refusal('one distinct source repair point only; no repair stacking or legacy receipt conversion')
+    stopped_original(runtime, key, controller)
+    if configuration.owned_service_conflict(runtime) or runtime.one(
+            "SELECT controller FROM service_runs WHERE capability=? AND (state!='returned-awaiting-parent-END' OR returned IS NULL)", (key,)):
+        raise Refusal('no active concurrent collector; every same-capability original must return and release')
+    for run in runtime.rows('SELECT controller FROM processing_runs WHERE capability=?', (key,)):
+        stopped_original(runtime, key, run['controller'])
+    transition = configuration.selected(runtime)
+    if not transition:
+        raise Refusal('immutable current configuration release selection required')
+    before, after = transition['basis']['release'], configuration.release(runtime, runtime.config)
+    implementation = processing.implementation()
+    changed = source_compatible(before, after, selection['basis']['implementation'], implementation, modules)
+    grants = {}
+    from .integration_management import _metadata_original
+    for role, board in boards.items():
+        with board.opened(settlement=True) as conn:
+            grant, enrollment = _metadata_original(board, conn, runtime)
+            binding = board._binding(grant)
+            if (binding != selection['basis']['roles'][role]['original']['binding']
+                    or grant['issued_by'] != actor or enrollment['owner'] != board.selected['owner']
+                    or enrollment['profile'] != board.selected['profile']):
+                raise Refusal('source repair conserves every original stopped software grant binding')
+            grants[role] = {'binding':binding, 'enrollment':enrollment}
+    if (not isinstance(events, list) or not 1 <= len(events) <= 32
+            or any(not isinstance(e, str) or not e for e in events) or events != sorted(set(events))):
+        raise Refusal('one to thirty-two distinct sorted explicit queued source identities required')
+    anchors = [source_anchor(runtime, key, event, selection) for event in events]
+    epoch = runtime.one('SELECT * FROM prospective_authorities WHERE revoked IS NULL')
+    if not epoch:
+        raise Refusal('original finite prospective authority must remain selected; no epoch replacement')
+    ordinary = json.loads(epoch['selection'])
+    if (ordinary.get('processing_capability') != key or ordinary['configuration'] != digest(runtime.config)
+            or ordinary['grantor'] != actor or ordinary['expires'] <= runtime.clock()):
+        raise Refusal('original prospective authority expired/revoked/foreign; no renewal through repair')
+    for anchor in anchors:
+        task = anchor['queue']['task']
+        role = anchor['queue']['role']
+        if (task not in ordinary['tasks'] or ordinary['tasks'][task]['task_hash'] != anchor['task_hash']
+                or ordinary['grants'].get(role) != grants[role]['binding']['id']
+                or not anchor['mapping'] and anchor['position'] <= epoch['event_boundary']):
+            raise Refusal('source/task outside frozen original prospective authority')
+    return {'schema':SOURCE_VERSION, 'configuration':digest(runtime.config),
+            'configuration_version':digest(configuration.version_metadata(runtime)),
+            'capability':key, 'controller':controller, 'selection_hash':digest(selection),
+            'starts':cap['starts'], 'grants':grants, 'prospective':epoch, 'purpose':purpose,
+            'modules':modules, 'old_release':before, 'release':after, 'changed':changed,
+            'old_implementation':selection['basis']['implementation'], 'implementation':implementation,
+            'sources':anchors}
+
+
+def source_validate(runtime, selected):
+    """Full bytes only after explicit owner selection has installed exact pins.
+
+    This changes no source/admission/policy hash, grants, epoch or queue state.
+    It proves source permission, not schedulability, effect or Root acceptance.
+    """
+    from . import prospective, processing_admission, report_scope
+    for anchor in selected['sources']:
+        queue = anchor['queue']
+        event = runtime.event(anchor['event'])
+        if (digest(event) != anchor['hash'] or not runtime.processing.event(event)
+                or queue['task'] not in event.get('allowed_tasks', [])
+                or event['role'] != queue['role']
+                or event['recipient'] != runtime.config['roles'][event['role']]['owner']):
+            raise Refusal('selected source bytes/hash/route/owner permission changed')
+        board = runtime.processing.boards[event['role']]
+        board.verify_authority(runtime)
+        epoch = prospective.current(runtime, queue['task'])
+        if not epoch or epoch['id'] != selected['prospective']['id']:
+            raise Refusal('source requires unchanged original prospective authority')
+        if anchor['kind'] == 'board':
+            board.verify_input_source(runtime, event)
+            if anchor['resolution']:
+                resolved = anchor['resolution']
+                processing_admission.resolved(runtime, queue['package'], resolved['topic'], resolved['scope_hash'])
+                # Root association acceptance and runtime readiness remain
+                # later independent launch checks, never fabricated here.
+            elif event.get('package') != queue['package']:
+                raise Refusal('source package substitution is forbidden')
+        else:
+            record = runtime.processing.current()[1]['service']['legacy_resources'].get('Reviews', {})
+            report_scope.eligible(runtime, queue, record)
+
+
+def source_receipt(key, selected):
+    return {'schema':SOURCE_VERSION, 'capability':key, 'configuration':selected['configuration'],
+            'selection_hash':selected['selection_hash'], 'repair_hash':digest(selected),
+            'sources':[{'event':s['event'], 'hash':s['hash'], 'queue':s['queue']['id']} for s in selected['sources']],
+            'producer_replay':False, 'authority_renewed':False, 'acceptance':None,
+            'meaning':'same immutable capability and queued inputs; code pins only; all original duties and finite windows retained'}
+
+
+def apply_source(runtime, boards, actor, request):
+    from . import processing
+    from .selected_source import custody_budget
+    if (not isinstance(request, dict) or set(request) != {'schema','basis','authority','evidence'}
+            or request['schema'] != SOURCE_VERSION or not isinstance(request['basis'], dict)
+            or request['basis'].get('schema') != SOURCE_VERSION):
+        raise Refusal('distinct versioned source-repair-v1 selection required; legacy requests stay separate')
+    owner(runtime, boards, actor)
+    required_text(request['authority'], 'genuine Work reviewed source-only repair decision', 4000)
+    if not isinstance(request['evidence'], list) or not 1 <= len(request['evidence']) <= 32:
+        raise Refusal('complete bounded review/qualification evidence required; Maker tests are not acceptance')
+    for item in request['evidence']:
+        required_text(item, 'exact reviewed source/qualification evidence', 4000)
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('source repair exceeds original result custody bound')
+    selected = request['basis']
+    key = selected['capability']
+    with configuration.stopped(runtime), runtime.tx():
+        previous = source_record(runtime, key)
+        if previous:
+            if previous != request or selected_release_for(runtime, key, boards) != selected['release']:
+                raise Refusal('source repair already selected differently or pins no longer current')
+            return source_receipt(key, selected)  # Never reread/requeue consumed inputs.
+        current = source_basis(runtime, boards, key, [s['event'] for s in selected['sources']],
+                               selected['controller'], actor, selected['modules'], selected['purpose'])
+        if current != selected:
+            raise Refusal('selected source repair basis changed; take fresh bounded owner-reviewed pins')
+        custody_budget(runtime, len(encode(request).encode()) + 1024)
+        runtime.db.execute('INSERT INTO same_authority_source_repairs_v1 VALUES(?,?,?,?)',
+                           (key, encode(request), actor, runtime.clock()))
+        old_access = runtime.processing
+        runtime.processing = processing.Access(runtime, key, boards)
+        try:
+            runtime.processing.current()
+            source_validate(runtime, selected)
+        finally:
+            runtime.processing = old_access
+    return source_receipt(key, selected)
