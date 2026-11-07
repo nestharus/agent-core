@@ -139,9 +139,11 @@ def requires_authority(store, job):
             continue
         # Missing birth cannot prove exclusion from a retained duty. Keep the
         # checker required for future members, while for_job refuses to grant.
-        if (job['task'] in authority['selection']['tasks'] and members
-                and all(event_position(store, m['event'], authority) > row['event_boundary'] for m in members)):
-            return True
+        if job['task'] in authority['selection']['tasks'] and members:
+            from .selected_source import retained_job_duty
+            if (all(event_position(store, m['event'], authority) > row['event_boundary'] for m in members)
+                    or retained_job_duty(store, job, authority)):
+                return True
     return False
 
 
@@ -156,8 +158,12 @@ def for_job(store, job):
     if position is None or position <= row['job_boundary']:
         return None
     members = json.loads(job['members'])
-    if not members or any(event_position(store, m['event'], row) <= row['event_boundary'] for m in members):
+    if not members:
         return None
+    if any(event_position(store, m['event'], row) <= row['event_boundary'] for m in members):
+        from .selected_source import permits_job
+        if not permits_job(store, job, row, attempt):
+            return None
     bridge = row['selection'].get('processing_capability')
     if bridge:
         detail = json.loads(attempt['detail']) if attempt else {}
@@ -185,8 +191,11 @@ def bridge_authority(store, key, tasks):
 def event_position(store, event, authority):
     if authority['selection'].get('processing_capability'):
         row = store.one('SELECT COALESCE(p.position,e.rowid) AS n FROM events e LEFT JOIN processing_source_positions p ON p.event=e.id WHERE e.id=?', (event,))
-        return row['n']
-    return store.one('SELECT rowid AS n FROM events WHERE id=?', (event,))['n']
+    else:
+        row = store.one('SELECT rowid AS n FROM events WHERE id=?', (event,))
+    if not row:
+        raise Refusal('prospective member has no original source referent')
+    return row['n']
 
 
 def board(store, role):
