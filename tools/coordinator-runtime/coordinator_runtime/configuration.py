@@ -245,9 +245,21 @@ def candidate(runtime, operator_config, scope_tasks, retention_library=None, bou
 
 def apply_scope_options(original, value, options):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text'}:
+    if not isinstance(options, dict) or set(options) - {'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
         raise Refusal('unsupported prospective scope option')
     select_task_text(original, value, options.get('task_text', {}))
+    operations = options.get('operations', {})
+    if not isinstance(operations, dict) or set(operations) - {'qa-execution'}:
+        raise Refusal('operation selection only narrows the existing QA execution task')
+    for name, selected in operations.items():
+        task = value['tasks'].get(name)
+        prior = original['tasks'].get(name)
+        if (not task or not prior or selected != ['execute-admitted-qa']
+                or task['role'] != 'QA' or task['phase'] != 'execution'
+                or task['effects'] != 'owner-reconcile' or not task.get('require_package_scope')
+                or 'execute-admitted-qa' not in prior['effect_authority']['operations']):
+            raise Refusal('exact already-authorized least-authority QA operation required')
+        task['effect_authority']['operations'] = list(selected)
     if 'local_integration' in options:
         from .local_integration import policy
         value['local_integration'] = copy.deepcopy(options['local_integration'])
@@ -361,6 +373,17 @@ def apply_scope_options(original, value, options):
         roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
         task.update(require_package_scope=True, package_narrowing=True,
                     scope_roots=list(dict.fromkeys([*roots, task['cwd']])))
+    if 'qa_branch_sequence' in options:
+        from .contracts import QA_BRANCH_SEQUENCE, qa_branch_sequence
+        if options['qa_branch_sequence'] != QA_BRANCH_SEQUENCE:
+            raise Refusal('supported same-package QA/Branch sequence required')
+        value['qa_branch_sequence'] = QA_BRANCH_SEQUENCE
+        for name, category, destination in (
+                ('qa-execution', 'consolidated', 'branch-integrator'),
+                ('branch-integrator', 'complete', 'qa-cleanup'),
+                ('qa-cleanup', 'qualification', 'work-proposer')):
+            value['tasks'][name]['responses'][category] = [destination]
+        qa_branch_sequence(value)
     value['prospective_scope_selection'] = copy.deepcopy(options)
 
 
@@ -438,6 +461,10 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')
     if options and set(options.get('task_text', {})) - set(tasks):
         raise Refusal('every task_text selection needs an explicitly selected prospective task')
+    if options and set(options.get('operations', {})) - set(tasks):
+        raise Refusal('every operation selection needs an explicitly selected prospective task')
+    if options and 'qa_branch_sequence' in options and {'qa-execution', 'branch-integrator', 'qa-cleanup', 'work-proposer'} - set(tasks):
+        raise Refusal('every same-package sequence task needs explicit prospective selection')
     # Scoped_task still narrows each actual package; this grants no writes or
     # Root acceptance. Broad ancestors and peer checkout roots cannot enter.
     if any(root not in value['tasks'][name]['scope_roots'] for name in additions
