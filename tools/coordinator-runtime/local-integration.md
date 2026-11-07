@@ -465,6 +465,11 @@ disposition, software package admission, independent Work coordination and
 ordinary effect authorization. It selects only existing local tasks, their
 original roles, routes, roots, grants and package permissions. It applies after
 the original processing source-birth boundary, never to an old unknown attempt.
+An unresolved source is delegated only when its frozen routes include a
+selected local task of its own role. An unrelated cross-role Work coordination
+route cannot suppress the ordinary input/control worker or enter a locator or
+mapping snapshot. Routing a control still requires fresh classification and all
+original admission, native association/acceptance and execution guards.
 The software actor remains itself. It gets no native-owner receipt, package
 consent, assignment/acceptance, native creation, collector or effect authority.
 

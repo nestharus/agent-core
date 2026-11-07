@@ -88,13 +88,23 @@ def validate_selection(store, selection):
     required_text(value['authority'], 'genuine Work metadata-only delegation and why', 4000)
 
 
-def delegated(store, event):
+def delegated_tasks(store, event):
+    """Applicable local consumers, not every cross-role coordination route."""
     if not store.processing:
-        return False
+        return set()
     _, selection = store.processing.current()
     value = selection.get('metadata_lookup')
-    if not value or not set(value['tasks']) & set(event['allowed_tasks']):
+    if not value:
+        return set()
+    from .local_integration import selected
+    return {task for task in value['tasks'] if task in event['allowed_tasks']
+            and selected(store, task) and store.config['tasks'][task]['role'] == event['role']}
+
+
+def delegated(store, event):
+    if not delegated_tasks(store, event):
         return False
+    _, selection = store.processing.current()
     # Never acquire old/unknown attempts or renew an original's birth.
     position = store.one('SELECT position FROM processing_source_positions WHERE event=?', (event['id'],))
     return bool(position and position['position'] > selection['basis']['event_boundary']
@@ -110,7 +120,7 @@ def guard(store, event, task, package):
             or not state['classification'] or not state['classifier']
             or store.attempt(state['classifier'])['collected'] is None
             or local.input_metadata(event) is not None or store.input_resolution(event['id']) is not None
-            or task not in store.processing.current()[1]['metadata_lookup']['tasks']):
+            or task not in delegated_tasks(store, event)):
         raise Refusal('lookup needs its original fresh classified prospective unreserved responsibility')
     local.input_authority(store, event, task, package)
     row = {'event': event['id'], 'task': task, 'package': package}
@@ -331,7 +341,7 @@ def claim(store):
             event = store.event(state['id'])
             if not delegated(store, event) or store.input_resolution(event['id']) or local.input_metadata(event) is not None:
                 continue
-            tasks = set(store.processing.current()[1]['metadata_lookup']['tasks']) & set(event['allowed_tasks'])
+            tasks = delegated_tasks(store, event)
             if state['task'] in tasks:
                 tasks = {state['task']}
             elif state['task'] != '@unresolved':
