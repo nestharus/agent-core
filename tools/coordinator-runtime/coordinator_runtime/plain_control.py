@@ -121,11 +121,11 @@ def validate(runtime, event, attempt, request, *, authenticate=True):
     validate_control_result(result, receipt)
     if result['semantic'] != 'DONE' or digest(result) != request['result_hash']:
         raise Refusal('plain control requires the exact original DONE result before source body')
+    runtime.processing.control_proof(event, attempt, receipt)
     receipt, _ = control_receipt(runtime, event, worker, result, receipt)
     if (receipt.get('mode') != 'control'
             or any(receipt.get(k) is not None for k in ('task','package','related_event','related_job'))):
         raise Refusal('plain control requires genuine no-task control interpretation')
-    runtime.processing.control_proof(event, attempt, receipt)
     source = runtime.event(event)
     if digest(source) != row['hash'] or source['kind'] != 'board' or not runtime.processing.event(source):
         raise Refusal('plain control requires exact selected Board source')
