@@ -46,7 +46,7 @@ def record(runtime, key):
 def pins(runtime, key, selection, implementation):
     amendment = lease_record(runtime, key)
     if amendment:
-        return lease_identity(runtime, key, selection, amendment) and amendment['basis']['implementation'] == implementation
+        return lease_identity(runtime, key, selection, amendment) and lease_source(runtime, key, amendment)['implementation'] == implementation
     paired = pair_record(runtime, key)
     if paired:
         return pair_identity(runtime, key, selection, paired) and paired["basis"]["implementation"] == implementation
@@ -72,7 +72,7 @@ def selected_release(runtime):
         if amendment:
             if not lease_identity(runtime, cap['id'], json.loads(cap['selection']), amendment):
                 raise Refusal('owner lease original identity changed')
-            return amendment['basis']['release']
+            return lease_source(runtime, cap['id'], amendment)['release']
         paired = pair_record(runtime, cap['id'])
         if paired:
             if not pair_identity(runtime, cap['id'], json.loads(cap['selection']), paired):
@@ -1057,3 +1057,237 @@ def stop_lease(runtime,boards,actor,key,reason):
         runtime.budget(None,len(reason.encode())+1024)
         runtime.db.execute('INSERT OR IGNORE INTO owner_lease_stops VALUES(?,?,?,?)',(key,actor,reason,runtime.clock()))
     return lease_receipt(runtime,key)
+
+
+# A source selection is separate from the immutable finite authority plan.
+AMEND_VERSION = 'stopped-owner-source-amendment-v1'
+AMEND_MODULES = LEASE_MODULES | {'local_integration.py', 'inputs.py', 'contracts.py',
+                              'software.py', 'completion.py'}
+SCHEMA += '''
+CREATE TABLE IF NOT EXISTS owner_source_amendments(
+ capability TEXT NOT NULL,ordinal INTEGER NOT NULL,request TEXT NOT NULL,
+ issuer TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(capability,ordinal));
+CREATE TABLE IF NOT EXISTS owner_source_reviews(
+ basis_hash TEXT PRIMARY KEY,review TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+'''
+for _table in ('owner_source_amendments', 'owner_source_reviews'):
+    for _op in ('UPDATE', 'DELETE'):
+        SCHEMA += (f'CREATE TRIGGER IF NOT EXISTS {_table}_no_{_op.lower()} BEFORE {_op} ON {_table} '
+                   "BEGIN SELECT RAISE(ABORT,'immutable stopped source selection'); END;\n")
+
+
+def source_amendment(runtime, key):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='owner_source_amendments'"):
+        return None
+    row = runtime.one('SELECT request FROM owner_source_amendments WHERE capability=? ORDER BY ordinal DESC LIMIT 1', (key,))
+    return json.loads(row['request']) if row else None
+
+
+def lease_source(runtime, key, plan):
+    amendment = source_amendment(runtime, key)
+    if not amendment:
+        return plan['basis']
+    selected = amendment['basis']
+    if (selected['plan_hash'] != digest(plan) or selected['configuration'] != digest(runtime.config)
+            or selected['selection_hash'] != plan['basis']['selection_hash']):
+        raise Refusal('source amendment cannot substitute original owner plan or authority')
+    return selected
+
+
+def git_source(root, commit=None):
+    """Bounded public source metadata; never emit Git diagnostics or chase refs."""
+    import re
+    import subprocess
+    def git(*args):
+        try:
+            return subprocess.run(['git', '-C', root, *args], stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, timeout=10, check=True).stdout
+        except (OSError, subprocess.SubprocessError):
+            raise Refusal('public source metadata unavailable') from None
+    if commit is not None and not re.fullmatch('[0-9a-f]{40}', commit):
+        raise Refusal('exact source commit required')
+    values = git('show', '-s', '--format=%H %T %P', commit or 'HEAD').decode().strip().split()
+    return {'commit':values[0], 'tree':values[1], 'parents':values[2:]}
+
+
+def source_transition(root, previous, current, old, new, modules):
+    """Authenticate Git ancestry AND installed byte pins, including every parent."""
+    import hashlib
+    import subprocess
+    if previous != git_source(root, previous.get('commit')) or current != git_source(root):
+        raise Refusal('exact previous/current commit tree and ALL parents required')
+    def git(*args):
+        try:
+            return subprocess.run(['git','-C',root,*args], stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, timeout=10, check=True).stdout
+        except (OSError, subprocess.SubprocessError):
+            raise Refusal('source ancestry/blob proof failed') from None
+    if previous == current:
+        raise Refusal('source amendment needs a fresh descendant commit')
+    git('merge-base','--is-ancestor',previous['commit'],current['commit'])
+    prefix = 'tools/coordinator-runtime/coordinator_runtime/'
+    changed = git('diff','--name-only',previous['commit'],current['commit'],'--',prefix).decode().splitlines()
+    if changed != [prefix+m for m in modules]:
+        raise Refusal('review must close the exact production module delta')
+    for revision, implementation in ((previous,old),(current,new)):
+        for name, pin in implementation.items():
+            if hashlib.sha256(git('show',revision['commit']+':'+prefix+name)).hexdigest() != pin:
+                raise Refusal('source commit does not authenticate selected implementation')
+    # Tests/docs may differ, but unrelated production paths require another protocol.
+    for path in git('diff','--name-only',previous['commit'],current['commit']).decode().splitlines():
+        if (path.startswith(prefix) or path.startswith('tools/coordinator-runtime/tests/')
+                or path.startswith('tools/coordinator-runtime/') and path.endswith('.md')):
+            continue
+        raise Refusal('source amendment contains unrelated production changes')
+
+
+def amendment_guards(runtime, boards, key, controller):
+    from .integration_management import _metadata_original
+    from . import windows
+    configuration.assert_current(runtime)
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    plan = lease_record(runtime,key)
+    if not cap or not plan or set(boards) != set(runtime.config['roles']):
+        raise Refusal('existing original continuing owner plan and all boards required')
+    raw = json.loads(cap['selection'])
+    if (not lease_identity(runtime,key,raw,plan)
+            or runtime.one('SELECT capability FROM owner_lease_stops WHERE capability=?',(key,))):
+        raise Refusal('original owner authority changed or stopped')
+    limits = plan['plan']; now = runtime.clock()
+    count = runtime.one('SELECT COUNT(*) n FROM processing_source_positions WHERE position>?', (raw['basis']['event_boundary'],))['n']
+    windows_used = runtime.one('SELECT COUNT(*) n FROM service_window_allocations WHERE capability=?',(key,))['n']
+    if (not limits['from'] <= now < limits['until'] or cap['starts'] >= limits['max_starts']
+            or count >= limits['max_new_inputs'] or windows_used >= limits['max_windows']
+            or runtime.usage()['bytes'] >= limits['pause_bytes']):
+        raise Refusal('current finite owner lease/headroom exhausted; no renewal')
+    stopped_original(runtime,key,controller)
+    if (configuration.owned_service_conflict(runtime)
+            or runtime.one('SELECT id FROM attempts WHERE collected IS NULL LIMIT 1')
+            or runtime.one("SELECT id FROM jobs WHERE state IN ('running','reserved') LIMIT 1")):
+        raise Refusal('all original services/jobs must be stopped and collected')
+    for run in runtime.rows('SELECT controller FROM processing_runs WHERE capability=?',(key,)):
+        stopped_original(runtime,key,run['controller'])
+    for run in runtime.rows('SELECT controller FROM service_runs WHERE capability=?',(key,)):
+        stopped_original(runtime,key,run['controller'])
+    grants = {}
+    for role, board in boards.items():
+        with board.opened(settlement=True) as conn:
+            grant, enrollment = _metadata_original(board,conn,runtime)
+            grants[role] = {'binding':board._binding(grant),'enrollment':enrollment}
+    if grants != plan['basis']['grants']:
+        raise Refusal('every original grant/enrollment must remain exact')
+    # This witness excludes only the review receipt appended between basis and apply.
+    revision = windows.revision(runtime)
+    revision['tokens'].pop('owner_source_reviews',None)
+    return plan, raw, {'starts':cap['starts'],'inputs':count,'windows':windows_used,
+                       'revision':revision,'grants':grants}
+
+
+def amendment_basis(runtime, boards, key, controller, actor, previous, modules, manifest, purpose):
+    from . import processing
+    owner(runtime,boards,actor)
+    if actor != runtime.config['software_delegation']['grantor']:
+        raise Refusal('same actual Work grantor required')
+    required_text(purpose,'actual Work stopped source amendment purpose',4000)
+    if not isinstance(previous,dict) or set(previous) != {'commit','tree','parents'}:
+        raise Refusal('exact preceding public source publication required')
+    plan, raw, counters = amendment_guards(runtime,boards,key,controller)
+    prior = source_amendment(runtime,key)
+    ordinal = prior['basis']['ordinal']+1 if prior else 1
+    if ordinal > 24:
+        raise Refusal('finite source amendment chain exhausted')
+    before = lease_source(runtime,key,plan)
+    after = configuration.release(runtime,runtime.config)
+    implementation = processing.implementation()
+    changed = source_compatible(before['release'],after,before['implementation'],implementation,modules,_ceiling=AMEND_MODULES)
+    current = git_source(after['root'])
+    if prior and previous != prior['basis']['current']:
+        raise Refusal('previous source must be the exact last appended selection')
+    source_transition(after['root'],previous,current,before['implementation'],implementation,modules)
+    safe = {'PRIMARY.md','RESULT.json','LIMITS.md','PUBLICATION.json','WRITER-RELEASE.json'}
+    import re
+    if (not isinstance(manifest,dict) or set(manifest) != safe
+            or any(not isinstance(v,str) or not re.fullmatch('[0-9a-f]{64}',v) for v in manifest.values())):
+        raise Refusal('immutable exact safe5 reviewed report SHA256 manifest required')
+    return {'schema':AMEND_VERSION,'capability':key,'ordinal':ordinal,
+        'previous_amendment':digest(prior) if prior else None,'plan_hash':digest(plan),
+        'configuration':digest(runtime.config),'selection_hash':digest(raw),'controller':controller,
+        'previous':previous,'current':current,'modules':modules,'changed':changed,
+        'old_release':before['release'],'release':after,'old_implementation':before['implementation'],
+        'implementation':implementation,'manifest':manifest,'purpose':purpose,'counters':counters}
+
+
+def review_amendment(runtime, boards, actor, request):
+    """Independent actual Reviews actor closes this exact basis and safe manifest."""
+    if (not isinstance(request,dict) or set(request) != {'basis','authority','actual_END'}
+            or type(request['actual_END']) is not int or request['actual_END'] != 0
+            or actor != runtime.config['roles']['Reviews']['owner']
+            or actor == runtime.config['roles']['Work']['owner']):
+        raise Refusal('distinct actual Reviews owner and collected successful review required')
+    boards['Reviews'].store.acting_session(actor)
+    required_text(request['authority'],'actual independent exact-delta review',4000)
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('review exceeds original custody bound')
+    selected = request['basis']
+    if selected.get('schema') != AMEND_VERSION:
+        raise Refusal('typed exact source amendment review required')
+    key = digest(selected)
+    with configuration.stopped(runtime), runtime.tx():
+        # Work supplied this basis; Reviews may attest it but cannot select it.
+        amendment_guards(runtime,boards,selected['capability'],selected['controller'])
+        if git_source(selected['release']['root']) != selected['current']:
+            raise Refusal('review source changed')
+        prior = runtime.one('SELECT * FROM owner_source_reviews WHERE basis_hash=?',(key,))
+        if prior:
+            if prior['review'] != encode(request) or prior['issuer'] != actor:
+                raise Refusal('contradictory immutable review')
+        else:
+            from .selected_source import custody_budget
+            custody_budget(runtime,len(encode(request).encode())+1024)
+            runtime.db.execute('INSERT INTO owner_source_reviews VALUES(?,?,?,?)',(key,encode(request),actor,runtime.clock()))
+    return {'schema':AMEND_VERSION,'basis_hash':key,'review_hash':digest(request),'reviewer':actor}
+
+
+def apply_amendment(runtime, boards, actor, request):
+    if (not isinstance(request,dict) or set(request) != {'schema','basis','authority','review_hash'}
+            or request['schema'] != AMEND_VERSION or request['basis'].get('schema') != AMEND_VERSION):
+        raise Refusal('explicit typed stopped source amendment required')
+    owner(runtime,boards,actor)
+    required_text(request['authority'],'actual Work reviewed source selection',4000)
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('source amendment exceeds original custody bound')
+    selected = request['basis']; key = selected['capability']
+    with configuration.stopped(runtime), runtime.tx():
+        amendment_guards(runtime,boards,key,selected['controller'])
+        prior = source_amendment(runtime,key)
+        if prior == request:
+            if (configuration.release(runtime,runtime.config) != selected['release']
+                    or git_source(selected['release']['root']) != selected['current']):
+                raise Refusal('idempotent source receipt is no longer current')
+            return amendment_receipt(request)
+        review = runtime.one('SELECT * FROM owner_source_reviews WHERE basis_hash=?',(digest(selected),))
+        if (not review or review['issuer'] != runtime.config['roles']['Reviews']['owner']
+                or digest(json.loads(review['review'])) != request['review_hash']):
+            raise Refusal('genuine closed independent review of exact source/manifest required')
+        current = amendment_basis(runtime,boards,key,selected['controller'],actor,selected['previous'],
+            selected['modules'],selected['manifest'],selected['purpose'])
+        if current != selected:
+            raise Refusal('stale/racing source amendment basis; acquire fresh independent review')
+        from .selected_source import custody_budget
+        custody_budget(runtime,len(encode(request).encode())+2048)
+        runtime.db.execute('INSERT INTO owner_source_amendments VALUES(?,?,?,?,?)',
+            (key,selected['ordinal'],encode(request),actor,runtime.clock()))
+        # Validate through normal guards only AFTER installing the new selection.
+        selected_release_for(runtime,key,boards)
+        if git_source(selected['release']['root']) != selected['current']:
+            raise Refusal('source changed during cooperative selection')
+    return amendment_receipt(request)
+
+
+def amendment_receipt(request):
+    selected = request['basis']
+    return {'schema':AMEND_VERSION,'capability':selected['capability'],'ordinal':selected['ordinal'],
+        'amendment_hash':digest(request),'plan_hash':selected['plan_hash'],
+        'previous':selected['previous'],'current':selected['current'],'modules':selected['modules'],
+        'manifest':selected['manifest'],'review_hash':request['review_hash'],
+        'original_history_rewritten':False,'native_rights_renewed':False,'acceptance':None}

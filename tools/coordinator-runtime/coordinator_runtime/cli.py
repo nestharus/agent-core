@@ -68,6 +68,17 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
+    for command in ('owner-source-amendment-basis','review-owner-source-amendment','select-owner-source-amendment'):
+        amendment = sub.add_parser(command, help='Stopped append-only source selection; original owner plan retained')
+        if command == 'owner-source-amendment-basis':
+            amendment.add_argument('capability')
+            amendment.add_argument('--controller', required=True)
+            amendment.add_argument('--previous', required=True, help='JSON exact previous commit/tree/parents')
+            amendment.add_argument('--manifest', required=True, help='JSON safe5 SHA256 manifest')
+            amendment.add_argument('--module', action='append', required=True, dest='modules')
+            amendment.add_argument('--purpose', required=True)
+        else:
+            amendment.add_argument('--selection', required=True)
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     processing_basis.add_argument('--selected-retained', help='Public JSON list of exact event/role/source_hash/source_birth/task/mapping_version pins; metadata only, distinct from future-only')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
@@ -375,6 +386,18 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'owner-source-amendment-basis','review-owner-source-amendment','select-owner-source-amendment'}:
+        from . import processing, report_repair, configuration
+        boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
+        role = 'Reviews' if args.command == 'review-owner-source-amendment' else 'Work'
+        actor = actual_actor(store.config['roles'][role]['owner'])
+        if args.command == 'owner-source-amendment-basis':
+            with configuration.stopped(store), store.tx():
+                return report_repair.amendment_basis(store,boards,args.capability,args.controller,actor,
+                    read_record(args.previous),args.modules,read_record(args.manifest),args.purpose)
+        if args.command == 'review-owner-source-amendment':
+            return report_repair.review_amendment(store,boards,actor,read_record(args.selection))
+        return report_repair.apply_amendment(store,boards,actor,read_record(args.selection))
     if args.command in {'owner-lease-basis','select-owner-lease','owner-lease-status','stop-owner-lease'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
