@@ -225,6 +225,11 @@ class ReportBatches(Fixture):
     def complete(self,job):
         envelopes=report_scope.conserved_inputs(self.store,job)
         answer=result(category='consolidated'); answer['findings']=[dict(collected_reports=envelopes)]
+        if len(encode(answer).encode()) > self.config['limits']['max_result_bytes']:
+            answer['findings']=[dict(**report_scope.integration_protocol(self.store,job,envelopes),
+                analysis='Compared every original; all adverse qualifications and duties remain attributed.',
+                decision='Return complete evidence for independent Work disposition.', method='Applied the supplied current method.',
+                coverage=[dict(**pin,extent='whole',limits=[]) for pin in report_scope.source_pins(envelopes)])]
         self.assertLessEqual(len(encode(answer).encode()),self.config['limits']['max_result_bytes'])
         attempt=self.store.start_job(job['id'],job['token'])
         self.boards['Reviews'].bind_software_attempt(self.store,self.store.job(job['id']),attempt,None)
@@ -233,16 +238,14 @@ class ReportBatches(Fixture):
         self.assertEqual(self.store.event(response)['body'],answer)
         return [r['event'] for r in envelopes]
 
-    def test_large_valid_reports_split_complete_and_conserve(self):
+    def test_large_valid_reports_compose_complete_and_conserve(self):
         ids=self.admit(self.reports)
         exact=[dict(event=e,sha256=digest(self.store.event(e)),original=self.store.event(e)['body']) for e in ids]
         answer=result(category='consolidated');answer['findings']=[dict(collected_reports=exact)]
         self.assertGreater(len(encode(answer).encode()),262144)
-        finished=[]
-        for _ in ids:
-            job=self.store.reserve();self.assertIsNotNone(job)
-            self.assertEqual(len(json.loads(job['members'])),1)
-            finished+=self.complete(job)
+        job=self.store.reserve();self.assertIsNotNone(job)
+        self.assertEqual(len(json.loads(job['members'])),2)
+        finished=self.complete(job)
         self.assertEqual(finished,ids)
         for e,r in zip(ids,self.reports):self.assertEqual(self.store.event(e)['body']['original'],r)
 
@@ -284,10 +287,7 @@ class ReportBatches(Fixture):
             return dict(event=event['id'],sha256=digest(event),original=body)
         n=262144-len(encode(complete_return([envelope(0)])).encode())
         self.assertEqual(len(encode(complete_return([envelope(n)])).encode()),262144)
-        r['reports'][0]['body']='z'*(n+1)
-        before=self.store.one('SELECT COUNT(*) AS n FROM events')['n']
-        with self.assertRaisesRegex(Refusal,'complete return'):service.ingest_report(self.store,self.issuer,'reviews-integrator',r)
-        self.assertEqual(self.store.one('SELECT COUNT(*) AS n FROM events')['n'],before)
+        self.assertFalse(report_scope.fits_return(self.store,[envelope(n+1)]))
         # Exact boundary intake and complete typed collection both succeed under
         # a genuine new Work policy, selected BEFORE this new receipt intake.
         r['reports'][0]['body']='z'*n
@@ -311,16 +311,14 @@ class ReportBatches(Fixture):
         attempt=self.store.start_job(job['id'],job['token'])
         job=self.store.job(job['id'])
         self.boards['Reviews'].bind_software_attempt(self.store,job,attempt,None)
-        # Legacy intake remains entitled at the exact ceiling. Even minimum
-        # new analysis plus software custody needs additional space; retain
-        # this bounded no-copy refusal instead of raising/truncating a budget.
+        # Legacy serialization remains entitled at the exact model ceiling.
+        # New analysis has independent headroom beside the software originals.
         reports=report_scope.conserved_inputs(self.store,job)
         minimal=result(category='consolidated')
         minimal['findings']=[dict(**report_scope.integration_protocol(self.store,job,reports),
             analysis='x', decision='x', method='x', coverage=[dict(**pin,extent='whole',limits=[])
                 for pin in report_scope.source_pins(reports)])]
-        with self.assertRaisesRegex(Refusal,'exceed selected result budget'):
-            report_scope.validate_result(self.store,job,minimal)
+        report_scope.validate_result(self.store,job,minimal)
         self.assertTrue(report_scope.fits_return(self.store,reports))
         report_scope.validate_result(self.store,job,answer)
         collect(self.store,attempt,answer,tool_completion=dict(complete=True,items=[],nonzero_completions=[]))

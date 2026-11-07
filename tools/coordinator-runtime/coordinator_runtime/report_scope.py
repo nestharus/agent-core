@@ -207,7 +207,7 @@ def analysis_result(runtime, row, result, reports):
     if (set(current) != set(protocol) | {'analysis', 'decision', 'coverage', 'method'}
             or any(encode(current[k]) != encode(v) for k, v in protocol.items())):
         raise Refusal('report analysis needs exact current sources and method binding')
-    required_text(current['analysis'], 'current report integration analysis', 65536)
+    required_text(current['analysis'], 'current report integration analysis', runtime.config['limits']['max_result_bytes'])
     required_text(current['decision'], 'current report integration decision', 16000)
     required_text(current['method'], 'current report integration method', 16000)
     coverage = current['coverage']
@@ -246,9 +246,58 @@ def source_custody(runtime, row, result, reports):
     custody = dict(version=INTEGRATION_KIND, collector=original['controller'],
                    attempt=original['id'], model_result_sha256=digest(result),
                    collected_reports=reports)
-    if len(encode(dict(body=result, report_custody=custody)).encode()) > runtime.config['limits']['max_result_bytes']:
-        raise Refusal('whole report custody and new analysis exceed selected result budget')
+    if len(encode(result).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('new model analysis exceed selected result budget')
+    validate_envelope(runtime, dict(body=result, report_custody=custody))
     return custody
+
+
+def transport_limit(runtime):
+    return min(runtime.config['limits'].get('max_artifact_bytes', 33554432),
+               runtime.config['limits']['max_bytes'])
+
+
+def validate_envelope(runtime, value):
+    """Measure the actual encoded software envelope, including every wrapper.
+
+    Each journal/outbox write also retains its existing cumulative budget check;
+    this per-envelope ceiling grants no storage reservation or source rights.
+    """
+    if len(encode(value).encode()) > transport_limit(runtime):
+        raise Refusal('whole report transport exceeds existing artifact/global ceiling')
+
+
+def selected_intake(runtime, event):
+    """Only exact Work-selected originals can use the larger intake envelope."""
+    if not runtime.processing:
+        return False
+    cap, selection = runtime.processing.current()
+    receipt = event.get('body', {}).get('original', {}) if isinstance(event.get('body'), dict) else {}
+    policy = selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {}).get('reviews_report')
+    if not policy:
+        return False
+    validate(runtime, 'Reviews', selection['service']['legacy_resources']['Reviews'], selection)
+    return (event.get('processing_report') == cap['id'] and event.get('author') == cap['issuer']
+            and event.get('role') == 'Reviews' and event.get('kind') == 'response'
+            and event.get('recipient') == runtime.config['roles']['Reviews']['owner']
+            and event.get('allowed_tasks') == [policy['task']]
+            and event.get('id') == digest({'attributed_report': {'collector': cap['issuer'], 'reference': receipt.get('reference')}})
+            and receipt.get('collector') == cap['issuer'] and receipt.get('effects') == 'known-report-only'
+            and event['body'].get('kind') == 'attributed-report' and event['body'].get('native_owner_execution') is False
+            and any(p['reference'] == receipt.get('reference') and p['sha256'] == digest(receipt) for p in policy['reports']))
+
+
+def validate_large_event(runtime, event):
+    """Authenticate the narrow selected exception to ordinary message sizing."""
+    if not selected_intake(runtime, event):
+        if event.get('kind') != 'response' or 'report_custody' not in event or not event.get('source_job'):
+            return False
+        job = runtime.job(event['source_job'])
+        if not uses_transport(job) or len(event.get('allowed_tasks', [])) != 1:
+            raise Refusal('large event requires exact selected report consumer')
+        execution_report(runtime, event, job, event['allowed_tasks'][0])
+    validate_envelope(runtime, event)
+    return True
 
 
 def incomplete_custody(runtime, row, result):
@@ -270,6 +319,8 @@ def validate_transport(runtime, row, event, result):
     expected = transport_custody(runtime, row, result)
     if encode(event.get('report_custody')) != encode(expected):
         raise Refusal('original software report custody changed or omitted')
+    if expected is not None:
+        validate_envelope(runtime, event)
 
 
 def integration_inputs(runtime, row):
@@ -309,18 +360,26 @@ def validate_result(runtime, row, result):
 
 
 def complete_return(reports):
-    """A complete legal return shape, not manufactured reviewer reasoning.
+    """Legacy complete whole-copy return shape, not reviewer reasoning.
 
-    Used for exact admission/composition accounting. Workers may add analysis
-    within the same actual result budget; all collection checks still apply.
+    Kept for legacy serialization accounting. New selected transport admission
+    reserves independent analysis headroom; all collection checks still apply.
     """
     return dict(semantic='DONE', category='consolidated',
                 summary='Whole attributed reports conserved; original qualifications remain.',
                 findings=[dict(collected_reports=reports)], failures=[], unknowns=[], artifacts=[])
 
 
-def fits_return(runtime, reports):
-    return len(encode(complete_return(reports)).encode()) <= runtime.config['limits']['max_result_bytes']
+def fits_return(runtime, reports, *, transport=False):
+    if not transport:
+        return len(encode(complete_return(reports)).encode()) <= runtime.config['limits']['max_result_bytes']
+    # Reserve the FULL selected model allowance for useful new analysis. Source
+    # bytes do not consume that allowance. The real response/outbox wrappers are
+    # measured again at their actual write and receive boundaries.
+    custody = dict(version=INTEGRATION_KIND, collector=runtime.controller,
+                   attempt='0'*36, model_result_sha256='0'*64, collected_reports=reports)
+    size = len(encode(dict(body=None, report_custody=custody)).encode()) - len('null')
+    return size + runtime.config['limits']['max_result_bytes'] <= transport_limit(runtime)
 
 
 def bounded_members(runtime, row, rows):
@@ -344,13 +403,13 @@ def bounded_members(runtime, row, rows):
                 raise
             continue
         incoming = conserved_inputs(runtime, candidate)
-        if not fits_return(runtime, incoming):
+        if not fits_return(runtime, incoming, transport=True):
             if candidate['id'] == row['id']:
-                raise Refusal('whole report has no complete return within current selected result budget')
+                raise Refusal('whole report has no complete transport with selected new analysis headroom')
             continue
-        if fits_return(runtime, reports + incoming):
+        if fits_return(runtime, reports + incoming, transport=True):
             chosen.append(candidate)
             reports += incoming
     if not chosen:
-        raise Refusal('no qualified complete report batch within current result budget')
+        raise Refusal('no qualified complete report batch within existing transport ceiling')
     return chosen

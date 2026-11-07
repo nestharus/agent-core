@@ -73,6 +73,10 @@ class DeliveryJournal:
                          'branch_root_routing':{'root':branch['root'],'ref':branch['ref'],'incarnation':branch['incarnation'],
                                                 'scope':branch['scope'],'authority':branch['authority'],
                                                 'accepted':branch['accepted']}}
+        if ('report_custody' in payload or any(isinstance(payload.get(k), dict) and 'report_custody' in payload[k]
+                                             for k in ('informative_failure', 'body'))):
+            from .report_scope import validate_envelope
+            validate_envelope(self, payload)
         self.budget("outboxes", len(encode(payload).encode()), event=event, job=job)
         self.db.execute("INSERT INTO outboxes(id,role,job,event,alert,producer,recipient,kind,required,payload,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (key, role, job, event, alert, producer or self.config["actor"],
