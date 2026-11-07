@@ -336,7 +336,7 @@ def integration_inputs(runtime, row):
     selected = runtime.processing.current()[1]
     record = selected.get('service', {}).get('legacy_resources', {}).get(row['role'], {})
     from .resource_scopes import qa_accounts, blocked
-    applies = (row['task'] == 'reviews-integrator' and 'reviews_report' in record
+    applies = (row['task'] == 'reviews-integrator' and ('reviews_report' in record or 'native_review_return' in record)
                or row['task'] == 'qa-cleanup' and any(a.get('cleanup') and a['binding']['package'] == row['package']
                    for a in qa_accounts(record)))
     if not applies:
@@ -394,6 +394,14 @@ def bounded_members(runtime, row, rows):
     if not runtime.processing or row['task'] != 'reviews-integrator':
         return rows
     record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+    if 'native_review_return' in record:
+        from .native_review_scope import eligible as native_eligible
+        with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+            native_eligible(runtime, row, record)
+            incoming = conserved_inputs(runtime, row)
+            if not fits_return(runtime, incoming, transport=True):
+                raise Refusal('whole native report has no complete transport with selected new analysis headroom')
+            return [row]  # Exact whole return; other current reports remain queued.
     if 'reviews_report' not in record:
         return rows
     chosen, reports = [], []
