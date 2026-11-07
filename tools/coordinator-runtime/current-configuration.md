@@ -109,10 +109,48 @@ executed schema changes only in isolated fixtures, not real stores.
 
 Before commit, failure rolls back the local transition. After commit, even if
 the response was lost, reopen with CURRENT_CONFIG and inspect status. Do not
-replay the selection; old-config writers refuse and the selected digest is
-unique. An unsupported rollback refuses; a later compatible release uses a
-fresh explicit configuration path/basis/selection, preserving all versions.
+replay the selection; old-config writers refuse and configuration-transition
+digests remain unique. An unsupported rollback refuses; a later compatible
+selection uses a fresh exact basis and genuine Work decision, preserving all versions.
 The API offers no restoration of old grants or incompatible old selectors.
+
+### Same configuration, new source release
+
+For a reviewed runtime code correction at the **same physical public release
+root**, use the existing basis/selection commands with `--config` and
+`--candidate` both naming the unchanged selected configuration file. Do not
+change `operator_config` or another selector to manufacture a configuration
+delta. An existing immutable selected release is required; initial bootstrap
+and ordinary different-configuration transitions keep their existing behavior.
+
+The basis includes `source_only`: the previous and measured new release
+digests and exact changed files. Every known release filename, root, pool
+control binding, non-runtime dependency, template, task and configuration byte
+must remain identical. Only bytes of existing runtime Python modules may
+change. Identical releases and added/removed modules refuse. This closed extent
+does not support a static dependency or policy upgrade; such work needs its
+applicable configuration/review procedure. Hot pool membership retains its
+existing independent meaning.
+
+Actual Work must review and select the exact code for its current purpose in
+the selection's `authority` rationale. Measured hashes or a filename prove
+neither semantic correctness nor owner review. The same genuine native issuer,
+original grant bindings, cooperative lock, fresh whole basis, revocations and
+budget checks still apply. Additionally, every recorded processing run must
+have its original supported `processing-release` receipt with numeric parent
+END, no uncollected owned attempt, and any associated service must have returned.
+A free lock, model DONE or revoked capability supplies no missing original END.
+
+Selection appends an immutable `configuration_source_selections` row associated
+with the current configuration transition. No old transition or configuration
+body is rewritten. Status reports its separate `source_selection` ordinal and
+the honest equal previous/current config digests; the selected release and
+future-source boundary advance. Config digests used by existing metadata
+terminal-reader fences stay unchanged. A subsequent configuration transition
+selects its own release; earlier source selections remain retained history.
+Fresh processing authority still requires a separate explicit delegation.
+There is no epoch renewal, old-capability transfer, old-job upgrade, input
+replay, metadata-fence rewrite, or disposition of historical unknowns/outboxes.
 
 ## Authority, receiving and conservation
 

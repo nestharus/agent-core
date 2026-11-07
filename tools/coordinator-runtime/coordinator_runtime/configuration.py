@@ -25,13 +25,37 @@ CREATE TRIGGER IF NOT EXISTS configuration_transitions_no_update
  BEFORE UPDATE ON configuration_transitions BEGIN SELECT RAISE(ABORT,'immutable configuration transition'); END;
 CREATE TRIGGER IF NOT EXISTS configuration_transitions_no_delete
  BEFORE DELETE ON configuration_transitions BEGIN SELECT RAISE(ABORT,'immutable configuration transition'); END;
+CREATE TABLE IF NOT EXISTS configuration_source_selections(
+ position INTEGER PRIMARY KEY AUTOINCREMENT,configuration_position INTEGER NOT NULL,
+ selection TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS configuration_source_selections_no_update
+ BEFORE UPDATE ON configuration_source_selections BEGIN SELECT RAISE(ABORT,'immutable source selection'); END;
+CREATE TRIGGER IF NOT EXISTS configuration_source_selections_no_delete
+ BEFORE DELETE ON configuration_source_selections BEGIN SELECT RAISE(ABORT,'immutable source selection'); END;
 """
+
+
+def _source_selection(runtime, row, *, body=False):
+    if not row or not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_source_selections'"):
+        return None
+    fields = 'position,issuer,created' + (',selection' if body else '')
+    return runtime.one('SELECT ' + fields + ' FROM configuration_source_selections '
+                       'WHERE configuration_position=? ORDER BY position DESC LIMIT 1', (row['position'],))
+
+
+def _with_source_selection(row, source):
+    if not source:
+        return row
+    # Separate ordinals: never invent a different configuration digest/version.
+    return {**row, **{k: v for k, v in source.items() if k != 'position'},
+            'previous': row['current'], 'source_selection': source['position']}
 
 
 def latest(runtime):
     if not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_transitions'"):
         return None  # Older read-only protocol fixtures; Store always installs the schema.
-    return runtime.one('SELECT * FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+    row = runtime.one('SELECT * FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+    return _with_source_selection(row, _source_selection(runtime, row, body=True))
 
 
 def current_binding(runtime):
@@ -45,7 +69,8 @@ def version_metadata(runtime):
     """Current public version identifiers without acquiring historical selections."""
     if not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_transitions'"):
         return None
-    return runtime.one('SELECT position,previous,current,original,issuer FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+    row = runtime.one('SELECT position,previous,current,original,issuer FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+    return _with_source_selection(row, _source_selection(runtime, row))
 
 
 def processing_tasks(runtime):
@@ -465,6 +490,8 @@ def validate_changes(runtime, value, tasks):
     if (not isinstance(tasks, list) or not tasks or len(set(tasks)) != len(tasks)
             or set(tasks) - set(value['tasks'])):
         raise Refusal('exact prospective task allowlist required')
+    if value == runtime.config:
+        return  # Source-only compatibility is checked against the immutable release below.
     # Reconstruct the permitted change. All other identities, grants, task
     # effects/bindings/concurrency, recipients, policies and fences freeze.
     # Only the explicit bounded capacity option may amend residency ceilings.
@@ -521,12 +548,59 @@ def basis(runtime, boards, value, tasks):
     from . import processing
     assert_current(runtime)
     validate_changes(runtime, value, tasks)
+    source_only = None
+    if value == runtime.config:
+        # Guard the new path's release before processing.implementation() can
+        # acquire its module bytes. Bootstrap inputs remain already loaded.
+        measured = release(runtime, value)
+        source_only = source_change(runtime, measured, tasks)
     identity = runtime.path.stat()
-    return {'configuration': digest(runtime.config), 'candidate': digest(value),
+    result = {'configuration': digest(runtime.config), 'candidate': digest(value),
             'runtime': {'path': str(runtime.path), 'dev': identity.st_dev, 'ino': identity.st_ino,
                         'actor': runtime.config['actor']},
             'processing': processing.basis(runtime, boards, future_only=True), 'journal': journal(runtime),
-            'release': release(runtime, value), 'tasks': tasks}
+            'release': measured if source_only else release(runtime, value), 'tasks': tasks}
+    if source_only:
+        result['source_only'] = source_only
+    return result
+
+
+def source_change(runtime, after, tasks):
+    """Only measured existing runtime code may differ; Work owns semantic review."""
+    previous = selected(runtime)
+    if not previous:
+        raise Refusal('source-only selection requires an existing immutable selected release')
+    before = previous['basis']['release']
+    if tasks != previous['basis']['tasks']:
+        raise Refusal('source-only selection preserves the exact prospective task allowlist')
+    if set(before) != set(after) or any(before[k] != after[k] for k in before if k != 'files'):
+        raise Refusal('source-only selection preserves release root, pool and static dependencies')
+    old, new = before['files'], after['files']
+    if set(old) != set(new):
+        raise Refusal('source-only selection preserves the exact known release file extent')
+    module_root = Path(before['root'])/'tools/coordinator-runtime/coordinator_runtime'
+    allowed = {p for p in old if Path(p).parent == module_root and Path(p).suffix == '.py'}
+    changed = sorted(p for p in new if old[p] != new[p])
+    if not changed or set(changed) - allowed:
+        raise Refusal('source-only selection requires different runtime code and unchanged static dependencies')
+    return {'previous_release': digest(before), 'release': digest(after), 'changed': changed,
+            'qualification': 'measured code change only; genuine Work owns reviewed semantic selection'}
+
+
+def source_originals_stopped(runtime):
+    """Use existing original processing-release receipts, never infer END from lock."""
+    if runtime.one("SELECT controller FROM service_runs WHERE state!='returned-awaiting-parent-END' "
+                   'OR returned IS NULL OR controller NOT IN (SELECT controller FROM processing_runs) LIMIT 1'):
+        raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
+    for run in runtime.rows('SELECT controller,state FROM processing_runs'):
+        try:
+            receipt = json.loads(run['state'])['parent_END']
+        except (ValueError, KeyError, TypeError):
+            receipt = None
+        if (not isinstance(receipt, dict) or type(receipt.get('actual_END')) is not int
+                or not receipt.get('evidence')
+                or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (run['controller'],))):
+            raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
 
 
 @contextmanager
@@ -552,13 +626,13 @@ def apply(runtime, boards, value, selection):
         current = basis(runtime, boards, value, tasks)
         if current != selection['basis']:
             raise Refusal('current transition source/basis changed; no automatic retry')
-        if current['candidate'] == current['configuration']:
-            raise Refusal('current transition needs an actual prospective configuration change')
         if (current['processing']['current'] or runtime.one('SELECT id FROM prospective_authorities WHERE revoked IS NULL')
                 or any(r['original']['continuation'] for r in current['processing']['roles'].values())):
             raise Refusal('explicitly revoke existing processing/prospective/retained capabilities; no implicit supersession')
         if any(r['original']['binding']['issued_by'] != issuer for r in current['processing']['roles'].values()):
             raise Refusal('same genuine original Work issuer required')
+        if 'source_only' in current:
+            source_originals_stopped(runtime)
         record = {**selection, 'previous_configuration': runtime.config,
                   'event_boundary': current['processing']['event_boundary'],
                   'jobs': [r['id'] for r in runtime.rows('SELECT id FROM jobs')],
@@ -567,9 +641,14 @@ def apply(runtime, boards, value, selection):
                   'alert_boundary': runtime.one('SELECT COALESCE(MAX(rowid),0) AS n FROM alerts')['n']}
         encoded = encode(record)
         runtime.budget(None, len(encoded.encode()) + len(encode(value).encode()) + 4096)
-        runtime.db.execute('INSERT INTO configuration_transitions(previous,current,original,configuration,selection,issuer,created) VALUES(?,?,?,?,?,?,?)',
-                           (current['configuration'], current['candidate'], original_digest(runtime), encode(value), encoded, issuer, runtime.clock()))
+        if 'source_only' in current:
+            source_position = runtime.db.execute('INSERT INTO configuration_source_selections(configuration_position,selection,issuer,created) VALUES(?,?,?,?)',
+                                                 (version_metadata(runtime)['position'], encoded, issuer, runtime.clock())).lastrowid
+        else:
+            runtime.db.execute('INSERT INTO configuration_transitions(previous,current,original,configuration,selection,issuer,created) VALUES(?,?,?,?,?,?,?)',
+                               (current['configuration'], current['candidate'], original_digest(runtime), encode(value), encoded, issuer, runtime.clock()))
     return {'configuration': current['candidate'], 'previous': current['configuration'],
+            **({'source_only': current['source_only'], 'source_selection': source_position} if 'source_only' in current else {}),
             'runtime': current['runtime'], 'normal_grants': 'unchanged and still revoked',
             'next': 'reopen this same journal with selected current config; take fresh processing-basis and delegate prospective authority',
             'historical_recovery': False}
