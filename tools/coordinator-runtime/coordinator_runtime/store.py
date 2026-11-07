@@ -897,10 +897,13 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
                             "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
                                                          encode(members), self.controller, token, self.clock()))
-            local_integration.record_job(self, self.job(job))
-            prospective.note_job(self, job)
+            # Ancestry validation can recheck a native producer's physical
+            # guard. Publish this reservation's immutable map first, within
+            # the same transaction, so it is not an opaque foreign holder.
             self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
                             encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
+            prospective.note_job(self, job)
+            local_integration.record_job(self, self.job(job))
             if admission and phase == "execution":
                 self.db.execute("INSERT OR REPLACE INTO qa_package_owners VALUES(?,?,?)", (row["package"], digest(admission["receipt"]), job))
             for member in members:

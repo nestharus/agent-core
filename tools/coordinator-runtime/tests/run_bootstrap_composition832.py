@@ -88,6 +88,7 @@ groups = {
             'test_source_amendment822.OutsideReview.test_collection_and_selection_mutation_fences_and_public_hashes',
             'test_authentic_control794.Kernel794.test_source_and_sdk_snapshots_readonly',
             'test_processing206.KernelIsolationTests.test_real_source_and_dependency_writes_are_kernel_denied']}
+groups['composite'] = [test for tests in list(groups.values()) for test in tests]
 for label in (sys.argv[1:] or list(groups)):
     if usage() >= 128*1024**2:
         print('stop-new128MiB',flush=True)

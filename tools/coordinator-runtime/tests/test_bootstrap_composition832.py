@@ -12,6 +12,11 @@ class NativeToWork(NativeReturn):
         super().configure_fixture()
         for task in ('reviews-integrator','work-proposer'):
             self.config['local_integration']['tasks'][task].update(points=['a'], lookup_scopes=[])
+        work = self.config['tasks']['work-proposer']
+        workdir = self.area/'work-reader'
+        workdir.mkdir()
+        work['cwd'] = str(workdir)
+        work['effect_authority']['read_roots'] = [str(self.catalog),str(self.method)]
 
     def test_native_whole_integrator_return_maps_real_work_point(self):
         self.mapping_readonly = True
