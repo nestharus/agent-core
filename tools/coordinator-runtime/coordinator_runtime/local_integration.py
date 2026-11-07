@@ -233,12 +233,50 @@ def input_metadata(event):
     return raw
 
 
-def input_authority(store, event, task, package, visiting=None):
+def report_receiver(store, task, package):
+    """Independent finite Work file coordination, never native ownership."""
+    from . import prospective
+    actual = store.config['tasks'][task]
+    if (not store.processing or package is not None or actual['role'] != 'Work'
+            or actual['phase'] not in {'proposer', 'integrator'} or actual.get('network')
+            or actual.get('execution') == 'owner' or not selected(store, task)):
+        raise Refusal('attributed ancestry requires independently authorized Work coordination')
+    epoch = prospective.current(store, task)
+    if not epoch or epoch['policy']['ordinary_effects'] is not False:
+        raise Refusal('attributed ancestry requires current no-native-effect Work authority')
+    points = point_definitions(store)
+    if (any('native' in binding for key in allowed_points(store, task)
+            for binding in points[key]['bindings'])
+            or any('native' in binding
+                   for scope in selected(store, task).get('lookup_scopes', [])
+                   for binding in scope.get('point', {}).get('bindings', []))):
+        raise Refusal('attributed ancestry cannot confer native point authority')
+    store.processing.boards['Work'].software_authority(store, task)
+
+
+def attributed_terminal(store, event, task, package, receiver):
+    """Authenticate a frozen admission, not a marker or nested source body."""
+    if task != 'reviews-integrator' or receiver is None:
+        raise Refusal('attributed report is only a terminal of collected Work coordination')
+    report_receiver(store, receiver, package)
+    from .report_scope import eligible, selected_intake
+    record = store.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+    if 'reviews_report' not in record:
+        raise Refusal('attributed terminal needs its exact current finite report selection')
+    row = dict(event=event['id'], task=task, role='Reviews', phase='integrator', package=package)
+    eligible(store, row, record)
+    if not selected_intake(store, event):
+        raise Refusal('attributed terminal differs from its original admitted identity')
+
+
+def input_authority(store, event, task, package, visiting=None, *, receiver=None):
     """Check original custody and conserved routes before point acquisition.
 
     Receiver mappings do not give a sender's nested text routing authority.
     Every upstream member remains checked, including unrelated batch leaves.
     """
+    if visiting is None:
+        receiver = task if store.config['tasks'][task]['role'] == 'Work' else None
     visiting = set() if visiting is None else visiting
     key = event['id']
     state = store.one('SELECT hash,hold FROM events WHERE id=?', (key,))
@@ -262,8 +300,42 @@ def input_authority(store, event, task, package, visiting=None):
     if not source_id and outbox:
         source_id = outbox['job']
     if not source_id:
+        if 'processing_report' in event and visiting:
+            attributed_terminal(store, event, task, package, receiver)
+            return True
         raise Refusal('mapping requires an original visible Board source or genuine collected upstream return')
     source = store.job(source_id)
+    # Preflight every sibling before collecting any member body.
+    from .report_scope import source_metadata
+    source_metadata(store, source)
+    attributed = any(store.one('SELECT event FROM processing_report_inputs WHERE event=?', (m['event'],))
+                     for m in json.loads(source['members']))
+    if source['task'] == 'reviews-integrator' and receiver is not None and attributed:
+        report_receiver(store, receiver, package)
+        from .report_scope import eligible
+        record = store.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+        if 'reviews_report' in record:
+            original_attempt = store.attempt(source['active_attempt'])
+            store.processing.authorize(original_attempt)
+            recorded = store.one('SELECT * FROM results WHERE attempt=?', (original_attempt['id'],))
+            if (source['state'] not in {'awaiting-delivery', 'closed'} or source['hold_reason']
+                    or source['effects'] not in {'none', 'reconciled'}
+                    or original_attempt['job'] != source['id'] or original_attempt['controller'] != source['controller']
+                    or original_attempt['kind'] != 'task' or original_attempt['state'] != 'collected'
+                    or any(original_attempt[k] is None for k in ('begin', 'ended', 'collected'))
+                    or original_attempt['exit'] != 0 or original_attempt['capture'] != 'complete'
+                    or original_attempt['error'] or not recorded
+                    or any(recorded[k] != original_attempt[k] for k in ('job', 'result', 'exit', 'capture', 'error'))):
+                raise Refusal('attributed ancestry requires complete original collector/result before source bodies')
+            if (not delivery and (source['response'] != key
+                    or event.get('source_job') != source['id']
+                    or event.get('source_attempt') != original_attempt['id']
+                    or key != digest({'response': original_attempt['id']})
+                    or event.get('source_members') != json.loads(source['members'])
+                    or encode(event.get('body')) != encode(collected_task_result(original_attempt)))):
+                raise Refusal('attributed ancestry requires the exact original collected response')
+            store.processing.boards['Reviews']._software_job_grant(store, source)
+            eligible(store, source, record)
     from .software import clean_processing, collected_report
     from .contracts import response_tasks
     from . import prospective
@@ -308,11 +380,24 @@ def input_authority(store, event, task, package, visiting=None):
             or event.get('source_members') != members or event.get('body') != answer
             or task not in response_tasks(store.config['tasks'][source['task']], answer, store.config)):
         raise Refusal('input mapping differs from exact collected internal response/route')
+    source_metadata(store, source)
+    attributed_lineage = False
     for member in members:
         original = store.event(member['event'])
         if member['hash'] != digest(original) or member['package'] != package:
             raise Refusal('input mapping must conserve every original member')
-        input_authority(store, original, source['task'], package, visiting | {key})
+        attributed_lineage = bool(input_authority(store, original, source['task'], package, visiting | {key}, receiver=receiver)) or attributed_lineage
+    return attributed_lineage
+
+
+def require_known_mapping(attributed, state):
+    """Attributed report ancestry supports existing Work decisions only.
+
+    Keep the semantic restriction shared by owner, delegated and packet paths;
+    authentic collection is not evidence that new work may be discovered.
+    """
+    if attributed and state != 'known':
+        raise Refusal('attributed ancestry requires an existing known-point Work decision')
 
 
 def mapping_binding(store, task, package):
@@ -330,7 +415,8 @@ def observe_input(store, event, receipt):
         raise Refusal('typed point mapping requires an already selected exact local receiver task')
     if input_metadata(event) is not None:
         raise Refusal('original anchor/commit continuation cannot be retargeted by input resolution')
-    input_authority(store, event, task, package)
+    attributed = input_authority(store, event, task, package)
+    require_known_mapping(attributed, request.get('state') if isinstance(request, dict) else None)
     if not isinstance(request, dict):
         raise Refusal('typed known/new/unresolved-existing input mapping required')
     state = request.get('state')
@@ -368,9 +454,11 @@ def observe_input(store, event, receipt):
             if not any(Path(path).is_relative_to(Path(root)) for root in roots):
                 raise Refusal('known mapping exceeds actual narrowed receiver source scope')
         with (snapshot_lock(store) if store.config.get('canonical_publication') else nullcontext()):
+            input_authority(store, event, task, package)
             bodies = {p:read_file(safe_path(p, roots), store.config['limits'].get('max_artifact_bytes',33554432))[0] for p in targets}
             packet = {k:copy.deepcopy(request[k]) for k in ('reads','writes')}
             packet['versions'] = {k:version(store, k, bodies, row) for k in keys}
+            input_authority(store, event, task, package)
     else:
         raise Refusal('typed known/new/unresolved-existing mapping; revisions are service-observed only')
     return {'packet':packet, 'binding':mapping_binding(store, task, package), 'observed':store.clock(),
@@ -397,11 +485,13 @@ def packet(store, row):
         if resolution['receipt']['task'] != row['task']:
             raise Refusal('receiver mapping belongs to a different exact task')
     delegated_report = (store.processing or store.config.get('software_delegation')) and (event.get('source_job') or event.get('source_delivery'))
+    attributed = False
     if mapped or delegated_report:
         # Existing anchors conserve revisions; they do not bypass the same
         # original collection/rights checks used for a fresh receiver mapping.
-        input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
+        attributed = input_authority(store, store.event(row['event']), row['task'], row.get('package', event.get('package')))
     raw = input_metadata(event)
+    require_known_mapping(attributed, 'known' if isinstance(raw, dict) and set(raw) == {'reads', 'writes', 'versions'} else None)
     if raw is None:
         raise Refusal('unresolved existing/new identity: missing metadata is not proof of new work; actual receiver mapping required')
     if isinstance(raw, dict) and set(raw) == {'new_work'}:
