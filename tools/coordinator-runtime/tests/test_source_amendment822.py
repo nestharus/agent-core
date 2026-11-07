@@ -133,16 +133,16 @@ class OutsideReview(Amendment):
         # Only the declared clock and installed-release/Git fixture seams differ.
         config=self.area/'cli-config.json';config.write_text(encode(self.config))
         seam=self.area/'cli-seam.json';seam.write_text(encode(dict(release=self.candidate_release,
-            previous=self.previous,current=self.current)))
+            previous=self.previous,current=self.current,implementation=self.candidate_impl)))
         script=self.area/'cli-driver.py'
         script.write_text('''import json,sys
 from unittest.mock import patch
-from coordinator_runtime import cli, configuration, report_repair as r
+from coordinator_runtime import cli, configuration, processing, report_repair as r
 from coordinator_runtime.store import Store
 seam=json.load(open(sys.argv[1])); original=Store.__init__
 def init(self,*a,**kw):
  kw['clock']=lambda:1600.; original(self,*a,**kw)
-with patch.object(Store,'__init__',init), patch.object(configuration,'release',return_value=seam['release']), patch.object(r,'git_source',side_effect=lambda root,commit=None:seam['previous'] if commit else seam['current']), patch.object(r,'source_transition'):
+with patch.object(Store,'__init__',init), patch.object(processing,'implementation',return_value=seam['implementation']), patch.object(configuration,'release',return_value=seam['release']), patch.object(r,'git_source',side_effect=lambda root,commit=None:seam['previous'] if commit else seam['current']), patch.object(r,'source_transition'):
  raise SystemExit(cli.main(sys.argv[2:]))
 ''')
         env=dict(os.environ,CODEX_SESSION_ID=self.issuer)

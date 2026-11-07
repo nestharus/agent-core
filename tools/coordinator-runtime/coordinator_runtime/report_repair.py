@@ -293,21 +293,24 @@ def source_pins(runtime, key, selection, implementation, request):
                 and request['basis']['implementation'] == implementation)
 
 
-def source_compatible(before, after, old, new, modules, *, _ceiling=None):
+def source_compatible(before, after, old, new, modules, *, _ceiling=None, _added_modules=frozenset()):
     if (not isinstance(modules, list) or not modules or any(not isinstance(m, str) for m in modules)
             or modules != sorted(set(modules)) or set(modules) - (SOURCE_MODULES if _ceiling is None else _ceiling)):
         raise Refusal('exact sorted public module delta within source-repair-v1 required')
     if set(before) != set(after) or any(before[k] != after[k] for k in before if k != 'files'):
         raise Refusal('source repair keeps exact release location, hot pool control and non-code dependencies')
-    if set(before['files']) != set(after['files']) or set(old) != set(new):
-        raise Refusal('source repair cannot add/remove modules or dependencies; no implicit module acquisition')
     root = Path(before['root'])/'tools/coordinator-runtime/coordinator_runtime'
-    for name in old:
+    added = set(new) - set(old)
+    if (set(old) - set(new) or added - _added_modules
+            or set(before['files']) - set(after['files'])
+            or set(after['files']) - set(before['files']) != {str(root/name) for name in added}):
+        raise Refusal('source repair cannot add/remove modules or dependencies beyond exact reviewed helpers')
+    for name in new:
         path = str(root/name)
-        if before['files'].get(path) != old[name] or after['files'].get(path) != new[name]:
+        if (name in old and before['files'].get(path) != old[name]) or after['files'].get(path) != new[name]:
             raise Refusal('release and original/current implementation pins must agree')
-    changed = sorted(name for name in old if old[name] != new[name])
-    paths = sorted(p for p in before['files'] if before['files'][p] != after['files'][p])
+    changed = sorted(name for name in new if name not in old or old[name] != new[name])
+    paths = sorted(p for p in after['files'] if p not in before['files'] or before['files'][p] != after['files'][p])
     if changed != modules or paths != sorted(str(root/name) for name in modules):
         raise Refusal('source repair requires precisely the selected module delta; templates/policy stay frozen')
     return paths
@@ -1061,7 +1064,8 @@ def stop_lease(runtime,boards,actor,key,reason):
 
 # A source selection is separate from the immutable finite authority plan.
 AMEND_VERSION = 'stopped-owner-source-amendment-v1'
-AMEND_MODULES = LEASE_MODULES | {'local_integration.py', 'inputs.py', 'contracts.py',
+AMEND_ADDED_MODULES = frozenset({'plain_control.py', 'native_review_scope.py'})
+AMEND_MODULES = AMEND_ADDED_MODULES | LEASE_MODULES | {'local_integration.py', 'inputs.py', 'contracts.py',
                               'software.py', 'completion.py', 'local_native.py',
                               'review_returns.py', 'metadata_lookup.py', 'processing_admission.py'}
 # This closed source-code ceiling is separate from the original lease's twelve
@@ -1135,6 +1139,10 @@ def source_transition(root, previous, current, old, new, modules):
     if changed != [prefix+m for m in modules]:
         raise Refusal('review must close the exact production module delta')
     for revision, implementation in ((previous,old),(current,new)):
+        tree_paths = git('ls-tree','-r','--name-only',revision['commit'],'--',prefix).decode().splitlines()
+        tree_modules = {p[len(prefix):] for p in tree_paths if p.endswith('.py')}
+        if tree_modules != set(implementation):
+            raise Refusal('complete previous/current Git implementation closure required')
         for name, pin in implementation.items():
             if hashlib.sha256(git('show',revision['commit']+':'+prefix+name)).hexdigest() != pin:
                 raise Refusal('source commit does not authenticate selected implementation')
@@ -1144,6 +1152,43 @@ def source_transition(root, previous, current, old, new, modules):
                 or path.startswith('tools/coordinator-runtime/') and path.endswith('.md')):
             continue
         raise Refusal('source amendment contains unrelated production changes')
+
+
+def amendment_source_users_stopped(runtime, key, plan):
+    """Metadata-only stop proof; retained job/effect debt is not process liveness.
+
+    Legacy originals do not consistently bind their interpreter release. Such
+    source relevance stays UNKNOWN: require their actual stop/END/release, never
+    infer safety from a foreign/revoked capability or a different config digest.
+    """
+    from .resource_scopes import original_modes, root, overlaps
+    originals = runtime.rows('SELECT controller,capability FROM processing_runs UNION '
+                             'SELECT controller,capability FROM service_runs')
+    controllers = {}
+    for original in originals:
+        controller = original['controller']; capability = original['capability']
+        if controller in controllers and controllers[controller] != capability:
+            raise Refusal('source amendment has ambiguous original controller provenance')
+        controllers[controller] = capability
+        stopped_original(runtime,capability,controller)
+    # An unattributed original cannot be qualified by acquiring its old body.
+    if runtime.one('SELECT id FROM attempts WHERE collected IS NULL LIMIT 1'):
+        raise Refusal('uncollected original source relevance unknown; actual collector END/release required')
+    source = root(str(Path(plan['basis']['release']['root'])/'tools/coordinator-runtime/coordinator_runtime'),
+                  runtime.config.get('artifact_exclusions', []))
+    for job in runtime.rows("SELECT id,task,controller FROM jobs WHERE state IN ('running','reserved')"):
+        if (controllers.get(job['controller']) == key
+                or runtime.one("SELECT id FROM attempts WHERE job=? AND json_extract(detail,'$.processing_capability')=? LIMIT 1",
+                               (job['id'],key))):
+            raise Refusal('current owned capability still has running/reserved original job')
+        if job['controller'] not in controllers:
+            raise Refusal('active job original source/controller relevance unknown')
+        # Every original above has its actual stop/END/release. A foreign stale
+        # reservation may retain unknown effects, custody and recovery forever;
+        # only its immutable resource footprint is relevant to this source edit.
+        reads, writes, _ = original_modes(runtime,job)
+        if any(overlaps(source,p) for p in reads + writes):
+            raise Refusal('retained original job resources overlap amended shared source')
 
 
 def amendment_guards(runtime, boards, key, controller):
@@ -1166,14 +1211,7 @@ def amendment_guards(runtime, boards, key, controller):
             or runtime.usage()['bytes'] >= limits['pause_bytes']):
         raise Refusal('current finite owner lease/headroom exhausted; no renewal')
     stopped_original(runtime,key,controller)
-    if (configuration.owned_service_conflict(runtime)
-            or runtime.one('SELECT id FROM attempts WHERE collected IS NULL LIMIT 1')
-            or runtime.one("SELECT id FROM jobs WHERE state IN ('running','reserved') LIMIT 1")):
-        raise Refusal('all original services/jobs must be stopped and collected')
-    for run in runtime.rows('SELECT controller FROM processing_runs WHERE capability=?',(key,)):
-        stopped_original(runtime,key,run['controller'])
-    for run in runtime.rows('SELECT controller FROM service_runs WHERE capability=?',(key,)):
-        stopped_original(runtime,key,run['controller'])
+    amendment_source_users_stopped(runtime,key,plan)
     grants = {}
     for role, board in boards.items():
         with board.opened(settlement=True) as conn:
@@ -1204,7 +1242,7 @@ def amendment_basis(runtime, boards, key, controller, actor, previous, modules, 
     before = lease_source(runtime,key,plan)
     after = configuration.release(runtime,runtime.config)
     implementation = processing.implementation()
-    changed = source_compatible(before['release'],after,before['implementation'],implementation,modules,_ceiling=AMEND_MODULES)
+    changed = source_compatible(before['release'],after,before['implementation'],implementation,modules,_ceiling=AMEND_MODULES,_added_modules=AMEND_ADDED_MODULES)
     current = git_source(after['root'])
     if prior and previous != prior['basis']['current']:
         raise Refusal('previous source must be the exact last appended selection')
