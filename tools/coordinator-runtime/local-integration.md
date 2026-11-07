@@ -466,12 +466,18 @@ ordinary effect authorization. It selects only existing local tasks, their
 original roles, routes, roots, grants and package permissions. It applies after
 the original processing source-birth boundary, never to an old unknown attempt.
 An unresolved source is delegated only when its frozen routes include a
-selected local task of its own role. An unrelated cross-role Work coordination
-route cannot suppress the ordinary input/control worker or enter a locator or
-mapping snapshot. Routing a control still requires fresh classification and all
+selected local task of its own role that is applicable under the input-route
+contract. Null-package QA and package-scoped tasks remain control inputs;
+metadata selection cannot invent their package admission. An unrelated
+cross-role Work coordination route cannot suppress the ordinary input/control
+worker or enter a locator or mapping snapshot. Routing a control still requires fresh classification and all
 original admission, native association/acceptance and execution guards.
 The software actor remains itself. It gets no native-owner receipt, package
 consent, assignment/acceptance, native creation, collector or effect authority.
+Failure/dependency recording uses retained source role/hash metadata without
+reacquiring the source body, including after a held source or revoked startup.
+The original failed-start collector preserves absent begin/END/exit values;
+diagnostics confer no renewed launch or source-read authority.
 
 The production tick first obtains fresh Luna LOW classification and a durable
 queue responsibility; those precede ACK. An instanced read-only metadata worker
