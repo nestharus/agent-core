@@ -122,7 +122,13 @@ def ingest_report(runtime, actor, task, receipt):
     if len(encode(event).encode()) > min(262144, runtime.config['limits']['max_result_bytes']):
         raise Refusal('whole report exceeds selected intake envelope; no truncation or full-report claim')
     from .report_scope import fits_return
-    if not fits_return(runtime, [dict(event=event['id'], sha256=digest(event), original=body)]):
+    from .report_reference import policy, validate_policy
+    reference_policy = policy(runtime)
+    if reference_policy is not None:
+        validate_policy(reference_policy, runtime.config['limits']['max_result_bytes'])
+        if len(encode(event).encode()) > min(reference_policy['max_read_bytes'], runtime.config['limits'].get('max_artifact_bytes', 33554432)):
+            raise Refusal('whole report cannot fit selected snapshot/read budget; no truncation')
+    elif not fits_return(runtime, [dict(event=event['id'], sha256=digest(event), original=body)]):
         raise Refusal('whole report has no complete return within selected result budget; no truncation')
     runtime.processing.boards['Reviews'].verify_authority(runtime)
     runtime.ingest(event)

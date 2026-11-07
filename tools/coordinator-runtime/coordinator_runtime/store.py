@@ -1134,6 +1134,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     'integration':binding} for index,(key,binding) in enumerate(sorted(updates.items()))] if updates else [response]
         from .processing import note_source
         for output in outputs:
+            from .report_reference import charge_transport
+            charge_transport(self, job, output)
             self.budget("events", len(encode(output).encode()), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (output['id'], destination, encode(output), digest(output), self.clock(), output['parent']))

@@ -122,3 +122,60 @@ controller `phase_errors` is not processing progress or acceptance.
 The focused fixtures use a disposable journal/SDK and authored collector/tool
 facts in a network-isolated mount namespace. They are producer verification,
 not independent QA, native acceptance, live repair or full rollout qualification.
+# Forward reference transport768: gated source prototype
+
+`software-report-reference-v1` is a distinct software custody version. It does
+not change `report-integration-v1` model analysis or reinterpret old inline
+v4/v5 results. The forward selector is an optional `transport` object inside
+the existing finite `reviews_report` policy, with `version`, `max_model_bytes`,
+`max_origins`, and `max_read_bytes`. **Selection currently refuses:**
+`report_reference.RELEASED` is false. This source is not a deployable reference
+consumer release. No current held producer repair or recovery is authorized.
+
+The prototype freezes each whole canonical current event into existing
+`artifact_blobs` and a distinct `artifact_custody` origin record. Responses carry
+ordered immediate origin descriptors, the original attempt/controller, and the
+unchanged model-result digest. Prior reference links stay inside immutable
+original events; they are not recursively expanded into new response custody.
+Old inline custody is frozen opaquely without reopening historical artifact
+paths. Source identity is the event plus its recorded custodian, not a blob
+hash. Snapshot paths are software-owned logical origin names, never arbitrary
+path lookup capabilities or instructions to inspect the runtime journal.
+
+The actual prompt entry resolves same-journal links under a cooperative source
+transaction, admitting every current member and required origin before body
+acquisition. It checks current holds, source hashes, selected capability, finite
+policy, epoch/grants, recipient/task binding and the existing blob origin,
+exclusion, stage, prefix and bounded-log guards. Calls after await repeat this
+admission. Naked blob access is refused. Required approved bytes are copied
+through guarded frozen materialization; existing materializations are read back
+and authenticated. All unique closure bytes and snapshot/materialization costs
+remain bounded by selected read, artifact and cumulative storage limits.
+
+Each consumer must separately declare a `report-reference-read-v1` finding with
+ordered immediate `{event,sha256}` sources, `closure` whole/partial/unread and
+text `limits`. DONE requires whole current inputs and required closure. This is
+an attributed read declaration, not proof of model thought: descriptor fit,
+existence, software hashing and synthetic fixtures do not establish actual
+provider reading. Reviews still owes its separate current typed analysis.
+Full-history reading still has real input/context cost.
+
+Selected response, handoff, owner-question and informative-failure paths check
+their software transport representation in UTF-8 bytes. Actual wrapper checks
+can refuse despite descriptor admission; originals remain collected. The
+prototype's model allowance is explicit, not assurance that arbitrary new
+analysis fits every wrapper. Unselected inline and QA paths keep their existing
+serialization and decisions.
+
+Origin records conservatively pin the entire original event/result/custodian
+cohort through the existing retirement eligibility gate. This intentionally
+provides no pin-release/GC feature; it may retain settled origins longer than
+24 hours. END, DONE and ACK never start the processing-plus-24-hour clock.
+
+Remaining release blockers include exact addressed consumer/owner report-origin
+export (direct `artifact-source` explicitly refuses), complete delivery wrapper
+accounting at the external boundary, imported-origin authority and exhaustive
+cycle/contradiction/corruption qualification, and independent review of the
+complete consumer/recovery/retention composition. Unsupported imports refuse;
+the original held v5 code-pin/owner redispose bridge is a separate interface and
+is not implemented. Existing repair allowlists and original results are intact.

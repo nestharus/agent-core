@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
+from contextlib import nullcontext
 
 from .contracts import PROFILES, Refusal, digest, encode, artifact_leaves
 from .cleanup import register_artifact
@@ -143,7 +144,11 @@ def _path_origins(store, path, tasks):
 def _hash_origins(store, sha256, sizes):
     paths = []
     for row in store.rows('SELECT * FROM artifact_custody WHERE sha256=?', (sha256,)):
-        size = custody_witness(row)['size']
+        witness = custody_witness(row)
+        if row['kind'] == 'report-origin-v1':
+            from .report_reference import guard_blob
+            guard_blob(store, witness)
+        size = witness['size']
         if sha256 in sizes and sizes[sha256] != size:
             raise Refusal('conflicting retained custody byte sizes')
         sizes[sha256] = size
@@ -304,7 +309,7 @@ def materialize(store, events, attempt, task=None):
                 with os.fdopen(fd, 'wb') as output:
                     output.write(row['body']); output.flush(); os.fsync(output.fileno())
                 register_artifact(store, attempt, path)
-                with store.tx():
+                with (nullcontext() if store.db.in_transaction else store.tx()):
                     store.db.execute('UPDATE artifacts SET conserved=? WHERE path=?',
                                      (encode({'basis': 'existing exact artifact_blobs', 'sha256': w['sha256']}), str(path)))
             result.append({**w, 'frozen_path': str(path)})

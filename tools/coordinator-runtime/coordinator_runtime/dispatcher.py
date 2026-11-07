@@ -105,6 +105,9 @@ def classifier_prompt(event, config):
 
 
 def job_prompt(store, job, task=None):
+    from . import report_reference
+    reference_inputs = (report_reference.materialize(store, job, job['active_attempt'])
+                        if report_reference.active(store, job) else None)
     local_integration.current_sources(store, job)
     from .report_scope import integration_inputs, integration_protocol, uses_transport, INSTRUCTIONS as REPORT_INSTRUCTIONS
     collected_reports = integration_inputs(store, job)
@@ -148,6 +151,17 @@ def job_prompt(store, job, task=None):
         context['events'] = [{k: v for k, v in event.items() if k not in {'body', 'report_custody'}} |
                              {'body_from': 'collected_reports['+str(index)+'].original'}
                              for index, event in enumerate(events)]
+    if reference_inputs is not None:
+        context['report_reference_inputs'] = reference_inputs
+        # Reference descriptors are software transport, not inline originals.
+        context['events'] = [{k: v for k, v in event.items() if k not in {'body', 'report_custody'}} |
+                             {'whole_event_from': reference_inputs['sources'][index]['origin']}
+                             for index, event in enumerate(events)]
+        templates.append('REPORT REFERENCE READ CONTRACT: read every approved frozen_inputs.frozen_path in report_reference_inputs whole, including the required origin closure. '
+                         'Descriptor fit/hash verification is not reading. Return a separate findings entry '
+                         '{kind:"report-reference-read-v1",sources:[{event,sha256} for immediate sources in order],closure:"whole"|"partial"|"unread",limits:[text]}. '
+                         'DONE requires honest whole current input AND closure reading; underlying artifacts remain reference-only. '
+                         'Keep report-integration-v1 analysis distinct. Never use a journal or original canonical path to acquire historical bytes.')
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
             + ("ORDINARY PREPARATION ONLY: read the admitted procedure/source and report findings. "
                "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "

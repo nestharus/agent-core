@@ -73,6 +73,10 @@ class DeliveryJournal:
                          'branch_root_routing':{'root':branch['root'],'ref':branch['ref'],'incarnation':branch['incarnation'],
                                                 'scope':branch['scope'],'authority':branch['authority'],
                                                 'accepted':branch['accepted']}}
+        if job:
+            from .report_reference import charge_transport
+            charge_transport(self, self.job(job), dict(role=role, recipient=recipient, kind=kind, payload=payload,
+                                                      job=job, event=event, id=key, producer=producer or self.config['actor'], required=required))
         self.budget("outboxes", len(encode(payload).encode()), event=event, job=job)
         self.db.execute("INSERT INTO outboxes(id,role,job,event,alert,producer,recipient,kind,required,payload,created) "
                         "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (key, role, job, event, alert, producer or self.config["actor"],
@@ -144,7 +148,10 @@ class DeliveryJournal:
             branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
             if len(branch_keys)==1:
                 event['branch_binding']=next(iter(branch_keys))
-            self.budget("events", len(encode(event)), job=job['id'])
+            from .report_reference import charge_transport
+            charge_transport(self, job, event)
+            from .report_reference import active
+            self.budget("events", len(encode(event).encode()) if active(self, job) else len(encode(event)), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (response_id, job["role"], encode(event), digest(event), self.clock(), event["parent"]))
             from .processing import note_source

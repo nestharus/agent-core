@@ -91,10 +91,13 @@ def validate(runtime, role, record, selection=None):
     policy = record['reviews_report']
     fields = {'version', 'authority', 'expires', 'task', 'task_sha256', 'reports'}
     if (role != 'Reviews' or record['unbounded'] is not True or not isinstance(policy, dict)
-            or set(policy) != fields or policy['version'] != 'reviews-report-v1'
+            or set(policy) - {'transport'} != fields or policy['version'] != 'reviews-report-v1'
             or type(policy['expires']) not in {int, float} or not math.isfinite(policy['expires'])
             or policy['expires'] <= runtime.clock() or policy['task'] != 'reviews-integrator'):
         raise Refusal('finite Reviews report policy must preserve unbounded original hold')
+    if 'transport' in policy:
+        from .report_reference import validate_policy
+        validate_policy(policy['transport'], runtime.config['limits']['max_result_bytes'])
     required_text(policy['authority'], 'actual Work finite report authority', 4000)
     task = runtime.config['tasks'][policy['task']]
     if (policy['task_sha256'] != digest(task) or task['role'] != role or task['phase'] != 'integrator'
@@ -230,6 +233,13 @@ def analysis_result(runtime, row, result, reports):
 
 def transport_custody(runtime, row, result):
     """Software composition only. The collected model result is never rewritten."""
+    from . import report_reference
+    if report_reference.active(runtime, row):
+        reports = report_reference.inputs(runtime, row)
+        report_reference.validate_read(runtime, row, result, reports)
+        if uses_transport(row) and not analysis_result(runtime, row, result, reports):
+            raise Refusal('selected reference mode requires distinct current report analysis')
+        return source_custody(runtime, row, result, reports)
     if not uses_transport(row):
         return None
     reports = integration_inputs(runtime, row)
@@ -243,6 +253,14 @@ def source_custody(runtime, row, result, reports):
     original = runtime.one('SELECT id,job,controller FROM attempts WHERE id=?', (row['active_attempt'],))
     if not original or original['job'] != row['id']:
         raise Refusal('custody requires the actual original job attempt collector')
+    # Ordinary legacy callers (including offline budget witnesses) retain their
+    # exact serialization. New fields are exclusively explicit forward policy.
+    from . import report_reference
+    if getattr(runtime, 'processing', None) and report_reference.active(runtime, row):
+        custody = dict(version=report_reference.VERSION, collector=original['controller'],
+                       attempt=original['id'], model_result_sha256=digest(result), sources=reports)
+        report_reference.charge_transport(runtime, row, dict(body=result, report_custody=custody))
+        return custody
     custody = dict(version=INTEGRATION_KIND, collector=original['controller'],
                    attempt=original['id'], model_result_sha256=digest(result),
                    collected_reports=reports)
@@ -252,6 +270,9 @@ def source_custody(runtime, row, result, reports):
 
 
 def incomplete_custody(runtime, row, result):
+    from . import report_reference
+    if report_reference.active(runtime, row):
+        return source_custody(runtime, row, result, report_reference.inputs(runtime, row))
     if not uses_transport(row):
         return None
     reports = integration_inputs(runtime, row)
@@ -280,6 +301,9 @@ def integration_inputs(runtime, row):
     """
     if not runtime.processing:
         return None
+    from . import report_reference
+    if report_reference.active(runtime, row):
+        return report_reference.inputs(runtime, row)
     selected = runtime.processing.current()[1]
     record = selected.get('service', {}).get('legacy_resources', {}).get(row['role'], {})
     from .resource_scopes import qa_accounts, blocked
@@ -296,6 +320,14 @@ def integration_inputs(runtime, row):
 
 
 def validate_result(runtime, row, result):
+    from . import report_reference
+    if report_reference.active(runtime, row):
+        reports = report_reference.inputs(runtime, row)
+        report_reference.validate_read(runtime, row, result, reports)
+        if uses_transport(row) and not analysis_result(runtime, row, result, reports):
+            raise Refusal('selected reference mode requires distinct current report analysis')
+        transport_custody(runtime, row, result)
+        return
     reports = integration_inputs(runtime, row)
     if reports is not None:
         if uses_transport(row) and analysis_result(runtime, row, result, reports):
@@ -335,6 +367,21 @@ def bounded_members(runtime, row, rows):
     record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
     if 'reviews_report' not in record:
         return rows
+    from . import report_reference
+    if report_reference.active(runtime, row):
+        # Snapshot/read admission is exact for each whole candidate. Do not
+        # claim the legacy minimum-copy return as an analysis feasibility proof.
+        chosen = []
+        for candidate in rows:
+            try:
+                eligible(runtime, candidate, record)
+                report_reference.inputs(runtime, candidate)
+            except Refusal:
+                if candidate['id'] == row['id']:
+                    raise
+                continue
+            chosen.append(candidate)
+        return chosen
     chosen, reports = [], []
     for candidate in rows:
         try:

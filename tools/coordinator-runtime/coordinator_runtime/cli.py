@@ -681,6 +681,8 @@ def operate(args, store):
     if args.command == 'artifact-source':
         row=store.one('SELECT * FROM artifact_custody WHERE attempt=? AND path=?',(args.attempt,args.path))
         if not row:raise Refusal('artifact custody not recorded for this exact source')
+        if row['kind'] == 'report-origin-v1':
+            raise Refusal('report-origin export requires a qualified current consumer read group; direct artifact-source is unsupported')
         caller=canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
         if caller != row['owner']:
             delivery=store.one('SELECT * FROM outboxes WHERE id=?',(args.delivery,)) if args.delivery else None

@@ -9,6 +9,7 @@ import hashlib
 import os
 from pathlib import Path
 import stat
+from contextlib import nullcontext
 
 from .contracts import Refusal, encode
 
@@ -34,7 +35,7 @@ def register_artifact(store, attempt, path):
     identity = regular_identity(path)
     maximum = min(store.config["limits"]["max_bytes"], store.config["limits"].get("max_artifact_bytes", 33554432))
     sha256 = artifact_digest(root, path, identity, maximum)
-    with store.tx():
+    with (nullcontext() if store.db.in_transaction else store.tx()):
         store.attempt(attempt)
         store.db.execute("INSERT INTO artifacts(path,attempt,dev,ino,size,mtime,sha256) VALUES(?,?,?,?,?,?,?)",
                          (str(path), attempt, *identity, sha256))
@@ -85,6 +86,9 @@ def conserve(store, path, actor, receipt):
 
 
 def eligible_event(store, event):
+    from .report_reference import origin_pinned
+    if origin_pinned(store, event['id']):
+        return False  # Keep blob AND event/result/custodian cohort; no GC addition.
     if store.one('SELECT p.point FROM local_lookup_points p JOIN attempts a ON a.id=p.source_attempt '
                  'WHERE a.event=? LIMIT 1', (event['id'],)):
         return False  # Derived live identities retain their actual original observation custody.
