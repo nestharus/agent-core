@@ -63,6 +63,7 @@ def failure_kind(error):
 
 
 def recovery_prompt(store,job):
+    local_integration.current_sources(store, job)
     old=store.attempt(job['active_attempt'])
     selected=store.owner_remaining_selection(job['id'],old['id'])
     selection={**selected,'receipt':json.loads(selected['receipt'])} if selected else None
@@ -104,6 +105,7 @@ def classifier_prompt(event, config):
 
 
 def job_prompt(store, job, task=None):
+    local_integration.current_sources(store, job)
     from .report_scope import integration_inputs
     collected_reports = integration_inputs(store, job)
     task = task or store.config["tasks"][job["task"]]
@@ -276,6 +278,14 @@ class Dispatcher:
             self.store.ack_state(event_id, "unknown", {"error": str(exc)[:1000]})
 
     async def classify(self, attempt, event):
+        try:
+            self.store.authorize_launch(attempt)
+        except (Refusal, OSError) as exc:
+            outcome = {"exit": None, "capture": "not-started", "cleanup": "no-session-created", "result": None,
+                       "error": str(exc), "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
+            self.store.collect(attempt, outcome)
+            self.store.classification_failed(attempt, exc)
+            return
         spec = {"cwd": self.config["classifier"]["cwd"], "sandbox": "read-only"}
         prompt = classifier_prompt(event, self.config)
         row = self.store.attempt(attempt)
@@ -342,11 +352,13 @@ class Dispatcher:
         directory = self.store.home / "artifacts" / attempt
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
+            local_integration.current_sources(self.store, job)
             admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))
             task = scoped_task(job["task"], task, admission)
             epoch = prospective.for_job(self.store, job)
             if self.config.get('software_delegation') or epoch:
                 self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
+            local_integration.current_sources(self.store, job)
             if ordinary.selected(self.store, self.store.job(job_id)):
                 ordinary.policy_for(self.store, job)
                 task = {**task, 'ordinary_preparation': True}
@@ -432,9 +444,13 @@ class Dispatcher:
 
     async def recover(self, job):
         attempt = self.store.diagnosis_attempt(job["id"])
-        prompt=recovery_prompt(self.store,job)
-        spec = {"cwd": self.config["diagnosis"]["cwd"], "sandbox": "read-only"}
-        outcome = await self.run_model(attempt, prompt, spec, DIAGNOSIS_SCHEMA)
+        try:
+            prompt=recovery_prompt(self.store,job)
+            spec = {"cwd": self.config["diagnosis"]["cwd"], "sandbox": "read-only"}
+            outcome = await self.run_model(attempt, prompt, spec, DIAGNOSIS_SCHEMA)
+        except (Refusal, OSError) as exc:
+            outcome = {"exit": None, "capture": "not-started", "cleanup": "no-session-created", "result": None,
+                       "error": str(exc), "detail": {"known_not_started": True, "resume_disposition": "unavailable-before-owned-start"}}
         self.store.collect(attempt, outcome)
         self.advance_recovery(job["id"], attempt)
 

@@ -206,6 +206,10 @@ def permits_job(runtime, job, authority, attempt):
                        for k in keys for b in points[k]['bindings'])):
             return False  # No discovery/lookup expansion or unbound file source.
     local.current_job(runtime, job)
+    try:
+        local.current_sources(runtime, job)
+    except Refusal:
+        return False
     packets = []
     for member in members:
         source = runtime.event(member['event'])
@@ -217,6 +221,10 @@ def permits_job(runtime, job, authority, attempt):
     # A collected decision retains its original revision for downstream duties;
     # it gets no new launch/effect/acceptance credit from later point changes.
     if attempt['collected'] is None:
+        try:
+            local.current_sources(runtime, job)
+        except Refusal:
+            return False
         from .custody import guard_path, safe_path, read_file
         from .publication import snapshot_lock
         actual = scoped_task(job['task'], task, None)
@@ -225,6 +233,10 @@ def permits_job(runtime, job, authority, attempt):
         for path in targets:
             guard_path(runtime, path)
         with (snapshot_lock(runtime) if runtime.config.get('canonical_publication') else nullcontext()):
+            try:
+                local.current_sources(runtime, job)
+            except Refusal:
+                return False
             bodies = {p:read_file(safe_path(p, roots), runtime.config['limits'].get('max_artifact_bytes', 33554432))[0]
                       for p in targets}
             if any(local.version(runtime, k, bodies, job) != packet['versions'][k]

@@ -1271,6 +1271,27 @@ passes in a stable process; this composition adds no wall-clock or migration
 atomicity guarantee. The combined offline witnesses are in
 `tests/test_receiving_integration.py`.
 
+Preparation and source holds use bounded cooperative admission. Each new input
+basis, routine snapshot attempt (including retries after an await), frozen-point
+projection, prompt/context group, staging group and selected-retained eligibility
+read group checks current member and neighbor hold metadata before acquisition.
+Classifier diagnosis checks its current event before fetching the prior result.
+Job-bound diagnosis checks member/neighbor holds before prior context, allocation,
+model admission and begin; read-only diagnosis does not require a current-point
+rebase. Diagnostic grants, ownership and original collection remain required.
+
+The serialized current-source check is the logical start of that bounded
+synchronous operation. An already admitted operation may finish after a later
+hold; subsequent groups, turns and effects must obtain fresh admission. Static
+path/quarantine exclusions still apply independently before each actual path
+acquisition. SQLite write locks are released before asynchronous admission,
+provider RPC, retry sleeps or waiting for publication locks. Publication lock
+attempts are nonblocking and retries recheck source holds. Existing AppServer
+checks remain at each model/turn boundary. Its final authorization and async send
+are separate (O3): admission starts the bounded RPC operation, without promising
+retroactive cancellation, unread bytes, a global lease or transaction atomicity
+across transport/files. No automatic recovery is enabled by this definition.
+
 ### Owner-qualified canonical-publication remainder
 
 A held, collected routine writer can have reconciled effects while canonical
