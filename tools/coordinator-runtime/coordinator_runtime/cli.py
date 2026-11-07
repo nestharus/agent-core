@@ -68,7 +68,8 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("init")
     sub.add_parser("status")
-    for command in ('owner-source-amendment-basis','review-owner-source-amendment','select-owner-source-amendment'):
+    for command in ('owner-source-amendment-basis','review-owner-source-amendment',
+                    'collect-owner-source-review','select-owner-source-amendment'):
         amendment = sub.add_parser(command, help='Stopped append-only source selection; original owner plan retained')
         if command == 'owner-source-amendment-basis':
             amendment.add_argument('capability')
@@ -386,7 +387,8 @@ async def serve(store):
 
 
 def operate(args, store):
-    if args.command in {'owner-source-amendment-basis','review-owner-source-amendment','select-owner-source-amendment'}:
+    if args.command in {'owner-source-amendment-basis','review-owner-source-amendment',
+                        'collect-owner-source-review','select-owner-source-amendment'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
         role = 'Reviews' if args.command == 'review-owner-source-amendment' else 'Work'
@@ -397,6 +399,8 @@ def operate(args, store):
                     read_record(args.previous),args.modules,read_record(args.manifest),args.purpose)
         if args.command == 'review-owner-source-amendment':
             return report_repair.review_amendment(store,boards,actor,read_record(args.selection))
+        if args.command == 'collect-owner-source-review':
+            return report_repair.collect_amendment_review(store,boards,actor,read_record(args.selection))
         return report_repair.apply_amendment(store,boards,actor,read_record(args.selection))
     if args.command in {'owner-lease-basis','select-owner-lease','owner-lease-status','stop-owner-lease'}:
         from . import processing, report_repair, configuration

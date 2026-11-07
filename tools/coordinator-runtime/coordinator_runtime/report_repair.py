@@ -1062,7 +1062,12 @@ def stop_lease(runtime,boards,actor,key,reason):
 # A source selection is separate from the immutable finite authority plan.
 AMEND_VERSION = 'stopped-owner-source-amendment-v1'
 AMEND_MODULES = LEASE_MODULES | {'local_integration.py', 'inputs.py', 'contracts.py',
-                              'software.py', 'completion.py'}
+                              'software.py', 'completion.py', 'local_native.py',
+                              'review_returns.py', 'metadata_lookup.py', 'processing_admission.py'}
+# This closed source-code ceiling is separate from the original lease's twelve
+# modules and grants no runtime/native rights. Every use needs a new exact review.
+WORK_REVIEW_VERSION = 'outside-work-collected-source-review-v1'
+SAFE_REVIEW_FILES = {'PRIMARY.md','RESULT.json','LIMITS.md','PUBLICATION.json','WRITER-RELEASE.json'}
 SCHEMA += '''
 CREATE TABLE IF NOT EXISTS owner_source_amendments(
  capability TEXT NOT NULL,ordinal INTEGER NOT NULL,request TEXT NOT NULL,
@@ -1248,6 +1253,117 @@ def review_amendment(runtime, boards, actor, request):
     return {'schema':AMEND_VERSION,'basis_hash':key,'review_hash':digest(request),'reviewer':actor}
 
 
+def external_review(runtime, actor, request):
+    """Trusted Work declares outside collection; public bytes never prove END.
+
+    No platform-store inspection, native Reviews identity or native acceptance.
+    Keep the entire original public review, including adverse qualifications.
+    """
+    import hashlib
+    import re
+    from .contracts import canonical_uuid, regular_path
+    if (not isinstance(request,dict) or set(request) !=
+            {'schema','basis','authority','collection','public_manifest'}
+            or request['schema'] != WORK_REVIEW_VERSION):
+        raise Refusal('typed independently Work-collected code review required')
+    required_text(request['authority'],'actual Work outside collection attribution',4000)
+    c = request['collection']; b = request['basis']
+    if (not isinstance(c,dict) or set(c) != {'collector','independently_observed','reviewer','invocation',
+            'writer','writer_invocation','original_numeric_id','actual_END','evidence'}
+            or c['collector'] != actor or c['independently_observed'] is not True
+            or type(c['actual_END']) is not int or c['actual_END'] != 0
+            or type(c['original_numeric_id']) is not int or c['original_numeric_id'] <= 0
+            or not isinstance(c['evidence'],list) or not c['evidence']):
+        raise Refusal('actual Work independently observed original numeric END0 required; DONE is insufficient')
+    for name in ('reviewer','writer'):
+        canonical_uuid(c[name])
+    for name in ('invocation','writer_invocation'):
+        required_text(c[name],name,256)
+    for item in c['evidence']:
+        required_text(item,'original outside collection evidence',4000)
+    if c['reviewer'] in {actor,c['writer']} or c['invocation'] == c['writer_invocation']:
+        raise Refusal('distinct dispatched readonly reviewer and invocation required')
+    manifest = request['public_manifest']
+    if not isinstance(manifest,dict) or set(manifest) != SAFE_REVIEW_FILES:
+        raise Refusal('exact independent reviewer public safe5 required')
+    bodies = {}; total = 0; paths = set()
+    exclusions = configuration._PathExclusions(runtime.config.get('artifact_exclusions',[]))
+    for name in sorted(manifest):
+        pin = manifest[name]
+        if (not isinstance(pin,dict) or set(pin) != {'path','sha256'}
+                or not isinstance(pin['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',pin['sha256'])
+                or not isinstance(pin['path'],str) or Path(pin['path']).name != name):
+            raise Refusal('exact absolute public review paths and SHA256 required')
+        path = regular_path(str(configuration._path(pin['path'],exclusions)))
+        paths.add(str(path.parent))
+        remaining = runtime.config['limits']['max_result_bytes'] - total
+        with path.open('rb') as stream:
+            data = stream.read(remaining+1)
+        total += len(data)
+        if total > runtime.config['limits']['max_result_bytes']:
+            raise Refusal('whole external review exceeds original custody limit')
+        if hashlib.sha256(data).hexdigest() != pin['sha256']:
+            raise Refusal('independent review public file changed')
+        bodies[name] = data.decode('utf-8')
+    if len(paths) != 1:
+        raise Refusal('one exact immutable independent public review packet required')
+    result = json.loads(bodies['RESULT.json']); release = json.loads(bodies['WRITER-RELEASE.json'])
+    publication = json.loads(bodies['PUBLICATION.json'])
+    if (not isinstance(publication,dict) or publication.get('reviewed_candidate') != b['current']
+            or publication.get('basis_hash') != digest(b)
+            or publication.get('reviewer') != c['reviewer'] or publication.get('invocation') != c['invocation']):
+        raise Refusal('independent public publication must bind the exact reviewed candidate')
+    expected = dict(schema='independent-source-code-review-v1',basis_hash=digest(b),
+        candidate=b['current'],previous=b['previous'],modules=b['modules'],module_diff=b['changed'],
+        plan_hash=b['plan_hash'],reviewer=c['reviewer'],invocation=c['invocation'],
+        writer=c['writer'],writer_invocation=c['writer_invocation'],
+        workflow='code-review-workflow',readonly=True,disposition='approve-exact-code-delta',
+        native_acceptance=False)
+    if (not isinstance(result,dict) or any(result.get(k) != v for k,v in expected.items())
+            or result.get('coverage') != {'complete':True,'modules':b['modules'],'unreviewed':[]}
+            or any(not isinstance(result.get(k),list) for k in ('risks','failures','remaining_obligations'))):
+        raise Refusal('whole independent exact candidate/module/old-plan review required; partial delta refuses')
+    if (not isinstance(release,dict) or release.get('reviewer') != c['reviewer']
+            or release.get('invocation') != c['invocation']
+            or release.get('report_writes_complete') is not True
+            or release.get('source_writes_complete') is not True
+            or release.get('pending_owned_children') != []):
+        raise Refusal('independent reviewer writer release required')
+    return bodies
+
+
+def collect_amendment_review(runtime, boards, actor, request):
+    """Authenticated Work seals its separately observed, original outside review."""
+    owner(runtime,boards,actor)
+    if not isinstance(request,dict) or not isinstance(request.get('basis'),dict):
+        raise Refusal('exact Work-collected basis required')
+    b = request['basis']
+    with configuration.stopped(runtime), runtime.tx():
+        current = amendment_basis(runtime,boards,b['capability'],b['controller'],actor,
+            b['previous'],b['modules'],b['manifest'],b['purpose'])
+        if current != b:
+            raise Refusal('stale external review basis')
+        bodies = external_review(runtime,actor,request)
+        sealed = {'request':request,'public_bodies':bodies}
+        if len(encode(sealed).encode()) > runtime.config['limits']['max_result_bytes']:
+            raise Refusal('whole sealed review exceeds original custody bound')
+        # Revalidate current authority/counters/source after public acquisition.
+        if amendment_basis(runtime,boards,b['capability'],b['controller'],actor,
+                b['previous'],b['modules'],b['manifest'],b['purpose']) != b:
+            raise Refusal('review collection mutation fence changed')
+        prior = runtime.one('SELECT * FROM owner_source_reviews WHERE basis_hash=?',(digest(b),))
+        if prior:
+            if prior['issuer'] != actor or prior['review'] != encode(sealed):
+                raise Refusal('contradictory immutable collected review')
+        else:
+            from .selected_source import custody_budget
+            custody_budget(runtime,len(encode(sealed).encode())+1024)
+            runtime.db.execute('INSERT INTO owner_source_reviews VALUES(?,?,?,?)',
+                (digest(b),encode(sealed),actor,runtime.clock()))
+    return {'schema':WORK_REVIEW_VERSION,'basis_hash':digest(b),'review_hash':digest(sealed),
+        'reviewer':request['collection']['reviewer'],'collector':actor,'native_acceptance':False}
+
+
 def apply_amendment(runtime, boards, actor, request):
     if (not isinstance(request,dict) or set(request) != {'schema','basis','authority','review_hash'}
             or request['schema'] != AMEND_VERSION or request['basis'].get('schema') != AMEND_VERSION):
@@ -1266,13 +1382,22 @@ def apply_amendment(runtime, boards, actor, request):
                 raise Refusal('idempotent source receipt is no longer current')
             return amendment_receipt(request)
         review = runtime.one('SELECT * FROM owner_source_reviews WHERE basis_hash=?',(digest(selected),))
-        if (not review or review['issuer'] != runtime.config['roles']['Reviews']['owner']
-                or digest(json.loads(review['review'])) != request['review_hash']):
+        proof = json.loads(review['review']) if review else None
+        if not review or digest(proof) != request['review_hash']:
             raise Refusal('genuine closed independent review of exact source/manifest required')
         current = amendment_basis(runtime,boards,key,selected['controller'],actor,selected['previous'],
             selected['modules'],selected['manifest'],selected['purpose'])
         if current != selected:
             raise Refusal('stale/racing source amendment basis; acquire fresh independent review')
+        if review['issuer'] == actor and isinstance(proof,dict) and 'request' in proof:
+            if (proof['request']['basis'] != selected
+                    or external_review(runtime,actor,proof['request']) != proof['public_bodies']):
+                raise Refusal('external exact review/public custody changed')
+            if amendment_basis(runtime,boards,key,selected['controller'],actor,selected['previous'],
+                    selected['modules'],selected['manifest'],selected['purpose']) != selected:
+                raise Refusal('external review selection mutation fence changed')
+        elif review['issuer'] != runtime.config['roles']['Reviews']['owner']:
+            raise Refusal('genuine Reviews or authenticated outside Work collection required')
         from .selected_source import custody_budget
         custody_budget(runtime,len(encode(request).encode())+2048)
         runtime.db.execute('INSERT INTO owner_source_amendments VALUES(?,?,?,?,?)',
