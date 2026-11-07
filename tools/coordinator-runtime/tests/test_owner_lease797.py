@@ -34,7 +34,7 @@ class OwnerLease(Fixture):
         self.controller = self.store.controller
         self.new_impl = processing.implementation()
         self.modules = sorted(repair.LEASE_MODULES)
-        self.old_impl = {k:('0'*64 if k in self.modules else v) for k,v in self.new_impl.items()}
+        self.old_impl = getattr(self, 'historical_implementation', None) or {k:('0'*64 if k in self.modules else v) for k,v in self.new_impl.items()}
         self.report = dict(reference='original797',collector=self.issuer,actual_END=0,
             reports=[dict(name='whole',body='Original dissent, UNKNOWN effects, retained duties Ω.')],history='Whole original history',
             method_pin='synthetic method',coverage=dict(status='PARTIAL',unread=['native source']),effects='known-report-only')
