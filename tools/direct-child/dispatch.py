@@ -69,7 +69,7 @@ def parse_args(argv):
         parser.add_argument(flag, action=Once, required=True)
     for flag in ("--seat", "--class", "--basis", "--kind", "--pass", "--route", "--model",
                  "--provider", "--effort", "--profile", "--override-reason", "--config",
-                 "--transport"):
+                 "--transport", "--session-lifecycle", "--session-owner-receipt"):
         parser.add_argument(flag, action=Once)
     parser.add_argument("--native-deadline", action=Once, type=int, metavar="SECONDS",
                         help="native front-door deadline; refused when the launch resolves direct")
@@ -509,6 +509,9 @@ def codex_command(args, record, profile, config, route_json=None):
                "--model", record["model"], "--effort", record["effort"]]
     if record.get('profile_source') != 'explicit':
         command += ['--execution-pool-routes', record['config']]
+    if args.session_lifecycle is not None:
+        command += ['--session-lifecycle', args.session_lifecycle,
+                    '--session-owner-receipt', args.session_owner_receipt]
     return command + (["--route-json", route_json] if route_json is not None else [])
 
 
@@ -1048,6 +1051,12 @@ def main(argv):
         check_paths(args)
         record.update(resolve_transport(config, args, record))
         provider = record["provider"]
+        if args.session_lifecycle is not None or args.session_owner_receipt is not None:
+            if (provider != 'codex' or record['transport'] != 'direct'
+                    or args.session_lifecycle not in ('oneoff', 'reusable')
+                    or not args.session_owner_receipt
+                    or not os.path.isabs(args.session_owner_receipt)):
+                raise Refusal('session lifecycle requires direct Codex and an absolute owner receipt')
         if provider == "claude" and record["transport"] == "direct":
             wrapper = args.profile or config["providers"]["claude"]["pool"][0]
             if not args.dry_run and shutil.which(wrapper) is None:

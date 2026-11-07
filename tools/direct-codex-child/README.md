@@ -86,3 +86,78 @@ Add `--dry-run` to validate local arguments and show the chosen profile/cwd with
 The caller owns the native terminal handle and parent state entry; a shell program cannot discover the harness handle. This tool captures the Codex process exit and final, but it cannot prove the child satisfied its task or that review, effect authority, and worktree rules were met. Existing project `AGENTS.md` files must route readers to `~/ai/AGENTS.md` or the child needs a direct pointer. RFQ's umbrella `AGENTS.md` does route there, though its older `agents` CLI examples remain and are superseded for new outage launches by the shared override.
 
 Used by: [`~/ai/AGENTS.md`](../../AGENTS.md) and project managers invoking new direct Codex children during the outage.
+
+### Prospective persisted-session retirement (preparatory source)
+
+Existing launches and opaque captures grant no retirement authority. A future direct
+Codex invocation may opt in with `--session-lifecycle oneoff|reusable` and
+`--session-owner-receipt /absolute/owner.json`. The dispatcher forwards these only
+for direct Codex; it refuses them for other transports/providers before allocation.
+The model, effort, MCP preflight, pool admission, capture quality and native END
+collection contract remain in force. The optional machine-readable stdout is
+intercepted before opaque capture limits. Missing, duplicate, invalid or oversized
+typed metadata holds that invocation. No old capture is parsed.
+
+The owner receipt has exactly these keys: `owner`, `custodian`, `collector`,
+`caller_session_id` (canonical UUID), `account_binding` (original owner account
+receipt reference), `context_ref`, `required_closures`, and `hold_owners`.
+`required_closures` maps every actual processing/consumer/context obligation to
+its original actor; `processing` and `context` must name `owner`.
+`hold_owners` maps each of source, consumer, control, outbox, publication, resource,
+recovery, effect, privacy and custody to its actual actor. No default empty holds
+or inferred consumer set is supplied. An incomplete obligation inventory remains
+held; owning a new directory alone proves no exclusive custody.
+
+The attempt's immutable `session-retirement.json` captures a fresh invocation UUID,
+original profile/home, absolute binary/hash, route reference/hash and original
+account reference. `session-retirement.jsonl` is its fsynced, chained append-only
+operation/lifecycle journal; required receipts survive logical deletion. This is
+part of the existing attempt manifest, with no database or scheduler. Original
+actors can call `session_retirement.edit()` or `record --attempt PATH --actor ACTOR
+--generation N --event JSON`; the JSON has `kind` and `value`. The API docstrings
+and source-only tests give exact receipt examples. `close` records each actual
+closure once per generation, `hold` records actual references and their clearance,
+`collect` records the original native terminal handle and collection receipt,
+and `custody` records the exclusive complete descendant tree and actual evidence.
+Process END supplies none of those actual work/context/consumer closures.
+
+All owners of resume, fork, context, consumer, hold and descendant lifecycle writes
+must cooperate on this same per-attempt lock. They must `reopen` **before** new
+work, resumption, descendants or obligations; this preserves old immutable
+closures in history and starts a new unqualified generation. Noncooperating or
+unknown writers cannot satisfy this contract. Actor labels are local cooperative
+custody assertions, not an authentication system or protection against hostile
+filesystem writers. The immutable original owner controls directory permissions.
+
+A `custody` receipt must bind the invocation, generation and exact binding digest;
+attest exclusive complete coverage, no unknown descendants/active callers; and
+supply a rooted tree of UUID members and actual edge receipts. Every member needs
+the original custodian, inactive state, numeric END, collection/closure references,
+actual processing time and actual context-close time. The root, every required
+consumer and every descendant contribute to the latest required completion. Only
+after that maximum plus 86400 seconds, all ten independent hold classes clear,
+and original collection is complete, may the original owner invoke `retire()` or
+`retire --attempt PATH --actor ACTOR --binding ORIGINAL_BINDING_JSON` from its
+current `CODEX_SESSION_ID`. Current caller/ancestor/active children are refused.
+Reusable builder/reviewer contexts require actual context lifecycle closure;
+individual process END cannot close them. Unknown legacy sessions stay held.
+
+A finite visit locks the cooperative lifecycle, persists intent/fence, initializes
+a newly controlled stdio app-server on the exact original binary/home, verifies
+`initialize.codexHome`, sends `initialized`, persists possible-send, then sends
+only `thread/delete {threadId}`. The installed public 0.167.0 schema was qualified
+offline; `session_retirement.py` pins its binary SHA256. Requalify source before
+using a changed binary. No pool lookup, current-profile substitution, inventory,
+thread read, model start/resume, private fallback or client attachment occurs.
+
+Durable ACK suppresses duplicate requests. Timeout/crash after possible-send is
+unknown and never blindly replayed. An unsent record may be requalified, or its
+original owner may `release-unsent` with a real receipt before new lifecycle work.
+An uncertain/acknowledged fence cannot be waived by this adapter; reconciliation
+stays with the actual effect owner. ACK means supported logical deletion only;
+it proves neither physical absence nor platform byte reclamation. SDK ephemeral
+teardown and coordinator queue/artifact cleanup remain separate lifecycles.
+
+This source is not installed or activated. No real thread was deleted during
+qualification. Run the bounded source-only tests with `test_session_retirement.py`;
+its clocks, CLI and stdio server are synthetic and require no credentials.

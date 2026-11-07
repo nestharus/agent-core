@@ -9,6 +9,7 @@ Usage: launch.sh --profile .codex[2|3|4|5] --cwd /absolute/workspace \
   --prompt /absolute/prompt.md --runs-dir /absolute/runs --id child-name \
   [--model native-model --effort native-effort] \
   [--ephemeral] [--log-max-bytes POSITIVE_INTEGER] \
+  [--session-lifecycle oneoff|reusable --session-owner-receipt /absolute/receipt.json] \
   [--dry-run | --preflight-only]
 
 The launcher reserves one unique attempt directory and runs one Codex child in
@@ -27,12 +28,15 @@ EOF
 die() { printf 'direct-codex-child: %s\n' "$*" >&2; exit 2; }
 
 profile='' cwd='' prompt='' runs_dir='' child_id='' dry_run=false preflight_only=false
+session_lifecycle='' session_owner_receipt=''
 model='' effort='' route_json='' ephemeral=false log_max_bytes='' execution_pool_routes=''
 while (($#)); do
   case "$1" in
-    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes|--execution-pool-routes)
+    --profile|--cwd|--prompt|--runs-dir|--id|--model|--effort|--route-json|--lease-wait|--log-max-bytes|--execution-pool-routes|--session-lifecycle|--session-owner-receipt)
       (($# >= 2)) || die "missing value for $1"
       case "$1" in
+        --session-lifecycle) [[ -z $session_lifecycle ]] || die 'duplicate --session-lifecycle'; session_lifecycle=$2 ;;
+        --session-owner-receipt) [[ -z $session_owner_receipt ]] || die 'duplicate --session-owner-receipt'; session_owner_receipt=$2 ;;
         --profile) [[ -z $profile ]] || die 'duplicate --profile'; profile=$2 ;;
         --cwd) [[ -z $cwd ]] || die 'duplicate --cwd'; cwd=$2 ;;
         --prompt) [[ -z $prompt ]] || die 'duplicate --prompt'; prompt=$2 ;;
@@ -55,6 +59,10 @@ while (($#)); do
 done
 [[ $dry_run == false || $preflight_only == false ]] || die 'choose either --dry-run or --preflight-only'
 
+[[ -z $session_lifecycle && -z $session_owner_receipt ]] || {
+  [[ $session_lifecycle == oneoff || $session_lifecycle == reusable ]] || die 'explicit session lifecycle required'
+  [[ $session_owner_receipt == /* && -f $session_owner_receipt ]] || die 'absolute owner receipt required'
+}
 case "$profile" in .codex|.codex2|.codex3|.codex4|.codex5) ;; *) die 'profile must be .codex, .codex2, .codex3, .codex4, or .codex5' ;; esac
 [[ -n $model || -z $effort ]] && [[ -z $model || -n $effort ]] \
   || die 'give --model and --effort together, or neither for gpt-6.1-sol/high'
@@ -241,32 +249,72 @@ git_branch=$(git -C "$cwd" branch --show-current 2>/dev/null || printf 'unavaila
   printf 'start_utc=%s\nexpected_status=native terminal exit plus codex_exit entry\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 } > "$state_path" || die 'cannot write state'
 
+if [[ -n $session_lifecycle ]]; then
+  codex_binary=$(command -v codex)
+  retirement_binding=$(python3 - "$codex_binary" "$profile_home" "$profile" "$attempt" "$ephemeral" "$session_owner_receipt" <<'PYB'
+import hashlib, json, os, sys
+binary, home, profile, attempt, ephemeral, receipt = sys.argv[1:]
+binary = os.path.realpath(binary)
+with open(receipt) as f:
+    owner = json.load(f)
+route = os.path.join(attempt, 'route.json')
+print(json.dumps(dict(binary=binary, binary_sha256=hashlib.sha256(open(binary,'rb').read()).hexdigest(),
+    codex_home=home, profile=profile, account_binding=owner['account_binding'],
+    route_ref=route if os.path.isfile(route) else None,
+    route_digest=hashlib.sha256(open(route,'rb').read()).hexdigest() if os.path.isfile(route) else None,
+    ephemeral=ephemeral == 'true')))
+PYB
+  ) || die 'cannot capture original session binding'
+  python3 "$launcher_dir/session_retirement.py" bootstrap --attempt "$attempt" \
+    --receipt "$session_owner_receipt" --binding "$retirement_binding" --lifetime "$session_lifecycle" \
+    || die 'cannot create prospective session manifest'
+  printf 'session_retirement_manifest=%s\n' "$attempt/session-retirement.json" >> "$state_path"
+fi
+
 printf 'DIRECT_CODEX_ATTEMPT=%s\nDIRECT_CODEX_STATE=%s\n' "$attempt" "$state_path"
 printf 'MCP_PREFLIGHT=all effective servers disabled\n'
 printf 'DELEGATION_CAPABILITY=%s\n' "$delegation_status"
 cd -- "$cwd" || die "cannot enter cwd: $cwd"
 session_flags=()
 [[ $ephemeral == false ]] || session_flags+=(--ephemeral)
+[[ -z $session_lifecycle ]] || session_flags+=(--json)
 run_child() {
   local admission=()
   if [[ -n $execution_pool_routes ]]; then
     admission=(python3 "$launcher_dir/../direct-child/execution_pool.py" --routes "$execution_pool_routes" \
       exec --profile "$profile" --receipt "$attempt/pool-admission.json" --)
   fi
-  CODEX_HOME="$profile_home" "${admission[@]}" codex exec --dangerously-bypass-approvals-and-sandbox \
+  CODEX_HOME="$profile_home" "${admission[@]}" "${codex_binary:-codex}" exec --dangerously-bypass-approvals-and-sandbox \
     -m "$model" -c "model_reasoning_effort=\"$effort\"" "${mcp_flags[@]}" "${delegation_flags[@]}" \
     "${session_flags[@]}" -C "$cwd" --color never -o "$final_path" -
 }
+run_observed_child() {
+  if [[ -n $session_lifecycle ]]; then
+    # Typed stdout only; stderr remains opaque and never reaches the extractor.
+    run_child | python3 "$launcher_dir/session_retirement.py" intercept --attempt "$attempt"
+    observed_status=("${PIPESTATUS[@]}")
+    if ((observed_status[1] != 0)); then
+      printf 'session_metadata_capture=failed\n' >> "$state_path"
+    fi
+    return "${observed_status[0]}"
+  else
+    run_child
+  fi
+}
 if [[ -n $log_max_bytes ]]; then
-  run_child < "$prompt_snapshot" 2>&1 | python3 "$launcher_dir/capture_output.py" \
+  run_observed_child < "$prompt_snapshot" 2>&1 | python3 "$launcher_dir/capture_output.py" \
     --log "$log_path" --summary "$attempt/capture.json" --max-bytes "$log_max_bytes"
   pipeline_status=("${PIPESTATUS[@]}")
 else
-  run_child < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
+  run_observed_child < "$prompt_snapshot" 2>&1 | tee -a "$log_path"
   pipeline_status=("${PIPESTATUS[@]}")
 fi
 codex_rc=${pipeline_status[0]}
 tee_rc=${pipeline_status[1]}
+if [[ -n $session_lifecycle ]]; then
+  python3 "$launcher_dir/session_retirement.py" end --attempt "$attempt" --code "$codex_rc" \
+    || printf 'session_end_receipt=failed\n' >> "$state_path"
+fi
 # Codex's human log renders collaboration tool use as `collab:` lines (Wait seen;
 # spawn not rendered), so this count is a detection lead, not proof either way.
 collab_lines=$(grep -c '^collab:' -- "$log_path" 2>/dev/null) || collab_lines=${collab_lines:-unavailable}
