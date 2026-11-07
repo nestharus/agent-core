@@ -1,142 +1,19 @@
-"""Real public policy/admission/resource APIs, contained owned Git fixtures.
+"""Migrated616 API controls for Work-selected generic operation policy.
 
-The genuine public QA JSON is tested unmodified without following its paths.
-Executable cases translate its paths/pins into fiction and patch ONLY the
-trusted statement/file/oracle constants. Grants are explicit logical seams;
-no real QA admission, owner, provider, native or procedure execution is claimed.
+The obsolete two-key wrapper and FINAL590 constants confer no authority.
+Attribution is inert evidence; current Work selects a separate exact policy.
+All original adverse gates remain exercised against that policy.
 """
 import copy
-import hashlib
-import json
-import os
 from pathlib import Path
-import subprocess
-from types import SimpleNamespace
-import unittest
 from unittest.mock import patch
 
-from support import config_at, enrolled
-from coordinator_runtime import resource_scopes as resources, processing, prospective
-from coordinator_runtime.contracts import Refusal, digest, encode, ident
+from coordinator_runtime import resource_scopes as resources
+from coordinator_runtime.contracts import Refusal, digest, encode
+from test_qa_operation620 import OperationFixture620
 
 
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-class Operation616(unittest.TestCase):
-    def setUp(self):
-        self.area = Path('/fixtures') / ident()
-        self.area.mkdir()
-        self.now = 1000.
-        self.repo = self.area / 'repo'
-        self.repo.mkdir()
-        self.git('init', '--initial-branch=source')
-        (self.repo / 'source.txt').write_text('first\n')
-        self.git('add', 'source.txt')
-        self.commit('first')
-        parent = self.git('rev-parse', 'HEAD')
-        (self.repo / 'source.txt').write_text('second\n')
-        self.git('add', 'source.txt')
-        self.commit('second')
-        self.head = self.git('rev-parse', 'HEAD')
-        self.tree = self.git('rev-parse', 'HEAD^{tree}')
-        self.config = config_at(self.area)
-        task = self.config['tasks']['qa-execution']
-        task.update(effects='owner-reconcile', require_package_scope=True,
-                    scope_roots=[str(self.area)])
-        task['effect_authority']['operations'] = ['execute-admitted-qa']
-        self.store = enrolled(self.config, clock=lambda: self.now)
-        self.addCleanup(self.store.close)
-        self.store.db.execute("UPDATE enrollments SET legacy_hold='old global UNKNOWN' WHERE role='QA'")
-        self.genuine = json.loads(Path(__file__).with_name('test_qa_operation616_statement.json').read_text())
-        self.statement = copy.deepcopy(self.genuine)
-        self.statement['custodian'] = 'Existing QA' + self.config['roles']['QA']['owner']
-        self.procedure = self.area / 'procedure.md'
-        self.procedure.write_text('Fictional bounded ordinary procedure, never executed.\n')
-        self.selected = self.area / 'selected'
-        self.selected.mkdir()
-        self.files = {}
-        for filename in ['qa_selected_tests.py','qa_resource_readback.py','TEST-SELECTION.json']:
-            path = self.selected / filename
-            path.write_text('{}\n' if filename.endswith('.json') else 'raise SystemExit(0)\n')
-            self.files[filename] = sha(path)
-        self.output = self.area / 'output'
-        self.output.mkdir()
-        op = self.statement['final_operations_as_reported']
-        op['fixed_source'].update(repository=str(self.repo), common_Git_READONLY=str(self.repo / '.git'),
-                                  source_ref='refs/heads/source', commit=self.head, tree=self.tree, parent=parent)
-        op['prepared_operands'].update(selected_root=str(self.selected), procedure=str(self.procedure),
-                                       procedure_Work_reported_SHA256=sha(self.procedure))
-        self.scope = dict(cwd=str(self.repo), read_roots=[str(self.repo), str(self.procedure),
-                          *[str(self.selected / f) for f in self.files]],
-                          write_roots=[str(self.output)], network=False, procedure=str(self.procedure),
-                          resource_evidence='Fictional independently admitted finite scope')
-        op['qa_execution_four_field_scope_projection'].update({k:self.scope[k] for k in ('cwd','read_roots','write_roots','procedure')})
-        executable = '/usr/bin/python3.12'
-        self.p = dict(kind='local-qa', git='/usr/bin/git', git_sha256=sha('/usr/bin/git'),
-                      repository=str(self.repo), source_ref='refs/heads/source', source_head=self.head,
-                      procedure_sha256=sha(self.procedure), timeout=1, max_output=4096,
-                      resources=[dict(key='fixture-output', owner=self.config['roles']['QA']['owner'],
-                                      authority='Fictional lease', expires=1100.)],
-                      acceptor=ident(), acceptance_authority='Fictional independent acceptor', known_exits=[0,1],
-                      source_capture=dict(bwrap='/usr/bin/bwrap', sha256=sha('/usr/bin/bwrap'), max_bytes=1024, max_files=10),
-                      public_executables={label:dict(path=executable, bytes=Path(executable).stat().st_size,
-                                                    sha256=sha(executable)) for label in ('command','readback')})
-        for label, filename in [('command','qa_selected_tests.py'), ('readback','qa_resource_readback.py')]:
-            self.p[label] = dict(argv=[executable, '-B', str(self.selected / filename)],
-                                 executable_sha256=sha(executable), script_sha256=self.files[filename],
-                                 stdout='FIXTURE COMPLETE\n' if label == 'readback' else None)
-        self.scope['ordinary_effects'] = self.p
-        self.admit()
-        admission = self.store.one('SELECT * FROM admissions WHERE package=?', ('fictional-package',))
-        self.record = dict(original_hold='old global UNKNOWN', roots=[], unbounded=True,
-                           evidence='Positive operation-relative set empty; global original custody UNKNOWN',
-                           qa_operation=dict(statement=self.statement, binding=dict(task='qa-execution',
-                               package='fictional-package', admission_sha256=digest(admission))))
-        self.selection = dict(basis=dict(configuration=digest(self.config), implementation=processing.implementation(),
-                              roles={r:dict(original=dict(events=[]), future_after=0) for r in self.config['roles']}),
-                              retained_events=[], recover_controls={}, future_intake=True,
-                              tasks=list(self.config['tasks']), service=dict(max_inflight=2,reviews={},legacy_resources={'QA':self.record}))
-        self.store.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,1000,NULL,0)',
-                              ('fixture-cap', encode(self.selection), self.config['roles']['Work']['owner']))
-        boards = {r:SimpleNamespace(verify_authority=lambda store:None) for r in self.config['roles']}
-        self.store.processing = processing.Access(self.store, 'fixture-cap', boards)
-        self.epoch = prospective.select(self.store, self.config['roles']['Work']['owner'], dict(
-            configuration=digest(self.config), authority='Fictional explicit bounded Work decision', expires=1100.,
-            processing_capability='fixture-cap', grants={'QA':self.store.enrollment('QA')['grant_id']},
-            tasks={'qa-execution':dict(task_hash=digest(task), software_handoffs={}, ordinary_effects='admitted-v1')}))
-        self.pending = dict(role='QA', phase='execution', task='qa-execution', package='fictional-package')
-        for name,value in [('FINAL590_QA_OBSERVATION',digest(self.statement)), ('FINAL590_FILES',self.files),
-                           ('FINAL590_STDOUT',hashlib.sha256(b'FIXTURE COMPLETE\n').hexdigest())]:
-            patcher = patch.object(resources, name, value, create=True)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def git(self, *args):
-        command = ['/usr/bin/git','-C',str(self.repo),*args]
-        result = subprocess.run(command, capture_output=True, text=True,
-                                env={**os.environ,'GIT_CONFIG_GLOBAL':'/dev/null','GIT_CONFIG_NOSYSTEM':'1'})
-        with (self.area / 'original-ends.jsonl').open('a') as target:
-            target.write(encode(dict(argv=command, end=result.returncode, stdout=result.stdout, stderr=result.stderr))+'\n')
-        self.assertEqual(result.returncode,0,result.stderr)
-        return result.stdout.strip()
-
-    def commit(self, message):
-        self.git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
-                 '-c','commit.gpgsign=false','commit','-m',message)
-
-    def admit(self):
-        self.store.admit('fictional-package',self.config['roles']['Branch']['owner'],
-                         dict(task_scopes={'qa-execution':self.scope}))
-
-    def save(self):
-        self.store.db.execute('UPDATE processing_capabilities SET selection=? WHERE id=?',
-                              (encode(self.selection),'fixture-cap'))
-
-    def blocked(self):
-        return resources.blocked(self.store,self.pending)
-
+class Operation616(OperationFixture620):
     def test_public_api_matching_operation_is_read_only_and_preserves_global_unknown(self):
         resources.validate(self.store, {'QA':self.record})
         before = '\n'.join(self.store.db.iterdump())
@@ -149,15 +26,20 @@ class Operation616(unittest.TestCase):
         self.assertEqual(self.store.rows('SELECT * FROM ordinary_acceptance'),[])
 
     def test_genuine_statement_unpatched_pin_and_forgery(self):
-        # Logical fictional enrollment uses the attributed UUID solely for this
-        # pure evidence-recognition test; no actual owner operation follows.
-        self.store.db.execute("UPDATE enrollments SET owner=? WHERE role='QA'",(self.genuine['custodian'][11:],))
         actual = copy.deepcopy(self.record)
-        actual['qa_operation']['statement'] = self.genuine
-        with patch.object(resources,'FINAL590_QA_OBSERVATION','3c9f85e9f9ddfef96ee8010d41dcb3b307d4d2bdab0505576817701f446023ef'):
-            self.assertEqual(resources.qa_observation(self.store,'QA',actual),self.genuine)
-            actual['qa_operation']['statement']['lead_disposition']['additional_positively_bound_relevant_retained_roots'] = ['/invented']
-            with self.assertRaises(Refusal):resources.qa_observation(self.store,'QA',actual)
+        actual['qa_operation']['statement'] = copy.deepcopy(self.genuine)
+        actual['qa_operation']['policy']['statement_sha256'] = digest(self.genuine)
+        # Body locators are inert; attribution is selected by Work, not a
+        # magic trusted-body checksum or a claim of native authorship.
+        with patch.object(Path, 'read_bytes', side_effect=AssertionError('inert evidence')):
+            self.assertEqual(resources.qa_observation(self.store, 'QA', actual), self.genuine)
+        actual['qa_operation']['statement']['custodian'] = 'forged'
+        with self.assertRaises(Refusal):
+            resources.qa_observation(self.store, 'QA', actual)
+        obsolete = copy.deepcopy(actual)
+        del obsolete['qa_operation']['policy']
+        with self.assertRaises(Refusal):
+            resources.qa_observation(self.store, 'QA', obsolete)
 
     def test_changed_malformed_forged_evidence_and_global_clearance_refuse(self):
         original = copy.deepcopy(self.record)
@@ -200,7 +82,7 @@ class Operation616(unittest.TestCase):
 
     def test_current_source_drift_refuses_without_metadata_oracle_substitution(self):
         self.assertFalse(self.blocked())
-        self.git('update-ref','refs/heads/source',self.statement['final_operations_as_reported']['fixed_source']['parent'],self.head)
+        self.git('update-ref','refs/heads/source',self.parents[0],self.head)
         self.assertTrue(self.blocked())
 
     def test_expiry_revocation_grant_and_missing_admission_refuse(self):
