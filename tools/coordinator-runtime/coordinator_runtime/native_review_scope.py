@@ -65,6 +65,14 @@ def eligible(runtime, row, record):
         raise Refusal('actual Work-selected same-case native consolidation required')
     for role in ('Work', 'Reviews'):
         runtime.processing.boards[role].verify_authority(runtime)
+    runtime.processing.boards['Reviews'].software_authority(runtime, row['task'])
+    from .resource_scopes import scope_excluded
+    from .contracts import scoped_task
+    for name in (p['source_task'], p['task']):
+        admission = runtime.one('SELECT * FROM admissions WHERE package=?', (p['package'],))
+        if scope_excluded(runtime, name, admission):
+            raise Refusal('current source/consumer scope excluded before body acquisition')
+        scoped_task(name, runtime.config['tasks'][name], admission)
     epoch = prospective.current(runtime, row['task'])
     if not epoch or epoch['policy']['ordinary_effects'] is not False:
         raise Refusal('current finite no-effect consumer epoch required')
@@ -101,6 +109,7 @@ def eligible(runtime, row, record):
         if consumer['hold_reason'] or not prospective.for_job(runtime, consumer):
             raise Refusal('current unheld consumer birth/task rights required')
         runtime.processing.authorize(runtime.attempt(row['active_attempt']))
+        runtime.processing.boards['Reviews']._software_job_grant(runtime, consumer)
     proof = reviews.collected_proof(runtime, job, attempt)
     if not proof or proof['material'].get('selected_task') != p['source_task']:
         raise Refusal('original collected native context required')
