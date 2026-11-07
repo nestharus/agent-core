@@ -73,7 +73,8 @@ class PrelaunchRecovery(Fixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(actual['id'], self.message['id'])
         # Stop wins between reservation and launch. Dispatcher, not a row edit,
         # establishes the known-not-started proof and failed classification.
-        if self._testMethodName == 'test_collected_failure_keeps_diagnosis':
+        if self._testMethodName in {'test_collected_failure_keeps_diagnosis',
+                                   'test_diagnosis_preparation_rechecks_before_prior_result724'}:
             self.store.begin(self.original, {'fictional_executed_classifier': True})
             self.store.collect(self.original, dict(exit=1, capture='complete', cleanup='fictional-no-child',
                 result=None, error='Fictional collected classifier failure'))
@@ -333,6 +334,21 @@ class PrelaunchRecovery(Fixture, unittest.IsolatedAsyncioTestCase):
             owner.set_hold(self.message['id'], reason)
         finally:
             owner.close()
+
+    async def test_diagnosis_preparation_rechecks_before_prior_result724(self):
+        attempt, event = self.store.claim_classification_recovery()
+        self.assertEqual(self.store.attempt(attempt)['kind'], 'diagnosis')
+        self.hold_from_other_connection()
+        actual = self.store.attempt
+        def permitted(key):
+            if key == self.original:
+                raise AssertionError('held prior classifier result acquired')
+            return actual(key)
+        with patch.object(self.store, 'attempt', side_effect=permitted):
+            await self.runtime.classify(attempt, event)
+        self.assertEqual(self.model.calls, [])
+        self.assertEqual(self.store.attempt(attempt)['state'], 'not-started')
+        self.assert_late_hold_conserved()
 
     def assert_late_hold_conserved(self):
         self.assertEqual(self.conserved(), self.before)

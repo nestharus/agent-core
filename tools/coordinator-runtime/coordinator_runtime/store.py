@@ -403,15 +403,25 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         if self.processing and not self.processing.event(self.event(attempt['event'])):
             raise Refusal('classification source outside current processing selection')
 
+    def authorize_preparation(self, attempt):
+        """Fresh source admission before prior-result/context acquisition."""
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            row = self.one('SELECT id,job,event,kind FROM attempts WHERE id=?', (attempt,))
+            if not row:
+                raise Refusal('attempt not owned by this journal')
+            if row['job']:
+                local_integration.current_sources(self, self.job(row['job']))
+            elif row['kind'] in {'classifier', 'diagnosis'}:
+                self._classification_current(row)
+
     def authorize_launch(self, attempt):
         self.require_attempt_execution_open(attempt)
         with (nullcontext() if self.db.in_transaction else self.tx()):
             self.require_attempt_execution_open(attempt)
+            self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if self.processing:
                 self.processing.authorize(row)
-            if row['job'] is None and row['kind'] in {'classifier', 'diagnosis'}:
-                self._classification_current(row)
             if row['kind'] in {'input-mapping', 'input-locator'}:
                 from .metadata_lookup import authorize
                 authorize(self, row)
@@ -561,13 +571,12 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def begin(self, attempt, detail):
         with self.tx():
             self.require_attempt_execution_open(attempt)
+            self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if row['job']:
                 self.require_execution_open(row['job'])
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("begin requires this controller's unstarted reservation")
-            if row['job'] is None and row['kind'] in {'classifier', 'diagnosis'}:
-                self._classification_current(row)
             self.db.execute("UPDATE attempts SET begin=?,state='running',detail=? WHERE id=?",
                             (self.clock(), encode({**json.loads(row["detail"]), **detail}), attempt))
 
@@ -1184,6 +1193,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if self.integration_retired(job):
                 return None
             row = self.job(job)
+            try:
+                local_integration.current_sources(self, row)
+            except Refusal:
+                return None  # No prior result acquisition or global recovery veto.
             self.require_active_sources(job=job)
             old=self.attempt(row['active_attempt'])
             no_start=old['state']=='not-started' and json.loads(old['detail']).get('known_not_started')
@@ -1199,6 +1212,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         with self.tx():
             self.require_execution_open(job)
             row = self.job(job)
+            local_integration.current_sources(self, row)
             if row["recovery_owner"] != self.controller or row["recovery_state"] != "claimed":
                 raise Refusal("recovery is exclusively owned or already attempted")
             selected = self.config["diagnosis"]

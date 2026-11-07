@@ -74,12 +74,14 @@ def snapshot(store, targets):
 def prepare(store, board, job, attempt, task):
     store.require_execution_open(job['id'])
     from .configuration import require_current_job
+    local_integration.current_sources(store, job)
     require_current_job(store, {**job, 'active_attempt': attempt})
     policy = execution_policy(store, task)
     if not policy:
         return
     grant = board.completion_authority(store, job['task'])
     with publication.snapshot_lock(store):
+        local_integration.current_sources(store, job)
         before = snapshot(store, bounded_log.inventory(policy) if bounded_log.selected(task) else policy['targets'])
         if bounded_log.selected(task):
             before[policy['bounded_log']['target']] = bounded_log.observe(store, policy['bounded_log'])

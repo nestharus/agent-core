@@ -601,6 +601,27 @@ def record_job(store, job):
     store.db.execute('INSERT INTO local_jobs VALUES(?,?,?)', (job['id'], digest(store.config['local_integration']), encode(scope)))
 
 
+def current_sources(store, job):
+    """Admit one bounded synchronous read/preparation group from hold metadata.
+
+    Check ALL selected members/neighbors under the cooperative hold-update
+    transaction before any body. Returning is the group's logical start; a
+    later hold does not cancel that in-flight group. Call anew after an await
+    or at a subsequent read group. No point rebase/effect permission is granted.
+    """
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        frozen = store.one('SELECT scope FROM local_jobs WHERE job=?', (job['id'],))
+        scope = json.loads(frozen['scope']) if frozen else {}
+        queues = []
+        for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
+            queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
+            source = store.one('SELECT hold IS NOT NULL AS held FROM events WHERE id=?', (member['event'],))
+            if not queue or queue['event'] != member['event'] or not source or source['held']:
+                raise Refusal('local member currentness/admission changed')
+            queues.append((member, queue))
+        return queues
+
+
 def current_job(store, job):
     with (nullcontext() if store.db.in_transaction else store.tx()):
         frozen = store.one('SELECT * FROM local_jobs WHERE job=?', (job['id'],))
@@ -609,16 +630,10 @@ def current_job(store, job):
         if frozen['policy'] != digest(store.config.get('local_integration')):
             raise Refusal('local policy/authority changed; retain recorded revision and return through review')
         scope = json.loads(frozen['scope'])
-        queues = []
         # Check every exact referent before member hashing, mapping/result
         # custody or point/native acquisition. Keep checks and permitted reads
         # under the same lock used by supported source hold updates.
-        for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
-            queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
-            source = store.one('SELECT hold IS NOT NULL AS held FROM events WHERE id=?', (member['event'],))
-            if not queue or queue['event'] != member['event'] or not source or source['held']:
-                raise Refusal('local member currentness/admission changed')
-            queues.append((member, queue))
+        queues = current_sources(store, job)
         if scope['lane'] == 'report':
             if report_route(store, job) != scope['report_route']:
                 raise Refusal('original finite report policy/capability/epoch changed; retain original reservation')
@@ -744,6 +759,7 @@ def version(store, key, bodies, job=None, *, definition=None):
 
 
 def prepare(store, job, attempt, before):
+    current_sources(store, job)
     scope = scope_for(store, job)
     if scope is None:
         return
@@ -769,7 +785,8 @@ def prepare_input_basis(store, job, attempt, task):
     """
     if not selected(store, job['task']) or task.get('routine_completion'):
         return
-    from .custody import read_file, safe_path
+    current_sources(store, job)
+    from .custody import guard_path, read_file, safe_path
     from .publication import snapshot_lock
     from contextlib import nullcontext
     scope = scope_for(store, job)
@@ -782,6 +799,9 @@ def prepare_input_basis(store, job, attempt, task):
     targets = {b['target'] for k in keys for b in points[k]['bindings'] if 'target' in b}
     maximum = store.config['limits'].get('max_artifact_bytes', 33554432)
     with (snapshot_lock(store) if store.config.get('canonical_publication') else nullcontext()):
+        current_sources(store, job)
+        for path in targets:
+            guard_path(store, path)
         bodies = {p:read_file(safe_path(p, roots), maximum)[0] for p in targets}
         versions = {k:version(store,k,bodies,job) for k in keys}
     stale = any(s['versions'].get(k) != versions[k] for s in scope['inputs'] for k in set(s['reads'])|set(s['writes']))

@@ -110,6 +110,7 @@ def stages(store, attempt):
 
 def prepare(store, attempt, before, policy=None):
     store.require_attempt_execution_open(attempt)
+    local_integration.current_sources(store, store.job(store.one('SELECT job FROM attempts WHERE id=?', (attempt,))['job']))
     root=store.home/'artifacts'/attempt/'staged'
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):

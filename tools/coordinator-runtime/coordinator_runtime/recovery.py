@@ -3,7 +3,7 @@
 import json
 
 from .contracts import LUNA, Refusal, canonical_uuid, digest, encode, required_text
-from . import windows
+from . import windows, local_integration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS recovery_requests(
@@ -21,6 +21,8 @@ class RecoveryJournal:
         with self.tx():
             self.require_execution_open(job)
             row=self.job(job,token)
+            if isinstance(receipt, dict) and receipt.get('mode') == 'remaining-work':
+                local_integration.current_sources(self, row)
             old=self.attempt(attempt)
             self.require_active_sources(job=job)
             if actor!=self.enrollment(row['role'])['owner']:
@@ -100,9 +102,11 @@ class RecoveryJournal:
             if not current or current['state']!='pending':return None
             self.require_execution_open(current['job'])
             row=self.job(current['job'])
+            receipt=json.loads(current['receipt'])
+            if receipt.get('mode') == 'remaining-work':
+                local_integration.current_sources(self, row)
             old=self.attempt(current['attempt'])
             self.require_active_sources(job=row['id'])
-            receipt=json.loads(current['receipt'])
             continuity=receipt['mode']=='use-diagnosis' and 'collector_continuity' in receipt
             if not self.owns_disposition(row,old) and not (continuity and dispatcher_continuity):
                 raise Refusal('request awaits actual original collector; no custody transfer')
