@@ -140,6 +140,18 @@ class CallerPaths(unittest.IsolatedAsyncioTestCase):
         self.held(job,2)
         self.assertEqual(self.answer['semantic'],'PARTIAL')
 
+    async def test_failure_only_external_blocker_stops_after_real_prior_resolution(self):
+        job,_ = await self.run_case(failure_only_external=True)
+        self.held(job,2)
+        self.assertEqual(self.answer['semantic'],'PARTIAL')
+        self.assertEqual(self.answer['failures'][0], self.detail['prior_turn_result']['failures'][0])
+        self.assertEqual(self.answer['completion']['failures'][0]['status'],'resolved')
+        self.assertEqual(self.answer['completion']['failures'][-1]['status'],'unresolved')
+        self.assertEqual(self.answer['failures'][-1]['kind'],'external-resource')
+        self.assertEqual(self.answer['completion']['unknowns'][-1]['duty'],'observed-tool-metadata')
+        self.assertEqual([r['exit_code'] for r in self.detail['tool_completion']['items']],[2,0,2,0])
+        self.assertEqual(self.answer['completion']['tools'][0]['status'],'resolved')
+
     async def test_partial_without_new_observable_progress_stops(self):
         job,_ = await self.run_case(no_progress=True)
         self.held(job,2)
@@ -155,7 +167,8 @@ class CallerPaths(unittest.IsolatedAsyncioTestCase):
         job,_ = await self.run_case(endless=True)
         self.held(job,3)
         self.assertEqual(self.answer['semantic'],'PARTIAL')
-        self.assertEqual(len(self.answer['failures']),3)
+        self.assertEqual(len(self.answer['failures']),1)
+        self.assertEqual(len(self.answer['unknowns']),3)
         self.assertEqual(len(self.detail['tool_completion']['nonzero_completions']),3)
 
     async def test_revoked_authority_fences_next_turn_and_preserves_lawful_original_collection(self):
@@ -169,7 +182,8 @@ class CallerPaths(unittest.IsolatedAsyncioTestCase):
         self.held(job,2)
         self.assertIn('authority revoked',self.row['error'])
         self.assertEqual(self.answer['semantic'],'PARTIAL')
-        self.assertEqual(len(self.answer['failures']),2)
+        self.assertEqual(len(self.answer['failures']),1)
+        self.assertEqual(len(self.answer['unknowns']),2)
 
     async def test_changed_idle_state_fences_progress_turn_without_losing_partial(self):
         original = AppServer.continue_idle

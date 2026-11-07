@@ -11,6 +11,7 @@ thread = str(uuid.uuid4())
 round_number = 0
 turn = None
 commands = {}
+failure_indexes, external_failure_indexes = {}, []
 failures, unknowns, resolutions, artifacts = [], [], [], []
 prior = None
 
@@ -32,7 +33,7 @@ def reply(request, value):
 
 
 def emit_debt():
-    index = len(failures)
+    index = len(commands)
     # These full completion wrappers deliberately differ from native labels and
     # preserve newlines, quoting and non-ASCII UTF-8 bytes.
     pair = ["/bin/bash -lc 'read_or_verify_" + str(index) + " typo λ\n'",
@@ -40,7 +41,12 @@ def emit_debt():
     if index == 0:
         pair = ["/bin/bash -lc 'python3 verify_stages.py λ\n'"] * 2
     commands[index] = pair
-    failures.append({'kind': 'verifier' if index == 0 else 'source-read', 'meaning': 'Retained original nonzero ' + str(index)})
+    failure_indexes[index] = None
+    if index == 0:
+        failure_indexes[index] = len(failures)
+        failures.append({'kind': 'verifier', 'meaning': 'Retained original nonzero ' + str(index)})
+    # A new linkage-only debt is an explicit local metadata unknown. Its actual
+    # adverse protocol item remains captured; no unresolved failure is renamed.
     unknowns.append({'kind': 'current-tool-linkage', 'meaning': 'Exact completion linkage missing ' + str(index)})
     for command, code in zip(pair, [2, 0]):
         send({'method': 'item/completed', 'params': {'threadId': thread, 'turnId': turn,
@@ -93,7 +99,9 @@ def answer(prompt):
             bindings[1]['id'] = 'visible-label-is-not-a-protocol-id'
         checks = [pair[1]['id']]
         reason = 'Corrected the exact verifier/read typo; selected own verification proves that concrete correction.'
-        subjects = [{'kind':'failure','index':index,'original_hash':digest(failures[index])},
+        failure_index = failure_indexes[index]
+        subjects = ([{'kind':'failure','index':failure_index,'original_hash':digest(failures[failure_index])}]
+                    if failure_index is not None else []) + [
                     {'kind':'unknown','index':index,'original_hash':digest(unknowns[index]),
                      'prior_disposition':{k:v for k,v in unresolved(index).items() if k != 'index'}},
                     {'kind':'tool','id':pair[0]['id']}]
@@ -103,30 +111,36 @@ def answer(prompt):
         ref = {'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
         artifacts.append(str(path))
         common = {'evidence':[ref],'verification_items':checks,'command_bindings':bindings,'causal_reason':reason}
-        rows = []
-        for entry in range(3):
+        rows = [None, None, None]
+        for entry, subject in enumerate(subjects):
             row = {**common,'causal_evidence':{**ref,'entry':entry},'status':'resolved'}
-            if entry < 2:row['index'] = index
-            if entry == 1:
+            if subject['kind'] != 'tool':row['index'] = subject['index']
+            if subject['kind'] == 'unknown':
                 row.update({k:v for k,v in unresolved(index).items() if k not in {'index','status'}})
-                row['prior_disposition'] = subjects[1]['prior_disposition']
-            if entry == 2:row.update(id=pair[0]['id'],reason=reason)
-            rows.append(row)
+                row['prior_disposition'] = subject['prior_disposition']
+            if subject['kind'] == 'tool':row.update(id=pair[0]['id'],reason=reason)
+            rows[{'failure':0,'unknown':1,'tool':2}[subject['kind']]] = row
         resolutions.append(rows)
         if round_number == 2 or plan.get('endless'):
             emit_debt()
-    pending = len(failures) > len(resolutions)
+    pending = len(commands) > len(resolutions)
     external = plan.get('external') and round_number == 2
     if external:
         unknowns.append('Actual external dependency still absent.')
-    partial = pending or external
+    if plan.get('failure_only_external') and round_number == 2:
+        external_failure_indexes.append(len(failures))
+        failures.append({'kind':'external-resource', 'meaning':'Actual external scope remains unavailable.'})
+    partial = pending or external or bool(external_failure_indexes)
     proof = {'version':1,'local':'blocked' if partial else 'ready',
-             'failures':[r[0] for r in resolutions], 'unknowns':[r[1] for r in resolutions],
+             'failures':[r[0] for r in resolutions if r[0] is not None], 'unknowns':[r[1] for r in resolutions],
              'tools':[r[2] for r in resolutions]}
     if pending:
-        index = len(failures)-1
-        proof['failures'].append({'index':index,'status':'unresolved','evidence':[],'verification_items':[]})
+        index = len(commands)-1
+        if failure_indexes[index] is not None:
+            proof['failures'].append({'index':failure_indexes[index],'status':'unresolved','evidence':[],'verification_items':[]})
         proof['unknowns'].append(unresolved(index))
+    for index in external_failure_indexes:
+        proof['failures'].append({'index':index,'status':'unresolved','evidence':[],'verification_items':[]})
     if external:
         proof['unknowns'].append({'index':len(unknowns)-1,'status':'unresolved','owner':'producer',
                                  'duty':'obtain-external-scope','reason':'External authority missing.'})

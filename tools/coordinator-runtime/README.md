@@ -362,7 +362,10 @@ Provider schema/capacity failures retain bounded safe causal projections. A
 proved pre-start failure records no fabricated process END and can recover
 within bounds. Unknown creation/foreign/lost handles retain their slot.
 
-One supported same-session continuation requires actual idle readback. Then
+The initial supported same-session continuation requires actual idle readback.
+Only the narrow routine metadata-progress exception described below can earn
+additional turns; interruption and conflicting-handback recovery remain single.
+After owned continuation is unavailable or exhausted,
 fresh Luna LOW diagnoses and selects one explicit authorized profile handoff
 with prior owned context/effects, only after actual end/collection (or proved
 no-start) and reconciled effects. No overlapping mutation, orphan resume,
@@ -432,8 +435,10 @@ assessment still requires actual collection, complete tool metadata and conserve
 byte witnesses. Staged semantic PARTIAL/FAILED/UNKNOWN continuation also supplies
 its available own protocol metadata; it can remain partial without guessing IDs
 or replaying work. Ambiguous DONE can use the
-ONE existing same-owned-idle continuation for faithful clarification/verification;
-no new session, blind rewrite, text heuristic, repeated clarification or per-job
+initial existing same-owned-idle continuation for faithful clarification/verification.
+Only verified routine metadata progress can earn an additional finite turn as
+described below; outer mismatch, interruption or conflicting handback alone cannot.
+No new session, blind rewrite, text heuristic, unrestricted clarification or per-job
 human permission is supplied. Original pre-clarification arrays must remain verbatim
 prefixes, with original completion and specific issues retained. See
 templates/local-completion.md and tests; the outer provider wire is unchanged.
@@ -487,7 +492,10 @@ There is no lookup of prior client history or recovery of old command bodies.
 A clarification that resolves prior adverse debt with exact causal evidence but
 creates newly observed adverse metadata can receive another owned idle turn.
 The producer appends a local `observed-tool-metadata` unknown and retains PARTIAL
-and every prior return. Strict evidence checks, actual idle readback, current
+and every prior return. Any unresolved failure, including a newly appended
+external failure without a duplicate unknown, stops additional feedback. New
+local metadata debt uses its explicitly declared observed-tool-metadata unknown;
+the service does not classify arbitrary failure prose. Strict evidence checks, actual idle readback, current
 authority, tool closure and pool admission apply to each turn. The existing
 `limits.max_owner_corrections` bounds total clarification turns (default four,
 1–8). No progress, external blockers, UNKNOWN/FAILED, or budget exhaustion stops

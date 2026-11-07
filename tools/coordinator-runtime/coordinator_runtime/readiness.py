@@ -370,7 +370,7 @@ def feedback_progress(store,attempt,prior,answer,previous_items,items,task,prior
                     return False
                 unresolved.append(duty)
     if not unresolved:return False
-    if any(r.get('status')=='unresolved' and r.get('index',-1)<len(prior.get('failures',[]))
+    if any(r.get('status')=='unresolved'
            for r in proof.get('failures',[]) if isinstance(r,dict)):return False
     known=[r for r in items if r['id'] not in new]
     return not live_issues(store,attempt,answer,known,task,prior_results,True,True)

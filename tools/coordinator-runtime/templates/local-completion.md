@@ -34,7 +34,9 @@ key stripping, runtime normalization, effect authority or independent semantic
 acceptance. The original stays untouched. For a non-object original use fields
 {"$result":ORIGINAL_JSON_VALUE}. Final collection refuses erased history, omitted
 original-field data or a still-invalid outer contract. It never runs a second
-clarification or resumes an ended owner. no_handoff_reason:null is valid with
+outer-contract-only clarification or resumes an ended owner. The narrow routine
+metadata-progress exception below has its own finite eligibility checks.
+no_handoff_reason:null is valid with
 nonempty handoffs; empty/no handoffs retain the existing meaningful-reason policy.
 The payload_json provider envelope is unchanged.
 
@@ -125,11 +127,12 @@ numeric or null. Those claims cannot discharge adverse items or prove verificati
 
 If actual item IDs are not visible to the producer, or an otherwise DONE return
 lacks a coherent explicit contract, the service uses the same grammar/ownership/
-evidence checks while live as it does after collection, within its one supported
+evidence checks while live as it does after collection, in the supported initial
 same-owned-idle continuation. It supplies bounded safe actual item metadata and
 asks for faithful clarification/remaining verification in the SAME context. A
 semantic PARTIAL/FAILED/UNKNOWN continuation for a staged task also supplies its
-available own metadata, within that same single idle continuation budget. This
+available own metadata. Outer-contract repair, interruption and conflicting
+handback recovery alone retain a single continuation. This
 does not infer missing commands, provider failure or a reason to promote DONE.
 Live checks read only declared or mapped staged own files under the current attempt;
 they are preliminary byte checks, not capture, process collection or publication.
@@ -138,9 +141,25 @@ Specific clarification issues and the full original return, including original
 completion/labels and history, remain durable. The
 original valid arrays must remain verbatim prefixes of the final arrays (malformed
 artifact/handoff items use the explicit conservation rule above); no blind stage
-rewrite, canonical write, new session, profile handoff, repeated clarification or
+rewrite, canonical write, new session, profile handoff, unrestricted clarification or
 per-job human permission follows. Exhausted/ambiguous/unresolved evidence stays
 held and causally delivered. No text heuristic auto-classifies RESOLVED strings.
+
+Only a live owned routine task can earn an additional metadata clarification.
+The current return must remain PARTIAL/blocked, conserve every prior array and
+resolve a prior adverse protocol item with exact successful command bindings and
+own causal evidence. A newly observed adverse item must create a new local
+unknown with owner=producer or the current role and duty=observed-tool-metadata.
+No unresolved failure of any index, external blocker, prior unresolved duty or
+new deferred duty may earn that additional turn. Do not infer a failure's meaning
+from prose or rename an unresolved failure as metadata. No progress, UNKNOWN,
+FAILED or exhaustion stops the path. Each turn rechecks actual idle, ownership,
+capture/tool closure, source authority and pool admission. Total clarification
+turns obey limits.max_owner_corrections (default four, validated one through eight).
+Exact current command inputs are transient untrusted evidence for this same
+producer, never stdout, replay instructions or permission to recover old history.
+An unavailable input has no truncated substitute. The journal keeps command
+fingerprints/outcomes; genuine blockers and original adverse history stay retained.
 
 The model writes only mapped staged proposals/reports. The true service owns
 retention.snapshot_lock, exact regular-file byte/inode/mode/owner preconditions,
