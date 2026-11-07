@@ -213,7 +213,7 @@ def allocation(store, kind, *, new_input=False):
         if (cap['issuer'] != owners['Work'] or cap['issuer'] != store.config['software_delegation']['grantor']
                 or authority['basis']['configuration'] != digest(store.config)
                 or {r: v['owner'] for r, v in authority['custody'].items()} != owners
-                or store.clock() >= authority['expires']):
+                or store.clock() >= (__import__(__package__+'.report_repair', fromlist=['lease_deadline']).lease_deadline(store) or authority['expires'])):
             raise Refusal('continuing allocation authority expired/borrowed or custody/configuration changed')
         anchor = authority['basis']['window']
         link = store.one('SELECT capability,authority_hash FROM service_window_allocations WHERE number=?', (row['number'],))
@@ -233,7 +233,10 @@ def allocation(store, kind, *, new_input=False):
             raise Refusal('current allocation window/configuration missing')
         raise Backpressure('Work-owned window boundary due; existing duties and upstream input retained')
     count = store.one('SELECT COUNT(*) AS n FROM service_window_allocations WHERE capability=?', (cap['id'],))['n']
-    if count >= authority['max_windows']:
+    from .report_repair import lease_record
+    amendment = lease_record(store, cap['id'])
+    maximum = amendment['plan']['max_windows'] if amendment else authority['max_windows']
+    if count >= maximum:
         raise Backpressure('continuing allocation authority exhausted; no renewal, refund or duty release')
     expected = basis(store)
     receipt = {'basis': expected, 'capability': cap['id'], 'authority_hash': digest(authority),

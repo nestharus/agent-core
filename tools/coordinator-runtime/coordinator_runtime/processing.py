@@ -6,6 +6,7 @@ enrollment intake flags, native owners, source bytes and effect holds stay put.
 from . import observations
 
 import json
+from contextlib import nullcontext
 import math
 from pathlib import Path
 import hashlib
@@ -396,7 +397,8 @@ class Access:
                 or (selection['basis']['implementation'] != current_implementation
                     and not pins(self.runtime, self.key, selection, current_implementation))):
             raise Refusal('processing capability expired/revoked or source/configuration changed; duties retained')
-        return row, selection
+        from .report_repair import lease_selection
+        return row, lease_selection(self.runtime, self.key, selection)
 
     def role(self, role):
         _, selection = self.current()
@@ -490,6 +492,10 @@ class Access:
 
     def reserve(self, attempt, event, job):
         row, selection = self.current()
+        from .report_repair import lease_record
+        amendment = lease_record(self.runtime, self.key)
+        if amendment and row['starts'] >= amendment['plan']['max_starts']:
+            raise Refusal('owner lease total start ceiling exhausted; no refund')
         if 'service' in selection:
             active = self.runtime.one("SELECT COUNT(*) AS n FROM attempts WHERE collected IS NULL AND controller=?", (self.runtime.controller,))['n']
             if active > selection['service']['max_inflight']:
@@ -1270,7 +1276,7 @@ def _apply_control(runtime, event, attempt):
     receipt = parse_json(result.get('decision_json', 'null'))
     runtime.processing.control_proof(event, attempt, receipt)
     receipt, _ = control_receipt(runtime, event, row, result, receipt)
-    with runtime.tx():
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
         if receipt['mode'] != 'notification':
             control_return(runtime, event, attempt, result, resolution)
@@ -1368,13 +1374,15 @@ async def _run(runtime, boards, key, seconds, emit):
 
 def apply_control(runtime, event, attempt):
     from . import report_repair
-    request = report_repair.pair_record(runtime, runtime.processing.key)
+    amendment = report_repair.lease_record(runtime, runtime.processing.key)
+    request = amendment or report_repair.pair_record(runtime, runtime.processing.key)
     if not request or event != request['basis']['sources'][1]['event']:
         return _apply_control(runtime, event, attempt)
     # A distinct applier keeps its own identity and serializes original-return consumption.
     with configuration.stopped(runtime), runtime.tx():
         runtime.processing.current()
-        report_repair.pair_finite(runtime, runtime.processing.current()[1])
+        if not amendment:
+            report_repair.pair_finite(runtime, runtime.processing.current()[1])
         anchor = request['basis']['sources'][1]
         if attempt != anchor['control']['attempt']:
             raise Refusal('only the selected original control attempt may be applied')
@@ -1383,7 +1391,7 @@ def apply_control(runtime, event, attempt):
             state = runtime.one('SELECT hash,hold,processed_at FROM events WHERE id=?', (event,))
             epoch = runtime.one('SELECT * FROM prospective_authorities WHERE id=?', (request['basis']['prospective']['id'],))
             if (not state or state['hold'] is not None or state['hash'] != anchor['hash']
-                    or epoch != request['basis']['prospective'] or json.loads(epoch['selection'])['expires'] <= runtime.clock()):
+                    or epoch != request['basis']['prospective'] or not amendment and json.loads(epoch['selection'])['expires'] <= runtime.clock()):
                 raise Refusal('original return current source/epoch rights changed')
             for board in runtime.processing.boards.values():
                 board.verify_authority(runtime)
@@ -1396,6 +1404,6 @@ def apply_control(runtime, event, attempt):
                     or resolution['prior'].get('software_processing', {}).get('attempt') != attempt):
                 raise Refusal('original control return/resolution mismatch')
             return resolution
-        if report_repair.pair_validate(runtime, request['basis']) != request['basis']['proof']:
+        if report_repair.pair_validate(runtime, request['basis'], _continuation=bool(amendment)) != request['basis']['proof']:
             raise Refusal('selected original result/custody changed')
         return _apply_control(runtime, event, attempt)

@@ -44,6 +44,9 @@ def record(runtime, key):
 
 
 def pins(runtime, key, selection, implementation):
+    amendment = lease_record(runtime, key)
+    if amendment:
+        return lease_identity(runtime, key, selection, amendment) and amendment['basis']['implementation'] == implementation
     paired = pair_record(runtime, key)
     if paired:
         return pair_identity(runtime, key, selection, paired) and paired["basis"]["implementation"] == implementation
@@ -65,6 +68,11 @@ def selected_release(runtime):
     # may resolve its code pins, but never lends that caller processing rights.
     cap = source_capability(runtime)
     if cap:
+        amendment = lease_record(runtime, cap['id'])
+        if amendment:
+            if not lease_identity(runtime, cap['id'], json.loads(cap['selection']), amendment):
+                raise Refusal('owner lease original identity changed')
+            return amendment['basis']['release']
         paired = pair_record(runtime, cap['id'])
         if paired:
             if not pair_identity(runtime, cap['id'], json.loads(cap['selection']), paired):
@@ -154,7 +162,7 @@ def report(runtime, key, event, controller, selection):
 def basis(runtime, boards, key, event, controller, actor):
     from . import processing
     owner(runtime, boards, actor)
-    if source_record(runtime, key) or pair_record(runtime, key):
+    if source_record(runtime, key) or pair_record(runtime, key) or lease_record(runtime, key):
         raise Refusal('distinct source repair already selected; legacy report repair cannot supersede it')
     configuration.assert_current(runtime)
     cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
@@ -385,7 +393,7 @@ def source_basis(runtime, boards, key, events, controller, actor, modules, purpo
     if ('service' not in selection or not selection['future_intake']
             or selection['basis']['configuration'] != digest(runtime.config)):
         raise Refusal('unchanged continuing capability/configuration required; no finite grant conversion')
-    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key):
+    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key) or lease_record(runtime, key):
         raise Refusal('one distinct source repair point only; no repair stacking or legacy receipt conversion')
     stopped_original(runtime, key, controller)
     if configuration.owned_service_conflict(runtime) or runtime.one(
@@ -592,7 +600,13 @@ def pair_anchor(runtime, key, event, selection, kind):
             if not current or current['hold'] is not None or current['hash'] != member['hash']:
                 raise Refusal('original producer member held or changed before body')
             members.append(current)
-        producer = {**producer, 'member_metadata':members}
+        original = runtime.one('SELECT id,kind,controller,begin,ended,collected,exit,capture,error,detail FROM attempts WHERE id=?', (producer['active_attempt'],))
+        if (not original or original['kind'] != 'task' or original['controller'] != producer['controller']
+                or original['begin'] is None or original['ended'] is None or original['collected'] is None
+                or original['exit'] != 0 or original['capture'] != 'complete' or original['error']
+                or json.loads(original['detail']).get('processing_capability') != key):
+            raise Refusal('original producer collection/capability required before body')
+        producer = {**producer, 'member_metadata':members, 'original_attempt':original}
         control = None
     elif kind == 'board-control':
         control = runtime.one('SELECT * FROM processing_controls WHERE event=?', (event,))
@@ -625,7 +639,7 @@ def pair_anchor(runtime, key, event, selection, kind):
             'classifier':classifier,'position':birth['position'],'control':control,'producer':producer}
 
 
-def pair_metadata(runtime, boards, key, work_event, control_event, controller, actor, modules, purpose):
+def pair_metadata(runtime, boards, key, work_event, control_event, controller, actor, modules, purpose, *, _continuation=False):
     events = [work_event, control_event]
     """Caller holds the cooperative stop lock and journal write transaction."""
     from . import processing
@@ -641,7 +655,7 @@ def pair_metadata(runtime, boards, key, work_event, control_event, controller, a
     if ('service' not in selection or not selection['future_intake']
             or selection['basis']['configuration'] != digest(runtime.config)):
         raise Refusal('unchanged continuing capability/configuration required; no finite grant conversion')
-    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key):
+    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key) or lease_record(runtime, key):
         raise Refusal('one distinct source repair point only; no repair stacking or legacy receipt conversion')
     stopped_original(runtime, key, controller)
     if configuration.owned_service_conflict(runtime) or runtime.one(
@@ -654,7 +668,7 @@ def pair_metadata(runtime, boards, key, work_event, control_event, controller, a
         raise Refusal('immutable current configuration release selection required')
     before, after = transition['basis']['release'], configuration.release(runtime, runtime.config)
     implementation = processing.implementation()
-    changed = source_compatible(before, after, selection['basis']['implementation'], implementation, modules, _ceiling=PAIR_MODULES)
+    changed = source_compatible(before, after, selection['basis']['implementation'], implementation, modules, _ceiling=LEASE_MODULES if _continuation else PAIR_MODULES)
     grants = {}
     from .integration_management import _metadata_original
     for role, board in boards.items():
@@ -666,7 +680,8 @@ def pair_metadata(runtime, boards, key, work_event, control_event, controller, a
                     or enrollment['profile'] != board.selected['profile']):
                 raise Refusal('source repair conserves every original stopped software grant binding')
             grants[role] = {'binding':binding, 'enrollment':enrollment}
-    pair_finite(runtime, selection)
+    if not _continuation:
+        pair_finite(runtime, selection)
     anchors = [pair_anchor(runtime, key, work_event, selection, 'work-report'),
                pair_anchor(runtime, key, control_event, selection, 'board-control')]
     if anchors[1]['control']['original']['controller'] != controller or anchors[0]['producer']['controller'] != controller:
@@ -676,7 +691,7 @@ def pair_metadata(runtime, boards, key, work_event, control_event, controller, a
         raise Refusal('original finite prospective authority must remain selected; no epoch replacement')
     ordinary = json.loads(epoch['selection'])
     if (ordinary.get('processing_capability') != key or ordinary['configuration'] != digest(runtime.config)
-            or ordinary['grantor'] != actor or ordinary['expires'] <= runtime.clock()):
+            or ordinary['grantor'] != actor or not _continuation and ordinary['expires'] <= runtime.clock()):
         raise Refusal('original prospective authority expired/revoked/foreign; no renewal through repair')
     for anchor in anchors:
         if anchor['position'] <= epoch['event_boundary']:
@@ -696,15 +711,20 @@ def pair_metadata(runtime, boards, key, work_event, control_event, controller, a
 
 
 
-def pair_validate(runtime, selected):
+def pair_validate(runtime, selected, *, _continuation=False):
     from . import prospective, report_scope
     runtime.processing.current()
-    pair_finite(runtime, runtime.processing.current()[1])
+    if not _continuation:
+        pair_finite(runtime, runtime.processing.current()[1])
     work, control = selected['sources']
     _, selection = runtime.processing.current()
     for anchor in (work, control):
         if pair_anchor(runtime, selected['capability'], anchor['event'], selection, anchor['kind']) != anchor:
             raise Refusal('selected original metadata/custody changed before body')
+    # Current original grants/epoch are checked before acquiring producer/result bodies.
+    for board in runtime.processing.boards.values():
+        board.verify_authority(runtime)
+    prospective.current(runtime, work['queue']['task'])
     value = report(runtime, selected['capability'], work['event'], selected['controller'], runtime.processing.current()[1])
     source = runtime.event(work['event'])
     if value['hash'] != work['hash'] or source.get('allowed_tasks') != [work['queue']['task']]:
@@ -774,6 +794,15 @@ def apply_pair(runtime, boards, actor, request):
 def released_control(runtime, event, row):
     """Metadata-only exception to the SAME-controller check, for one selected original."""
     key = runtime.processing.key
+    request = lease_record(runtime, key)
+    if request:
+        lease_selection(runtime, key, json.loads(runtime.one('SELECT selection FROM processing_capabilities WHERE id=?', (key,))['selection']))
+        anchor = request['basis']['sources'][1]
+        if event != anchor['event'] or row['id'] != anchor['control']['attempt']:
+            return False
+        if pair_anchor(runtime, key, event, runtime.processing.current()[1], 'board-control') != anchor:
+            raise Refusal('owner lease original control metadata changed')
+        return True
     request = pair_record(runtime, key)
     if not request:
         return False
@@ -814,3 +843,210 @@ def pair_basis(runtime, boards, key, work_event, control_event, controller, acto
         runtime.db.execute('ROLLBACK TO report_control_preview')
         runtime.db.execute('RELEASE report_control_preview')
     return {**selected, 'proof':proof}
+
+
+# Explicit finite authority amendment. Neither v1 nor v2 inherits this ceiling.
+LEASE_VERSION = 'continuing-owner-lease-v1'
+LEASE_MODULES = PAIR_MODULES | {'prospective.py', 'windows.py', 'service_wake.py'}
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS owner_lease_plans(
+ capability TEXT PRIMARY KEY,request TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS owner_lease_activations(
+ capability TEXT NOT NULL,ordinal INTEGER NOT NULL,controller TEXT NOT NULL,
+ activated REAL NOT NULL,until REAL NOT NULL,PRIMARY KEY(capability,ordinal));
+CREATE TABLE IF NOT EXISTS owner_lease_stops(
+ capability TEXT PRIMARY KEY,issuer TEXT NOT NULL,reason TEXT NOT NULL,created REAL NOT NULL);
+"""
+for _table in ('owner_lease_plans', 'owner_lease_activations', 'owner_lease_stops'):
+    for _op in ('UPDATE', 'DELETE'):
+        SCHEMA += (f'CREATE TRIGGER IF NOT EXISTS {_table}_no_{_op.lower()} BEFORE {_op} ON {_table} '
+                   "BEGIN SELECT RAISE(ABORT,'immutable owner lease authority'); END;\n")
+
+
+def lease_record(runtime, key):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='owner_lease_plans'"):
+        return None
+    row = runtime.one('SELECT request FROM owner_lease_plans WHERE capability=?', (key,))
+    return json.loads(row['request']) if row else None
+
+
+def lease_identity(runtime, key, selection, request):
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    selected = request['basis']
+    identity = runtime.path.stat()
+    return bool(cap and request['schema'] == LEASE_VERSION
+        and selected['schema'] == LEASE_VERSION
+        and source_identity(runtime, cap, selection,
+                            {'basis':{**selected, 'schema':SOURCE_VERSION}})
+        and selected['journal'] == {'path':str(runtime.path), 'dev':identity.st_dev, 'ino':identity.st_ino}
+        and digest(request['plan']) == selected['plan_hash']
+        and runtime.one('SELECT * FROM prospective_authorities WHERE id=?',
+                        (selected['prospective']['id'],)) == selected['prospective'])
+
+
+def validate_lease_plan(runtime, plan, selection, *, selecting=True):
+    import math
+    if (not isinstance(plan, dict) or set(plan) != {'from', 'until', 'lease_seconds',
+            'max_starts', 'max_new_inputs', 'max_windows', 'pause_bytes'}
+            or any(type(plan[k]) not in {int,float} or not math.isfinite(plan[k]) for k in ('from','until'))
+            or type(plan['lease_seconds']) is not int or not 1 <= plan['lease_seconds'] <= 3600
+            or not 0 < plan['until'] - plan['from'] <= 24 * plan['lease_seconds']
+            or selecting and not plan['from'] <= runtime.clock() < plan['until']
+            or selecting and runtime.clock() - plan['from'] > 60):
+        raise Refusal('explicit finite owner plan: current start, at most 24 leases, each at most one hour')
+    for name, maximum in [('max_starts', 1000000), ('max_new_inputs', runtime.config['limits']['max_events']),
+                          ('max_windows', 10000), ('pause_bytes', runtime.config['limits']['max_bytes'] - 1)]:
+        if type(plan[name]) is not int or not 0 < plan[name] <= maximum:
+            raise Refusal('bounded total owner lease allocation required: ' + name)
+    if (not selection.get('service', {}).get('admission')
+            or plan['pause_bytes'] <= 4096 or not selection['future_intake']):
+        raise Refusal('owner lease requires original bounded continuing admission')
+
+
+def lease_selection(runtime, key, selection):
+    """An effective view; immutable original selection and hashes never change."""
+    request = lease_record(runtime, key)
+    if not request:
+        return selection
+    if (not lease_identity(runtime, key, selection, request)
+            or runtime.one('SELECT capability FROM owner_lease_stops WHERE capability=?', (key,))):
+        raise Refusal('owner lease revoked or original journal/configuration/epoch/selection changed')
+    plan = request['plan']
+    now = runtime.clock()
+    if not plan['from'] <= now < plan['until']:
+        raise Refusal('owner lease plan exhausted/not yet active; duties retained')
+    cap = runtime.one('SELECT starts FROM processing_capabilities WHERE id=?', (key,))
+    if cap['starts'] > plan['max_starts'] or runtime.usage()['bytes'] >= plan['pause_bytes']:
+        raise Refusal('owner lease total allocation/byte pressure; no accounting reset')
+    ordinal = int((now - plan['from']) // plan['lease_seconds']) + 1
+    until = min(plan['until'], plan['from'] + ordinal * plan['lease_seconds'])
+    if not runtime.one('SELECT ordinal FROM owner_lease_activations WHERE capability=? AND ordinal=?', (key,ordinal)):
+        from contextlib import nullcontext
+        with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+            runtime.budget(None, 1024)
+            runtime.db.execute('INSERT OR IGNORE INTO owner_lease_activations VALUES(?,?,?,?,?)',
+                               (key,ordinal,runtime.controller,now,until))
+    import copy
+    effective = copy.deepcopy(selection)
+    effective['service']['admission'].update(until=until, max_new_inputs=plan['max_new_inputs'], pause_bytes=plan['pause_bytes'])
+    if effective['service'].get('wake'):
+        effective['service']['wake']['until'] = until
+    # Only the framework's exact report policy gains new finite authority.
+    # Native QA/Branch/resource/effect/account policies keep their original expiry.
+    report_policy = effective['service'].get('legacy_resources', {}).get('Reviews', {}).get('reviews_report')
+    if report_policy:
+        report_policy['expires'] = until
+    return effective
+
+
+def lease_deadline(runtime):
+    if not runtime.processing:
+        return None
+    request = lease_record(runtime, runtime.processing.key)
+    if not request:
+        return None
+    _, selection = runtime.processing.current()
+    return selection['service']['admission']['until']
+
+
+def lease_expiry(runtime, epoch):
+    if not runtime.processing:
+        return None
+    request = lease_record(runtime, runtime.processing.key)
+    if not request:
+        return None
+    if epoch != request['basis']['prospective']:
+        raise Refusal('owner lease cannot replace or revive a changed/revoked epoch')
+    return lease_deadline(runtime)
+
+
+def lease_metadata(runtime, boards, key, work, control, controller, actor, modules, purpose, plan):
+    if lease_record(runtime, key):
+        raise Refusal('one immutable owner plan per original capability; no silent replacement')
+    selected = pair_metadata(runtime, boards, key, work, control, controller, actor, modules, purpose, _continuation=True)
+    raw = json.loads(runtime.one('SELECT selection FROM processing_capabilities WHERE id=?', (key,))['selection'])
+    validate_lease_plan(runtime, plan, raw)
+    if selected['starts'] >= plan['max_starts']:
+        raise Refusal('owner plan needs explicit remaining starts above original cumulative debit')
+    count = runtime.one('SELECT COUNT(*) n FROM processing_source_positions WHERE position>?', (raw['basis']['event_boundary'],))['n']
+    windows = runtime.one('SELECT COUNT(*) n FROM service_window_allocations WHERE capability=?', (key,))['n']
+    if count >= plan['max_new_inputs'] or windows >= plan['max_windows']:
+        raise Refusal('owner plan requires remaining total input/window headroom, never a reset')
+    identity = runtime.path.stat()
+    return {**selected, 'schema':LEASE_VERSION, 'plan_hash':digest(plan),
+            'journal':{'path':str(runtime.path),'dev':identity.st_dev,'ino':identity.st_ino}}
+
+
+def lease_basis(runtime, boards, key, work, control, controller, actor, modules, purpose, plan):
+    from .processing import Access
+    selected = lease_metadata(runtime, boards, key, work, control, controller, actor, modules, purpose, plan)
+    old = runtime.processing
+    runtime.db.execute('SAVEPOINT owner_lease_preview')
+    try:
+        runtime.db.execute('INSERT INTO owner_lease_plans VALUES(?,?,?,?)',
+            (key, encode({'schema':LEASE_VERSION,'basis':selected,'plan':plan}),actor,runtime.clock()))
+        runtime.processing = Access(runtime,key,boards)
+        proof = pair_validate(runtime, selected, _continuation=True)
+    finally:
+        runtime.processing = old
+        runtime.db.execute('ROLLBACK TO owner_lease_preview')
+        runtime.db.execute('RELEASE owner_lease_preview')
+    return {**selected,'proof':proof}
+
+
+def apply_lease(runtime, boards, actor, request):
+    from .processing import Access
+    from .selected_source import custody_budget
+    if (not isinstance(request,dict) or set(request) != {'schema','basis','plan','authority','evidence'}
+            or request['schema'] != LEASE_VERSION or request['basis'].get('schema') != LEASE_VERSION):
+        raise Refusal('distinct exact owner lease amendment required')
+    owner(runtime,boards,actor)
+    required_text(request['authority'],'actual Work finite continuing authority',4000)
+    if not isinstance(request['evidence'],list) or not 1 <= len(request['evidence']) <= 32:
+        raise Refusal('reviewed exact code and authority evidence required')
+    for item in request['evidence']:
+        required_text(item,'actual review/qualification evidence',4000)
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('owner amendment exceeds original custody bound')
+    selected = request['basis']; key = selected['capability']
+    with configuration.stopped(runtime), runtime.tx():
+        previous = lease_record(runtime,key)
+        if previous:
+            if previous != request or selected_release_for(runtime,key,boards) != selected['release']:
+                raise Refusal('owner amendment already selected differently/expired/changed')
+            return lease_receipt(runtime,key)
+        work, control = selected['sources']
+        current = lease_metadata(runtime,boards,key,work['event'],control['event'],selected['controller'],actor,
+                                 selected['modules'],selected['purpose'],request['plan'])
+        if current != {k:v for k,v in selected.items() if k != 'proof'}:
+            raise Refusal('owner lease basis changed before body; take fresh reviewed basis')
+        custody_budget(runtime,len(encode(request).encode())+2048)
+        runtime.db.execute('INSERT INTO owner_lease_plans VALUES(?,?,?,?)',(key,encode(request),actor,runtime.clock()))
+        old = runtime.processing; runtime.processing = Access(runtime,key,boards)
+        try:
+            if pair_validate(runtime,selected,_continuation=True) != selected['proof']:
+                raise Refusal('owner lease original producer/control/custody changed')
+        finally:
+            runtime.processing = old
+    return lease_receipt(runtime,key)
+
+
+def lease_receipt(runtime,key):
+    request = lease_record(runtime,key)
+    return {'schema':LEASE_VERSION,'capability':key,'plan':request['plan'],
+            'amendment_hash':digest(request),'original_controller':request['basis']['controller'],
+            'activations':runtime.rows('SELECT * FROM owner_lease_activations WHERE capability=? ORDER BY ordinal',(key,)),
+            'stop':runtime.one('SELECT * FROM owner_lease_stops WHERE capability=?',(key,)),
+            'acceptance':None,'original_history_rewritten':False,'native_rights_renewed':False}
+
+
+def stop_lease(runtime,boards,actor,key,reason):
+    owner(runtime,boards,actor)
+    required_text(reason,'actual Work immediate lease stop',4000)
+    request = lease_record(runtime,key)
+    if not request or actor != runtime.config['software_delegation']['grantor']:
+        raise Refusal('same actual Work owner plan required')
+    with runtime.tx():
+        runtime.budget(None,len(reason.encode())+1024)
+        runtime.db.execute('INSERT OR IGNORE INTO owner_lease_stops VALUES(?,?,?,?)',(key,actor,reason,runtime.clock()))
+    return lease_receipt(runtime,key)

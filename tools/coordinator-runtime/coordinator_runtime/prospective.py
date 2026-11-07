@@ -116,7 +116,9 @@ def current(store, task, epoch=None):
     elif store.processing:
         raise Refusal('ordinary authority belongs to another service mode')
     role = store.config['tasks'][task]['role']
-    if (row['revoked'] is not None or selection['expires'] <= store.clock()
+    from .report_repair import lease_expiry
+    expires = lease_expiry(store, row) or selection['expires']
+    if (row['revoked'] is not None or expires <= store.clock()
             or selection['configuration'] != digest(store.config)
             or policy['task_hash'] != digest(store.config['tasks'][task])
             or selection['grants'][role] != store.enrollment(role)['grant_id']):

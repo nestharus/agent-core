@@ -71,6 +71,21 @@ def parser():
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     processing_basis.add_argument('--selected-retained', help='Public JSON list of exact event/role/source_hash/source_birth/task/mapping_version pins; metadata only, distinct from future-only')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
+    for command in ('owner-lease-basis', 'select-owner-lease', 'owner-lease-status', 'stop-owner-lease'):
+        lease = sub.add_parser(command, help='Actual Work finite continuation; original history and native rights stay frozen')
+        if command == 'select-owner-lease':
+            lease.add_argument('--selection', required=True)
+        else:
+            lease.add_argument('capability')
+        if command == 'owner-lease-basis':
+            lease.add_argument('--work-report', required=True)
+            lease.add_argument('--board-control', required=True)
+            lease.add_argument('--controller', required=True)
+            lease.add_argument('--module', action='append', required=True, dest='modules')
+            lease.add_argument('--purpose', required=True)
+            lease.add_argument('--plan', required=True)
+        if command == 'stop-owner-lease':
+            lease.add_argument('--reason', required=True)
     for command in ('collected-report-repair-basis', 'select-collected-report-repair'):
         repair = sub.add_parser(command, help='Actual Work: stopped SAME-owner code pins and already-queued report; no epoch rotation')
         if command == 'collected-report-repair-basis':
@@ -360,6 +375,20 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'owner-lease-basis','select-owner-lease','owner-lease-status','stop-owner-lease'}:
+        from . import processing, report_repair, configuration
+        boards = {r:processing.ProcessingBoard(store.config,r) for r in store.config['roles']}
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        if args.command == 'owner-lease-basis':
+            with configuration.stopped(store), store.tx():
+                return report_repair.lease_basis(store,boards,args.capability,args.work_report,args.board_control,
+                    args.controller,actor,args.modules,args.purpose,read_record(args.plan))
+        if args.command == 'select-owner-lease':
+            return report_repair.apply_lease(store,boards,actor,read_record(args.selection))
+        if args.command == 'stop-owner-lease':
+            return report_repair.stop_lease(store,boards,actor,args.capability,args.reason)
+        report_repair.owner(store,boards,actor)
+        return report_repair.lease_receipt(store,args.capability)
     if args.command in {'same-authority-report-control-repair-basis', 'select-same-authority-report-control-repair'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
@@ -522,6 +551,8 @@ def operate(args, store):
                 return processing.reservation_diagnostics(store, boards, args.capability, args.event)
             if args.command == 'processing-source' and args.diagnostics:
                 return processing.source_diagnostics(store, boards, args.capability, args.event)
+            if args.command == 'processing-apply-control':
+                return processing.apply_control(store, args.event, args.attempt)
             if not store.processing.event(store.event(args.event)):
                 raise Refusal('source outside exact software processing selection')
             boards[store.event(args.event)['role']].verify_authority(store)

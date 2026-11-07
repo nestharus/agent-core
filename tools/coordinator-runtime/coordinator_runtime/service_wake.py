@@ -79,10 +79,26 @@ class ServiceWake:
                 self.loop.add_reader(receiver.fileno(), self._ready, receiver, identity, helper)
             self.state = 'bound'
             self.expiry = self.loop.call_later(max(0, self.until - self.runtime.clock()),
-                                               self.close, 'expired')
+                                               self._expired)
         except BaseException:
             self.close('refused')
             raise
+
+    def _expired(self):
+        # Only this incarnation's handles can be rearmed. No bind/adopt/unlink.
+        try:
+            _, selection = self.runtime.processing.current()
+            policy = validate(self.runtime, selection, selecting=False)
+            if (self.state != 'bound' or not policy or policy['roles'] != self.roles
+                    or self.runtime.clock() >= policy['until']):
+                raise Refusal('no eligible owner lease for owned wake')
+            self.until = policy['until']
+            self.check()
+            self.expiry = self.loop.call_later(max(0, self.until - self.runtime.clock()), self._expired)
+            self.dispatcher.wakeup.set()
+        except Exception:
+            self.close('expired')
+            self.dispatcher.wakeup.set()
 
     def _ready(self, receiver, identity, helper):
         # Bounded draining coalesces traffic and yields to the guarded dispatcher.
@@ -106,6 +122,11 @@ class ServiceWake:
         try:
             _, selection = self.runtime.processing.current()
             policy = validate(self.runtime, selection, selecting=False)
+            if policy and policy['roles'] == self.roles and policy['until'] > self.until:
+                self.until = policy['until']
+                if self.expiry is not None:
+                    self.expiry.cancel()
+                self.expiry = self.loop.call_later(max(0, self.until - self.runtime.clock()), self._expired)
             if (not policy or policy['roles'] != self.roles or policy['until'] != self.until
                     or self.runtime.clock() >= self.until):
                 raise Refusal('selected wake expired or changed; original duties retained')
