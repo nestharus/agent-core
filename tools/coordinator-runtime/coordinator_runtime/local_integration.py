@@ -602,26 +602,35 @@ def record_job(store, job):
 
 
 def current_job(store, job):
-    frozen = store.one('SELECT * FROM local_jobs WHERE job=?', (job['id'],))
-    if not frozen:
-        return
-    if frozen['policy'] != digest(store.config.get('local_integration')):
-        raise Refusal('local policy/authority changed; retain recorded revision and return through review')
-    scope = json.loads(frozen['scope'])
-    if scope['lane'] == 'report':
-        if report_route(store, job) != scope['report_route']:
-            raise Refusal('original finite report policy/capability/epoch changed; retain original reservation')
-    else:
-        native_access(store, job, scope)
-    for source in scope.get('read_fences', []):
-        if not store.work_read_coexists(job, scope, {'id':source}):
-            raise Refusal('Work read fence or current read-only authority changed')
-    for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
-        queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
-        if (not queue or store._input_member(queue) != member
-                or store.one('SELECT hold FROM events WHERE id=?', (member['event'],))['hold']
-                or store.processing and not store.processing.task(queue)):
-            raise Refusal('local member currentness/admission changed')
+    with (nullcontext() if store.db.in_transaction else store.tx()):
+        frozen = store.one('SELECT * FROM local_jobs WHERE job=?', (job['id'],))
+        if not frozen:
+            return
+        if frozen['policy'] != digest(store.config.get('local_integration')):
+            raise Refusal('local policy/authority changed; retain recorded revision and return through review')
+        scope = json.loads(frozen['scope'])
+        queues = []
+        # Check every exact referent before member hashing, mapping/result
+        # custody or point/native acquisition. Keep checks and permitted reads
+        # under the same lock used by supported source hold updates.
+        for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
+            queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
+            source = store.one('SELECT hold IS NOT NULL AS held FROM events WHERE id=?', (member['event'],))
+            if not queue or queue['event'] != member['event'] or not source or source['held']:
+                raise Refusal('local member currentness/admission changed')
+            queues.append((member, queue))
+        if scope['lane'] == 'report':
+            if report_route(store, job) != scope['report_route']:
+                raise Refusal('original finite report policy/capability/epoch changed; retain original reservation')
+        else:
+            native_access(store, job, scope)
+        for source in scope.get('read_fences', []):
+            if not store.work_read_coexists(job, scope, {'id':source}):
+                raise Refusal('Work read fence or current read-only authority changed')
+        for member, queue in queues:
+            if (store._input_member(queue) != member
+                    or store.processing and not store.processing.task(queue)):
+                raise Refusal('local member currentness/admission changed')
 
 
 def locate(document, path, missing=False, missing_value=None):

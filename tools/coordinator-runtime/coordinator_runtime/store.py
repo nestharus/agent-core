@@ -388,31 +388,48 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         for role in self.source_roles(event, job):
             self.enrollment(role)
 
+    def _classification_current(self, attempt):
+        # Called inside the current cooperative write transaction. A reservation
+        # is not continuing permission to acquire/disclose a subsequently held
+        # source, or to commit its answer after source responsibility changes.
+        scope, parameters = configuration.event_candidate_scope(self)
+        source = self.one('SELECT e.hold IS NOT NULL AS held,e.state,e.classifier,e.processed_at '
+                          'FROM events e WHERE e.id=? AND (' + scope + ')',
+                          (attempt['event'], *parameters))
+        if (not source or source['held'] or source['processed_at'] is not None
+                or source['state'] != 'classifying' or source['classifier'] != attempt['id']):
+            raise Refusal('classification source held/excluded or no longer current')
+        if self.processing and not self.processing.event(self.event(attempt['event'])):
+            raise Refusal('classification source outside current processing selection')
+
     def authorize_launch(self, attempt):
-        row = self.attempt(attempt)
-        if self.processing:
-            self.processing.authorize(row)
-        if row['kind'] in {'input-mapping', 'input-locator'}:
-            from .metadata_lookup import authorize
-            authorize(self, row)
-        if row['job']:
-            self.require_execution_open(row['job'])
-        self.require_active_sources(row["event"], row["job"])
-        if self.launch_authorizer:
-            self.launch_authorizer(self.source_roles(row["event"], row["job"]))
-        if row['kind'] != 'task':
-            return
-        job = self.job(row['job'])
-        self.integration_launch_current(job)
-        local_integration.current_job(self, job)
-        if (self.config.get('software_delegation')
-                or 'software_authority' in json.loads(row['detail'])
-                or prospective.requires_authority(self, job)):
-            if not self.task_launch_authorizer:
-                raise Refusal('software task launch requires its current authority checker')
-            if job['active_attempt'] != attempt:
-                raise Refusal('software launch is not the current owned task attempt')
-            self.task_launch_authorizer(row)
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            row = self.attempt(attempt)
+            if self.processing:
+                self.processing.authorize(row)
+            if row['job'] is None and row['kind'] in {'classifier', 'diagnosis'}:
+                self._classification_current(row)
+            if row['kind'] in {'input-mapping', 'input-locator'}:
+                from .metadata_lookup import authorize
+                authorize(self, row)
+            if row['job']:
+                self.require_execution_open(row['job'])
+            self.require_active_sources(row["event"], row["job"])
+            if self.launch_authorizer:
+                self.launch_authorizer(self.source_roles(row["event"], row["job"]))
+            if row['kind'] != 'task':
+                return
+            job = self.job(row['job'])
+            self.integration_launch_current(job)
+            local_integration.current_job(self, job)
+            if (self.config.get('software_delegation')
+                    or 'software_authority' in json.loads(row['detail'])
+                    or prospective.requires_authority(self, job)):
+                if not self.task_launch_authorizer:
+                    raise Refusal('software task launch requires its current authority checker')
+                if job['active_attempt'] != attempt:
+                    raise Refusal('software launch is not the current owned task attempt')
+                self.task_launch_authorizer(row)
 
     def claim_classification(self):
         with self.tx():
@@ -545,6 +562,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.require_execution_open(row['job'])
             if row["controller"] != self.controller or row["state"] != "reserved":
                 raise Refusal("begin requires this controller's unstarted reservation")
+            if row['job'] is None and row['kind'] in {'classifier', 'diagnosis'}:
+                self._classification_current(row)
             self.db.execute("UPDATE attempts SET begin=?,state='running',detail=? WHERE id=?",
                             (self.clock(), encode({**json.loads(row["detail"]), **detail}), attempt))
 
@@ -667,16 +686,14 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                             (message[:2000], attempt))
 
     def commit_classification(self, attempt):
-        row = self.attempt(attempt)
-        if row["exit"] != 0 or not row["collected"] or row["capture"] != "complete" or row["error"]:
-            raise Refusal("classification requires actual successful collection and complete typed capture")
-        event = self.routing_event(row["event"])
-        answer = classification(json.loads(row["result"]), event, self.config)
-        task = self.config["tasks"].get(answer["task"])
         with self.tx():
-            state = self.one("SELECT state,classifier FROM events WHERE id=?", (event["id"],))
-            if state != {"state": "classifying", "classifier": attempt}:
-                raise Refusal("stale classification cannot replace responsibility")
+            row = self.attempt(attempt)
+            self._classification_current(row)
+            if row["exit"] != 0 or not row["collected"] or row["capture"] != "complete" or row["error"]:
+                raise Refusal("classification requires actual successful collection and complete typed capture")
+            event = self.routing_event(row["event"])
+            answer = classification(json.loads(row["result"]), event, self.config)
+            task = self.config["tasks"].get(answer["task"])
             delivery = event["kind"] == "outgoing-response" and answer["task"] == "@delivery"
             control=answer['task'] in CONTROL_ROUTES
             if control:self.queue_input_control(event,answer)

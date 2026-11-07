@@ -8,15 +8,17 @@ provider, native session, ordinary QA procedure or external state is accessed.
 import asyncio
 import copy
 import json
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from test_qa629_repairs import Fixture, actor
 from coordinator_runtime import processing, processing_admission
 from coordinator_runtime.contracts import Refusal, encode, ident
 from coordinator_runtime.dispatcher import Dispatcher
+from coordinator_runtime.appserver import AppServer
 from coordinator_runtime.store import Store
 
 
@@ -325,6 +327,107 @@ class PrelaunchRecovery(Fixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.conserved(), self.before)
         self.assertEqual(len(self.model.calls), 1)
 
+    def hold_from_other_connection(self, reason='fictional late source hold'):
+        owner = Store(self.config)
+        try:
+            owner.set_hold(self.message['id'], reason)
+        finally:
+            owner.close()
+
+    def assert_late_hold_conserved(self):
+        self.assertEqual(self.conserved(), self.before)
+        self.assertEqual(self.store.one('SELECT ack,recovery_count,processed_at FROM events WHERE id=?',
+            (self.message['id'],)), dict(ack='pending', recovery_count=1, processed_at=None))
+        self.assertEqual(self.store.rows('SELECT * FROM queue'), [])
+        self.assertIsNone(self.store.claim_classification_recovery())
+
+    async def test_hold_after_claim_refuses_dispatch_without_model_or_ack(self):
+        attempt, event = self.store.claim_classification_recovery()
+        starts = self.store.processing.current()[0]['starts']
+        self.hold_from_other_connection()
+        with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')), \
+             patch.object(self.store, 'routing_event', side_effect=AssertionError('held routing acquired')):
+            await self.runtime.classify(attempt, event)
+            self.runtime.receipts()
+        current = self.store.attempt(attempt)
+        self.assertEqual(self.model.calls, [])
+        self.assertEqual(current['state'], 'not-started')
+        self.assertIsNone(current['begin'])
+        self.assertIsNone(current['ended'])
+        self.assertIsNone(current['exit'])
+        self.assertEqual(self.store.processing.current()[0]['starts'], starts)
+        self.assert_late_hold_conserved()
+
+    async def test_hold_before_begin_refuses_without_changing_reservation(self):
+        attempt, _ = self.store.claim_classification_recovery()
+        before = self.store.attempt(attempt)
+        # Even a non-null empty reason is a hold, as in the claim predicate.
+        self.hold_from_other_connection('')
+        with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')):
+            with self.assertRaises(Refusal):
+                self.store.begin(attempt, {'fictional': True})
+        self.assertEqual(self.store.attempt(attempt), before)
+        self.assert_late_hold_conserved()
+
+    async def test_hold_after_begin_preserves_collection_but_refuses_commit_and_ack(self):
+        attempt, _ = self.store.claim_classification_recovery()
+        self.store.begin(attempt, {'fictional_typed_answer': True})
+        self.hold_from_other_connection()
+        with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')), \
+             patch.object(self.store, 'routing_event', side_effect=AssertionError('held routing acquired')):
+            self.store.collect(attempt, dict(exit=0, capture='complete', cleanup='fictional-no-child',
+                result=dict(event_id=self.message['id'], task='qa-execution', package='recovery703-one',
+                            reason='Fictional answer acquired before hold')))
+            before = self.store.attempt(attempt), self.store.one('SELECT * FROM results WHERE attempt=?', (attempt,))
+            with self.assertRaises(Refusal): self.store.commit_classification(attempt)
+            self.runtime.receipts()
+        self.assertEqual((self.store.attempt(attempt), self.store.one('SELECT * FROM results WHERE attempt=?', (attempt,))), before)
+        self.assert_late_hold_conserved()
+
+    async def test_appserver_rechecks_hold_after_preflight_before_creation(self):
+        attempt, _ = self.store.claim_classification_recovery()
+        adapter = AppServer(self.config)
+        async def preflight(*args):
+            self.hold_from_other_connection()
+            return ['fictional-never-created'], {}
+        with patch.object(adapter, 'command', side_effect=preflight), \
+             patch('coordinator_runtime.appserver.asyncio.create_subprocess_exec', new_callable=AsyncMock,
+                   side_effect=AssertionError('fictional creation gate crossed')) as create:
+            outcome = await adapter.run(self.store, attempt, 'fictional prompt',
+                dict(cwd=str(self.area), sandbox='read-only'), {})
+        create.assert_not_called()
+        self.assertIn('source', outcome['error'])
+        self.assertIsNone(outcome['exit'])
+        self.assertIsNone(self.store.attempt(attempt)['begin'])
+        self.assert_late_hold_conserved()
+
+    async def test_appserver_rechecks_hold_after_admission_before_disclosure(self):
+        attempt, _ = self.store.claim_classification_recovery()
+        adapter = AppServer(self.config)
+        @asynccontextmanager
+        async def admission(profile):
+            self.hold_from_other_connection()
+            with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')):
+                yield {}
+        with patch.object(self.store.execution_pool, 'admission', admission), \
+             patch.object(adapter, 'start_turn', new_callable=AsyncMock,
+                   side_effect=AssertionError('fictional disclosure gate crossed')) as disclose:
+            with self.assertRaises(Refusal):
+                await adapter.turn(object(), self.store, attempt, ident(), 'fictional prompt',
+                    dict(cwd=str(self.area), sandbox='read-only'), self.config['classifier']['binding'], {}, {})
+        disclose.assert_not_called()
+        self.assert_late_hold_conserved()
+
+    async def test_changed_current_source_selection_after_claim_refuses(self):
+        attempt, _ = self.store.claim_classification_recovery()
+        row = self.store.processing.current()[0]
+        selection = json.loads(row['selection'])
+        selection['future_intake'] = False
+        self.store.db.execute('UPDATE processing_capabilities SET selection=? WHERE id=?', (encode(selection), self.cap))
+        with self.assertRaises(Refusal): self.store.authorize_launch(attempt)
+        self.assertEqual(self.model.calls, [])
+        self.assert_late_hold_conserved()
+
     async def test_launch_rechecks_current_capability_after_recovery_claim(self):
         attempt, event = self.store.claim_classification_recovery()
         self.store.db.execute('UPDATE processing_capabilities SET revoked=? WHERE id=?', (self.store.clock(), self.cap))
@@ -353,6 +456,36 @@ class PrelaunchRecovery(Fixture, unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(fresh['session'])
         self.assertIsNone(self.store.claim_classification_recovery())
         self.assertTrue(all(r['intake'] == 0 for r in self.store.rows('SELECT intake FROM enrollments')))
+
+
+class OrdinaryLateHold(Fixture, unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        from support import event
+        self.bootstrap(lambda: None)
+        self.message = event(self.config, 'ordinary-late-hold', task='work-proposer')
+        self.store.ingest(self.message)
+        self.attempt, self.source = self.store.claim_classification()
+
+    async def test_ordinary_classifier_hold_refuses_launch_and_begin(self):
+        self.store.set_hold(self.message['id'], 'fictional ordinary hold')
+        with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')):
+            with self.assertRaises(Refusal): self.store.authorize_launch(self.attempt)
+            with self.assertRaises(Refusal): self.store.begin(self.attempt, {})
+        self.assertIsNone(self.store.attempt(self.attempt)['begin'])
+
+    async def test_ordinary_collected_classifier_hold_refuses_commit_before_body(self):
+        from support import collect
+        collect(self.store, self.attempt, dict(event_id=self.message['id'], task='work-proposer', package=None,
+            reason='Fictional ordinary answer'))
+        original = self.store.attempt(self.attempt)
+        self.store.set_hold(self.message['id'], 'fictional ordinary hold')
+        with patch.object(self.store, 'event', side_effect=AssertionError('held body acquired')):
+            with self.assertRaises(Refusal): self.store.commit_classification(self.attempt)
+            self.runtime.receipts()
+        self.assertEqual(self.store.attempt(self.attempt), original)
+        self.assertEqual(self.store.rows('SELECT * FROM queue'), [])
+        self.assertEqual(self.store.one('SELECT ack,processed_at FROM events WHERE id=?', (self.message['id'],)),
+            dict(ack='pending', processed_at=None))
 
 
 if __name__ == '__main__':

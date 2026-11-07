@@ -5,11 +5,13 @@ the existing synthetic fixture seams; no model/native/ordinary work is run.
 """
 import copy
 import json
+import sqlite3
 import unittest
 from unittest.mock import patch
 
 from coordinator_runtime import local_integration, processing, prospective
 from coordinator_runtime.contracts import Refusal, digest, encode, scoped_task
+from coordinator_runtime.store import Store
 from test_qa629_repairs import Fixture, actor
 import test_selected_basis50115 as selected
 
@@ -150,6 +152,101 @@ class RetainedLaunch(Fixture):
         self.store.set_hold(self.source['id'], 'fictional current source hold')
         with patch.object(self.store, 'event', side_effect=AssertionError('held source acquired')):
             self.assertIsNone(prospective.for_job(self.store, self.job))
+
+    def other_connection_hold(self, reason):
+        owner = Store(self.config)
+        try:
+            owner.set_hold(self.source['id'], reason)
+        finally:
+            owner.close()
+
+    def test_full_start_refuses_held_member_before_acquisition_then_unheld_works(self):
+        self.epoch()
+        self.job = self.store.reserve()
+        original = self.store.job(self.job['id'])
+        attempts = self.store.rows('SELECT * FROM attempts')
+        for reason in ('fictional late local hold', ''):
+            self.other_connection_hold(reason)
+            with patch.object(self.store, '_input_member', side_effect=AssertionError('held member hashed')), \
+                 patch.object(self.store, 'event', side_effect=AssertionError('held payload/custody acquired')), \
+                 patch.object(self.store, 'input_resolution', side_effect=AssertionError('held mapping acquired')):
+                with self.assertRaises(Refusal):
+                    self.store.start_job(self.job['id'], self.job['token'])
+            self.assertEqual(self.store.job(self.job['id']), original)
+            self.assertEqual(self.store.rows('SELECT * FROM attempts'), attempts)
+        self.other_connection_hold(None)
+        self.attempt = self.store.start_job(self.job['id'], self.job['token'])
+        self.job = self.store.job(self.job['id'])
+        self.boards['Work'].bind_software_attempt(self.store, self.job, self.attempt, None)
+        task = scoped_task(self.job['task'], self.config['tasks'][self.job['task']], None)
+        local_integration.prepare_input_basis(self.store, self.job, self.attempt, task)
+        self.authorize()
+        self.assert_originals()
+
+    def test_full_authorize_and_current_job_refuse_hold_before_acquisition(self):
+        self.new_job()
+        original = self.store.attempt(self.attempt)
+        self.other_connection_hold('fictional late local hold')
+        for check in (self.authorize, lambda: local_integration.current_job(self.store, self.job)):
+            with patch.object(self.store, '_input_member', side_effect=AssertionError('held member hashed')), \
+                 patch.object(self.store, 'event', side_effect=AssertionError('held payload/custody acquired')), \
+                 patch.object(self.store, 'input_resolution', side_effect=AssertionError('held mapping acquired')):
+                with self.assertRaises(Refusal): check()
+        self.assertEqual(self.store.attempt(self.attempt), original)
+        self.other_connection_hold(None)
+        self.authorize()
+        self.assert_originals()
+
+    def test_current_member_referent_drift_refuses_before_other_body(self):
+        self.new_job()
+        member = json.loads(self.job['members'])[0]
+        other = self.store.one('SELECT id FROM queue WHERE event=?', (self.other['id'],))
+        self.store.db.execute('UPDATE jobs SET members=? WHERE id=?',
+            (encode([dict(member, queue=other['id'])]), self.job['id']))
+        with patch.object(self.store, '_input_member', side_effect=AssertionError('wrong member acquired')), \
+             patch.object(self.store, 'event', side_effect=AssertionError('wrong source acquired')):
+            with self.assertRaises(Refusal): self.authorize()
+
+    def test_held_neighbor_refuses_before_first_member_or_custody_read(self):
+        self.new_job()
+        scope = local_integration.scope_for(self.store, self.job)
+        queue = self.store.one('SELECT id,event,package FROM queue WHERE event=?', (self.other['id'],))
+        scope['neighbors'] = [dict(queue=queue['id'], event=queue['event'], package=queue['package'], hash='0'*64)]
+        self.store.db.execute('UPDATE local_jobs SET scope=? WHERE job=?', (encode(scope), self.job['id']))
+        denied = []
+        def no_body(action, table, column, database, caller):
+            if action == sqlite3.SQLITE_READ and (table in {'source_custody', 'results'}
+                    or table == 'events' and column == 'payload'):
+                denied.append((table, column))
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK
+        self.store.db.set_authorizer(no_body)
+        try:
+            with patch.object(self.store, '_input_member', side_effect=AssertionError('first member acquired')):
+                with self.assertRaises(Refusal): self.authorize()
+        finally:
+            self.store.db.set_authorizer(None)
+        self.assertEqual(denied, [])
+
+    def test_current_job_reads_share_transaction_with_hold_check(self):
+        self.new_job()
+        owner = Store(self.config)
+        self.addCleanup(owner.close)
+        owner.db.execute('PRAGMA busy_timeout=0')
+        member = self.store._input_member
+        reads = []
+        def locked(queue):
+            self.assertTrue(self.store.db.in_transaction)
+            with self.assertRaisesRegex(sqlite3.OperationalError, 'locked'):
+                owner.set_hold(self.source['id'], 'fictional concurrent hold')
+            reads.append(queue['event'])
+            return member(queue)
+        with patch.object(self.store, '_input_member', locked):
+            local_integration.current_job(self.store, self.job)
+        self.assertEqual(reads, [self.source['id']])
+        owner.set_hold(self.source['id'], 'fictional committed hold after guard')
+        with patch.object(self.store, '_input_member', side_effect=AssertionError('held member acquired')):
+            with self.assertRaises(Refusal): local_integration.current_job(self.store, self.job)
 
     def test_missing_member_referent_refuses_without_body_diagnosis(self):
         self.new_job()
