@@ -82,6 +82,11 @@ receives the full original/correction history. Already collected returns route
 new findings as a new addressed message; no blind integration/review replay.
 
 For Work's explicitly selected finite collected-report integration route, retain
-all exact whole input envelopes in a `collected_reports` finding as specified in
-`software-role-routes.md`. The attributed report grants no native execution,
-context, effect, acceptance or historical-clearance authority.
+all exact whole input envelopes as specified in `software-role-routes.md`.
+When TASK_CONTEXT.report_integration declares report-integration-v1, return the
+new analysis/decision/method/coverage under that protocol; software carries the
+originals once in response report_custody. This satisfies whole-envelope
+conservation without copying original bodies into the model return. Without
+that declaration, retain the legacy exact `collected_reports` finding. The
+attributed report grants no native execution, context, effect, acceptance or
+historical-clearance authority.

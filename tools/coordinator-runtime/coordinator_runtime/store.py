@@ -1108,6 +1108,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             "allowed_tasks": choices, "notice": None, "board_id": None,
             "body": result, "kind": "response", "grant": None,
         }
+        from .report_scope import transport_custody
+        report_custody = transport_custody(self, job, result)
+        if report_custody is not None:
+            response['report_custody'] = report_custody
         branch_keys={self.event(m['event']).get('branch_binding') for m in members}-{None}
         if not branch_keys and local_integration.selected(self, job['task']):
             from .branches import job_branch

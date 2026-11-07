@@ -22,6 +22,39 @@ The clean-processing and owner-settlement checks remain separate and strict.
 A published adverse result reuses its exact original response/consumer; enqueue
 and pickup do not supply settlement or a processing timestamp.
 
+## Whole-report transport without model retransmission
+
+For an admitted `report_scope.integration_inputs` route, the prompt supplies each
+frozen original envelope once, and `report_integration` declares the optional
+`report-integration-v1` producer protocol. The model returns its new analysis,
+decision, explanation of the current method, exact task/source pins, and coverage
+of each supplied envelope in a typed finding. DONE requires complete current
+envelope coverage and a substantive new analysis/decision; coverage is an
+attributed model declaration, never proof of reading referenced artifacts or
+performing a native review. Historical partial/unread evidence stays historical.
+
+Software leaves the collected model result and its numerical collection intact.
+It attaches `report_custody` to the response beside `body`: original collector and
+attempt, model-result digest, and exact canonical collected-report envelopes.
+JSON strings inside those envelopes retain their exact bytes. The next reader
+receives the originals once plus separately attributed new assertions. Recursive
+custody remains input on subsequent report integration. New-protocol results
+must not echo a `collected_reports` finding; legacy exact whole-copy results still
+validate. The combined custody and model result obey the existing result budget.
+
+Original failures, unknowns, artifacts and handoffs remain inert attributed source
+data. Software neither acquires their referenced files nor executes old intents.
+Only the new model's declared artifacts and new handoffs enter the existing
+acquisition/delivery checks. Informative failure returns also retain original
+custody; PARTIAL/UNKNOWN/FAILED, numeric exit1, invalid analysis and incomplete
+capture cannot qualify as a complete report. Ordinary clarification still
+conserves the model's own prior return exactly. Transfer authenticates both the
+unchanged model body and software custody against current frozen source rights.
+Receiving Work must independently process and settle its own responsibility.
+
+This protocol does not repair or replay a previously failed original. Its owner
+must separately select a lawful fresh-input or remaining-work transition.
+
 ## Same-location code repair
 
 A normal prospective configuration transition advances the source frontier. It

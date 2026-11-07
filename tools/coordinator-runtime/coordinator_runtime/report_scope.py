@@ -34,6 +34,7 @@ def execution_report(runtime, event, job, destination):
     from .contracts import response_tasks
     attempt = runtime.attempt(job['active_attempt'])
     answer = collected_task_result(attempt)
+    validate_transport(runtime, job, event, answer)
     if (job['response'] != event['id'] or event.get('source_job') != job['id'] or event.get('source_attempt') != attempt['id']
             or event.get('source_members') != json.loads(job['members']) or event.get('source_role') != job['role']
             or event.get('package') != job['package'] or event.get('body') != answer
@@ -107,7 +108,114 @@ def eligible(runtime, row, record):
 def conserved_inputs(runtime, row):
     """Whole envelopes for integration; no summary can erase original dissent."""
     events = source_events(runtime, row)
-    return [{'event': e['id'], 'sha256': digest(e), 'original': e['body']} for e in events]
+    return [dict(event=e['id'], sha256=digest(e), original=e['body'],
+                 **({'report_custody': e['report_custody']} if 'report_custody' in e else {})) for e in events]
+
+
+INTEGRATION_KIND = 'report-integration-v1'
+
+
+def source_pins(reports):
+    return [{'event': r['event'], 'sha256': r['sha256']} for r in reports]
+
+
+def integration_protocol(runtime, row, reports):
+    """Producer declaration, supplied before execution; never reviewer testimony."""
+    return dict(kind=INTEGRATION_KIND, sources=source_pins(reports),
+                task_sha256=digest(runtime.config['tasks'][row['task']]))
+
+
+INSTRUCTIONS = (
+    'REPORT TRANSPORT: software retains TASK_CONTEXT.collected_reports exactly once as '
+    'immutable attributed source custody on the response; do not retransmit these bodies '
+    'or adopt a file as your result. Return your NEW analysis in one findings entry with '
+    'kind="report-integration-v1", sources and task_sha256 copied from '
+    'TASK_CONTEXT.report_integration, analysis (nonempty text), decision (nonempty text), '
+    'method (nonempty text explaining application of the supplied current method), '
+    'coverage (one {event,sha256,extent,limits} per supplied source in order). '
+    'extent is whole/partial/unread for that supplied envelope, NOT a claim to have read '
+    'its referenced artifacts or underlying historical evidence; limits is a text list '
+    'and must explain partial/unread. DONE requires whole current envelope coverage and '
+    'genuinely finished new analysis. Original adverse/unknown facts and duties remain '
+    'original; contradictory new assertions are separately attributed, never corrections '
+    'of original bytes. Include new handoff intents only; inherited intents stay inert '
+    'in source custody with their actual owners. No transport field supplies acceptance, '
+    'native review, execution or receiving processing. Clarifications still conserve '
+    'your own prior model return under the ordinary exact-prefix rules.\n')
+
+
+def analysis_result(runtime, row, result, reports):
+    """Recognize only explicit new semantics; legacy whole-copy returns still work.
+
+    Coverage is the model's attributed declaration, not software proof of thought
+    or of reading any nested source. Bind it to every actual current input.
+    """
+    entries = [f for f in result['findings'] if isinstance(f, dict) and f.get('kind') == INTEGRATION_KIND]
+    if not entries:
+        return False
+    # Clarifications may preserve earlier assertions verbatim and append a new
+    # current analysis. Never discard those earlier assertions to select one.
+    current = entries[-1]
+    protocol = integration_protocol(runtime, row, reports)
+    if (set(current) != set(protocol) | {'analysis', 'decision', 'coverage', 'method'}
+            or any(encode(current[k]) != encode(v) for k, v in protocol.items())):
+        raise Refusal('report analysis needs exact current sources and method binding')
+    required_text(current['analysis'], 'current report integration analysis', 65536)
+    required_text(current['decision'], 'current report integration decision', 16000)
+    required_text(current['method'], 'current report integration method', 16000)
+    coverage = current['coverage']
+    if not isinstance(coverage, list) or len(coverage) != len(reports):
+        raise Refusal('report analysis needs every current input coverage declaration')
+    for item, pin in zip(coverage, source_pins(reports)):
+        if (not isinstance(item, dict) or set(item) != {'event', 'sha256', 'extent', 'limits'}
+                or any(encode(item[k]) != encode(v) for k, v in pin.items())
+                or item['extent'] not in ('whole', 'partial', 'unread')
+                or not isinstance(item['limits'], list)):
+            raise Refusal('report coverage must bind exact current input and extent')
+        for limit in item['limits']:
+            required_text(limit, 'report coverage limit', 16000)
+        if item['extent'] != 'whole' and (not item['limits'] or result['semantic'] == 'DONE'):
+            raise Refusal('incomplete current report coverage cannot become DONE')
+    if any(isinstance(f, dict) and 'collected_reports' in f for f in result['findings']):
+        raise Refusal('new report protocol conserves originals in software custody once')
+    return True
+
+
+def transport_custody(runtime, row, result):
+    """Software composition only. The collected model result is never rewritten."""
+    reports = integration_inputs(runtime, row)
+    if reports is None or not analysis_result(runtime, row, result, reports):
+        return None
+    return source_custody(runtime, row, result, reports)
+
+
+def source_custody(runtime, row, result, reports):
+    """Carry originals even on an informative incomplete return; never qualify it."""
+    custody = dict(version=INTEGRATION_KIND, collector=row['controller'],
+                   attempt=row['active_attempt'], model_result_sha256=digest(result),
+                   collected_reports=reports)
+    if len(encode(dict(body=result, report_custody=custody)).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('whole report custody and new analysis exceed selected result budget')
+    return custody
+
+
+def incomplete_custody(runtime, row, result):
+    reports = integration_inputs(runtime, row)
+    if reports is None:
+        return None
+    # Legacy failures may already contain the exact whole source membership.
+    # Do not attach another recursive copy or make their old valid budget fail.
+    expected = encode({'collected_reports': reports})
+    findings = result.get('findings', []) if isinstance(result, dict) else []
+    if isinstance(findings, list) and any(encode(f) == expected for f in findings):
+        return None
+    return source_custody(runtime, row, result, reports)
+
+
+def validate_transport(runtime, row, event, result):
+    expected = transport_custody(runtime, row, result)
+    if encode(event.get('report_custody')) != encode(expected):
+        raise Refusal('original software report custody changed or omitted')
 
 
 def integration_inputs(runtime, row):
@@ -134,6 +242,9 @@ def integration_inputs(runtime, row):
 def validate_result(runtime, row, result):
     reports = integration_inputs(runtime, row)
     if reports is not None:
+        if analysis_result(runtime, row, result, reports):
+            transport_custody(runtime, row, result)
+            return
         # Use the source pins' canonical JSON identity: Python equality conflates
         # booleans/numbers and numeric representations that encode distinctly.
         expected = encode({'collected_reports': reports})

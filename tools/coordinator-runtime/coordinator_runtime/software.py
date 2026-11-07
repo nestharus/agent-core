@@ -54,6 +54,8 @@ def report_delivery(runtime, job, outbox):
     if outbox['kind'] != 'result' or not job['response']:
         return []
     event = runtime.event(job['response'])
+    from .report_scope import validate_transport
+    validate_transport(runtime, job, event, collected_task_result(runtime.attempt(job['active_attempt'])))
     routes = report_routes(runtime, job, collected_task_result(runtime.attempt(job['active_attempt'])))
     if (not routes or json.loads(outbox['payload']) != event or event.get('kind') != 'response'
             or event.get('source_job') != job['id'] or event.get('source_attempt') != job['active_attempt']
@@ -87,6 +89,12 @@ def _processing(runtime, job, report_task=None):
                 or attempt['job'] != job['id'] or attempt['controller'] != job['controller']
                 or not recorded or any(recorded[k] != attempt[k] for k in ('job','result','exit','capture','error'))):
             return None
+        if job['response']:
+            from .report_scope import validate_transport
+            response = runtime.event(job['response'])
+            if encode(response.get('body')) != encode(answer):
+                return None
+            validate_transport(runtime, job, response, answer)
     tools = json.loads(attempt['detail']).get('tool_completion', {})
     if (attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
             or attempt['exit'] != 0 or not collected_capture(attempt) or attempt['error']

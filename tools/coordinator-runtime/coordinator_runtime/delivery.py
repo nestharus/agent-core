@@ -106,6 +106,10 @@ class DeliveryJournal:
         informative={'disposition':'incomplete; execution/effects/source remain held',
                      'original_result':original,'projection':view,'capture':attempt['capture'],
                      'capture_error':attempt['error'],'exit':attempt['exit'],'contract_errors':errors}
+        from .report_scope import incomplete_custody
+        custody = incomplete_custody(self, job, original)
+        if custody is not None:
+            informative['report_custody'] = custody
         handoffs=original.get('handoffs',[]) if isinstance(original,dict) else []
         if not isinstance(handoffs,list) or len(handoffs)>16:
             errors.append('handoffs malformed/over bound; originals retained for actual owner');handoffs=[]
@@ -180,6 +184,11 @@ class DeliveryJournal:
                    "text": handoff["text"], "ref": handoff["ref"], "producer": attempt["session"],
                    "original_handoff":handoff,"intent_label":handoff['kind'],
                    "delivery_kind":delivery_kind}
+        if informative is None:
+            from .report_scope import transport_custody
+            custody = transport_custody(self, job, result)
+            if custody is not None:
+                payload['report_custody'] = custody
         if delivery_kind=='question':
             payload.update(notification_only=True,qualification_acceptance='not claimed; original result/duties retained')
         if delivery_kind!=handoff['kind']:
@@ -199,6 +208,10 @@ class DeliveryJournal:
                    "reason": reason, "result": json.loads(attempt["result"]) if attempt["result"] else None,
                    "causal_detail": json.loads(attempt["detail"]), "exit": attempt["exit"],
                    "package": job["package"], "source_members": json.loads(job["members"])}
+        from .report_scope import incomplete_custody
+        custody = incomplete_custody(self, job, payload['result'])
+        if custody is not None:
+            payload['report_custody'] = custody
         return self._outbox(job["role"], target, kind, payload, job=job["id"],
                             producer=attempt["session"], key=digest({"attempt": attempt["id"], "owner": kind}))
 

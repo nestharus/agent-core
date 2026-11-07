@@ -98,15 +98,21 @@ operations. It requires current no-effect prospective authority. This is not a
 native Source launcher, replacement review, legacy-resource clearance or grant
 from report text. Existing owner-execution and HIGH reviewer method are unchanged.
 
-Both this Reviews route and the QA cleanup exception require a finding containing
-`{"collected_reports": [{"event": "...", "sha256": "...", "original": {}}]}`,
-with every exact original input body in frozen-member order. The runtime supplies
-this shape as `TASK_CONTEXT.collected_reports` after revalidating the current
-route, before prompt artifact acquisition. Integration may add analysis,
-but cannot omit or rewrite dissent, original qualification, source, context,
-collector, failures, partial/unread coverage or history. The ordinary response
-routes carry this full envelope downstream to Work or Branch. Source collection,
-semantic acceptance, integration and downstream processing remain separate.
+Both this Reviews route and the QA cleanup exception conserve every exact original
+input body in frozen-member order. The runtime supplies
+`{"collected_reports": [{"event": "...", "sha256": "...", "original": {}}]}`
+in TASK_CONTEXT after current admission checks, before prompt artifact acquisition.
+When TASK_CONTEXT.report_integration declares report-integration-v1, the model
+returns its genuinely new analysis/decision/method/coverage with exact current
+task and source pins. Software attaches the originals once as report_custody
+beside the unchanged model body, authenticated on transfer. Current envelope
+coverage is an attributed declaration, not a native review or underlying-source
+read receipt. See `collected-report-routing.md` for producer/consumer semantics.
+Legacy whole-copy findings remain valid without that new protocol. Neither path
+may omit or rewrite dissent, original qualification, source, context, collector,
+failures, partial/unread coverage or history. Ordinary responses carry the full
+custody downstream to Work or Branch. Source collection, semantic acceptance,
+integration and downstream processing remain separate.
 
 ## Prospective Branch local refs
 

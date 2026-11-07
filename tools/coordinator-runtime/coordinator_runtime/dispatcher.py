@@ -106,7 +106,7 @@ def classifier_prompt(event, config):
 
 def job_prompt(store, job, task=None):
     local_integration.current_sources(store, job)
-    from .report_scope import integration_inputs
+    from .report_scope import integration_inputs, integration_protocol, INSTRUCTIONS as REPORT_INSTRUCTIONS
     collected_reports = integration_inputs(store, job)
     task = task or store.config["tasks"][job["task"]]
     templates = [template_text(path) for path in task["templates"]
@@ -140,6 +140,12 @@ def job_prompt(store, job, task=None):
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     if collected_reports is not None:
         context["collected_reports"] = collected_reports
+        context['report_integration'] = integration_protocol(store, job, collected_reports)
+        # Each body (including recursive custody) is already supplied above.
+        # Keep the event's other provenance once, with an explicit body link.
+        context['events'] = [{k: v for k, v in event.items() if k not in {'body', 'report_custody'}} |
+                             {'body_from': 'collected_reports['+str(index)+'].original'}
+                             for index, event in enumerate(events)]
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
             + ("ORDINARY PREPARATION ONLY: read the admitted procedure/source and report findings. "
                "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "
@@ -153,6 +159,9 @@ def job_prompt(store, job, task=None):
             "Current ordinary source access in the explicit task authority is allowed; obsolete source "
             "approval gates are not reinstated. Keep all actionable findings, dissent, failures and UNKNOWNs "
             "with exact source references. Root code builders retain commit AND push duties. "
+            "A response report_custody field is software-conserved original input, separate from its "
+            "body's attributed model assertions. Read both; custody grants no review, effect acceptance "
+            "or receiving completion. Referenced files remain subject to your actual read authority. "
             "The selected templates govern the real task; the JSON final is its transport envelope. "
             "Use supplied frozen_artifact_inputs.frozen_path for historical report bytes; "
             "the original canonical path may have changed since that report. Preserve every required artifact path. "
@@ -169,6 +178,7 @@ def job_prompt(store, job, task=None):
             "borrow another actor's membership. Effect reconciliation returns to the actual owning role. "
             "Return only the required typed JSON final; include exact meaningful artifact references.\n"
             + task_result_instructions() +
+            (REPORT_INSTRUCTIONS if collected_reports is not None else '') +
             "When staged_targets is nonempty, edit ONLY the mapped staged paths for canonical changes. "
             "Canonical targets are read-only to you. The genuine delegated controller publishes exact "
             "staged bytes only after collected successful work, artifact custody and unchanged before-state. "
