@@ -14,6 +14,25 @@ CREATE TABLE IF NOT EXISTS input_resolutions(
 CONTROL_ROUTES={'@control','@unresolved','@coalesce'}
 
 
+def input_interpretation(event):
+    """Label the scope of a derived receipt without rewriting source meaning.
+
+    Only a collected software mapping carries both service-observed integration
+    metadata and the explicit non-native software proof. General input/owner
+    selections keep their attributed meaning; no label grants effect rights.
+    """
+    selection = event.get('owner_resolution')
+    context = {'business_source': 'EVENT original source fields',
+               'resolution_scope': 'input-selection' if selection else 'original-source'}
+    if selection:
+        context['selected_task'] = selection['receipt']['task']
+        prior = selection['prior']
+        if ('integration_observation' in prior
+                and prior.get('software_processing', {}).get('native_owner_receipt') is False):
+            context['resolution_scope'] = 'software-metadata-only'
+    return context
+
+
 def input_routes(event, config=None):
     routes=list(event['allowed_tasks'])
     routes.append('@unresolved')
