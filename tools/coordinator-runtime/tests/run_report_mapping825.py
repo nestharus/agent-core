@@ -28,11 +28,13 @@ handoff=root/'handoff';handoff.mkdir()
 records=[]
 def run(label,ids,source=None,code=None):
     if usage()>=128*1024**2:raise RuntimeError('stop-new128MiB')
-    fixtures=root/label;fixtures.mkdir();(fixtures/'normal-path27-act'/'tmp').mkdir(parents=True)
+    fixtures=root/label;fixtures.mkdir();(fixtures/'normal-path27-act'/'tmp').mkdir(parents=True);(fixtures/'tmp').mkdir()
+    ordinary = label == 'ordinary'
+    tmpdir = '/fixtures/normal-path27-act/tmp' if ordinary else '/fixtures/tmp'
     cmd=['bwrap','--die-with-parent','--unshare-all','--new-session','--tmpfs','/']
     for path in ['/usr','/lib','/lib64','/bin']:cmd+=['--ro-bind',path,path]
-    cmd+=['--proc','/proc','--dev','/dev','--ro-bind',str(source or src),'/src','--bind',str(fixtures),'/fixtures','--dir','/tmp','--dir','/home','--clearenv']
-    for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR='/fixtures/normal-path27-act/tmp',PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',COORDINATOR_NORMAL_PATH_FIXTURES='/fixtures/normal-path27-act',COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',PYTHONPATH='/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():cmd+=['--setenv',k,v]
+    cmd+=['--proc','/proc','--dev','/dev','--ro-bind',str(source or src),'/src','--ro-bind',str(src/'tools/coordinator-runtime/tests/fixture_snapshot'),'/sdk','--bind',str(fixtures),'/fixtures','--dir','/tmp','--dir','/home','--clearenv']
+    for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR=tmpdir,PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',COORDINATOR_NORMAL_PATH_FIXTURES='/fixtures/normal-path27-act',COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',PYTHONPATH='/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():cmd+=['--setenv',k,v]
     cmd += ['--bind' if code else '--ro-bind',str(handoff),'/handoff']
     cmd+=['--chdir','/fixtures','/usr/bin/python3','-B']+(['-c',code] if code else ['-m','unittest','-v',*ids])
     child=None;data=bytearray();reason=None;start=time.monotonic()
@@ -60,8 +62,10 @@ def run(label,ids,source=None,code=None):
 ids=['test_report_mapping825.Mapping825.'+n for n in ['test_delegated_new_completion_refuses_before_resolution','test_delegated_known_completion_and_packet_work','test_genuine_outer_new_work_refuses_packet','test_genuine_outer_known_packet_works']]
 ids += ['test_authentic_control794.Kernel794.test_source_and_sdk_snapshots_readonly','test_processing206.KernelIsolationTests.test_real_source_and_dependency_writes_are_kernel_denied']
 ids += ['test_report_leaf816.ReportLeaf816.'+n for n in ['test_collected_reviews_return_maps_known_work_point_preserving_originals','test_metadata_wrong_cap_hold_birth_changed_hash_and_uncollected_before_body','test_expired_and_changed_task_grant_refuse_before_body','test_changed_frozen_receipt_and_orphan_marker_refuse','test_new_point_and_native_impersonation_remain_refused','test_mutation_after_target_read_is_refused','test_forged_response_identity_refuses_before_leaf_body']]
-ids += ['test_metadata471.Automatic.test_unknown_is_owned_and_only_positive_new_enters_discovery','test_metadata471.Automatic.test_snapshot_is_before_model_and_never_restamped_after_result','test_metadata471.Automatic.test_holds_permissions_and_original_source_refuse_before_acquisition']
+ordinary_ids = ['test_metadata471.Automatic.test_unknown_is_owned_and_only_positive_new_enters_discovery','test_metadata471.Automatic.test_snapshot_is_before_model_and_never_restamped_after_result','test_metadata471.Automatic.test_holds_permissions_and_original_source_refuse_before_acquisition']
 end=run('candidate',ids)
+ordinary_end=run('ordinary',ordinary_ids)
+end = end or ordinary_end
 # Same tests and immutable baseline production bodies: both bypasses must be red.
 originals={}
 for name in ['local_integration.py','metadata_lookup.py']:
