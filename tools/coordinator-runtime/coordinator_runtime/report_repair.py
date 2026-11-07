@@ -1154,6 +1154,46 @@ def source_transition(root, previous, current, old, new, modules):
         raise Refusal('source amendment contains unrelated production changes')
 
 
+def amendment_original_stop(runtime, key, controller):
+    """Work's authenticated processing-release closes the original process.
+
+    A failed service can leave a stale serving row; a one-off has no service
+    row. Neither rewrites that history nor settles any work/effect obligation.
+    This interpretation is confined to stopped source amendment metadata.
+    """
+    run = runtime.one('SELECT * FROM processing_runs WHERE controller=? AND capability=?', (controller,key))
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    service = runtime.one('SELECT controller,capability,state,started,returned FROM service_runs WHERE controller=? AND capability=?', (controller,key))
+    work = runtime.config['roles']['Work']['owner']
+    try:
+        state = json.loads(run['state']) if run else None
+        receipt = state['parent_END']
+        valid = (set(state) == {'parent_END'} and isinstance(receipt,dict)
+                 and set(receipt) == {'actual_END','evidence'}
+                 and type(receipt['actual_END']) is int
+                 and isinstance(receipt['evidence'],list) and bool(receipt['evidence']))
+    except (ValueError, KeyError, TypeError):
+        valid = False
+    if (not valid or not cap or cap['issuer'] != work
+            or work != runtime.config['software_delegation']['grantor']
+            or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1',(controller,))):
+        raise Refusal('source amendment requires original genuine Work processing-release, numeric END and evidence')
+    for item in receipt['evidence']:
+        required_text(item,'original process collection evidence',4000)
+    if service and service['state'] == 'returned-awaiting-parent-END' and service['returned'] is not None:
+        mode = 'strict-service-return'
+    elif service is None:
+        mode = 'Work-collected-original-without-service-row'
+    elif service['state'] == 'serving' and service['returned'] is None and receipt['actual_END'] != 0:
+        mode = 'Work-collected-failed-original-with-stale-service-row'
+    else:
+        raise Refusal('source amendment has contradictory or unresolved original service metadata')
+    return {'controller':controller,'capability':key,'issuer':cap['issuer'],
+            'capability_revoked':cap['revoked'],'processing_run':run,'service_run':service,
+            'parent_END':receipt,'interpretation':mode,
+            'qualification':'original process closed by authenticated Work collection; work, effects, native/context/private auxiliary uncertainty remain held'}
+
+
 def amendment_source_users_stopped(runtime, key, plan):
     """Metadata-only stop proof; retained job/effect debt is not process liveness.
 
@@ -1165,12 +1205,13 @@ def amendment_source_users_stopped(runtime, key, plan):
     originals = runtime.rows('SELECT controller,capability FROM processing_runs UNION '
                              'SELECT controller,capability FROM service_runs')
     controllers = {}
+    witnesses = []
     for original in originals:
         controller = original['controller']; capability = original['capability']
         if controller in controllers and controllers[controller] != capability:
             raise Refusal('source amendment has ambiguous original controller provenance')
         controllers[controller] = capability
-        stopped_original(runtime,capability,controller)
+        witnesses.append(amendment_original_stop(runtime,capability,controller))
     # An unattributed original cannot be qualified by acquiring its old body.
     if runtime.one('SELECT id FROM attempts WHERE collected IS NULL LIMIT 1'):
         raise Refusal('uncollected original source relevance unknown; actual collector END/release required')
@@ -1189,6 +1230,7 @@ def amendment_source_users_stopped(runtime, key, plan):
         reads, writes, _ = original_modes(runtime,job)
         if any(overlaps(source,p) for p in reads + writes):
             raise Refusal('retained original job resources overlap amended shared source')
+    return sorted(witnesses,key=lambda proof:(proof['controller'],proof['capability']))
 
 
 def amendment_guards(runtime, boards, key, controller):
@@ -1210,8 +1252,8 @@ def amendment_guards(runtime, boards, key, controller):
             or count >= limits['max_new_inputs'] or windows_used >= limits['max_windows']
             or runtime.usage()['bytes'] >= limits['pause_bytes']):
         raise Refusal('current finite owner lease/headroom exhausted; no renewal')
-    stopped_original(runtime,key,controller)
-    amendment_source_users_stopped(runtime,key,plan)
+    amendment_original_stop(runtime,key,controller)
+    stop_provenance = amendment_source_users_stopped(runtime,key,plan)
     grants = {}
     for role, board in boards.items():
         with board.opened(settlement=True) as conn:
@@ -1223,7 +1265,7 @@ def amendment_guards(runtime, boards, key, controller):
     revision = windows.revision(runtime)
     revision['tokens'].pop('owner_source_reviews',None)
     return plan, raw, {'starts':cap['starts'],'inputs':count,'windows':windows_used,
-                       'revision':revision,'grants':grants}
+                       'revision':revision,'grants':grants,'original_stop_provenance':stop_provenance}
 
 
 def amendment_basis(runtime, boards, key, controller, actor, previous, modules, manifest, purpose):

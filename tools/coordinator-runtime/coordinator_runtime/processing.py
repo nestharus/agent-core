@@ -1407,6 +1407,17 @@ def release(runtime, boards, key, controller, receipt):
     with runtime.tx():
         if runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL', (controller,)):
             raise Refusal('dependency: original collector still owns uncollected attempt; no replacement or foreign wait')
+        row = runtime.one('SELECT * FROM processing_runs WHERE controller=? AND capability=?', (controller, key))
+        if not row:
+            raise Refusal('original processing run disappeared before collection')
+        try:
+            prior = json.loads(row['state'])
+        except (ValueError, TypeError):
+            prior = None
+        if isinstance(prior, dict) and 'parent_END' in prior:
+            if prior != {'parent_END': receipt}:
+                raise Refusal('original parent END receipt is already recorded; contradictory release refused')
+            return {'controller': controller, 'collection': receipt, 'processing_or_effects_complete': False}
         runtime.budget(None, len(encode(receipt).encode()) + 1024)
         runtime.db.execute('UPDATE processing_runs SET state=? WHERE controller=?', (encode({'parent_END': receipt}), controller))
     return {'controller': controller, 'collection': receipt, 'processing_or_effects_complete': False}

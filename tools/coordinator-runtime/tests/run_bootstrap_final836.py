@@ -91,6 +91,7 @@ groups = {
 groups['composite'] = [test for tests in list(groups.values()) for test in tests]
 groups['reacquire'] = ['test_native_reacquisition836.Reacquisition836.'+n for n in ['test_public_frozen_retry_after_pool_failure_refuses_before_body','test_async_preparation_after_start_refuses_before_body','test_frozen_resume_without_conflict_preserves_source','test_spawned_preparation_after_start_refuses_before_body']]
 groups['final836'] = groups['composite'] + groups['reacquire'] + ['test_control_marker831.Marker831.'+n for n in ['test_marker_api_fresh_classifier_completion_replay','test_marker_existing_return_cli_terminal_once','test_marker_metadata_before_body','test_marker_source_reservation_and_external_guards']]
+groups['final836'] += ['test_collected_stop835.CollectedStop.'+n for n in ['test_public_release_oneoff_and_failed_service_cli_preserves_history','test_bad_collection_foreign_uncollected_and_live_refuse_before_bodies','test_release_contradiction_and_wrong_actor_refuse']] + ['test_lease_effect805.'+c+'.test_expired_effect_refuses_before_body_with_framework_current' for c in ['EffectLease','AdmittedLease']]
 groups['baseline836'] = groups['reacquire'][:2]
 for label in (sys.argv[1:] or list(groups)):
     if usage() >= 128*1024**2:
