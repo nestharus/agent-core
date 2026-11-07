@@ -118,12 +118,18 @@ def _material(store, task_name, package):
 
 
 def account(store, actor, receipt):
-    if not isinstance(receipt, dict) or set(receipt) != {'basis','authority','originals','activity_scope','remaining_holds','past_effects'}:
+    if not isinstance(receipt, dict) or set(receipt) - {'authority_kind'} != {'basis','authority','originals','activity_scope','remaining_holds','past_effects'}:
         raise Refusal('prospective account requires actual activity originals and conserved past obligations')
     basis = receipt['basis']
     actual = material(store, basis['task'], basis['package'])
-    if actual != basis or actor != actual['custodian']:
+    software = receipt.get('authority_kind') == 'work-selected-local-ref-v1'
+    if 'authority_kind' in receipt and not software:
+        raise Refusal('unsupported prospective ref authority kind')
+    if actual != basis or (not software and actor != actual['custodian']):
         raise Refusal('actual retained custodian and fresh exact prospective basis required')
+    if software:
+        work_authority(store, actor, actual)
+
     if not historical_resources_clear(store, actual):
         raise Refusal('original historical resource scope/overlap remains unknown or conflicting; activity closure is separate')
     required_text(receipt['authority'], 'actual custodian current-operation authority and rationale')
@@ -137,7 +143,7 @@ def account(store, actor, receipt):
         raise Refusal('actual custodian must qualify current exact resources/activity, not just old ENDs')
     required_text(activity['evidence'], 'current exact operation activity/control evidence')
     originals = receipt['originals']
-    if not isinstance(originals, list) or not originals:
+    if not isinstance(originals, list) or not originals and not software:
         raise Refusal('genuine original control/activity/END evidence required')
     for original in originals:
         if (not isinstance(original, dict) or set(original) != {'original','collector','activity','actual_END','evidence'}
@@ -148,9 +154,11 @@ def account(store, actor, receipt):
         required_text(original['original'], 'actual original receipt reference')
         required_text(original['evidence'], 'actual collected original/control/activity evidence')
     # Current candidate job does not need a retrospective END. All OTHER prior
-    # unresolved jobs require genuine already collected originals; old unknown
-    # effects remain charged. External originals are attributed above.
-    for job in actual['unresolved_jobs']:
+    # unresolved jobs in the native-owner route require collected originals.
+    # The software route already proved original resource independence above;
+    # disjoint collection debt remains in the frozen basis, never cleared or
+    # adopted, and is not a blanket historical-END prerequisite.
+    for job in ([] if software else actual['unresolved_jobs']):
         if not job['attempts']:
             raise Refusal('prior job activity unavailable; hold affected operation')
         for attempt in job['attempts']:
@@ -173,8 +181,16 @@ def eligible(store, row, task):
     if not historical_resources_clear(store, actual, row.get('id')):
         return False
     # Current job/attempt progression is not a change to historical activity.
-    records = store.rows('SELECT * FROM ref_scope_accounts WHERE actor=?', (actual['custodian'],))
+    records = store.rows('SELECT * FROM ref_scope_accounts WHERE actor IN (?,?)', (actual['custodian'], store.config['roles']['Work']['owner']))
     for record in records:
+        receipt = json.loads(record['receipt'])
+        if receipt.get('authority_kind') == 'work-selected-local-ref-v1':
+            try:
+                work_authority(store, record['actor'], actual)
+            except (Refusal, KeyError):
+                continue
+        elif record['actor'] != actual['custodian']:
+            continue
         saved = json.loads(record['basis'])
         current = {**actual, 'unresolved_jobs': [j for j in actual['unresolved_jobs'] if j['id'] != row.get('id')]}
         previous = {**saved, 'unresolved_jobs': [j for j in saved['unresolved_jobs'] if j['id'] != row.get('id')]}
@@ -220,3 +236,47 @@ def historical_resources_clear(store, actual, current_job=None):
         except (Refusal, KeyError, TypeError, ValueError):
             return False
     return True
+
+
+def work_authority(store, actor, actual):
+    """Prospective software operation rights, distinct from historical consent.
+
+    The Work issuer attests only its exact current selected operation. Existing
+    original maps, actual local writers/leases and collector debts still fence
+    that operation; no historical native identity is borrowed.
+    """
+    from . import prospective
+    from .processing_admission import resolved
+    cap, selection = store.processing.current()
+    if actor != cap['issuer'] or actor != store.config['roles']['Work']['owner']:
+        raise Refusal('actual Work issuer must select prospective software ref account')
+    for role in ('Work', 'Branch'):
+        store.processing.boards[role].verify_authority(store)
+    admission = store.one('SELECT * FROM processing_admissions WHERE package=?', (actual['package'],))
+    if not admission:
+        raise Refusal('software ref route requires actual Work-issued topic admission')
+    scope = selection.get('software_admission', {}).get('scopes', {}).get(admission['scope'])
+    if not scope or actual['task'] not in scope['task_scopes']:
+        raise Refusal('exact Work-selected prospective local-ref scope required')
+    resolved(store, actual['package'], admission['scope'], digest(scope))
+    epoch = prospective.current(store, actual['task'])
+    if not epoch or epoch['policy']['ordinary_effects'] != 'admitted-v1':
+        raise Refusal('current typed prospective local-ref operation authority required')
+    # A different role's unresolved local writer is not erased by the Branch
+    # account. Only its original frozen scope can establish independence.
+    from .resource_scopes import overlaps
+    for job in store.rows("SELECT * FROM jobs WHERE role!='Branch' AND effects NOT IN ('none','reconciled')"):
+        frozen = store.one('SELECT * FROM job_resource_policies WHERE job=?', (job['id'],))
+        if not frozen or not frozen['admission']:
+            raise Refusal('current cross-role original writer lacks its frozen resource scope')
+        prior = json.loads(frozen['admission'])
+        if scope_excluded(store, job['task'], prior):
+            raise Refusal('current cross-role writer scope excluded before metadata')
+        task = scoped_task(job['task'], json.loads(frozen['task']), prior)
+        authority = task['effect_authority']
+        if task.get('network') or 'organize-authorized-refs' in authority['operations']:
+            raise Refusal('current cross-role external/ref writer scope remains held')
+        for value in authority['read_roots'] + authority['write_roots'] + [task['cwd']]:
+            path = root(value, store.config.get('artifact_exclusions', []))
+            if any(overlaps(path, Path(v)) for v in [actual['common_repository']['path'], actual['operation']['repository']]):
+                raise Refusal('current cross-role original writer overlaps exact ref resources')

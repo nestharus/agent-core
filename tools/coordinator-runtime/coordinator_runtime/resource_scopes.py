@@ -32,10 +32,10 @@ def overlaps(left, right):
     return identity(left) in ancestors(right) or identity(right) in ancestors(left)
 
 
-def validate(runtime, policy):
+def validate(runtime, policy, selection=None):
     for role, record in policy.items():
         if (role not in runtime.config['roles'] or not isinstance(record, dict)
-                or set(record) - {'qa_operation'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
+                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
                 or type(record['unbounded']) is not bool or not isinstance(record['roots'], list)):
             raise Refusal('legacy resource account needs exact hold, roots, unbounded and evidence')
         if runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))['legacy_hold'] != record['original_hold']:
@@ -45,8 +45,26 @@ def validate(runtime, policy):
             raise Refusal('unknown legacy scope cannot be declared independent')
         for value in record['roots']:
             root(value, runtime.config.get('artifact_exclusions', []))
-        if 'qa_operation' in record:
-            qa_observation(runtime, role, record)
+        accounts = qa_accounts(record)
+        if accounts:
+            packages = []
+            for account in accounts:
+                qa_observation(runtime, role, record, account)
+                binding = account['binding']
+                packages.append(binding['package'])
+                if selection is not None and 'topic' in binding:
+                    scope = selection.get('software_admission', {}).get('scopes', {}).get(binding['topic'])
+                    if (not scope or digest(scope) != binding['scope_sha256']
+                            or not binding['package'].startswith(scope['package_prefix'])
+                            or scope['task_scopes'].get('qa-execution') != account['policy']['scope']
+                            or account.get('cleanup') and scope['task_scopes'].get('qa-cleanup') != account['cleanup']['scope']):
+                        raise Refusal('QA policy must bind exact selected software topic/scopes')
+            if len(packages) != len(set(packages)):
+                raise Refusal('independent QA policies need distinct packages')
+        if 'reviews_report' in record:
+            from .report_scope import validate as validate_report
+            validate_report(runtime, role, record, selection)
+
 
 
 def scope_excluded(runtime, name, admission):
@@ -56,16 +74,25 @@ def scope_excluded(runtime, name, admission):
                for value in values for p in runtime.config.get('artifact_exclusions', []))
 
 
-def qa_observation(runtime, role, record):
+def qa_accounts(record):
+    if 'qa_operations' in record:
+        values = record['qa_operations']
+        if ('qa_operation' in record or not isinstance(values, list) or not 1 <= len(values) <= 5):
+            raise Refusal('one to five independent selected QA operation policies required')
+        return values
+    return [record['qa_operation']] if 'qa_operation' in record else []
+
+
+def qa_observation(runtime, role, record, account=None):
     """Validate Work's attributed evidence and exact proposed policy, not authorship.
 
     This structural check also runs before issuance. Only qa_operation, through
     the current trusted Work capability, can apply it. Digests bind bytes; they
     cannot prove native authorship or the truth/completeness of external facts.
     """
-    account = record['qa_operation']
+    account = record['qa_operation'] if account is None else account
     if (role != 'QA' or record['unbounded'] is not True
-            or not isinstance(account, dict) or set(account) != {'statement', 'binding', 'policy'}):
+            or not isinstance(account, dict) or set(account) - {'cleanup'} != {'statement', 'binding', 'policy'}):
         raise Refusal('operation-relative QA policy must preserve global unknown scope')
     statement, binding, policy = (account[k] for k in ('statement', 'binding', 'policy'))
     fields = {'version', 'custodian', 'reference', 'statement_sha256', 'authority',
@@ -83,11 +110,14 @@ def qa_observation(runtime, role, record):
     if (type(policy['expires']) not in {int, float} or not math.isfinite(policy['expires'])
             or policy['expires'] <= runtime.clock()):
         raise Refusal('operation-relative selection expired')
-    if (not isinstance(binding, dict) or set(binding) != {'task', 'package', 'admission_sha256'}
+    if (not isinstance(binding, dict) or set(binding) not in ({'task', 'package', 'admission_sha256'}, {'task', 'package', 'topic', 'scope_sha256'})
             or binding['task'] != 'qa-execution'):
         raise Refusal('one exact admitted QA execution binding required')
     required_text(binding['package'], 'actual independently admitted package')
-    if not isinstance(binding['admission_sha256'], str) or not re.fullmatch('[0-9a-f]{64}', binding['admission_sha256']):
+    pin = binding.get('admission_sha256', binding.get('scope_sha256'))
+    if 'topic' in binding:
+        required_text(binding['topic'], 'selected software admission topic', 128)
+    if not isinstance(pin, str) or not re.fullmatch('[0-9a-f]{64}', pin):
         raise Refusal('exact whole admission digest required')
     source = policy['source']
     if (not isinstance(source, dict) or set(source) != {'common_git', 'tree', 'parents'}
@@ -113,10 +143,23 @@ def qa_observation(runtime, role, record):
         if path in seen:
             raise Refusal('duplicate selected QA input')
         seen.add(path)
+    if 'cleanup' in account:
+        cleanup = account['cleanup']
+        if (not isinstance(cleanup, dict) or set(cleanup) != {'task', 'scope', 'procedure_sha256'}
+                or cleanup['task'] != 'qa-cleanup' or not isinstance(cleanup['scope'], dict)
+                or cleanup['scope'].get('ordinary_effects') or cleanup['scope'].get('network') is not False
+                or not re.fullmatch('[0-9a-f]{64}', cleanup['procedure_sha256'])):
+            raise Refusal('separate exact no-effect same-package cleanup scope required')
+        for value in cleanup['scope'].get('read_roots', []) + cleanup['scope'].get('write_roots', []) + [cleanup['scope'].get('cwd'), cleanup['scope'].get('procedure')]:
+            root(value, exclusions, metadata=False)
+        task = runtime.config['tasks']['qa-cleanup']
+        if not task.get('package_narrowing') or task['effects'] != 'owned-artifacts':
+            raise Refusal('cleanup must narrow the existing report-only task')
+        scoped_task('qa-cleanup', task, {'receipt': json.dumps({'task_scopes': {'qa-cleanup': cleanup['scope']}})})
     return statement
 
 
-def qa_operation(runtime, row, record):
+def qa_operation(runtime, row, record, account=None):
     """Compare a recorded bounded fact; return no grant, lease or acceptance.
 
     All paths are exclusion-checked before policy/tool/source metadata. Actual
@@ -131,15 +174,28 @@ def qa_operation(runtime, row, record):
             or not runtime.processing.boards or 'Work' not in runtime.processing.boards):
         raise Refusal('exact current genuine Work-selected QA policy required')
     runtime.processing.boards['Work'].verify_authority(runtime)
-    qa_observation(runtime, row['role'], record)
-    policy = record['qa_operation']['policy']
-    binding = record['qa_operation']['binding']
+    accounts = qa_accounts(record)
+    if account is None:
+        matches = [a for a in accounts if a['binding']['package'] == row['package']]
+        if len(matches) != 1:
+            raise Refusal('one exact selected package operation required')
+        account = matches[0]
+    if account not in accounts:
+        raise Refusal('unselected QA operation')
+    qa_observation(runtime, row['role'], record, account)
+    if row['task'] == 'qa-cleanup':
+        return qa_cleanup(runtime, row, record, account)
+    policy = account['policy']
+    binding = account['binding']
     if (row['role'] != 'QA' or row['phase'] != 'execution'
             or row['task'] != binding['task'] or row['package'] != binding['package']):
         raise Refusal('QA observation does not describe this operation')
     task = runtime.config['tasks'][row['task']]
     admission = runtime.one('SELECT * FROM admissions WHERE package=?', (row['package'],))
-    if (not admission or digest(admission) != binding['admission_sha256']
+    if 'topic' in binding:
+        from .processing_admission import resolved
+        admission = resolved(runtime, row['package'], binding['topic'], binding['scope_sha256'])
+    if (not admission or 'admission_sha256' in binding and digest(admission) != binding['admission_sha256']
             or task['role'] != 'QA' or task['phase'] != 'execution'
             or not task.get('require_package_scope') or scope_excluded(runtime, row['task'], admission)):
         raise Refusal('unchanged genuine narrowed QA admission required before metadata')
@@ -251,10 +307,16 @@ def blocked(runtime, row, task=None):
     if not record or record['original_hold'] != enrollment['legacy_hold']:
         return True
     operation_held = []
-    if 'qa_operation' in record:
+    if qa_accounts(record):
         try:
             operation_held = qa_operation(runtime, row, record)
         except (Refusal, OSError, subprocess.SubprocessError, KeyError, TypeError, ValueError):
+            return True
+    elif 'reviews_report' in record:
+        try:
+            from .report_scope import eligible
+            eligible(runtime, row, record)
+        except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
     elif record['unbounded']:
         return True
@@ -298,3 +360,37 @@ def blocked(runtime, row, task=None):
         except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
     return not selected or any(overlaps(a, b) for a in selected for b in held)
+
+
+def qa_cleanup(runtime, row, record, account):
+    """Consolidation consumes this accepted execution, never a model DONE."""
+    from . import ordinary, prospective, qa_source
+    from .report_scope import source_events, execution_report
+    cleanup = account.get('cleanup')
+    if not cleanup or row['phase'] != 'cleanup' or row['role'] != 'QA':
+        raise Refusal('separately selected same-package cleanup required')
+    epoch = prospective.current(runtime, row['task'])
+    if not epoch or epoch['policy']['ordinary_effects'] is not False:
+        raise Refusal('current no-effect consolidation authority required')
+    rows = ordinary.accepted_runs(runtime, row['package'])
+    if len(rows) != 1 or rows[0]['task'] != 'qa-execution':
+        raise Refusal('one exact independently accepted same-package execution required')
+    run = rows[0]
+    original = runtime.job(run['job'])
+    held = qa_operation(runtime, original, record, account)
+    qa_source.verify(runtime, run['attempt'], json.loads(run['policy']), json.loads(run['receipt']))
+    admission = runtime.one('SELECT * FROM admissions WHERE package=?', (row['package'],))
+    if scope_excluded(runtime, row['task'], admission):
+        raise Refusal('cleanup excluded before metadata')
+    task = scoped_task(row['task'], runtime.config['tasks'][row['task']], admission)
+    if (task['admitted_scope'] != cleanup['scope'] or task.get('network')
+            or task['effect_authority']['owner'] != runtime.enrollment('QA')['owner']
+            or set(task['effect_authority']['operations']) - {'read-source', 'read-reports', 'prepare-intents', 'consolidate-reports', 'write-owned-artifacts'}):
+        raise Refusal('cleanup scope cannot acquire execution/native/effect authority')
+    ordinary.frozen_file(runtime, cleanup['scope']['procedure'], cleanup['scope']['read_roots'], cleanup['procedure_sha256'])
+    events = source_events(runtime, row)
+    if not events:
+        raise Refusal('actual complete execution reports required')
+    for event in events:
+        execution_report(runtime, event, original, row['task'])
+    return held

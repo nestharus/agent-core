@@ -104,6 +104,8 @@ def classifier_prompt(event, config):
 
 
 def job_prompt(store, job, task=None):
+    from .report_scope import integration_inputs
+    collected_reports = integration_inputs(store, job)
     task = task or store.config["tasks"][job["task"]]
     templates = [template_text(path) for path in task["templates"]
                  if not (scoped_startup(task) and Path(path).name in {"AGENTS.md", "WORK_LOG.md"})]
@@ -134,6 +136,8 @@ def job_prompt(store, job, task=None):
                "inherited_failure_sources": readiness.failure_sources(store,attempt['id']) if task.get('routine_completion') else [],
                "output_directory": str(store.home / "artifacts" / attempt["id"]),
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
+    if collected_reports is not None:
+        context["collected_reports"] = collected_reports
     return ("You perform this actual bounded role task personally; ROOT/Work are outside your session. "
             + ("ORDINARY PREPARATION ONLY: read the admitted procedure/source and report findings. "
                "Do not execute refs, QA commands, CI, resource or network effects. The service alone executes "

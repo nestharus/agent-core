@@ -54,3 +54,8 @@ network access does not grant another watcher or reservation. Reuse actual
 existing run/PR custody, record skips/failures/UNKNOWNs and exact executed source.
 Only an actually accepted package returns qualification to Branch; all necessary
 results/questions remain durably owned until actual pickup/processing/settlement.
+
+For an explicitly selected finite software cleanup exception, conserve the exact
+whole input envelopes in a `collected_reports` finding as specified in
+`software-role-routes.md`. Execution is separate from independent acceptance;
+cleanup cannot borrow another package's acceptance or omit original evidence.

@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS processing_control_returns(
 CREATE TABLE IF NOT EXISTS processing_admissions(
  package TEXT PRIMARY KEY,capability TEXT NOT NULL,event TEXT NOT NULL UNIQUE,
  scope TEXT NOT NULL,receipt TEXT NOT NULL,created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS processing_admission_resolutions(
+ package TEXT PRIMARY KEY,capability TEXT NOT NULL,event TEXT NOT NULL,topic TEXT NOT NULL,
+ scope_hash TEXT NOT NULL,admission_hash TEXT NOT NULL,source_hash TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS processing_resolution_no_update BEFORE UPDATE ON processing_admission_resolutions
+ BEGIN SELECT RAISE(ABORT,'immutable applied software admission'); END;
+CREATE TRIGGER IF NOT EXISTS processing_resolution_no_delete BEFORE DELETE ON processing_admission_resolutions
+ BEGIN SELECT RAISE(ABORT,'immutable applied software admission'); END;
 CREATE TABLE IF NOT EXISTS processing_delivery_links(
  delivery TEXT PRIMARY KEY,event TEXT NOT NULL REFERENCES events(id));
 CREATE TABLE IF NOT EXISTS processing_source_positions(

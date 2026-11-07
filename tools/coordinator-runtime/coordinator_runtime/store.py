@@ -841,6 +841,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,'Invalid inner task contract: '+str(exc))
                 self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=?",(str(exc),job))
                 return None
+            from .report_scope import validate_result
+            validate_result(self, row, result)
             local_integration.validate_method(self, row, attempt, result)
             if result["semantic"] != "DONE":
                 self.failure_delivery(row,attempt,task,"Incomplete task: retain all findings/failures/UNKNOWNs")

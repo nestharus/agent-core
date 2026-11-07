@@ -20,6 +20,12 @@ from . import reviews, resource_scopes, windows
 from .configuration import owned_service_conflict, assert_current
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS processing_report_inputs(
+ event TEXT PRIMARY KEY,capability TEXT NOT NULL,source_hash TEXT NOT NULL,receipt_hash TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS processing_report_no_update BEFORE UPDATE ON processing_report_inputs
+ BEGIN SELECT RAISE(ABORT,'immutable collected report input'); END;
+CREATE TRIGGER IF NOT EXISTS processing_report_no_delete BEFORE DELETE ON processing_report_inputs
+ BEGIN SELECT RAISE(ABORT,'immutable collected report input'); END;
 CREATE TABLE IF NOT EXISTS service_runs(
  controller TEXT PRIMARY KEY,capability TEXT NOT NULL,socket TEXT NOT NULL,
  state TEXT NOT NULL,started REAL NOT NULL,returned REAL,receipt TEXT);
@@ -41,7 +47,7 @@ def validate(runtime, selection):
         raise Refusal('attributed reports need the selected sole software Reviews integrator')
     validate_admission(runtime, policy.get('admission'))
     windows.validate_delegation(runtime, selection)
-    resource_scopes.validate(runtime, policy['legacy_resources'])
+    resource_scopes.validate(runtime, policy['legacy_resources'], selection)
     reviews.validate(runtime, policy['reviews'])
     if set(policy['reviews']) - set(selection['tasks']):
         raise Refusal('selected Reviews executor outside task authority')
@@ -115,6 +121,14 @@ def ingest_report(runtime, actor, task, receipt):
         raise Refusal('whole report exceeds selected intake envelope; no truncation or full-report claim')
     runtime.processing.boards['Reviews'].verify_authority(runtime)
     runtime.ingest(event)
+    with runtime.tx():
+        if runtime.event(event['id']) != event:
+            raise Refusal('original public report event differs')
+        prior = runtime.one('SELECT * FROM processing_report_inputs WHERE event=?', (event['id'],))
+        frozen = dict(event=event['id'], capability=cap['id'], source_hash=digest(event), receipt_hash=digest(receipt))
+        if prior and prior != frozen:
+            raise Refusal('original collected report changed; no replacement')
+        runtime.db.execute('INSERT OR IGNORE INTO processing_report_inputs VALUES(?,?,?,?)', tuple(frozen.values()))
     return {'event': event['id'], 'report_hash': digest(receipt), 'native_owner_execution': False,
             'acceptance': None, 'meaning': 'durable attributed input; fresh classification, sole integration and Work consumption still owed'}
 

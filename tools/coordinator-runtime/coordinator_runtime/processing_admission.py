@@ -98,6 +98,11 @@ def admit(runtime, event_id):
         runtime.db.execute('INSERT INTO admissions VALUES(?,?,?,NULL)', (package, runtime.config['actor'], encoded))
         runtime.db.execute('INSERT INTO processing_admissions VALUES(?,?,?,?,?,?)',
                            (package, cap['id'], event_id, scope_name, encoded, runtime.clock()))
+        # Freeze the runtime-applied whole admission after the random capability
+        # exists. Selection binds topic/scope; neither immutable input is edited.
+        applied = runtime.one('SELECT * FROM admissions WHERE package=?', (package,))
+        runtime.db.execute('INSERT INTO processing_admission_resolutions VALUES(?,?,?,?,?,?,?)',
+            (package, cap['id'], event_id, scope_name, digest(scope), digest(applied), digest(event)))
         return {'package': package, 'receipt': receipt, 'acceptance_inferred': False,
                 'native_owner_consent': False, 'existing_holds': 'unchanged'}
 
@@ -263,3 +268,30 @@ def admit_pending(runtime):
             admit(runtime, row['id'])
         except (Refusal, OSError, TypeError, ValueError) as exc:
             runtime.record_operational_error(row['id'], {'dependency': str(exc)}, row['role'], 'processing-admission-dependency')
+
+
+def resolved(runtime, package, topic, scope_hash):
+    """Exact current Work-issued selection -> immutable applied admission."""
+    cap, selected = runtime.processing.current()
+    runtime.processing.boards['Work'].verify_authority(runtime)
+    row = runtime.one('SELECT * FROM processing_admission_resolutions WHERE package=?', (package,))
+    applied = runtime.one('SELECT * FROM admissions WHERE package=?', (package,))
+    original = runtime.one('SELECT * FROM processing_admissions WHERE package=?', (package,))
+    scope = selected.get('software_admission', {}).get('scopes', {}).get(topic)
+    if (cap['issuer'] != runtime.config['roles']['Work']['owner'] or not row or not applied or not original
+            or not scope or row['capability'] != cap['id'] or original['capability'] != cap['id']
+            or row['topic'] != topic or original['scope'] != topic or row['scope_hash'] != scope_hash
+            or digest(scope) != scope_hash or digest(applied) != row['admission_hash']
+            or applied['receipt'] != original['receipt'] or applied['owner'] != runtime.config['actor']
+            or row['event'] != original['event']):
+        raise Refusal('unchanged runtime-resolved current software admission required')
+    event = runtime.event(row['event'])
+    state = runtime.one('SELECT hold,hash FROM events WHERE id=?', (row['event'],))
+    receipt = json.loads(applied['receipt'])
+    if (state['hold'] or state['hash'] != row['source_hash'] or digest(event) != row['source_hash']
+            or not runtime.processing.event(event) or event.get('author') not in scope['submitters']
+            or event.get('body', {}).get('topic') != topic or event.get('package') != package
+            or receipt['software_admission']['scope_hash'] != scope_hash
+            or receipt['software_admission']['capability'] != cap['id']):
+        raise Refusal('original topic/source/submitter identity changed or held')
+    return applied

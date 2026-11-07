@@ -80,3 +80,8 @@ no-start evidence, all reports/findings and genuine coverage frontiers. Correct
 a report/routing error without replaying Source or reviewers. The integrator
 receives the full original/correction history. Already collected returns route
 new findings as a new addressed message; no blind integration/review replay.
+
+For Work's explicitly selected finite collected-report integration route, retain
+all exact whole input envelopes in a `collected_reports` finding as specified in
+`software-role-routes.md`. The attributed report grants no native execution,
+context, effect, acceptance or historical-clearance authority.
