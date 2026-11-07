@@ -365,7 +365,8 @@ repository, and/or explicitly supplied safe report/procedure files. For reports
 alone use `source:null`, `components:{}`, `repository_reads:[]`. Roots equal these
 files exactly (maximum 64, 1 MiB each, 4 MiB total per task); directories, Git
 metadata, startup AGENTS/WORK_LOG, profile/excluded/ancestor and symlink paths
-are refused before material acquisition. A linked worktree currently requires
+are refused before working-file body acquisition. Immutable tracked blobs are
+checked first; this does not read through a working-file alias. A linked worktree currently requires
 a separate concrete source-owner Git binding and is unsupported by this option.
 Tracked source is verified before working-file bytes are read; no untracked
 body discovery is used. Repository identities confer no directory access.
@@ -386,6 +387,14 @@ material classification and concrete binding; Work selects it. Filesystem/Git
 immutability and absence of hidden Git object-store indirection are cooperative
 owner obligations, not OS read isolation or noncooperating-writer CAS. Preserve
 all known exclusions. This policy change cannot use source-only/fixed8 repair.
+
+The seed commit and file hashes witness material at configuration selection.
+Later admitted heads may change bytes at already permitted paths, under the
+existing package, source, caller and collector checks; new paths or repository
+identities need another explicit ceiling transition. Native Reviews checks
+component and relationship paths against task material roots before listing or
+reading them for both scoped and unscoped tasks. Repository identity alone
+does not admit a component directory or any of its children.
 
 `package_scoped_proposals: [EXISTING_BRANCH_PROPOSER]` is an **unselected opt-in
 narrowing** for the existing read-only software Branch proposer. It requires
