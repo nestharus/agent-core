@@ -11,7 +11,9 @@ Preserve original review contexts, collectors, methods, source revisions and all
 relevant CI/QA/acceptance/final-risk gates. Later arrivals are continuations, not
 newly completed work or a current review verdict. Actual Root builders still
 commit AND push. Source-only capability is not live adoption or qualification.
-See local-integration.md in the selected source for the service boundary.
+See local-integration.md beside the coordinator executable in the authorized
+runtime release root for the service boundary (not templates/local-integration.md).
+Use the supplied selected runtime root; never guess a different checkout.
 
 
 Perform the supplied phase personally without descendants. Work is the semantic
@@ -93,4 +95,5 @@ permission ceremony or a private-journal discovery obligation.
 
 The seven joined publication receipts, actual new entry and interruption custody
 return to Work through the existing completion/report path. Six witnesses alone
-never complete seven duties. See bounded-catalog.md in the selected runtime source.
+never complete seven duties. See bounded-catalog.md beside the coordinator
+executable in that same authorized runtime release root (not templates/bounded-catalog.md).

@@ -8,6 +8,7 @@ qualification. Configuration readback is not model execution attestation.
 
 import asyncio
 import errno
+import hashlib
 from contextlib import suppress
 from .contracts import scoped_startup
 import json
@@ -38,6 +39,14 @@ class TurnFailure(Refusal):
         self.capacity = error.get("capacity", False)
         self.projection = error
         super().__init__("owned turn ended failed/interrupted" + (" with capacity error" if self.capacity else ""))
+
+
+class HandbackFailure(Refusal):
+    """Collected owned turn, but no uniquely decodable authoritative handback.
+
+    A later answer can supply useful typed evidence, never clear this capture
+    hold. Accepting a reconciled conflict needs a shared collected contract.
+    """
 
 
 class MetadataFailure(Refusal):
@@ -200,6 +209,9 @@ class Peer:
         self.child, self.limit = child, limit
         self.pending, self.finals = {}, {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
+        self.owned_turns, self.final_records, self.conflicting_turns = set(), [], set()
+        self.capture_issues = []
+        self.continuation_used = False
         self.errors = []
         self.tools, self.unknown_tools, self.thread = {}, set(), None
         self.events = asyncio.Queue(maxsize=8)
@@ -212,6 +224,23 @@ class Peer:
         self.rpc_timings = {}
         self.capture = "complete"
         self.reader = asyncio.create_task(self.read())
+
+    def hold_capture(self, reason):
+        if reason not in self.capture_issues and len(self.capture_issues) < 32:
+            self.capture_issues.append(reason)
+        if self.capture == 'complete':
+            self.capture = reason
+
+    def tool_inventory_complete(self):
+        return (not self.unknown_tools and not any('tool' in x or 'delegation' in x for x in self.capture_issues)
+            and all(x['thread'] == self.thread and x['turn'] in self.owned_turns
+                and x['completed_notification'] and x['status'] in {'completed', 'failed'}
+                and (x['type'] != 'commandExecution' or x['exit_code'] is not None)
+                for x in self.tools.values()))
+
+    def validate_turn_correlation(self):
+        if any(row['turn'] not in self.owned_turns for row in self.final_records):
+            self.hold_capture('foreign-final-turn')
 
     async def send(self, value):
         self.child.stdin.write((encode(value)+"\n").encode())
@@ -287,7 +316,7 @@ class Peer:
         try:
             await self.read_frames()
         except Exception as exc:
-            self.capture = "incomplete"
+            self.hold_capture("incomplete")
             self.fail_pending(Refusal(f"protocol reader failed: {type(exc).__name__}"))
         finally:
             self.fail_pending(Refusal("owned app-server stream ended before RPC collection"))
@@ -316,7 +345,7 @@ class Peer:
             return
         if "id" in value:
             await self.send({"id": value["id"], "error": {"code": -32601, "message": "runtime grants no server-request effects"}})
-            self.capture = "unhandled-server-request"
+            self.hold_capture("unhandled-server-request")
             return
         self.notification(value)
 
@@ -326,64 +355,103 @@ class Peer:
             item = params.get('item', {})
             kind = item.get('type')
             if kind in {'commandExecution','fileChange'}:
-                if self.thread and params.get('threadId') != self.thread:
-                    self.capture = 'foreign-tool-completion'
+                if not self.thread or params.get('threadId') != self.thread:
+                    self.hold_capture('foreign-tool-completion')
                 elif not isinstance(item.get('id'),str) or not 1<=len(item['id'])<=128:
-                    self.capture = 'invalid-tool-item-identity'
+                    self.hold_capture('invalid-tool-item-identity')
                 elif len(self.tools) < 128 or item.get('id') in self.tools:
-                    self.tools[item.get('id')] = {'id': item.get('id'), 'type': kind, 'turn': params.get('turnId'),
+                    row = {'id': item.get('id'), 'type': kind, 'thread': params.get('threadId'), 'turn': params.get('turnId'),
                         'status': item.get('status'), 'completed_notification': method == 'item/completed',
                         'exit_code': item.get('exitCode') if type(item.get('exitCode')) is int else None,
                         'duration_ms': item.get('durationMs') if type(item.get('durationMs')) is int else None,
                         'provider_process_id': item.get('processId')[:128] if isinstance(item.get('processId'),str) else None,
                         'OS_handle_owned': False}
+                    command = item.get('command')
+                    if kind == 'commandExecution' and isinstance(command, str):
+                        body = command.encode()
+                        row.update(command_sha256=hashlib.sha256(body).hexdigest(), command_bytes=len(body))
+                    old = self.tools.get(item['id'])
+                    if old and (old['turn'] != row['turn'] or old['type'] != kind
+                            or old['completed_notification'] and method == 'item/completed' and old != row):
+                        self.hold_capture('conflicting-tool-completion')
+                    elif not old or not old['completed_notification']:
+                        self.tools[item['id']] = row
                 else:
-                    self.capture = 'tool-metadata-count-bound'
+                    self.hold_capture('tool-metadata-count-bound')
             elif kind not in {'agentMessage','userMessage','reasoning','plan','contextCompaction'}:
                 self.unknown_tools.add(str(kind)[:100])
         if method == "error" and len(self.errors) < 8:
             self.errors.append(safe_error(params.get("error", params)))
         if method == "item/completed":
-            self.final_item(params.get("turnId"), params.get("item", {}))
+            self.final_item(params.get("turnId"), params.get("item", {}), params.get('threadId'))
         if method == "turn/completed":
             turn = params.get("turn", {})
             for item in turn.get("items", []):
-                self.final_item(turn.get("id"), item)
+                # The turn aggregate is a consistency witness, not a substitute
+                # for the authoritative item/completed notification.
+                self.final_item(turn.get("id"), item, params.get('threadId'), aggregate=True)
             self.events.put_nowait({"method": method, "threadId": params.get("threadId"),
                                    "turn": {"id": turn.get("id"), "status": turn.get("status"),
                                             "error": safe_error(turn.get("error"))}})
         if method in {"item/started", "item/completed"}:
             kind = params.get("item", {}).get("type", "")
             if re.search(r"collab|subAgent", kind):
-                self.capture = "unexpected-delegation-observed"
+                self.hold_capture("unexpected-delegation-observed")
 
-    def final_item(self, turn, item):
+    def final_item(self, turn, item, thread, aggregate=False):
         if item.get("type") != "agentMessage" or item.get("phase") != "final_answer":
+            return
+        if not self.thread or thread != self.thread:
+            self.hold_capture('foreign-final-completion')
+            return
+        if not isinstance(turn, str) or not 1 <= len(turn) <= 128:
+            self.hold_capture('invalid-final-turn-identity')
             return
         text = item.get("text", "")
         if not isinstance(text, str) or len(text.encode()) > self.limit:
-            self.capture = "final-exceeded-bound"
+            self.hold_capture("final-exceeded-bound")
             return
         item_id = item.get("id")
         if not isinstance(item_id, str) or not item_id or len(item_id) > 128:
-            self.capture = "invalid-final-item-identity"
+            self.hold_capture("invalid-final-item-identity")
             return
-        if item_id in self.final_items and self.final_items[item_id] == text:
+        key = (thread, turn, item_id)
+        if key in self.final_items and self.final_items[key] == text:
             return
-        if len(self.final_items) >= 16:
-            self.capture = "final-count-exceeded-bound"
+        if len(self.final_records) >= 16:
+            self.hold_capture("final-count-exceeded-bound")
             return
-        self.final_items[item_id] = text
+        try:
+            typed, valid = decode_final(text), True
+        except (ValueError, Refusal):
+            typed, valid = {'error': 'invalid final JSON', 'bytes': len(text.encode())}, False
+        self.final_records.append({'thread': thread, 'turn': turn, 'item': item_id,
+            'authority': 'turn-aggregate' if aggregate else 'item/completed',
+            'valid_json': valid, 'typed_return': typed})
+        if aggregate:
+            self.hold_capture('aggregate-final-without-matching-authority')
+            return
+        if key in self.final_items:
+            self.conflicting_turns.add(turn)
+            self.hold_capture('conflicting-final')
+        else:
+            self.final_items[key] = text
         if turn in self.completed_turns:
             self.preserve_late(turn, text)
-            self.capture = "late-final-needs-reconciliation"
+            self.hold_capture("late-final-needs-reconciliation")
             return
         prior = self.finals.get(turn)
-        if prior is not None and prior != text:
+        try:
+            same = valid and prior is not None and encode(decode_final(prior)) == encode(typed)
+        except (ValueError, Refusal):
+            same = False
+        if prior is not None and not same:
             self.preserve_late(turn, text)
-            self.capture = "conflicting-final"
+            self.conflicting_turns.add(turn)
+            self.hold_capture("conflicting-final")
             return
-        self.finals[turn] = text
+        if prior is None:
+            self.finals[turn] = text
 
     def preserve_late(self, turn, text):
         try:
@@ -402,13 +470,31 @@ class Peer:
         if event["method"] == "owner/EOF":
             raise Refusal("process stream ended before matching turn completion")
         if event["threadId"] != thread or event["turn"]["id"] != turn:
+            self.hold_capture('foreign-turn-completion')
             raise Refusal("foreign or stale completion cannot satisfy this owned turn")
+        if thread != self.thread or turn not in self.owned_turns:
+            self.hold_capture('unowned-turn-completion')
+            raise Refusal('turn completion lacks owned start correlation')
+        if event['turn']['status'] not in {'completed', 'failed', 'interrupted'}:
+            self.hold_capture('nonterminal-turn-completion')
+            raise Refusal('turn completion lacks an actual terminal status')
+        self.completed_turns.add(turn)
+        self.validate_turn_correlation()
         if event["turn"]["status"] != "completed" or event["turn"]["error"]:
             raise TurnFailure(event["turn"]["error"] or {"capacity": False})
+        return self.terminal_result(turn)
+
+    def terminal_result(self, turn):
+        if turn in self.conflicting_turns:
+            raise HandbackFailure('owned terminal handback has conflicting authoritative finals')
         if turn not in self.finals:
+            self.hold_capture('missing-final-answer')
             raise Refusal("completed turn has no final answer")
-        self.completed_turns.add(turn)
-        return decode_final(self.finals.pop(turn))
+        try:
+            return decode_final(self.finals[turn])
+        except (ValueError, Refusal) as exc:
+            self.hold_capture('invalid-final-json')
+            raise HandbackFailure('owned authoritative final is invalid JSON; content remains unknown') from exc
 
 
 def thread_request(spec,binding):
@@ -547,6 +633,9 @@ class AppServer:
         if schema and set(schema.get('properties',{}))=={'payload_json'}:
             if 'prior_turn_result' in outcome['detail']:task_result(result,outcome['detail']['prior_turn_result'])
             else:task_result(result)
+            for original in outcome['detail'].get('prior_terminal_returns', []):
+                if original['valid_json']:
+                    task_result(result, original['typed_return'])
         return result
 
     async def unsubscribe(self, peer, store, attempt, outcome):
@@ -586,6 +675,7 @@ class AppServer:
             store.authorize_launch(attempt)
             started = await self.start_turn(peer, thread, prompt, binding, schema, spec)
         turn = canonical_uuid(started["turn"]["id"])
+        peer.owned_turns.add(turn)
         store.session(attempt, thread, turn)
         timeout = self.config["deadlines"]["classify" if store.attempt(attempt)["kind"] in {"classifier", "diagnosis"} else "task"]
         try:
@@ -596,6 +686,35 @@ class AppServer:
             outcome["detail"]["prior_turn_failure"] = exc.projection
             outcome["detail"]["resume_disposition"] = "attempted-after-collected-failed-turn"
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
+        except HandbackFailure as exc:
+            # Do not select a late/last parseable candidate or lose the chance
+            # to return honest typed evidence before this ephemeral owner exits.
+            # No shared conflict-resolution receipt exists: this remains held
+            # even if the one clarification supplies a well-formed response.
+            originals = [r for r in peer.final_records if r['turn'] == turn]
+            outcome['detail'].update(prior_terminal_returns=originals,
+                handback_reconciliation='unresolved-shared-collected-contract-required',
+                resume_disposition='attempted-owned-terminal-handback-clarification')
+            outcome['error'] = str(exc)
+            is_task = bool(schema and set(schema.get('properties', {})) == {'payload_json'})
+            if (not is_task or not peer.tool_inventory_complete()
+                    or any(x not in {'conflicting-final', 'invalid-final-json'} for x in peer.capture_issues)):
+                raise Refusal('handback clarification lacks complete owned original/tool capture') from exc
+            clarification = ('Return one uniquely typed terminal handback for this SAME owned task. '
+                'Preserve every original adverse/unknown fact and all prepared stages unchanged. '
+                'No construction replay, canonical publication, new duties, or invented ID correlations. '
+                'Original capture remains held; this response cannot waive a conflict or unknown JSON content. '
+                'Conserve every parseable original under the shared original-array/field rules. '
+                'Invalid originals below carry metadata only; their precise content remains unknown.\n'
+                + task_result_instructions() + (readiness.INSTRUCTIONS if spec.get('routine_completion') else '')
+                + '\nORIGINAL_TERMINAL_RETURNS=' + encode(originals)
+                + self.tool_feedback(peer))
+            try:
+                return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema, clarification)
+            except Exception as failure:
+                outcome['detail']['handback_clarification_failure'] = (str(failure)[:1000]
+                    if isinstance(failure, Refusal) else type(failure).__name__)
+                raise
         outcome["result"] = result
         items=list(peer.tools.values())
         is_task=bool(schema and set(schema.get('properties',{}))=={'payload_json'})
@@ -611,10 +730,7 @@ class AppServer:
                 'A real partial/blocker remains partial/blocked; no DONE merely to repair JSON, canonical writes or new duties.\n'+
                 task_result_instructions()+(readiness.INSTRUCTIONS if spec.get('routine_completion') else '')+
                 '\nCOMPLETION_ISSUES='+encode(issues)+
-                '\nThese IDs are controller-observed protocol identity, not a correlation to your visible chunk labels.'+
-                '\nOBSERVED_TOOL_METADATA='+encode(items)+
-                '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
-                '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools)))
+                self.tool_feedback(peer))
             return await self.continue_idle(peer,store,attempt,thread,turn,spec,binding,schema,prompt)
         if isinstance(result, dict) and result.get("semantic") in {"PARTIAL", "FAILED", "UNKNOWN"}:
             outcome["detail"]["prior_turn_result"] = result
@@ -626,11 +742,22 @@ class AppServer:
                     'own observed protocol IDs, never inferred correlations to visible labels. Complete only '
                     'genuinely remaining authorized local work or remain truthfully partial/blocked.\n'+
                     task_result_instructions()+readiness.INSTRUCTIONS+
-                    '\nOBSERVED_TOOL_METADATA='+encode(items)+
-                    '\nOBSERVED_ADVERSE_PROTOCOL_IDS='+encode([r['id'] for r in items if r.get('exit_code') not in {None,0} or r.get('status')=='failed'])+
-                    '\nUNKNOWN_TOOL_TYPES='+encode(sorted(peer.unknown_tools)))
+                    self.tool_feedback(peer))
             return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema,prompt)
         return result
+
+    @staticmethod
+    def tool_feedback(peer):
+        items = list(peer.tools.values())
+        return ('\nThese IDs are controller-observed protocol identity, not a correlation to your visible chunk labels. '
+            'command_sha256/command_bytes, when present, fingerprint the exact UTF-8 command from the actual '
+            'completion item, not its output or a reconstructed command. Match only exact known commands. '
+            'For each failed read select the exact successful replacement protocol items and conserved own '
+            'verification evidence; an unrelated later zero cannot resolve it. Unmatched/ambiguous identities remain unknown.\n'
+            'OBSERVED_TOOL_METADATA=' + encode(items) +
+            '\nOBSERVED_ADVERSE_PROTOCOL_IDS=' + encode([r['id'] for r in items
+                if r.get('exit_code') not in {None, 0} or r.get('status') == 'failed']) +
+            '\nUNKNOWN_TOOL_TYPES=' + encode(sorted(peer.unknown_tools)))
 
     async def start_turn(self, peer, thread, prompt, binding, schema, spec):
         if schema and set(schema.get("properties", {})) == {"payload_json"}:
@@ -651,11 +778,25 @@ class AppServer:
         if event.get("threadId") != thread or event.get("turn", {}).get("id") != turn:
             raise Refusal("original interruption/end unknown; overlapping continuation prohibited")
         # The original may have completed concurrently with interrupt. Conserve that result.
-        if event["turn"]["status"] == "completed" and turn in peer.finals:
-            return decode_final(peer.finals.pop(turn))
+        if event['turn']['status'] not in {'completed', 'failed', 'interrupted'}:
+            raise Refusal('original turn has no terminal status; continuation prohibited')
+        peer.completed_turns.add(turn)
+        if event["turn"]["status"] == "completed":
+            if event['turn'].get('error'):
+                raise TurnFailure(event['turn']['error'])
+            return peer.terminal_result(turn)
         return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema)
 
     async def continue_idle(self, peer, store, attempt, thread, turn, spec, binding, schema, clarification=None):
+        peer.validate_turn_correlation()
+        if (peer.continuation_used or peer.child.returncode is not None or peer.reader.done()
+                or peer.thread != thread or turn not in peer.owned_turns or turn not in peer.completed_turns):
+            raise Refusal('single continuation needs a live owned collected original turn and unused budget')
+        if (not peer.tool_inventory_complete() or any(x not in {'conflicting-final', 'invalid-final-json'}
+                for x in peer.capture_issues)):
+            raise Refusal('original capture/tool uncertainty prohibits continuation')
+        peer.continuation_used = True
+        store.authorize_launch(attempt)
         state = await peer.rpc("thread/read", {"threadId": thread, "includeTurns": False})
         if state.get("thread", {}).get("id") != thread or state.get("thread", {}).get("status", {}).get("type") != "idle":
             raise Refusal("owned same-session continuation requires actual idle readback")
@@ -667,7 +808,14 @@ class AppServer:
             prompt+='\n'+task_result_instructions()
         async with store.execution_pool.admission(store.attempt(attempt)['profile']):
             store.authorize_launch(attempt)
+            peer.validate_turn_correlation()
+            # A live reader can observe late/foreign capture while idle readback
+            # or pool admission waits. Never launch through that new uncertainty.
+            if (peer.child.returncode is not None or peer.reader.done() or not peer.tool_inventory_complete()
+                    or any(x not in {'conflicting-final', 'invalid-final-json'} for x in peer.capture_issues)):
+                raise Refusal('owned continuation guard changed before start')
             next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
+        peer.owned_turns.add(next_turn)
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])
 
@@ -684,16 +832,20 @@ class AppServer:
             try:
                 await asyncio.wait_for(peer.reader, self.config["deadlines"]["shutdown"])
             except asyncio.TimeoutError:
-                peer.capture = "incomplete-owned-pipe-closure"
+                peer.hold_capture("incomplete-owned-pipe-closure")
+            peer.validate_turn_correlation()
             outcome["capture"] = peer.capture
+            if peer.capture_issues:
+                outcome['detail']['capture_issues'] = peer.capture_issues
+            if peer.final_records and peer.capture != 'complete':
+                outcome['detail']['terminal_return_evidence'] = peer.final_records
             if peer.late_finals:
                 outcome["detail"]["late_or_conflicting_returns"] = peer.late_finals
             if peer.errors:
                 outcome["detail"]["protocol_failures"] = peer.errors
             items = list(peer.tools.values())
             outcome['detail']['tool_completion'] = {'items': items, 'unknown_types': sorted(peer.unknown_tools),
-                'complete': not peer.unknown_tools and all(x['completed_notification'] and x['status'] in {'completed','failed'}
-                     and (x['type'] != 'commandExecution' or x['exit_code'] is not None) for x in items),
+                'complete': peer.tool_inventory_complete(),
                 'nonzero_completions': [x['id'] for x in items if x['exit_code'] is not None and x['exit_code'] != 0],
                 'meaning': 'provider completion metadata; not OS ownership, raw transcript or absence of descendants'}
         if (outcome["detail"].get("ephemeral") and outcome["exit"] == 0
