@@ -7,9 +7,10 @@ checker. It adds no production module or import-acquisition footprint. The
 legacy collected-report API retains its separate schema and source restrictions;
 the two repair protocols cannot stack on one capability.
 
-Work selects the exact changed subset of `configuration.py`, `integration.py`,
-`integration_management.py`, `resource_scopes.py`, `cli.py`, and
-`report_repair.py`. Both release-file and implementation hashes must agree on
+Work selects the exact changed subset of these eight public modules:
+`configuration.py`, `integration.py`, `integration_management.py`,
+`resource_scopes.py`, `cli.py`, `report_repair.py`, `local_integration.py`, and
+`store.py`. Both release-file and implementation hashes must agree on
 every module before and after. Module/dependency addition or removal, a changed
 release location, and any other changed release file are refused. Templates,
 task definitions, policy, provider/SDK/scheduler sources, static dependencies,

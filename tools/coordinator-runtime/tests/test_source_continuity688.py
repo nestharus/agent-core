@@ -268,8 +268,25 @@ class Continuity(Fixture):
         for sql in ('UPDATE same_authority_source_repairs_v1 SET issuer=issuer','DELETE FROM same_authority_source_repairs_v1'):
             with self.assertRaises(sqlite3.IntegrityError):self.store.db.execute(sql)
 
+    def test_exact_eight_module_ceiling_accepts_local_integration_and_store(self):
+        self.assertEqual(repair.SOURCE_MODULES, {
+            'configuration.py','integration.py','integration_management.py','resource_scopes.py',
+            'cli.py','report_repair.py','local_integration.py','store.py'})
+        for modules in (['local_integration.py'], ['store.py'], ['local_integration.py','store.py']):
+            with self.subTest(modules=modules):
+                before,after=copy.deepcopy(self.old_release),copy.deepcopy(self.old_release)
+                old,new=dict(self.original_impl),dict(self.original_impl)
+                paths=[]
+                for name in modules:
+                    self.assertIn(name,old)
+                    path=before['root']+'/tools/coordinator-runtime/coordinator_runtime/'+name
+                    new[name]=digest('fictional reviewed change to '+name)
+                    after['files'][path]=new[name]
+                    paths.append(path)
+                self.assertEqual(repair.source_compatible(before,after,old,new,modules),sorted(paths))
+
     def test_exact_delta_does_not_expand_modules_location_pool_or_dependencies(self):
-        for name in ('software.py','processing.py','store.py','appserver.py'):
+        for name in ('software.py','processing.py','appserver.py'):
             before,after=copy.deepcopy(self.old_release),copy.deepcopy(self.old_release)
             old,new=dict(self.original_impl),dict(self.original_impl)
             new[name]='unselected';after['files'][before['root']+'/tools/coordinator-runtime/coordinator_runtime/'+name]='unselected'

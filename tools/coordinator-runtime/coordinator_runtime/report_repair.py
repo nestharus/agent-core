@@ -235,7 +235,8 @@ def receipt(key, selected):
 # loader and pin hooks; no new import footprint or authorize-arbitrary-code flag.
 SOURCE_VERSION = 'same-authority-source-repair-v1'
 SOURCE_MODULES = {'configuration.py', 'integration.py', 'integration_management.py',
-                  'resource_scopes.py', 'cli.py', 'report_repair.py'}
+                  'resource_scopes.py', 'cli.py', 'report_repair.py',
+                  'local_integration.py', 'store.py'}
 
 
 def source_record(runtime, key):
