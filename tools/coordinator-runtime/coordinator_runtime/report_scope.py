@@ -336,7 +336,7 @@ def integration_inputs(runtime, row):
     selected = runtime.processing.current()[1]
     record = selected.get('service', {}).get('legacy_resources', {}).get(row['role'], {})
     from .resource_scopes import qa_accounts, blocked
-    applies = (row['task'] == 'reviews-integrator' and 'reviews_report' in record
+    applies = (row['task'] == 'reviews-integrator' and ('reviews_report' in record or 'native_review_return' in record)
                or row['task'] == 'qa-cleanup' and any(a.get('cleanup') and a['binding']['package'] == row['package']
                    for a in qa_accounts(record)))
     if not applies:

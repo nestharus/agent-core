@@ -145,7 +145,7 @@ def original_modes(runtime, job):
 def validate(runtime, policy, selection=None):
     for role, record in policy.items():
         if (role not in runtime.config['roles'] or not isinstance(record, dict)
-                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
+                or set(record) - {'qa_operation', 'qa_operations', 'reviews_report', 'native_review_return'} != {'original_hold', 'roots', 'unbounded', 'evidence'}
                 or type(record['unbounded']) is not bool or not isinstance(record['roots'], list)):
             raise Refusal('legacy resource account needs exact hold, roots, unbounded and evidence')
         if runtime.one('SELECT legacy_hold FROM enrollments WHERE role=?', (role,))['legacy_hold'] != record['original_hold']:
@@ -171,6 +171,9 @@ def validate(runtime, policy, selection=None):
                         raise Refusal('QA policy must bind exact selected software topic/scopes')
             if len(packages) != len(set(packages)):
                 raise Refusal('independent QA policies need distinct packages')
+        if 'native_review_return' in record:
+            from .native_review_scope import validate as validate_native
+            validate_native(runtime, role, record, selection)
         if 'reviews_report' in record:
             from .report_scope import validate as validate_report
             validate_report(runtime, role, record, selection)
@@ -410,6 +413,12 @@ def blocked(runtime, row, task=None):
         try:
             operation_held = qa_operation(runtime, row, record)
         except (Refusal, OSError, subprocess.SubprocessError, KeyError, TypeError, ValueError):
+            return True
+    elif 'native_review_return' in record:
+        try:
+            from .native_review_scope import eligible
+            operation_held = eligible(runtime, row, record)
+        except (Refusal, OSError, KeyError, TypeError, ValueError):
             return True
     elif 'reviews_report' in record:
         try:
