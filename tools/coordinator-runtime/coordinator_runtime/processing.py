@@ -471,13 +471,18 @@ class Access:
     def task(self, row):
         _, selection = self.current()
         from .processing_admission import permits
-        if (row['role'] == 'Reviews' and row['phase'] == 'integrator'
+        configured = self.runtime.config['tasks'].get(row['task'], {})
+        if (configured.get('role') == 'Reviews' and configured.get('phase') == 'integrator'
                 and 'native_review_return' in selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {})):
             from .resource_scopes import blocked
             # Scheduler and reservation consult task() before their legacy-hold
             # guards. Fence physical admission ahead of this first event read.
             with (nullcontext() if self.runtime.db.in_transaction else self.runtime.tx()):
-                if blocked(self.runtime, row):
+                native_row = {**row, 'role': configured['role'], 'phase': configured['phase']}
+                if 'package' not in native_row:
+                    metadata = self.runtime.one("SELECT json_extract(payload,'$.package') AS package FROM events WHERE id=?", (row['event'],))
+                    native_row['package'] = metadata['package'] if metadata else None
+                if blocked(self.runtime, native_row):
                     return False
                 return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event'])) and permits(self.runtime, row)
         return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event'])) and permits(self.runtime, row)
