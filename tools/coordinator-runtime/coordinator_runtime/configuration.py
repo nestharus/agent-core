@@ -86,11 +86,28 @@ def original_binding(runtime, role, grant):
     return original_digest(runtime)
 
 
+class _PathExclusions:
+    """Lexical operands for one release call, never a validation result cache.
+
+    Component prefixes preserve Path equality/ancestry (including / versus //).
+    Rebuild from current exclusions/home at every release boundary. No stat,
+    alias, byte-pin, pool or authority outcome is retained here.
+    """
+    def __init__(self, exclusions):
+        self.prefixes = frozenset(Path(p).parts for p in
+            [*exclusions, *(Path.home()/p for p in PROFILES)])
+
+    def contains(self, path):
+        parts = path.parts
+        return any(parts[:end] in self.prefixes for end in range(1, len(parts)+1))
+
+
 def _path(value, exclusions):
     path = Path(required_text(value, 'current selection path', 4000))
     if not path.is_absolute() or '..' in path.parts:
         raise Refusal('absolute canonical current selection path required')
-    if any(path == Path(p) or path.is_relative_to(Path(p)) for p in [*exclusions, *(str(Path.home()/p) for p in PROFILES)]):
+    excluded = exclusions if isinstance(exclusions, _PathExclusions) else _PathExclusions(exclusions)
+    if excluded.contains(path):
         raise Refusal('current selector is excluded before metadata')
     if any(p.is_symlink() for p in (path, *path.parents)):
         raise Refusal('current selection cannot follow aliases')
@@ -107,7 +124,7 @@ def release(runtime, candidate):
     """Actual public source bytes; no account probing, pool allocation or install."""
     directory = Path(__file__).resolve().parents[1]
     root = directory.parent.parent
-    exclusions = candidate.get('artifact_exclusions', [])
+    exclusions = _PathExclusions(candidate.get('artifact_exclusions', []))
     expected = {'board_library': str(root/'tools/message-board'),
                 'operator_cli': str(directory/'coordinator')}
     if any(candidate.get(k) != v for k, v in expected.items()):
@@ -125,7 +142,10 @@ def release(runtime, candidate):
     operator = regular_path(str(_path(candidate.get('operator_config'), exclusions)))
     if parse_json(operator.read_text()) != candidate:
         raise Refusal('operator config file must contain this exact selected current configuration')
-    paths = [*sorted((directory/'coordinator_runtime').glob('*.py')), directory/'coordinator',
+    # Guard the source directory before glob enumeration as well as each file
+    # before metadata/bytes. This index never memoizes either guard's outcome.
+    modules = _path(str(directory/'coordinator_runtime'), exclusions)
+    paths = [*sorted(modules.glob('*.py')), directory/'coordinator',
              *(root/'tools/message-board'/p for p in ('catalog.py', 'board_store.py', 'active_listener.py', 'queue_transport.py', 'managed_owner.py')),
              root/'tools/direct-child/execution_pool.py', root/'tools/direct-child/dispatch.py',
              root/'tools/direct-codex-child/launch.sh', directory/'templates/coordinator-receive.md',
