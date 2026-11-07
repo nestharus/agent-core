@@ -442,10 +442,105 @@ def read_ceiling_extensions(runtime, original, value, entries):
             task['repository_reads'] = list(dict.fromkeys([*task.get('repository_reads', []), *identities]))
 
 
+PROTOCOL_SCHEMA_FIELDS = {
+    'v2/ThreadStartParams.json': {'ephemeral', 'model', 'config'},
+    'v2/ConfigReadParams.json': {'includeLayers'},
+    'v2/ConfigReadResponse.json': {'config'},
+    'v2/ThreadUnsubscribeParams.json': {'threadId'},
+    'v2/ThreadDeleteParams.json': {'threadId'},
+}
+
+
+def select_protocol(runtime, original, value, choice):
+    """Recheck Work-selected public evidence, never infer native compatibility.
+
+    Package provenance is the genuine Work issuer's explicit attestation after
+    trusted public acquisition. Local JSON cannot authenticate a registry or
+    establish behavior; byte pins and the actual version are checked here.
+    """
+    fields = {'configuration', 'owner', 'authority', 'public_package', 'codex',
+              'executable_sha256', 'cli_version', 'qualification',
+              'qualification_sha256', 'schema_files', 'settings_check', 'settings_sha256'}
+    if not isinstance(choice, dict) or set(choice) != fields or runtime is None:
+        raise Refusal('exact explicit protocol upgrade choice required')
+    if (choice['configuration'] != digest(original)
+            or choice['owner'] != original['roles']['Work']['owner']
+            or choice['owner'] != original['software_delegation']['grantor']):
+        raise Refusal('protocol upgrade requires current configuration and genuine Work owner')
+    required_text(choice['authority'], 'Work trusted public package selection and rationale', 4000)
+    package = choice['public_package']
+    if (not isinstance(package, dict) or set(package) != {'name', 'version', 'registry', 'integrity', 'tarball'}
+            or package['name'] != '@openai/codex'
+            or package['registry'] != 'https://registry.npmjs.org'
+            or not isinstance(package['version'], str)
+            or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?', package['version'])
+            or package['tarball'] != 'https://registry.npmjs.org/@openai/codex/-/codex-'+package['version']+'.tgz'
+            or not isinstance(package['integrity'], str)
+            or not re.fullmatch(r'sha512-[A-Za-z0-9+/]{86}==', package['integrity'])
+            or choice['cli_version'] != 'codex-cli '+package['version']
+            or choice['cli_version'] == original.get('protocol_cli_version')
+            or choice['qualification'] == original.get('protocol_qualification')
+            or choice['codex'] == original.get('codex', 'codex')):
+        raise Refusal('new exact public Codex package, executable, version and receipt required')
+    exclusions = value.get('artifact_exclusions', [])
+    def pinned(path, sha, maximum=None):
+        if not isinstance(sha, str) or not re.fullmatch('[0-9a-f]{64}', sha):
+            raise Refusal('protocol evidence SHA256 required')
+        p = Path(required_text(path, 'public protocol evidence path', 4000))
+        if str(p) != path or set(p.parts) & {'AGENTS.md', 'WORK_LOG.md', '.ssh', '.aws', '.config', '.local'}:
+            raise Refusal('exact canonical public protocol evidence required')
+        p = regular_path(str(_path(path, exclusions)))
+        if maximum is not None and p.stat().st_size > maximum:
+            raise Refusal('bounded public protocol evidence required')
+        h = hashlib.sha256()
+        with p.open('rb') as stream:
+            for block in iter(lambda: stream.read(1048576), b''):
+                h.update(block)
+        if h.hexdigest() != sha:
+            raise Refusal('protocol evidence bytes changed')
+        return p
+    executable = pinned(choice['codex'], choice['executable_sha256'])
+    receipt_path = pinned(choice['qualification'], choice['qualification_sha256'], 1048576)
+    receipt = parse_json(receipt_path.read_text())
+    if (not isinstance(receipt, dict) or receipt.get('cli_version') != choice['cli_version']
+            or receipt.get('settings_check') != choice['settings_check']
+            or not isinstance(receipt.get('checked'), dict)):
+        raise Refusal('qualified public receipt/version/settings differ')
+    schemas = choice['schema_files']
+    if not isinstance(schemas, dict) or set(schemas) != set(PROTOCOL_SCHEMA_FIELDS):
+        raise Refusal('exact qualified public schema file pins required')
+    for name, fields in PROTOCOL_SCHEMA_FIELDS.items():
+        p = pinned(str(receipt_path.parent/name), schemas[name], 1048576)
+        schema = parse_json(p.read_text())
+        declared = receipt['checked'].get(name)
+        if (not isinstance(schema, dict) or not isinstance(schema.get('properties'), dict)
+                or not fields <= set(schema['properties']) or not isinstance(declared, list)
+                or not all(isinstance(f, str) for f in declared) or not fields <= set(declared)):
+            raise Refusal('actual pinned generated schema lacks required protocol fields')
+    settings = pinned(choice['settings_check'], choice['settings_sha256'], 1048576)
+    if not isinstance(parse_json(settings.read_text()), dict):
+        raise Refusal('public strict metadata record required')
+    try:
+        version = subprocess.run([str(executable), '--version'], stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, check=True,
+            env={'PATH': '/usr/bin:/bin', 'LANG': 'C'}, cwd=receipt_path.parent).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise Refusal('actual selected public executable version unavailable') from exc
+    if len(version) > 256 or version.decode('utf-8', errors='replace').strip() != choice['cli_version']:
+        raise Refusal('actual selected executable version differs from qualified version')
+    # Recheck executable bytes after the version child; cooperative byte pins,
+    # not a claim of noncooperating-writer atomicity or OS sandbox enforcement.
+    pinned(choice['codex'], choice['executable_sha256'])
+    value.update(codex=choice['codex'], protocol_cli_version=choice['cli_version'],
+                 protocol_qualification=choice['qualification'])
+
+
 def apply_scope_options(original, value, options, *, runtime=None):
     """Explicit future narrowing and associated resource ceilings, never old policy edits."""
-    if not isinstance(options, dict) or set(options) - {'read_ceiling_extensions', 'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
+    if not isinstance(options, dict) or set(options) - {'protocol_upgrade', 'read_ceiling_extensions', 'read_roots', 'neutral_startup', 'exclusions', 'linked_repositories', 'capacity', 'cwd', 'local_integration', 'package_scoped_cleanup', 'package_scoped_proposals', 'repository_reads', 'task_text', 'operations', 'qa_branch_sequence'}:
         raise Refusal('unsupported prospective scope option')
+    if 'protocol_upgrade' in options and set(options) != {'protocol_upgrade'}:
+        raise Refusal('protocol upgrade must preserve all existing task rights and scope options')
     select_task_text(original, value, options.get('task_text', {}))
     operations = options.get('operations', {})
     if not isinstance(operations, dict) or set(operations) - {'qa-execution'}:
@@ -474,6 +569,8 @@ def apply_scope_options(original, value, options, *, runtime=None):
             raise Refusal('absolute known exclusion required')
         if p not in value.setdefault('artifact_exclusions', []):
             value['artifact_exclusions'].append(p)
+    if 'protocol_upgrade' in options:
+        select_protocol(runtime, original, value, options['protocol_upgrade'])
     def safe(p):
         from .resource_scopes import root
         return root(p, value.get('artifact_exclusions', []))
@@ -662,6 +759,10 @@ def validate_changes(runtime, value, tasks):
         raise Refusal('every added scope needs an explicitly selected prospective task')
     if options and (set(options.get('read_ceiling_extensions', {})) | set(options.get('read_roots', {})) | set(options.get('neutral_startup', [])) | set(options.get('linked_repositories', {})) | set(options.get('cwd', {})) | set(options.get('package_scoped_cleanup', [])) | set(options.get('package_scoped_proposals', [])) | set(options.get('repository_reads', {}))) - set(tasks):
         raise Refusal('every changed future scope/startup needs an explicitly selected task')
+    if options and 'protocol_upgrade' in options:
+        if (set(tasks) != set(value['tasks']) or additions
+                or value['tasks'] != runtime.config['tasks']):
+            raise Refusal('protocol upgrade requires every conserved task and unchanged task rights')
     if options and 'local_integration' in options and set(options['local_integration']['tasks']) - set(tasks):
         raise Refusal('every future local integration policy needs an explicitly selected prospective task')
     if options and set(options.get('task_text', {})) - set(tasks):
@@ -739,8 +840,8 @@ def source_change(runtime, after, tasks):
             'qualification': 'measured code change only; genuine Work owns reviewed semantic selection'}
 
 
-def source_originals_stopped(runtime):
-    """Close the outgoing source generation, retaining unrelated original duties.
+def _outgoing_source_originals(runtime):
+    """Resolve the outgoing source generation, retaining unrelated original duties.
 
     Resolve relationships from public version/source metadata before acquiring
     any lifecycle state. Legacy bases have no source ordinal: their immutable
@@ -819,19 +920,42 @@ def source_originals_stopped(runtime):
         if (not runtime.one('SELECT controller FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
                 or runtime.one('SELECT controller FROM service_runs WHERE controller=? AND capability!=?', (controller, capability))):
             raise Refusal(ambiguous)
-    for controller, capability in relevant:
+    return relevant
+
+
+def _original_parent_released(runtime, controller, capability):
+    """Read supported processing-release evidence, never infer effect completion."""
+    run = runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
+    try:
+        receipt = json.loads(run['state'])['parent_END']
+    except (ValueError, KeyError, TypeError):
+        receipt = None
+    return (isinstance(receipt, dict) and type(receipt.get('actual_END')) is int
+            and isinstance(receipt.get('evidence'), list) and bool(receipt['evidence'])
+            and all(isinstance(e, str) and e.strip() for e in receipt['evidence'])
+            and not runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (controller,)))
+
+
+def source_originals_stopped(runtime):
+    """Source-only repair still requires the original service's return marker."""
+    for controller, capability in _outgoing_source_originals(runtime):
         service = runtime.one('SELECT state,returned FROM service_runs WHERE controller=? AND capability=?', (controller, capability))
-        run = runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
-        try:
-            receipt = json.loads(run['state'])['parent_END']
-        except (ValueError, KeyError, TypeError):
-            receipt = None
-        if (not isinstance(receipt, dict) or type(receipt.get('actual_END')) is not int
-                or not isinstance(receipt.get('evidence'), list) or not receipt['evidence']
-                or any(not isinstance(e, str) or not e.strip() for e in receipt['evidence'])
-                or service and (service['state'] != 'returned-awaiting-parent-END' or service['returned'] is None)
-                or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (controller,))):
+        if (not _original_parent_released(runtime, controller, capability)
+                or service and (service['state'] != 'returned-awaiting-parent-END' or service['returned'] is None)):
             raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
+
+
+def protocol_originals_stopped(runtime):
+    """Future executable selection needs parent END, not old reconciliation.
+
+    processing-release authenticates the original issuer and collected attempts.
+    A finalizer failure can leave serving/NULL after actual parent collection;
+    retain that service row and every unresolved duty without replay or repair.
+    The caller still owns the stop lock and active-authority checks.
+    """
+    for controller, capability in _outgoing_source_originals(runtime):
+        if not _original_parent_released(runtime, controller, capability):
+            raise Refusal('protocol upgrade requires original stop, numeric parent END and processing-release')
 
 
 @contextmanager
@@ -864,6 +988,8 @@ def apply(runtime, boards, value, selection):
             raise Refusal('same genuine original Work issuer required')
         if 'source_only' in current:
             source_originals_stopped(runtime)
+        elif 'protocol_upgrade' in value.get('prospective_scope_selection', {}):
+            protocol_originals_stopped(runtime)
         record = {**selection, 'previous_configuration': runtime.config,
                   'event_boundary': current['processing']['event_boundary'],
                   'jobs': [r['id'] for r in runtime.rows('SELECT id FROM jobs')],
