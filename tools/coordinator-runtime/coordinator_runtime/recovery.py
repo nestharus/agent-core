@@ -28,7 +28,7 @@ class RecoveryJournal:
             self.require_execution_open(job['id'])
             current = self.job(job['id'])
             if (current['token'] != job['token'] or current['active_attempt'] != job['active_attempt']
-                    or current['controller'] != self.controller or current['recovery_owner'] != self.controller
+                    or current['recovery_owner'] != self.controller
                     or current['recovery_state'] not in {'claimed', 'diagnosing'}):
                 raise Refusal('pending recovery remains with the exact original recovery owner')
             diag = None
@@ -149,6 +149,11 @@ class RecoveryJournal:
             row=self.job(current['job'])
             receipt=json.loads(current['receipt'])
             local_integration.current_sources(self, row)
+            if dispatcher_continuity and receipt['mode']!='use-diagnosis' and row['controller']!=self.controller:
+                # Admission, proved closure transfer and request disposition
+                # share this transaction. A later refusal rolls them all back.
+                self.adopt_collected(row['id'])
+                row=self.job(row['id'])
             old=self.attempt(current['attempt'])
             self.require_active_sources(job=row['id'])
             continuity=receipt['mode']=='use-diagnosis' and 'collector_continuity' in receipt

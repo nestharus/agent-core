@@ -325,7 +325,7 @@ class Dispatcher(ProcessingDispatcher):
     def reconcile_completed(self):
         self.reconcile_classifications()
         for job in self.store.rows('SELECT * FROM jobs WHERE controller=? AND active_attempt IS NOT NULL', (self.store.controller,)):
-            attempt = self.store.attempt(job['active_attempt'])
+            attempt = self.store.one('SELECT collected,error,capture,semantic FROM attempts WHERE id=?', (job['active_attempt'],))
             if attempt['collected'] is None:
                 continue
             if self.store.processing.review_task(job['task']) and (attempt['error'] or attempt['capture'] != 'complete' or attempt['semantic'] != 'DONE'):
