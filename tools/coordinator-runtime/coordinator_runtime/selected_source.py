@@ -89,6 +89,127 @@ def permits_original(runtime, event):
         for p in selected_pins(selection))
 
 
+def retained_job_duty(runtime, job, authority):
+    """Require proof even after revocation/drift; this grants no authority.
+
+    Read only the exact epoch's retained pin metadata, never historical source
+    bodies. Missing job birth remains unqualified in prospective.for_job.
+    """
+    key = authority['selection'].get('processing_capability')
+    if not key:
+        return False
+    row = runtime.one("SELECT json_extract(selection,'$.basis.mode') AS mode,"
+                      "json_extract(selection,'$.basis.selected_retained') AS pins "
+                      'FROM processing_capabilities WHERE id=?', (key,))
+    return bool(row and row['mode'] == MODE and any(
+        p['event'] == m['event'] and p['role'] == job['role'] and p['task'] == job['task']
+        for p in json.loads(row['pins'] or '[]') for m in json.loads(job['members'])))
+
+
+def permits_job(runtime, job, authority, attempt):
+    """A new frozen Work catalog job may use explicitly selected old inputs.
+
+    Called only AFTER the prospective job-birth fence. Neither an old job nor
+    a role label, source title, configuration exemption or renewed mapping is
+    a grant. Original source pins and the new job's current mapping both bind.
+    """
+    from contextlib import nullcontext
+    from . import local_integration as local
+    from .contracts import scoped_task
+    bridge = authority['selection'].get('processing_capability')
+    task = runtime.config['tasks'][job['task']]
+    if (authority['selection'].get('job_birth') != 'observed-v1'
+            or not bridge or not runtime.processing or runtime.processing.key != bridge or not attempt
+            or job['role'] != 'Work' or job['phase'] not in {'proposer', 'integrator'}
+            or task['role'] != job['role'] or task['phase'] != job['phase'] or task['effects'] != 'none'
+            or job['package'] is not None or authority['policy']['ordinary_effects'] is not False
+            or job['controller'] != runtime.controller or attempt['controller'] != runtime.controller
+            or attempt['job'] != job['id'] or attempt['kind'] != 'task'
+            or json.loads(attempt['detail']).get('processing_capability') != bridge
+            or not local.selected(runtime, job['task'])
+            or runtime.one('SELECT attempt FROM ordinary_runs WHERE job=?', (job['id'],))):
+        return False
+    cap, selection = runtime.processing.current()
+    owner = runtime.config['roles']['Work']['owner']
+    if (cap['issuer'] != owner or authority['selection']['grantor'] != owner
+            or job['task'] not in selection['tasks']):
+        return False
+    proof = json.loads(attempt['detail']).get('software_authority', {})
+    if attempt['collected'] is not None and (proof.get('prospective_epoch') != authority['id']
+            or proof.get('processing_capability') != bridge):
+        return False  # A prior unbound/refused attempt cannot gain a proof now.
+    pins = {p['event']:p for p in selected_pins(selection)}
+    members = json.loads(job['members'])
+    # A mixed unselected old/future member cannot borrow this narrow exception.
+    if any(m['event'] not in pins for m in members):
+        return False
+    originals = selection['basis']['roles'].get('Work', {}).get('original', {}).get('events', [])
+    for member in members:
+        pin = pins[member['event']]
+        original = next((o for o in originals if o['id'] == pin['event']), None)
+        if (pin['role'] != job['role'] or pin['task'] != job['task']
+                or member['hash'] != pin['source_hash'] or member['package'] is not None
+                or pin['event'] not in selection['retained_events'] or not original
+                or any(original.get(k) != v for k, v in pin.items())
+                or original['queue']['package'] is not None):
+            return False
+        # Hold and identity metadata precede every selected source body read.
+        state = runtime.one('SELECT hold IS NOT NULL AS held,state,processed_at FROM events WHERE id=?', (pin['event'],))
+        if (not state or state['held'] or state['state'] not in {'queued', 'processed'}
+                or state['processed_at'] is not None and attempt['collected'] is None):
+            return False
+        source = runtime.one('SELECT role,hash FROM events WHERE id=?', (pin['event'],))
+        birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (pin['event'],))
+        queue = runtime.one('SELECT * FROM queue WHERE event=?', (pin['event'],))
+        mapping = runtime.one("SELECT version,source_hash,actor,json_extract(receipt,'$.mode') AS mode,"
+                              "json_extract(receipt,'$.task') AS task,json_extract(receipt,'$.package') AS package "
+                              'FROM input_resolutions WHERE event=? ORDER BY version DESC LIMIT 1', (pin['event'],))
+        if (not source or source['role'] != pin['role'] or source['hash'] != pin['source_hash']
+                or not birth or birth['position'] != pin['source_birth']
+                or not queue or queue['id'] != member['queue'] or queue['job'] != job['id']
+                or queue['role'] != job['role'] or queue['phase'] != job['phase'] or queue['task'] != job['task']
+                or queue['package'] is not None or queue['state'] not in {'reserved', 'done'}
+                or not mapping or mapping['version'] != member.get('input_resolution')
+                or mapping['version'] < pin['mapping_version'] or mapping['source_hash'] != pin['source_hash']
+                or mapping['mode'] != 'route' or mapping['task'] != job['task'] or mapping['package'] is not None
+                or mapping['actor'] not in {owner, runtime.config['actor']}):
+            return False
+    scope = local.scope_for(runtime, job)
+    if not scope or scope['lane'] != 'anchored' or scope.get('neighbors'):
+        return False
+    keys = set(scope['reads']) | set(scope['writes'])
+    points = local.point_definitions(runtime)
+    if (not keys or keys - local.allowed_points(runtime, job['task']) or keys - points.keys()
+            or any('native' in b for k in keys for b in points[k]['bindings'])):
+        return False  # Before any native acquisition, even read-only native.
+    local.current_job(runtime, job)
+    packets = []
+    for member in members:
+        source = runtime.event(member['event'])
+        if source.get('package') is not None:
+            return False
+        packets.append(local.packet(runtime, dict(task=job['task'], event=member['event'], package=None)))
+    if local.combine(packets) != {k:v for k,v in scope.items() if k != 'read_fences'}:
+        return False
+    # A collected decision retains its original revision for downstream duties;
+    # it gets no new launch/effect/acceptance credit from later point changes.
+    if attempt['collected'] is None:
+        from .custody import guard_path, safe_path, read_file
+        from .publication import snapshot_lock
+        actual = scoped_task(job['task'], task, None)
+        roots = actual['effect_authority']['read_roots'] + actual['effect_authority']['write_roots']
+        targets = {b['target'] for k in keys for b in points[k]['bindings']}
+        for path in targets:
+            guard_path(runtime, path)
+        with (snapshot_lock(runtime) if runtime.config.get('canonical_publication') else nullcontext()):
+            bodies = {p:read_file(safe_path(p, roots), runtime.config['limits'].get('max_artifact_bytes', 33554432))[0]
+                      for p in targets}
+            if any(local.version(runtime, k, bodies, job) != packet['versions'][k]
+                   for packet in packets for k in set(packet['reads']) | set(packet['writes'])):
+                return False
+    return True
+
+
 def custody_budget(runtime, incoming):
     """Bound only this metadata registration without walking old captures.
 
