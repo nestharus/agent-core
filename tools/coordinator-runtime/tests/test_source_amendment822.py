@@ -155,7 +155,7 @@ with patch.object(Store,'__init__',init), patch.object(processing,'implementatio
             if proc is not None:
                 if proc.poll() is None:proc.kill();proc.communicate()
                 with (self.area/'cli-END.jsonl').open('a') as stream:
-                    stream.write(encode(dict(pid=proc.pid,actual_END=proc.returncode,command=args[0]))+'\n')
+                    stream.write(encode(dict(pid=proc.pid,actual_END=proc.returncode,command=args[0],operating_argv=args))+'\n')
         self.assertLess(len(out)+len(err),4*1024**2)
         self.assertEqual(proc.returncode,0,(out.decode(),err.decode()))
         return json.loads(out)
