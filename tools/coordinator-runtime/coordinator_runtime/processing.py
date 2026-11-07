@@ -482,6 +482,12 @@ class Access:
                 if 'package' not in native_row:
                     metadata = self.runtime.one("SELECT json_extract(payload,'$.package') AS package FROM events WHERE id=?", (row['event'],))
                     native_row['package'] = metadata['package'] if metadata else None
+                # A frozen queue member keeps the actual job's resource identity;
+                # its queue UUID must not make its own staging a foreign lease.
+                frozen = self.runtime.one("SELECT j.id,j.active_attempt FROM queue q JOIN jobs j ON j.id=q.job "
+                    "WHERE q.event=? AND q.task=? AND q.state='reserved'", (row['event'], row['task']))
+                if frozen:
+                    native_row.update(frozen)
                 if blocked(self.runtime, native_row):
                     return False
                 return row['task'] in selection['tasks'] and self.event(self.runtime.event(row['event'])) and permits(self.runtime, row)
