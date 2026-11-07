@@ -61,3 +61,35 @@ class CompositeAmendment(OutsideReview):
         self.assertTrue({'plain_control.py','native_review_scope.py'} <= set(self.delta))
         self.assertTrue(set(self.delta) <= report_repair.AMEND_MODULES)
         self.test_real_cli_basis_external_safe5_work_collection_and_selection()
+
+
+class NativePublication838(NativeToWork):
+    def configure_fixture(self):
+        super().configure_fixture()
+        self.config['tasks']['work-proposer'].update(
+            publish_internal_results=True, responses={'complete':['work-integrator']})
+        task = self.config['tasks']['work-integrator']
+        task.update(effects='none', sandbox='read-only')
+        task.pop('routine_completion')
+        task['effect_authority'].update(write_roots=[], operations=['read-reports','consolidate-reports'])
+        reader = self.area/'integrator-reader'
+        reader.mkdir()
+        task['cwd'] = str(reader)
+        task['effect_authority']['read_roots'] = [str(self.catalog), str(self.method)]
+        self.config['local_integration']['tasks']['work-integrator'].update(points=['a'], lookup_scopes=[])
+
+    def test_work_proposer_publication_reaches_integrator_without_canonical_writes(self):
+        before = {p:p.read_bytes() for p in [self.catalog, self.log, *self.peers]}
+        self.test_native_whole_integrator_return_maps_real_work_point()
+        proposer = self.store.one("SELECT * FROM jobs WHERE task='work-proposer'")
+        self.assertIsNotNone(proposer['response'])
+        published = self.store.event(proposer['response'])
+        self.assertEqual(published['body']['semantic'], 'DONE')
+        self.initial[published['id']] = 'work-integrator'
+        asyncio.run(self.until(lambda:self.store.one("SELECT j.id FROM jobs j JOIN attempts a "
+            "ON a.id=j.active_attempt WHERE j.task='work-integrator' AND a.collected IS NOT NULL"), n=8))
+        integrator = self.store.one("SELECT * FROM jobs WHERE task='work-integrator'")
+        call = next(c for c in self.models.calls if c['attempt']==integrator['active_attempt'])
+        self.assertIn(proposer['response'], call['prompt'])
+        for path, content in before.items():
+            self.assertEqual(path.read_bytes(), content, str(path))
