@@ -562,11 +562,18 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
                 conflict_observe(job['id'], arm)
             return unavailable('local-scope-conflict')
         at('local-branch-conflict')
-        sources = [store.event(m['event']) for m in json.loads(job['members'])]
-        incoming = [store.event(m['event']) for m in members]
-        branch = {e.get('branch_binding') for e in sources} - {None}
-        if branch & ({e.get('branch_binding') for e in incoming} - {None}):
-            return unavailable('local-branch-conflict')
+        incoming = {store.event(m['event']).get('branch_binding') for m in members} - {None}
+        if incoming:
+            # An unbound incoming request cannot share a branch key. Otherwise
+            # the old relation really needs source acquisition: execution-only
+            # closure supplies no permission to read a held original.
+            from .report_scope import source_metadata
+            with (nullcontext() if store.db.in_transaction else store.tx()):
+                source_metadata(store, job)
+                branch = {store.event(m['event']).get('branch_binding')
+                          for m in json.loads(job['members'])} - {None}
+            if branch & incoming:
+                return unavailable('local-branch-conflict')
     return True
 
 
