@@ -102,7 +102,7 @@ def validate_policy(store, name, policy, selection):
             raise Refusal('each receiver needs exact prospective task authority')
 
 
-def current(store, task, epoch=None):
+def current(store, task, epoch=None, *, ordinary_effects=False):
     row = store.one('SELECT * FROM prospective_authorities WHERE id=?', (epoch,)) if epoch else store.one(
         'SELECT * FROM prospective_authorities WHERE revoked IS NULL')
     if not row:
@@ -117,7 +117,9 @@ def current(store, task, epoch=None):
         raise Refusal('ordinary authority belongs to another service mode')
     role = store.config['tasks'][task]['role']
     from .report_repair import lease_expiry
-    expires = lease_expiry(store, row) or selection['expires']
+    # The owner plan extends framework timing only. Effect consumers retain
+    # the immutable original epoch ceiling, in addition to all native checks.
+    expires = selection['expires'] if ordinary_effects and policy['ordinary_effects'] else (lease_expiry(store, row) or selection['expires'])
     if (row['revoked'] is not None or expires <= store.clock()
             or selection['configuration'] != digest(store.config)
             or policy['task_hash'] != digest(store.config['tasks'][task])
@@ -149,13 +151,16 @@ def requires_authority(store, job):
     return False
 
 
-def for_job(store, job):
+def for_job(store, job, *, ordinary_effects=False):
+    if ordinary_effects:
+        # Refuse the active effect ceiling before acquiring full attempt data.
+        current(store, job['task'], ordinary_effects=True)
     from .report_scope import source_metadata
     source_metadata(store, job)
     attempt = store.attempt(job['active_attempt']) if job['active_attempt'] else None
     proof = json.loads(attempt['detail']).get('software_authority', {}) if attempt else {}
     epoch = proof.get('prospective_epoch')
-    row = current(store, job['task'], epoch)
+    row = current(store, job['task'], epoch, ordinary_effects=ordinary_effects)
     if not row:
         return None
     position = job_position(store, job, row)
