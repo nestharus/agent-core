@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
@@ -65,9 +66,31 @@ class Recovery(CatalogCase, unittest.IsolatedAsyncioTestCase):
     @contextmanager
     def deny_new_context(self):
         self.read_violations = []
+        # SQLite's READ callback names the underlying column even for a safe
+        # JSON metadata projection. Admit only the existing scalar lineage
+        # projection, with no remaining detail identifier or wildcard. This
+        # finite test oracle is not a general SQL parser or host isolation.
+        metadata_detail = False
+        connection = self.store.db
+        class ObservedConnection:
+            def __getattr__(self, name):
+                return getattr(connection, name)
+
+            def execute(self, sql, values=()):
+                nonlocal metadata_detail
+                projected = re.sub(r"json_extract\(\s*(?:\w+\.)?detail\s*,\s*'\$\.prior_task_attempt'\s*\)",
+                                   'lineage_metadata', sql, flags=re.I)
+                remaining = re.sub(r'count\(\s*\*\s*\)', 'row_count', projected, flags=re.I)
+                metadata_detail = (projected != sql and not re.search(r'\bdetail\b|\*', remaining, re.I))
+                try:
+                    return connection.execute(sql, values)
+                finally:
+                    metadata_detail = False
+
         def deny(action, table, column, database, caller):
             if action == sqlite3.SQLITE_READ and (
                     table == 'attempts' and column == 'result'
+                    or table == 'attempts' and column == 'detail' and not metadata_detail
                     or table == 'events' and column == 'payload'
                     or table in {'results', 'source_custody', 'artifact_blobs'}):
                 self.read_violations.append((table, column))
@@ -82,7 +105,8 @@ class Recovery(CatalogCase, unittest.IsolatedAsyncioTestCase):
                 self.store.db.set_authorizer(deny)
         self.store.db.set_authorizer(deny)
         try:
-            with patch.object(self.store, 'collect', side_effect=collection), \
+            with patch.object(self.store, 'db', ObservedConnection()), \
+                 patch.object(self.store, 'collect', side_effect=collection), \
                  patch.object(self.store, 'retain_recovery_disposition',
                     side_effect=AssertionError('informative disposition after refused admission')), \
                  patch.object(dispatcher, 'template_text', side_effect=AssertionError('held template read')):

@@ -14,7 +14,7 @@ import subprocess
 
 from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode, scoped_task, qa_branch_sequence, response_tasks
 from .custody import safe_path, read_file, guard_path
-from . import prospective, qa_source
+from . import prospective, qa_source, local_integration
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ordinary_runs(
@@ -182,8 +182,10 @@ def validate_adapter(store, task, p, roots):
 
 async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum=None):
     """Original subprocess and complete bounded capture, never caller JSON."""
+    run = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
+    current_job = store.job(run['job'])
+    local_integration.current_sources(store, current_job)
     current_run = store.one('SELECT * FROM ordinary_runs WHERE attempt=?', (attempt,))
-    current_job = store.job(current_run['job'])
     if not selected(store, current_job):
         raise Refusal('original prospective effect authority no longer current')
     prospective.board(store, current_job['role'])._software_job_grant(store, current_job)
@@ -291,20 +293,29 @@ async def git(store, attempt, p, *args):
     return record['stdout'].strip()
 
 
-async def source(store, attempt, p, task):
+async def source(store, attempt, p, task, *, context_job=None):
     # Linked worktrees must admit the actual common Git resource, not just cwd.
+    async def read(*args):
+        if context_job is not None:
+            local_integration.current_sources(store, context_job)
+        return await git(store, attempt, p, *args)
+
     roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
-    top = await git(store, attempt, p, 'rev-parse', '--show-toplevel')
+    top = await read('rev-parse', '--show-toplevel')
     if top != p['repository']:
         raise Refusal('Git discovery must resolve the exact admitted repository cwd')
-    git_dir = await git(store, attempt, p, 'rev-parse', '--path-format=absolute', '--git-common-dir')
+    git_dir = await read('rev-parse', '--path-format=absolute', '--git-common-dir')
     scoped_path(store, git_dir, task['effect_authority']['write_roots'] if p['kind'] == 'local-ref' else roots)
-    head = await git(store, attempt, p, 'rev-parse', '--verify', p['source_ref'] + '^{commit}')
+    head = await read('rev-parse', '--verify', p['source_ref'] + '^{commit}')
     if head != p['source_head']:
         raise Refusal('actual source ref is stale')
-    tree = await git(store, attempt, p, 'rev-parse', '--verify', head + '^{tree}')
-    origin = await git(store, attempt, p, 'remote', 'get-url', 'origin')
-    parents = (await git(store, attempt, p, 'show', '-s', '--format=%P', head)).split()
+    tree = await read('rev-parse', '--verify', head + '^{tree}')
+    origin = await read('remote', 'get-url', 'origin')
+    parents = (await read('show', '-s', '--format=%P', head)).split()
+    run = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
+    local_integration.current_sources(store, store.job(run['job']))
+    if context_job is not None:
+        local_integration.current_sources(store, context_job)
     binding = task.get('admitted_scope', {}).get('branch_binding')
     branch = None
     if binding:
@@ -321,6 +332,10 @@ async def source(store, attempt, p, task):
 
 async def perform(store, board, job):
     store.require_execution_open(job['id'])
+    # Even a plain task's selector reads the original full attempt before it
+    # can discover that no ordinary epoch applies. Model collection is not
+    # admission for this new preparation group.
+    local_integration.current_sources(store, job)
     epoch = selected(store, job)
     if not epoch:
         return False
@@ -372,6 +387,7 @@ async def perform(store, board, job):
             store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (resource['key'], attempt['id']))
     before = await source(store, attempt['id'], p, task)
     with store.tx():
+        local_integration.current_sources(store, job)
         receipt['before'] = before
         store.db.execute('UPDATE ordinary_runs SET receipt=? WHERE attempt=?',(encode(receipt),attempt['id']))
     if p['kind'] == 'local-ref':
@@ -389,6 +405,7 @@ async def perform(store, board, job):
     after = await source(store, attempt['id'], p, task)
     if after != before:
         raise Refusal('source repository/origin/ref/branch identity changed during effects; retain original intent/resources')
+    local_integration.current_sources(store, job)
     board._software_job_grant(store, store.job(job['id']))
     policy_for(store, store.job(job['id']))  # Lease/procedure/executable/admission current after tool collection.
     if store.one('SELECT receipt FROM admissions WHERE package=?', (job['package'],))['receipt'] != admission['receipt']:
@@ -430,8 +447,10 @@ async def adapter(store, attempt, p, *, task=None, association=None):
             'selection': p['command']['argv'], 'readback': readback, 'source_execution': association}
 
 
-async def github(store, attempt, p):
+async def github(store, attempt, p, *, context_job=None):
     endpoint = f"repos/{p['repository_slug']}/actions/runs/{p['run_id']}"
+    if context_job is not None:
+        local_integration.current_sources(store, context_job)
     record = await tool(store, attempt, 'ci-run-readback', [p['gh'], 'api', '--hostname', 'github.com', '--method', 'GET', endpoint], p['repository'], p)
     if record['exit'] != 0:
         raise Refusal('actual CI API readback failed')
@@ -441,6 +460,8 @@ async def github(store, attempt, p):
         raise Refusal('CI source/run/attempt/event/workflow/repository differs from admission')
     if run.get('status') != 'completed' or run.get('conclusion') not in {'success', 'failure', 'cancelled', 'timed_out', 'action_required', 'neutral', 'skipped', 'startup_failure', 'stale'}:
         raise Refusal('CI remains partial/unknown; monitoring stays with original custodian')
+    if context_job is not None:
+        local_integration.current_sources(store, context_job)
     jobs = await tool(store, attempt, 'ci-jobs-readback', [p['gh'], 'api', '--hostname', 'github.com', '--method', 'GET', endpoint + f"/attempts/{p['run_attempt']}/jobs?per_page=100"], p['repository'], p)
     data = json.loads(jobs['stdout']) if jobs['exit'] == 0 else {}
     items = data.get('jobs', [])
@@ -653,6 +674,7 @@ def awaiting_acceptance(store, job):
 
 async def qualification(store, job):
     with store.tx():
+        local_integration.current_sources(store, job)
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail.pop('ordinary_qualification', None)
@@ -662,19 +684,27 @@ async def qualification(store, job):
         raise Refusal('actual independent acceptance missing for one or more admitted ordinary task outcomes')
     for row in rows:
         original = store.job(row['job'])
+        # A previous dependency's readback may have yielded since the initial
+        # acceptance group. Both the recipient and dependency remain sources.
+        local_integration.current_sources(store, job)
+        local_integration.current_sources(store, original)
         if not selected(store, original):
             raise Refusal('qualified ordinary authority no longer current')
         prospective.board(store, original['role'])._software_job_grant(store, original)
         task, p = policy_for(store, original)
         if p['kind'] == 'local-qa':
             qa_source.verify(store, row['attempt'], p, json.loads(row['receipt']))
-        if await source(store, row['attempt'], p, task) != json.loads(row['receipt'])['after']:
+        if await source(store, row['attempt'], p, task, context_job=job) != json.loads(row['receipt'])['after']:
             raise Refusal('qualified source repository/origin/ref/branch no longer current')
+        local_integration.current_sources(store, job)
+        local_integration.current_sources(store, original)
         if p['kind'] == 'local-ref' and await git(store, row['attempt'], p, 'rev-parse', '--verify', p['ref'] + '^{commit}') != p['target']:
             raise Refusal('qualified ref no longer current')
-        if p['kind'] == 'github-run' and digest(await github(store, row['attempt'], p)) != digest(json.loads(row['receipt'])['outcome']):
+        if p['kind'] == 'github-run' and digest(await github(store, row['attempt'], p, context_job=job)) != digest(json.loads(row['receipt'])['outcome']):
             raise Refusal('qualified CI run no longer current')
+        local_integration.current_sources(store, original)
     with store.tx():
+        local_integration.current_sources(store, job)
         attempt = store.attempt(job['active_attempt'])
         detail = json.loads(attempt['detail'])
         detail['ordinary_qualification'] = {'acceptances': digest([r['acceptance'] for r in rows]), 'checked': store.clock()}

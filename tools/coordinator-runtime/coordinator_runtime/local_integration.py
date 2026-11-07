@@ -601,6 +601,10 @@ def record_job(store, job):
     store.db.execute('INSERT INTO local_jobs VALUES(?,?,?)', (job['id'], digest(store.config['local_integration']), encode(scope)))
 
 
+class SourceAdmissionRefusal(Refusal):
+    """A new read group is pending, without changing original effect custody."""
+
+
 def current_sources(store, job):
     """Admit one bounded synchronous read/preparation group from hold metadata.
 
@@ -617,7 +621,7 @@ def current_sources(store, job):
             queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
             source = store.one('SELECT hold IS NOT NULL AS held FROM events WHERE id=?', (member['event'],))
             if not queue or queue['event'] != member['event'] or not source or source['held']:
-                raise Refusal('local member currentness/admission changed')
+                raise SourceAdmissionRefusal('local member currentness/admission changed')
             queues.append((member, queue))
         return queues
 

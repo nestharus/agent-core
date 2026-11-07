@@ -401,6 +401,7 @@ class Dispatcher:
                                       (job_id, attempt))
         try:
             await ordinary.perform(self.store, self.boards[job['role']], self.store.job(job_id))
+            local_integration.current_sources(self.store, self.store.job(job_id))
             if (ordinary.needs_acceptance(self.store, job['package'])
                     and isinstance(outcome.get('result'), dict) and outcome['result'].get('category') == 'qualification'):
                 if not ordinary.accepted_runs(self.store, job['package']):
@@ -408,7 +409,9 @@ class Dispatcher:
                     return
                 await ordinary.qualification(self.store, self.store.job(job_id))
         except (Refusal, OSError, ValueError) as exc:
-            self.store.hold_job(job_id, 'Ordinary original effect/collection needs accountable disposition: ' + str(exc))
+            reason = 'Ordinary original effect/collection needs accountable disposition: ' + str(exc)
+            self.store.hold_job(job_id, reason)
+            self.store.record_operational_error(job_id, {'error': reason}, job['role'], 'task-disposition-error')
         self.try_finish(job_id)
 
     def inventory_artifacts(self, attempt, outcome, task=None):
@@ -631,14 +634,20 @@ class Dispatcher:
             current = self.store.job(job['id'])
             if current['active_attempt'] != job['active_attempt'] or current['controller'] != self.store.controller:
                 raise Refusal('acceptance continuation must retain the same original attempt/collector')
+            if not self.admit_collected_context(current):return
             await ordinary.qualification(self.store, current)
             with self.store.tx():
                 self.store.require_execution_open(current['id'])
+                if not self.admit_collected_context(current):return
                 attempt = self.store.attempt(current['active_attempt'])
                 detail = json.loads(attempt['detail'])
                 detail.pop('ordinary_awaiting_acceptance', None)
                 self.store.db.execute('UPDATE attempts SET detail=? WHERE id=?', (encode(detail), attempt['id']))
             self.try_finish(current['id'])
+        except local_integration.SourceAdmissionRefusal as exc:
+            # Retain the durable awaiting marker even when it is a dependency
+            # source that refused. A permanent job hold strands re-entry.
+            self.runtime_errors[job['id']] = str(exc)
         except (Refusal, OSError, ValueError) as exc:
             self.store.hold_job(job['id'], 'Accepted outcome needs original currentness disposition: ' + str(exc))
         finally:
