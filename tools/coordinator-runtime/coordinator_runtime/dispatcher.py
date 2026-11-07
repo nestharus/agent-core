@@ -190,6 +190,7 @@ class Dispatcher:
         self.boards = boards if boards is not None else {r: Board(self.config, r) for r in self.config["roles"]}
         self.active = set()
         self.stopping = asyncio.Event()
+        self.wakeup = asyncio.Event()
         self.last_alert = 0
         self.last_cleanup = 0
         self.runtime_errors = {}
@@ -226,6 +227,7 @@ class Dispatcher:
 
     def completed(self, task):
         self.active.discard(task)
+        self.wakeup.set()
         if task.cancelled():
             return
         error = task.exception()
@@ -248,6 +250,9 @@ class Dispatcher:
                 # to source_delivery, not a rewritten top-level event.
                 post = event["post"] if "post" in event else event["source_delivery"]["post"]
                 self.store.ingest(event, cursor=post)
+            if len(events) >= 100:
+                # Continue finite pages through the normal fair phase loop.
+                self.wakeup.set()
             self.runtime_errors.pop(role, None)
             self.store.clear_operational_error(role)
         except Exception as exc:
@@ -636,6 +641,8 @@ class Dispatcher:
 
     async def loop(self, emit):
         while not self.stopping.is_set():
+            # Clear BEFORE scanning: a hint racing with intake survives pause.
+            self.wakeup.clear()
             await self.guarded_tick(emit)
             await self.pause()
 
@@ -792,10 +799,15 @@ class Dispatcher:
         return attempted
 
     async def pause(self):
+        waits = [asyncio.create_task(self.stopping.wait()),
+                 asyncio.create_task(self.wakeup.wait())]
         try:
-            await asyncio.wait_for(self.stopping.wait(), self.config.get("recheck_seconds", 1))
-        except asyncio.TimeoutError:
-            return
+            await asyncio.wait(waits, timeout=self.config.get("recheck_seconds", 1),
+                               return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in waits:
+                task.cancel()
+            await asyncio.gather(*waits, return_exceptions=True)
 
 
 def execution_spec(task, directory):

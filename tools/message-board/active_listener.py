@@ -16,6 +16,7 @@ class ListenerError(Exception):
 
 
 MAX_RECHECK_SECONDS = 2.0
+MANAGED_HINT_PROTOCOL = 1
 
 
 def _linux() -> None:
@@ -52,6 +53,16 @@ def _packet(identity: bytes) -> bytes:
     return b"MESSAGE-BOARD-WATCH/1:" + identity
 
 
+def managed_address(recipient: str, identity: bytes) -> bytes:
+    """Exclusive software service lane; never a native recipient watch address.
+
+    Binding this hint endpoint grants no board access or receiver ownership.
+    The consumer must separately hold current, explicitly selected authority.
+    """
+    digest = hashlib.sha256(recipient.encode("ascii") + b"\0" + identity).hexdigest()[:32]
+    return f"\0message-board-managed-v1-{os.getuid()}-{digest}".encode("ascii")
+
+
 def _pending(conn: sqlite3.Connection, session: str, limit: int) -> list[dict]:
     rows = conn.execute("""
         SELECT notification_id, thread_id, post_seq, event, title
@@ -68,8 +79,8 @@ def signal_post(conn: sqlite3.Connection, post_seq: int) -> None:
     try:
         _linux()
         identity = _db_identity(conn)
-        recipients = [row[0] for row in conn.execute(
-            "SELECT recipient FROM notification_outbox WHERE post_seq=?", (post_seq,))]
+        recipients = list(conn.execute(
+            "SELECT recipient,route FROM notification_outbox WHERE post_seq=?", (post_seq,)))
     except (ListenerError, sqlite3.Error, OSError):
         # The post and its outbox already committed. Losing this optional hint
         # must not make open/reply report an error for a successful write.
@@ -78,13 +89,19 @@ def signal_post(conn: sqlite3.Connection, post_seq: int) -> None:
         return
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sender:
-            for recipient in recipients:
-                try:
-                    sender.sendto(_packet(identity), _address(recipient, identity))
-                except OSError:
-                    # A missing/full watcher loses only this hint. Its next
-                    # board check finds the committed outbox row.
-                    pass
+            # A full receiver queue must not block a committed producer.
+            sender.setblocking(False)
+            for recipient, route in recipients:
+                addresses = [_address(recipient, identity)]
+                if route == "managed":
+                    addresses.append(managed_address(recipient, identity))
+                for address in addresses:
+                    try:
+                        sender.sendto(_packet(identity), address)
+                    except OSError:
+                        # Missing/full listeners lose only this advisory hint.
+                        # Durable intake and its recovery timer remain required.
+                        pass
     except OSError:
         # Socket construction/close may fail after the post committed. This
         # optional hint must never change the reported write outcome.
