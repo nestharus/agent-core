@@ -461,20 +461,76 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if not self._classification_available():
                 return None
             scope, parameters = configuration.event_candidate_scope(self)
-            row = self.one("SELECT e.id,e.classifier FROM events e JOIN attempts a ON e.classifier=a.id "
-                           "JOIN enrollments r ON r.role=e.role "
-                           "WHERE e.state='classification-held' AND e.recovery_count=0 AND a.collected IS NOT NULL AND r.intake=1 "
-                           "AND (" + scope + ") ORDER BY e.received,e.id LIMIT 1", parameters)
-            if not row:
+            candidates = self.rows("SELECT e.id,e.role,e.classifier FROM events e JOIN attempts a ON e.classifier=a.id "
+                                   "WHERE e.state='classification-held' AND e.recovery_count=0 "
+                                   "AND e.hold IS NULL AND e.processed_at IS NULL AND a.collected IS NOT NULL "
+                                   "AND (" + scope + ") ORDER BY e.received,e.id", parameters)
+            row = None
+            for candidate in candidates:
+                if not self.role_enabled(candidate['role']):
+                    continue
+                if self.processing and not self.processing.event(self.event(candidate['id'])):
+                    continue  # Current source selection, never role/task authority alone.
+                prior = self.attempt(candidate['classifier'])
+                detail = json.loads(prior['detail'])
+                no_start = (prior['state'] == 'not-started' and detail.get('known_not_started') is True
+                            and all(prior[k] is None for k in ('begin', 'ended', 'exit', 'session', 'turn', 'result', 'semantic'))
+                            and prior['capture'] == 'not-started' and prior['cleanup'] == 'no-session-created')
+                failed = (prior['state'] == 'collected' and prior['ended'] is not None
+                          and prior['exit'] is not None)
+                if (prior['kind'] != 'classifier' or prior['event'] != candidate['id'] or prior['job'] is not None
+                        or not (no_start or failed) or not self._classification_recovery_original(prior, no_start)):
+                    continue
+                event = self.routing_event(candidate['id'])
+                row = candidate
+                break
+            if row is None:
                 return None
-            event = self.routing_event(row["id"])
-            selected = self.config["diagnosis"]
-            attempt = self._attempt("diagnosis", row["id"], None, selected["binding"], selected["profile"])
+            # A proved prelaunch refusal has no executed result to diagnose.
+            # Both paths consume the existing single recovery/start credit.
+            kind = 'classifier' if no_start else 'diagnosis'
+            selected = self.config[kind]
+            attempt = self._attempt(kind, row["id"], None, selected["binding"], selected["profile"])
             detail = {**json.loads(self.attempt(attempt)["detail"]), "prior_classifier": row["classifier"]}
             self.db.execute("UPDATE attempts SET detail=? WHERE id=?", (encode(detail), attempt))
             self.db.execute("UPDATE events SET state='classifying',classifier=?,recovery_count=1 WHERE id=?",
                             (attempt, row["id"]))
         return attempt, event
+
+    def _classification_recovery_original(self, prior, no_start):
+        if not self.processing:
+            return prior['controller'] == self.controller
+        if json.loads(prior['detail']).get('processing_capability') != self.processing.key:
+            return False  # No foreign capability/collector adoption.
+        _, selection = self.processing.current()
+        if prior['controller'] == self.controller:
+            if no_start:
+                return False  # Prelaunch service recovery belongs to a new original.
+            if 'service' not in selection:
+                return True  # Existing finite collected-failure diagnosis.
+        elif 'service' not in selection:
+            return False
+        current = self.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?',
+                           (self.controller, self.processing.key))
+        current_service = self.one('SELECT state,returned FROM service_runs WHERE controller=? AND capability=?',
+                                   (self.controller, self.processing.key))
+        if current != {'state': 'owned'} or current_service != {'state': 'serving', 'returned': None}:
+            return False
+        if prior['controller'] == self.controller:
+            return True
+        old = self.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?',
+                       (prior['controller'], self.processing.key))
+        old_service = self.one('SELECT state,returned FROM service_runs WHERE controller=? AND capability=?',
+                               (prior['controller'], self.processing.key))
+        if (not old or not old_service or old_service['state'] != 'returned-awaiting-parent-END'
+                or old_service['returned'] is None):
+            return False
+        try:
+            receipt = json.loads(old['state'])['parent_END']
+        except (ValueError, TypeError, KeyError):
+            return False
+        return (isinstance(receipt, dict) and type(receipt.get('actual_END')) is int
+                and isinstance(receipt.get('evidence'), list) and bool(receipt['evidence']))
 
     def attempt(self, attempt):
         row = self.one("SELECT * FROM attempts WHERE id=?", (attempt,))
