@@ -507,6 +507,8 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
         if scope['lane'] == prior['lane'] == 'discovery':
             return unavailable('local-discovery')
         at('local-scope-conflict')
+        if scope['lane'] == prior['lane'] == 'anchored' and store.work_read_coexists(row, scope, job):
+            continue
         # Preserve OR short-circuit order and operands. The diagnostic records
         # only the first true arm; helper refusal has no proven conflict arm.
         arm = None
@@ -535,7 +537,7 @@ def record_job(store, job):
     scope = combine([packet(store, {'task': job['task'], 'event': m['event']}) for m in json.loads(job['members'])])
     fences = [prior['id'] for prior in store.rows("SELECT * FROM jobs WHERE role=? AND state!='closed'", (job['role'],))
               if prior['id'] != job['id'] and not store.execution_complete(prior)
-              and scope_for(store, prior) is None and store.work_read_coexists(job, scope, prior)]
+              and store.work_read_coexists(job, scope, prior)]
     if fences:
         scope['read_fences'] = fences
     if scope['lane'] == 'discovery':
@@ -567,7 +569,7 @@ def current_job(store, job):
     scope = json.loads(frozen['scope'])
     native_access(store, job, scope)
     for source in scope.get('read_fences', []):
-        if not store.work_read_coexists(job, scope, store.job(source)):
+        if not store.work_read_coexists(job, scope, {'id':source}):
             raise Refusal('Work read fence or current read-only authority changed')
     for member in [*json.loads(job['members']), *scope.get('neighbors', [])]:
         queue = store.one('SELECT * FROM queue WHERE id=?', (member['queue'],))
