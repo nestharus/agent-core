@@ -172,9 +172,10 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         from .service import SCHEMA as SERVICE_SCHEMA
         from .review_returns import SCHEMA as REPORT_RETURN_SCHEMA
         from .report_repair import SCHEMA as REPORT_REPAIR_SCHEMA
+        from .resource_scopes import SCHEMA as QA_OBSERVATION_SCHEMA
         from .branches import SCHEMA as BRANCH_SCHEMA
         from .service_recovery import SCHEMA as SERVICE_RECOVERY_SCHEMA
-        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA + REPORT_RETURN_SCHEMA + REPORT_REPAIR_SCHEMA)
+        self.db.executescript(REVIEW_SCHEMA + SERVICE_SCHEMA + BRANCH_SCHEMA + SERVICE_RECOVERY_SCHEMA + REPORT_RETURN_SCHEMA + REPORT_REPAIR_SCHEMA + QA_OBSERVATION_SCHEMA)
         self.db.execute('CREATE TABLE IF NOT EXISTS shared_custody_intents(delivery TEXT PRIMARY KEY,archive TEXT NOT NULL,basis TEXT NOT NULL,state TEXT NOT NULL,receipt TEXT)')
         windows.prepare_revision(self)
 

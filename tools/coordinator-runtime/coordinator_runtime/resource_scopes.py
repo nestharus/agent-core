@@ -4,9 +4,21 @@ import math
 import re
 import os
 import subprocess
+import copy
 from pathlib import Path
 
-from .contracts import PROFILES, Refusal, digest, required_text, scoped_task, qa_branch_sequence
+from .contracts import PROFILES, Refusal, digest, encode, canonical_uuid, required_text, scoped_task, qa_branch_sequence
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS qa_observation_amendments(
+ capability TEXT NOT NULL,package TEXT NOT NULL,request TEXT NOT NULL,
+ issuer TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(capability,package));
+CREATE TRIGGER IF NOT EXISTS qa_observation_amendments_no_update BEFORE UPDATE ON qa_observation_amendments
+ BEGIN SELECT RAISE(ABORT,'immutable Work observation amendment'); END;
+CREATE TRIGGER IF NOT EXISTS qa_observation_amendments_no_delete BEFORE DELETE ON qa_observation_amendments
+ BEGIN SELECT RAISE(ABORT,'immutable Work observation amendment'); END;
+"""
 
 
 def root(value, exclusions=(), *, metadata=True):
@@ -74,15 +86,212 @@ def scope_excluded(runtime, name, admission):
                for value in values for p in runtime.config.get('artifact_exclusions', []))
 
 
-def qa_accounts(record):
+def qa_accounts(record, runtime=None):
     if 'qa_operations' in record:
         values = record['qa_operations']
         # Five executing + one accepted cleanup + one waiting execution need
         # seven exact package accounts, without increasing either phase slot.
         if ('qa_operation' in record or not isinstance(values, list) or not 1 <= len(values) <= 7):
             raise Refusal('one to seven independent selected QA operation policies required')
-        return values
-    return [record['qa_operation']] if 'qa_operation' in record else []
+    else:
+        values = [record['qa_operation']] if 'qa_operation' in record else []
+    return [selected_qa_account(runtime, record, a) for a in values] if runtime else values
+
+
+def _qa_grants(runtime):
+    # Supported enrollment metadata only; never source bodies or shared stores.
+    return {r: runtime.one('SELECT owner,profile,grant_id,cutover,intake,legacy_hold FROM enrollments WHERE role=?', (r,))
+            for r in ('Work', 'QA')}
+
+
+def _qa_amendment(runtime, package):
+    if not runtime.processing or not runtime.one("SELECT name FROM sqlite_master WHERE name='qa_observation_amendments'"):
+        return None
+    return runtime.one('SELECT * FROM qa_observation_amendments WHERE capability=? AND package=?',
+                       (runtime.processing.key, package))
+
+
+def _corrected_account(account, request):
+    if (not isinstance(request, dict)
+            or set(request) != {'basis', 'authority', 'evidence', 'statement', 'statement_sha256', 'relevant_roots'}
+            or not isinstance(request['statement'], dict) or not request['statement']
+            or request['statement_sha256'] != digest(request['statement'])):
+        raise Refusal('exact whole new Work observation, statement hash and relevant roots required')
+    required_text(request['authority'], 'current Work correction truth and rationale', 4000)
+    if not isinstance(request['evidence'], list) or not 1 <= len(request['evidence']) <= 32:
+        raise Refusal('finite explicit current owner observation evidence required')
+    for item in request['evidence']:
+        required_text(item, 'current Work observation evidence', 4000)
+    value = copy.deepcopy(account)
+    value['statement'] = request['statement']
+    value['policy'].update(statement_sha256=request['statement_sha256'], relevant_roots=request['relevant_roots'])
+    return value
+
+
+def selected_qa_account(runtime, record, account):
+    """Resolve one append-only Work attribution; never rewrite the old account.
+
+    An amendment does not authenticate native QA authorship or prove a physical
+    census. Original global unknown custody and every independent guard remain.
+    """
+    package = account.get('binding', {}).get('package') if isinstance(account, dict) else None
+    row = _qa_amendment(runtime, package)
+    if not row:
+        return account
+    cap, selection = runtime.processing.current()
+    request = json.loads(row['request'])
+    basis = request['basis']
+    originals = [a for a in qa_accounts(record) if a['binding']['package'] == package]
+    if (len(originals) != 1 or selection.get('service', {}).get('legacy_resources', {}).get('QA') != record
+            or cap['issuer'] != runtime.config['roles']['Work']['owner'] or row['issuer'] != cap['issuer']
+            or basis['capability'] != cap['id'] or basis['package'] != package
+            or basis['issuer'] != cap['issuer'] or basis['configuration'] != digest(runtime.config)
+            or basis['selection_sha256'] != digest(selection) or basis['original_record_sha256'] != digest(record)
+            or basis['original_account_sha256'] != digest(originals[0]) or basis['grants'] != _qa_grants(runtime)):
+        raise Refusal('observation amendment differs from its unchanged current cap/account/custody binding')
+    if not runtime.processing.boards or 'Work' not in runtime.processing.boards:
+        raise Refusal('current original Work authority checker required')
+    runtime.processing.boards['Work'].verify_authority(runtime)
+    admission = runtime.one('SELECT * FROM admissions WHERE package=?', (package,))
+    if digest(admission) != basis['admission_sha256']:
+        raise Refusal('observation amendment cannot rebind its original admission')
+    corrected = _corrected_account(originals[0], request)
+    if account != originals[0] and account != corrected:
+        raise Refusal('unselected amended observation')
+    _qa_observation(runtime, 'QA', record, corrected)
+    return corrected
+
+
+def _qa_owner(runtime):
+    # No supplied actor argument. The real process identity is mandatory even
+    # for an API caller; SDK authority is independently checked below.
+    actor = canonical_uuid(os.environ.get('CODEX_SESSION_ID'))
+    owner = runtime.config['roles']['Work']['owner']
+    if actor != owner or runtime.config.get('software_delegation', {}).get('grantor') != owner:
+        raise Refusal('actual authenticated current Work alone corrects its observation')
+    boards = runtime.processing.boards if runtime.processing else None
+    if not boards or not all(r in boards for r in ('Work', 'QA')):
+        raise Refusal('original Work and QA authority checkers required')
+    if boards['Work'].store.acting_session(owner) != actor:
+        raise Refusal('actual Work identity differs')
+    for role in ('Work', 'QA'):
+        boards[role].verify_authority(runtime)
+    return actor
+
+
+def _qa_observation_basis(runtime, controller, event):
+    from . import configuration, prospective, windows, local_integration
+    from .report_repair import stopped_original
+    actor = _qa_owner(runtime)
+    cap, selection = runtime.processing.current()
+    if cap['issuer'] != actor or 'service' not in selection:
+        raise Refusal('same current genuine continuing Work capability required')
+    stopped_original(runtime, cap['id'], controller)
+    if (runtime.one("SELECT 1 FROM processing_runs WHERE capability=? AND state='owned' LIMIT 1", (cap['id'],))
+            or runtime.one('SELECT 1 FROM attempts WHERE controller=? AND (collected IS NULL OR ended IS NULL OR exit IS NULL) LIMIT 1', (controller,))):
+        raise Refusal('every original owned attempt and SAME service parent END must be collected')
+    queue = runtime.one('SELECT * FROM queue WHERE event=?', (event,))
+    state = runtime.one('SELECT hash,hold,state FROM events WHERE id=?', (event,))
+    if (not queue or not state or state['hold'] or queue['state'] != 'queued' or queue['job'] is not None
+            or queue['role'] != 'QA' or queue['phase'] != 'execution' or queue['task'] != 'qa-execution'):
+        raise Refusal('one exact current unheld queued unstarted QA execution required')
+    package = queue['package']
+    record = selection.get('service', {}).get('legacy_resources', {}).get('QA', {})
+    accounts = [a for a in qa_accounts(record) if a['binding']['package'] == package]
+    if len(accounts) != 1 or _qa_amendment(runtime, package):
+        raise Refusal('one original selected package observation without another amendment required')
+    original = accounts[0]
+    if (runtime.one('SELECT 1 FROM jobs WHERE package=? LIMIT 1', (package,))
+            or runtime.one('SELECT 1 FROM qa_package_owners WHERE package=?', (package,))):
+        raise Refusal('reserved or previously started package cannot rebind an observation')
+    admission = runtime.one('SELECT * FROM admissions WHERE package=?', (package,))
+    if not admission or runtime.one('SELECT 1 FROM ordinary_runs WHERE admission=? LIMIT 1', (digest(admission['receipt']),)):
+        raise Refusal('package ordinary run/effect intent cannot rebind an observation')
+    source = runtime.event(event)
+    routed = runtime.routing_event(event)
+    if (state['hash'] != digest(source) or routed.get('package') != package
+            or routed['role'] != queue['role'] or not runtime.processing.task(queue)):
+        raise Refusal('current unchanged queued source/hash/mapping/admission required')
+    local_integration.input_authority(runtime, source, queue['task'], package)
+    # This validates the ORIGINAL source/admission/tools/expiry but does not
+    # require its positive held roots to be disjoint: that is the mistaken
+    # Work attribution being corrected, not a guard to disable.
+    qa_operation(runtime, queue, record, original)
+    scope = original['policy']['scope']
+    operation = scope['ordinary_effects']
+    for resource in operation['resources']:
+        if runtime.one('SELECT 1 FROM ordinary_resources WHERE resource=?', (resource['key'],)):
+            raise Refusal('original operation resource lease stays held')
+    branch = None
+    if scope.get('branch_binding'):
+        from .local_native import branch_scope
+        from .branches import association
+        branch_scope(runtime, queue, scope['branch_binding'])
+        branch = association(runtime, scope['branch_binding'])
+        if (not branch['accepted'] or branch['root'] != operation['acceptor']
+                or branch['repository'] != operation['repository'] or branch['scope'] != package):
+            raise Refusal('unchanged current exact Root-accepted branch association required')
+    return {'capability': cap['id'], 'issuer': actor, 'configuration': digest(runtime.config),
+            'selection_sha256': digest(selection), 'starts': cap['starts'], 'controller': controller,
+            'package': package, 'event': event, 'source_sha256': state['hash'], 'queue': queue,
+            'mapping': runtime.input_resolution(event), 'admission_sha256': digest(admission),
+            'original_record_sha256': digest(record), 'original_account_sha256': digest(original),
+            'original_hold': record['original_hold'], 'custodian': original['policy']['custodian'],
+            'binding': original['binding'], 'grants': _qa_grants(runtime),
+            'prospective': prospective.current(runtime, queue['task']), 'branch': branch,
+            'original_release': runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, cap['id'])),
+            'revision': windows.revision(runtime)}
+
+
+def qa_observation_basis(runtime, controller, event):
+    """Fresh bounded correction operands; no observation truth is inferred."""
+    from . import configuration
+    with configuration.stopped(runtime), runtime.tx():
+        return _qa_observation_basis(runtime, controller, event)
+
+
+def amend_qa_observation(runtime, request):
+    """Append Work's new testimony, only before any package job/effect exists."""
+    from . import configuration
+    from .selected_source import custody_budget
+    _qa_owner(runtime)
+    if not isinstance(request, dict) or not isinstance(request.get('basis'), dict):
+        raise Refusal('exact current observation correction basis required')
+    basis = request['basis']
+    with configuration.stopped(runtime), runtime.tx():
+        cap, selection = runtime.processing.current()
+        if basis.get('capability') != cap['id']:
+            raise Refusal('amendment cannot select another capability')
+        previous = _qa_amendment(runtime, basis.get('package'))
+        record = selection.get('service', {}).get('legacy_resources', {}).get('QA', {})
+        if previous:
+            if json.loads(previous['request']) != request:
+                raise Refusal('different observation amendment already retained; no replacement')
+            original = next(a for a in qa_accounts(record) if a['binding']['package'] == basis['package'])
+            selected_qa_account(runtime, record, original)  # Read-only; no new charge or write.
+            return _qa_amendment_receipt(request)
+        if _qa_observation_basis(runtime, basis['controller'], basis['event']) != basis:
+            raise Refusal('correction basis changed; obtain a fresh bounded owner observation')
+        original = next(a for a in qa_accounts(record) if a['binding']['package'] == basis['package'])
+        corrected = _corrected_account(original, request)
+        _qa_observation(runtime, 'QA', record, corrected)  # Lexical exclusions before metadata.
+        if corrected['statement'] == original['statement']:
+            raise Refusal('a new explicit owner observation is required, not an old binding restamp')
+        encoded = encode(request)
+        if len(encoded.encode()) > runtime.config['limits']['max_result_bytes']:
+            raise Refusal('whole observation correction exceeds finite metadata envelope')
+        custody_budget(runtime, len(encoded.encode()) + 2048)
+        runtime.db.execute('INSERT INTO qa_observation_amendments VALUES(?,?,?,?,?)',
+                           (cap['id'], basis['package'], encoded, cap['issuer'], runtime.clock()))
+        qa_operation(runtime, basis['queue'], record)  # Same transaction exact anchor recheck.
+    return _qa_amendment_receipt(request)
+
+
+def _qa_amendment_receipt(request):
+    return {'capability': request['basis']['capability'], 'package': request['basis']['package'],
+            'amendment_sha256': digest(request), 'statement_sha256': request['statement_sha256'],
+            'native_qa_authorship': False, 'admission_or_effect_authority_changed': False,
+            'meaning': 'new explicit Work attribution; original account, unknown hold, budgets and expiry retained'}
 
 
 def qa_observation(runtime, role, record, account=None):
@@ -93,6 +302,11 @@ def qa_observation(runtime, role, record, account=None):
     cannot prove native authorship or the truth/completeness of external facts.
     """
     account = record['qa_operation'] if account is None else account
+    account = selected_qa_account(runtime, record, account)
+    return _qa_observation(runtime, role, record, account)
+
+
+def _qa_observation(runtime, role, record, account):
     if (role != 'QA' or record['unbounded'] is not True
             or not isinstance(account, dict) or set(account) - {'cleanup'} != {'statement', 'binding', 'policy'}):
         raise Refusal('operation-relative QA policy must preserve global unknown scope')
@@ -182,8 +396,11 @@ def qa_operation(runtime, row, record, account=None):
         if len(matches) != 1:
             raise Refusal('one exact selected package operation required')
         account = matches[0]
-    if account not in accounts:
+    if account not in accounts and not any(
+            a['binding'] == account.get('binding') and selected_qa_account(runtime, record, a) == account
+            for a in accounts):
         raise Refusal('unselected QA operation')
+    account = selected_qa_account(runtime, record, account)
     qa_observation(runtime, row['role'], record, account)
     if row['task'] == 'qa-cleanup':
         return qa_cleanup(runtime, row, record, account)
@@ -374,6 +591,7 @@ def qa_cleanup(runtime, row, record, account):
     """Consolidation consumes this accepted execution, never a model DONE."""
     from . import ordinary, prospective, qa_source
     from .report_scope import source_events, execution_report
+    account = selected_qa_account(runtime, record, account)
     cleanup = account.get('cleanup')
     if not cleanup or row['phase'] != 'cleanup' or row['role'] != 'QA':
         raise Refusal('separately selected same-package cleanup required')

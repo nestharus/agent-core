@@ -71,6 +71,14 @@ def parser():
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
     processing_basis.add_argument('--selected-retained', help='Public JSON list of exact event/role/source_hash/source_birth/task/mapping_version pins; metadata only, distinct from future-only')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
+    for command in ('qa-observation-correction-basis', 'amend-qa-observation'):
+        correction = sub.add_parser(command, help='Actual Work: append a pre-start attributed observation; preserve all authority and holds')
+        correction.add_argument('capability')
+        if command == 'qa-observation-correction-basis':
+            correction.add_argument('event')
+            correction.add_argument('--controller', required=True)
+        else:
+            correction.add_argument('--receipt', required=True)
     for command in ('collected-report-repair-basis', 'select-collected-report-repair'):
         repair = sub.add_parser(command, help='Actual Work: stopped SAME-owner code pins and already-queued report; no epoch rotation')
         if command == 'collected-report-repair-basis':
@@ -330,6 +338,14 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'qa-observation-correction-basis', 'amend-qa-observation'}:
+        from . import processing, resource_scopes
+        boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        actual_actor(store.config['roles']['Work']['owner'])
+        store.processing = processing.Access(store, args.capability, boards)
+        if args.command == 'qa-observation-correction-basis':
+            return resource_scopes.qa_observation_basis(store, args.controller, args.event)
+        return resource_scopes.amend_qa_observation(store, read_record(args.receipt))
     if args.command in {'collected-report-repair-basis', 'select-collected-report-repair'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
