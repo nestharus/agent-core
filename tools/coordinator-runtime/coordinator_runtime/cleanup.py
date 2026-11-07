@@ -108,14 +108,31 @@ def eligible_event(store, event):
         return False
     if store.dependency_hold(event["id"]):
         return False
-    if any(row["processed_at"] is None or store.clock() < row["processed_at"]+RETENTION for row in store.dependents(event["id"])):
+    dependencies = store.dependents(event["id"])
+    if any(row["processed_at"] is None or store.clock() < row["processed_at"]+RETENTION for row in dependencies):
         return False
+    # Reopened work keeps its immutable original completion, but its current
+    # queue/job generation must close before any upstream source can retire.
+    for dependent in dependencies:
+        if store.one("SELECT o.id FROM outboxes o WHERE (o.event=? OR o.job IN "
+                     "(SELECT j.id FROM jobs j,json_each(j.members) m "
+                     "WHERE json_extract(m.value,'$.event')=?)) "
+                     "AND (o.processed_at IS NULL OR o.hold IS NOT NULL OR o.state!='settled' OR o.processed_at>?)",
+                     (dependent["id"], dependent["id"], store.clock()-RETENTION)):
+            return False
+        if store.one("SELECT q.id FROM queue q LEFT JOIN jobs j ON j.id=q.job WHERE q.event=? "
+                     "AND (q.state!='done' OR (q.job IS NOT NULL AND "
+                     "(j.id IS NULL OR j.state!='closed' OR j.effects NOT IN ('none','reconciled') "
+                     "OR j.closed_at IS NULL OR j.closed_at>?)))",
+                     (dependent["id"], store.clock()-RETENTION)):
+            return False
     active = store.one("SELECT j.id FROM queue q JOIN jobs j ON j.id=q.job WHERE q.event=? "
                        "AND (j.state!='closed' OR j.effects NOT IN ('none','reconciled'))", (event["id"],))
     if active:
         return False
-    attempts = store.rows("SELECT a.* FROM attempts a LEFT JOIN queue q ON q.job=a.job "
-                          "WHERE a.event=? OR q.event=?", (event["id"], event["id"]))
+    attempts = [attempt for dependent in dependencies for attempt in store.rows(
+        "SELECT a.* FROM attempts a LEFT JOIN queue q ON q.job=a.job "
+        "WHERE a.event=? OR q.event=?", (dependent["id"], dependent["id"]))]
     # Session/store uncertainty stays separately owned, not a universal freeze
     # on already conserved queue sources or permission to purge a profile.
     return all(a["collected"] is not None and (a["ended"] is not None or a["state"] == "not-started")
@@ -153,9 +170,29 @@ def descend(fd, part):
     return next_fd
 
 
+ARTIFACT_ORIGINAL = ("path", "attempt", "dev", "ino", "size", "mtime", "sha256")
+
+
+def guard_retirement(store, row):
+    from .custody import guard_path
+    # Lexical exclusions and recorded transitive origins precede ALL path I/O.
+    guard_path(store, row["path"])
+    fresh = store.one("SELECT * FROM artifacts WHERE path=?", (row["path"],))
+    if (not fresh or any(fresh[key] != row[key] for key in ARTIFACT_ORIGINAL)
+            or fresh["removed"] is not None or not artifact_eligible(store, fresh)):
+        raise Refusal("original artifact custody or current retention hold changed")
+
+
 def unlink_exact(store, row):
+    if not store.db.in_transaction:
+        raise Refusal("artifact retirement requires the cooperative write fence")
+    guard_retirement(store, row)
     path = Path(row["path"])
+    if '..' in path.parts or not path.is_absolute():
+        raise Refusal("exact original artifact path required")
     root = store.home / "artifacts" / row["attempt"]
+    if not path.is_relative_to(root):
+        raise Refusal("artifact is outside its original attempt root")
     if any(p.is_symlink() for p in (root, *root.parents)):
         raise Refusal("owned artifact root/ancestor became a symlink")
     fd, name = open_parent(root, path)
@@ -165,6 +202,18 @@ def unlink_exact(store, row):
         actual = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
         if actual != expected or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise Refusal("artifact identity/metadata changed immediately before deletion")
+        maximum = min(store.config["limits"]["max_bytes"], store.config["limits"].get("max_artifact_bytes", 33554432))
+        if digest_at(fd, name, expected, maximum) != row["sha256"]:
+            raise Refusal("original artifact source hash changed")
+        # Recheck after source acquisition, immediately before the exact unlink.
+        # Cooperating journal writers share this transaction; external writers
+        # are still outside its atomicity guarantee.
+        guard_retirement(store, row)
+        latest = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        if ((latest.st_dev, latest.st_ino, latest.st_size, latest.st_mtime_ns) != expected
+                or not stat.S_ISREG(latest.st_mode) or latest.st_nlink != 1):
+            raise Refusal("artifact identity changed after source hash")
+        guard_retirement(store, row)
         os.unlink(name, dir_fd=fd)
         os.fsync(fd)
     finally:
@@ -175,7 +224,8 @@ def retire_artifact(store, row):
     # The same SQLite write lock fences concurrent hold changes and retirement.
     with store.tx():
         fresh = store.one("SELECT * FROM artifacts WHERE path=?", (row["path"],))
-        if fresh["removed"] is not None or not artifact_eligible(store, fresh):
+        if (not fresh or any(fresh[key] != row[key] for key in ARTIFACT_ORIGINAL)
+                or fresh["removed"] is not None or not artifact_eligible(store, fresh)):
             return {"path": row["path"], "state": "held"}
         try:
             unlink_exact(store, fresh)

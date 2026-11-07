@@ -1316,9 +1316,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def set_hold(self, event, reason):
         with self.tx():
-            self.db.execute("UPDATE events SET processed_at=CASE WHEN hold IS NOT NULL AND ? IS NULL "
-                            "AND processed_at IS NOT NULL THEN ? ELSE processed_at END,hold=? WHERE id=?",
-                            (reason, self.clock(), reason, event))
+            # Hold disposition is independent of actual completion. New work is
+            # retained by its own queue/job/dependent obligations and clock.
+            self.db.execute("UPDATE events SET hold=? WHERE id=?", (reason, event))
 
     def hold_job(self, job, reason):
         with self.tx():
