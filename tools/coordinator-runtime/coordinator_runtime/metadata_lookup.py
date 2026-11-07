@@ -7,6 +7,7 @@ delivery lifetimes are separate operands.
 """
 import copy
 import json
+import sqlite3
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -413,15 +414,52 @@ def authorize(store, attempt):
     from . import local_integration as local
     locator = attempt['kind'] == 'input-locator'
     table = 'input_locators' if locator else 'input_lookups'
-    record = store.one(f'SELECT * FROM {table} WHERE attempt=?', (attempt['id'],))
+    field = 'request' if locator else 'snapshot'
+    # The shared handoff check needs binding metadata, never point values,
+    # locator strings, result bodies or stored exception text.
+    record = store.one(f'SELECT event,capability,source_hash FROM {table} WHERE attempt=?', (attempt['id'],))
     if (not record or not store.processing or record['capability'] != store.processing.key
             or record['source_hash'] != digest(store.event(record['event']))):
         raise Refusal('original metadata handoff binding changed')
     original = store.event(record['event'])
-    for task, snapshot in json.loads(record['request' if locator else 'snapshot']).items():
+    bindings = store.rows(f"SELECT j.key AS task,json_extract(j.value,'$.binding') AS binding "
+                          f'FROM {table} r,json_each(r.{field}) j WHERE r.attempt=?', (attempt['id'],))
+    for binding in bindings:
+        task = binding['task']
         guard(store, original, task, original.get('package'))
-        if snapshot['binding'] != local.mapping_binding(store, task, original.get('package')):
+        if json.loads(binding['binding']) != local.mapping_binding(store, task, original.get('package')):
             raise Refusal('metadata handoff authority changed before model read')
+
+
+def diagnostic_current_context(store, attempt, key, event, source_hash, controller):
+    """SELECT-only handoff comparison, not eligibility, liveness or acceptance.
+
+    A historical structural join is useful even when this stronger comparison
+    cannot be established. Do not restamp, authorize a launch or acquire bodies.
+    """
+    row = store.one("SELECT id,kind,event,controller,CASE WHEN json_valid(detail) THEN "
+                    "json_extract(detail,'$.processing_capability')=? ELSE 0 END AS delegated "
+                    'FROM attempts WHERE id=?', (key, attempt))
+    if (not row or row['event'] != event or row['controller'] != controller or not row['delegated']
+            or row['kind'] not in ('input-locator', 'input-mapping')
+            or not store.processing or store.processing.key != key):
+        return False
+    table, field = (('input_locators', 'request') if row['kind'] == 'input-locator' else
+                    ('input_lookups', 'snapshot'))
+    record = store.one(f'SELECT event,capability,source_hash,json_valid({field}) AS valid, '
+                       f'CASE WHEN json_valid({field}) THEN json_type({field}) END AS shape, '
+                       f'CASE WHEN json_valid({field}) THEN (SELECT COUNT(*) FROM json_each({field})) END AS tasks '
+                       f'FROM {table} WHERE attempt=?', (attempt,))
+    if (not record or record['event'] != event or record['capability'] != key
+            or record['source_hash'] != source_hash or not record['valid']
+            or record['shape'] != 'object' or not record['tasks']):
+        return False
+    try:
+        store.processing.current()
+        authorize(store, row)
+    except (Refusal, ValueError, TypeError, KeyError, sqlite3.DatabaseError):
+        return False
+    return True
 
 
 def proof(store, event, actor, attempt, receipt):

@@ -777,6 +777,7 @@ def source_diagnostics(runtime, boards, key, event):
     if len(runs) != 1:
         raise Refusal('one current original service controller required; no liveness inferred')
     controller = runs[0]['controller']
+    canonical_uuid(controller)
     classifier = runtime.one('SELECT id,controller,kind,state,ended,collected,exit,capture,cleanup, '
                              'error IS NOT NULL AS error_present FROM attempts '
                              "WHERE id=? AND event=? AND controller=? AND kind IN ('classifier','diagnosis')",
@@ -801,6 +802,7 @@ def source_diagnostics(runtime, boards, key, event):
         attempt = runtime.one('SELECT id,kind,state,begin,ended,collected,exit,capture,cleanup, '
                               'error IS NOT NULL AS error_present FROM attempts WHERE id=?', (record['attempt'],))
         result = {'attempt':record['attempt'], 'collection':attempt, 'error_present':bool(record['error_present'])}
+        result['attempt_scope'] = diagnostic_attempt_scope(runtime, record['attempt'], key, event, state['hash'], controller)
         if kind == 'input-locator':
             result['hints_present'] = bool(record['hints_present'])
             result['hint_count'] = record['hint_count'] if record['hints_present'] else None
@@ -835,6 +837,12 @@ def source_diagnostics(runtime, boards, key, event):
             'job':job, 'resolution': resolution,
             'processing_complete': False,
             'meaning': 'bounded current prospective metadata; END/ACK/empty errors never imply processing or acceptance'}
+
+
+def diagnostic_attempt_scope(runtime, attempt, key, event, source_hash, controller):
+    from .metadata_lookup import diagnostic_current_context
+    return ('current-handoff-context-observed' if diagnostic_current_context(
+        runtime, attempt, key, event, source_hash, controller) else 'structurally-linked-currentness-unknown')
 
 
 def dependency_observation(runtime, key, event, state, controller):
@@ -900,10 +908,10 @@ def dependency_observation(runtime, key, event, state, controller):
             'detail': {'dependency': row['reason'] if row['reason'] is not None else
                        'metadata dependency refused; detail outside bounded public vocabulary',
                        'reason_known': row['reason'] is not None, 'attempt': row['attempt'],
-                       'attempt_scope': ('current-source-controller' if row['attempt'] else
+                       'attempt_scope': (diagnostic_attempt_scope(runtime, row['attempt'], key, event, state['hash'], controller) if row['attempt'] else
                                          'unavailable-current-source-controller' if row['attempt_recorded'] else
                                          'unrecorded')},
-            'meaning': 'exact source/hash/capability/controller observation; not fresh progress or acceptance'}
+            'meaning': 'recorded exact source/hash/capability/controller association; handoff comparison is observational, not execution, liveness or acceptance'}
 
 
 def reservation_observation(runtime, key, event, state, responsibility, controller):
@@ -917,11 +925,15 @@ def reservation_observation(runtime, key, event, state, responsibility, controll
     row = runtime.one("SELECT role,observed, (SELECT COUNT(*) FROM json_each(detail)) AS fields, "
                       "CASE WHEN json_extract(detail,'$.dependency') IN (?,?,?,?) "
                       "THEN json_extract(detail,'$.dependency') END AS reason, "
-                      "json_extract(detail,'$.controller') AS controller, "
+                      "CASE WHEN json_type(detail,'$.controller')='text' AND json_extract(detail,'$.controller')=? "
+                      "THEN ? END AS controller, "
                       "json_extract(detail,'$.capability') AS capability, "
                       "json_extract(detail,'$.source_hash') AS source_hash, "
                       "json_extract(detail,'$.queue') AS queue, json_extract(detail,'$.task') AS task "
-                      "FROM operational_errors WHERE subject=? AND kind='local-integration-dependency'", (*safe,event))
+                      "FROM (SELECT role,observed,CASE WHEN json_valid(detail) THEN "
+                      "CASE WHEN json_type(detail)='object' THEN detail ELSE '{}' END ELSE '{}' END AS detail "
+                      "FROM operational_errors WHERE subject=? AND kind='local-integration-dependency')",
+                      (*safe,controller,controller,event))
     if not row or not responsibility:
         return None
     detail = row
@@ -934,10 +946,13 @@ def reservation_observation(runtime, key, event, state, responsibility, controll
             or detail.get('source_hash') != state['hash']
             or detail.get('queue') != runtime.one('SELECT id FROM queue WHERE event=?', (event,))['id']
             or detail.get('task') != responsibility['task'] or not detail.get('controller')):
-        return {'available': False, 'meaning': 'unattributed or changed observation; no current reservation inference'}
+        return {'available': False, 'controller': None, 'same_controller': None,
+                'controller_scope': 'unqualified-currentness-unknown',
+                'meaning': 'unattributed or changed observation; no current reservation inference'}
     # Do not turn an arbitrary exception into a public raw-error interface.
     reason = row['reason']
     return {'available': True, 'controller':detail['controller'], 'capability':key,
+            'controller_scope': 'matches-current-source-controller',
             'source_hash':state['hash'], 'task':detail['task'], 'observed':row['observed'],
             'reason':reason if reason in safe else 'reservation refused; detail outside bounded public vocabulary',
             'same_controller':detail['controller'] == controller,

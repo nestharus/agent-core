@@ -117,7 +117,9 @@ class DiagnosticProjection(unittest.TestCase):
             attempt = self.store._attempt('input-mapping', self.event['id'], None, SOL, '.codex5')
         view = self.dependency('unknown fixture refusal', attempt=attempt)
         self.assertEqual(view['detail']['attempt'], attempt)
-        self.assertEqual(view['detail']['attempt_scope'], 'current-source-controller')
+        # Original601 passed this synthetic structural join. No lookup record
+        # or metadata delegation was claimed, so current handoff is unknown.
+        self.assertEqual(view['detail']['attempt_scope'], 'structurally-linked-currentness-unknown')
         for field, value in (('controller', 'FICTIONAL_OTHER601'), ('event', json.loads(self.producer['members'])[0]['event']),
                              ('kind', 'classifier')):
             with self.subTest(field=field), self.changed('attempts', 'id', attempt, **{field: value}):
