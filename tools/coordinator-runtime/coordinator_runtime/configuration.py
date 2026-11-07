@@ -840,8 +840,8 @@ def source_change(runtime, after, tasks):
             'qualification': 'measured code change only; genuine Work owns reviewed semantic selection'}
 
 
-def source_originals_stopped(runtime):
-    """Close the outgoing source generation, retaining unrelated original duties.
+def _outgoing_source_originals(runtime):
+    """Resolve the outgoing source generation, retaining unrelated original duties.
 
     Resolve relationships from public version/source metadata before acquiring
     any lifecycle state. Legacy bases have no source ordinal: their immutable
@@ -920,19 +920,42 @@ def source_originals_stopped(runtime):
         if (not runtime.one('SELECT controller FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
                 or runtime.one('SELECT controller FROM service_runs WHERE controller=? AND capability!=?', (controller, capability))):
             raise Refusal(ambiguous)
-    for controller, capability in relevant:
+    return relevant
+
+
+def _original_parent_released(runtime, controller, capability):
+    """Read supported processing-release evidence, never infer effect completion."""
+    run = runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
+    try:
+        receipt = json.loads(run['state'])['parent_END']
+    except (ValueError, KeyError, TypeError):
+        receipt = None
+    return (isinstance(receipt, dict) and type(receipt.get('actual_END')) is int
+            and isinstance(receipt.get('evidence'), list) and bool(receipt['evidence'])
+            and all(isinstance(e, str) and e.strip() for e in receipt['evidence'])
+            and not runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (controller,)))
+
+
+def source_originals_stopped(runtime):
+    """Source-only repair still requires the original service's return marker."""
+    for controller, capability in _outgoing_source_originals(runtime):
         service = runtime.one('SELECT state,returned FROM service_runs WHERE controller=? AND capability=?', (controller, capability))
-        run = runtime.one('SELECT state FROM processing_runs WHERE controller=? AND capability=?', (controller, capability))
-        try:
-            receipt = json.loads(run['state'])['parent_END']
-        except (ValueError, KeyError, TypeError):
-            receipt = None
-        if (not isinstance(receipt, dict) or type(receipt.get('actual_END')) is not int
-                or not isinstance(receipt.get('evidence'), list) or not receipt['evidence']
-                or any(not isinstance(e, str) or not e.strip() for e in receipt['evidence'])
-                or service and (service['state'] != 'returned-awaiting-parent-END' or service['returned'] is None)
-                or runtime.one('SELECT id FROM attempts WHERE controller=? AND collected IS NULL LIMIT 1', (controller,))):
+        if (not _original_parent_released(runtime, controller, capability)
+                or service and (service['state'] != 'returned-awaiting-parent-END' or service['returned'] is None)):
             raise Refusal('source-only selection requires original stop, numeric parent END and processing-release')
+
+
+def protocol_originals_stopped(runtime):
+    """Future executable selection needs parent END, not old reconciliation.
+
+    processing-release authenticates the original issuer and collected attempts.
+    A finalizer failure can leave serving/NULL after actual parent collection;
+    retain that service row and every unresolved duty without replay or repair.
+    The caller still owns the stop lock and active-authority checks.
+    """
+    for controller, capability in _outgoing_source_originals(runtime):
+        if not _original_parent_released(runtime, controller, capability):
+            raise Refusal('protocol upgrade requires original stop, numeric parent END and processing-release')
 
 
 @contextmanager
@@ -963,9 +986,10 @@ def apply(runtime, boards, value, selection):
             raise Refusal('explicitly revoke existing processing/prospective/retained capabilities; no implicit supersession')
         if any(r['original']['binding']['issued_by'] != issuer for r in current['processing']['roles'].values()):
             raise Refusal('same genuine original Work issuer required')
-        if ('source_only' in current or
-                'protocol_upgrade' in value.get('prospective_scope_selection', {})):
+        if 'source_only' in current:
             source_originals_stopped(runtime)
+        elif 'protocol_upgrade' in value.get('prospective_scope_selection', {}):
+            protocol_originals_stopped(runtime)
         record = {**selection, 'previous_configuration': runtime.config,
                   'event_boundary': current['processing']['event_boundary'],
                   'jobs': [r['id'] for r in runtime.rows('SELECT id FROM jobs')],

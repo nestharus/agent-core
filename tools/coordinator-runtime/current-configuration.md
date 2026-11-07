@@ -514,10 +514,18 @@ The existing app-server preflight still checks actual runtime version; this
 schema/metadata receipt makes no app-server/model/store compatibility claim.
 Pins provide cooperative change detection, not atomicity against another writer.
 
-Application additionally uses the existing source-generation stop fence: every
-outgoing selected controller must have its numeric parent END and supported
-processing release, with no uncollected attempt or active service. Existing
-active-capability and cooperative-lock refusals still apply. Old contexts,
+Application resolves the same outgoing configuration/source generation and exact
+original controller/capability relationships as the source-only stop fence.
+Every outgoing original must have genuine numeric parent END recorded through
+supported `processing-release`, with every original attempt collected. Numeric
+END may be nonzero. Successful reconciliation of old effects is not proof of
+process liveness: an already-ended original may still have a `serving` service
+row with `returned` NULL when its finalizer refused. Protocol selection leaves
+that row and all service/job/effect/privacy/source/retention UNKNOWN records
+unchanged; it neither fabricates a service return nor clears any obligation.
+Normal original service-return plus parent release remains supported. Source-only
+repair retains its stronger requirement for the original service-return marker.
+Existing active-capability and cooperative-lock refusals still apply. Old contexts,
 callers, collectors, jobs, grants and binary qualifications remain their actual
 originals. Only future admissions after parent END/release may use the new
 selection. Source staging and fixture success are not live adoption.
