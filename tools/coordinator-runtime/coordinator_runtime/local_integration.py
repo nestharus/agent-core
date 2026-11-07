@@ -528,7 +528,11 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
     at('local-ordinary-busy')
     if any(store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (r,)) for r in wanted):
         return unavailable('local-ordinary-busy')
-    for job in active:
+    # Execution-only closure does not settle native point/material/resource debt.
+    # These originals stop consuming residency but still participate in conflicts.
+    conserved = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'")
+                 if store.role_execution_fenced(j['id']) and j['id'] not in {a['id'] for a in active}]
+    for job in active + conserved:
         at('local-unknown-material')
         prior = scope_for(store, job)
         if not prior:
