@@ -28,11 +28,11 @@ handoff=root/'handoff';handoff.mkdir()
 records=[]
 def run(label,ids,source=None,code=None):
     if usage()>=128*1024**2:raise RuntimeError('stop-new128MiB')
-    fixtures=root/label;fixtures.mkdir();(fixtures/'tmp').mkdir()
+    fixtures=root/label;fixtures.mkdir();(fixtures/'normal-path27-act'/'tmp').mkdir(parents=True)
     cmd=['bwrap','--die-with-parent','--unshare-all','--new-session','--tmpfs','/']
     for path in ['/usr','/lib','/lib64','/bin']:cmd+=['--ro-bind',path,path]
     cmd+=['--proc','/proc','--dev','/dev','--ro-bind',str(source or src),'/src','--bind',str(fixtures),'/fixtures','--dir','/tmp','--dir','/home','--clearenv']
-    for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR='/fixtures/tmp',PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',PYTHONPATH='/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():cmd+=['--setenv',k,v]
+    for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR='/fixtures/normal-path27-act/tmp',PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',COORDINATOR_NORMAL_PATH_FIXTURES='/fixtures/normal-path27-act',COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',PYTHONPATH='/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():cmd+=['--setenv',k,v]
     cmd += ['--bind' if code else '--ro-bind',str(handoff),'/handoff']
     cmd+=['--chdir','/fixtures','/usr/bin/python3','-B']+(['-c',code] if code else ['-m','unittest','-v',*ids])
     child=None;data=bytearray();reason=None;start=time.monotonic()
