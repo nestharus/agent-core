@@ -181,7 +181,8 @@ def validate_config(config, *, withdrawal_only=False):
             from .retention_dependency import validate_pins
             validate_pins(method['source_pins'])
     excluded_paths=config.get('artifact_exclusions',[])
-    if not isinstance(excluded_paths,list) or len(excluded_paths)>64 or any(not isinstance(p,str) or not Path(p).is_absolute() or '..' in Path(p).parts for p in excluded_paths):
+    # Privacy hold populations grow; retain every opaque exclusion within a finite bound.
+    if not isinstance(excluded_paths,list) or len(excluded_paths)>4096 or any(not isinstance(p,str) or not Path(p).is_absolute() or '..' in Path(p).parts for p in excluded_paths):
         raise Refusal('bounded absolute opaque artifact exclusions required')
     for selected in config["roles"].values():
         if set(selected["routes"]) - set(config["tasks"]):
