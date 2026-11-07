@@ -3,6 +3,7 @@
 No result normalization or visible-label/protocol-ID inference. Linked evidence
 qualifies producer resolution claims, not independent semantic acceptance.
 """
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -331,6 +332,7 @@ def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlat
 
 
 def assess(store,attempt):
+    from .custody import frozen_body
     answer=collected_task_result(attempt)
     detail=json.loads(attempt['detail'])
     tools=detail.get('tool_completion',{})
@@ -341,8 +343,11 @@ def assess(store,attempt):
         _require(path.is_relative_to(root) and '..' not in path.parts,'resolution evidence must belong to this producer attempt')
         held=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],str(path)))
         _require(held and held['sha256']==ref['sha256'],'resolution evidence is not the exact conserved artifact')
-        blob=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(ref['sha256'],))
+        # Conservation/own-attempt identity does not grant current acquisition
+        # rights. Close recorded origins before even reading retained length.
+        blob=frozen_body(store,ref['sha256'],task,str(path))
         _require(blob is not None,'exact causal evidence bytes are not conserved')
+        _require(hashlib.sha256(blob['body']).hexdigest()==ref['sha256'],'conserved resolution evidence hash changed')
         return blob['body']
     job=store.job(attempt['job']);task=store.config['tasks'][job['task']]
     prior_results=prior_handbacks(detail)
