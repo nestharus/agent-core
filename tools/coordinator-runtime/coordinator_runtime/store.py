@@ -201,7 +201,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def _check_config(self):
         row = self.one("SELECT value FROM meta WHERE key='configuration'")
-        current = configuration.latest(self)
+        current = configuration.current_binding(self)
         if row and (current['current'] if current else row['value']) != digest(self.config):
             raise Refusal("configuration differs from this journal; use the supported current-configuration transition")
         if current and (current['original'] != row['value'] or json.loads(current['configuration']) != self.config):

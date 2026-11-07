@@ -33,6 +33,13 @@ def latest(runtime):
     return runtime.one('SELECT * FROM configuration_transitions ORDER BY position DESC LIMIT 1')
 
 
+def current_binding(runtime):
+    """Startup integrity fields without acquiring the historical selection."""
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_transitions'"):
+        return None
+    return runtime.one('SELECT current,original,configuration FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+
+
 def version_metadata(runtime):
     """Current public version identifiers without acquiring historical selections."""
     if not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_transitions'"):
