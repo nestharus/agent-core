@@ -426,10 +426,6 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         self.require_attempt_execution_open(attempt)
         with (nullcontext() if self.db.in_transaction else self.tx()):
             self.require_attempt_execution_open(attempt)
-            link = self.one('SELECT job FROM attempts WHERE id=?', (attempt,))
-            if link and link['job']:
-                from .native_review_scope import admit
-                admit(self, self.job(link['job']))
             self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if self.processing:
@@ -583,10 +579,6 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
     def begin(self, attempt, detail):
         with self.tx():
             self.require_attempt_execution_open(attempt)
-            link = self.one('SELECT job FROM attempts WHERE id=?', (attempt,))
-            if link and link['job']:
-                from .native_review_scope import admit
-                admit(self, self.job(link['job']))
             self.authorize_preparation(attempt)
             row = self.attempt(attempt)
             if row['job']:
