@@ -817,6 +817,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             rows = [r for r in rows if r["package"] == row["package"]]
         if self.config.get('window_service'):
             rows = rows[:self.config['window_service']['batch_size']]
+        from .report_scope import bounded_members
+        rows = bounded_members(self, row, rows)
         return [self._input_member(r) for r in rows]
 
     def _input_member(self,row):

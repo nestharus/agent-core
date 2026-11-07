@@ -67,17 +67,28 @@ def implementation():
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
 
 
-def basis(runtime, boards, *, future_only=False):
+def basis(runtime, boards, *, future_only=False, selected_retained=None):
     from . import windows
-    if future_only and not runtime.db.in_transaction:
+    narrow = selected_retained is not None
+    if future_only and narrow:
+        raise Refusal('future-only and selected retained source authority are distinct')
+    if narrow:
+        from .selected_source import operands
+        operands(runtime, selected_retained)
+        boards['Work'].store.acting_session(runtime.config['software_delegation']['grantor'])
+    if (future_only or narrow) and not runtime.db.in_transaction:
         with runtime.tx():
-            return basis(runtime, boards, future_only=True)
-    version = configuration.latest(runtime)
+            return basis(runtime, boards, future_only=future_only, selected_retained=selected_retained)
+    version = configuration.version_metadata(runtime)
     return {'configuration': digest(runtime.config), 'implementation': implementation(),
+            **({'mode':'selected-retained-source-v1', 'selected_retained':selected_retained,
+                'journal_revision':windows.revision(runtime),
+                'allocation':windows.basis(runtime) if runtime.config.get('window_service') else None} if narrow else {}),
             **({'configuration_transition': {k: version[k] for k in ('position', 'previous', 'current', 'original', 'issuer')}} if version else {}),
             **({'future_only': True, 'journal_revision': windows.revision(runtime),
                 'allocation': windows.basis(runtime) if runtime.config.get('window_service') else None} if future_only else {}),
-            'roles': {r: {'original': b.prospective_basis(runtime) if future_only else b.retained_basis(runtime),
+            'roles': {r: {'original': (b.selected_basis(runtime, selected_retained) if narrow else
+                                       b.prospective_basis(runtime) if future_only else b.retained_basis(runtime)),
                           'future_after': b.future_frontier(),
                           'original_cursor': runtime.one('SELECT seq FROM cursors WHERE role=?', (r,))['seq']}
                       for r, b in boards.items()},
@@ -273,6 +284,16 @@ def select(runtime, boards, selection):
                         or selection['recover_controls'] or selection.get('control_recognitions')
                         or any(r.get('kind') != 'admit-package' for r in selection.get('owner_operations', []))):
         raise Refusal('metadata-only future basis cannot authorize retained history, recovery or finite processing')
+    from .selected_source import MODE, operands
+    narrow = selection['basis'].get('mode') == MODE
+    pins = selection['basis'].get('selected_retained') if narrow else None
+    if narrow:
+        operands(runtime, pins)
+        if (not continuing or not selection['future_intake'] or selection['recover_controls']
+                or selection.get('control_recognitions') or selection.get('owner_operations')
+                or selection['retained_events'] != [p['event'] for p in pins]
+                or any(p['task'] not in selection['tasks'] for p in pins)):
+            raise Refusal('selected metadata basis authorizes only exact queued originals plus future intake; no recovery/owner effects')
     events = selection['retained_events']
     if not isinstance(events, list) or any(not isinstance(e, str) for e in events) or len(events) != len(set(events)):
         raise Refusal('explicit unique retained source IDs required')
@@ -317,7 +338,7 @@ def select(runtime, boards, selection):
     if continuing:
         from .service import validate
         validate(runtime, selection)
-    current = basis(runtime, boards, future_only=future_only)
+    current = basis(runtime, boards, future_only=future_only, selected_retained=pins)
     if selection['basis'] != current:
         raise Refusal('processing source/capacity/frontier basis changed; no automatic retry')
     if len(encode(selection).encode()) > runtime.config['limits']['max_result_bytes']:
@@ -329,10 +350,11 @@ def select(runtime, boards, selection):
             grant = b._original(conn, runtime)
             if grant['issued_by'] != issuer:
                 raise Refusal('processing issuer differs from original software issuer')
-            usage = b._usage(conn, grant)
-            if any(usage[u] > selection[p] for u, p in (
-                    ('shared_rows', 'max_shared_rows'), ('shared_payload_bytes', 'max_shared_payload_bytes'),
-                    ('runtime_rows', 'max_runtime_rows'))):
+            usage = b._selected_usage(conn, grant) if narrow else b._usage(conn, grant)
+            limits = [('shared_rows', 'max_shared_rows'), ('runtime_rows', 'max_runtime_rows')]
+            if not narrow:
+                limits.append(('shared_payload_bytes', 'max_shared_payload_bytes'))
+            if any(usage[u] > selection[p] for u, p in limits):
                 raise Refusal('processing residency does not fit current preserved use: ' + role)
     with runtime.tx():
         if runtime.one('SELECT id FROM processing_capabilities WHERE revoked IS NULL'):
@@ -340,9 +362,13 @@ def select(runtime, boards, selection):
         if continuing:
             from . import windows
             windows.validate_delegation(runtime, selection)
-        if future_only and basis(runtime, boards, future_only=True) != selection['basis']:
+        if (future_only or narrow) and basis(runtime, boards, future_only=future_only, selected_retained=pins) != selection['basis']:
             raise Refusal('future-only processing basis changed before local selection; no automatic replay')
-        runtime.budget(None, len(encode(selection).encode()) + 2048)
+        if narrow:
+            from .selected_source import custody_budget
+            custody_budget(runtime, len(encode(selection).encode()) + 2048)
+        else:
+            runtime.budget(None, len(encode(selection).encode()) + 2048)
         key = ident()
         runtime.db.execute('INSERT INTO processing_capabilities VALUES(?,?,?,?,NULL,0)',
                            (key, encode(selection), issuer, runtime.clock()))
@@ -397,6 +423,13 @@ class Access:
         if not configuration.event_allowed(self.runtime, event):
             return False
         if event['id'] in selection['retained_events']:
+            from .selected_source import selected_pins
+            pins = {p['event']:p for p in selected_pins(selection)}
+            if event['id'] in pins:
+                pin = pins[event['id']]
+                position = self.runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event['id'],))
+                if not position or position['position'] != pin['source_birth'] or event['role'] != pin['role']:
+                    raise Refusal('selected retained original role/birth changed; no source renewal')
             original = {e['id']: e['hash'] for r in selection['basis']['roles'].values() for e in r['original']['events']}
             if digest(event) != original.get(event['id']):
                 raise Refusal('retained processing source differs from its original hash')
@@ -509,6 +542,24 @@ class Access:
 
 
 class ProcessingBoard(RetainedBoard):
+    def _selected_usage(self, conn, grant):
+        # Public aggregate row residency only, never historical payload LENGTH.
+        shared = conn.execute('SELECT COUNT(*) FROM coordinator_deliveries_v1').fetchone()[0]
+        owned = conn.execute('SELECT COUNT(*) FROM coordinator_deliveries_v1 d JOIN coordinator_grants_v1 g '
+                             'ON g.id=d.grant_id WHERE g.runtime=? AND g.runtime_dev=? AND g.runtime_ino=? AND g.actor=?',
+                             tuple(grant[k] for k in ('runtime','runtime_dev','runtime_ino','actor'))).fetchone()[0]
+        return dict(shared_rows=shared, runtime_rows=owned)
+
+    def selected_basis(self, runtime, pins):
+        from .selected_source import snapshot
+        with self.opened(settlement=True) as conn:
+            grant = self._original(conn, runtime)
+            events = [snapshot(runtime, p) for p in pins if p['role'] == self.role]
+            return dict(configuration=self._configuration(runtime,self._binding(grant)), binding=self._binding(grant),
+                        usage=self._selected_usage(conn,grant), events=events,
+                        scope='explicit selected source metadata only; no historical body/hash/size acquisition; '
+                              'payload residency unobserved and still checked at actual delivery/allocation')
+
     def prospective_basis(self, runtime):
         """Original binding and recorded identifiers, never rehash old bodies.
 

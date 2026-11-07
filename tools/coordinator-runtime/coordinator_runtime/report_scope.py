@@ -5,7 +5,7 @@ native method/context/collector and every legacy debt remain attributed input.
 """
 import json
 import math
-from .contracts import Refusal, digest, collected_task_result, required_text
+from .contracts import Refusal, digest, encode, collected_task_result, required_text
 
 
 def source_events(runtime, row):
@@ -135,3 +135,51 @@ def validate_result(runtime, row, result):
     reports = integration_inputs(runtime, row)
     if reports is not None and {'collected_reports': reports} not in result['findings']:
         raise Refusal('consolidation must conserve exact whole original report envelopes and qualifications')
+
+
+def complete_return(reports):
+    """A complete legal return shape, not manufactured reviewer reasoning.
+
+    Used for exact admission/composition accounting. Workers may add analysis
+    within the same actual result budget; all collection checks still apply.
+    """
+    return dict(semantic='DONE', category='consolidated',
+                summary='Whole attributed reports conserved; original qualifications remain.',
+                findings=[dict(collected_reports=reports)], failures=[], unknowns=[], artifacts=[])
+
+
+def fits_return(runtime, reports):
+    return len(encode(complete_return(reports)).encode()) <= runtime.config['limits']['max_result_bytes']
+
+
+def bounded_members(runtime, row, rows):
+    """Qualify every member before freezing, then pack whole envelopes in order.
+
+    A nonfitting neighbor remains queued; it is never partially represented.
+    All singleton receipts admitted by this source have a conforming return.
+    Older nonfitting singletons remain conserved/refused under current limits.
+    """
+    if not runtime.processing or row['task'] != 'reviews-integrator':
+        return rows
+    record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+    if 'reviews_report' not in record:
+        return rows
+    chosen, reports = [], []
+    for candidate in rows:
+        try:
+            eligible(runtime, candidate, record)
+        except Refusal:
+            if candidate['id'] == row['id']:
+                raise
+            continue
+        incoming = conserved_inputs(runtime, candidate)
+        if not fits_return(runtime, incoming):
+            if candidate['id'] == row['id']:
+                raise Refusal('whole report has no complete return within current selected result budget')
+            continue
+        if fits_return(runtime, reports + incoming):
+            chosen.append(candidate)
+            reports += incoming
+    if not chosen:
+        raise Refusal('no qualified complete report batch within current result budget')
+    return chosen

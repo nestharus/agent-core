@@ -119,6 +119,9 @@ def ingest_report(runtime, actor, task, receipt):
              'processing_report': cap['id'], 'body': body}
     if len(encode(event).encode()) > min(262144, runtime.config['limits']['max_result_bytes']):
         raise Refusal('whole report exceeds selected intake envelope; no truncation or full-report claim')
+    from .report_scope import fits_return
+    if not fits_return(runtime, [dict(event=event['id'], sha256=digest(event), original=body)]):
+        raise Refusal('whole report has no complete return within selected result budget; no truncation')
     runtime.processing.boards['Reviews'].verify_authority(runtime)
     runtime.ingest(event)
     with runtime.tx():

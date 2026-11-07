@@ -69,6 +69,7 @@ def parser():
     sub.add_parser("init")
     sub.add_parser("status")
     processing_basis = sub.add_parser('processing-basis', help='Genuine Work: exact stopped software basis and future frontier')
+    processing_basis.add_argument('--selected-retained', help='Public JSON list of exact event/role/source_hash/source_birth/task/mapping_version pins; metadata only, distinct from future-only')
     processing_basis.add_argument('--future-only', action='store_true', help='Metadata-only basis for continuing future intake; no retained processing authority')
     for command in ('collected-report-repair-basis', 'select-collected-report-repair'):
         repair = sub.add_parser(command, help='Actual Work: stopped SAME-owner code pins and already-queued report; no epoch rotation')
@@ -449,7 +450,8 @@ def operate(args, store):
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
         if args.command == 'processing-basis':
-            return processing.basis(store, boards, future_only=args.future_only)
+            return processing.basis(store, boards, future_only=args.future_only,
+                                    selected_retained=read_record(args.selected_retained) if args.selected_retained else None)
         if args.command == 'delegate-processing':
             return processing.select(store, boards, read_record(args.selection))
         if args.command == 'processing-status':

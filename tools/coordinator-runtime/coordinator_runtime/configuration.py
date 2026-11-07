@@ -33,15 +33,31 @@ def latest(runtime):
     return runtime.one('SELECT * FROM configuration_transitions ORDER BY position DESC LIMIT 1')
 
 
+def version_metadata(runtime):
+    """Current public version identifiers without acquiring historical selections."""
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='configuration_transitions'"):
+        return None
+    return runtime.one('SELECT position,previous,current,original,issuer FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+
+
+def processing_tasks(runtime):
+    assert_current(runtime)
+    if not version_metadata(runtime):
+        return None
+    row = runtime.one("SELECT json_extract(selection,'$.basis.tasks') AS tasks "
+                      'FROM configuration_transitions ORDER BY position DESC LIMIT 1')
+    return json.loads(row['tasks'])
+
+
 @observations.observe('configuration-current')
 def assert_current(runtime):
-    row = latest(runtime)
+    row = version_metadata(runtime)
     if row and row['current'] != digest(runtime.config):
         raise Refusal('configuration is historical; reopen with the selected current configuration, never replay old authority')
 
 
 def original_digest(runtime):
-    row = latest(runtime)
+    row = version_metadata(runtime)
     return row['original'] if row else digest(runtime.config)
 
 
@@ -53,10 +69,12 @@ def selected(runtime):
 
 def original_binding(runtime, role, grant):
     """Only ProcessingBoard bridges current authority to a still-revoked grant."""
-    selection = selected(runtime)
-    if not selection:
+    assert_current(runtime)
+    if not version_metadata(runtime):
         return digest(runtime.config)
-    if selection['basis']['processing']['roles'][role]['original']['binding'] != grant:
+    row = runtime.one('SELECT json_extract(selection,?) AS binding FROM configuration_transitions ORDER BY position DESC LIMIT 1',
+                      ('$.basis.processing.roles.' + role + '.original.binding',))
+    if not row['binding'] or json.loads(row['binding']) != grant:
         raise Refusal('current selection cannot replace the immutable original grant binding')
     return original_digest(runtime)
 
@@ -478,11 +496,14 @@ def apply(runtime, boards, value, selection):
 
 
 def validate_processing(runtime, selection):
-    transition = selected(runtime)
-    if not transition:
+    tasks = processing_tasks(runtime)
+    if tasks is None:
         return
-    if (selection['retained_events'] or selection['recover_controls'] or not selection['future_intake']
-            or set(selection['tasks']) - set(transition['basis']['tasks'])
+    from .selected_source import selected_pins
+    pins = selected_pins(selection)
+    if (selection['retained_events'] and selection['retained_events'] != [p['event'] for p in pins]
+            or selection['recover_controls'] or not selection['future_intake']
+            or set(selection['tasks']) - set(tasks)
             or any(r['kind'] != 'admit-package' for r in selection.get('owner_operations', []))):
         raise Refusal('current configuration authority is prospective only; historical recovery/holds remain original')
 
@@ -492,7 +513,8 @@ def event_allowed(runtime, event):
     if not transition:
         return True
     row = runtime.one('SELECT COALESCE(p.position,e.rowid) AS position FROM events e LEFT JOIN processing_source_positions p ON p.event=e.id WHERE e.id=?', (event['id'],))
-    return not row or row['position'] > transition['event_boundary']
+    from .selected_source import permits_original
+    return not row or row['position'] > transition['event_boundary'] or permits_original(runtime, event)
 
 
 def event_candidate_scope(runtime):
@@ -507,8 +529,12 @@ def event_candidate_scope(runtime):
     transition = selected(runtime)
     if not transition:
         return '1', ()
-    return ('COALESCE((SELECT p.position FROM processing_source_positions p '
-            'WHERE p.event=e.id),e.rowid)>?', (transition['event_boundary'],))
+    from .selected_source import selected_pins
+    pins = selected_pins(runtime.processing.current()[1]) if runtime.processing else []
+    ids = [p['event'] for p in pins]
+    extra = ' OR e.id IN (' + ','.join('?' for _ in ids) + ')' if ids else ''
+    return ('(COALESCE((SELECT p.position FROM processing_source_positions p '
+            'WHERE p.event=e.id),e.rowid)>?' + extra + ')', (transition['event_boundary'], *ids))
 
 
 def task_for_job(runtime, job):

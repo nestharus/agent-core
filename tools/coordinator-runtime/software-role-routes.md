@@ -170,3 +170,93 @@ reservation-only procedure avoids that path's source-body reconstruction.
 Normal guard order, short circuit, exactly-once evaluations, Refusal semantics,
 admission/launch/effect rights, all consumer obligations and original unknowns
 remain. The last observation is not a historical clearance or retention clock.
+
+### Complete bounded Reviews batches (Work50109)
+
+The ordinary report route qualifies **every** member against the current finite
+report policy before freezing it. Distinct ineligible receipts stay conserved
+and queued; they do not join an eligible neighbor. Valid receipts are packed in
+queue order into batches whose complete encoded return fits the selected
+`max_result_bytes`. Remaining receipts can progress in later normal batches.
+No original, history, method, dissent or coverage field is shortened.
+
+Intake also requires a complete singleton return to fit. Accounting uses the
+actual JSON encoding of the whole `collected_reports` envelopes, source IDs and
+digests, and all required result fields, via `report_scope.complete_return`.
+That function describes a legal conservation return shape, not generated model
+reasoning. Added analysis must fit the same budget. Ordinary result collection
+and whole-envelope validation remain mandatory; an oversized actual return
+still fails and retains its original recovery custody. A newly supplied report
+with no conforming singleton path is refused before intake. An already stored
+nonfitting original remains conserved/refused, with no automatic replay or
+policy/budget increase. Local integration keeps its separate mapping protocol;
+this batching contract describes the ordinary nonlocal report route.
+
+### Explicit selected retained source plus future intake (Work50115)
+
+For a stopped original software grant and a revoked exact processing capability,
+Work can request a **distinct** metadata-only basis for exact previously
+unprocessed queued originals. It does not invoke the retained-history sweep or
+borrow `future_only` authority. No unselected old event/outbox/result/attempt/
+capture body, body hash, body size, or capture file metadata is acquired by this
+basis/delegation path. The current configuration, its transition position,
+cooperative journal revision, allocation window, original still-revoked grant
+bindings and future Board frontiers remain explicit.
+
+Work supplies an authorized public JSON list with one to 32 unique exact pins:
+
+```json
+[{"event":"<original ID>","role":"Work","source_hash":"<64 hex>",
+  "source_birth":380,"task":"work-integrator","mapping_version":1}]
+```
+
+The numeric birth and mapping version above are schema examples, not permission
+to probe or operate any real source. Obtain these operands only from Work's
+already authorized metadata. Use the supported CLI in the selected release:
+
+```text
+coordinator --config <current-config> processing-basis --selected-retained <pins.json>
+coordinator --config <current-config> delegate-processing --selection <selection.json>
+```
+
+The Python API is `processing.basis(runtime, boards,
+selected_retained=[...])`, followed by ordinary `processing.select`. Place the
+returned **whole** basis unchanged in the usual continuing selection. Set
+`retained_events` to exactly those IDs in pin order, `future_intake: true`,
+`recover_controls: {}`, and provide genuine Work `authority`, the unchanged
+allowed `tasks`, positive `max_shared_rows`, `max_shared_payload_bytes` and
+`max_runtime_rows`, plus the ordinary finite `service` policy. Select existing
+`input_mappings` tasks if a local receiver mapping must be refreshed. Do not
+supply owner operations, control recovery/recognition, `future_only`, finite
+start authority, or broader retained IDs through this mode. Existing admissions,
+Reviews policies, and optional allocation authorities retain their own schema
+and validation. Wrong role/hash/birth/task/mapping or unknown/held/excluded/
+processed/reserved sources refuse before source bytes. Drift before delegation
+refuses; no automatic retry, charge refund or remapping occurs.
+
+Basis registration observes only aggregate Board row counts; historical payload
+residency is explicitly **unobserved**, never reported as zero. Its bounded
+metadata write checks aggregate SQLite journal capacity without walking old
+captures. It grants no execution/allocation; existing total storage admission
+and actual Board payload limits still apply to subsequent real allocations and
+delivery. This is not an attestation of total artifact residency or private
+physical isolation. Current allocation counts are retained, never reset/refunded.
+
+The same original event, immutable hash/birth, classification and current mapping
+are retained. Configuration candidate filtering recognizes only these explicit
+original IDs, while later source authentication/current-task/custody/collector/
+resource/effect/hold checks still apply. For local mappings, the old capability
+binding can be stale after delegation. Work must use the supported
+`processing-map-input` procedure (or `processing.map_input`) to obtain a fresh
+service observation, then fresh classification, before reservation. The runtime
+does not restamp old point versions. No business source is reposted, no old job
+or effect is replayed, and no processing clock is fabricated. All unrelated
+unknowns, original/native/consumer/outbox/recovery and retention duties remain.
+These commands were verified only on fresh fictional journals; Work owns any
+later actual stop, selection, charges, remapping and adoption.
+
+Configuration checks in this path project only current version identifiers,
+selected task names and the required original grant binding. They do not return
+a whole historical configuration/processing selection as a way to reconstruct
+unselected source hashes. The sentinels cover these container reads as well as
+source tables and historical delivery payload length/body queries.
