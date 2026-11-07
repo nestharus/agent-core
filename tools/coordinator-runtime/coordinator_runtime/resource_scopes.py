@@ -7,7 +7,7 @@ import subprocess
 import sqlite3
 from pathlib import Path
 
-from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, required_text, scoped_task, qa_branch_sequence
+from .contracts import OPERATIONS, PROFILES, Refusal, canonical_uuid, digest, encode, required_text, scoped_task, qa_branch_sequence
 
 
 def root(value, exclusions=(), *, metadata=True):
@@ -549,7 +549,8 @@ def qa_cleanup(runtime, row, record, account):
         ordinary.accepted_report(runtime, events[0], branch, row['task'])
         # The Branch return must retain the complete QA envelope too.
         from .report_scope import conserved_inputs
-        if {'collected_reports': conserved_inputs(runtime, branch_job)} not in events[0]['body']['findings']:
+        expected = encode({'collected_reports': conserved_inputs(runtime, branch_job)})
+        if not any(encode(finding) == expected for finding in events[0]['body']['findings']):
             raise Refusal('final cleanup cannot omit the whole original QA report')
     else:
         for event in events:
