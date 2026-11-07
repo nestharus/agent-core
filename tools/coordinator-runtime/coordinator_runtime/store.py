@@ -317,7 +317,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("event recipient is outside actual enrollment")
         content = encode(event)
         if len(content.encode()) > 262144:
-            raise Backpressure("event body exceeds per-message bound; upstream retains it unACKed")
+            from .report_scope import validate_large_event
+            if not validate_large_event(self, event):
+                raise Backpressure("event body exceeds per-message bound; upstream retains it unACKed")
         with self.tx():
             old = self.one("SELECT hash FROM events WHERE id=?", (event["id"],))
             if old and old["hash"] != digest(event):
@@ -1134,6 +1136,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                     'integration':binding} for index,(key,binding) in enumerate(sorted(updates.items()))] if updates else [response]
         from .processing import note_source
         for output in outputs:
+            if report_custody is not None:
+                from .report_scope import validate_envelope
+                validate_envelope(self, output)
             self.budget("events", len(encode(output).encode()), job=job['id'])
             self.db.execute("INSERT INTO events(id,role,payload,hash,received,parent) VALUES(?,?,?,?,?,?)",
                             (output['id'], destination, encode(output), digest(output), self.clock(), output['parent']))

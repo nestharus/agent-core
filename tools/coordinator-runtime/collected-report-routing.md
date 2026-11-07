@@ -43,7 +43,13 @@ JSON strings inside those envelopes retain their exact bytes. The next reader
 receives the originals once plus separately attributed new assertions. Recursive
 custody remains input on subsequent report integration. New-protocol results
 must not echo a `collected_reports` finding; legacy exact whole-copy results still
-validate. The combined custody and model result obey the existing result budget.
+validate. The actual encoded model result obeys `max_result_bytes`. Software
+custody and its complete response/outbox wrappers independently obey the existing
+`max_artifact_bytes` (default 33554432) and `max_bytes` ceilings. Each storage
+write still checks cumulative residency and shared delivery entitlements. Finite
+Reviews admission reserves the full model allowance beside the whole custody;
+it does not use legacy whole-copy fit as analysis headroom. Ordinary messages
+and QA cleanup retain their existing serialization limits.
 
 Original failures, unknowns, artifacts and handoffs remain inert attributed source
 data. Software neither acquires their referenced files nor executes old intents.

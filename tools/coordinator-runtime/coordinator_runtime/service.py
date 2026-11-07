@@ -101,29 +101,29 @@ def ingest_report(runtime, actor, task, receipt):
     if actor != cap['issuer'] or task not in selection.get('service', {}).get('report_tasks', []):
         raise Refusal('actual Work collector and explicitly selected Reviews report route required')
     fields = {'reference', 'collector', 'actual_END', 'reports', 'history', 'method_pin', 'coverage', 'effects'}
+    from .report_scope import fits_return, transport_limit, validate_envelope
+    maximum = transport_limit(runtime)
     if (not isinstance(receipt, dict) or set(receipt) != fields or receipt['collector'] != actor
             or type(receipt['actual_END']) is not int or receipt['effects'] != 'known-report-only'
             or not isinstance(receipt['reports'], list) or not receipt['reports'] or len(receipt['reports']) > 32
             or not isinstance(receipt['coverage'], dict)):
         raise Refusal('whole attributed original reports/history/coverage and actual owned END required')
     for key in ('reference', 'history', 'method_pin'):
-        required_text(receipt[key], 'actual original report ' + key, 262144)
+        required_text(receipt[key], 'actual original report ' + key, maximum)
     for report in receipt['reports']:
         if not isinstance(report, dict) or set(report) != {'name', 'body'}:
             raise Refusal('complete named report bodies required; no pointer-only full-read claim')
         required_text(report['name'], 'report name', 256)
-        required_text(report['body'], 'whole report body', 262144)
+        required_text(report['body'], 'whole report body', maximum)
     body = {'kind': 'attributed-report', 'original': receipt, 'native_owner_execution': False,
             'meaning': 'Work testimony and whole report input; not persistent Reviews owner collection or native liveness'}
     event = {'id': digest({'attributed_report': {'collector': actor, 'reference': receipt['reference']}}),
              'role': 'Reviews', 'recipient': runtime.config['roles']['Reviews']['owner'],
              'kind': 'response', 'author': actor, 'allowed_tasks': [task], 'package': None,
              'processing_report': cap['id'], 'body': body}
-    if len(encode(event).encode()) > min(262144, runtime.config['limits']['max_result_bytes']):
-        raise Refusal('whole report exceeds selected intake envelope; no truncation or full-report claim')
-    from .report_scope import fits_return
-    if not fits_return(runtime, [dict(event=event['id'], sha256=digest(event), original=body)]):
-        raise Refusal('whole report has no complete return within selected result budget; no truncation')
+    validate_envelope(runtime, event)
+    if not fits_return(runtime, [dict(event=event['id'], sha256=digest(event), original=body)], transport=True):
+        raise Refusal('whole report has no complete transport with selected new analysis headroom')
     runtime.processing.boards['Reviews'].verify_authority(runtime)
     runtime.ingest(event)
     with runtime.tx():
