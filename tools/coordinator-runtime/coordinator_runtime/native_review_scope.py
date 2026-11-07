@@ -34,10 +34,10 @@ def validate(runtime, role, record, selection=None):
             or task.get('effects') != 'owned-artifacts' or task.get('sandbox') != 'workspace-write'
             or task.get('network') or task.get('execution') == 'owner' or task.get('routine_completion')
             or task.get('effect_authority', {}).get('write_roots') != []
-            or task['effect_authority']['owner'] != runtime.enrollment(role)['owner']
+            or task['effect_authority']['owner'] != runtime.one('SELECT owner FROM enrollments WHERE role=?', (role,))['owner']
             or set(task['effect_authority']['operations']) -
                {'read-source', 'read-reports', 'prepare-intents', 'consolidate-reports', 'write-owned-artifacts'}
-            or p['grant'] != runtime.enrollment(role)['grant_id']):
+            or p['grant'] != runtime.one('SELECT grant_id FROM enrollments WHERE role=?', (role,))['grant_id']):
         raise Refusal('exact original grant and output-only current source/consumer rights required')
     from .resource_scopes import root
     if not isinstance(p['relevant_roots'], list) or len(p['relevant_roots']) > 32:

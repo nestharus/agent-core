@@ -24,7 +24,7 @@ class NativeReturn(f.Native):
             source_task='reviews-proposer', source_task_sha256=digest(self.config['tasks']['reviews-proposer']),
             task='reviews-integrator', task_sha256=digest(self.config['tasks']['reviews-integrator']),
             review_policy_sha256=digest(s['service']['reviews']['reviews-proposer']),
-            grant=self.store.enrollment('Reviews')['grant_id'], resource_evidence='Synthetic owner physical map; explicit unrelated roots only', relevant_roots=[])
+            grant=self.store.one("SELECT grant_id FROM enrollments WHERE role='Reviews'")['grant_id'], resource_evidence='Synthetic owner physical map; explicit unrelated roots only', relevant_roots=[])
         s['service']['legacy_resources']['Reviews'].update(unbounded=True, native_review_return=p)
 
     def source(self):
