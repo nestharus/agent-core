@@ -712,6 +712,15 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             outstanding = self.rows("SELECT * FROM jobs WHERE role=? AND phase=? AND state!='closed'", (role, phase))
             observation.at('local-selection')
             local = local_integration.selected(self, row["task"])
+            report = False
+            if local:
+                try:
+                    if local_integration.report_route(self, row):
+                        report = True
+                        local = None  # Authenticated finite reports use the sole central integrator.
+                except Refusal:
+                    observation.finish('refusal')
+                    return None
             observation.at('execution-capacity')
             active = sum(not self.execution_complete(job) for job in outstanding)
             limit = min(5, local["capacity"]) if local else self._capacity(task)
@@ -767,7 +776,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 observation.at('members')
                 members = local_integration.members(self, row) if local else (json.loads(window['basis'])['members'] if window else self._members(row))
                 observation.at('local-availability')
-                if local and not local_integration.available(self, row, members, observe=observation.at,
+                if (local or report) and not local_integration.available(self, row, members, observe=observation.at,
                                                             conflict_observe=observation.conflict):
                     observation.finish('false')
                     return None

@@ -124,6 +124,31 @@ def selected(store, task):
     return store.config.get('local_integration', {}).get('tasks', {}).get(task)
 
 
+def report_route(store, row):
+    """Authenticate Work-attributed reports without borrowing point authority.
+
+    The origin marker only selects a checker. Exact current policy, original
+    frozen source permission and no-effect epoch must all pass that checker.
+    Native/ordinary inputs retain their existing point-local path.
+    """
+    if not store.processing or row['task'] != 'reviews-integrator':
+        return None
+    keys = ([row['event']] if row.get('event') else
+            [m['event'] for m in json.loads(row['members'])])
+    if not any('processing_report' in store.event(key) for key in keys):
+        return None
+    from .report_scope import eligible
+    cap, selection = store.processing.current()
+    record = selection.get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+    if 'reviews_report' not in record:
+        raise Refusal('attributed report needs its actual selected finite report policy')
+    eligible(store, row, record)
+    from .prospective import current
+    return {'capability': cap['id'], 'policy': digest(record),
+            'epoch': current(store, row['task'])['id'],
+            'task': digest(store.config['tasks'][row['task']])}
+
+
 def point_definitions(store):
     result = dict(store.config['local_integration']['points'])
     for row in store.rows('SELECT * FROM local_discovered_points'):
@@ -449,7 +474,9 @@ def scope_for(store, job):
     if not selected(store, job['task']):
         return None
     row = store.one('SELECT * FROM local_jobs WHERE job=?', (job['id'],))
-    return json.loads(row['scope']) if row else None
+    scope = json.loads(row['scope']) if row else None
+    # A frozen report route carries currentness, never native point rights.
+    return scope if scope and scope['lane'] != 'report' else None
 
 
 def resources(store, scope):
@@ -472,6 +499,14 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
         at(predicate)
         return False
 
+    if report_route(store, row):
+        # Reports take no point/resource lease, but still consume the selected
+        # shared residency budget as well as the sole role integration slot.
+        at('local-active-jobs')
+        active = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'") if not store.execution_complete(j)]
+        if sum(bool(selected(store, j['task'])) for j in active) >= store.config['local_integration']['max_inflight']:
+            return unavailable('local-capacity')
+        return True
     at('local-packet')
     scopes = [packet(store, {**row, 'event': m['event']}) for m in members]
     scope = combine(scopes)
@@ -534,6 +569,12 @@ def available(store, row, members, *, observe=None, conflict_observe=None):
 def record_job(store, job):
     if not selected(store, job['task']):
         return
+    report = report_route(store, job)
+    if report:
+        store.db.execute('INSERT INTO local_jobs VALUES(?,?,?)',
+                         (job['id'], digest(store.config['local_integration']),
+                          encode({'lane': 'report', 'report_route': report})))
+        return
     scope = combine([packet(store, {'task': job['task'], 'event': m['event']}) for m in json.loads(job['members'])])
     fences = [prior['id'] for prior in store.rows("SELECT * FROM jobs WHERE role=? AND state!='closed'", (job['role'],))
               if prior['id'] != job['id'] and not store.execution_complete(prior)
@@ -567,7 +608,11 @@ def current_job(store, job):
     if frozen['policy'] != digest(store.config.get('local_integration')):
         raise Refusal('local policy/authority changed; retain recorded revision and return through review')
     scope = json.loads(frozen['scope'])
-    native_access(store, job, scope)
+    if scope['lane'] == 'report':
+        if report_route(store, job) != scope['report_route']:
+            raise Refusal('original finite report policy/capability/epoch changed; retain original reservation')
+    else:
+        native_access(store, job, scope)
     for source in scope.get('read_fences', []):
         if not store.work_read_coexists(job, scope, {'id':source}):
             raise Refusal('Work read fence or current read-only authority changed')
@@ -719,6 +764,9 @@ def prepare_input_basis(store, job, attempt, task):
     from .publication import snapshot_lock
     from contextlib import nullcontext
     scope = scope_for(store, job)
+    if scope is None:
+        current_job(store, job)
+        return
     keys = set(scope['reads']) | set(scope['writes'])
     points = point_definitions(store)
     roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
@@ -800,6 +848,9 @@ def context(store, job):
     row = store.one('SELECT basis FROM local_bases WHERE attempt=?', (job['active_attempt'],)) if job['active_attempt'] else None
     basis = json.loads(row['basis']) if row else scope_for(store, job)
     if not selected(store, job['task']):
+        return None
+    if basis is None:
+        current_job(store, job)
         return None
     scope = basis.get('scope', basis) if basis else {}
     prior = []
@@ -954,6 +1005,7 @@ def discovery_conservation(before, after, ownership=()):
 def validate_method(store, job, attempt, answer):
     scope = scope_for(store, job)
     if scope is None:
+        current_job(store, job)
         return
     row = store.one('SELECT basis FROM local_bases WHERE attempt=?', (attempt['id'],))
     mode = json.loads(row['basis'])['scope']['mode'] if row else scope['mode']
