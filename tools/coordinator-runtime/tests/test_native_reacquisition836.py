@@ -7,6 +7,11 @@ from coordinator_runtime import appserver, service, prospective
 from coordinator_runtime.contracts import Refusal
 
 class Reacquisition836(NativeReturn):
+    def configure_fixture(self):
+        super().configure_fixture()
+        # Supported central integration, the CLOSED833 frozen-launch witness.
+        self.config['local_integration']['tasks'].pop('reviews-integrator')
+
     def frozen(self):
         self.source()
         asyncio.run(self.phase('schedule_classifications'))
@@ -15,6 +20,7 @@ class Reacquisition836(NativeReturn):
         from coordinator_runtime import resource_scopes
         self.assertFalse(resource_scopes.blocked(self.store,self.row))
         job = self.store.reserve()
+        self.assertIsNotNone(job,repr(self.store.rows('SELECT outcome,predicate FROM reservation_outcomes')))
         self.assertEqual(job['task'], 'reviews-integrator')
         with patch.object(self.store.execution_pool, 'allocate', side_effect=Refusal('fictional pool allocation unavailable')):
             with self.assertRaises(Refusal):

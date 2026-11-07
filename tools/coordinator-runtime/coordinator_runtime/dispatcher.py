@@ -377,18 +377,19 @@ class Dispatcher:
         directory = self.store.home / "artifacts" / attempt
         directory.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
-            native_review_scope.admit(self.store, job)
-            local_integration.current_sources(self.store, job)
-            admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))
-            task = scoped_task(job["task"], task, admission)
-            epoch = prospective.for_job(self.store, job)
-            if self.config.get('software_delegation') or epoch:
-                self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
-            local_integration.current_sources(self.store, job)
-            if ordinary.selected(self.store, self.store.job(job_id)):
-                ordinary.policy_for(self.store, job)
-                task = {**task, 'ordinary_preparation': True}
-            local_integration.prepare_input_basis(self.store, job, attempt, task)
+            with self.store.tx():
+                native_review_scope.admit(self.store, job)
+                local_integration.current_sources(self.store, job)
+                admission = self.store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))
+                task = scoped_task(job["task"], task, admission)
+                epoch = prospective.for_job(self.store, job)
+                if self.config.get('software_delegation') or epoch:
+                    self.boards[job['role']].bind_software_attempt(self.store, job, attempt, admission)
+                local_integration.current_sources(self.store, job)
+                if ordinary.selected(self.store, self.store.job(job_id)):
+                    ordinary.policy_for(self.store, job)
+                    task = {**task, 'ordinary_preparation': True}
+                local_integration.prepare_input_basis(self.store, job, attempt, task)
             if task.get('routine_completion'):
                 until=self.store.clock()+self.config['deadlines']['bind']
                 while True:
