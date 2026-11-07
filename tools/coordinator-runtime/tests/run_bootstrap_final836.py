@@ -11,10 +11,10 @@ import sys
 import time
 
 repo = Path(__file__).resolve().parents[3]
-base = repo / '.qualification836'
+base = repo / '.qualification838'
 base.mkdir(mode=0o700, exist_ok=True)
 def usage():
-    return sum(p.stat().st_size for p in base.rglob('*') if p.is_file())
+    return sum(p.stat().st_size for p in repo.rglob('*') if p.is_file())
 if usage() >= 128*1024**2:
     raise SystemExit('stop-new128MiB')
 root = base / ('attempt-' + str(time.time_ns()))
