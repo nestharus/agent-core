@@ -90,13 +90,18 @@ def original_binding(runtime, role, grant):
 class _PathExclusions:
     """Lexical operands for one release call, never a validation result cache.
 
-    Component prefixes preserve Path equality/ancestry (including / versus //).
+    Component prefixes preserve canonical Path equality/ancestry. POSIX's
+    implementation-defined // root is refused before metadata, on both sides
+    of the comparison; Linux must not treat it as a separate exclusion root.
     Rebuild from current exclusions/home at every release boundary. No stat,
     alias, byte-pin, pool or authority outcome is retained here.
     """
     def __init__(self, exclusions):
-        self.prefixes = frozenset(Path(p).parts for p in
-            [*exclusions, *(Path.home()/p for p in PROFILES)])
+        paths = [Path(p) for p in
+                 [*exclusions, *(Path.home()/p for p in PROFILES)]]
+        if any(p.anchor == '//' for p in paths):
+            raise Refusal('canonical single-root release exclusions required')
+        self.prefixes = frozenset(p.parts for p in paths)
 
     def contains(self, path):
         parts = path.parts
@@ -105,7 +110,7 @@ class _PathExclusions:
 
 def _path(value, exclusions):
     path = Path(required_text(value, 'current selection path', 4000))
-    if not path.is_absolute() or '..' in path.parts:
+    if not path.is_absolute() or '..' in path.parts or path.anchor == '//':
         raise Refusal('absolute canonical current selection path required')
     excluded = exclusions if isinstance(exclusions, _PathExclusions) else _PathExclusions(exclusions)
     if excluded.contains(path):
@@ -141,10 +146,12 @@ def release(runtime, candidate):
         raise Refusal('current operator and Board SDK must select this same release checkout')
     if candidate.get('canonical_publication', {}).get('method') != 'retention-same-inode-v1':
         raise Refusal('current retention must preserve the same-inode snapshot lock contract')
-    # retention capture imports custody, which imports cleanup. Check their
-    # source and the loader's current-interpreter bytecode paths even when warm;
-    # an import-cache hit must not become an exclusion/alias permission cache.
-    for name in ('retention_dependency.py', 'custody.py', 'cleanup.py'):
+    # Retention capture imports custody -> cleanup. scoped_startup also imports
+    # bounded_log -> custody/cleanup when templates are selected. Check this
+    # exact local closure's source and current-interpreter caches before either
+    # call, even when warm; import hits never cache exclusion/alias permission.
+    # contracts/configuration and the interpreter are already bootstrapped.
+    for name in ('retention_dependency.py', 'custody.py', 'cleanup.py', 'bounded_log.py'):
         source = _path(str(modules/name), exclusions)
         _path(cache_from_source(str(source)), exclusions)
     from . import retention_dependency
