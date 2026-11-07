@@ -5,6 +5,8 @@ ACK is never evidence that a recipient's Codex submission queue was processed.
 """
 
 import json
+from contextlib import nullcontext
+from functools import wraps
 
 from .contracts import Backpressure, Refusal, digest, encode, ident, required_text, handoff_delivery_kind
 from .custody import witnesses
@@ -37,6 +39,16 @@ CREATE TABLE IF NOT EXISTS owner_results(
 """
 
 
+def _execution_delivery(method):
+    """Serialize new execution-result delivery; retained settlement stays open."""
+    @wraps(method)
+    def guarded(self, job, *args, **kwargs):
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            self.require_execution_open(job['id'])
+            return method(self, job, *args, **kwargs)
+    return guarded
+
+
 class DeliveryJournal:
     def _outbox(self, role, recipient, kind, payload, *, job=None, event=None, alert=None, producer=None, key=None, required="settled"):
         key = key or ident()
@@ -65,6 +77,7 @@ class DeliveryJournal:
                                                          recipient, kind, required, encode(payload), self.clock()))
         return key
 
+    @_execution_delivery
     def prepare_handoffs(self, job, attempt, task, result):
         handoffs = result.get("handoffs", [])
         if task.get("delivery_required") and "handoffs" not in result:
@@ -74,6 +87,7 @@ class DeliveryJournal:
         for index, handoff in enumerate(handoffs):
             self._task_handoff(job, attempt, task, result, handoff, index)
 
+    @_execution_delivery
     def failure_delivery(self, job, attempt, task, reason):
         """Informative custody can progress while execution/capture/effects stay held."""
         original=json.loads(attempt['result']) if attempt['result'] else None
@@ -104,6 +118,7 @@ class DeliveryJournal:
             self.owner_question(job,attempt,'Actual effect owner retains unresolved local/publication effects: '+reason,effects=True)
         return self.gate_result_delivery(job,attempt,informative)
 
+    @_execution_delivery
     def gate_result_delivery(self, job, attempt, result, internal=None):
         """One fresh Luna-low response classification precedes outgoing model results."""
         rows = self.rows("SELECT * FROM outboxes WHERE job=? AND event IS NULL ORDER BY id", (job["id"],))
@@ -135,6 +150,7 @@ class DeliveryJournal:
         self.db.execute("UPDATE jobs SET response=? WHERE id=?", (response_id, job["id"]))
         return response_id
 
+    @_execution_delivery
     def owner_report(self, job, attempt, result):
         existing = self.one("SELECT id FROM outboxes WHERE job=? AND recipient=?", (job["id"], job["role"]))
         if not existing:
@@ -143,6 +159,7 @@ class DeliveryJournal:
                          "result": result, "artifact_witnesses":witnesses(self,attempt['id']), "source_members": json.loads(job["members"])}, job=job["id"], producer=attempt["session"],
                          key=digest({"owner_report": attempt["id"]}))
 
+    @_execution_delivery
     def _task_handoff(self, job, attempt, task, result, handoff, index, informative=None):
         delivery_kind=handoff_delivery_kind(handoff)
         target = handoff["recipient"]
@@ -174,6 +191,7 @@ class DeliveryJournal:
         self._outbox(job["role"], target, 'question' if informative else delivery_kind, payload, job=job["id"], producer=attempt["session"],
                      key=digest({"attempt": attempt["id"], "handoff": index}), required=handoff["required"])
 
+    @_execution_delivery
     def owner_question(self, job, attempt, reason, *, effects=False):
         kind = "effect-request" if effects else "question"
         target = job["role"] if effects else "Work"

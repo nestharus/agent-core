@@ -12,6 +12,7 @@ from .contracts import Refusal, digest, encode, required_text
 from .integration_evidence import attempt_view, fence_view, shared_debt_view
 
 METADATA_CLOSURE = 'integration-execution-closure-metadata-v1'
+METADATA_NO_START = 'integration-positive-no-start-closure-metadata-v1'
 METADATA_READ_FENCE = 'work-anchored-read-fence-metadata-v1'
 LOCAL_NO_START = 'integration-local-no-start-metadata-v1'
 
@@ -41,9 +42,22 @@ class IntegrationJournal:
         return (self.one('SELECT * FROM integration_retirements WHERE job=?', (job,))
                 or self.one('SELECT * FROM integration_prestart_dispositions WHERE job=?', (job,)))
 
+    def integration_retirement_recorded(self, job):
+        """Metadata existence check for stale execution callbacks."""
+        return any(self.one('SELECT job FROM '+table+' WHERE job=?', (job,)) for table in
+                   ('integration_retirements', 'integration_prestart_dispositions'))
+
     def require_execution_open(self, job):
-        if self.integration_retired(job) or self.one('SELECT job FROM work_read_fences WHERE job=?', (job,)):
+        if any(self.one('SELECT job FROM '+table+' WHERE job=?', (job,)) for table in
+               ('integration_retirements', 'integration_prestart_dispositions', 'work_read_fences')):
             raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
+
+    def require_attempt_execution_open(self, attempt):
+        # Callback fences precede retained result/detail acquisition. Collection
+        # remains lawful for originals that have not qualified for retirement.
+        row = self.one('SELECT job FROM attempts WHERE id=?', (attempt,))
+        if row and row['job']:
+            self.require_execution_open(row['job'])
 
     def work_read_closure_basis(self, job, token):
         """Exact terminal proposer metadata, without interpreting its return.
@@ -309,12 +323,15 @@ class IntegrationJournal:
             raise Refusal('every original controller must be genuinely closed')
         found = []
         for item in closures:
-            if not isinstance(item, dict) or set(item) != {'controller', 'collector', 'end', 'collected', 'writers_closed', 'evidence'}:
+            if not isinstance(item, dict) or set(item) != ({'controller', 'collector', 'end', 'collected', 'writers_closed', 'evidence'}
+                    | ({'no_task_launch'} if basis.get('schema') == METADATA_NO_START else set())):
                 raise Refusal('exact controller/collector/END and writer closure evidence required')
             required_text(item['controller'], 'actual launch-capable controller', 128)
             required_text(item['collector'], 'actual controller collector', 128)
             if type(item['end']) is not int or item['collected'] is not True or item['writers_closed'] is not True:
                 raise Refusal('controller END alone cannot establish writer closure')
+            if basis.get('schema') == METADATA_NO_START and item['no_task_launch'] is not True:
+                raise Refusal('scoped positive no-task-launch controller testimony required; parent END is not task END')
             self._integration_evidence(item['evidence'])
             found.append(item['controller'])
         if sorted(found) != basis['controllers']:
@@ -767,14 +784,19 @@ class IntegrationJournal:
         attempts = self.rows('SELECT id,kind,job,controller,begin,ended,collected,exit,state '
                              'FROM attempts WHERE job=? ORDER BY rowid', (job,))
         active = next((a for a in attempts if a['id'] == row['active_attempt']), None)
-        if (not active or active['kind'] != 'task' or active['controller'] != row['controller']
-                or any(a['kind'] not in {'task','diagnosis'} or a['job'] != job
-                       or a['state'] != 'collected' or a['begin'] is None or a['ended'] is None
-                       or a['collected'] is None or type(a['exit']) is not int
-                       or any(type(a[k]) not in {int,float} or not math.isfinite(a[k]) or a[k] < 0
-                              for k in ('begin','ended','collected'))
-                       or not a['begin'] <= a['ended'] <= a['collected'] for a in attempts)):
-            raise Refusal('all related originals need actual begun numeric END and collection; exact active task/controller required')
+        no_start = bool(active and active['state'] == 'not-started')
+        no_start_scope = None
+        if no_start:
+            no_start_scope = self._integration_metadata_no_start(row, attempts, sources)
+        else:
+            if (not active or active['kind'] != 'task' or active['controller'] != row['controller']
+                    or any(a['kind'] not in {'task','diagnosis'} or a['job'] != job
+                           or a['state'] != 'collected' or a['begin'] is None or a['ended'] is None
+                           or a['collected'] is None or type(a['exit']) is not int
+                           or any(type(a[k]) not in {int,float} or not math.isfinite(a[k]) or a[k] < 0
+                                  for k in ('begin','ended','collected'))
+                           or not a['begin'] <= a['ended'] <= a['collected'] for a in attempts)):
+                raise Refusal('all related originals need actual begun numeric END and collection; exact active task/controller required')
         pending = self.one("SELECT 1 AS pending FROM recovery_requests WHERE job=? AND state='pending' LIMIT 1", (job,))
         if pending:
             raise Refusal('pending owner recovery selection must be disposed before retirement')
@@ -783,10 +805,139 @@ class IntegrationJournal:
             controllers.add(row['recovery_owner'])
         for controller in controllers:
             required_text(controller, 'actual launch-capable controller', 128)
-        return self._integration_bounded({'schema': METADATA_CLOSURE,
+        return self._integration_bounded({'schema': METADATA_NO_START if no_start else METADATA_CLOSURE,
+            **({'no_start_scope': no_start_scope} if no_start else {}),
             'configuration': digest(self.config), 'job': row, 'sources': sources,
             'enrollments': enrollments, 'attempts': attempts, 'controllers': sorted(controllers),
             'pending_recovery': False, 'journal_revision': windows.revision(self)})
+
+    def _integration_metadata_no_start(self, row, attempts, sources):
+        """Positive closure facts only; opaque responses/duties stay unacquired.
+
+        SQL compares frozen policy/source pins but returns only predicates and
+        scope metadata. No canonical value, result, response or outbox is read.
+        The cooperative revision additionally binds every omitted mutable duty.
+        """
+        from . import routine
+        job, task = row['id'], self.config['tasks'][row['task']]
+        local = self.config.get('local_integration', {})
+        selected = local.get('tasks', {}).get(row['task'])
+        policy = routine.policy_for(task, execution=False)
+        if (row['effects'] != 'none' or not selected or not policy
+                or policy['kind'] != 'catalog-bounded-log-v1'
+                or task.get('sandbox') != 'workspace-write' or task.get('execution') is not None
+                or task.get('network', False) is not False
+                or task.get('ordinary_effects') or task.get('require_package_scope')
+                or task['effect_authority']['owner'] != self.config['roles']['Work']['owner']
+                or set(task['effect_authority']['write_roots']) != set(policy['targets'])):
+            raise Refusal('positive no-start requires exact local file-only Work catalog task')
+        flags = self.one('SELECT package IS NULL AS no_package,closed_at IS NULL AS open,'
+            'effect_receipt IS NULL AS no_effect_receipt,collection_handoff IS NULL AS no_handoff '
+            'FROM jobs WHERE id=?', (job,))
+        frozen = self.one('SELECT task=? AS current_task,admission IS NULL AS no_admission '
+                         'FROM job_resource_policies WHERE job=?', (encode(task), job))
+        if not flags or not all(flags.values()) or frozen != {'current_task':1,'no_admission':1}:
+            raise Refusal('original frozen task/package/effect identity required for positive no-start')
+        active = next((a for a in attempts if a['id'] == row['active_attempt']), None)
+        if not active or active['kind'] != 'task' or active['controller'] != row['controller']:
+            raise Refusal('exact active no-start task/controller required')
+        for attempt in attempts:
+            identity = self.one('SELECT created,event IS NULL AS no_event FROM attempts WHERE id=?', (attempt['id'],))
+            if (type(identity['created']) not in {int,float} or not math.isfinite(identity['created'])
+                    or identity['created'] < 0 or not identity['no_event']
+                    or type(attempt['collected']) not in {int,float} or identity['created'] > attempt['collected']):
+                raise Refusal('original task/diagnosis identity and ordered actual collection required')
+            if (attempt['kind'] not in {'task','diagnosis'} or attempt['job'] != job
+                    or type(attempt['collected']) not in {int,float}
+                    or not math.isfinite(attempt['collected']) or attempt['collected'] < 0):
+                raise Refusal('every original requires finite actual collection')
+            if attempt['kind'] == 'diagnosis' and attempt['state'] == 'collected':
+                cleanup = self.one('SELECT cleanup FROM attempts WHERE id=?', (attempt['id'],))
+                if (type(attempt['exit']) is not int
+                        or any(type(attempt[k]) not in {int,float} or not math.isfinite(attempt[k]) or attempt[k] < 0
+                               for k in ('begin','ended'))
+                        or not attempt['begin'] <= attempt['ended'] <= attempt['collected']
+                        or cleanup['cleanup'] not in {'done','owned-ephemeral-lifecycle-observed'}):
+                    raise Refusal('diagnosis requires its own ordered numeric END/collection and closed cleanup')
+                continue
+            valid = self.one('SELECT json_valid(detail) AS valid FROM attempts WHERE id=?', (attempt['id'],))
+            if not valid['valid']:
+                raise Refusal('positive no-start proof must be valid metadata')
+            proof = self.one("SELECT session IS NULL AS no_session,turn IS NULL AS no_turn,"
+                "semantic IS NULL AS no_semantic,result IS NULL AS no_result,"
+                "capture='not-started' AS no_capture,cleanup='no-session-created' AS no_cleanup,"
+                "json_type(detail,'$.known_not_started') AS known_type,"
+                "CASE WHEN json_type(detail,'$.resume_disposition')='text' THEN "
+                "json_extract(detail,'$.resume_disposition') END AS disposition FROM attempts WHERE id=?", (attempt['id'],))
+            if (attempt['state'] != 'not-started'
+                    or any(attempt[k] is not None for k in ('begin','ended','exit'))
+                    or any(proof[k] != 1 for k in ('no_session','no_turn','no_semantic','no_result','no_capture','no_cleanup'))
+                    or proof['known_type'] != 'true'):
+                raise Refusal('every task requires positive collected no-start; no invented task END')
+            required_text(proof['disposition'], 'positive no-start resume disposition', 4000)
+            attempt['no_start_proof'] = proof
+        # Existence projections deliberately never acquire publication payloads,
+        # routine preimages, ordinary receipts or local commit bodies.
+        for table, join in [('file_publications','p.attempt=a.id'), ('ordinary_runs','p.attempt=a.id'),
+                            ('local_commits','p.attempt=a.id'), ('local_point_commits','p.attempt=a.id'),
+                            ('local_material_commits','p.attempt=a.id'), ('ordinary_resources','p.attempt=a.id')]:
+            if self.one('SELECT 1 AS present FROM '+table+' p JOIN attempts a ON '+join+' WHERE a.job=? LIMIT 1', (job,)):
+                raise Refusal('positive no-start cannot borrow effect/publication/local commit history')
+        if self.one("SELECT 1 AS completed FROM routine_runs r JOIN attempts a ON a.id=r.attempt "
+                    "WHERE a.job=? AND (r.state!='prepared' OR r.after_files IS NOT NULL OR r.receipt IS NOT NULL) LIMIT 1", (job,)):
+            raise Refusal('completed or uncertain routine effect cannot borrow positive no-start')
+        valid = self.one('SELECT json_valid(scope) AS valid FROM local_jobs WHERE job=?', (job,))
+        if not valid or not valid['valid']:
+            raise Refusal('original anchored scope metadata required')
+        scope = self.one("SELECT policy,json_extract(scope,'$.lane') AS lane,"
+            "json_extract(scope,'$.reads') AS reads,json_extract(scope,'$.writes') AS writes,"
+            "json_extract(scope,'$.sources') AS sources,json_extract(scope,'$.inputs') AS inputs,"
+            "json_extract(scope,'$.neighbors') AS neighbors FROM local_jobs WHERE job=?", (job,))
+        if scope['policy'] != digest(local) or scope['lane'] != 'anchored' or scope['neighbors'] not in {None,'[]'}:
+            raise Refusal('unchanged local policy and anchored no-neighbor scope required')
+        for field in ('reads','writes','sources','inputs'):
+            try:
+                scope[field] = json.loads(scope[field])
+            except (ValueError,TypeError):
+                raise Refusal('exact anchored scope metadata required') from None
+            if not isinstance(scope[field], list):
+                raise Refusal('exact anchored scope metadata arrays required')
+        if (scope['sources'] != [s['event'] for s in sources] or not scope['inputs']
+                or any(not isinstance(k,str) for k in scope['reads']+scope['writes'])
+                or any(len(scope[k]) != len(set(scope[k])) for k in ('reads','writes'))):
+            raise Refusal('exact source/point scope metadata required')
+        keys = set(scope['reads']) | set(scope['writes'])
+        points = local['points']
+        if (not keys or keys - set(selected['points']) or keys - points.keys()
+                or any(points[k]['resources'] or not points[k]['bindings'] or any(set(b) != {'target','path'} or not b['path']
+                    or b['target'] not in policy['targets'] or b['target'] == policy['bounded_log']['target']
+                    for b in points[k]['bindings']) for k in keys)):
+            raise Refusal('selected anchored file-only catalog points required; no native/ordinary effects')
+        if (len(scope['inputs']) != len(sources)
+                or any(not isinstance(i,dict) or set(i) != {'lane','reads','writes','versions','sources'}
+                       or i['lane'] != 'anchored' or i['sources'] != [source['event']]
+                       or not isinstance(i['versions'],dict)
+                       or any(not isinstance(i[k],list) or any(not isinstance(v,str) for v in i[k]) for k in ('reads','writes'))
+                       or any(len(i[k]) != len(set(i[k])) for k in ('reads','writes'))
+                       or set(i['versions']) != set(i['reads']) | set(i['writes'])
+                       or any(not isinstance(v,str) or not v for v in i['versions'].values())
+                       for i,source in zip(scope['inputs'],sources))
+                or any(set(scope[k]) != {v for i in scope['inputs'] for v in i[k]} for k in ('reads','writes'))):
+            raise Refusal('frozen per-source anchored scope must match every represented member')
+        relationships = self.rows("SELECT q.id AS queue,q.state,q.package IS NULL AS no_package,"
+            "json_extract(m.value,'$.package') IS NULL AS member_no_package,"
+            "json_extract(m.value,'$.hash')=e.hash AS frozen_source_current,"
+            "json_extract(m.value,'$.input_resolution') IS (SELECT MAX(version) FROM input_resolutions ir WHERE ir.event=e.id) AS mapping_current,"
+            "e.hold IS NOT NULL AS source_held,e.processed_at IS NULL AS unprocessed "
+            "FROM jobs j,json_each(j.members) m JOIN queue q ON q.id=json_extract(m.value,'$.queue') "
+            "JOIN events e ON e.id=json_extract(m.value,'$.event') WHERE j.id=? ORDER BY m.key", (job,))
+        if (len(relationships) != len(sources)
+                or self.one('SELECT COUNT(*) AS n FROM queue WHERE job=?', (job,))['n'] != len(sources)
+                or any(r['state'] != 'reserved' or any(r[k] != 1 for k in
+                       ('no_package','member_no_package','frozen_source_current','mapping_current','unprocessed')) for r in relationships)):
+            raise Refusal('exact original reserved source/queue/mapping pins required')
+        return {'task':digest(task), 'scope':scope, 'points':{k:points[k] for k in sorted(keys)},
+                'relationships':relationships}
 
     def integration_metadata_sources(self, job, *, phase='integrator'):
         """Only frozen relationship identities; never transport member hashes."""

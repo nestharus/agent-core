@@ -228,6 +228,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if collection is None:
                 configuration.assert_current(self)
             else:
+                self.require_attempt_execution_open(collection)
                 configuration.authorize_collection(self, collection)
             yield
             self.db.execute("COMMIT")
@@ -403,7 +404,9 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal('classification source outside current processing selection')
 
     def authorize_launch(self, attempt):
+        self.require_attempt_execution_open(attempt)
         with (nullcontext() if self.db.in_transaction else self.tx()):
+            self.require_attempt_execution_open(attempt)
             row = self.attempt(attempt)
             if self.processing:
                 self.processing.authorize(row)
@@ -557,6 +560,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def begin(self, attempt, detail):
         with self.tx():
+            self.require_attempt_execution_open(attempt)
             row = self.attempt(attempt)
             if row['job']:
                 self.require_execution_open(row['job'])
@@ -607,6 +611,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def collect(self, attempt, outcome):
         """Only the launching controller supplies actual child.wait() outcome."""
+        self.require_attempt_execution_open(attempt)
         qualification_error=None
         if 'handback_boundary' in json.loads(self.attempt(attempt)['detail']):
             try:
@@ -674,6 +679,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def capture_gap(self, attempt, error):
         with self.tx():
+            self.require_attempt_execution_open(attempt)
             row = self.attempt(attempt)
             if row["controller"] != self.controller:
                 raise Refusal("capture qualification belongs to the original collector")
@@ -915,6 +921,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def start_job(self, job, token, profile=None):
         with self.tx():
+            self.require_execution_open(job)
             row = self.job(job, token)
             self.integration_launch_current(row)
             local_integration.current_job(self, row)
@@ -981,8 +988,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def finish_job(self, job, token):
         with self.tx():
-            row = self.job(job, token)
             self.require_execution_open(job)
+            row = self.job(job, token)
             if row["controller"] != self.controller:
                 raise Refusal("stale/foreign controller cannot close a successor reservation")
             if row["state"] == "closed":
@@ -1275,6 +1282,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def hold_job(self, job, reason):
         with self.tx():
+            self.require_execution_open(job)
             self.db.execute("UPDATE jobs SET state='held',hold_reason=? WHERE id=? AND state!='closed' AND controller=?",
                             (str(reason)[:2000], job, self.controller))
 

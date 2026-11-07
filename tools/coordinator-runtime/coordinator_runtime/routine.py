@@ -72,6 +72,7 @@ def snapshot(store, targets):
 
 
 def prepare(store, board, job, attempt, task):
+    store.require_execution_open(job['id'])
     from .configuration import require_current_job
     require_current_job(store, {**job, 'active_attempt': attempt})
     policy = execution_policy(store, task)
