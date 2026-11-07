@@ -80,11 +80,12 @@ def eligible(runtime, row, record):
     link = runtime.one("SELECT json_extract(payload,'$.source_job') AS job FROM events WHERE id=?", (source['id'],))
     if not link or not link['job']:
         raise Refusal('external or orphan report is not a native Source return')
-    job = runtime.job(link['job'])
-    if (job['role'] != 'Reviews' or job['phase'] != 'proposer' or job['task'] != p['source_task']
+    job = runtime.one('SELECT id,role,phase,task,package,hold_reason,effects,active_attempt FROM jobs WHERE id=?', (link['job'],))
+    if (not job or job['role'] != 'Reviews' or job['phase'] != 'proposer' or job['task'] != p['source_task']
             or job['package'] != p['package'] or job['hold_reason']
             or job['effects'] not in ('none', 'reconciled') or not job['active_attempt']):
         raise Refusal('current unheld genuine native source job required')
+    job = runtime.job(job['id'])
     originals = source_metadata(runtime, job)
     for original in originals:
         birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (original['id'],))
@@ -103,6 +104,10 @@ def eligible(runtime, row, record):
     proof = reviews.collected_proof(runtime, job, attempt)
     if not proof or proof['material'].get('selected_task') != p['source_task']:
         raise Refusal('original collected native context required')
+    context = runtime.one('SELECT capability,collector,run,state FROM review_contexts WHERE component=?', (proof['component'],))
+    if (not context or context['capability'] != cap['id'] or context['collector'] != proof['collector']
+            or context['run'] != proof['run'] or context['state'] != 'live'):
+        raise Refusal('actual current original native context required')
     acquired = proof['material']
     current_policy = selected['service']['reviews'][p['source_task']]
     if acquired.get('method_files') != current_policy['method_files']:

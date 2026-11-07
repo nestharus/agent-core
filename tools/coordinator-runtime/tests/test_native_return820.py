@@ -24,7 +24,7 @@ class NativeReturn(f.Native):
             source_task='reviews-proposer', source_task_sha256=digest(self.config['tasks']['reviews-proposer']),
             task='reviews-integrator', task_sha256=digest(self.config['tasks']['reviews-integrator']),
             review_policy_sha256=digest(s['service']['reviews']['reviews-proposer']),
-            grant=self.store.one("SELECT grant_id FROM enrollments WHERE role='Reviews'")['grant_id'], resource_evidence='Synthetic owner physical map; explicit unrelated roots only', relevant_roots=[])
+            grant=self.store.one("SELECT grant_id FROM enrollments WHERE role='Reviews'")['grant_id'], resource_evidence='Synthetic owner physical map; explicit unrelated roots only', relevant_roots=[str(self.area)] if getattr(self,'resource_conflict',False) else [])
         s['service']['legacy_resources']['Reviews'].update(unbounded=True, native_review_return=p)
 
     def source(self):
@@ -68,7 +68,8 @@ class NativeReturn(f.Native):
 
     def test_stale_held_uncollected_forged_method_and_orphan_refuse(self):
         self.source();self.assertFalse(resource_scopes.blocked(self.store,self.row))
-        faults=[("UPDATE events SET hold='held' WHERE id=?",(self.e['id'],)),
+        faults=[("UPDATE review_contexts SET state='interrupted'",()),
+            ("UPDATE events SET hold='held' WHERE id=?",(self.returned['id'],)),("UPDATE events SET hold='held' WHERE id=?",(self.e['id'],)),
             ("UPDATE attempts SET collected=NULL WHERE id=?",(self.a['id'],)),
             ("UPDATE attempts SET controller='forged' WHERE id=?",(self.a['id'],)),
             ("UPDATE review_calls SET state='launch-intent' WHERE attempt=?",(self.a['id'],)),
@@ -90,10 +91,23 @@ class NativeReturn(f.Native):
         self.source()
         from coordinator_runtime.native_review_scope import eligible
         from coordinator_runtime import native_review_scope
-        with patch.object(native_review_scope,'eligible',side_effect=lambda *a:[str(self.area)]):
-            self.assertTrue(resource_scopes.blocked(self.store,self.row))
         self.store.db.execute("INSERT INTO ordinary_resources VALUES('unmapped-resource','orphan-attempt')")
         self.assertTrue(resource_scopes.blocked(self.store,self.row))
         self.store.db.execute('DELETE FROM ordinary_resources')
         changed=copy.deepcopy(self.record);changed['reviews_report']={}
         with self.assertRaises(Refusal):native_review_scope.validate(self.store,'Reviews',changed)
+
+    def test_actual_selected_resource_overlap_remains_blocking(self):
+        self.resource_conflict=True
+        self.source()
+        self.assertTrue(resource_scopes.blocked(self.store,self.row))
+
+    def test_held_original_refuses_before_its_body(self):
+        self.source()
+        self.store.set_hold(self.e['id'],'synthetic original source hold')
+        original_event=self.store.event
+        def guarded(key):
+            if key==self.e['id']:raise AssertionError('held source body acquired')
+            return original_event(key)
+        with patch.object(self.store,'event',side_effect=guarded):
+            self.assertTrue(resource_scopes.blocked(self.store,self.row))
