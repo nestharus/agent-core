@@ -79,6 +79,16 @@ def parser():
             repair.add_argument('--controller', required=True)
         else:
             repair.add_argument('--selection', required=True)
+    for command in ('same-authority-source-repair-basis', 'select-same-authority-source-repair'):
+        repair = sub.add_parser(command, help='Actual Work: source-only v1 repair for exact queued originals; preserve current capability and finite windows')
+        if command == 'same-authority-source-repair-basis':
+            repair.add_argument('capability')
+            repair.add_argument('events', nargs='+')
+            repair.add_argument('--controller', required=True)
+            repair.add_argument('--module', action='append', required=True, dest='modules')
+            repair.add_argument('--purpose', required=True)
+        else:
+            repair.add_argument('--selection', required=True)
     draft = sub.add_parser('draft-current-configuration', help='Return a coherent prospective draft; no selection or deployment')
     draft.add_argument('--operator-config', required=True)
     draft.add_argument('--retention-library')
@@ -330,6 +340,15 @@ async def serve(store):
 
 
 def operate(args, store):
+    if args.command in {'same-authority-source-repair-basis', 'select-same-authority-source-repair'}:
+        from . import processing, report_repair, configuration
+        boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
+        actor = actual_actor(store.config['roles']['Work']['owner'])
+        if args.command == 'same-authority-source-repair-basis':
+            with configuration.stopped(store), store.tx():
+                return report_repair.source_basis(store, boards, args.capability, args.events,
+                    args.controller, actor, args.modules, args.purpose)
+        return report_repair.apply_source(store, boards, actor, read_record(args.selection))
     if args.command in {'collected-report-repair-basis', 'select-collected-report-repair'}:
         from . import processing, report_repair, configuration
         boards = {r:processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
