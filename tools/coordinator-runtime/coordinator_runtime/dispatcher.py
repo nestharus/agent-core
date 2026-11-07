@@ -710,10 +710,13 @@ class Dispatcher:
             end = self.delivery_cycle_end if lane == "revisit" else fresh_end
             source = "outboxes" if lane == "revisit" else "delivery_wakeups w JOIN outboxes ON outboxes.id=w.delivery"
             sequence = "outboxes.rowid" if lane == "revisit" else "w.seq"
+            # Settlement may precede whole receiving completion. Revisit local
+            # observation debt through the same handler, within these page bounds.
             page = self.store.rows(
                 "SELECT outboxes.*," + sequence + " AS delivery_seq, "
                 "(state NOT IN ('settled','classification-pending') OR "
-                "(state='settled' AND (error IS NOT NULL OR json_extract(board_receipt,'$.control_receipt.pending')=1 "
+                "(state='settled' AND (processed_at IS NULL OR error IS NOT NULL "
+                "OR json_extract(board_receipt,'$.control_receipt.pending')=1 "
                 "OR json_type(board_receipt,'$.control_receipt') IS NULL))) AS delivery_due "
                 "FROM " + source + " WHERE " + sequence + ">? AND " + sequence + "<=? ORDER BY " + sequence + " LIMIT ?",
                 (cursor, end, DELIVERY_PAGE))

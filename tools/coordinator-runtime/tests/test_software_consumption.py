@@ -170,6 +170,13 @@ class SoftwareConsumption(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(final['control_receipt']['required'])
                 self.assertFalse(final['settlement']['native_receipt'])
                 self.assertEqual(self.store.job(sender['id'])['state'], 'closed')
+                # Board settlement can precede the whole receiving frontier.
+                # Allow ordinary bounded revisits to observe that later completion.
+                for _ in range(8):
+                    if self.store.one('SELECT processed_at FROM events WHERE id=?', (source['id'],))['processed_at'] is not None:
+                        break
+                    self.runtime.pump_deliveries()
+                    self.runtime.reconcile_completed()
                 processed = self.store.one('SELECT processed_at FROM events WHERE id=?', (source['id'],))['processed_at']
                 self.assertIsNotNone(processed)
                 self.assertEqual(self.store.recover_source(source['id']), source)
