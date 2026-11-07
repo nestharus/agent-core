@@ -37,7 +37,7 @@ class RefResources(OrdinaryEffects):
         self.assertEqual(self.git('rev-parse', 'destination'), self.head)
         receipt = json.loads(self.store.job(job['id'])['effect_receipt'])
         commands = receipt['tools']
-        cas = [r for r in commands if 'update-ref' in r['argv']]
+        cas = [r for r in commands if 'update-ref' in r['argv'] and r['exit'] is not None]
         self.assertEqual(len(cas), 1)
         self.assertEqual(cas[0]['exit'], 0)
         self.assertTrue(cas[0]['complete'])

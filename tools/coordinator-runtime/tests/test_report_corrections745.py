@@ -63,6 +63,7 @@ class Reviews745(Fixture):
                     complete=True, items=[], nonzero_completions=[]))))
         asyncio.run(original())
         collected = self.store.attempt(attempt)
+        job_before = self.store.job(job['id'])
         with self.reject_source_reads(ids):
             for name, call in [
                 ('finish', lambda: self.store.finish_job(job['id'], job['token'])),
@@ -87,10 +88,12 @@ class Reviews745(Fixture):
         self.assertEqual(collected['exit'], 0)
         self.assertIsNotNone(collected['ended'])
         self.assertIsNotNone(collected['collected'])
-        self.assertEqual(self.store.job(job['id'])['state'], 'held')
+        # The combined735 outer admission guard defers before any finish or
+        # informative-failure mutation. It preserves the exact original job.
+        self.assertEqual(self.store.job(job['id']), job_before)
         self.assertIsNone(self.store.job(job['id'])['response'])
         self.assertEqual(self.store.rows('SELECT * FROM outboxes'), [])
-        self.assertIn('informative delivery held', self.runtime.runtime_errors[job['id']])
+        self.assertIn('admission changed', self.runtime.runtime_errors[job['id']])
         # Explicit fixture custodian releases its own hold solely to compare
         # bytes; no production hold or actual receipt is involved.
         self.store.set_hold(ids[-1], None)
