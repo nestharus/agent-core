@@ -305,6 +305,10 @@ async def source(store, attempt, p, task, *, context_job=None):
     if top != p['repository']:
         raise Refusal('Git discovery must resolve the exact admitted repository cwd')
     git_dir = await read('rev-parse', '--path-format=absolute', '--git-common-dir')
+    run = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
+    local_integration.current_sources(store, store.job(run['job']))
+    if context_job is not None:
+        local_integration.current_sources(store, context_job)
     scoped_path(store, git_dir, task['effect_authority']['write_roots'] if p['kind'] == 'local-ref' else roots)
     head = await read('rev-parse', '--verify', p['source_ref'] + '^{commit}')
     if head != p['source_head']:
@@ -443,8 +447,17 @@ async def adapter(store, attempt, p, *, task=None, association=None):
         return {'status': 'success', 'ref': p['ref'], 'before': before, 'after': after}
     if p['kind'] == 'github-run':
         return await github(store, attempt, p)
-    run = await tool(store, attempt, 'qa-runner', qa_source.command(store, task, p, association, p['command']), p['repository'], p)
-    readback = await tool(store, attempt, 'qa-effect-resource-readback', qa_source.command(store, task, p, association, p['readback']), p['repository'], p)
+    identity = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
+    with store.tx():
+        store.require_attempt_execution_open(attempt)
+        local_integration.current_sources(store, store.job(identity['job']))
+        runner_command = qa_source.command(store, task, p, association, p['command'])
+    run = await tool(store, attempt, 'qa-runner', runner_command, p['repository'], p)
+    with store.tx():
+        store.require_attempt_execution_open(attempt)
+        local_integration.current_sources(store, store.job(identity['job']))
+        readback_command = qa_source.command(store, task, p, association, p['readback'])
+    readback = await tool(store, attempt, 'qa-effect-resource-readback', readback_command, p['repository'], p)
     association = {**association, 'runner_record': digest(run)}
     if run['exit'] not in p['known_exits'] or readback['exit'] != 0 or readback['stdout'] != p['readback']['stdout']:
         raise Refusal('QA exit/effect/resource readback unknown; retain original custody')
@@ -478,10 +491,14 @@ async def github(store, attempt, p, *, context_job=None):
 
 
 async def accept(store, actor, attempt_id, decision, evidence):
+    identity = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt_id,))
+    if not identity:
+        raise Refusal('actual reconciled execution, explicit decision and semantic evidence required')
+    job = store.job(identity['job'])
+    local_integration.current_sources(store, job)
     run = store.one('SELECT * FROM ordinary_runs WHERE attempt=?', (attempt_id,))
     if not run or run['state'] != 'reconciled' or decision not in {'accepted', 'rejected'} or not evidence:
         raise Refusal('actual reconciled execution, explicit decision and semantic evidence required')
-    job = store.job(run['job'])
     attempt = store.attempt(attempt_id)
     if job['active_attempt'] != attempt_id or not selected(store, job):
         raise Refusal('acceptance must bind the current original attempt/authority')
@@ -506,6 +523,14 @@ async def accept(store, actor, attempt_id, decision, evidence):
         if digest(current) != digest(receipt['outcome']):
             raise Refusal('CI run changed before semantic acceptance')
     with store.tx():
+        job = store.job(identity['job'])
+        local_integration.current_sources(store, job)
+        if job['active_attempt'] != attempt_id or not selected(store, job):
+            raise Refusal('acceptance must bind the current original attempt/authority')
+        prospective.board(store, job['role'])._software_job_grant(store, job)
+        _, current_policy = policy_for(store, job)
+        if encode(current_policy) != encode(p):
+            raise Refusal('acceptance policy changed during readback; retain original decision duty')
         record = {'actor': actor, 'authority': p['acceptance_authority'], 'execution_hash': evidence['execution_hash'],
                   'admission': run['admission'], 'decision': decision, 'evidence': evidence, 'at': store.clock()}
         store.db.execute('INSERT INTO ordinary_acceptance VALUES(?,?,?,?)', (attempt_id, actor, decision, encode(record)))
