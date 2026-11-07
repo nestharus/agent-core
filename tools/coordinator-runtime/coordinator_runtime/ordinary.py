@@ -349,7 +349,10 @@ async def perform(store, board, job):
     task, p = policy_for(store, job)
     if qa_branch_sequence(store.config) and job['task'] == 'branch-integrator':
         from .report_scope import conserved_inputs
-        if {'collected_reports': conserved_inputs(store, job)} not in answer['findings']:
+        # Match the whole source envelope using the same canonical JSON
+        # identity as its pins, including boolean and numeric distinctions.
+        expected = encode({'collected_reports': conserved_inputs(store, job)})
+        if not any(encode(finding) == expected for finding in answer['findings']):
             raise Refusal('Branch must conserve the whole accepted QA report before effects')
     from .local_integration import current_basis, validate_method
     current_basis(store, job)
@@ -605,7 +608,7 @@ def accepted_report(store, event, run, destination):
             or original['response'] != event['id'] or event.get('source_job') != original['id']
             or event.get('source_attempt') != attempt['id'] or event.get('source_role') != original['role']
             or event.get('source_members') != json.loads(original['members'])
-            or event.get('package') != original['package'] or event.get('body') != answer
+            or event.get('package') != original['package'] or encode(event.get('body')) != encode(answer)
             or event['id'] != digest({'response': attempt['id']})
             or event.get('allowed_tasks') != response_tasks(store.config['tasks'][original['task']], answer, store.config)
             or destination not in event['allowed_tasks']):
