@@ -32,6 +32,8 @@ class Management(unittest.TestCase):
             'authority': 'Synthetic original user/Work delegation only', 'boundary': 'new-journal-only'}
         self.config['delivery'] = {'recipients': {r: {'session': s['owner'], 'profile': s['profile'],
             'board_role': s['board_role']} for r, s in self.config['roles'].items()}}
+        if hasattr(self, 'configure'):
+            self.configure()
         self.config_path = self.home/'config.json'
         self.config_path.write_text(encode(self.config))
         self.store = Store(self.config, clock=lambda: 1000.)

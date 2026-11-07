@@ -317,3 +317,66 @@ integration selection also retains that configuration's batch-size bound. It
 refuses an oversized selection intact; it does not truncate members, drop duties
 or replace the selected target and WHY. Allocation-window renewal remains
 separate from integration selection and its retained lifetime evidence bound.
+
+## Positive no-start metadata execution retirement
+
+`integration-metadata-closure-basis JOB --token TOKEN` also represents a held
+local anchored Work catalog integrator whose task attempts were positively
+collected without starting. This alternative returns
+`integration-positive-no-start-closure-metadata-v1`. The existing
+`integration-execution-closure-metadata-v1` begun/numeric-END basis retains its
+original predicates and receipt shape.
+
+The no-start alternative requires the original frozen task to equal the current
+selected task, package/admission absent, unchanged local policy, exact reserved
+source/queue/mapping relationships, and anchored file-only catalog points. It
+accepts only `catalog-bounded-log-v1`, workspace-write, no-network,
+owner-reconcile tasks with exact target write roots and no native or ordinary
+effect authority. Every task must have finite ordered actual collection,
+not-started state, null begin/END/exit/session/turn/semantic/result,
+not-started capture, no-session-created cleanup, JSON boolean true
+`known_not_started`, and a nonblank textual `resume_disposition`. Each diagnosis
+must independently meet that proof or have its own ordered begin/numeric
+END/collection and closed cleanup. Pending/active/inconsistent recovery,
+publication intents, ordinary runs/resources, local commits, effect receipts,
+and completed or uncertain routine effects refuse.
+
+`retire-integration-metadata JOB --token TOKEN --receipt ABSOLUTE_FILE` uses the
+existing current-owner or exact stopped-management adapter. The receipt has
+`basis`, `reason`, and one `controllers` item for every represented controller.
+For this version each item contains exactly `controller`, `collector`, `end`,
+`collected`, `writers_closed`, `no_task_launch`, and `evidence`. `end` is the
+actual numeric **parent/controller** END; `collected`, `writers_closed`, and
+`no_task_launch` must each be true. The receipt's exact basis scopes the no-task
+launch testimony. A controller END never becomes a task END. These are
+attributed original-custodian facts, not facts inferred from SQL or process
+absence.
+
+Metadata acquisition returns only scoped identity, null/equality predicates,
+positive no-start fields, policy and file-point metadata, and the cooperative
+journal revision. It does not fetch response IDs/bodies, follow pointers, acquire
+outbox payloads, results, routine preimages or canonical values. SQL evaluates
+null/frozen-equality predicates in the journal; this is no physical read-isolation
+claim. The revision binds omitted mutable duties, including opaque response and
+outbox changes, without reading or hashing their bodies. A transaction rechecks
+the entire basis after evidence and capacity checks, then appends only the
+existing retirement row and, when selected, its management audit. Failure rolls
+back both.
+
+Retirement leaves the held job, reserved original queue, failure response,
+outboxes, attempts/results, custody, recovery, retention and all charges intact.
+It changes only execution eligibility. No successor, queue return, replay,
+success, reconciled status, processing timestamp or budget refund follows. Any
+later related Work decision needs its own genuine current authority and normal
+guards. The prestart/no-start withdrawal contracts are unchanged.
+
+Permanent execution fences precede stale callback body acquisition, including
+late holds, launch/start/session/semantic/collection/capture callbacks and new
+failure/result delivery production. A retired original has already been
+collected; unfenced original collection remains available. Existing owed
+outbox observation/settlement and accountable effect reconciliation remain
+separate operations. The fictional full-dispatcher tests exercise the actual
+failure-response path without patching `try_finish` or `failure_delivery`:
+`PYTHONPATH=tools/coordinator-runtime:tools/coordinator-runtime/tests python3 -B
+-m unittest -v test_positive_no_start721 test_metadata_closure671
+ test_management406`.

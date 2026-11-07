@@ -109,6 +109,7 @@ def stages(store, attempt):
 
 
 def prepare(store, attempt, before, policy=None):
+    store.require_attempt_execution_open(attempt)
     root=store.home/'artifacts'/attempt/'staged'
     root.mkdir(mode=0o700)
     for index,(target,witness) in enumerate(before.items()):
@@ -125,6 +126,7 @@ def prepare(store, attempt, before, policy=None):
 
 
 def conserve_stages(store, attempt, task):
+    store.require_attempt_execution_open(attempt)
     for path in stages(store,attempt).values():capture(store,attempt,path,task)
 
 
@@ -156,8 +158,8 @@ def snapshot_lock(store):
 
 def publish(store, board, job, attempt, run, task):
     from .configuration import require_current_job
-    require_current_job(store, job)
     store.require_execution_open(job['id'])
+    require_current_job(store, job)
     with snapshot_lock(store):
         known = store.one('SELECT * FROM local_commits WHERE attempt=?', (attempt['id'],))
         if known and known['state'] == 'published':

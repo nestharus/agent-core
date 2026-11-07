@@ -327,6 +327,7 @@ class RecoveryJournal:
 
     def finish_invalid_diagnosis(self,job):
         """Also exposes the public next step for already-collected old bad diagnoses."""
+        self.require_execution_open(job['id'])
         if job['recovery_state']!='diagnosing':return
         if not self.owns_disposition(job,self.attempt(job['active_attempt'])):return
         diag=self.current_diagnosis(job)
@@ -337,6 +338,7 @@ class RecoveryJournal:
     def recheck_artifact_capture(self,attempt):
         """After full inventory, correct only its derived gap, conserving history."""
         with self.tx():
+            self.require_attempt_execution_open(attempt)
             old=self.attempt(attempt);detail=json.loads(old['detail'])
             if not self.owns_disposition(self.job(old['job']),old) or old['ended'] is None or old['collected'] is None:
                 raise Refusal('artifact recheck belongs to the collected original owner')
@@ -361,6 +363,7 @@ class RecoveryJournal:
     def retry_disposition_hold(self,job):
         """Re-examine our own recorded disposition error, preserving other holds."""
         with self.tx():
+            self.require_execution_open(job)
             row=self.job(job)
             error=self.one("SELECT * FROM operational_errors WHERE subject=? AND active=1 AND kind='task-disposition-error'",(job,))
             if error and json.loads(error['detail']).get('error')==row['hold_reason']:

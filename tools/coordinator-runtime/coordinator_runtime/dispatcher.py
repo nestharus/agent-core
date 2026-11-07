@@ -337,6 +337,7 @@ class Dispatcher:
         self.spawn(self.execute(job["id"], attempt))
 
     async def execute(self, job_id, attempt):
+        if self.store.integration_retirement_recorded(job_id):return
         job = self.store.job(job_id)
         task = self.config["tasks"][job["task"]]
         directory = self.store.home / "artifacts" / attempt
@@ -389,6 +390,7 @@ class Dispatcher:
         self.try_finish(job_id)
 
     def inventory_artifacts(self, attempt, outcome, task=None):
+        self.store.require_attempt_execution_open(attempt)
         result = outcome.get("result")
         if not isinstance(result, dict):
             return
@@ -404,8 +406,8 @@ class Dispatcher:
         if errors:raise Refusal('; '.join(errors))
 
     def try_finish(self, job_id):
+        if self.store.integration_retirement_recorded(job_id):return
         job = self.store.job(job_id)
-        if self.store.integration_retired(job_id):return
         try:
             if self.config['tasks'][job['task']].get('routine_completion'):
                 routine.reconcile(self.store, self.boards[job['role']], job)
@@ -441,8 +443,8 @@ class Dispatcher:
     def advance_recovery(self, job_id, diagnosis):
         if self.stopping.is_set():
             return
+        if self.store.integration_retirement_recorded(job_id):return
         job=self.store.job(job_id)
-        if self.store.integration_retired(job_id):return
         if job['recovery_state']!='diagnosing':return
         old=self.store.attempt(job['active_attempt'])
         current=self.store.current_diagnosis(job)
@@ -467,7 +469,9 @@ class Dispatcher:
 
     def schedule_recovery(self):
         jobs = self.store.rows("SELECT j.* FROM jobs j JOIN attempts a ON j.active_attempt=a.id "
-                               "WHERE j.state='held' AND COALESCE(j.recovery_state,'')!='owner-deferred' AND a.collected IS NOT NULL AND j.recovery_count=0 "
+                               "WHERE NOT EXISTS (SELECT 1 FROM integration_retirements r WHERE r.job=j.id) "
+                               "AND NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=j.id) "
+                               "AND j.state='held' AND COALESCE(j.recovery_state,'')!='owner-deferred' AND a.collected IS NOT NULL AND j.recovery_count=0 "
                                "AND (a.exit!=0 OR a.error IS NOT NULL OR a.capture!='complete' "
                                "OR COALESCE(a.semantic,'UNKNOWN')!='DONE' OR EXISTS "
                                "(SELECT 1 FROM operational_errors e WHERE e.subject=j.id AND e.active=1 AND e.kind='task-disposition-error'))")
@@ -480,11 +484,15 @@ class Dispatcher:
         self.reconcile_classifications()
         self.reconcile_recovery_requests()
         collected = self.store.rows("SELECT j.* FROM jobs j JOIN attempts a ON j.active_attempt=a.id "
-                                    "WHERE j.state!='closed' AND COALESCE(j.recovery_state,'')!='owner-deferred' AND (j.recovery_owner IS NULL OR j.recovery_state IN ('handed-off','awaiting-disposition')) "
+                                    "WHERE NOT EXISTS (SELECT 1 FROM integration_retirements r WHERE r.job=j.id) "
+                                    "AND NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=j.id) "
+                                    "AND j.state!='closed' AND COALESCE(j.recovery_state,'')!='owner-deferred' AND (j.recovery_owner IS NULL OR j.recovery_state IN ('handed-off','awaiting-disposition')) "
                                     "AND a.collected IS NOT NULL")
         for job in collected:
             self.reconcile_collected(job)
-        ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing'", (self.store.controller,))
+        ready = self.store.rows("SELECT * FROM jobs WHERE recovery_owner=? AND recovery_state='diagnosing' "
+                                "AND NOT EXISTS (SELECT 1 FROM integration_retirements r WHERE r.job=jobs.id) "
+                                "AND NOT EXISTS (SELECT 1 FROM integration_prestart_dispositions d WHERE d.job=jobs.id)", (self.store.controller,))
         for job in ready:
             try:
                 diagnosis=self.store.current_diagnosis(job)
@@ -540,7 +548,7 @@ class Dispatcher:
             self.store.classification_failed(attempt, exc)
 
     def reconcile_collected(self, job):
-        if self.store.integration_retired(job['id']):return
+        if self.store.integration_retirement_recorded(job['id']):return
         if ordinary.awaiting_acceptance(self.store, job):
             if (job['controller'] == self.store.controller and not job['hold_reason']
                     and job['id'] not in self.acceptance_active and ordinary.accepted_runs(self.store, job['package'])):
@@ -561,12 +569,14 @@ class Dispatcher:
             self.runtime_errors[job["id"]] = str(exc)
 
     async def resume_acceptance(self, job):
+        if self.store.integration_retirement_recorded(job['id']):return
         try:
             current = self.store.job(job['id'])
             if current['active_attempt'] != job['active_attempt'] or current['controller'] != self.store.controller:
                 raise Refusal('acceptance continuation must retain the same original attempt/collector')
             await ordinary.qualification(self.store, current)
             with self.store.tx():
+                self.store.require_execution_open(current['id'])
                 attempt = self.store.attempt(current['active_attempt'])
                 detail = json.loads(attempt['detail'])
                 detail.pop('ordinary_awaiting_acceptance', None)
