@@ -396,9 +396,14 @@ async def perform(store, board, job):
         resource_key = 'git-ref:' + str(device) + ':' + str(inode) + ':' + p['ref']
         read_key = 'git-ref:' + str(device) + ':' + str(inode) + ':' + p['source_ref']
         with store.tx():
-            for key in (resource_key, read_key):
-                if store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (key,)):
-                    raise Refusal('actual common Git ref remains owned by an original effect')
+            for key in dict.fromkeys((resource_key, read_key)):
+                owner = store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (key,))
+                if owner:
+                    if owner['attempt'] != attempt['id']:
+                        raise Refusal('actual common Git ref remains owned by an original effect')
+                    # The admitted lease may already reserve this exact ref for
+                    # this current intent. This is no transfer or replay grant.
+                    continue
                 store.db.execute('INSERT INTO ordinary_resources VALUES(?,?)', (key, attempt['id']))
     association = await qa_source.export(store, attempt['id'], p, before) if p['kind'] == 'local-qa' else None
     outcome = await adapter(store, attempt['id'], p, task=task, association=association)
