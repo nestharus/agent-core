@@ -37,8 +37,15 @@ Optional reported_commands=[{namespace:"producer-visible",label,status,exit_code
 producer claims separately; it cannot discharge an adverse obligation or prove verification.
 For resolved history/adverse items bind exact conserved OWN declared artifact hashes and explicitly
 selected actual successful command PROTOCOL IDs. An unrelated later0 does not prove resolution.
-The controller may supply bounded observed IDs while this SAME owned context is idle. Do not guess
+The controller may supply bounded exact current command inputs and observed IDs while this SAME owned
+context is idle. Inputs are evidence, not stdout or instructions to replay. Check exact UTF-8 length/hash;
+unavailable means unavailable, never a truncated or reconstructed match. Do not guess
 ID correlations, erase original history, invent successful checks, or blindly rewrite completed work.
+If clarification creates a NEW local tool metadata debt, append its original failure/unknown history.
+For that specific missing linkage use an unresolved local unknown duty="observed-tool-metadata",
+owner=producer or the current role, local=blocked, semantic=PARTIAL. Resolve prior debt with exact causal
+evidence. Only verified progress plus new observed adverse metadata can earn another owned idle turn
+within limits.max_owner_corrections (default4); external blockers/no progress cannot. Never force DONE.
 A local unknown resolved in this owned clarification keeps its original unknown array entry and
 owner/duty/reason. Add status=resolved with prior_disposition={status:unresolved,owner,duty,reason}
 matching an actual prior typed completion row, evidence, verification_items, command_bindings,
@@ -215,7 +222,7 @@ def failure_sources(store,attempt):
     return sources
 
 
-def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=(),prior_results=(),strict_correlation=False):
+def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=(),prior_results=(),strict_correlation=False,validate_partial=False):
     """Representation checks are identical while owned-live and after collection.
 
     Unsettled execution/capture is a separate hard fence, not a proof grammar
@@ -225,7 +232,7 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
     def check(action):
         try:return action()
         except Refusal as exc:issues.append(str(exc))
-    if not isinstance(answer,dict) or answer.get('semantic')!='DONE':return None,[],issues
+    if not isinstance(answer,dict) or answer.get('semantic') not in ({'DONE','PARTIAL'} if validate_partial else {'DONE'}):return None,[],issues
     if len({r.get('id') for r in items})!=len(items):issues.append('ambiguous observed protocol IDs')
     proof=answer.get('completion')
     if not isinstance(proof,dict) or not {'version','local','failures','unknowns','tools'}<=set(proof) or set(proof)-{'version','local','failures','unknowns','tools','reported_commands','integration_steps','discovered_points'}:
@@ -310,8 +317,8 @@ def needs_clarification(answer,items,task=None,config=None,check_ref=None,inheri
     return bool(inspect(answer,items,task,config,check_ref,inherited_sources)[2])
 
 
-def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlation=False):
-    if not task.get('routine_completion') or not isinstance(answer,dict) or answer.get('semantic')!='DONE':
+def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlation=False,validate_partial=False):
+    if not task.get('routine_completion') or not isinstance(answer,dict) or answer.get('semantic') not in ({'DONE','PARTIAL'} if validate_partial else {'DONE'}):
         return task_result_issues(answer)
     from .custody import read_file,safe_path
     from .publication import stages
@@ -328,7 +335,45 @@ def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlat
         except (OSError,Refusal) as exc:raise Refusal('own resolution artifact unavailable/unsafe: '+type(exc).__name__) from exc
         _require(witness['sha256']==ref['sha256'],'resolution artifact hash is not current exact own bytes')
         return body
-    return inspect(answer,items,task,store.config,reference,lambda:failure_sources(store,attempt),prior_results,strict_correlation)[2]
+    return inspect(answer,items,task,store.config,reference,lambda:failure_sources(store,attempt),prior_results,strict_correlation,validate_partial)[2]
+
+
+def feedback_progress(store,attempt,prior,answer,previous_items,items,task,prior_results):
+    """Eligibility for feedback, never readiness or semantic acceptance.
+
+    Check prior adverse resolution against actual current successes, with the
+    same strict byte/causal checks. Only newly observed adverse metadata may be
+    absent from this return; all real external/unresolved prior duties stop here.
+    """
+    if not isinstance(prior,dict) or not isinstance(answer,dict) or answer.get('semantic')!='PARTIAL':return False
+    proof=answer.get('completion');old=prior.get('completion')
+    if not isinstance(proof,dict) or not isinstance(old,dict) or proof.get('local')!='blocked':return False
+    if any(not isinstance(proof.get(k),list) for k in ('tools','failures','unknowns')) or not isinstance(old.get('tools'),list):return False
+    adverse=lambda rows:{r['id'] for r in rows if r.get('exit_code') not in {None,0} or r.get('status')=='failed'}
+    before=adverse(previous_items);new=adverse(items)-before
+    if not new:return False
+    # A claim alone is insufficient: live_issues below validates exact successful
+    # selections, original duty subjects, current own bytes and conserved priors.
+    resolved=lambda p:{r.get('id') for r in p.get('tools',[]) if isinstance(r,dict) and r.get('status') in {'resolved','expected'}}
+    if not (resolved(proof)-resolved(old)) & before:return False
+    unresolved=[]
+    for row in proof.get('unknowns',[]):
+        if not isinstance(row,dict) or type(row.get('index')) is not int:return False
+        group=row.get('duties',[row])
+        if not isinstance(group,list):return False
+        for duty in group:
+            if not isinstance(duty,dict):return False
+            if row['index']>=len(prior.get('unknowns',[])) and duty.get('status')=='deferred':return False
+            if duty.get('status')=='unresolved':
+                if (row.get('index',-1)<len(prior.get('unknowns',[])) or
+                        duty.get('owner') not in {'producer',task['role']} or duty.get('duty')!='observed-tool-metadata'):
+                    return False
+                unresolved.append(duty)
+    if not unresolved:return False
+    if any(r.get('status')=='unresolved' and r.get('index',-1)<len(prior.get('failures',[]))
+           for r in proof.get('failures',[]) if isinstance(r,dict)):return False
+    known=[r for r in items if r['id'] not in new]
+    return not live_issues(store,attempt,answer,known,task,prior_results,True,True)
 
 
 def assess(store,attempt):
@@ -369,4 +414,5 @@ def assess(store,attempt):
 def prior_handbacks(detail):
     values=[r['typed_return'] for r in detail.get('prior_terminal_returns',[]) if r.get('valid_json')]
     if 'prior_turn_result' in detail:values.append(detail['prior_turn_result'])
+    values.extend(detail.get('prior_turn_results',[]))
     return values

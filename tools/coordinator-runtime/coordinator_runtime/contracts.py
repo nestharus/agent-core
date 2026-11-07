@@ -704,7 +704,10 @@ def collected_task_result(attempt):
     answer=parse_json(attempt['result']) if attempt['result'] else None
     detail=parse_json(attempt['detail'])
     if attempt['capture']!='complete': handback_receipt(attempt,detail,answer)
-    return task_result(answer,detail['prior_turn_result']) if 'prior_turn_result' in detail else task_result(answer)
+    validated=task_result(answer)
+    for prior in ([detail['prior_turn_result']] if 'prior_turn_result' in detail else []) + detail.get('prior_turn_results',[]):
+        task_result(answer,prior)
+    return validated
 
 
 def response_tasks(task, result, config):
