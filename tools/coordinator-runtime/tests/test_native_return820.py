@@ -111,3 +111,18 @@ class NativeReturn(f.Native):
             return original_event(key)
         with patch.object(self.store,'event',side_effect=guarded):
             self.assertTrue(resource_scopes.blocked(self.store,self.row))
+
+    def test_external_marker_and_incomplete_family_cannot_be_native(self):
+        self.source()
+        self.store.db.execute('SAVEPOINT external820')
+        try:
+            self.store.db.execute("UPDATE events SET payload=json_remove(payload,'$.source_job') WHERE id=?",(self.returned['id'],))
+            self.assertTrue(resource_scopes.blocked(self.store,self.row))
+        finally:
+            self.store.db.execute('ROLLBACK TO external820');self.store.db.execute('RELEASE external820')
+        call=self.store.one('SELECT receipt FROM review_calls WHERE attempt=?',(self.a['id'],))
+        turns=json.loads(call['receipt']);answer=json.loads(turns[-1]['full_answer'])
+        answer['coverage']['families'].pop(next(iter(answer['coverage']['families'])))
+        turns[-1]['full_answer']=encode(answer)
+        self.store.db.execute('UPDATE review_calls SET receipt=? WHERE attempt=?',(encode(turns),self.a['id']))
+        self.assertTrue(resource_scopes.blocked(self.store,self.row))

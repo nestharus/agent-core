@@ -394,6 +394,10 @@ def bounded_members(runtime, row, rows):
     if not runtime.processing or row['task'] != 'reviews-integrator':
         return rows
     record = runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {})
+    if 'native_review_return' in record:
+        from .native_review_scope import eligible as native_eligible
+        native_eligible(runtime, row, record)
+        return [row]  # Exact whole return; other current reports remain queued.
     if 'reviews_report' not in record:
         return rows
     chosen, reports = [], []
