@@ -594,6 +594,8 @@ def pair_anchor(runtime, key, event, selection, kind):
                 or producer['effects'] != 'none' or producer['role'] != 'Reviews'
                 or producer['phase'] != 'integrator'):
             raise Refusal('authentic original report-only Reviews producer required before body')
+        if not json.loads(producer['members']):
+            raise Refusal('original report producer requires its whole nonempty member chain')
         members = []
         for member in json.loads(producer['members']):
             current = runtime.one('SELECT id,role,hash,hold FROM events WHERE id=?', (member['event'],))
@@ -725,6 +727,7 @@ def pair_validate(runtime, selected, *, _continuation=False):
     for board in runtime.processing.boards.values():
         board.verify_authority(runtime)
     prospective.current(runtime, work['queue']['task'])
+    report_scope.source_metadata(runtime, work['producer'])
     value = report(runtime, selected['capability'], work['event'], selected['controller'], runtime.processing.current()[1])
     source = runtime.event(work['event'])
     if value['hash'] != work['hash'] or source.get('allowed_tasks') != [work['queue']['task']]:
@@ -737,7 +740,11 @@ def pair_validate(runtime, selected, *, _continuation=False):
     epoch = prospective.current(runtime, work['queue']['task'])
     if not epoch or epoch['id'] != selected['prospective']['id']:
         raise Refusal('original finite epoch changed')
-    runtime.processing.current()
+    _, selection = runtime.processing.current()
+    if not _continuation:
+        pair_finite(runtime, selection)
+    if pair_anchor(runtime, selected['capability'], control['event'], selection, control['kind']) != control:
+        raise Refusal('selected original control changed before result body')
     row = runtime.attempt(control['control']['attempt'])
     result = json.loads(row['result'] or 'null')
     receipt = json.loads(result['decision_json'])
