@@ -161,3 +161,11 @@ teardown and coordinator queue/artifact cleanup remain separate lifecycles.
 This source is not installed or activated. No real thread was deleted during
 qualification. Run the bounded source-only tests with `test_session_retirement.py`;
 its clocks, CLI and stdio server are synthetic and require no credentials.
+
+Offline public-protocol qualification used the installed 0.167.0 binary with
+SHA256 `cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda`.
+Its nonexperimental generated schema includes `initialize.codexHome`, exact
+`thread/delete` params `{threadId: string}` and an empty-object response. Help
+confirms `--listen stdio://`. Generation/help ran without networking and with
+empty private HOME/TMPDIR; no real server was initialized. Schema qualification
+and synthetic ACK tests establish the request contract, not live deletion behavior.
