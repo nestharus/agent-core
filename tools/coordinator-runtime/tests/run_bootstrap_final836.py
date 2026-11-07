@@ -89,7 +89,7 @@ groups = {
             'test_authentic_control794.Kernel794.test_source_and_sdk_snapshots_readonly',
             'test_processing206.KernelIsolationTests.test_real_source_and_dependency_writes_are_kernel_denied']}
 groups['composite'] = [test for tests in list(groups.values()) for test in tests]
-groups['reacquire'] = ['test_native_reacquisition836.Reacquisition836.'+n for n in ['test_public_frozen_retry_after_pool_failure_refuses_before_body','test_async_preparation_after_start_refuses_before_body','test_frozen_resume_without_conflict_preserves_source']]
+groups['reacquire'] = ['test_native_reacquisition836.Reacquisition836.'+n for n in ['test_public_frozen_retry_after_pool_failure_refuses_before_body','test_async_preparation_after_start_refuses_before_body','test_frozen_resume_without_conflict_preserves_source','test_spawned_preparation_after_start_refuses_before_body']]
 groups['final836'] = groups['composite'] + groups['reacquire'] + ['test_control_marker831.Marker831.'+n for n in ['test_marker_api_fresh_classifier_completion_replay','test_marker_existing_return_cli_terminal_once','test_marker_metadata_before_body','test_marker_source_reservation_and_external_guards']]
 groups['baseline836'] = groups['reacquire'][:2]
 if 'baseline836' in sys.argv:

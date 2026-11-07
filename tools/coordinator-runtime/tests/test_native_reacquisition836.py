@@ -91,8 +91,31 @@ class Reacquisition836(NativeReturn):
         self.assertIsNotNone(self.store.attempt(attempt)['collected'])
         self.assertEqual(len(self.transport.calls),2)
 
+    def test_spawned_preparation_after_start_refuses_before_body(self):
+        job = self.frozen()
+        attempt = self.store.start_job(job['id'],job['token'])
+        self.conflict()
+        with self.traps():
+            asyncio.run(self.dispatch.execute(job['id'],attempt))
+        result = self.store.attempt(attempt)
+        self.assertIsNotNone(result['collected'])
+        self.assertIn('physical admission',result['error'])
+        self.assertEqual(self.store.job(job['id'])['state'],'held')
+        self.assertEqual(len(self.transport.calls),2)
+
     def test_frozen_resume_without_conflict_preserves_source(self):
         job = self.frozen()
+        from _receiving485_fixtures import Models
+        from coordinator_runtime import report_scope
+        def answer(current,out):
+            if current['task'] == 'reviews-integrator':
+                reports = report_scope.integration_inputs(self.store,current)
+                protocol = report_scope.integration_protocol(self.store,current,reports)
+                out['category'] = 'consolidated'
+                out['findings'] = [dict(**protocol,analysis='Fictional conserved analysis',decision='Report only',method='Fixture method',coverage=[dict(**pin,extent='whole',limits=['Fictional native transport']) for pin in protocol['sources']])]
+        self.task_result = answer
+        self.models = Models(self)
+        self.dispatch = service.Dispatcher(self.store,self.boards,self.models,self.transport)
         originals = self.store.rows('SELECT * FROM review_calls')
         async def resume():
             self.dispatch.schedule_job()
@@ -100,6 +123,10 @@ class Reacquisition836(NativeReturn):
         asyncio.run(resume())
         current = self.store.job(job['id'])
         self.assertIsNotNone(current['active_attempt'])
-        self.assertIsNotNone(self.store.attempt(current['active_attempt'])['collected'])
+        result = self.store.attempt(current['active_attempt'])
+        self.assertIsNotNone(result['collected'])
+        self.assertIsNone(result['error'])
+        self.assertEqual(result['exit'],0)
+        self.assertIsNotNone(current['response'])
         self.assertEqual(originals,self.store.rows('SELECT * FROM review_calls'))
         self.assertEqual(len(self.transport.calls),2)
