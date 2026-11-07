@@ -5,7 +5,7 @@ Resource evidence is an attributed Work/owner account, never inferred from names
 """
 import json
 import math
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from .contracts import Refusal, digest, encode, required_text
 
 
@@ -188,7 +188,7 @@ def _authenticate(runtime, row, record):
 
 def eligible(runtime, row, record):
     """Public entry: physical admission and whole authentication are inseparable."""
-    from contextlib import nullcontext
+    from contextlib import contextmanager, nullcontext
     from .resource_scopes import blocked
     with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
         preflight(runtime, row, record)
@@ -215,3 +215,15 @@ def admit(runtime, row):
         current = runtime.job(row['id']) if row.get('id') else row
         if blocked(runtime, current):
             raise Refusal('current native physical admission refused before protected acquisition')
+
+
+@contextmanager
+def acquisition(runtime, row):
+    configured = runtime.config['tasks'].get(row['task'], {})
+    native = (runtime.processing and configured.get('role') == 'Reviews'
+              and configured.get('phase') == 'integrator'
+              and 'native_review_return' in runtime.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('Reviews', {}))
+    with (runtime.tx() if native and not runtime.db.in_transaction else nullcontext()):
+        if native:
+            admit(runtime, row)
+        yield

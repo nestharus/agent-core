@@ -221,6 +221,8 @@ class Software:
     def bind_software_attempt(self, runtime, job, attempt, admission):
         # Bind the very admission used by scoped_task, not a later replacement.
         with runtime.tx():
+            from .native_review_scope import admit
+            admit(runtime, job)
             grant = self.software_authority(runtime, job['task'])
             current = runtime.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
             if current != admission:
