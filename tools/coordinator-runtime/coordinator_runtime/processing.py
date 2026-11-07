@@ -775,6 +775,50 @@ def diagnostic_source(runtime, boards, key, event):
     return state, position
 
 
+def reservation_diagnostics(runtime, boards, key, event):
+    """Read-only admitted source metadata; never reconstruct source/capture bodies.
+
+    Post-boundary rows were admitted by the current processing intake. Retained
+    rows require the exact already-selected immutable hash. This observation
+    confers no task, reservation, admission, launch or effect permission.
+    """
+    access = Access(runtime, key, boards)
+    _, selection = access.current()
+    def snapshot():
+        state = runtime.one('SELECT id,hash,role FROM events WHERE id=?', (event,))
+        position = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event,))
+        queue = runtime.one('SELECT task,phase,state,job FROM queue WHERE event=?', (event,))
+        mapping = runtime.one('SELECT version FROM input_resolutions WHERE event=? ORDER BY version DESC LIMIT 1', (event,))
+        runs = runtime.rows("SELECT s.controller FROM service_runs s JOIN processing_runs p ON p.controller=s.controller "
+                            "WHERE s.capability=? AND p.capability=? AND s.state='serving' AND s.returned IS NULL "
+                            "AND p.state='owned' LIMIT 2", (key, key))
+        return state, position, queue, mapping, runs
+    before = snapshot()
+    state, position, queue, mapping, runs = before
+    if not state or not position or state['role'] not in selection['basis']['roles']:
+        raise Refusal('exact admitted processing source metadata required')
+    retained = event in selection['retained_events']
+    if retained:
+        original = {e['id']: e['hash'] for r in selection['basis']['roles'].values() for e in r['original']['events']}
+        if original.get(event) != state['hash']:
+            raise Refusal('retained source metadata differs from selected immutable hash')
+    elif position['position'] <= selection['basis']['event_boundary']:
+        raise Refusal('source metadata outside current processing frontier')
+    boards[state['role']].verify_authority(runtime)
+    if len(runs) != 1:
+        raise Refusal('one current original service controller required; no liveness inferred')
+    controller = runs[0]['controller']
+    canonical_uuid(controller)
+    reservation = reservation_observation(runtime, key, event, state, queue, controller)
+    access.current()
+    if snapshot() != before:
+        raise Refusal('reservation source context changed; no currentness inference')
+    return {'source': state, 'position': position['position'], 'capability': key,
+            'controller': controller, 'responsibility': queue, 'reservation': reservation,
+            'processing_complete': False,
+            'meaning': 'read-only last reached reservation outcome; no source bodies, fresh attempt, liveness or clearance'}
+
+
 def source_diagnostics(runtime, boards, key, event):
     """Exact prospective metadata only; no attempt detail, raw result or history."""
     state, position = diagnostic_source(runtime, boards, key, event)
@@ -831,6 +875,8 @@ def source_diagnostics(runtime, boards, key, event):
         raise Refusal('diagnostic resolution differs from the selected source hash')
     reservation = reservation_observation(runtime, key, event, state, responsibility, controller)
     if (diagnostic_source(runtime, boards, key, event) != (state, position)
+            or runtime.one('SELECT version,source_hash FROM input_resolutions WHERE event=? '
+                           'ORDER BY version DESC LIMIT 1', (event,)) != resolution
             or runtime.one('SELECT task,phase,state,job FROM queue WHERE event=?', (event,)) != responsibility
             or runtime.one("SELECT state,returned FROM service_runs WHERE controller=? AND capability=?",
                            (controller, key)) != {'state': 'serving', 'returned': None}):
@@ -922,49 +968,9 @@ def dependency_observation(runtime, key, event, state, controller):
 
 
 def reservation_observation(runtime, key, event, state, responsibility, controller):
-    """Only this source's attributed observation; absence is not progress."""
-    safe = ('input mapping awaits original collected upstream processing',
-            'input mapping needs each original current source/hash/role/package/recipient/hold authority',
-            'input mapping differs from exact collected internal response/route',
-            'input mapping must conserve every original member')
-    # Project only exact attributed metadata and an admitted public constant.
-    # Never acquire an arbitrary raw error/detail body to filter it afterward.
-    row = runtime.one("SELECT role,observed, (SELECT COUNT(*) FROM json_each(detail)) AS fields, "
-                      "CASE WHEN json_extract(detail,'$.dependency') IN (?,?,?,?) "
-                      "THEN json_extract(detail,'$.dependency') END AS reason, "
-                      "CASE WHEN json_type(detail,'$.controller')='text' AND json_extract(detail,'$.controller')=? "
-                      "THEN ? END AS controller, "
-                      "json_extract(detail,'$.capability') AS capability, "
-                      "json_extract(detail,'$.source_hash') AS source_hash, "
-                      "json_extract(detail,'$.queue') AS queue, json_extract(detail,'$.task') AS task "
-                      "FROM (SELECT role,observed,CASE WHEN json_valid(detail) THEN "
-                      "CASE WHEN json_type(detail)='object' THEN detail ELSE '{}' END ELSE '{}' END AS detail "
-                      "FROM operational_errors WHERE subject=? AND kind='local-integration-dependency')",
-                      (*safe,controller,controller,event))
-    if not row or not responsibility:
-        return None
-    detail = row
-    if row['fields'] == 1 and row['role'] == state['role'] and row['reason']:
-        return {'available':True, 'role':row['role'], 'source':event, 'observed':row['observed'],
-                'reason':row['reason'], 'controller':None, 'same_controller':None,
-                'still_queued':responsibility['state'] == 'queued' and responsibility['job'] is None,
-                'meaning':'legacy exact-source/role observation; controller, capability and hash attribution unrecorded; currentness unknown'}
-    if (row['role'] != state['role'] or detail.get('capability') != key
-            or detail.get('source_hash') != state['hash']
-            or detail.get('queue') != runtime.one('SELECT id FROM queue WHERE event=?', (event,))['id']
-            or detail.get('task') != responsibility['task'] or not detail.get('controller')):
-        return {'available': False, 'controller': None, 'same_controller': None,
-                'controller_scope': 'unqualified-currentness-unknown',
-                'meaning': 'unattributed or changed observation; no current reservation inference'}
-    # Do not turn an arbitrary exception into a public raw-error interface.
-    reason = row['reason']
-    return {'available': True, 'controller':detail['controller'], 'capability':key,
-            'controller_scope': 'matches-current-source-controller',
-            'source_hash':state['hash'], 'task':detail['task'], 'observed':row['observed'],
-            'reason':reason if reason in safe else 'reservation refused; detail outside bounded public vocabulary',
-            'same_controller':detail['controller'] == controller,
-            'still_queued':responsibility['state'] == 'queued' and responsibility['job'] is None,
-            'meaning':'last actual reservation refusal only; not a fresh attempt, liveness or acceptance proof'}
+    """Typed exact-context view only; legacy raw dependencies are not current."""
+    from .reservation import view
+    return view(runtime, key, event, state, responsibility, controller)
 
 
 def status(runtime, key):

@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS alerts(
 CREATE TABLE IF NOT EXISTS artifacts(
  path TEXT PRIMARY KEY,attempt TEXT NOT NULL,dev INTEGER NOT NULL,ino INTEGER NOT NULL,
  size INTEGER NOT NULL,mtime INTEGER NOT NULL,sha256 TEXT NOT NULL,conserved TEXT,removed REAL,error TEXT);
+
+CREATE TABLE IF NOT EXISTS reservation_outcomes(
+ event TEXT PRIMARY KEY,source_hash TEXT NOT NULL,queue TEXT NOT NULL,
+ task TEXT NOT NULL,phase TEXT NOT NULL,capability TEXT,controller TEXT NOT NULL,
+ mapping_version INTEGER NOT NULL,observed REAL NOT NULL,
+ schema_version INTEGER NOT NULL,outcome TEXT NOT NULL,predicate TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS queue_pending ON queue(role,phase,state);
 CREATE INDEX IF NOT EXISTS events_parent ON events(parent);
 CREATE INDEX IF NOT EXISTS attempts_job ON attempts(job);
@@ -639,10 +645,24 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
 
     def reserve(self):
         """Freeze members and reserve under the same cross-controller write lock."""
-        with self.tx():
-            pending = self.rows("SELECT q.* FROM queue q JOIN events e ON e.id=q.event "
-                                "WHERE q.state='queued' AND e.hold IS NULL ORDER BY e.received,q.id")
-            return self._reserve_first(pending)
+        from .reservation import write
+        self._reservation_observations = []
+        try:
+            with self.tx():
+                pending = self.rows("SELECT q.* FROM queue q JOIN events e ON e.id=q.event "
+                                    "WHERE q.state='queued' AND e.hold IS NULL ORDER BY e.received,q.id")
+                return self._reserve_first(pending)
+        except Refusal:
+            # The original reservation transaction rolled back. Retain only
+            # reached observations in a separate ordinary transaction, then
+            # propagate the same control refusal; no job/effect is retried.
+            if self._reservation_observations:
+                with self.tx():
+                    for record in self._reservation_observations:
+                        write(self, record)
+            raise
+        finally:
+            self._reservation_observations = None
 
     def _reserve_first(self, pending):
         for row in pending:
@@ -652,90 +672,138 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return None
 
     def _reserve_candidate(self, row):
-        role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
-        enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
-        held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
-        from .resource_scopes import blocked, qa_accounts
-        if (not enrollment or not self.role_enabled(role)
-                or self.processing and not self.processing.task(row)
-                or self.processing and task.get('execution') == 'owner' and not self.processing.review_task(row['task'])
-                or enrollment["legacy_hold"] and phase in held_phases and blocked(self, row)):
-            return None
-        if task.get("active") is False:
-            return None
-        if task.get("require_package_scope") and not self.one("SELECT package FROM admissions WHERE package=?", (row["package"],)):
-            return None
-        outstanding = self.rows("SELECT * FROM jobs WHERE role=? AND phase=? AND state!='closed'", (role, phase))
-        local = local_integration.selected(self, row["task"])
-        active = sum(not self.execution_complete(job) for job in outstanding)
-        limit = min(5, local["capacity"]) if local else self._capacity(task)
-        if active >= limit:
-            return None
-        if task.get("require_package_scope") and any(j["package"] == row["package"] for j in outstanding):
-            return None  # Unsettled responsibility in the same admitted scope stays fenced.
-        if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
-            return None
-        if role == 'QA' and not local and (self.config.get('window_service') or self.processing):
-            # The retained-hold check above has already validated this exact
-            # Work-selected operation, acceptance/report (for cleanup), current
-            # source/rights and unresolved resource maps. Its phase capacities
-            # are independent; unrelated execution must not delay accepted
-            # consolidation, or vice versa. Keep the legacy barrier for routes
-            # without that finite operation-relative qualification.
-            record = (self.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('QA', {})
-                      if self.processing else {})
-            separate_slots = (enrollment['legacy_hold'] and phase in held_phases and qa_accounts(record))
-            other = 'cleanup' if phase == 'execution' else 'execution'
-            if not separate_slots and any(not self.execution_complete(j) for j in self.rows(
-                    "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
+        from .reservation import Evaluation
+        with Evaluation(self, row) as observation:
+            role, phase, task = row["role"], row["phase"], self.config["tasks"][row["task"]]
+            enrollment = self.one("SELECT * FROM enrollments WHERE role=?", (role,))
+            held_phases = self.config["roles"][role].get("legacy_hold_phases", list({"proposer", "integrator", "execution", "cleanup"}))
+            from .resource_scopes import blocked, qa_accounts
+            if not enrollment:
+                observation.failed('enrollment')
                 return None
-        if role == "QA" and (phase == "execution" or local) and self.one(
-                "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
-            return None
-        admission = self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)) if role == "QA" else None
-        prior = self.one("SELECT * FROM qa_package_owners WHERE package=?", (row["package"],)) if admission and phase == "execution" else None
-        if prior and prior["admission"] == digest(admission["receipt"]):
-            return None
-        if prior and any(self.dependency_hold(m["event"]) for m in json.loads(self.job(prior["job"])["members"])):
-            return None
-        try:
-            window = None if local else self.integration_window(row)
-        except Refusal:
-            return None
-        try:
-            members = local_integration.members(self, row) if local else (json.loads(window['basis'])['members'] if window else self._members(row))
-            if local and not local_integration.available(self, row, members):
+            observation.at('role-enabled')
+            if not self.role_enabled(role):
+                observation.finish('false')
                 return None
-        except Refusal as exc:
-            self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
-                            'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
-                            (row['event'], role, 'local-integration-dependency', encode({
-                                'dependency':str(exc), 'controller':self.controller,
-                                'capability':self.processing.key if self.processing else None,
-                                'source_hash':digest(self.event(row['event'])),
-                                'queue':row['id'], 'task':row['task']}), self.clock()))
-            return None
-        if self.processing and any(not self.processing.task(self.one('SELECT * FROM queue WHERE id=?', (m['queue'],))) for m in members):
-            return None
-        packages = {member["package"] for member in members}
-        package = next(iter(packages)) if len(packages) == 1 else None
-        self.budget("jobs", event=row['event'])
-        job, token = ident(), ident()
-        self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
-                        "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
-                                                     encode(members), self.controller, token, self.clock()))
-        local_integration.record_job(self, self.job(job))
-        prospective.note_job(self, job)
-        self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
-                        encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
-        if admission and phase == "execution":
-            self.db.execute("INSERT OR REPLACE INTO qa_package_owners VALUES(?,?,?)", (row["package"], digest(admission["receipt"]), job))
-        for member in members:
-            self.db.execute("UPDATE queue SET state='reserved',job=? WHERE id=? AND state='queued'",
-                            (job, member["queue"]))
-        if window:
-            self.db.execute('UPDATE integration_windows SET job=? WHERE id=? AND job IS NULL', (job, window['id']))
-        return self.one("SELECT * FROM jobs WHERE id=?", (job,))
+            observation.at('processing-task')
+            if self.processing and not self.processing.task(row):
+                observation.finish('false')
+                return None
+            observation.at('owner-review')
+            if self.processing and task.get('execution') == 'owner' and not self.processing.review_task(row['task']):
+                observation.finish('false')
+                return None
+            observation.at('legacy-hold')
+            if enrollment["legacy_hold"] and phase in held_phases and blocked(self, row):
+                observation.finish('false')
+                return None
+            observation.at('task-active')
+            if task.get("active") is False:
+                observation.finish('false')
+                return None
+            observation.at('package-admission')
+            if task.get("require_package_scope") and not self.one("SELECT package FROM admissions WHERE package=?", (row["package"],)):
+                observation.finish('false')
+                return None
+            observation.at('outstanding-jobs')
+            outstanding = self.rows("SELECT * FROM jobs WHERE role=? AND phase=? AND state!='closed'", (role, phase))
+            observation.at('local-selection')
+            local = local_integration.selected(self, row["task"])
+            observation.at('execution-capacity')
+            active = sum(not self.execution_complete(job) for job in outstanding)
+            limit = min(5, local["capacity"]) if local else self._capacity(task)
+            if active >= limit:
+                observation.finish('false')
+                return None
+            observation.at('same-package-outstanding')
+            if task.get("require_package_scope") and any(j["package"] == row["package"] for j in outstanding):
+                observation.finish('false')
+                return None  # Unsettled responsibility in the same admitted scope stays fenced.
+            observation.at('qa-admission')
+            if role == "QA" and not self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)):
+                observation.finish('false')
+                return None
+            observation.at('qa-phase')
+            if role == 'QA' and not local and (self.config.get('window_service') or self.processing):
+                # The retained-hold check above has already validated this exact
+                # Work-selected operation, acceptance/report (for cleanup), current
+                # source/rights and unresolved resource maps. Its phase capacities
+                # are independent; unrelated execution must not delay accepted
+                # consolidation, or vice versa. Keep the legacy barrier for routes
+                # without that finite operation-relative qualification.
+                record = (self.processing.current()[1].get('service', {}).get('legacy_resources', {}).get('QA', {})
+                          if self.processing else {})
+                separate_slots = (enrollment['legacy_hold'] and phase in held_phases and qa_accounts(record))
+                other = 'cleanup' if phase == 'execution' else 'execution'
+                if not separate_slots and any(not self.execution_complete(j) for j in self.rows(
+                        "SELECT * FROM jobs WHERE role='QA' AND phase=? AND state!='closed'", (other,))):
+                    observation.finish('false')
+                    return None
+            observation.at('qa-package-outstanding')
+            if role == "QA" and (phase == "execution" or local) and self.one(
+                    "SELECT id FROM jobs WHERE role='QA' AND package=? AND phase IN ('execution','cleanup') AND state!='closed'", (row["package"],)):
+                observation.finish('false')
+                return None
+            admission = self.one("SELECT * FROM admissions WHERE package=?", (row["package"],)) if role == "QA" else None
+            prior = self.one("SELECT * FROM qa_package_owners WHERE package=?", (row["package"],)) if admission and phase == "execution" else None
+            observation.at('qa-prior-admission')
+            if prior and prior["admission"] == digest(admission["receipt"]):
+                observation.finish('false')
+                return None
+            observation.at('qa-prior-dependency')
+            if prior and any(self.dependency_hold(m["event"]) for m in json.loads(self.job(prior["job"])["members"])):
+                observation.finish('false')
+                return None
+            try:
+                observation.at('integration-window')
+                window = None if local else self.integration_window(row)
+            except Refusal:
+                observation.finish('refusal')
+                return None
+            try:
+                observation.at('members')
+                members = local_integration.members(self, row) if local else (json.loads(window['basis'])['members'] if window else self._members(row))
+                observation.at('local-availability')
+                if local and not local_integration.available(self, row, members, observe=observation.at):
+                    observation.finish('false')
+                    return None
+            except Refusal as exc:
+                observation.finish('refusal')
+                self.db.execute('INSERT INTO operational_errors VALUES(?,?,?,?,1,?) ON CONFLICT(subject) '
+                                'DO UPDATE SET detail=excluded.detail,active=1,observed=excluded.observed',
+                                (row['event'], role, 'local-integration-dependency', encode({
+                                    'dependency':str(exc), 'controller':self.controller,
+                                    'capability':self.processing.key if self.processing else None,
+                                    'source_hash':observation.context[1],
+                                    'queue':row['id'], 'task':row['task']}), self.clock()))
+                return None
+            observation.at('member-processing')
+            if self.processing and any(not self.processing.task(self.one('SELECT * FROM queue WHERE id=?', (m['queue'],))) for m in members):
+                observation.finish('false')
+                return None
+            packages = {member["package"] for member in members}
+            package = next(iter(packages)) if len(packages) == 1 else None
+            observation.at('job-budget')
+            self.budget("jobs", event=row['event'])
+            observation.at('reservation')
+            job, token = ident(), ident()
+            self.db.execute("INSERT INTO jobs(id,role,phase,task,package,members,controller,token,created) "
+                            "VALUES(?,?,?,?,?,?,?,?,?)", (job, role, phase, row["task"], package,
+                                                         encode(members), self.controller, token, self.clock()))
+            local_integration.record_job(self, self.job(job))
+            prospective.note_job(self, job)
+            self.db.execute('INSERT INTO job_resource_policies VALUES(?,?,?)', (job, encode(self.config['tasks'][row['task']]),
+                            encode(self.one('SELECT * FROM admissions WHERE package=?',(package,))) if package else None))
+            if admission and phase == "execution":
+                self.db.execute("INSERT OR REPLACE INTO qa_package_owners VALUES(?,?,?)", (row["package"], digest(admission["receipt"]), job))
+            for member in members:
+                self.db.execute("UPDATE queue SET state='reserved',job=? WHERE id=? AND state='queued'",
+                                (job, member["queue"]))
+            if window:
+                self.db.execute('UPDATE integration_windows SET job=? WHERE id=? AND job IS NULL', (job, window['id']))
+            observation.at('reservation')
+            observation.finish('reserved')
+            return self.one("SELECT * FROM jobs WHERE id=?", (job,))
 
     def _members(self, row):
         if row["phase"] != "integrator":

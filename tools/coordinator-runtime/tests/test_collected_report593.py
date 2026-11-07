@@ -346,18 +346,23 @@ class Reports(unittest.TestCase):
         # No processing capability is claimed by normal-mode fixture.
         observation = processing.reservation_observation(self.store,None,report['id'],state,queue,self.store.controller)
         self.assertTrue(observation['available']);self.assertTrue(observation['still_queued'])
-        self.assertEqual(observation['reason'],'input mapping awaits original collected upstream processing')
+        # Work50103 supersedes the old diagnostic-string contract. The
+        # parent failure is retained separately; this asserts the reached
+        # typed branch and that legacy strings cannot refresh its attribution.
+        self.assertEqual(observation['outcome'], 'refusal')
+        self.assertEqual(observation['predicate'], 'members')
+        self.assertTrue(observation['current'])
         self.assertTrue(observation['same_controller'])
         with self.assertRaises(Refusal):local.input_authority(self.store,report,'work-integrator',None)
         self.store.db.execute('UPDATE operational_errors SET detail=? WHERE subject=?',
             (encode({'dependency':'RAW_UNRELATED_PRIVATE_CANARY'}),report['id']))
-        view = processing.reservation_observation(self.store,None,report['id'],state,queue,self.store.controller)
-        self.assertFalse(view['available']);self.assertNotIn('CANARY',encode(view))
-        self.store.db.execute('UPDATE operational_errors SET detail=? WHERE subject=?',
-            (encode({'dependency':'input mapping awaits original collected upstream processing'}),report['id']))
-        legacy = processing.reservation_observation(self.store,None,report['id'],state,queue,self.store.controller)
-        self.assertEqual(legacy['reason'],'input mapping awaits original collected upstream processing')
-        self.assertIsNone(legacy['same_controller']);self.assertIn('currentness unknown',legacy['meaning'])
+        self.assertEqual(processing.reservation_observation(self.store,None,report['id'],state,queue,self.store.controller), observation)
+        self.store.db.execute('UPDATE reservation_outcomes SET controller=? WHERE event=?', (ident(), report['id']))
+        stale = processing.reservation_observation(self.store,None,report['id'],state,queue,self.store.controller)
+        self.assertFalse(stale['available']); self.assertEqual(stale['outcome'], 'stale')
+        self.assertIsNone(stale['reason'])
+        self.assertNotIn('CANARY', encode(stale))
+
 
 
 if __name__ == '__main__':unittest.main()

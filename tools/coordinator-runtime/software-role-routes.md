@@ -132,3 +132,41 @@ clocks, source birth, retention, publication, effect recovery or old custodians.
 Retain all input, output and interrupted-intent records under whole processing
 completion plus 24 hours AND all applicable holds. The new immutable resolution
 and report records are retained, with no new reclamation claim.
+
+
+## Current reservation outcomes (Work50103)
+
+`processing-source CAPABILITY EVENT --reservation-only` is the finite read-only
+procedure for the genuine owning Work/custodian after normal source adoption.
+Use the existing authorized configuration selection (`--config PATH` at the
+ordinary CLI position). It opens an existing journal read-only and does not
+initialize/migrate it, attempt a reservation, restart service, replay a source,
+change grants/admission/capability, or acquire source/error/model/capture bodies.
+This procedure was tested only in new fiction; it was not run on the actual
+journal or original380. Actual future selection must retain original380 through
+`retained_events` and a fresh mapping if needed; Work owns that transition.
+
+The `reservation` object uses schema_version1 for admitted observations, with
+exact event/source_hash, task, phase, capability, original controller,
+mapping_version (0 means no owner mapping), and observed timestamp. `current`
+means that this complete attribution matches current stored metadata. It never
+means a fresh attempt or service liveness. `outcome` is `false`, `refusal`, or
+`reserved` only for an actual reached candidate evaluation. The fixed `predicate`
+(and compatibility `reason` alias) comes from `reservation.PREDICATES`; no raw
+Refusal string is parsed. Examples are `role-enabled`, `processing-task`,
+`legacy-hold`, `execution-capacity`, `integration-window`, `members`,
+`local-capacity`, `local-unknown-material`, and `local-scope-conflict`.
+`reserved` is emitted only after the actual job/member reservation completes.
+
+Unvisited candidates/absent observations project `not-evaluated` with null
+predicate/reason; skipped later guards are never diagnosed. Different task,
+phase, queue, hash, controller, capability or mapping version projects `stale`
+without old identities or reason. Malformed/unrecognized stored observations
+project `unknown`. Legacy raw operational errors never become current typed
+observations. Existing broader `--diagnostics` also returns this typed reservation
+field while retaining its existing source-authentication path; the narrower
+reservation-only procedure avoids that path's source-body reconstruction.
+
+Normal guard order, short circuit, exactly-once evaluations, Refusal semantics,
+admission/launch/effect rights, all consumer obligations and original unknowns
+remain. The last observation is not a historical clearance or retention clock.

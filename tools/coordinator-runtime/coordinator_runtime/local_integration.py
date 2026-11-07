@@ -463,40 +463,59 @@ def resources(store, scope):
     return result
 
 
-def available(store, row, members):
+def available(store, row, members, *, observe=None):
+    def at(predicate):
+        if observe:
+            observe(predicate)
+
+    def unavailable(predicate):
+        at(predicate)
+        return False
+
+    at('local-packet')
     scopes = [packet(store, {**row, 'event': m['event']}) for m in members]
     scope = combine(scopes)
+    at('local-qa-anchor')
     if row['role'] == 'QA' and row['phase'] == 'execution' and scope['lane'] != 'anchored':
         raise Refusal('first QA execution requires an anchored original admission before reservation')
+    at('local-native-access')
     native_access(store, row, scope)
+    at('local-active-jobs')
     active = [j for j in store.rows("SELECT * FROM jobs WHERE state!='closed'") if not store.execution_complete(j)]
     if sum(bool(selected(store, j['task'])) for j in active) >= store.config['local_integration']['max_inflight']:
-        return False
+        return unavailable('local-capacity')
+    at('local-resources')
     wanted = resources(store, scope)
     from .local_native import busy
+    at('local-native-busy')
     if busy(store, wanted):
-        return False
+        return unavailable('local-native-busy')
+    at('local-ordinary-busy')
     if any(store.one('SELECT attempt FROM ordinary_resources WHERE resource=?', (r,)) for r in wanted):
-        return False
+        return unavailable('local-ordinary-busy')
     for job in active:
+        at('local-unknown-material')
         prior = scope_for(store, job)
         if not prior:
             if job['role'] == row['role']:
                 from .review_returns import observes_source
                 if not (observes_source(store, row, members, scope, job)
                         or store.work_read_coexists(row, scope, job)):
-                    return False  # Unknown earlier material remains fenced.
+                    return unavailable('local-unknown-material')  # Unknown earlier material remains fenced.
             continue
+        at('local-discovery')
         if scope['lane'] == prior['lane'] == 'discovery':
-            return False
+            return unavailable('local-discovery')
+        at('local-scope-conflict')
         if (conflict(scope, prior) or binding_conflict(store, scope, prior)
                 or wanted & resources(store, prior)):
-            return False
+            return unavailable('local-scope-conflict')
+        at('local-branch-conflict')
         sources = [store.event(m['event']) for m in json.loads(job['members'])]
         incoming = [store.event(m['event']) for m in members]
         branch = {e.get('branch_binding') for e in sources} - {None}
         if branch & ({e.get('branch_binding') for e in incoming} - {None}):
-            return False
+            return unavailable('local-branch-conflict')
     return True
 
 

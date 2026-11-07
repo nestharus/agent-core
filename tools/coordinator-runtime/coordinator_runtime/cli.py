@@ -146,7 +146,9 @@ def parser():
         if name in {'processing-source', 'processing-apply-control', 'processing-admit-source'}:
             item.add_argument('event')
         if name == 'processing-source':
-            item.add_argument('--diagnostics', action='store_true', help='Bounded current prospective source/classifier metadata; no source or capture bodies')
+            view = item.add_mutually_exclusive_group()
+            view.add_argument('--diagnostics', action='store_true', help='Bounded current prospective source/classifier metadata; no source or capture bodies')
+            view.add_argument('--reservation-only', action='store_true', help='Read-only exact current reservation outcome; no source, error or capture body acquisition')
         if name == 'processing-apply-control':
             item.add_argument('--attempt', required=True)
         if name == 'processing-release':
@@ -465,6 +467,8 @@ def operate(args, store):
             boards[store.event(args.event)['role']].verify_authority(store)
             return admit(store, args.event)
         if args.command in {'processing-source', 'processing-apply-control'}:
+            if args.command == 'processing-source' and args.reservation_only:
+                return processing.reservation_diagnostics(store, boards, args.capability, args.event)
             if args.command == 'processing-source' and args.diagnostics:
                 return processing.source_diagnostics(store, boards, args.capability, args.event)
             if not store.processing.event(store.event(args.event)):
@@ -733,7 +737,7 @@ def main_owned(args):
             return 0
         with observations.span('store-open'):
             store = Store(config, read_only=args.command == 'processing-service-control'
-                          or args.command == 'processing-source' and args.diagnostics)
+                          or args.command == 'processing-source' and (args.diagnostics or args.reservation_only))
         try:
             value = operate(args, store)
             if args.command == "processing-service-control":
