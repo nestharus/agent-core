@@ -23,6 +23,12 @@ CREATE TRIGGER IF NOT EXISTS source_repairs_v1_no_update BEFORE UPDATE ON same_a
  BEGIN SELECT RAISE(ABORT,'immutable same authority source repair'); END;
 CREATE TRIGGER IF NOT EXISTS source_repairs_v1_no_delete BEFORE DELETE ON same_authority_source_repairs_v1
  BEGIN SELECT RAISE(ABORT,'immutable same authority source repair'); END;
+CREATE TABLE IF NOT EXISTS same_authority_report_control_repairs_v2(
+ capability TEXT PRIMARY KEY,request TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS report_control_v2_no_update BEFORE UPDATE ON same_authority_report_control_repairs_v2
+ BEGIN SELECT RAISE(ABORT,'immutable report control repair'); END;
+CREATE TRIGGER IF NOT EXISTS report_control_v2_no_delete BEFORE DELETE ON same_authority_report_control_repairs_v2
+ BEGIN SELECT RAISE(ABORT,'immutable report control repair'); END;
 """
 # This interface cannot select policy, templates, SDK, provider or scheduler
 # changes. A different repair requires a separate decision/interface.
@@ -38,6 +44,9 @@ def record(runtime, key):
 
 
 def pins(runtime, key, selection, implementation):
+    paired = pair_record(runtime, key)
+    if paired:
+        return pair_identity(runtime, key, selection, paired) and paired["basis"]["implementation"] == implementation
     continuing = source_record(runtime, key)
     if continuing:
         return source_pins(runtime, key, selection, implementation, continuing)
@@ -56,6 +65,11 @@ def selected_release(runtime):
     # may resolve its code pins, but never lends that caller processing rights.
     cap = source_capability(runtime)
     if cap:
+        paired = pair_record(runtime, cap['id'])
+        if paired:
+            if not pair_identity(runtime, cap['id'], json.loads(cap['selection']), paired):
+                raise Refusal('report/control repair identity changed')
+            return paired['basis']['release']
         request = source_record(runtime, cap['id'])
         selection = json.loads(cap['selection'])
         if request:
@@ -140,7 +154,7 @@ def report(runtime, key, event, controller, selection):
 def basis(runtime, boards, key, event, controller, actor):
     from . import processing
     owner(runtime, boards, actor)
-    if source_record(runtime, key):
+    if source_record(runtime, key) or pair_record(runtime, key):
         raise Refusal('distinct source repair already selected; legacy report repair cannot supersede it')
     configuration.assert_current(runtime)
     cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
@@ -271,9 +285,9 @@ def source_pins(runtime, key, selection, implementation, request):
                 and request['basis']['implementation'] == implementation)
 
 
-def source_compatible(before, after, old, new, modules):
+def source_compatible(before, after, old, new, modules, *, _ceiling=None):
     if (not isinstance(modules, list) or not modules or any(not isinstance(m, str) for m in modules)
-            or modules != sorted(set(modules)) or set(modules) - SOURCE_MODULES):
+            or modules != sorted(set(modules)) or set(modules) - (SOURCE_MODULES if _ceiling is None else _ceiling)):
         raise Refusal('exact sorted public module delta within source-repair-v1 required')
     if set(before) != set(after) or any(before[k] != after[k] for k in before if k != 'files'):
         raise Refusal('source repair keeps exact release location, hot pool control and non-code dependencies')
@@ -371,7 +385,7 @@ def source_basis(runtime, boards, key, events, controller, actor, modules, purpo
     if ('service' not in selection or not selection['future_intake']
             or selection['basis']['configuration'] != digest(runtime.config)):
         raise Refusal('unchanged continuing capability/configuration required; no finite grant conversion')
-    if record(runtime, key) or source_record(runtime, key):
+    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key):
         raise Refusal('one distinct source repair point only; no repair stacking or legacy receipt conversion')
     stopped_original(runtime, key, controller)
     if configuration.owned_service_conflict(runtime) or runtime.one(
@@ -503,3 +517,300 @@ def apply_source(runtime, boards, actor, request):
         finally:
             runtime.processing = old_access
     return source_receipt(key, selected)
+
+
+# Separate typed protocol; neither v1's sources nor its module ceiling expand.
+PAIR_VERSION = 'same-authority-report-control-repair-v2'
+PAIR_MODULES = {'cli.py','report_repair.py','processing.py','report_scope.py',
+                'service.py','delivery.py','store.py'}
+
+
+def pair_record(runtime, key):
+    if not runtime.one("SELECT name FROM sqlite_master WHERE name='same_authority_report_control_repairs_v2'"):
+        return None
+    row = runtime.one('SELECT request FROM same_authority_report_control_repairs_v2 WHERE capability=?', (key,))
+    return json.loads(row['request']) if row else None
+
+
+def pair_identity(runtime, key, selection, request):
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    if not cap or request['basis'].get('schema') != PAIR_VERSION:
+        return False
+    # Reuse every v1 identity check without teaching v1 about new sources.
+    legacy_shape = {**request, 'basis':{**request['basis'], 'schema':SOURCE_VERSION}}
+    return source_identity(runtime, cap, selection, legacy_shape)
+
+
+def pair_finite(runtime, selection):
+    import math
+    def check(value):
+        if isinstance(value, dict):
+            for name, item in value.items():
+                if name in {'expires','until'}:
+                    if type(item) not in {int,float} or not math.isfinite(item) or item <= runtime.clock():
+                        raise Refusal('original finite report/admission/wake/allocation rights expired; no renewal')
+                elif isinstance(item, (dict,list)):
+                    check(item)
+        elif isinstance(value, list):
+            for item in value:
+                check(item)
+    check(selection.get('service', {}))
+    check(selection.get('allocation', {}))
+    check(selection.get('window_authority', {}))
+
+
+def pair_anchor(runtime, key, event, selection, kind):
+    state = runtime.one('SELECT id,role,hash,state,hold,processed_at,classifier,classification,ack FROM events WHERE id=?', (event,))
+    queue = runtime.one('SELECT * FROM queue WHERE event=?', (event,))
+    birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?', (event,))
+    if (not state or state['hold'] is not None or state['processed_at'] is not None or not queue
+            or queue['job'] is not None or not birth or queue['role'] != state['role']
+            or state['ack'] not in {'done','internal'} or not state['classifier']
+            or runtime.one("SELECT jobs.id FROM jobs,json_each(jobs.members) m WHERE json_extract(m.value,'$.event')=? LIMIT 1", (event,))):
+        raise Refusal('typed repair requires unchanged unheld unprocessed unfrozen original')
+    classifier = runtime.one('SELECT id,kind,event,state,begin,ended,collected,exit,capture,error,controller,session,binding FROM attempts WHERE id=?', (state['classifier'],))
+    if (not classifier or classifier['kind'] != 'classifier' or classifier['event'] != event
+            or classifier['state'] != 'collected' or classifier['begin'] is None or classifier['ended'] is None
+            or classifier['collected'] is None or classifier['exit'] != 0 or classifier['capture'] != 'complete' or classifier['error']):
+        raise Refusal('actual complete original classifier required')
+    header = runtime.one("SELECT json_extract(payload,'$.kind') kind,json_extract(payload,'$.source_job') producer FROM events WHERE id=?", (event,))
+    if kind == 'work-report':
+        task = runtime.config['tasks'].get(queue['task'])
+        if (state['state'] != 'queued' or queue['state'] != 'queued' or state['role'] != 'Work'
+                or queue['package'] is not None or queue['task'] not in selection['tasks'] or not task
+                or task['role'] != 'Work' or task['phase'] != 'proposer' or task['effects'] != 'none'
+                or queue['phase'] != 'proposer' or header['kind'] != 'response' or not header['producer']):
+            raise Refusal('exact internal unstarted Work proposer report required')
+        producer = runtime.one('SELECT * FROM jobs WHERE id=?', (header['producer'],))
+        if (not producer or producer['response'] != event or producer['hold_reason']
+                or producer['effects'] != 'none' or producer['role'] != 'Reviews'
+                or producer['phase'] != 'integrator'):
+            raise Refusal('authentic original report-only Reviews producer required before body')
+        members = []
+        for member in json.loads(producer['members']):
+            current = runtime.one('SELECT id,role,hash,hold FROM events WHERE id=?', (member['event'],))
+            if not current or current['hold'] is not None or current['hash'] != member['hash']:
+                raise Refusal('original producer member held or changed before body')
+            members.append(current)
+        producer = {**producer, 'member_metadata':members}
+        control = None
+    elif kind == 'board-control':
+        control = runtime.one('SELECT * FROM processing_controls WHERE event=?', (event,))
+        if (header['kind'] != 'board' or header['producer'] or queue['state'] != 'awaiting-owner'
+                or queue['phase'] != 'control' or queue['task'] != '@control' or queue['package'] is not None
+                or not control or control['capability'] != key or control['source_hash'] != state['hash']
+                or control['resolution'] is not None):
+            raise Refusal('exact unresolved original Board control required')
+        control = {**control, 'original':runtime.one('SELECT id,controller,session,kind,event,state,begin,ended,collected,exit,capture,error,binding,detail FROM attempts WHERE id=?', (control['attempt'],))}
+        row = control['original']
+        producer = None
+        if (not row or row['state'] != 'collected' or row['kind'] != 'input-control' or row['event'] != event
+                or row['begin'] is None or row['ended'] is None or row['collected'] is None
+                or row['exit'] != 0 or row['error'] or row['capture'] != 'complete'
+                or json.loads(row['detail']).get('processing_capability') != key):
+            raise Refusal('actual original complete END0 control collection required')
+        from .contracts import SOL, canonical_uuid
+        tools = json.loads(row['detail']).get('tool_completion', {})
+        if (json.loads(row['binding']) != SOL or not tools.get('complete')
+                or tools.get('items') or tools.get('nonzero_completions') or tools.get('unknown_types')):
+            raise Refusal('original control worker binding/tool completion required before body')
+        canonical_uuid(row['session'])
+        stopped_original(runtime, key, row['controller'])
+    else:
+        raise Refusal('unsupported typed anchor')
+    transition = configuration.selected(runtime)
+    if birth['position'] <= max(selection['basis']['event_boundary'], transition['event_boundary']):
+        raise Refusal('repair cannot introduce historical sources')
+    return {'kind':kind,'event':event,'hash':state['hash'],'state':state,'queue':queue,
+            'classifier':classifier,'position':birth['position'],'control':control,'producer':producer}
+
+
+def pair_metadata(runtime, boards, key, work_event, control_event, controller, actor, modules, purpose):
+    events = [work_event, control_event]
+    """Caller holds the cooperative stop lock and journal write transaction."""
+    from . import processing
+    owner(runtime, boards, actor)
+    required_text(purpose, 'explicit current Work source-repair purpose', 4000)
+    configuration.assert_current(runtime)
+    cap = runtime.one('SELECT * FROM processing_capabilities WHERE id=?', (key,))
+    if (not cap or cap['revoked'] is not None or cap['issuer'] != actor
+            or actor != runtime.config['software_delegation']['grantor']
+            or set(boards) != {'Work','Reviews','QA','Branch'} or set(boards) != set(runtime.config['roles'])):
+        raise Refusal('same genuine current Work capability and exact four original roles required')
+    selection = json.loads(cap['selection'])
+    if ('service' not in selection or not selection['future_intake']
+            or selection['basis']['configuration'] != digest(runtime.config)):
+        raise Refusal('unchanged continuing capability/configuration required; no finite grant conversion')
+    if record(runtime, key) or source_record(runtime, key) or pair_record(runtime, key):
+        raise Refusal('one distinct source repair point only; no repair stacking or legacy receipt conversion')
+    stopped_original(runtime, key, controller)
+    if configuration.owned_service_conflict(runtime) or runtime.one(
+            "SELECT controller FROM service_runs WHERE capability=? AND (state!='returned-awaiting-parent-END' OR returned IS NULL)", (key,)):
+        raise Refusal('no active concurrent collector; every same-capability original must return and release')
+    for run in runtime.rows('SELECT controller FROM processing_runs WHERE capability=?', (key,)):
+        stopped_original(runtime, key, run['controller'])
+    transition = configuration.selected(runtime)
+    if not transition:
+        raise Refusal('immutable current configuration release selection required')
+    before, after = transition['basis']['release'], configuration.release(runtime, runtime.config)
+    implementation = processing.implementation()
+    changed = source_compatible(before, after, selection['basis']['implementation'], implementation, modules, _ceiling=PAIR_MODULES)
+    grants = {}
+    from .integration_management import _metadata_original
+    for role, board in boards.items():
+        with board.opened(settlement=True) as conn:
+            grant, enrollment = _metadata_original(board, conn, runtime)
+            binding = board._binding(grant)
+            if (binding != selection['basis']['roles'][role]['original']['binding']
+                    or grant['issued_by'] != actor or enrollment['owner'] != board.selected['owner']
+                    or enrollment['profile'] != board.selected['profile']):
+                raise Refusal('source repair conserves every original stopped software grant binding')
+            grants[role] = {'binding':binding, 'enrollment':enrollment}
+    pair_finite(runtime, selection)
+    anchors = [pair_anchor(runtime, key, work_event, selection, 'work-report'),
+               pair_anchor(runtime, key, control_event, selection, 'board-control')]
+    if anchors[1]['control']['original']['controller'] != controller or anchors[0]['producer']['controller'] != controller:
+        raise Refusal('both selected originals must retain their same released producer/controller')
+    epoch = runtime.one('SELECT * FROM prospective_authorities WHERE revoked IS NULL')
+    if not epoch:
+        raise Refusal('original finite prospective authority must remain selected; no epoch replacement')
+    ordinary = json.loads(epoch['selection'])
+    if (ordinary.get('processing_capability') != key or ordinary['configuration'] != digest(runtime.config)
+            or ordinary['grantor'] != actor or ordinary['expires'] <= runtime.clock()):
+        raise Refusal('original prospective authority expired/revoked/foreign; no renewal through repair')
+    for anchor in anchors:
+        if anchor['position'] <= epoch['event_boundary']:
+            raise Refusal('report/control source predates original epoch')
+        if anchor['kind'] == 'work-report':
+            task = anchor['queue']['task']
+            if (task not in ordinary['tasks'] or ordinary['tasks'][task]['task_hash'] != digest(runtime.config['tasks'][task])
+                    or ordinary['grants'].get('Work') != grants['Work']['binding']['id']):
+                raise Refusal('Work report outside original task/grant authority')
+    return {'schema':PAIR_VERSION, 'configuration':digest(runtime.config),
+            'configuration_version':digest(configuration.version_metadata(runtime)),
+            'capability':key, 'controller':controller, 'selection_hash':digest(selection),
+            'revision':__import__(__package__+'.windows', fromlist=['revision']).revision(runtime), 'starts':cap['starts'], 'grants':grants, 'prospective':epoch, 'purpose':purpose,
+            'modules':modules, 'old_release':before, 'release':after, 'changed':changed,
+            'old_implementation':selection['basis']['implementation'], 'implementation':implementation,
+            'sources':anchors}
+
+
+
+def pair_validate(runtime, selected):
+    from . import prospective, report_scope
+    runtime.processing.current()
+    pair_finite(runtime, runtime.processing.current()[1])
+    work, control = selected['sources']
+    _, selection = runtime.processing.current()
+    for anchor in (work, control):
+        if pair_anchor(runtime, selected['capability'], anchor['event'], selection, anchor['kind']) != anchor:
+            raise Refusal('selected original metadata/custody changed before body')
+    value = report(runtime, selected['capability'], work['event'], selected['controller'], runtime.processing.current()[1])
+    source = runtime.event(work['event'])
+    if value['hash'] != work['hash'] or source.get('allowed_tasks') != [work['queue']['task']]:
+        raise Refusal('whole original Work producer route/hash changed')
+    report_scope.execution_report(runtime, source, value['producer'], work['queue']['task'])
+    if value['producer']['effects'] != 'none':
+        raise Refusal('repair only transfers authentic report-only producer')
+    for role in runtime.processing.boards:
+        runtime.processing.boards[role].verify_authority(runtime)
+    epoch = prospective.current(runtime, work['queue']['task'])
+    if not epoch or epoch['id'] != selected['prospective']['id']:
+        raise Refusal('original finite epoch changed')
+    runtime.processing.current()
+    row = runtime.attempt(control['control']['attempt'])
+    result = json.loads(row['result'] or 'null')
+    receipt = json.loads(result['decision_json'])
+    proof = runtime.processing.control_proof(control['event'], row['id'], receipt)
+    if (result['semantic'] != 'DONE' or receipt['mode'] != 'control' or receipt['task'] != '@control'
+            or proof['controller'] != selected['controller']):
+        raise Refusal('exact original DONE control marker and original controller required')
+    runtime.processing.boards[control['queue']['role']].verify_input_source(runtime, runtime.event(control['event']))
+    return {'work':value,'control_result_hash':digest(result),
+            'raw_control_sha256':__import__('hashlib').sha256(row['result'].encode()).hexdigest()}
+
+
+def pair_receipt(key, selected):
+    return {**source_receipt(key, selected), 'schema':PAIR_VERSION}
+
+
+def apply_pair(runtime, boards, actor, request):
+    from . import processing
+    from .selected_source import custody_budget
+    if (not isinstance(request, dict) or set(request) != {'schema','basis','authority','evidence'}
+            or request['schema'] != PAIR_VERSION or request['basis'].get('schema') != PAIR_VERSION):
+        raise Refusal('explicit versioned typed report/control repair required')
+    owner(runtime, boards, actor)
+    required_text(request['authority'], 'actual Work typed repair selection', 4000)
+    if not isinstance(request['evidence'], list) or not 1 <= len(request['evidence']) <= 32:
+        raise Refusal('bounded actual independent review evidence required')
+    for item in request['evidence']:
+        required_text(item, 'review evidence', 4000)
+    selected = request['basis']; key = selected['capability']
+    if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
+        raise Refusal('typed repair selection exceeds original custody bound')
+    with configuration.stopped(runtime), runtime.tx():
+        previous = pair_record(runtime, key)
+        if previous:
+            if previous != request or selected_release_for(runtime, key, boards) != selected['release']:
+                raise Refusal('immutable repair already selected differently')
+            return pair_receipt(key, selected)
+        work, control = selected['sources']
+        current = pair_metadata(runtime, boards, key, work['event'], control['event'], selected['controller'], actor, selected['modules'], selected['purpose'])
+        if current != {k:v for k,v in selected.items() if k != 'proof'}:
+            raise Refusal('typed repair metadata/pins/rights/counters changed before body acquisition')
+        custody_budget(runtime, len(encode(request).encode()) + 1024)
+        runtime.db.execute('INSERT INTO same_authority_report_control_repairs_v2 VALUES(?,?,?,?)', (key, encode(request), actor, runtime.clock()))
+        old = runtime.processing
+        runtime.processing = processing.Access(runtime, key, boards)
+        try:
+            if pair_validate(runtime, selected) != selected['proof']:
+                raise Refusal('whole original producer/custody/control result proof changed')
+        finally:
+            runtime.processing = old
+    return pair_receipt(key, selected)
+
+
+def released_control(runtime, event, row):
+    """Metadata-only exception to the SAME-controller check, for one selected original."""
+    key = runtime.processing.key
+    request = pair_record(runtime, key)
+    if not request:
+        return False
+    _, selection = runtime.processing.current()
+    if not pair_identity(runtime, key, selection, request):
+        raise Refusal('selected original control repair no longer current')
+    pair_finite(runtime, selection)
+    selected = request['basis']
+    epoch = runtime.one('SELECT * FROM prospective_authorities WHERE id=?', (selected['prospective']['id'],))
+    if epoch != selected['prospective'] or json.loads(epoch['selection'])['expires'] <= runtime.clock():
+        raise Refusal('original finite epoch changed or expired')
+    anchor = selected['sources'][1]
+    if event != anchor['event'] or row['id'] != anchor['control']['attempt']:
+        return False
+    if pair_anchor(runtime, key, event, selection, 'board-control') != anchor:
+        raise Refusal('selected original control metadata changed')
+    return True
+
+
+
+def pair_basis(runtime, boards, key, work_event, control_event, controller, actor, modules, purpose):
+    """Preview exact pins and full proofs after metadata, leaving no selection behind.
+
+    The caller owns the stopped lock and transaction. The temporary pin row is
+    visible only inside this savepoint; every exit rolls it back.
+    """
+    from . import processing
+    selected = pair_metadata(runtime, boards, key, work_event, control_event, controller, actor, modules, purpose)
+    runtime.db.execute('SAVEPOINT report_control_preview')
+    old = runtime.processing
+    try:
+        preview = {'schema':PAIR_VERSION, 'basis':selected}
+        runtime.db.execute('INSERT INTO same_authority_report_control_repairs_v2 VALUES(?,?,?,?)', (key, encode(preview), actor, runtime.clock()))
+        runtime.processing = processing.Access(runtime, key, boards)
+        proof = pair_validate(runtime, selected)
+    finally:
+        runtime.processing = old
+        runtime.db.execute('ROLLBACK TO report_control_preview')
+        runtime.db.execute('RELEASE report_control_preview')
+    return {**selected, 'proof':proof}

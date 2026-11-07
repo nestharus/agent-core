@@ -550,6 +550,7 @@ class Access:
                 'controller': row['controller'], 'actual_END': row['exit'], 'source_hash': record['source_hash'],
                 'result_hash': digest(result), 'native_owner_receipt': False,
                 'legacy_semantic_recognition': recognition,
+                **({'applier_controller': self.runtime.controller} if derivation and row['controller'] != self.runtime.controller else {}),
                 **({'syntax_derivation': derivation} if derivation and receipt == derived else {})}
 
 
@@ -1084,7 +1085,8 @@ def control_receipt(runtime, event, row, result, receipt):
     if (not state or state['hold'] or state['processed_at'] is not None
             or not queue or queue['task'] != '@control' or queue['phase'] != 'control'
             or queue['state'] != 'awaiting-owner' or queue['job'] is not None
-            or queue['package'] is not None or row['controller'] != runtime.controller
+            or queue['package'] is not None or (row['controller'] != runtime.controller
+                and not __import__(__package__+'.report_repair', fromlist=['released_control']).released_control(runtime, event, row))
             or json.loads(row['detail']).get('processing_capability') != runtime.processing.key
             or result['semantic'] != 'DONE' or receipt['source_hash'] != state['hash']):
         raise Refusal('control marker syntax requires exact current unheld source/controller/responsibility and DONE')
@@ -1260,7 +1262,7 @@ fabricate reading, consent or a native owner's receipt.\n''' +
             self.store.record_operational_error(event, {'dependency': str(exc), 'attempt': attempt}, original['role'], 'processing-control-dependency')
 
 
-def apply_control(runtime, event, attempt):
+def _apply_control(runtime, event, attempt):
     """Recover an exact collected disposition, never relaunch its original."""
     runtime.processing.current()
     row = runtime.attempt(attempt)
@@ -1361,3 +1363,39 @@ async def _run(runtime, boards, key, seconds, emit):
         timer.cancel()
         emit({'controller': runtime.controller, 'state': 'returning; parent must collect this original numeric END',
               'uncollected': runtime.rows('SELECT id,controller FROM attempts WHERE controller=? AND collected IS NULL', (runtime.controller,))})
+
+
+
+def apply_control(runtime, event, attempt):
+    from . import report_repair
+    request = report_repair.pair_record(runtime, runtime.processing.key)
+    if not request or event != request['basis']['sources'][1]['event']:
+        return _apply_control(runtime, event, attempt)
+    # A distinct applier keeps its own identity and serializes original-return consumption.
+    with configuration.stopped(runtime), runtime.tx():
+        runtime.processing.current()
+        report_repair.pair_finite(runtime, runtime.processing.current()[1])
+        anchor = request['basis']['sources'][1]
+        if attempt != anchor['control']['attempt']:
+            raise Refusal('only the selected original control attempt may be applied')
+        previous = runtime.one('SELECT * FROM processing_control_returns WHERE source=?', (event,))
+        if previous:
+            state = runtime.one('SELECT hash,hold,processed_at FROM events WHERE id=?', (event,))
+            epoch = runtime.one('SELECT * FROM prospective_authorities WHERE id=?', (request['basis']['prospective']['id'],))
+            if (not state or state['hold'] is not None or state['hash'] != anchor['hash']
+                    or epoch != request['basis']['prospective'] or json.loads(epoch['selection'])['expires'] <= runtime.clock()):
+                raise Refusal('original return current source/epoch rights changed')
+            for board in runtime.processing.boards.values():
+                board.verify_authority(runtime)
+            row = runtime.attempt(attempt)
+            if (row['controller'] != anchor['control']['original']['controller']
+                    or hashlib.sha256(row['result'].encode()).hexdigest() != request['basis']['proof']['raw_control_sha256']):
+                raise Refusal('original control raw result changed')
+            resolution = runtime.input_resolution(event)
+            if (previous['attempt'] != attempt or not resolution
+                    or resolution['prior'].get('software_processing', {}).get('attempt') != attempt):
+                raise Refusal('original control return/resolution mismatch')
+            return resolution
+        if report_repair.pair_validate(runtime, request['basis']) != request['basis']['proof']:
+            raise Refusal('selected original result/custody changed')
+        return _apply_control(runtime, event, attempt)
