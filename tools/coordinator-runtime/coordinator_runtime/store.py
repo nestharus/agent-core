@@ -146,6 +146,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("private single-link runtime database required")
         self.db = sqlite3.connect(self.path, isolation_level=None, timeout=15)
         self.db.row_factory = sqlite3.Row
+        from .plain_control import accepted
+        self.db.create_function("plain_control_valid",1,lambda event:int(bool(self.processing) and accepted(self,event)))
         self.db.execute("PRAGMA foreign_keys=ON")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if version not in {0, 1}:
@@ -191,6 +193,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             raise Refusal("private single-link runtime database required")
         self.db = sqlite3.connect(self.path.as_uri()+"?mode=ro", uri=True, isolation_level=None, timeout=15)
         self.db.row_factory = sqlite3.Row
+        from .plain_control import accepted
+        self.db.create_function("plain_control_valid",1,lambda event:int(bool(self.processing) and accepted(self,event)))
         try:
             self.db.execute('PRAGMA query_only=ON')
             if self.db.execute('PRAGMA user_version').fetchone()[0] != 1:
@@ -1172,8 +1176,15 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         return ("WHERE processed_at IS NULL AND hold IS NULL AND ack IN ('done','plain','internal') "
                     "AND NOT EXISTS (SELECT 1 FROM input_resolutions ir WHERE ir.event=events.id "
                     "AND ir.version=(SELECT MAX(v.version) FROM input_resolutions v WHERE v.event=events.id) "
-                    "AND json_array_length(json_extract(ir.receipt,'$.remaining_obligations'))>0) "
+                    "AND json_array_length(json_extract(ir.receipt,'$.remaining_obligations'))>0 "
+                    "AND NOT EXISTS (SELECT 1 FROM plain_control_dispositions pc WHERE pc.event=events.id "
+                    "AND pc.version=ir.version AND pc.source_hash=ir.source_hash AND pc.source_hash=events.hash "
+                    "AND plain_control_valid(events.id)=1)) "
                     "AND id IN (SELECT event FROM queue WHERE state='done') "
+                    "AND NOT EXISTS (SELECT 1 FROM plain_control_dispositions pc JOIN processing_control_returns cr "
+                    "ON cr.source=pc.event WHERE cr.response=events.id "
+                    "AND json_extract(pc.request,'$.consumer_disposition.event')=events.id "
+                    "AND plain_control_valid(pc.event)=0) "
                     "AND NOT EXISTS (SELECT 1 FROM file_publications fp JOIN attempts a ON a.id=fp.attempt JOIN queue q ON q.job=a.job WHERE q.event=events.id AND fp.state!='published') "
                     "AND NOT EXISTS (SELECT 1 FROM outboxes o WHERE (o.event=events.id OR EXISTS "
                     "(SELECT 1 FROM queue q WHERE q.job=o.job AND q.event=events.id)) "

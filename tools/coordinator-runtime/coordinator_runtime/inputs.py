@@ -193,9 +193,11 @@ class InputJournal:
             raise Refusal('only coalescence names an existing responsibility')
 
     def queue_input_control(self,event,answer):
+        from .plain_control import accepted
         selection=event.get('owner_resolution')
         settled=(answer['task']=='@control' and selection and selection['receipt']['mode']=='control'
-                 and not selection['receipt']['remaining_obligations'])
+                 and (not selection['receipt']['remaining_obligations'] or
+                      accepted(self,event['id'])))
         self.write_input_queue(event,answer,event['role'],'control','done' if settled else 'awaiting-owner')
         if settled or answer['task']=='@coalesce':return
         if self.processing and self.processing.event(self.event(event['id'])):

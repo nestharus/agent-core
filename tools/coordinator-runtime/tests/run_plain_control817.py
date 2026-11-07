@@ -23,7 +23,7 @@ ids=['test_plain_control817.Terminal817.'+n for n in (
  'test_existing_pending_consumer_refuses_completed_consumer_preserved',
  'test_unknown_scope_obligations_and_bad_metadata_refuse_before_body',
  'test_obligations_remain_blocking_and_unmodified','test_mutation_at_transaction_refuses',
- 'test_conserved_duty_pins_lossless_but_global_completion_stays_blocked',
+ 'test_conserved_duty_pins_lossless_and_exact_completion',
  'test_uncertain_outbox_and_stale_capability_refuse_before_body','test_refused_or_forged_result_before_source_body')]
 ids += ['test_processing206.ProtocolTests.test_control_transaction_creates_one_work_return_and_consumer_blocks_completion',
  'test_control_marker789.MarkerTests.test_malformed_fields_other_modes_and_native_claims_are_not_normalized']

@@ -4,6 +4,7 @@ This deliberately requires an authenticated Work interpretation. It does not
 infer obligation ownership from prose, semantic DONE, or an empty array.
 """
 import json
+import math
 
 from .contracts import Refusal, digest, encode, required_text
 
@@ -21,19 +22,30 @@ CREATE TRIGGER IF NOT EXISTS plain_control_immutable_delete BEFORE DELETE ON pla
 
 
 def metadata(runtime, event, attempt, request):
-    cap, _ = runtime.processing.current()
+    cap, selection = runtime.processing.current()
     keys = {'schema','event','source_hash','received','attempt','result_hash',
             'resolution_version','scope','accounting','evidence','completed_consumer'}
-    if (not isinstance(request, dict) or set(request) != keys
+    optional = {'consumer_disposition','authority'}
+    if (not isinstance(request, dict) or set(request) - optional != keys
             or request['schema'] != VERSION or request['event'] != event
             or request['attempt'] != attempt
             or request['scope'] != 'no-new-owned-work-or-effects'
             or type(request['resolution_version']) is not int):
         raise Refusal('exact typed plain-control scope and pins required')
-    row = runtime.one('SELECT id,hash,received,hold,role FROM events WHERE id=?', (event,))
+    row = runtime.one('SELECT id,hash,received,hold,role,classifier FROM events WHERE id=?', (event,))
     if row:
         for role in {'Work', row['role']}:
             runtime.processing.boards[role].verify_authority(runtime)
+    from .configuration import event_candidate_scope
+    predicate, parameters = event_candidate_scope(runtime)
+    if not runtime.one('SELECT e.id FROM events e WHERE e.id=? AND ('+predicate+')',(event,*parameters)):
+        raise Refusal('source excluded by current source/birth selection before body')
+    from .selected_source import selected_pins
+    for pin in selected_pins(selection):
+        if pin['event'] == event:
+            birth = runtime.one('SELECT position FROM processing_source_positions WHERE event=?',(event,))
+            if not birth or birth['position'] != pin['source_birth'] or row['hash'] != pin['source_hash'] or row['role'] != pin['role']:
+                raise Refusal('exact selected source pins changed before body')
     control = runtime.one('SELECT event,capability,attempt,source_hash FROM processing_controls WHERE event=?', (event,))
     worker = runtime.one('SELECT kind,event,begin,ended,collected,exit,error,capture FROM attempts WHERE id=?', (attempt,))
     if (not row or row['hold'] is not None or row['hash'] != request['source_hash']
@@ -50,10 +62,12 @@ def metadata(runtime, event, attempt, request):
     returned = runtime.one('SELECT source,response,attempt FROM processing_control_returns WHERE source=?', (event,))
     if request['completed_consumer'] != (returned['response'] if returned else None):
         raise Refusal('exact existing control consumer must be accounted')
+    consumer = request.get('consumer_disposition')
+    pending_consumer = consumer_metadata(runtime, event, returned, consumer) if consumer else None
     descendants = runtime.rows('WITH RECURSIVE d(id) AS (SELECT id FROM events WHERE parent=? '
         'UNION SELECT e.id FROM events e JOIN d ON e.parent=d.id) '
         'SELECT e.id,e.processed_at,e.hold FROM events e JOIN d ON e.id=d.id', (event,))
-    if descendants and (not returned or any(d['processed_at'] is None or d['hold'] is not None for d in descendants)):
+    if descendants and (not returned or any((d['processed_at'] is None and d['id'] != pending_consumer) or d['hold'] is not None for d in descendants)):
         raise Refusal('actual control consumer and descendants must already be complete')
     for descendant in descendants:
         child = descendant['id']
@@ -70,6 +84,11 @@ def metadata(runtime, event, attempt, request):
         raise Refusal('plain control cannot settle real work or uncertain effects')
     if runtime.one("SELECT id FROM outboxes WHERE event=? AND (state!='settled' OR processed_at IS NULL OR hold IS NOT NULL)", (event,)):
         raise Refusal('plain control cannot settle outstanding delivery/effect duties')
+    classifier = runtime.one('SELECT collected FROM attempts WHERE id=?', (row['classifier'],)) if row['classifier'] else None
+    if classifier and classifier['collected'] is None:
+        raise Refusal('original classifier remains with its collector')
+    if runtime.one("SELECT fp.target FROM file_publications fp JOIN attempts a ON a.id=fp.attempt WHERE a.event=? AND fp.state!='published'", (event,)):
+        raise Refusal('source publication remains unresolved')
     if len(encode(request).encode()) > runtime.config['limits']['max_result_bytes']:
         raise Refusal('plain-control interpretation exceeds admitted result bound')
     return cap, row
@@ -89,11 +108,21 @@ def validate(runtime, event, attempt, request, *, authenticate=True):
         required_text(evidence, 'Work interpretation evidence', 4000)
     worker = runtime.attempt(attempt)
     result = json.loads(worker['result'])
+    if 'authority' in request:
+        raw = json.loads(result['decision_json'])
+        if (request['authority'] != software_authority(cap,worker,result)
+                or raw.get('plain_control') != {k:request[k] for k in ('scope','accounting','evidence')}
+                or request.get('consumer_disposition')
+                or any('attestation' in e for e in request['accounting'])):
+            raise Refusal('software disposition must be the exact actually collected scope interpretation')
+        actor = worker['session']
     receipt = json.loads(result['decision_json'])
-    from .processing import validate_control_result
+    from .processing import control_receipt, validate_control_result
     validate_control_result(result, receipt)
-    if (result['semantic'] != 'DONE' or digest(result) != request['result_hash']
-            or receipt.get('mode') != 'control'
+    if result['semantic'] != 'DONE' or digest(result) != request['result_hash']:
+        raise Refusal('plain control requires the exact original DONE result before source body')
+    receipt, _ = control_receipt(runtime, event, worker, result, receipt)
+    if (receipt.get('mode') != 'control'
             or any(receipt.get(k) is not None for k in ('task','package','related_event','related_job'))):
         raise Refusal('plain control requires genuine no-task control interpretation')
     runtime.processing.control_proof(event, attempt, receipt)
@@ -103,17 +132,33 @@ def validate(runtime, event, attempt, request, *, authenticate=True):
     from .capacity import notification
     if notification(runtime, source):
         raise Refusal('authenticated notification keeps its occurrence/cause contract')
+    returned = runtime.one('SELECT * FROM processing_control_returns WHERE source=?', (event,))
+    if request.get('consumer_disposition'):
+        consumer_body(runtime, event, returned, request['consumer_disposition'])
     accounting = request['accounting']
     obligations = receipt['remaining_obligations']
     if not isinstance(accounting, list) or len(accounting) != len(obligations) or len(accounting) > 32:
         raise Refusal('every original obligation requires lossless exact owner/source accounting')
     for index, (entry, text) in enumerate(zip(accounting, obligations)):
-        if (not isinstance(entry, dict) or set(entry) != {'index','text','disposition','owner','event','source_hash','evidence'}
+        if (not isinstance(entry, dict) or set(entry) - {'attestation'} != {'index','text','disposition','owner','event','source_hash','evidence'}
                 or type(entry['index']) is not int or entry['index'] != index or entry['text'] != text
                 or entry['disposition'] != 'conserved-at-original-source' or entry['event'] == event):
             raise Refusal('unknown or message-owned obligations cannot be terminalized')
         original = runtime.one('SELECT role,hash FROM events WHERE id=?', (entry['event'],))
-        if (not original or original['hash'] != entry['source_hash']
+        if 'attestation' in entry:
+            attestation = entry['attestation']
+            owners = {runtime.enrollment(r)['owner'] for r in runtime.config['roles']}
+            if (not isinstance(attestation, dict) or set(attestation) != {'reference','observed'}
+                    or type(attestation['observed']) not in (int,float)
+                    or not math.isfinite(attestation['observed'])
+                    or attestation['observed'] > runtime.clock()
+                    or (not runtime.one('SELECT event FROM plain_control_dispositions WHERE event=?',(event,)) and runtime.clock() - attestation['observed'] > 300)
+                    or entry['owner'] not in owners or not isinstance(entry['source_hash'], str)
+                    or len(entry['source_hash']) != 64 or any(c not in '0123456789abcdef' for c in entry['source_hash'])):
+                raise Refusal('exact current Work-attested source/owner evidence required')
+            required_text(attestation['reference'], 'exact external original source reference', 4000)
+            required_text(entry['event'], 'exact original source identity', 4000)
+        elif (not original or original['hash'] != entry['source_hash']
                 or runtime.enrollment(original['role'])['owner'] != entry['owner']):
             raise Refusal('conserved duty requires exact existing source and actual owner')
         required_text(entry['evidence'], 'obligation scope evidence', 4000)
@@ -127,15 +172,17 @@ def validate(runtime, event, attempt, request, *, authenticate=True):
     return actor
 
 
-def apply(runtime, event, attempt, request):
+def apply(runtime, event, attempt, request, *, software=False):
     """Supported atomic API, authenticated as Work; leaves fresh classifier due.
 
-    Existing pending Work consumers refuse. This version never manufactures a
-    control-only receipt for an unprocessed response or removes its edge.
+    An existing unreserved return needs a separate whole-payload Work receipt.
+    Its original edge, bytes and descendants remain under ordinary completion.
     """
-    validate(runtime, event, attempt, request)
+    if software and ('authority' not in request or any('attestation' in entry for entry in request.get('accounting', []))):
+        raise Refusal('automatic software interpretation cannot attest external Work evidence')
+    validate(runtime, event, attempt, request, authenticate=not software)
     with runtime.tx():
-        actor = validate(runtime, event, attempt, request)
+        actor = validate(runtime, event, attempt, request, authenticate=not software)
         previous = runtime.one('SELECT * FROM plain_control_dispositions WHERE event=?', (event,))
         if previous:
             if (previous['request'] != encode(request)
@@ -145,9 +192,101 @@ def apply(runtime, event, attempt, request):
                 raise Refusal('plain control already has a different disposition')
             return previous
         from .processing import _apply_control
-        resolution = _apply_control(runtime, event, attempt, terminal_request=request)
+        resolution = _apply_control(runtime, event, attempt, terminal_request=request, software_terminal=software)
         runtime.budget(None, len(encode(request).encode()) + 1024)
         runtime.db.execute('INSERT INTO plain_control_dispositions VALUES(?,?,?,?,?,?,?,?)',
             (event,resolution['version'],request['source_hash'],runtime.processing.key,actor,
              encode(request),digest(resolution),runtime.clock()))
+        if request.get('consumer_disposition'):
+            child = request['completed_consumer']
+            consumer_metadata(runtime, event, runtime.one('SELECT * FROM processing_control_returns WHERE source=?',(event,)), request['consumer_disposition'])
+            runtime.db.execute("UPDATE queue SET state='done' WHERE event=? AND job IS NULL", (child,))
+        # An already-applied resolution needs a fresh collected classifier too.
+        state = runtime.one('SELECT processed_at FROM events WHERE id=?',(event,))
+        if state['processed_at'] is None:
+            runtime.db.execute("UPDATE events SET state='received' WHERE id=?",(event,))
+            runtime.db.execute("UPDATE queue SET state='owner-resolution-pending' WHERE event=?",(event,))
         return runtime.one('SELECT * FROM plain_control_dispositions WHERE event=?', (event,))
+
+
+def consumer_metadata(runtime, source, returned, receipt):
+    """Only an exact unreserved Work control return; never a running job takeover."""
+    keys = {'schema','event','source_hash','received','scope','payload_hash','evidence'}
+    if (not returned or not isinstance(receipt, dict) or set(receipt) != keys
+            or receipt['schema'] != 'plain-control-consumer-v1'
+            or receipt['event'] != returned['response']
+            or receipt['scope'] != 'whole-return-no-new-owned-work-or-effects'):
+        raise Refusal('exact genuine whole-return control consumer disposition required')
+    child = runtime.one('SELECT * FROM events WHERE id=?',(returned['response'],))
+    queue = runtime.one('SELECT * FROM queue WHERE event=?',(returned['response'],))
+    if (not child or child['parent'] != source or child['role'] != 'Work' or child['hold'] is not None
+            or child['hash'] != receipt['source_hash'] or child['received'] != receipt['received']
+            or not queue or queue['job'] is not None or queue['package'] is not None
+            or queue['role'] != 'Work' or queue['task'] != 'work-proposer'
+            or queue['state'] not in ('queued','done') or child['ack'] not in ('done','plain','internal')
+            or runtime.one("SELECT j.id FROM jobs j,json_each(j.members) m WHERE json_extract(m.value,'$.event')=?",(child['id'],))
+            or runtime.one('SELECT id FROM events WHERE parent=? AND (processed_at IS NULL OR hold IS NOT NULL)',(child['id'],))
+            or runtime.input_resolution(child['id'])):
+        raise Refusal('consumer has actual work, pending descendant, hold or reservation')
+    classifier = runtime.one('SELECT collected FROM attempts WHERE id=?',(child['classifier'],))
+    if not classifier or classifier['collected'] is None:
+        raise Refusal('consumer needs its own collected classifier and ACK')
+    if not isinstance(receipt['evidence'],list) or not 1 <= len(receipt['evidence']) <= 32:
+        raise Refusal('whole original payload/history interpretation required')
+    for evidence in receipt['evidence']:required_text(evidence,'whole-return handling evidence',4000)
+    return child['id']
+
+
+def consumer_body(runtime, source, returned, receipt):
+    child = runtime.event(returned['response'])
+    payload = json.loads(returned['payload'])
+    control = runtime.one('SELECT attempt FROM processing_controls WHERE event=?',(source,))
+    worker = runtime.attempt(control['attempt'])
+    if (child != payload or digest(child) != receipt['source_hash'] or digest(payload) != receipt['payload_hash']
+            or child.get('processing_control_return') != {'source':source,'attempt':control['attempt']}
+            or child['body'] != {'source':runtime.event(source),'actual_worker_return':json.loads(worker['result']),
+                                'software_resolution':runtime.input_resolution(source),'native_owner_receipt':False}
+            or not runtime.processing.event(child)):
+        raise Refusal('whole original consumer payload/history differs')
+
+
+def accepted(runtime, event):
+    row = runtime.one('SELECT * FROM plain_control_dispositions WHERE event=?',(event,))
+    if not row:return False
+    request = json.loads(row['request'])
+    try:
+        actor = validate(runtime,event,request['attempt'],request,authenticate=False)
+        return (row['actor'] == actor and row['capability'] == runtime.processing.key
+                and row['resolution_hash'] == digest(runtime.input_resolution(event)))
+    except (Refusal,ValueError,TypeError):
+        return False
+
+
+def automatic(runtime, event, attempt):
+    """Use only an explicit structured decision from the actually collected worker."""
+    runtime.processing.current()
+    state = runtime.one("SELECT ended,collected,exit,capture,error FROM attempts WHERE id=?",(attempt,))
+    if (not state or state["ended"] is None or state["collected"] is None or state["exit"] != 0
+            or state["capture"] != "complete" or state["error"]):
+        raise Refusal("automatic control requires actual successful original collection")
+    worker = runtime.attempt(attempt)
+    result = json.loads(worker['result'] or 'null')
+    raw = json.loads(result['decision_json']) if isinstance(result,dict) else None
+    if not isinstance(raw,dict) or 'plain_control' not in raw:return None
+    scope = raw['plain_control']
+    if not isinstance(scope,dict) or set(scope) != {'scope','accounting','evidence'}:
+        raise Refusal('unknown automatic plain control scope')
+    if runtime.one('SELECT source FROM processing_control_returns WHERE source=?',(event,)):
+        raise Refusal('existing return needs a specific genuine Work consumer receipt')
+    row = runtime.one('SELECT hash,received FROM events WHERE id=?',(event,))
+    resolution = runtime.input_resolution(event)
+    request = dict(schema=VERSION,event=event,source_hash=row['hash'],received=row['received'],
+        attempt=attempt,result_hash=digest(result),resolution_version=resolution['version'] if resolution else 1,
+        completed_consumer=None,authority=software_authority(runtime.processing.current()[0],worker,result),**scope)
+    return apply(runtime,event,attempt,request,software=True)
+
+
+def software_authority(cap, worker, result):
+    return dict(kind='collected-software-control',issuer=cap['issuer'],worker=worker['session'],
+                controller=worker['controller'],attempt=worker['id'],collected=worker['collected'],
+                result_hash=digest(result),native_owner_receipt=False)

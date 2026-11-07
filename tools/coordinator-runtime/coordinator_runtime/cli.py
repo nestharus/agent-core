@@ -191,6 +191,11 @@ def parser():
         if name == 'processing-release':
             item.add_argument('--controller', required=True)
             item.add_argument('--receipt', required=True)
+    terminal = sub.add_parser('processing-dispose-plain-control', help='Actual Work: exact collected control and separately conserved duties; no native receipt')
+    terminal.add_argument('capability')
+    terminal.add_argument('event')
+    terminal.add_argument('--attempt',required=True)
+    terminal.add_argument('--receipt',required=True)
     drain = sub.add_parser('retained-drain', help='Actual Work: one finite four-role retained software sweep, no intake or execution')
     drain.add_argument('--authority', required=True)
     drain.add_argument('--shared-rows', type=int, required=True)
@@ -523,7 +528,7 @@ def operate(args, store):
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         return processing.apply_owner(store, boards, args.capability, request, actor)
     if args.command in {'processing-basis', 'delegate-processing', 'processing-status', 'revoke-processing',
-                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-owner-source', 'processing-admit-source'}:
+                        'processing-run', 'processing-source', 'processing-apply-control', 'processing-release', 'processing-owner-source', 'processing-admit-source', 'processing-dispose-plain-control'}:
         from . import processing
         boards = {r: processing.ProcessingBoard(store.config, r) for r in store.config['roles']}
         boards['Work'].store.acting_session(store.config['software_delegation']['grantor'])
@@ -540,6 +545,9 @@ def operate(args, store):
             return processing.release(store, boards, args.capability, args.controller, read_record(args.receipt))
         store.processing = processing.Access(store, args.capability, boards)
         store.processing.current()
+        if args.command == 'processing-dispose-plain-control':
+            from .plain_control import apply
+            return apply(store,args.event,args.attempt,read_record(args.receipt))
         if args.command == 'processing-owner-source':
             return processing.owner_source(store, boards, args.capability, args.role, args.kind, args.target)
         if args.command == 'processing-admit-source':

@@ -14,7 +14,7 @@ from coordinator_runtime import plain_control, processing
 from coordinator_runtime.contracts import Refusal, SOL, digest, encode
 
 class Terminal817(ReportTransport):
-    def original(self, obligations=()):
+    def original(self, obligations=(), plain_scope=None):
         b=self.boards['Reviews']
         args=b.store.parser().parse_args(['open','--session',self.source_sender,'--topic','fixture',
             '--kind','finding','--text','Interpret this status only. No new workflow or effect. Original duties stay with their owners.',
@@ -30,6 +30,7 @@ class Terminal817(ReportTransport):
             self.store.db.execute('INSERT INTO processing_controls VALUES(?,?,?,?,NULL,NULL)',(source['id'],self.cap,attempt,digest(source)))
         receipt=dict(source_hash=digest(source),mode='control',task=None,package=None,related_event=None,related_job=None,
             reason='Whole status interpreted with no newly assigned work/effect',evidence=['Whole explicit status source'],remaining_obligations=list(obligations))
+        if plain_scope is not None:receipt['plain_control']=plain_scope
         result=dict(semantic='DONE',summary='Bounded status interpretation completed',decision_json=encode(receipt))
         collect(self.store,attempt,result,tool_completion=dict(complete=True,items=[],nonzero_completions=[],unknown_types=[]))
         request=dict(schema=plain_control.VERSION,event=source['id'],source_hash=digest(source),
@@ -128,7 +129,7 @@ class Terminal817(ReportTransport):
         self.assertEqual(os.environ['TMPDIR'],'/fixtures/tmp')
         self.assertEqual(set(os.listdir('/sys/class/net')) if Path('/sys/class/net').exists() else set(),set())
 
-    def test_conserved_duty_pins_lossless_but_global_completion_stays_blocked(self):
+    def test_conserved_duty_pins_lossless_and_exact_completion(self):
         debt,_,_=self.original()
         source,attempt,request=self.original(['Exact original obligation remains'])
         raw=self.store.attempt(attempt)
@@ -140,7 +141,7 @@ class Terminal817(ReportTransport):
         self.apply817(source,attempt,request);self.fresh();self.runtime.receipts();self.store.complete_events()
         self.assertEqual(raw,self.store.attempt(attempt))
         self.assertEqual(self.store.input_resolution(source['id'])['receipt']['remaining_obligations'],['Exact original obligation remains'])
-        self.assertIsNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(source['id'],))['processed_at'])
+        self.assertIsNotNone(self.store.one('SELECT processed_at FROM events WHERE id=?',(source['id'],))['processed_at'])
         self.assertEqual(self.store.rows('SELECT * FROM processing_control_returns'),[])
 
     def test_uncertain_outbox_and_stale_capability_refuse_before_body(self):
