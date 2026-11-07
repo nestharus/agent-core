@@ -96,8 +96,10 @@ def delegated_tasks(store, event):
     value = selection.get('metadata_lookup')
     if not value:
         return set()
+    from .inputs import input_routes
     from .local_integration import selected
-    return {task for task in value['tasks'] if task in event['allowed_tasks']
+    routes = input_routes(event, store.config)
+    return {task for task in value['tasks'] if task in routes
             and selected(store, task) and store.config['tasks'][task]['role'] == event['role']}
 
 
@@ -311,14 +313,19 @@ def observe(store, event, task, package, limit, hints=None):
 
 
 def dependency(store, event, stage, exc, attempt=None):
-    """Current source-bound failure, independent of later reservation errors."""
-    original = store.event(event)
+    """Source-bound diagnostics never renew authority to acquire its body."""
     detail = {'dependency':str(exc)[:1000], 'attempt':attempt}
     with store.tx():
+        # The current configuration transaction still owns this diagnostic.
+        # A held source or revoked startup can be reported from retained
+        # identity metadata without re-opening payload/result custody.
+        original = store.one('SELECT role,hash FROM events WHERE id=?', (event,))
+        if not original:
+            raise Refusal('dependency needs its original source identity')
         store.db.execute('INSERT INTO input_dependencies VALUES(?,?,?,?,?,?,?) ON CONFLICT(event) '
                          'DO UPDATE SET capability=excluded.capability,source_hash=excluded.source_hash, '
                          'controller=excluded.controller,stage=excluded.stage,detail=excluded.detail,observed=excluded.observed',
-                         (event, store.processing.key, digest(original), store.controller, stage, encode(detail), store.clock()))
+                         (event, store.processing.key, original['hash'], store.controller, stage, encode(detail), store.clock()))
     store.record_operational_error(event, detail, original['role'], 'metadata-'+stage+'-dependency')
 
 
