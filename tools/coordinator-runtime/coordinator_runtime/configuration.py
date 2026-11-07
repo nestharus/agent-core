@@ -486,6 +486,9 @@ def select_protocol(runtime, original, value, choice):
     def pinned(path, sha, maximum=None):
         if not isinstance(sha, str) or not re.fullmatch('[0-9a-f]{64}', sha):
             raise Refusal('protocol evidence SHA256 required')
+        p = Path(required_text(path, 'public protocol evidence path', 4000))
+        if str(p) != path or set(p.parts) & {'AGENTS.md', 'WORK_LOG.md', '.ssh', '.aws', '.config', '.local'}:
+            raise Refusal('exact canonical public protocol evidence required')
         p = regular_path(str(_path(path, exclusions)))
         if maximum is not None and p.stat().st_size > maximum:
             raise Refusal('bounded public protocol evidence required')

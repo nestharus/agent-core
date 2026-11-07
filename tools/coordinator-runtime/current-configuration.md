@@ -521,3 +521,10 @@ active-capability and cooperative-lock refusals still apply. Old contexts,
 callers, collectors, jobs, grants and binary qualifications remain their actual
 originals. Only future admissions after parent END/release may use the new
 selection. Source staging and fixture success are not live adoption.
+
+After selecting this upgrade, an unrelated later configuration draft uses
+explicit `--scope-options` containing `{}` (or its new applicable options),
+retaining the selected executable/version/receipt while avoiding replay of the
+old upgrade's original-configuration choice. A new upgrade needs a new exact
+choice against the then-current configuration. Unchanged source-only selection
+keeps its existing reviewed-source procedure.
