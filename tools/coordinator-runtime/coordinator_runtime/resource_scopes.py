@@ -9,14 +9,14 @@ from pathlib import Path
 from .contracts import PROFILES, Refusal, digest, required_text, scoped_task
 
 
-def root(value, exclusions=()):
+def root(value, exclusions=(), *, metadata=True):
     path = Path(required_text(value, 'resource root', 4000))
     if not path.is_absolute() or '..' in path.parts:
         raise Refusal('absolute resource root required')
     if any(path == Path(p) or path.is_relative_to(Path(p)) or Path(p).is_relative_to(path)
            for p in [*exclusions, *[Path.home()/p for p in PROFILES]]):
         raise Refusal('resource overlaps an excluded store before metadata')
-    if any(p.is_symlink() for p in (path, *path.parents)):
+    if metadata and any(p.is_symlink() for p in (path, *path.parents)):
         raise Refusal('resource aliases need their actual custodian; no symlink inference')
     # Existing ancestry is compared by identity too (including bind aliases).
     return path
@@ -99,15 +99,17 @@ def qa_observation(runtime, role, record):
             or not isinstance(policy['relevant_roots'], list) or len(policy['relevant_roots']) > 32):
         raise Refusal('exact finite QA source topology, scope and inputs required')
     exclusions = runtime.config.get('artifact_exclusions', [])
-    root(source['common_git'], exclusions)
+    # Proposed policy validation is lexical. Task-specific exclusions must run
+    # in scoped_task before any selected input's filesystem metadata.
+    root(source['common_git'], exclusions, metadata=False)
     for value in policy['relevant_roots']:
-        root(value, exclusions)
+        root(value, exclusions, metadata=False)
     seen = set()
     for item in policy['inputs']:
         if (not isinstance(item, dict) or set(item) != {'path', 'sha256'}
                 or not isinstance(item['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
             raise Refusal('exact selected supporting input byte pins required')
-        path = str(root(item['path'], exclusions))
+        path = str(root(item['path'], exclusions, metadata=False))
         if path in seen:
             raise Refusal('duplicate selected QA input')
         seen.add(path)
@@ -166,6 +168,7 @@ def qa_operation(runtime, row, record):
     for path in [policy['source']['common_git'], *[i['path'] for i in policy['inputs']]]:
         if not any(Path(path).is_relative_to(r) for r in reads):
             raise Refusal('selected QA evidence input is outside admitted read authority')
+        root(path, exclusions)
     # A queue ID is not a job ID. Public policy validation supports a genuine
     # pre-reservation projection; never fabricate an attempt/birth/launch proof.
     current = runtime.one('SELECT * FROM jobs WHERE id=?', (row.get('id'),))

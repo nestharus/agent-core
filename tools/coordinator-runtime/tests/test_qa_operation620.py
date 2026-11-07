@@ -456,6 +456,12 @@ class Operation620(OperationFixture620):
             self.record['qa_operation']['binding']['admission_sha256']=digest(self.store.one('SELECT * FROM admissions'))
             self.save();self.assertTrue(self.blocked())
 
+    def test_task_exclusion_precedes_all_selected_path_metadata(self):
+        self.config['tasks']['qa-execution']['scope_exclusions']=[str(self.repo)]
+        self.selection['basis']['configuration']=digest(self.config);self.save()
+        with patch.object(Path,'is_symlink',side_effect=AssertionError('task excluded path metadata')):
+            self.assertTrue(self.blocked())
+
 
 
 class SecondOperation620(OperationFixture620):
