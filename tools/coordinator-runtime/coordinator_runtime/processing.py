@@ -7,6 +7,7 @@ from . import observations
 
 import json
 import math
+from contextlib import nullcontext
 from pathlib import Path
 import hashlib
 
@@ -1270,7 +1271,8 @@ def _apply_control(runtime, event, attempt):
     receipt = parse_json(result.get('decision_json', 'null'))
     runtime.processing.control_proof(event, attempt, receipt)
     receipt, _ = control_receipt(runtime, event, row, result, receipt)
-    with runtime.tx():
+    # The typed stopped-original path already owns the whole return transaction.
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
         if receipt['mode'] != 'notification':
             control_return(runtime, event, attempt, result, resolution)
