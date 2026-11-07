@@ -460,3 +460,64 @@ Do not fill an unknown with `[]`, reopen revoked intake, borrow an owner or
 fabricate a historical scope map. If conditions do not pass, retain the affected
 effect hold and return the concrete missing fact to actual Work. This correction
 adds no Work-account framework or blanket waiver.
+
+
+### Explicit public protocol upgrade (774)
+
+The previous selectors freeze `codex`, `protocol_cli_version` and
+`protocol_qualification`; neither editing those fields nor changing a config
+label is an accepted protocol transition. To preserve 0.166.0, keep its actual
+executable available and leave these selectors unchanged. This mechanism does
+not install, retain, move or manage old binaries. Replacing the globally selected
+binary would break its actual-version preflight until an accepted selection.
+
+A protocol upgrade uses the same draft/basis/select commands with an exclusive
+`--scope-options` object `{"protocol_upgrade": CHOICE}` and no `--source-task`.
+Select all eight existing tasks with `--task`. Task owners, rights, models, CWD,
+network, effects, original grants and historical policies must remain identical.
+The ordinary release relocation still applies; whole-source and protocol
+acceptance by the actual parent/Work remain necessary before use.
+
+CHOICE has exactly these fields:
+
+* `configuration`: digest of the actual current configuration; `owner`: its
+  genuine Work owner/software grantor; `authority`: that owner's concrete
+  decision and trusted public acquisition/provenance evidence.
+* `public_package`: `{name:"@openai/codex", version:EXACT_VERSION,
+  registry:"https://registry.npmjs.org", integrity:EXACT_SHA512_SRI,
+  tarball:"https://registry.npmjs.org/@openai/codex/-/codex-VERSION.tgz"}`.
+  The real Work issuer must verify this public package and the extracted
+  executable mapping. These recorded facts are attributed owner evidence, not
+  registry authentication by this offline code. A publication or mutable JSON
+  claim alone supplies no compatibility or selection authority.
+* `codex`: new absolute canonical executable file, `executable_sha256`: its
+  actual bytes, `cli_version`: its exact `codex-cli VERSION` output. Use the
+  actual extracted public executable, with no mutable wrapper/symlink.
+* `qualification`: new absolute public receipt file,
+  `qualification_sha256`: its bytes. The receipt must name that exact
+  `cli_version`, the `checked` fields below, and `settings_check`.
+* `schema_files`: exact relative filenames below mapped to SHA256. These are
+  the installed candidate's generated experimental JSON schemas beside the
+  receipt: `v2/ThreadStartParams.json` (`ephemeral`, `model`, `config`),
+  `v2/ConfigReadParams.json` (`includeLayers`), `v2/ConfigReadResponse.json`
+  (`config`), `v2/ThreadUnsubscribeParams.json` (`threadId`), and
+  `v2/ThreadDeleteParams.json` (`threadId`).
+* `settings_check`: the exact public own-empty-config strict-metadata record;
+  `settings_sha256`: its actual bytes. This record is pinned and parsed, while
+  its substantive strict-metadata acceptance remains the parent's explicit
+  qualification decision.
+
+Draft, basis and apply independently recheck these pins, real schema properties
+and the actual executable's `--version` (10-second child bound, collected before
+return). This executes no app-server, model, profile, store or provider probe.
+The existing app-server preflight still checks actual runtime version; this
+schema/metadata receipt makes no app-server/model/store compatibility claim.
+Pins provide cooperative change detection, not atomicity against another writer.
+
+Application additionally uses the existing source-generation stop fence: every
+outgoing selected controller must have its numeric parent END and supported
+processing release, with no uncollected attempt or active service. Existing
+active-capability and cooperative-lock refusals still apply. Old contexts,
+callers, collectors, jobs, grants and binary qualifications remain their actual
+originals. Only future admissions after parent END/release may use the new
+selection. Source staging and fixture success are not live adoption.
