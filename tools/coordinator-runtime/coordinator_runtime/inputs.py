@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS input_resolutions(
  event TEXT NOT NULL,version INTEGER NOT NULL,source_hash TEXT NOT NULL,actor TEXT NOT NULL,
  receipt TEXT NOT NULL,prior TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(event,version));
 """
+from .plain_control import SCHEMA as PLAIN_CONTROL_SCHEMA
+SCHEMA += PLAIN_CONTROL_SCHEMA
 CONTROL_ROUTES={'@control','@unresolved','@coalesce'}
 
 
@@ -191,9 +193,11 @@ class InputJournal:
             raise Refusal('only coalescence names an existing responsibility')
 
     def queue_input_control(self,event,answer):
+        from .plain_control import accepted
         selection=event.get('owner_resolution')
         settled=(answer['task']=='@control' and selection and selection['receipt']['mode']=='control'
-                 and not selection['receipt']['remaining_obligations'])
+                 and (not selection['receipt']['remaining_obligations'] or
+                      accepted(self,event['id'])))
         self.write_input_queue(event,answer,event['role'],'control','done' if settled else 'awaiting-owner')
         if settled or answer['task']=='@coalesce':return
         if self.processing and self.processing.event(self.event(event['id'])):

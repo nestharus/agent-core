@@ -538,7 +538,7 @@ class Access:
 
     def control_proof(self, event, attempt, receipt):
         _, selection = self.current()
-        state = self.runtime.one('SELECT hold FROM events WHERE id=?', (event,))
+        state = self.runtime.one('SELECT hold,hash FROM events WHERE id=?', (event,))
         if not state or state['hold']:
             raise Refusal('control disposition requires its exact unheld current source')
         row = self.runtime.attempt(attempt)
@@ -548,17 +548,13 @@ class Access:
         record = self.runtime.one('SELECT * FROM processing_controls WHERE event=?', (event,))
         result = json.loads(row['result']) if row['result'] else {}
         tools = json.loads(row['detail']).get('tool_completion', {})
-        self.current()
-        source = self.runtime.event(event)
-        if not self.event(source):
-            raise Refusal('control disposition outside exact current source selection')
         if (not record or record['attempt'] != attempt or record['capability'] != original_cap
-                or record['source_hash'] != digest(source)
+                or record['source_hash'] != state['hash']
                 or row['kind'] != 'input-control' or row['event'] != event
                 or row['begin'] is None or row['ended'] is None or row['collected'] is None
                 or row['exit'] != 0 or row['error'] or row['capture'] != 'complete'
-                or json.loads(row['binding']) != SOL or not tools.get('complete')
-                or tools.get('nonzero_completions') or tools.get('items') or tools.get('unknown_types')):
+                or json.loads(row['binding']) != SOL or tools.get('complete') is not True
+                or any(tools.get(k) != [] for k in ('nonzero_completions','items','unknown_types'))):
             raise Refusal('control disposition requires its meaningful actual worker return and original numeric END')
         validate_control_result(result, receipt)
         recognition = selection.get('control_recognitions', {}).get(event)
@@ -568,6 +564,10 @@ class Access:
             validate_recognition(self.runtime, event, attempt, recognition)
         canonical_uuid(row['session'])  # Actual observed worker, never the native role owner.
         required_text(result.get('summary'), 'actual control handling summary')
+        self.current()
+        source = self.runtime.event(event)
+        if digest(source) != state['hash'] or not self.event(source):
+            raise Refusal('control disposition outside exact current source selection')
         original = parse_json(result.get('decision_json', 'null'))
         derived, derivation = control_receipt(self.runtime, event, row, result, original)
         if receipt != original and receipt != derived:
@@ -1101,6 +1101,11 @@ def control_receipt(runtime, event, row, result, receipt):
     """
     keys = {'source_hash', 'mode', 'task', 'package', 'related_event', 'related_job',
             'reason', 'evidence', 'remaining_obligations'}
+    if isinstance(receipt,dict) and set(receipt) == keys | {'plain_control'}:
+        base = {k:v for k,v in receipt.items() if k != 'plain_control'}
+        derived, syntax = control_receipt(runtime,event,row,result,base)
+        return derived, {'version':'plain-control-scope-envelope-v1','original_receipt_hash':digest(receipt),
+                         'derived_receipt_hash':digest(derived),'syntax':syntax}
     if (not isinstance(receipt, dict) or set(receipt) != keys
             or receipt['mode'] != 'control' or receipt['task'] != '@control'
             or any(receipt[k] is not None for k in ('package', 'related_event', 'related_job'))):
@@ -1256,7 +1261,13 @@ class ProcessingDispatcher(Dispatcher):
                   'mode=control processes a board control only; mode=route selects an original allowed task; '
                   'responsibility.task=@control is a queue sentinel, never an actual task. For mode=control, '
                   'receipt.task MUST be null, and package/related_event/related_job MUST also be null. '
-                  'Only mode=route selects an actual task. '
+                  'Only mode=route selects an actual task. For an explicitly no-new-owned-work-or-effects Board status, '
+                  'you MAY add plain_control to decision_json: an object with EXACT scope,accounting,evidence keys. '
+                  'scope must be no-new-owned-work-or-effects. Account for EVERY unchanged remaining_obligations '
+                  'entry in order as {index,text,disposition:conserved-at-original-source,owner,event,source_hash,evidence}. '
+                  'Use exact supplied existing source/owner references with meaningful scope evidence; no keyword guesses. '
+                  'Unknown, THIS-message work/decision/effect, or insufficient references MUST remain blocking: omit plain_control. '
+                  'No native ACK or acceptance is requested. '
                   'mode=coalesce needs actual same-role related_event/job proof. Evidence must cite actual supplied '
                   'source. Scope corrections go to Root, scope/blockers to Work; Reviews/QA/Branch duties stay '
                   'with actual holders. Retain every unresolved authority/effect/selected-procedure dependency in '
@@ -1276,7 +1287,8 @@ fabricate reading, consent or a native owner's receipt.\n''' +
                           'responsibility': self.store.one('SELECT * FROM queue WHERE event=?', (event,)),
                           'same_role_jobs': self.store.rows('SELECT id,task,package,state,members,effects,hold_reason,controller,active_attempt FROM jobs WHERE role=? ORDER BY created,id LIMIT 16', (original['role'],)),
                           'authority': self.store.processing.current()[1]['authority'],
-                          'role_effect_hold': self.store.enrollment(original['role'])['legacy_hold']}))
+                          'role_effect_hold': self.store.enrollment(original['role'])['legacy_hold'],
+                          'conserved_source_references': [dict(id=r['id'],role=r['role'],source_hash=r['hash'],owner=self.store.enrollment(r['role'])['owner']) for r in self.store.rows('SELECT id,role,hash FROM events WHERE id!=? ORDER BY received DESC LIMIT 32',(event,))]}))
         outcome = await self.run_model(attempt, prompt,
                                        {'cwd': self.config['classifier']['cwd'], 'sandbox': 'read-only', 'network': False}, CONTROL_SCHEMA)
         self.store.collect(attempt, outcome)
@@ -1288,9 +1300,23 @@ fabricate reading, consent or a native owner's receipt.\n''' +
             self.store.record_operational_error(event, {'dependency': str(exc), 'attempt': attempt}, original['role'], 'processing-control-dependency')
 
 
-def _apply_control(runtime, event, attempt):
+def _apply_control(runtime, event, attempt, *, terminal_request=None, software_terminal=False):
     """Recover an exact collected disposition, never relaunch its original."""
     runtime.processing.current()
+    disposition = runtime.one('SELECT * FROM plain_control_dispositions WHERE event=?', (event,))
+    if disposition:
+        from .plain_control import validate
+        request = json.loads(disposition['request'])
+        validate(runtime, event, attempt, request, authenticate=False)
+        resolution = runtime.input_resolution(event)
+        if (disposition['capability'] != runtime.processing.key
+                or disposition['resolution_hash'] != digest(resolution)
+                or terminal_request is not None and terminal_request != request):
+            raise Refusal('exact original plain-control disposition changed')
+        return resolution
+    if terminal_request is not None:
+        from .plain_control import validate
+        validate(runtime, event, attempt, terminal_request, authenticate=not software_terminal)
     row = runtime.attempt(attempt)
     result = json.loads(row['result'] or 'null') or {}
     receipt = parse_json(result.get('decision_json', 'null'))
@@ -1298,8 +1324,10 @@ def _apply_control(runtime, event, attempt):
     receipt, _ = control_receipt(runtime, event, row, result, receipt)
     # The typed stopped-original path already owns the whole return transaction.
     with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        if terminal_request is not None:
+            validate(runtime, event, attempt, terminal_request, authenticate=not software_terminal)
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
-        if receipt['mode'] != 'notification':
+        if receipt['mode'] != 'notification' and terminal_request is None:
             control_return(runtime, event, attempt, result, resolution)
         runtime.db.execute('UPDATE processing_controls SET resolution=?,error=NULL WHERE event=?', (encode(resolution), event))
     return resolution
@@ -1394,7 +1422,9 @@ async def _run(runtime, boards, key, seconds, emit):
 
 
 def apply_control(runtime, event, attempt):
-    from . import report_repair
+    from . import report_repair, plain_control
+    if plain_control.automatic(runtime,event,attempt) is not None:
+        return runtime.input_resolution(event)
     amendment = report_repair.lease_record(runtime, runtime.processing.key)
     request = amendment or report_repair.pair_record(runtime, runtime.processing.key)
     if not request or event != request['basis']['sources'][1]['event']:
