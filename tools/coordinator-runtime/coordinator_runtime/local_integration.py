@@ -915,7 +915,7 @@ def prepare_input_basis(store, job, attempt, task):
     basis['observed_values'] = {k:point_value(points[k], bodies, store=store, job=job) for k in keys}
     if len(encode(basis).encode()) > store.config['limits']['max_result_bytes']:
         raise Refusal('selected point projection exceeds model context; narrow the actual field views')
-    with store.tx():
+    with (nullcontext() if store.db.in_transaction else store.tx()):
         store.db.execute('INSERT INTO local_bases VALUES(?,?)', (attempt, encode(basis)))
 
 
