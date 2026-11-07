@@ -259,7 +259,7 @@ def work_authority(store, actor, actual):
     if not scope or actual['task'] not in scope['task_scopes']:
         raise Refusal('exact Work-selected prospective local-ref scope required')
     resolved(store, actual['package'], admission['scope'], digest(scope))
-    epoch = prospective.current(store, actual['task'])
+    epoch = prospective.current(store, actual['task'], ordinary_effects=True)
     if not epoch or epoch['policy']['ordinary_effects'] != 'admitted-v1':
         raise Refusal('current typed prospective local-ref operation authority required')
     # A different role's unresolved local writer is not erased by the Branch

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS ordinary_tool_records(
 
 
 def selected(store, job):
-    row = prospective.for_job(store, job)
+    row = prospective.for_job(store, job, ordinary_effects=True)
     if row and row['policy']['ordinary_effects']:
         if row['policy']['ordinary_effects'] == 'admitted-v1':
             admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
@@ -58,6 +58,8 @@ def frozen_file(store, path, roots, expected=None):
 
 
 def policy_for(store, job):
+    # Pre-reservation native projections also retain the original effect clock.
+    prospective.current(store, job['task'], ordinary_effects=True)
     admission = store.one('SELECT * FROM admissions WHERE package=?', (job['package'],))
     if qa_branch_sequence(store.config) and job['task'] in {'qa-execution', 'branch-integrator'}:
         sequence_policies(store, job['package'])
@@ -83,7 +85,7 @@ def policy_for(store, job):
         # Native read-only projections use a scoped job view before a worker
         # exists. They validate the current ceiling, never manufacture a birth
         # or attempt. Actual execution still requires the original for_job.
-        ceiling = selected(store, job) if job.get('id') else prospective.current(store, job['task'])
+        ceiling = selected(store, job) if job.get('id') else prospective.current(store, job['task'], ordinary_effects=True)
         if p['kind'] != 'local-qa' or not ceiling or ceiling['policy']['ordinary_effects'] != 'admitted-v1':
             raise Refusal('public QA executable contract requires explicit admitted-v1 prospective selection')
         from .public_tools import validate
@@ -184,6 +186,7 @@ async def tool(store, attempt, label, argv, cwd, p, *, output_file=None, maximum
     """Original subprocess and complete bounded capture, never caller JSON."""
     run = store.one('SELECT job FROM ordinary_runs WHERE attempt=?', (attempt,))
     current_job = store.job(run['job'])
+    prospective.current(store, current_job['task'], ordinary_effects=True)
     local_integration.current_sources(store, current_job)
     current_run = store.one('SELECT * FROM ordinary_runs WHERE attempt=?', (attempt,))
     if not selected(store, current_job):
@@ -336,6 +339,7 @@ async def source(store, attempt, p, task, *, context_job=None):
 
 async def perform(store, board, job):
     store.require_execution_open(job['id'])
+    prospective.current(store, job['task'], ordinary_effects=True)
     # Even a plain task's selector reads the original full attempt before it
     # can discover that no ordinary epoch applies. Model collection is not
     # admission for this new preparation group.

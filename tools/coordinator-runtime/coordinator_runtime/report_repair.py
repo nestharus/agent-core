@@ -854,7 +854,7 @@ def pair_basis(runtime, boards, key, work_event, control_event, controller, acto
 
 # Explicit finite authority amendment. Neither v1 nor v2 inherits this ceiling.
 LEASE_VERSION = 'continuing-owner-lease-v1'
-LEASE_MODULES = PAIR_MODULES | {'prospective.py', 'windows.py', 'service_wake.py'}
+LEASE_MODULES = PAIR_MODULES | {'prospective.py', 'windows.py', 'service_wake.py', 'ordinary.py', 'ref_scope.py'}
 SCHEMA += """
 CREATE TABLE IF NOT EXISTS owner_lease_plans(
  capability TEXT PRIMARY KEY,request TEXT NOT NULL,issuer TEXT NOT NULL,created REAL NOT NULL);
