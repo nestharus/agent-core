@@ -124,13 +124,14 @@ class FutureContract(unittest.IsolatedAsyncioTestCase):
         queued(self.store,self.store.event(self.store.job(job['id'])['response']))
         self.runtime.receipts();self.runtime.pump_deliveries();self.runtime.reconcile_completed()
         current=self.store.job(job['id'])
-        # Concrete remaining out-of-scope consumer: complete_own_delivery still
-        # requires the original capture column to be complete (completion.py:59).
-        self.assertEqual(current['state'],'awaiting-delivery')
+        # 625: normal delivery consumes the independently qualified current
+        # response without upgrading the immutable original conflicting capture.
+        self.assertEqual(current['state'],'closed')
         self.assertIsNotNone(software._processing(self.store,current))
         outbox=self.store.one("SELECT * FROM outboxes WHERE job=? AND kind='result'",(job['id'],))
-        self.assertIsNone(self.board.complete_own_delivery(self.store,outbox))
-        self.assertIsNone(self.store.one('SELECT processed_at FROM events')['processed_at'])
+        self.assertEqual(self.board.complete_own_delivery(self.store,outbox)['state'],'settled')
+        self.assertIsNotNone(self.store.one('SELECT processed_at FROM events')['processed_at'])
+        self.assertEqual(self.store.attempt(attempt)['capture'],'conflicting-final')
 
     async def test_receipt_tampering_old_capture_and_forged_model_fields_refuse(self):
         await self.run_boundary()

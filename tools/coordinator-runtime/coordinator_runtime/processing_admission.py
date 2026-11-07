@@ -7,7 +7,7 @@ Existing admissions, jobs, holds and old sources are never replaced or released.
 import json
 from pathlib import Path
 
-from .contracts import Refusal, digest, encode, required_text, scoped_task
+from .contracts import Refusal, digest, encode, required_text, scoped_task, collected_capture
 
 
 def validate(runtime, selection):
@@ -192,7 +192,7 @@ def permits(runtime, queue):
                     from .contracts import response_tasks, collected_task_result
                     attempt = runtime.attempt(job['active_attempt'])
                     if (attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
-                            or attempt['error'] or attempt['capture'] != 'complete'
+                            or attempt['error'] or not collected_capture(attempt)
                             or receiver and (attempt['job'] != job['id'] or attempt['controller'] != job['controller'])
                             or source.get('body') != collected_task_result(attempt)
                             or receiver and (source['body'].get('semantic') != 'DONE' or source['body'].get('category') != 'qualification')
@@ -220,7 +220,7 @@ def permits(runtime, queue):
                         or payload.get('attempt') != attempt['id'] or payload.get('source_result') != answer
                         or payload.get('original_handoff') not in answer.get('handoffs', [])
                         or attempt['collected'] is None or attempt['ended'] is None or attempt['exit'] != 0
-                        or attempt['error'] or attempt['capture'] != 'complete'):
+                        or attempt['error'] or not collected_capture(attempt)):
                     return False
                 if receiver and (attempt['job'] != job['id'] or attempt['controller'] != job['controller']):
                     return False

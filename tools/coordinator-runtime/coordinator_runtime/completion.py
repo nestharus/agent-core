@@ -1,7 +1,7 @@
 """Explicit real-role delegation for routine collector completion, never impersonation."""
 import json
 
-from .contracts import Refusal, encode, digest, collected_task_result
+from .contracts import Refusal, encode, digest, collected_task_result, collected_capture
 from .routine import BOARD_SCHEMA, policy_for
 from . import prospective
 
@@ -56,7 +56,7 @@ class Completion:
         try:answer=collected_task_result(attempt)
         except Refusal:return None
         if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['error']
-                or attempt['capture'] != 'complete' or answer.get('semantic') != 'DONE'
+                or not collected_capture(attempt) or answer.get('semantic') != 'DONE'
                 or job['effects'] not in {'none','reconciled'} or job['hold_reason']):
             return None
         from .readiness import assess
