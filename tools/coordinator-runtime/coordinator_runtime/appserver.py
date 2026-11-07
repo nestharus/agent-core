@@ -17,7 +17,7 @@ from pathlib import Path
 import re
 
 from .contracts import (PROFILES, Refusal, canonical_uuid, encode, parse_json,
-                        task_result, task_result_issues, task_result_instructions, report_only)
+                        task_result, task_result_issues, task_result_instructions, report_only, digest)
 from . import storage, readiness, observations
 
 RPC_METHODS = frozenset({'initialize', 'config/read', 'thread/start', 'thread/read',
@@ -44,8 +44,8 @@ class TurnFailure(Refusal):
 class HandbackFailure(Refusal):
     """Collected owned turn, but no uniquely decodable authoritative handback.
 
-    A later answer can supply useful typed evidence, never clear this capture
-    hold. Accepting a reconciled conflict needs a shared collected contract.
+    A fresh uniquely typed response needs its own original-collector receipt.
+    The original capture hold and invalid-content uncertainty remain conserved.
     """
 
 
@@ -210,6 +210,7 @@ class Peer:
         self.pending, self.finals = {}, {}
         self.completed_turns, self.final_items, self.late_finals = set(), {}, []
         self.owned_turns, self.final_records, self.conflicting_turns = set(), [], set()
+        self.terminal_notifications = set()
         self.capture_issues = []
         self.continuation_used = False
         self.errors = []
@@ -390,6 +391,8 @@ class Peer:
                 # The turn aggregate is a consistency witness, not a substitute
                 # for the authoritative item/completed notification.
                 self.final_item(turn.get("id"), item, params.get('threadId'), aggregate=True)
+            if params.get("threadId")==self.thread:
+                self.terminal_notifications.add(turn.get("id"))
             self.events.put_nowait({"method": method, "threadId": params.get("threadId"),
                                    "turn": {"id": turn.get("id"), "status": turn.get("status"),
                                             "error": safe_error(turn.get("error"))}})
@@ -436,7 +439,7 @@ class Peer:
             self.hold_capture('conflicting-final')
         else:
             self.final_items[key] = text
-        if turn in self.completed_turns:
+        if turn in self.completed_turns or turn in self.terminal_notifications:
             self.preserve_late(turn, text)
             self.hold_capture("late-final-needs-reconciliation")
             return
@@ -633,6 +636,9 @@ class AppServer:
         if schema and set(schema.get('properties',{}))=={'payload_json'}:
             if 'prior_turn_result' in outcome['detail']:task_result(result,outcome['detail']['prior_turn_result'])
             else:task_result(result)
+            issues=readiness.live_issues(store,attempt,result,list(peer.tools.values()),spec,
+                readiness.prior_handbacks(outcome['detail']), bool(getattr(peer,'handback_original',None)))
+            if issues:raise Refusal('; '.join(issues))
             for original in outcome['detail'].get('prior_terminal_returns', []):
                 if original['valid_json']:
                     task_result(result, original['typed_return'])
@@ -689,17 +695,19 @@ class AppServer:
         except HandbackFailure as exc:
             # Do not select a late/last parseable candidate or lose the chance
             # to return honest typed evidence before this ephemeral owner exits.
-            # No shared conflict-resolution receipt exists: this remains held
-            # even if the one clarification supplies a well-formed response.
+            # Preserve the original conflict. A distinct collector-issued receipt
+            # may qualify only the fresh response after full collection.
             originals = [r for r in peer.final_records if r['turn'] == turn]
             outcome['detail'].update(prior_terminal_returns=originals,
-                handback_reconciliation='unresolved-shared-collected-contract-required',
+                handback_reconciliation='pending-original-collector-receipt',
+                original_handback_error=str(exc),
                 resume_disposition='attempted-owned-terminal-handback-clarification')
             outcome['error'] = str(exc)
             is_task = bool(schema and set(schema.get('properties', {})) == {'payload_json'})
             if (not is_task or not peer.tool_inventory_complete()
                     or any(x not in {'conflicting-final', 'invalid-final-json'} for x in peer.capture_issues)):
                 raise Refusal('handback clarification lacks complete owned original/tool capture') from exc
+            peer.handback_original = {'turn':turn, 'originals':originals}
             clarification = ('Return one uniquely typed terminal handback for this SAME owned task. '
                 'Preserve every original adverse/unknown fact and all prepared stages unchanged. '
                 'No construction replay, canonical publication, new duties, or invented ID correlations. '
@@ -710,7 +718,12 @@ class AppServer:
                 + '\nORIGINAL_TERMINAL_RETURNS=' + encode(originals)
                 + self.tool_feedback(peer))
             try:
-                return await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema, clarification)
+                result = await self.continue_idle(peer, store, attempt, thread, turn, spec, binding, schema, clarification)
+                for original in originals:
+                    if original['valid_json']: task_result(result, original['typed_return'])
+                task_result(result)
+                outcome['error'] = None  # Original error retained separately; no capture clearance.
+                return result
             except Exception as failure:
                 outcome['detail']['handback_clarification_failure'] = (str(failure)[:1000]
                     if isinstance(failure, Refusal) else type(failure).__name__)
@@ -817,6 +830,10 @@ class AppServer:
             next_turn = canonical_uuid((await self.start_turn(peer, thread, prompt, binding, schema, spec))["turn"]["id"])
         peer.owned_turns.add(next_turn)
         store.session(attempt, thread, next_turn, {"resume_attempted": True, "prior_turn": turn})
+        if getattr(peer, 'handback_original', None):
+            store.record_handback_boundary(attempt, thread, turn, next_turn,
+                peer.capture, list(peer.capture_issues), peer.handback_original['originals'],
+                [r for r in peer.tools.values() if r['turn']==turn], digest(spec))
         return await peer.completion(thread, next_turn, self.config["deadlines"]["task"])
 
     async def teardown(self, child, peer, outcome):

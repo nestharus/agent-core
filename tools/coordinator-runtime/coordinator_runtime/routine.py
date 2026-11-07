@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from .contracts import Refusal, encode, collected_task_result, digest
+from .contracts import Refusal, encode, collected_task_result, collected_capture, digest
 from .custody import safe_path, read_file
 from . import publication, readiness, bounded_log, local_integration
 
@@ -109,7 +109,7 @@ def reconcile(store, board, job):
     from .resource_scopes import blocked
     if grant['id'] != run['grant_id'] or blocked(store, job) or job['hold_reason']:
         return False
-    if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or attempt['capture'] != 'complete'
+    if (attempt['ended'] is None or attempt['collected'] is None or attempt['exit'] != 0 or not collected_capture(attempt)
             or attempt['error']):
         return False
     answer = collected_task_result(attempt)

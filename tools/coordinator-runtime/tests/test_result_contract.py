@@ -195,7 +195,8 @@ class OwnedOuterClarification(unittest.IsolatedAsyncioTestCase):
         first,final=self.answers()
         job,attempt=await self.run_pair(first,final,tool_metadata={'exitCode':None},second_tool_metadata={'exitCode':0})
         detail=json.loads(self.store.attempt(attempt)['detail'])
-        self.assertEqual([r['exit_code'] for r in detail['tool_completion']['items']],[None,0])
+        # Selected stricter contract: an incomplete original prevents the second turn.
+        self.assertEqual([r['exit_code'] for r in detail['tool_completion']['items']],[None])
         self.assertFalse(detail['tool_completion']['complete'])
         self.assertEqual(json.loads(self.target.read_text())['total'],0)
         self.assertEqual(self.store.job(job['id'])['effects'],'unknown')

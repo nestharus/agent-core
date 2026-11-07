@@ -37,7 +37,23 @@ producer claims separately; it cannot discharge an adverse obligation or prove v
 For resolved history/adverse items bind exact conserved OWN declared artifact hashes and explicitly
 selected actual successful command PROTOCOL IDs. An unrelated later0 does not prove resolution.
 The controller may supply bounded observed IDs while this SAME owned context is idle. Do not guess
-ID correlations, erase original history, invent successful checks, or blindly rewrite completed work.'''
+ID correlations, erase original history, invent successful checks, or blindly rewrite completed work.
+A local unknown resolved in this owned clarification keeps its original unknown array entry and
+owner/duty/reason. Add status=resolved with prior_disposition={status:unresolved,owner,duty,reason}
+matching an actual prior typed completion row, evidence, verification_items, command_bindings,
+and causal_reason. Do not change owner/duty/reason or convert the duty to downstream/boundary.
+command_bindings is a list of exact {id,thread,turn,command_sha256,command_bytes,exit_code,status}
+from OBSERVED_TOOL_METADATA. Include every selected successful verification ID and relevant adverse ID.
+These identities and conserved bytes are mechanically checked. causal_reason must explain why those
+commands/evidence resolve this particular duty; that relevance remains a performer claim for review,
+not a general mechanical interpretation of shell commands. causal_evidence={path,sha256,entry}
+selects one entry in a declared conserved JSON evidence file {version:1,resolutions:[ENTRY,...]}.
+ENTRY is exactly {subject,command_bindings,verification_items,causal_reason}. subject is
+{kind:"unknown",index,original_hash:HASH_OF_ORIGINAL_UNKNOWN,prior_disposition} or
+{kind:"failure",index,original_hash:HASH_OF_ORIGINAL_FAILURE} or {kind:"tool",id:ADVERSE_ID}.
+The causal_evidence path/hash must also appear in evidence. A reconciled terminal response also needs
+these bindings and causal_reason on resolved failure and adverse-tool rows. No unrelated later zero,
+ambiguous command identity, guessed chunk mapping or self-attestation can substitute for evidence.'''
 
 
 def _require(condition,message):
@@ -52,25 +68,106 @@ def _indexed(answer,proof,name):
     return rows
 
 
-def _evidence(row,zero,check_ref):
+COMMAND_BINDING_FIELDS={'id','thread','turn','command_sha256','command_bytes','exit_code','status'}
+CORRELATION_FIELDS={'command_bindings','causal_reason','causal_evidence'}
+
+
+def _correlation(row,items,required=(),failure=None):
+    bindings=row.get('command_bindings')
+    _require(isinstance(bindings,list) and 1<=len(bindings)<=128,'exact command bindings required')
+    required_text(row.get('causal_reason'),'causal verification relevance assertion',4000)
+    _require(len({b.get('id') for b in bindings if isinstance(b,dict)})==len(bindings),'ambiguous command binding IDs')
+    observed={}
+    for item in items:observed.setdefault(item.get('id'),[]).append(item)
+    for binding in bindings:
+        _require(isinstance(binding,dict) and set(binding)==COMMAND_BINDING_FIELDS,'exact command identity fields required')
+        matches=observed.get(binding['id'],[])
+        _require(len(matches)==1,'ambiguous or unobserved command identity')
+        item=matches[0]
+        _require(item.get('type')=='commandExecution' and item.get('completed_notification') is True and
+                 item.get('status') in {'completed','failed'} and type(item.get('exit_code')) is int and
+                 isinstance(item.get('thread'),str) and isinstance(item.get('turn'),str) and
+                 isinstance(item.get('command_sha256'),str) and re.fullmatch('[0-9a-f]{64}',item['command_sha256']) and
+                 type(item.get('command_bytes')) is int and item['command_bytes']>0 and
+                 digest(binding)==digest({k:item.get(k) for k in COMMAND_BINDING_FIELDS}),
+                 'command fingerprint/thread/turn/outcome binding mismatch')
+    ids={b['id'] for b in bindings}
+    _require(set(row['verification_items'])<=ids and set(required)<=ids,'command bindings omit relevant verification/adverse IDs')
+    if isinstance(failure,dict) and isinstance(failure.get('command'),str):
+        import hashlib
+        command=failure['command'].encode()
+        matches=[i for i in items if i.get('type')=='commandExecution' and
+            i.get('command_sha256')==hashlib.sha256(command).hexdigest() and i.get('command_bytes')==len(command) and
+            i.get('exit_code')==failure.get('exit_code') and i.get('exit_code') not in {None,0}]
+        _require(len(matches)==1 and matches[0]['id'] in ids,'original failure command identity is ambiguous or unmatched')
+
+
+def _evidence(row,zero,check_ref,items=(),strict=False,required=(),failure=None,subject=None):
     refs=row.get('evidence');checks=row.get('verification_items')
     _require(isinstance(refs,list) and 1<=len(refs)<=16 and isinstance(checks,list) and 1<=len(checks)<=128,
              'resolution needs bounded report evidence and verification protocol IDs')
     _require(all(isinstance(c,str) and c in zero for c in checks),'verification must name observed successful command protocol IDs, never visible chunk labels')
+    _require(len(checks)==len(set(checks)),'duplicate verification protocol IDs')
+    correlate=bool(strict or CORRELATION_FIELDS & set(row))
+    if correlate:_correlation(row,items,required,failure)
+    bodies={}
     for ref in refs:
         _require(isinstance(ref,dict) and set(ref)=={'path','sha256'} and isinstance(ref['path'],str)
                  and isinstance(ref['sha256'],str) and re.fullmatch('[0-9a-f]{64}',ref['sha256']) is not None,
                  'exact resolution artifact path/hash required')
-        if check_ref:check_ref(ref)
+        if check_ref:bodies[(ref['path'],ref['sha256'])]=check_ref(ref)
+    if correlate:
+        witness=row.get('causal_evidence')
+        _require(isinstance(witness,dict) and set(witness)=={'path','sha256','entry'} and isinstance(witness['path'],str) and
+            isinstance(witness['sha256'],str) and type(witness['entry']) is int,
+            'exact conserved causal witness and entry required')
+        body=bodies.get((witness['path'],witness['sha256']))
+        _require(isinstance(body,bytes),'causal witness bytes must be actually acquired/conserved')
+        try:
+            from .contracts import parse_json
+            manifest=parse_json(body.decode('utf-8'))
+        except (ValueError,UnicodeError,Refusal) as exc:raise Refusal('causal witness must be typed JSON evidence') from exc
+        _require(isinstance(manifest,dict) and type(manifest.get('version')) is int and manifest['version']==1 and isinstance(manifest.get('resolutions'),list),
+                 'causal witness resolutions version1 required')
+        entries=manifest['resolutions'];index=witness['entry']
+        _require(0<=index<len(entries) and digest(entries[index])==digest({
+            'subject':subject,'command_bindings':row['command_bindings'],
+            'verification_items':row['verification_items'],'causal_reason':row['causal_reason']}),
+            'causal witness does not bind this duty and exact command selection; unrelated later success is insufficient')
 
 
-def _duty(row,index,answer,task,config):
-    _require(isinstance(row,dict) and set(row)=={'status','owner','duty','reason'},'explicit individual unknown disposition required')
-    _require(all(isinstance(row[k],str) for k in row),'typed unknown status/owner/duty/reason required')
+def _duty(row,index,answer,task,config,zero,check_ref,items,prior_results):
+    base={'status','owner','duty','reason'}
+    resolved=base|{'prior_disposition','evidence','verification_items'}|CORRELATION_FIELDS
+    _require(isinstance(row,dict) and (set(row)==resolved if row.get('status')=='resolved' else set(row)==base),
+             'explicit individual unknown disposition required')
+    _require(all(isinstance(row[k],str) for k in base),'typed unknown status/owner/duty/reason required')
     required_text(row['reason'],'unknown classification rationale',4000);required_text(row['duty'],'individual duty',4000)
     owner,duty,status=row['owner'],row['duty'],row['status'];actor=None
     if status=='unresolved':
         _require(answer['completion']['local']=='blocked','local ready contradicts an unresolved local unknown')
+    elif status=='resolved':
+        prior=row['prior_disposition']
+        _require(isinstance(prior,dict) and set(prior)==base and prior.get('status')=='unresolved' and
+            all(prior.get(k)==row[k] for k in ('owner','duty','reason')),
+            'resolved local duty must conserve original owner/duty/reason')
+        _require(owner not in {'controller','outside-workflow'} and (task is None or owner in {'producer',task['role']}),
+            'resolved unknown must remain a current local producer duty')
+        def witnessed(old):
+            if not isinstance(old,dict) or digest(old.get('unknowns',[])[:index+1])!=digest(answer['unknowns'][:index+1]):return False
+            completion=old.get('completion',{})
+            if not isinstance(completion,dict):return False
+            rows=completion.get('unknowns',[])
+            if not isinstance(rows,list):return False
+            for entry in rows:
+                if not isinstance(entry,dict):continue
+                if entry.get('index')!=index:continue
+                group=entry.get('duties',[{k:v for k,v in entry.items() if k!='index'}])
+                if any(digest(member)==digest(prior) for member in group):return True
+            return False
+        _require(any(witnessed(old) for old in prior_results),'resolved unknown lacks actual conserved prior local disposition')
+        _evidence(row,zero,check_ref,items,True,subject={'kind':'unknown','index':index,
+            'original_hash':digest(answer['unknowns'][index]),'prior_disposition':prior})
     elif status=='boundary':
         _require(owner=='outside-workflow' and duty in BOUNDARY_DUTIES,'boundary duty must be exactly review or acceptance; split combined duties')
     elif status=='deferred' and owner=='controller':
@@ -117,7 +214,7 @@ def failure_sources(store,attempt):
     return sources
 
 
-def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=()):
+def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=(),prior_results=(),strict_correlation=False):
     """Representation checks are identical while owned-live and after collection.
 
     Unsettled execution/capture is a separate hard fence, not a proof grammar
@@ -128,6 +225,7 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
         try:return action()
         except Refusal as exc:issues.append(str(exc))
     if not isinstance(answer,dict) or answer.get('semantic')!='DONE':return None,[],issues
+    if len({r.get('id') for r in items})!=len(items):issues.append('ambiguous observed protocol IDs')
     proof=answer.get('completion')
     if not isinstance(proof,dict) or not {'version','local','failures','unknowns','tools'}<=set(proof) or set(proof)-{'version','local','failures','unknowns','tools','reported_commands','integration_steps','discovered_points'}:
         return None,[],issues+['explicit completion fields/version1 required; original return retained']
@@ -143,11 +241,12 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
             _require(any(digest(row['source'])==digest(s['source']) and digest(answer['failures'][row['index']])==digest(s['failure'])
                          for s in sources),'inherited failure must match an exact controller-supplied frozen source')
             return
-        _require(set(row)=={'index','status','evidence','verification_items'},'typed local failure disposition required')
+        _require(set(row)-CORRELATION_FIELDS=={'index','status','evidence','verification_items'},'typed local failure disposition required')
         if row['status']=='unresolved':_require(proof['local']=='blocked','local ready contradicts an unresolved local failure')
         else:
             _require(row['status']=='resolved','local failure status must be resolved or unresolved')
-            _evidence(row,zero,check_ref)
+            _evidence(row,zero,check_ref,items,strict_correlation,failure=answer['failures'][row['index']],subject={'kind':'failure','index':row['index'],
+                'original_hash':digest(answer['failures'][row['index']])})
     rows=check(lambda:_indexed(answer,proof,'failures'))
     for row in rows or []:check(lambda row=row:failure(row))
     rows=check(lambda:_indexed(answer,proof,'unknowns'))
@@ -156,15 +255,33 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
             group=row['duties']
             if not isinstance(group,list) or not 1<=len(group)<=16:
                 issues.append('unknown duties group requires 1..16 explicit individual members');continue
-        elif set(row)=={'index','status','owner','duty','reason'}:group=[{k:v for k,v in row.items() if k!='index'}]
+        elif set(row)-{'prior_disposition','evidence','verification_items'}-CORRELATION_FIELDS=={'index','status','owner','duty','reason'}:group=[{k:v for k,v in row.items() if k!='index'}]
         else:issues.append('unknown entry must be one disposition or indexed duties group');continue
         seen=set()
         for member in group:
-            duty=check(lambda member=member:_duty(member,row['index'],answer,task,config))
+            duty=check(lambda member=member:_duty(member,row['index'],answer,task,config,zero,check_ref,items,prior_results))
             if duty:
                 key=(duty['status'],duty['owner'],duty['duty'])
                 if key in seen:issues.append('duplicate individual duty in group')
                 seen.add(key);duties.append(duty)
+    # A prior structured local duty cannot disappear by relabelling it as
+    # downstream work or by dropping one member of an indexed duties group.
+    for old in prior_results:
+        if not isinstance(old,dict) or not isinstance(old.get('completion'),dict):continue
+        old_rows=old['completion'].get('unknowns',[])
+        if not isinstance(old_rows,list):continue
+        for entry in old_rows:
+            if not isinstance(entry,dict) or type(entry.get('index')) is not int:continue
+            index=entry['index'];members=entry.get('duties',[{k:v for k,v in entry.items() if k!='index'}])
+            if not isinstance(members,list):continue
+            for member in members:
+                if (not isinstance(member,dict) or member.get('status')!='unresolved' or
+                        member.get('owner') not in {'producer',task['role'] if task else 'producer'}):continue
+                candidates=[d for d in duties if d['index']==index and
+                    all(d.get(k)==member.get(k) for k in ('owner','duty','reason')) and
+                    (d['status']=='unresolved' or d['status']=='resolved' and
+                     digest(d.get('prior_disposition'))==digest(member))]
+                if not candidates:issues.append('original local unknown duty erased or reclassified; preserve or resolve it with evidence')
     rows=proof['tools']
     if not isinstance(rows,list) or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) for r in rows):
         issues.append('typed adverse protocol-item dispositions required')
@@ -173,8 +290,8 @@ def inspect(answer,items,task=None,config=None,check_ref=None,inherited_sources=
             issues.append('tools must cover ONLY the observed adverse protocol IDs exactly once; successful commands require no entry; never correlate visible labels')
         for row in rows:
             def tool(row=row):
-                _require(set(row)=={'id','status','reason','evidence','verification_items'} and isinstance(row['status'],str) and row['status'] in {'resolved','expected'},'typed adverse tool disposition required')
-                required_text(row['reason'],'tool resolution rationale',4000);_evidence(row,zero,check_ref)
+                _require(set(row)-CORRELATION_FIELDS=={'id','status','reason','evidence','verification_items'} and isinstance(row['status'],str) and row['status'] in {'resolved','expected'},'typed adverse tool disposition required')
+                required_text(row['reason'],'tool resolution rationale',4000);_evidence(row,zero,check_ref,items,strict_correlation,required=[row['id']],subject={'kind':'tool','id':row['id']})
             check(tool)
     claims=proof.get('reported_commands',[])
     if not isinstance(claims,list) or len(claims)>128:issues.append('reported_commands must be a bounded list of uncorrelated producer claims')
@@ -192,7 +309,7 @@ def needs_clarification(answer,items,task=None,config=None,check_ref=None,inheri
     return bool(inspect(answer,items,task,config,check_ref,inherited_sources)[2])
 
 
-def live_issues(store,attempt,answer,items,task):
+def live_issues(store,attempt,answer,items,task,prior_results=(),strict_correlation=False):
     if not task.get('routine_completion') or not isinstance(answer,dict) or answer.get('semantic')!='DONE':
         return task_result_issues(answer)
     from .custody import read_file,safe_path
@@ -206,10 +323,11 @@ def live_issues(store,attempt,answer,items,task):
         _require(path.is_relative_to(root) and '..' not in path.parts,'resolution evidence must belong to this producer attempt')
         _require(not any(path==Path(p) or path.is_relative_to(Path(p)) for p in store.config.get('artifact_exclusions',[])),'opaque resolution reference excluded before metadata')
         _require(str(path) in declared,'resolution reference must be a declared own output or known staged file')
-        try:_,witness=read_file(safe_path(str(path),[str(root)]),min(store.config['limits'].get('max_artifact_bytes',33554432),store.config['limits']['max_bytes']))
+        try:body,witness=read_file(safe_path(str(path),[str(root)]),min(store.config['limits'].get('max_artifact_bytes',33554432),store.config['limits']['max_bytes']))
         except (OSError,Refusal) as exc:raise Refusal('own resolution artifact unavailable/unsafe: '+type(exc).__name__) from exc
         _require(witness['sha256']==ref['sha256'],'resolution artifact hash is not current exact own bytes')
-    return inspect(answer,items,task,store.config,reference,lambda:failure_sources(store,attempt))[2]
+        return body
+    return inspect(answer,items,task,store.config,reference,lambda:failure_sources(store,attempt),prior_results,strict_correlation)[2]
 
 
 def assess(store,attempt):
@@ -223,15 +341,27 @@ def assess(store,attempt):
         _require(path.is_relative_to(root) and '..' not in path.parts,'resolution evidence must belong to this producer attempt')
         held=store.one('SELECT sha256 FROM artifact_custody WHERE attempt=? AND path=?',(attempt['id'],str(path)))
         _require(held and held['sha256']==ref['sha256'],'resolution evidence is not the exact conserved artifact')
+        blob=store.one('SELECT body FROM artifact_blobs WHERE sha256=?',(ref['sha256'],))
+        _require(blob is not None,'exact causal evidence bytes are not conserved')
+        return blob['body']
     job=store.job(attempt['job']);task=store.config['tasks'][job['task']]
-    proof,duties,issues=inspect(answer,tools['items'],task,store.config,reference,lambda:failure_sources(store,attempt['id']))
+    prior_results=prior_handbacks(detail)
+    proof,duties,issues=inspect(answer,tools['items'],task,store.config,reference,lambda:failure_sources(store,attempt['id']),prior_results,bool(detail.get('handback_receipt')))
     _require(not issues,'; '.join(issues))
     _require(answer.get('semantic')=='DONE' and proof['local']=='ready','current local work is not ready')
     return {'version':1,'local':'ready','producer':attempt['session'],'result_hash':digest(answer),
         'original_failures':answer['failures'],'original_unknowns':answer['unknowns'],
         'resolved_history':[r for r in proof['failures'] if r['status']=='resolved'],
         'inherited_history':[r for r in proof['failures'] if r['status']=='inherited'],
-        'tool_dispositions':proof['tools'],'subsequent_duties':duties,
+        'tool_dispositions':proof['tools'],'subsequent_duties':[d for d in duties if d['status']!='resolved'],
+        'resolved_local_unknowns':[d for d in duties if d['status']=='resolved'],
+        'handback_receipt':detail.get('handback_receipt'),
         'reported_commands':proof.get('reported_commands',[]),
         'clarification_origin':{'result_hash':digest(detail['prior_turn_result']),'completion':detail['prior_turn_result'].get('completion') if isinstance(detail['prior_turn_result'],dict) else None,'issues':detail.get('readiness_issues',[])} if detail.get('readiness_clarification') else None,
         'qualification':'producer-attested local readiness/resolution with actual protocol IDs and conserved-byte links; producer-visible labels are uncorrelated claims, not OS handles; not independent semantic verification or downstream acceptance'}
+
+
+def prior_handbacks(detail):
+    values=[r['typed_return'] for r in detail.get('prior_terminal_returns',[]) if r.get('valid_json')]
+    if 'prior_turn_result' in detail:values.append(detail['prior_turn_result'])
+    return values

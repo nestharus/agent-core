@@ -5,7 +5,7 @@ selected review launch, reconcile external effects, or migrate old journals.
 """
 import json
 
-from .contracts import Refusal, canonical_uuid, collected_task_result, digest, encode
+from .contracts import Refusal, canonical_uuid, collected_task_result, collected_capture, digest, encode
 from . import prospective
 
 BOARD_SCHEMA = """
@@ -89,7 +89,7 @@ def _processing(runtime, job, report_task=None):
             return None
     tools = json.loads(attempt['detail']).get('tool_completion', {})
     if (attempt['begin'] is None or attempt['ended'] is None or attempt['collected'] is None
-            or attempt['exit'] != 0 or attempt['capture'] != 'complete' or attempt['error']
+            or attempt['exit'] != 0 or not collected_capture(attempt) or attempt['error']
             or answer['semantic'] != 'DONE' or not (reviewed or tools.get('complete'))):
         return None
     members = json.loads(job['members'])

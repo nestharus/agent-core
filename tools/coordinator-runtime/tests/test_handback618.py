@@ -247,7 +247,8 @@ class OwnedBoundary(unittest.IsolatedAsyncioTestCase):
         answer['completion']['local'] = 'ready'
         answer['completion']['unknowns'][0]['status'] = 'resolved'
         issues = readiness.inspect(answer, self.detail['tool_completion']['items'])[2]
-        self.assertIn('unresolved/unsupported local unknown remains held', issues)
+        # A bare resolved label lacks the selected evidence-backed disposition.
+        self.assertIn('explicit individual unknown disposition required', issues)
 
     async def test_busy_idle_readback_prohibits_second_turn(self):
         job, attempt = await self.run_boundary(conflict=True, partial=True, read_status='active')

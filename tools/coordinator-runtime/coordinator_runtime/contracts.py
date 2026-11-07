@@ -565,7 +565,7 @@ def clarification_issues(answer,prior):
                 if key not in {'findings','failures','unknowns'}:continue
                 old=[old]
             else:old=valid_items(key,old)
-            if not isinstance(answer.get(key),list) or answer[key][:len(old)]!=old:
+            if not isinstance(answer.get(key),list) or encode(answer[key][:len(old)])!=encode(old):
                 issues.append('clarification erased or rewrote original '+key)
     fields=clarification_fields(prior)
     if fields and (not isinstance(answer.get('findings'),list) or
@@ -583,9 +583,98 @@ def task_result(answer,prior=_NO_PRIOR):
     return answer
 
 
+RECONCILABLE_CAPTURES = {'conflicting-final', 'invalid-final-json'}
+
+
+def handback_binding(attempt):
+    # Stable original collector/source identities, never model supplied fields.
+    return {key: attempt[key] for key in
+            ('id', 'job', 'controller', 'session', 'turn', 'binding', 'profile')}
+
+
+def _handback_receipt(attempt, detail, answer):
+    """Validate a journal-issued current-response receipt, preserving old capture.
+
+    The journal is the trust boundary. Hashes bind evidence, not signatures or
+    protection against a writer that can mutate the original collector journal.
+    Only Store.collect issues this receipt against its previously stored live
+    boundary. Model JSON and an outcome field alone have no issuing capability.
+    """
+    receipt = detail.get('handback_receipt')
+    boundary = detail.get('handback_boundary')
+    def require(value, message):
+        if not value: raise Refusal('current handback receipt: '+message)
+    require(isinstance(receipt, dict) and isinstance(boundary, dict), 'original collector evidence missing')
+    require(set(receipt)=={'version','issuer','binding','boundary_hash','result_hash','evidence_hash'}, 'unsupported fields')
+    require(type(receipt['version']) is int and receipt['version']==1 and
+            receipt['issuer']==attempt['controller'] and receipt['binding']==handback_binding(attempt), 'collector/source/turn binding changed')
+    require(receipt['boundary_hash']==digest(boundary) and receipt['result_hash']==digest(answer), 'boundary/result hash changed')
+    require(boundary.get('version')==1 and boundary.get('attempt')==attempt['id'] and
+            boundary.get('controller')==attempt['controller'] and boundary.get('thread')==attempt['session'] and
+            boundary.get('response_turn')==attempt['turn'] and boundary.get('original_turn')!=attempt['turn'] and
+            boundary.get('binding')==attempt['binding'] and boundary.get('profile')==attempt['profile'] and
+            boundary.get('owned_idle') is True and boundary.get('budget_used')==1 and
+            isinstance(boundary.get('nonce'),str), 'owned idle/single-budget boundary missing')
+    require(attempt['capture']==boundary.get('original_capture') and attempt['capture'] in RECONCILABLE_CAPTURES,
+            'original capture changed or ineligible')
+    require(attempt['kind']=='task' and attempt['state']=='collected' and attempt['begin'] is not None and
+            type(attempt['exit']) is int and attempt['exit']==0 and attempt['ended'] is not None and attempt['collected'] is not None and
+            not attempt['error'], 'actual successful collection required')
+    issues = detail.get('capture_issues', [])
+    require(issues and set(issues)<=RECONCILABLE_CAPTURES and encode(issues)==encode(boundary.get('capture_issues')),
+            'new capture uncertainty')
+    require(detail.get('creation')=='owned' and detail.get('ephemeral') is True and
+            detail.get('teardown')=='actual-owned-process-exit-collected' and
+            detail.get('unsubscribe') in {'unsubscribed','notLoaded','notSubscribed'}, 'owned lifecycle incomplete')
+    tools = detail.get('tool_completion', {})
+    require(tools.get('complete') is True and not tools.get('unknown_types'), 'tool closure unknown')
+    rows=tools.get('items', [])
+    require(len({r['id'] for r in rows})==len(rows) and all(
+        r.get('thread')==attempt['session'] and r.get('turn') in {boundary['original_turn'],attempt['turn']} and
+        r.get('completed_notification') is True and r.get('status') in {'completed','failed'} and
+        (r.get('type')!='commandExecution' or type(r.get('exit_code')) is int) for r in rows), 'tool identity/closure changed')
+    require(encode([r for r in rows if r['turn']==boundary['original_turn']])==encode(boundary.get('original_tools')),
+            'original tools changed')
+    originals=detail.get('prior_terminal_returns')
+    records=detail.get('terminal_return_evidence', [])
+    require(encode(originals)==encode(boundary.get('originals')) and isinstance(originals,list) and originals,
+            'original returns changed')
+    require(encode([r for r in records if r.get('turn')==boundary['original_turn']])==encode(originals),
+            'original terminal provenance changed')
+    current=[r for r in records if r.get('turn')==attempt['turn']]
+    require(current and len(records)==len(originals)+len(current) and all(
+        r.get('thread')==attempt['session'] and r.get('authority')=='item/completed' and
+        r.get('valid_json') is True and digest(r.get('typed_return'))==digest(answer) for r in current),
+        'current terminal response ambiguous, foreign or invalid')
+    for original in originals:
+        require(original.get('thread')==attempt['session'] and original.get('authority')=='item/completed',
+                'original authority changed')
+        if original.get('valid_json'): task_result(answer, original['typed_return'])
+    require(receipt['evidence_hash']==digest({'returns':records,'tools':tools,'issues':issues,
+            'original_error':detail.get('original_handback_error')}), 'collector evidence changed')
+    return receipt
+
+
+def handback_receipt(attempt, detail, answer):
+    try:return _handback_receipt(attempt,detail,answer)
+    except (KeyError,TypeError,ValueError,AttributeError) as exc:
+        raise Refusal('current handback receipt: malformed collector evidence') from exc
+
+
+def collected_capture(attempt):
+    """Current response eligibility; never upgrades the original capture column."""
+    if attempt['capture']=='complete': return True
+    try:
+        answer=parse_json(attempt['result']) if attempt['result'] else None
+        handback_receipt(attempt,parse_json(attempt['detail']),answer)
+        return True
+    except (Refusal, ValueError, TypeError, KeyError): return False
+
+
 def collected_task_result(attempt):
-    answer=json.loads(attempt['result']) if attempt['result'] else None
-    detail=json.loads(attempt['detail'])
+    answer=parse_json(attempt['result']) if attempt['result'] else None
+    detail=parse_json(attempt['detail'])
+    if attempt['capture']!='complete': handback_receipt(attempt,detail,answer)
     return task_result(answer,detail['prior_turn_result']) if 'prior_turn_result' in detail else task_result(answer)
 
 

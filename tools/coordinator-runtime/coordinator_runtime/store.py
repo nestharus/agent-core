@@ -16,7 +16,7 @@ import stat
 import time
 
 from .contracts import (Backpressure, Refusal, classification, digest, encode, ident,
-                        response_tasks, collected_task_result)
+                        response_tasks, collected_task_result, collected_capture, handback_binding, handback_receipt)
 from .delivery import DeliveryJournal, SCHEMA as DELIVERY_SCHEMA
 from .custody import SCHEMA as CUSTODY_SCHEMA, witnesses
 from .routine import SCHEMA as ROUTINE_SCHEMA
@@ -503,8 +503,34 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("semantic observation belongs to the live original collector")
             self.db.execute("UPDATE attempts SET semantic=? WHERE id=?", (semantic, attempt))
 
+    def record_handback_boundary(self, attempt, thread, original_turn, response_turn,
+                                capture, issues, originals, tools, spec_hash):
+        """Adapter-only evidence after actual owned idle and the sole next start."""
+        self.authorize_launch(attempt)
+        with self.tx(collection=attempt):
+            row=self.attempt(attempt);detail=json.loads(row['detail'])
+            if (row['controller']!=self.controller or row['kind']!='task' or row['state']!='running' or row['ended'] is not None
+                    or row['session']!=thread or row['turn']!=response_turn or 'handback_boundary' in detail
+                    or not detail.get('resume_attempted') or detail.get('prior_turn')!=original_turn):
+                raise Refusal('handback boundary requires unchanged live original collector')
+            detail['handback_boundary']={'version':1,'nonce':ident(),'attempt':attempt,'controller':self.controller,
+                'thread':thread,'original_turn':original_turn,'response_turn':response_turn,
+                'binding':row['binding'],'profile':row['profile'],'spec_hash':spec_hash,
+                'task_hash':digest(self.config['tasks'][self.job(row['job'])['task']]),
+                'owned_idle':True,'budget_used':1,'original_capture':capture,'capture_issues':issues,
+                'originals':originals,'original_tools':tools}
+            self.db.execute('UPDATE attempts SET detail=? WHERE id=?',(encode(detail),attempt))
+
     def collect(self, attempt, outcome):
         """Only the launching controller supplies actual child.wait() outcome."""
+        qualification_error=None
+        if 'handback_boundary' in json.loads(self.attempt(attempt)['detail']):
+            try:
+                self.authorize_launch(attempt)
+                current=self.attempt(attempt);boundary=json.loads(current['detail'])['handback_boundary']
+                if boundary['task_hash']!=digest(self.config['tasks'][self.job(current['job'])['task']]):
+                    raise Refusal('selected task/admission/scope changed after owned boundary')
+            except (Refusal, OSError) as exc:qualification_error=str(exc)
         with self.tx(collection=attempt):
             row = self.attempt(attempt)
             if row["controller"] != self.controller or row["collected"] is not None:
@@ -521,13 +547,38 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 result, result_json = None, None
             no_start = bool(outcome.get("detail", {}).get("known_not_started")) and row["begin"] is None
             ended = self.clock() if outcome.get("exit") is not None else None
+            detail={**json.loads(row['detail']), **outcome.get('detail', {})}
+            # No outcome/model can inject or replace journal-only evidence.
+            stored=json.loads(row['detail'])
+            detail.pop('handback_receipt',None)
+            detail.pop('handback_boundary',None)
+            if 'handback_boundary' in stored:
+                detail['handback_boundary']=stored['handback_boundary']
+                evidence={'returns':detail.get('terminal_return_evidence',[]),
+                    'tools':detail.get('tool_completion',{}),'issues':detail.get('capture_issues',[]),
+                    'original_error':detail.get('original_handback_error')}
+                candidate={**row,'state':'collected','result':result_json,'detail':encode(detail),'exit':outcome.get('exit'),
+                    'ended':ended,'collected':self.clock() if ended else None,
+                    'capture':outcome['capture'],'error':outcome.get('error')}
+                receipt={'version':1,'issuer':self.controller,'binding':handback_binding(candidate),
+                    'boundary_hash':digest(detail['handback_boundary']),'result_hash':digest(result),
+                    'evidence_hash':digest(evidence)}
+                detail['handback_receipt']=receipt
+                try:
+                    if qualification_error:raise Refusal(qualification_error)
+                    handback_receipt(candidate,detail,result)
+                except (Refusal, ValueError, TypeError, KeyError) as exc:
+                    detail.pop('handback_receipt',None)
+                    detail['handback_reconciliation']='refused'
+                    detail['handback_receipt_failure']=str(exc)[:2000]
+                else:detail['handback_reconciliation']='current-response-qualified-original-held'
             self.db.execute("UPDATE attempts SET state=?,ended=?,exit=?,collected=?,result=?,error=?,"
                             "semantic=?,capture=?,cleanup=?,detail=? WHERE id=?",
                             ("not-started" if no_start else ("collected" if ended else "unknown"), ended, outcome.get("exit"),
                              self.clock() if ended or no_start else None, result_json, outcome.get("error"),
                              result.get("semantic") if isinstance(result, dict) else row["semantic"],
                              outcome["capture"], outcome["cleanup"],
-                             encode({**json.loads(row["detail"]), **outcome.get("detail", {})}), attempt))
+                             encode(detail), attempt))
             self.db.execute("INSERT INTO results VALUES(?,?,?,?,?,?,?,?)",
                             (attempt, row["job"], row["event"], result_json, outcome.get("error"),
                              outcome.get("exit"), outcome["capture"], self.clock(),))
@@ -739,7 +790,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
         attempt = self.attempt(job["active_attempt"]) if job["active_attempt"] else None
         return bool(attempt and attempt["begin"] is not None and attempt["ended"] is not None
                     and attempt["collected"] is not None and attempt["exit"] == 0
-                    and attempt["state"] == "collected" and attempt["capture"] == "complete"
+                    and attempt["state"] == "collected" and collected_capture(attempt)
                     and attempt["semantic"] == "DONE" and not attempt["error"])
 
     def job(self, job, token=None):
@@ -781,7 +832,7 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 self.failure_delivery(row,attempt,task,'Unresolved exact publication intent; source/effect uncertainty remains held')
                 self.db.execute("UPDATE jobs SET state='held',hold_reason='unresolved publication intent' WHERE id=?",(job,))
                 return None
-            if attempt["exit"] != 0 or attempt["capture"] != "complete" or attempt["error"]:
+            if attempt["exit"] != 0 or not collected_capture(attempt) or attempt["error"]:
                 self.failure_delivery(row,attempt,task,"Collected failure/capture requires bounded recovery or real owner disposition")
                 self.db.execute("UPDATE jobs SET state='held' WHERE id=?", (job,))
                 return None
