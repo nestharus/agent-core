@@ -34,7 +34,7 @@ def metadata(runtime, event, attempt, request):
     if row:
         for role in {'Work', row['role']}:
             runtime.processing.boards[role].verify_authority(runtime)
-    control = runtime.one('SELECT * FROM processing_controls WHERE event=?', (event,))
+    control = runtime.one('SELECT event,capability,attempt,source_hash FROM processing_controls WHERE event=?', (event,))
     worker = runtime.one('SELECT kind,event,begin,ended,collected,exit,error,capture FROM attempts WHERE id=?', (attempt,))
     if (not row or row['hold'] is not None or row['hash'] != request['source_hash']
             or row['received'] != request['received'] or not control
@@ -47,7 +47,7 @@ def metadata(runtime, event, attempt, request):
     if (not queue or queue['job'] is not None or queue['package'] is not None
             or queue['phase'] != 'control' or queue['task'] not in ('@control','@unresolved')):
         raise Refusal('plain control cannot bypass an actual task or reservation')
-    returned = runtime.one('SELECT * FROM processing_control_returns WHERE source=?', (event,))
+    returned = runtime.one('SELECT source,response,attempt FROM processing_control_returns WHERE source=?', (event,))
     if request['completed_consumer'] != (returned['response'] if returned else None):
         raise Refusal('exact existing control consumer must be accounted')
     descendants = runtime.rows('WITH RECURSIVE d(id) AS (SELECT id FROM events WHERE parent=? '
@@ -55,6 +55,17 @@ def metadata(runtime, event, attempt, request):
         'SELECT e.id,e.processed_at,e.hold FROM events e JOIN d ON e.id=d.id', (event,))
     if descendants and (not returned or any(d['processed_at'] is None or d['hold'] is not None for d in descendants)):
         raise Refusal('actual control consumer and descendants must already be complete')
+    for descendant in descendants:
+        child = descendant['id']
+        if runtime.one("SELECT o.id FROM outboxes o LEFT JOIN queue q ON q.job=o.job "
+                "WHERE (o.event=? OR q.event=?) AND (o.state!='settled' OR o.processed_at IS NULL OR o.hold IS NOT NULL)", (child,child)):
+            raise Refusal('completed consumer retains an outstanding delivery/effect duty')
+        if runtime.one("SELECT j.id FROM jobs j,json_each(j.members) m WHERE json_extract(m.value,'$.event')=? "
+                "AND (j.state!='closed' OR j.effects NOT IN ('none','reconciled') OR j.hold_reason IS NOT NULL)", (child,)):
+            raise Refusal('completed consumer retains real work or effect uncertainty')
+        if runtime.one("SELECT fp.target FROM file_publications fp JOIN attempts a ON a.id=fp.attempt "
+                "JOIN queue q ON q.job=a.job WHERE q.event=? AND fp.state!='published'", (child,)):
+            raise Refusal('completed consumer retains an unresolved publication')
     if runtime.one('SELECT j.id FROM jobs j,json_each(j.members) m WHERE json_extract(m.value,\'$.event\')=?', (event,)):
         raise Refusal('plain control cannot settle real work or uncertain effects')
     if runtime.one("SELECT id FROM outboxes WHERE event=? AND (state!='settled' OR processed_at IS NULL OR hold IS NOT NULL)", (event,)):
