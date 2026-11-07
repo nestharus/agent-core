@@ -106,8 +106,9 @@ def classifier_prompt(event, config):
 
 def job_prompt(store, job, task=None):
     local_integration.current_sources(store, job)
-    from .report_scope import integration_inputs, integration_protocol, INSTRUCTIONS as REPORT_INSTRUCTIONS
+    from .report_scope import integration_inputs, integration_protocol, uses_transport, INSTRUCTIONS as REPORT_INSTRUCTIONS
     collected_reports = integration_inputs(store, job)
+    report_transport = collected_reports is not None and uses_transport(job)
     task = task or store.config["tasks"][job["task"]]
     templates = [template_text(path) for path in task["templates"]
                  if not (scoped_startup(task) and Path(path).name in {"AGENTS.md", "WORK_LOG.md"})]
@@ -140,7 +141,8 @@ def job_prompt(store, job, task=None):
                "admission": store.one("SELECT * FROM admissions WHERE package=?", (job["package"],))}
     if collected_reports is not None:
         context["collected_reports"] = collected_reports
-        context['report_integration'] = integration_protocol(store, job, collected_reports)
+        if report_transport:
+            context['report_integration'] = integration_protocol(store, job, collected_reports)
         # Each body (including recursive custody) is already supplied above.
         # Keep the event's other provenance once, with an explicit body link.
         context['events'] = [{k: v for k, v in event.items() if k not in {'body', 'report_custody'}} |
@@ -178,7 +180,7 @@ def job_prompt(store, job, task=None):
             "borrow another actor's membership. Effect reconciliation returns to the actual owning role. "
             "Return only the required typed JSON final; include exact meaningful artifact references.\n"
             + task_result_instructions() +
-            (REPORT_INSTRUCTIONS if collected_reports is not None else '') +
+            (REPORT_INSTRUCTIONS if report_transport else '') +
             "When staged_targets is nonempty, edit ONLY the mapped staged paths for canonical changes. "
             "Canonical targets are read-only to you. The genuine delegated controller publishes exact "
             "staged bytes only after collected successful work, artifact custody and unchanged before-state. "
@@ -454,8 +456,17 @@ class Dispatcher:
             self.store.record_operational_error(job_id, {"error": str(exc), "job": job_id}, job["role"], "task-disposition-error")
             attempt = self.store.attempt(job["active_attempt"])
             if attempt["collected"]:
-                with self.store.tx():
-                    self.store.failure_delivery(job,attempt,self.config['tasks'][job['task']],str(exc))
+                try:
+                    with self.store.tx():
+                        self.store.failure_delivery(job,attempt,self.config['tasks'][job['task']],str(exc))
+                except Refusal as delivery_refusal:
+                    # Informative delivery is a NEW source acquisition too.
+                    # Keep the collected original and held job without reading
+                    # a withheld member merely to explain this refusal.
+                    reason = str(exc) + '; informative delivery held: ' + str(delivery_refusal)
+                    self.runtime_errors[job_id] = reason
+                    self.store.record_operational_error(job_id, {"error": reason, "job": job_id},
+                                                        job["role"], "task-disposition-error")
 
     async def recover(self, job):
         try:

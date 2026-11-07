@@ -102,13 +102,15 @@ Both this Reviews route and the QA cleanup exception conserve every exact origin
 input body in frozen-member order. The runtime supplies
 `{"collected_reports": [{"event": "...", "sha256": "...", "original": {}}]}`
 in TASK_CONTEXT after current admission checks, before prompt artifact acquisition.
-When TASK_CONTEXT.report_integration declares report-integration-v1, the model
+Only the finite Reviews route declares TASK_CONTEXT.report_integration. The model
 returns its genuinely new analysis/decision/method/coverage with exact current
 task and source pins. Software attaches the originals once as report_custody
 beside the unchanged model body, authenticated on transfer. Current envelope
 coverage is an attributed declaration, not a native review or underlying-source
 read receipt. See `collected-report-routing.md` for producer/consumer semantics.
-Legacy whole-copy findings remain valid without that new protocol. Neither path
+QA cleanup retains its exact legacy template and whole-copy finding; it receives
+no new-protocol declaration or contradictory no-copy instruction. Reviews also
+continues to accept legacy whole-copy findings. Neither path
 may omit or rewrite dissent, original qualification, source, context, collector,
 failures, partial/unread coverage or history. Ordinary responses carry the full
 custody downstream to Work or Branch. Source collection, semantic acceptance,

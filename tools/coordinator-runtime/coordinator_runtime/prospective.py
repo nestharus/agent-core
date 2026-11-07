@@ -148,6 +148,8 @@ def requires_authority(store, job):
 
 
 def for_job(store, job):
+    from .report_scope import source_metadata
+    source_metadata(store, job)
     attempt = store.attempt(job['active_attempt']) if job['active_attempt'] else None
     proof = json.loads(attempt['detail']).get('software_authority', {}) if attempt else {}
     epoch = proof.get('prospective_epoch')
