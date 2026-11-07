@@ -435,6 +435,11 @@ def read_ceiling_extensions(runtime, original, value, entries):
             from .custody import read_file
             if hashlib.sha256(read_file(regular, 1048576)[0]).hexdigest() != pin:
                 raise Refusal('read ceiling material changed from its exact pin')
+        # Public selection semantics survive later working-tree kind changes.
+        # An already granted root retains its existing subtree authority.
+        existing = prior['effect_authority']['read_roots'] + prior['effect_authority']['write_roots']
+        task['exact_read_files'] = list(dict.fromkeys([
+            *task.get('exact_read_files', []), *[p for p in roots if p not in existing]]))
         task['effect_authority']['read_roots'] = list(dict.fromkeys([*task['effect_authority']['read_roots'], *roots]))
         if task.get('package_narrowing'):
             task['scope_roots'] = list(dict.fromkeys([*task['scope_roots'], *roots]))

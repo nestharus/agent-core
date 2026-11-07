@@ -207,7 +207,23 @@ def git(repository, *args):
     return result.stdout
 
 
-def material(policy, packet, prior):
+def material_path(tasks, repository, name, *, subtree=False):
+    """Intersect accepted selection semantics with actual package ceilings.
+
+    No filesystem metadata or authority prose supplies a grant here.
+    """
+    absolute = Path(repository) / name
+    for task in tasks:
+        exact = set(task.get('exact_read_files', []))
+        roots = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
+        if not any(absolute.is_relative_to(Path(root)) and
+                   (root not in exact or not subtree and absolute == Path(root))
+                   for root in roots):
+            return False
+    return True
+
+
+def material(policy, packet, prior, *, task=None):
     if not isinstance(packet, dict) or set(packet) != {'component', 'origin', 'base', 'head', 'previous', 'answered_ids'}:
         raise Refusal('Source input accepts only component/origin/base/head/previous/answered_ids; goals stay outside')
     selected = policy['components'].get(packet['component'])
@@ -241,7 +257,23 @@ def material(policy, packet, prior):
     source = {}
     commands = []
     paths=list(dict.fromkeys(selected['paths']+selected.get('relationship_paths',[])))
-    for pin in dict.fromkeys([packet['base'], packet['head'], *([packet['previous']] if prior else [])]):
+    pins = dict.fromkeys([packet['base'], packet['head'], *([packet['previous']] if prior else [])])
+    # Check exact operands at EVERY actual pin before any recursive listing or
+    # diff can acquire descendant names. Absence is a legitimate deletion.
+    exact_paths = [p for p in paths if task and not material_path(task, repository, p, subtree=True)]
+    for pin in pins:
+        for path in exact_paths:
+            record = git(repository, '--literal-pathspecs', 'ls-tree', '-z', pin, '--', path)
+            if not record:
+                continue
+            entries = record.rstrip(b'\0').split(b'\0')
+            if len(entries) != 1:
+                raise Refusal('exact-file Source operand changed kind or name')
+            metadata, name = entries[0].split(b'\t', 1)
+            mode, kind, oid = metadata.decode().split()
+            if name != path.encode() or mode not in {'100644', '100755'} or kind != 'blob':
+                raise Refusal('exact-file Source operand changed kind or name')
+    for pin in pins:
         entries = git(repository, '--literal-pathspecs', 'ls-tree', '-rz', pin, '--', *paths).split(b'\0')
         for entry in filter(None, entries):
             metadata, name = entry.split(b'\t', 1)
@@ -249,6 +281,8 @@ def material(policy, packet, prior):
             if mode == '120000' or kind != 'blob':
                 raise Refusal('symlink/submodule material needs an explicit source boundary')
             name = name.decode()
+            if task and not material_path(task, repository, name):
+                raise Refusal('returned Source name outside exact-file task authority')
             body = git(repository, 'show', pin + ':' + name)
             source[pin + ':' + name] = {'git_blob': oid, 'bytes': len(body), 'sha256': sha(body)}
             commands.append(shlex.join(['git', '-C', repository, 'show', pin + ':' + name]))
@@ -494,9 +528,11 @@ class Executor:
 
     async def execute(self, job, attempt, policy, packet):
         runtime = self.runtime
+        material_task = None
         if job.get('task'):
             runtime.authorize_launch(attempt)
             task = runtime.config['tasks'][job['task']]
+            original_task = task
             if task.get('require_package_scope'):
                 from .contracts import scoped_task
                 task = scoped_task(job['task'], task, runtime.one(
@@ -506,11 +542,13 @@ class Executor:
             # read source, whether or not package admission further narrows it.
             selected = policy['components'].get(packet.get('component'), {})
             repository = Path(selected.get('repository', ''))
-            reads = task['effect_authority']['read_roots'] + task['effect_authority']['write_roots']
+            # Keep the accepted root meanings as well as the package narrowing;
+            # a receipt cannot turn an exact file into a new subtree grant.
+            material_task = (original_task, task)
             paths = selected.get('paths', []) + selected.get('relationship_paths', [])
             if (not repository.is_absolute() or not paths
                     or any(Path(p).is_absolute() or '..' in Path(p).parts
-                           or not any((repository / p).is_relative_to(Path(r)) for r in reads)
+                           or not material_path(material_task, repository, p)
                            for p in paths)):
                 raise Refusal('bound Source material paths outside current delegated task read authority')
         from .branches import review_key,review_policy,job_branch
@@ -526,7 +564,7 @@ class Executor:
                 raise Refusal('original live context/collector unavailable; explicit recovery required, never a fresh fallback')
             predecessor=runtime.one("SELECT context FROM review_predecessors WHERE component=? AND disposition='inactive' ORDER BY created DESC,rowid DESC LIMIT 1",(component,)) if not context else None
             prior=context or (json.loads(predecessor['context']) if predecessor else None)
-            acquired = material(policy, packet, prior)
+            acquired = material(policy, packet, prior, task=material_task)
             acquired['selected_task']=job.get('task')
             from .review_reader import CACHE_MAX
             acquired['cache_max_bytes'] = min(CACHE_MAX, runtime.config['limits'].get('max_artifact_bytes', CACHE_MAX),

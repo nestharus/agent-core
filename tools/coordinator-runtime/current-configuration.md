@@ -392,6 +392,12 @@ The seed commit and file hashes witness material at configuration selection.
 Later admitted heads may change bytes at already permitted paths, under the
 existing package, source, caller and collector checks; new paths or repository
 identities need another explicit ceiling transition. Native Reviews checks
+the public selection's `exact_read_files` names at every base/head/previous
+pin before recursive listing or diff: an absent file permits deletion, while a
+file replaced by a tree refuses before acquiring descendant names or bodies.
+This metadata records file grant meaning, not perpetual seed bytes or a later
+working-tree type check. Existing independently granted subtree roots retain
+their authority, intersected with actual package narrowing. Native Reviews checks
 component and relationship paths against task material roots before listing or
 reading them for both scoped and unscoped tasks. Repository identity alone
 does not admit a component directory or any of its children.
