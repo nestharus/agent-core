@@ -273,10 +273,10 @@ class Software:
             return False
         grant = self._software_job_grant(runtime, job)
         clean = clean_processing(runtime, job)
-        report = report_delivery(runtime, job, outbox) if not clean else []
+        report = report_delivery(runtime, job, outbox)
         if not clean and not report:
             return False
-        if clean and outbox['recipient'] == self.role and outbox['kind'] == 'result':
+        if clean and not report and outbox['recipient'] == self.role and outbox['kind'] == 'result':
             # Existing callback does real collection. Do not mint a new native
             # receive duty; any already recorded control duty is still reported.
             return self.complete_own_delivery(runtime, outbox) is not None
@@ -346,12 +346,13 @@ class Software:
                     conn.execute('INSERT INTO coordinator_software_deliveries_v1 VALUES(?,?,?,?,?)',
                                  (row['id'], grant['id'], receive_grant['id'], event['id'], encode(event)))
         runtime.ingest(event)  # Exact intent retries only; never re-execute a result.
-        if runtime.processing:
-            with runtime.tx():
-                link = runtime.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (outbox['id'],))
-                if link and link['event'] != event['id']:
-                    raise Refusal('original delivery already belongs to a different whole consumer')
-                runtime.db.execute('INSERT OR IGNORE INTO processing_delivery_links VALUES(?,?)', (outbox['id'], event['id']))
+        # Structural receiving identity is independent of processing capability.
+        # In particular, a published report has no source_delivery fallback.
+        with runtime.tx():
+            link = runtime.one('SELECT event FROM processing_delivery_links WHERE delivery=?', (outbox['id'],))
+            if link and link['event'] != event['id']:
+                raise Refusal('original delivery already belongs to a different whole consumer')
+            runtime.db.execute('INSERT OR IGNORE INTO processing_delivery_links VALUES(?,?)', (outbox['id'], event['id']))
         state = runtime.one('SELECT * FROM events WHERE id=?', (event['id'],))
         queue = runtime.one('SELECT * FROM queue WHERE event=?', (event['id'],))
         if not state['classification'] or not queue or state['hold']:
@@ -376,7 +377,7 @@ class Software:
                                                         for m in json.loads(consumer['members'])):
                 raise Refusal('receiver did not process this exact frozen source under the selected route')
             processed = clean_processing(runtime, consumer)
-            if processed and runtime.processing:
+            if processed:
                 from .frontier import delivery
                 if not delivery(runtime, outbox['id'])['complete']:
                     processed = None  # Delivery cannot outrun the whole receiving chain.
