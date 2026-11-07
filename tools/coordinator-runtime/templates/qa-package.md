@@ -71,9 +71,6 @@ Only an actually accepted package returns qualification to Branch; all necessary
 results/questions remain durably owned until actual pickup/processing/settlement.
 
 For an explicitly selected finite software cleanup exception, conserve the exact
-whole input envelopes as specified in `software-role-routes.md`. With the explicit
-TASK_CONTEXT.report_integration declaration, report-integration-v1 returns new
-analysis/decision/method/coverage and software carries originals once in response
-report_custody. Otherwise retain the legacy exact `collected_reports` finding.
-Execution is separate from independent acceptance;
+whole input envelopes in a `collected_reports` finding as specified in
+`software-role-routes.md`. Execution is separate from independent acceptance;
 cleanup cannot borrow another package's acceptance or omit original evidence.

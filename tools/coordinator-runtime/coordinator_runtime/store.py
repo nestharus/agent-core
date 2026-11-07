@@ -1003,6 +1003,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
                 raise Refusal("stale/foreign controller cannot close a successor reservation")
             if row["state"] == "closed":
                 return None
+            from .report_scope import source_metadata
+            source_metadata(self, row)
             attempt = self.attempt(row["active_attempt"])
             task = self.config["tasks"][row["task"]]
             from .branches import settle_attempt

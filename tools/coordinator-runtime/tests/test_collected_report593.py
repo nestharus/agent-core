@@ -247,7 +247,8 @@ class Reports(unittest.TestCase):
         self.new_release = {**self.old_release,'files':{**self.old_release['files'],file:'reviewed repair'}}
         selection = json.loads(self.store.one('SELECT selection FROM processing_capabilities WHERE id=?',(self.key,))['selection'])
         bindings = {r:{'original':{'binding':v['original']['binding']}} for r,v in selection['basis']['roles'].items()}
-        transition = {'basis':{'release':self.old_release,'processing':{'roles':bindings}},'event_boundary':0,
+        transition = {'basis':{'release':self.old_release,'processing':{'roles':bindings},
+                               'tasks':list(self.config['tasks'])},'event_boundary':0,
                       'jobs':[],'outboxes':[],'alert_boundary':0}
         self.store.db.execute('INSERT INTO configuration_transitions(previous,current,original,configuration,selection,issuer,created) VALUES(?,?,?,?,?,?,?)',
             ('fixture previous',digest(self.config),digest(self.config),encode(self.config),encode(transition),self.actor,1000.))

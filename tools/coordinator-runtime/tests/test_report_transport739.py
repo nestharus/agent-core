@@ -286,7 +286,7 @@ class ReportTransport(Fixture):
         job, attempt, _ = self.start()
         answer = self.answer(job)
         response = self.finish(job, attempt, answer)
-        reader = SimpleNamespace(controller='different fictional receiving collector', config=self.config)
+        reader = SimpleNamespace(controller='different fictional receiving collector', config=self.config, one=self.store.one)
         expected = report_scope.source_custody(reader, job, answer, report_scope.conserved_inputs(self.store, job))
         self.assertEqual(response['report_custody'], expected)
         self.assertEqual(expected['collector'], job['controller'])
@@ -340,7 +340,8 @@ class ReportTransport(Fixture):
         # Text is valid at65536 UTF-8 bytes; the whole composed result still
         # must obey the existing selected limit without expanding it.
         report_scope.validate_result(self.store, job, answer)
-        budget_only = SimpleNamespace(controller=self.store.controller, config=dict(limits=dict(max_result_bytes=1024)))
+        budget_only = SimpleNamespace(controller=self.store.controller, one=self.store.one,
+                                      config=dict(limits=dict(max_result_bytes=1024)))
         with self.assertRaisesRegex(Refusal, 'exceed selected result budget'):
             report_scope.source_custody(budget_only, job, answer, report_scope.conserved_inputs(self.store, job))
         self.assertIsNone(self.store.job(job['id'])['response'])

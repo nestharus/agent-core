@@ -5,33 +5,75 @@ native method/context/collector and every legacy debt remain attributed input.
 """
 import json
 import math
+from contextlib import nullcontext
 from .contracts import Refusal, digest, encode, collected_task_result, required_text
 
 
-def source_events(runtime, row):
+def source_metadata(runtime, row, *, current_authority=True):
+    """Admit ALL members before a new synchronous source read group.
+
+    Call again after await. Metadata refusal never cancels original collection
+    or acquires a held body to explain why current custody cannot proceed.
+    The caller serializes this group with cooperative hold updates.
+    """
     if row.get('id') and runtime.one('SELECT id FROM jobs WHERE id=?', (row['id'],)):
         members = json.loads(runtime.job(row['id'])['members'])
-        events = []
-        for member in members:
-            event = runtime.event(member['event'])
-            if digest(event) != member['hash']:
-                raise Refusal('original whole report member changed')
-            events.append(event)
     elif row.get('event'):
-        events = [runtime.event(row['event'])]
+        members = [dict(event=row['event'])]
     else:
         raise Refusal('exact collected report input required')
-    for event in events:
-        stored = runtime.one('SELECT hold,hash FROM events WHERE id=?', (event['id'],))
-        if stored['hold'] or stored['hash'] != digest(event) or not runtime.processing.event(event):
+    sources = []
+    for member in members:
+        stored = runtime.one('SELECT id,role,hold,hash FROM events WHERE id=?', (member['event'],))
+        if not stored or stored['hold'] is not None:
             raise Refusal('report input held, changed or outside current authority')
-    return events
+        if 'hash' in member and stored['hash'] != member['hash']:
+            raise Refusal('original whole report member changed')
+        sources.append(stored)
+    if runtime.processing and current_authority:
+        from .configuration import event_allowed, processing_tasks
+        _, selection = runtime.processing.current()
+        tasks = processing_tasks(runtime)
+        if row['task'] not in selection['tasks'] or (tasks is not None and row['task'] not in tasks):
+            raise Refusal('report task outside current source authority')
+        for source in sources:
+            if source['role'] != row['role'] or not event_allowed(runtime, source):
+                raise Refusal('report input held, changed or outside current authority')
+            if source['id'] in selection.get('retained_events', []):
+                originals = {e['id']: e['hash'] for role in selection['basis']['roles'].values()
+                             for e in role['original']['events']}
+                if originals.get(source['id']) != source['hash']:
+                    raise Refusal('retained report input outside current source authority')
+            receipt = runtime.one('SELECT capability,source_hash,receipt_hash FROM processing_report_inputs WHERE event=?', (source['id'],))
+            if receipt:
+                if receipt['capability'] != runtime.processing.key:
+                    raise Refusal('report input outside current collection authority')
+                policy = selection.get('service', {}).get('legacy_resources', {}).get(row['role'], {}).get('reviews_report')
+                if (receipt['source_hash'] != source['hash'] or policy is not None
+                        and receipt['receipt_hash'] not in {pin['sha256'] for pin in policy['reports']}):
+                    raise Refusal('report input outside current finite source selection')
+    return sources
+
+
+def source_events(runtime, row):
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        sources = source_metadata(runtime, row)
+        events = []
+        for source in sources:
+            event = runtime.event(source['id'])
+            if digest(event) != source['hash']:
+                raise Refusal('original whole report member changed')
+            if runtime.processing and not runtime.processing.event(event):
+                raise Refusal('report input held, changed or outside current authority')
+            events.append(event)
+        return events
 
 
 def execution_report(runtime, event, job, destination):
     """Accept only the original service-generated, fully collected return."""
     from .software import collected_report
     from .contracts import response_tasks
+    source_metadata(runtime, job)
     attempt = runtime.attempt(job['active_attempt'])
     answer = collected_task_result(attempt)
     validate_transport(runtime, job, event, answer)
@@ -115,6 +157,11 @@ def conserved_inputs(runtime, row):
 INTEGRATION_KIND = 'report-integration-v1'
 
 
+def uses_transport(row):
+    """QA retains its exact legacy template and whole-copy serialization."""
+    return row['task'] == 'reviews-integrator'
+
+
 def source_pins(reports):
     return [{'event': r['event'], 'sha256': r['sha256']} for r in reports]
 
@@ -183,6 +230,8 @@ def analysis_result(runtime, row, result, reports):
 
 def transport_custody(runtime, row, result):
     """Software composition only. The collected model result is never rewritten."""
+    if not uses_transport(row):
+        return None
     reports = integration_inputs(runtime, row)
     if reports is None or not analysis_result(runtime, row, result, reports):
         return None
@@ -191,8 +240,11 @@ def transport_custody(runtime, row, result):
 
 def source_custody(runtime, row, result, reports):
     """Carry originals even on an informative incomplete return; never qualify it."""
-    custody = dict(version=INTEGRATION_KIND, collector=row['controller'],
-                   attempt=row['active_attempt'], model_result_sha256=digest(result),
+    original = runtime.one('SELECT id,job,controller FROM attempts WHERE id=?', (row['active_attempt'],))
+    if not original or original['job'] != row['id']:
+        raise Refusal('custody requires the actual original job attempt collector')
+    custody = dict(version=INTEGRATION_KIND, collector=original['controller'],
+                   attempt=original['id'], model_result_sha256=digest(result),
                    collected_reports=reports)
     if len(encode(dict(body=result, report_custody=custody)).encode()) > runtime.config['limits']['max_result_bytes']:
         raise Refusal('whole report custody and new analysis exceed selected result budget')
@@ -200,6 +252,8 @@ def source_custody(runtime, row, result, reports):
 
 
 def incomplete_custody(runtime, row, result):
+    if not uses_transport(row):
+        return None
     reports = integration_inputs(runtime, row)
     if reports is None:
         return None
@@ -234,15 +288,17 @@ def integration_inputs(runtime, row):
                    for a in qa_accounts(record)))
     if not applies:
         return None
-    if blocked(runtime, row):
-        raise Refusal('current report operation authority/resources changed')
-    return conserved_inputs(runtime, row)
+    with (nullcontext() if runtime.db.in_transaction else runtime.tx()):
+        source_metadata(runtime, row)
+        if blocked(runtime, row):
+            raise Refusal('current report operation authority/resources changed')
+        return conserved_inputs(runtime, row)
 
 
 def validate_result(runtime, row, result):
     reports = integration_inputs(runtime, row)
     if reports is not None:
-        if analysis_result(runtime, row, result, reports):
+        if uses_transport(row) and analysis_result(runtime, row, result, reports):
             transport_custody(runtime, row, result)
             return
         # Use the source pins' canonical JSON identity: Python equality conflates

@@ -53,6 +53,8 @@ def report_delivery(runtime, job, outbox):
     """
     if outbox['kind'] != 'result' or not job['response']:
         return []
+    from .report_scope import source_metadata
+    source_metadata(runtime, job)
     event = runtime.event(job['response'])
     from .report_scope import validate_transport
     validate_transport(runtime, job, event, collected_task_result(runtime.attempt(job['active_attempt'])))
@@ -74,6 +76,14 @@ def clean_processing(runtime, job):
 def _processing(runtime, job, report_task=None):
     if (not job['active_attempt'] or job['state'] not in {'awaiting-delivery', 'closed'}
             or job['hold_reason'] or job['effects'] not in {'none', 'reconciled'}):
+        return None
+    from .report_scope import source_metadata, uses_transport
+    try:
+        # Old report repair authenticates its exact stopped grant/release in
+        # its own caller. Do not replace that evidence authority with a live
+        # execution grant. New Reviews custody still requires fresh authority.
+        source_metadata(runtime, job, current_authority=uses_transport(job))
+    except Refusal:
         return None
     attempt = runtime.attempt(job['active_attempt'])
     from .reviews import collected_proof

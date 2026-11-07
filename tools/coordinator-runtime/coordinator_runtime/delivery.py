@@ -45,6 +45,8 @@ def _execution_delivery(method):
     def guarded(self, job, *args, **kwargs):
         with (nullcontext() if self.db.in_transaction else self.tx()):
             self.require_execution_open(job['id'])
+            from .report_scope import source_metadata
+            source_metadata(self, job)
             return method(self, job, *args, **kwargs)
     return guarded
 

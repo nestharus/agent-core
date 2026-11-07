@@ -41,14 +41,20 @@ class ReportTypeConservation(unittest.TestCase):
             if sql == 'SELECT id FROM jobs WHERE id=?':
                 self.assertEqual(params, ('offline-job710',))
                 return dict(id=params[0])
-            self.assertEqual(sql, 'SELECT hold,hash FROM events WHERE id=?')
-            return dict(hold=self.hold, hash=self.hashes[params[0]])
+            if sql == 'SELECT capability,source_hash,receipt_hash FROM processing_report_inputs WHERE event=?':
+                return None
+            self.assertEqual(sql, 'SELECT id,role,hold,hash FROM events WHERE id=?')
+            return dict(id=params[0], role='Reviews', hold='held' if self.hold else None, hash=self.hashes[params[0]])
         self.runtime = SimpleNamespace(one=one, event=lambda key: json.loads(self.sources[key]),
+            db=SimpleNamespace(in_transaction=True),
             job=lambda key: dict(members=self.members),
             processing=SimpleNamespace(current=lambda: (None, dict(service=dict(legacy_resources=dict(
-                Reviews=dict(reviews_report={'fixture': 'already admitted'}))))), event=lambda event: self.current))
+                Reviews=dict(reviews_report={'fixture': 'already admitted'}))), tasks=['reviews-integrator'])),
+                event=lambda event: self.current))
         self.row = dict(id='offline-job710', role='Reviews', task='reviews-integrator', package=None)
         self.gate = self.enterContext(patch('coordinator_runtime.resource_scopes.blocked', return_value=False))
+        self.enterContext(patch('coordinator_runtime.configuration.processing_tasks', return_value=None))
+        self.enterContext(patch('coordinator_runtime.configuration.event_allowed', return_value=True))
         # Spell out the expected copied envelopes independently of conserved_inputs.
         self.envelopes = [dict(event=key, sha256=self.hashes[key], original=json.loads(value)['body'])
                           for key, value in self.sources.items()]
@@ -303,7 +309,20 @@ class ReportBatches(Fixture):
         answer=complete_return(report_scope.conserved_inputs(self.store,job))
         self.assertEqual(len(encode(answer).encode()),262144)
         attempt=self.store.start_job(job['id'],job['token'])
-        self.boards['Reviews'].bind_software_attempt(self.store,self.store.job(job['id']),attempt,None)
+        job=self.store.job(job['id'])
+        self.boards['Reviews'].bind_software_attempt(self.store,job,attempt,None)
+        # Legacy intake remains entitled at the exact ceiling. Even minimum
+        # new analysis plus software custody needs additional space; retain
+        # this bounded no-copy refusal instead of raising/truncating a budget.
+        reports=report_scope.conserved_inputs(self.store,job)
+        minimal=result(category='consolidated')
+        minimal['findings']=[dict(**report_scope.integration_protocol(self.store,job,reports),
+            analysis='x', decision='x', method='x', coverage=[dict(**pin,extent='whole',limits=[])
+                for pin in report_scope.source_pins(reports)])]
+        with self.assertRaisesRegex(Refusal,'exceed selected result budget'):
+            report_scope.validate_result(self.store,job,minimal)
+        self.assertTrue(report_scope.fits_return(self.store,reports))
+        report_scope.validate_result(self.store,job,answer)
         collect(self.store,attempt,answer,tool_completion=dict(complete=True,items=[],nonzero_completions=[]))
         response=self.store.finish_job(job['id'],job['token'])
         self.assertEqual(self.store.event(response)['body'],answer)

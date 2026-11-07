@@ -24,7 +24,7 @@ and pickup do not supply settlement or a processing timestamp.
 
 ## Whole-report transport without model retransmission
 
-For an admitted `report_scope.integration_inputs` route, the prompt supplies each
+For an admitted finite Reviews `report_scope.integration_inputs` route, the prompt supplies each
 frozen original envelope once, and `report_integration` declares the optional
 `report-integration-v1` producer protocol. The model returns its new analysis,
 decision, explanation of the current method, exact task/source pins, and coverage
@@ -36,6 +36,9 @@ performing a native review. Historical partial/unread evidence stays historical.
 Software leaves the collected model result and its numerical collection intact.
 It attaches `report_custody` to the response beside `body`: original collector and
 attempt, model-result digest, and exact canonical collected-report envelopes.
+The collector comes from the immutable original attempt, even after a successor
+adopts closure. The job controller and `collection_handoff` describe separate
+closure custody; transferring it neither rewrites nor invalidates this value.
 JSON strings inside those envelopes retain their exact bytes. The next reader
 receives the originals once plus separately attributed new assertions. Recursive
 custody remains input on subsequent report integration. New-protocol results
@@ -51,6 +54,22 @@ capture cannot qualify as a complete report. Ordinary clarification still
 conserves the model's own prior return exactly. Transfer authenticates both the
 unchanged model body and software custody against current frozen source rights.
 Receiving Work must independently process and settle its own responsibility.
+
+Finite QA cleanup retains the exact legacy QA template and its whole-copy
+`collected_reports` finding. Its prompt declares no new transport protocol and
+the validator requires the legacy serialization. QA model retransmission is a
+bounded compatibility limitation; acceptance and original duties are unchanged.
+
+Every new read group, including post-await finish, custody, transfer and
+informative failure, checks all member hold/hash metadata and current source
+authority before any member body. Refused informative delivery stays held with
+its already collected original; it does not reacquire the withheld source.
+
+Admission and batching still guarantee the accepted legacy return shape only.
+Near the result ceiling the larger new Reviews composition can refuse: custody,
+coverage and new analysis must all fit the same selected limit. No budget is
+raised, source truncated or legacy return invalidated. This remains a scoped
+no-copy feasibility followup, not whole-runtime completion.
 
 This protocol does not repair or replay a previously failed original. Its owner
 must separately select a lawful fresh-input or remaining-work transition.
