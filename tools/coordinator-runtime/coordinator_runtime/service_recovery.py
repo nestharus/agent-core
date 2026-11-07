@@ -120,6 +120,11 @@ def recover_review(store,actor,key,receipt):
     if not isinstance(receipt['remaining_holds'],list):
         raise Refusal('explicit remaining obligations required')
     with store.tx():
+        # An execution-only fence cannot be turned into a new same-original
+        # recovery selection. Native context custody stays with its owner.
+        for row in store.rows('SELECT a.job FROM review_calls c JOIN attempts a ON a.id=c.attempt WHERE c.component=?', (key,)):
+            if row['job'] and store.role_execution_fenced(row['job']):
+                store.require_execution_open(row['job'])
         current=review_basis(store,key); context=current['context']
         cap,_=store.processing.current()
         predecessor_authority(store,actor,cap,context['capability'])

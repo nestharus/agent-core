@@ -11,7 +11,8 @@ import math
 from . import configuration, processing
 from .contracts import Refusal, digest, encode, required_text
 
-OPERATIONS = {'integration-closure-basis', 'retire-integration',
+ROLE_EXECUTION_OPERATIONS = {'role-execution-closure-basis', 'fence-role-execution'}
+OPERATIONS = ROLE_EXECUTION_OPERATIONS | {'integration-closure-basis', 'retire-integration',
               'integration-window-basis', 'select-integration-window',
               'work-read-closure-basis', 'fence-work-proposer',
               'integration-metadata-closure-basis', 'retire-integration-metadata',
@@ -20,7 +21,7 @@ OPERATIONS = {'integration-closure-basis', 'retire-integration',
 LOCAL_NO_START_OPERATIONS = {'integration-no-start-basis', 'withdraw-integration-no-start'}
 READ_FENCE_OPERATIONS = {'work-read-closure-basis', 'fence-work-proposer'}
 METADATA_READ_FENCE_OPERATIONS = {'work-read-metadata-closure-basis', 'fence-work-proposer-metadata'}
-METADATA_OPERATIONS = ({'integration-metadata-closure-basis', 'retire-integration-metadata'}
+METADATA_OPERATIONS = ROLE_EXECUTION_OPERATIONS | ({'integration-metadata-closure-basis', 'retire-integration-metadata'}
                        | METADATA_READ_FENCE_OPERATIONS | LOCAL_NO_START_OPERATIONS)
 METADATA_MANAGEMENT = 'integration-metadata-management-v1'
 
@@ -102,6 +103,8 @@ def basis(runtime, roles, actor, authority, purpose, *, metadata_only=False):
 
 
 def target(command, args, receipt):
+    if command in ROLE_EXECUTION_OPERATIONS:
+        return {'job':args.job,'token':args.token,'role':args.role,'phase':args.phase}
     if command in {'integration-closure-basis', 'retire-integration'} | READ_FENCE_OPERATIONS | METADATA_OPERATIONS:
         return {'job': args.job, 'token': args.token}
     if command == 'integration-window-basis':
@@ -169,7 +172,7 @@ class Access:
             task = runtime.config['tasks'].get(selected['task'])
             if not task or task['role'] != 'Work' or task['phase'] != 'integrator':
                 raise Refusal('management requires exact Work integration task')
-            jobs = {r['job'] for r in runtime.rows('SELECT job FROM integration_retirements')}
+            jobs = {r['job'] for r in runtime.rows("SELECT r.job FROM integration_retirements r JOIN jobs j ON j.id=r.job WHERE j.role='Work' AND j.phase='integrator'")}
             jobs |= {r['job'] for r in runtime.rows('SELECT job FROM integration_prestart_dispositions')}
             events = set(selected['events'])
         if set(declared['jobs']) != jobs:
@@ -180,10 +183,13 @@ class Access:
                 (job, selected['token'])) if command in METADATA_OPERATIONS else runtime.one(
                 'SELECT role,phase,members FROM jobs WHERE id=?', (job,))
             phase = 'proposer' if command in READ_FENCE_OPERATIONS | METADATA_READ_FENCE_OPERATIONS else 'integrator'
-            if not row or row['role'] != 'Work' or row['phase'] != phase:
-                raise Refusal('management job must be an exact Work '+phase)
+            role = selected['role'] if command in ROLE_EXECUTION_OPERATIONS else 'Work'
+            phase = selected['phase'] if command in ROLE_EXECUTION_OPERATIONS else phase
+            if not row or row['role'] != role or row['phase'] != phase:
+                raise Refusal('management job must be an exact '+role+' '+phase)
+            roles.add(role)
             if command in METADATA_OPERATIONS:
-                events.update(m['event'] for m in runtime.integration_metadata_sources(job, phase=phase))
+                events.update(m['event'] for m in runtime.integration_metadata_sources(job, phase=phase, role=role))
             else:
                 events.update(m['event'] for m in json.loads(row['members']))
         if set(declared['events']) != events:
@@ -213,7 +219,7 @@ def execute(runtime, command, selected, selection, actor, operation):
         try:
             outcome = operation()
             access.current()
-            if command in {'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata', 'fence-work-proposer-metadata', 'withdraw-integration-no-start'}:
+            if command in {'fence-role-execution', 'retire-integration', 'select-integration-window', 'fence-work-proposer', 'retire-integration-metadata', 'fence-work-proposer-metadata', 'withdraw-integration-no-start'}:
                 key = digest(selection)
                 if command in METADATA_OPERATIONS:
                     from .selected_source import custody_budget
