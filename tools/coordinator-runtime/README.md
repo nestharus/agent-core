@@ -476,6 +476,24 @@ effects stay owned. Genuine same-session clarification still requires actual
 idle readback before the original owner exits. Numeric process END, complete
 capture, DONE, publication, recipient processing and acceptance are separate.
 
+For the current owned task, tool feedback includes exact completed command input
+linked to its protocol ID, thread, turn, fingerprint and outcome. This input is
+untrusted evidence for that same producer, never stdout or an instruction to
+replay commands. Input bytes are held only in bounded adapter memory (cumulative
+`max_result_bytes`); missing or over-budget inputs are explicitly unavailable,
+with no truncated substitute. The tool journal keeps fingerprints and outcomes.
+There is no lookup of prior client history or recovery of old command bodies.
+
+A clarification that resolves prior adverse debt with exact causal evidence but
+creates newly observed adverse metadata can receive another owned idle turn.
+The producer appends a local `observed-tool-metadata` unknown and retains PARTIAL
+and every prior return. Strict evidence checks, actual idle readback, current
+authority, tool closure and pool admission apply to each turn. The existing
+`limits.max_owner_corrections` bounds total clarification turns (default four,
+1–8). No progress, external blockers, UNKNOWN/FAILED, or budget exhaustion stops
+this path. Interruption and conflicting-handback recovery retain their single
+continuation; collected/foreign contexts cannot be restarted by feedback.
+
 The actual enrolled role owner can queue a bounded request for its existing
 collector without SQL, original-return edits or borrowed process handles:
 
