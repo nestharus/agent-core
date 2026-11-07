@@ -6,6 +6,7 @@ Legacy test77 duty/guard assertions run with supplied admission instead of its
 /proc preamble and an explicit small per-publication fixture byte reservation.
 """
 import argparse
+import asyncio
 from contextlib import contextmanager, ExitStack
 import copy
 import json
@@ -14,7 +15,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import support
@@ -24,6 +25,7 @@ import test_metadata_closure671 as metadata
 from coordinator_runtime import integration_management as management, local_integration as local
 from coordinator_runtime import publication, selected_source
 from coordinator_runtime.contracts import Refusal, digest, encode, validate_config
+from coordinator_runtime.dispatcher import Dispatcher
 from coordinator_runtime.integration import LOCAL_NO_START
 from coordinator_runtime.store import Store
 
@@ -82,10 +84,13 @@ class LocalNoStart708(unittest.TestCase):
         self.assertIsNotNone(self.job)
         self.assertIsNone(self.s.integration_context(self.job['id']))
         self.attempt = self.s.start_job(self.job['id'],self.job['token'])
+        self.collect_no_start()
+        self.s.hold_job(self.job['id'],'fictional current owner hold')
+
+    def collect_no_start(self):
         self.s.collect(self.attempt, {'exit':None,'result':None,'capture':'not-started',
             'cleanup':'no-session-created','error':'fictional prelaunch refusal',
             'detail':{'known_not_started':True,'resume_disposition':'fictional original confirms no launch'}})
-        self.s.hold_job(self.job['id'],'fictional current owner hold')
 
     def basis(self):
         return self.s.integration_no_start_basis(self.job['id'],self.job['token'])
@@ -270,6 +275,8 @@ class LocalNoStart708(unittest.TestCase):
              (self.job['id'],self.attempt,self.owner)),
             ("UPDATE jobs SET effect_receipt='{}' WHERE id=?",(self.job['id'],)),
             ("UPDATE jobs SET effects='reconciled' WHERE id=?",(self.job['id'],)),
+            ("UPDATE jobs SET effects='effectful' WHERE id=?",(self.job['id'],)),
+            ("UPDATE jobs SET response='fictional-existing-response' WHERE id=?",(self.job['id'],)),
             ("UPDATE jobs SET collection_handoff='{}' WHERE id=?",(self.job['id'],)),
             ("UPDATE jobs SET recovery_state='unknown' WHERE id=?",(self.job['id'],))]
         for sql,args in statements:
@@ -340,6 +347,36 @@ class LocalNoStart708(unittest.TestCase):
             self.refused(lambda:self.withdraw(receipt))
 
 
+class DispatcherNoStart715(LocalNoStart708):
+    """Run all local proofs against production dispatcher's effects=none path."""
+
+    def collect_no_start(self):
+        board = Mock()
+        board.completion_authority.side_effect = Refusal('fictional prelaunch delegation unavailable')
+        # Restore the fixture's launch hooks after constructing the dispatcher.
+        # The real execute/prepare/collect/effects path runs. Stop before final
+        # response disposition, matching the original stopped-service premise;
+        # do not create a response and then erase it to qualify the fixture.
+        with patch.object(self.s,'launch_authorizer',None,create=True), \
+                patch.object(self.s,'task_launch_authorizer',None,create=True):
+            dispatcher = Dispatcher(self.s,models=object(),boards={'Work':board})
+            with patch.object(dispatcher,'run_model',new_callable=AsyncMock,
+                              side_effect=AssertionError('no model may launch')) as model, \
+                    patch.object(dispatcher,'try_finish') as finish:
+                asyncio.run(dispatcher.execute(self.job['id'],self.attempt))
+                model.assert_not_awaited()
+                finish.assert_called_once_with(self.job['id'])
+        board.completion_authority.assert_called_once()
+        self.assertEqual('none',self.s.job(self.job['id'])['effects'])
+        self.assertIsNone(self.s.job(self.job['id'])['response'])
+        original = self.s.attempt(self.attempt)
+        self.assertEqual('not-started',original['state'])
+        for field in ('begin','ended','exit','session','turn','semantic','result'):
+            self.assertIsNone(original[field],field)
+        self.assertIsNotNone(original['collected'])
+        self.assertTrue(json.loads(original['detail'])['known_not_started'])
+
+
 @unittest.skipUnless(__name__ == '__main__', 'requires explicit owned --fixtures root')
 class PausedLocal708(unittest.TestCase):
     call = metadata.MetadataClosure671.call
@@ -385,6 +422,11 @@ class PausedLocal708(unittest.TestCase):
         self.assertEqual(0,self.store.one("SELECT intake FROM enrollments WHERE role='Work'")['intake'])
         self.assertIsNone(self.store.reserve())
         self.assertEqual({'state':'queued','job':None},self.store.one('SELECT state,job FROM queue WHERE event=?',(self.f.source['id'],)))
+
+    def test_known_none_paused_cli_conserves_original_effect_status(self):
+        self.store.db.execute("UPDATE jobs SET effects='none' WHERE id=?",(self.job,))
+        self.test_real_paused_cli_authority_and_audit_conserve_every_other_duty()
+        self.assertEqual('none',self.store.one('SELECT effects FROM jobs WHERE id=?',(self.job,))['effects'])
 
     def test_owner_source_token_scope_operation_and_processing_substitution_refuse(self):
         for modify in [lambda s:s['records'].update(events=[]),lambda s:s['records'].update(jobs=[]),
@@ -441,6 +483,7 @@ if __name__ == '__main__':
         elif args.management_guards:
             result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(managed.Management))
         else:
-            suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in (LocalNoStart708,PausedLocal708))
+            suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c)
+                                      for c in (LocalNoStart708,DispatcherNoStart715,PausedLocal708))
             result = unittest.TextTestRunner(verbosity=2).run(suite)
     raise SystemExit(not result.wasSuccessful())

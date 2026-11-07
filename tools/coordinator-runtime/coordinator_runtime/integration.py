@@ -460,8 +460,10 @@ class IntegrationJournal:
             'collection_handoff IS NOT NULL AS collection_handoff FROM jobs WHERE id=? AND token=?', (job,token))
         if (not row or row['role'] != 'Work' or row['phase'] != 'integrator' or row['state'] != 'held'
                 or not row['active_attempt'] or row['response'] or row['closed_at'] is not None
-                or row['effects'] != 'unknown' or row['effect_receipt'] or row['collection_handoff']):
+                or row['effects'] not in {'unknown','none'} or row['effect_receipt'] or row['collection_handoff']):
             raise Refusal('exact held allocated local Work integrator without effect/response/handoff required')
+        # Dispatcher records none on known_not_started. Neither admissible
+        # effect status replaces the affirmative attempt/closure proofs below.
         for table in ('integration_retirements','integration_prestart_dispositions','work_read_fences'):
             if self.one('SELECT job FROM '+table+' WHERE job=?', (job,)):
                 raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
