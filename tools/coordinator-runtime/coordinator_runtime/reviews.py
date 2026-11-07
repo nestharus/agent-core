@@ -242,7 +242,7 @@ def material(policy, packet, prior):
     commands = []
     paths=list(dict.fromkeys(selected['paths']+selected.get('relationship_paths',[])))
     for pin in dict.fromkeys([packet['base'], packet['head'], *([packet['previous']] if prior else [])]):
-        entries = git(repository, 'ls-tree', '-rz', pin, '--', *paths).split(b'\0')
+        entries = git(repository, '--literal-pathspecs', 'ls-tree', '-rz', pin, '--', *paths).split(b'\0')
         for entry in filter(None, entries):
             metadata, name = entry.split(b'\t', 1)
             mode, kind, oid = metadata.decode().split()
@@ -252,14 +252,14 @@ def material(policy, packet, prior):
             body = git(repository, 'show', pin + ':' + name)
             source[pin + ':' + name] = {'git_blob': oid, 'bytes': len(body), 'sha256': sha(body)}
             commands.append(shlex.join(['git', '-C', repository, 'show', pin + ':' + name]))
-        commands.append(shlex.join(['git', '-C', repository, 'ls-tree', '-r', pin, '--', *paths]))
+        commands.append(shlex.join(['git', '-C', repository, '--literal-pathspecs', 'ls-tree', '-r', pin, '--', *paths]))
     if not source:
         raise Refusal('selected material is empty')
     correction_base = packet['previous'] if prior else packet['base']
-    diff = git(repository, 'diff', '--no-ext-diff', '--no-textconv', correction_base, packet['head'], '--', *paths).decode()
+    diff = git(repository, '--literal-pathspecs', 'diff', '--no-ext-diff', '--no-textconv', correction_base, packet['head'], '--', *paths).decode()
     # Material/diff/history are factual inputs, never task purpose/acceptance or
     # arbitrary message bodies. The full diff is in the executable read command.
-    commands.append(shlex.join(['git', '-C', repository, 'diff', '--no-ext-diff', '--no-textconv', correction_base, packet['head'], '--', *paths]))
+    commands.append(shlex.join(['git', '-C', repository, '--literal-pathspecs', 'diff', '--no-ext-diff', '--no-textconv', correction_base, packet['head'], '--', *paths]))
     for path in policy['method_files']:
         commands.append(shlex.join(['cat', path]))
     if history.exists():

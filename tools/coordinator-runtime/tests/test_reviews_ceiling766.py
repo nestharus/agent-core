@@ -51,9 +51,11 @@ class ReviewsCeiling(unittest.TestCase):
         self.s = self.f.runtime
         self.repo = self.f.directory/'external'; self.repo.mkdir()
         self.git('init','-q')
-        (self.repo/'A.py').write_text('admitted_public_A = True\n')
+        self.allowed = 'A[1].py' if self._testMethodName == 'test_exact_filename_cannot_expand_as_git_pathspec' else 'A.py'
+        (self.repo/self.allowed).write_text('admitted_public_A = True\n')
         (self.repo/'B.py').write_text('owned_outside_ceiling_B = True\n')
-        self.git('add','A.py','B.py')
+        (self.repo/'A1.py').write_text('owned_outside_ceiling_pathspec_neighbor = True\n')
+        self.git('add',self.allowed,'B.py','A1.py')
         self.git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
                  '-c','commit.gpgsign=false','commit','-qm','owned public sentinel fixture')
         self.head = self.git('rev-parse','HEAD').strip()
@@ -61,10 +63,10 @@ class ReviewsCeiling(unittest.TestCase):
         entry = {'configuration':digest(self.s.config),'role_owner':'fictional-Reviews',
                  'original_grant':'fictional-grant-Reviews','authority':'fictional Work selection',
                  'source_authority':'fictional owner exact public A binding',
-                 'read_roots':[str(self.repo/'A.py')], 'repository_reads':[str(self.repo)],
-                 'components':{'component':['A.py']},'safe_files':{},
+                 'read_roots':[str(self.repo/self.allowed)], 'repository_reads':[str(self.repo)],
+                 'components':{'component':[self.allowed]},'safe_files':{},
                  'source':{'repository':str(self.repo),'commit':self.head,
-                           'files':{'A.py':reviews.sha((self.repo/'A.py').read_bytes())}}}
+                           'files':{self.allowed:reviews.sha((self.repo/self.allowed).read_bytes())}}}
         self.s.config = configuration.candidate(self.s,str(self.f.directory/'extended.json'),[],
                                 scope_options={'read_ceiling_extensions':{'rp':entry}})
         self.s.db.executescript(reviews.SCHEMA + service_recovery.SCHEMA)
@@ -74,13 +76,13 @@ class ReviewsCeiling(unittest.TestCase):
         self.policy = {'method':str(self.method),'method_files':{str(self.method):reviews.sha(self.method.read_bytes())},
                        'routes':{None:'fictional-route'},'deadline':2,
                        'components':{'component':{'repository':str(self.repo),'origin':'fixture-origin',
-                           'paths':['A.py'],'history':str(self.s.home/'review-history/component'),
+                           'paths':[self.allowed],'history':str(self.s.home/'review-history/component'),
                            'authority':'fictional source statement cannot expand roots'}}}
         self.packet = {'component':'component','origin':'fixture-origin','base':self.head,
                        'head':self.head,'previous':None,'answered_ids':[]}
         self.job = {'task':'rp','package':'fictional-package'}
         self.admission = {'receipt':encode({'task_scopes':{'rp':{
-            'cwd':self.s.config['tasks']['rp']['cwd'],'read_roots':[str(self.repo/'A.py')],
+            'cwd':self.s.config['tasks']['rp']['cwd'],'read_roots':[str(self.repo/self.allowed)],
             'write_roots':[],'repository_reads':[str(self.repo)],'network':False,
             'procedure':str(self.method),'resource_evidence':'fictional package owner evidence'}}})}
         self.s.db.execute('INSERT INTO admissions(package,owner,receipt,accepted) VALUES(?,?,?,NULL)',
@@ -99,7 +101,7 @@ class ReviewsCeiling(unittest.TestCase):
         class Probe:
             async def call(inner,runtime,attempt,policy,context,directory,text,commands,**kwargs):
                 manifest = json.loads(Path(shlex.split(commands[0])[-1]).read_text())
-                case.assertEqual(set(manifest['source']),{case.head+':A.py'})
+                case.assertEqual(set(manifest['source']),{case.head+':'+case.allowed})
                 case.assertIn('READ_COMMAND=',text)
                 labels = []
                 for _ in range(8):
@@ -108,10 +110,10 @@ class ReviewsCeiling(unittest.TestCase):
                     chunk = json.loads(r.stdout)
                     if chunk.get('end_of_material'): break
                     labels.append(chunk['source'])
-                    if chunk['source'].endswith(':A.py'):
+                    if chunk['source'].endswith(':'+case.allowed):
                         case.assertIn('admitted_public_A',chunk['text'])
                 else: case.fail('facade did not reach end_of_material')
-                case.assertIn(case.head+':A.py',labels)
+                case.assertIn(case.head+':'+case.allowed,labels)
                 raise ReachedFacade()
         with self.assertRaises(ReachedFacade): self.execute(Probe())
         self.authorized.assert_called_with('fictional-attempt')
@@ -127,6 +129,7 @@ class ReviewsCeiling(unittest.TestCase):
         acquire.assert_not_called()
 
     def test_unscoped_exact_A_reaches_real_material_and_read_facade(self): self.positive()
+    def test_exact_filename_cannot_expand_as_git_pathspec(self): self.positive()
     def test_unscoped_B_refuses_before_material_metadata_or_body(self): self.negative()
     def test_unscoped_directory_refuses_before_recursive_listing(self): self.negative(path='.')
     def test_unscoped_relationship_B_refuses_before_material(self): self.negative(relationship=True)
