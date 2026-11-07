@@ -12,6 +12,7 @@ from .contracts import Refusal, digest, encode, required_text
 from .integration_evidence import attempt_view, fence_view, shared_debt_view
 
 METADATA_CLOSURE = 'integration-execution-closure-metadata-v1'
+METADATA_READ_FENCE = 'work-anchored-read-fence-metadata-v1'
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS integration_retirements(
@@ -134,7 +135,24 @@ class IntegrationJournal:
         if (row['role'] != 'Work' or scope['lane'] != 'anchored'
                 or not (scope['reads'] or scope['writes']) or not (reader or integrator)):
             return False
+        header = self.one("SELECT json_extract(basis,'$.schema') AS schema FROM work_read_fences WHERE job=?",
+                          (source['id'],))
         from .local_integration import point_definitions
+        if header and header['schema'] == METADATA_READ_FENCE:
+            # This route remains metadata-only even if a local row disappears.
+            try:
+                points = point_definitions(self)
+                if any('native' in binding for key in set(scope['reads']) | set(scope['writes'])
+                       for binding in points[key]['bindings']):
+                    return False
+                fence = self.one('SELECT basis FROM work_read_fences WHERE job=?', (source['id'],))
+                return json.loads(fence['basis'])['stable'] == self._work_read_metadata_stable(source['id'])
+            except Refusal:
+                return False  # Preserve the ordinary first actual conflict witness.
+        if self.one('SELECT job FROM local_jobs WHERE job=?', (source['id'],)):
+            return False  # Known scopes cannot borrow the legacy unknown scope contract.
+        # Preserve legacy unknown-scope helper behavior. Unfenced known scopes
+        # return above, before adding any operands to the original conflict OR.
         points = point_definitions(self)
         if any('native' in binding for key in set(scope['reads']) | set(scope['writes'])
                for binding in points[key]['bindings']):
@@ -143,6 +161,141 @@ class IntegrationJournal:
         if not fence:
             return False
         return json.loads(fence['basis']) == self._work_read_basis(source['id'])
+
+    def _work_read_metadata_identity(self, job, token=None):
+        row = self.one('SELECT id,token,role,phase,task,state,active_attempt,controller,effects,'
+                       'recovery_owner,recovery_state,recovery_count FROM jobs WHERE id=?'
+                       + (' AND token=?' if token is not None else ''),
+                       (job, token) if token is not None else (job,))
+        if (not row or row['role'] != 'Work' or row['phase'] != 'proposer'
+                or row['state'] != 'held' or row['effects'] != 'none'
+                or not self._work_read_task(self.config['tasks'].get(row['task']))):
+            raise Refusal('exact held read-only Work proposer and reservation token required')
+        return row
+
+    def _work_read_metadata_stable(self, job, *, row=None, sources=None):
+        """Selected stable predicates only; no old body/hash integrity claim.
+
+        Re-evaluated after append and at use. Global revision is deliberately
+        absent: unrelated journal activity and our own append must not revoke
+        an otherwise unchanged terminal reader fence.
+        """
+        row = row if row is not None else self._work_read_metadata_identity(job)
+        sources = sources if sources is not None else self.integration_metadata_sources(job, phase='proposer')
+        if (row['recovery_state'] not in {None, 'awaiting-disposition', 'owner-deferred', 'handed-off'}
+                or (row['recovery_state'] is None) != (row['recovery_owner'] is None)
+                or type(row['recovery_count']) is not int or row['recovery_count'] < 0
+                or (row['recovery_owner'] is None) != (row['recovery_count'] == 0)
+                or row['recovery_state'] == 'handed-off' and row['controller'] != row['recovery_owner']):
+            raise Refusal('exact inactive recovery/controller relationship required')
+        attempts = self.rows('SELECT id,kind,job,controller,begin,ended,collected,exit,state '
+                             'FROM attempts WHERE job=? ORDER BY rowid', (job,))
+        active = next((a for a in attempts if a['id'] == row['active_attempt']), None)
+        if (not active or active['kind'] != 'task' or active['controller'] != row['controller']
+                or any(a['kind'] not in {'task','diagnosis'} or a['state'] != 'collected'
+                       or type(a['exit']) is not int
+                       or any(type(a[k]) not in {int,float} or not math.isfinite(a[k]) or a[k] < 0
+                              for k in ('begin','ended','collected'))
+                       or not a['begin'] <= a['ended'] <= a['collected'] for a in attempts)):
+            raise Refusal('all related originals need actual begun numeric END and collection; exact active task/controller required')
+        if self.one("SELECT 1 AS pending FROM recovery_requests WHERE job=? AND state='pending' LIMIT 1", (job,)):
+            raise Refusal('pending owner recovery must be disposed before a read fence')
+        for table in ('file_publications', 'local_commits', 'local_point_commits', 'local_material_commits'):
+            if self.one('SELECT 1 AS present FROM '+table+' p JOIN attempts a ON a.id=p.attempt WHERE a.job=? LIMIT 1', (job,)):
+                raise Refusal('publication/local commit duties cannot be treated as a nonwriting predecessor')
+        valid = self.one('SELECT json_valid(task) AS valid FROM job_resource_policies WHERE job=?', (job,))
+        if not valid or not valid['valid']:
+            raise Refusal('original frozen read-only policy required')
+        # Types and explicit scalar projections prevent object/array bodies
+        # masquerading as policy flags. Never transport/hash the frozen task.
+        policy = {}
+        for field in ('role','phase','sandbox','effects','network','execution','routine_completion',
+                      'effect_authority','effect_authority.write_roots'):
+            path = '$.'+field
+            value = self.one('SELECT json_type(task,?) AS type,CASE WHEN json_type(task,?) '
+                "IN ('text','true','false','integer','real','null') THEN json_extract(task,?) END AS scalar "
+                'FROM job_resource_policies WHERE job=?', (path,path,path,job))
+            policy[field] = value
+        if (any(policy[k] != {'type':'text','scalar':v} for k,v in
+                [('role','Work'),('phase','proposer'),('sandbox','read-only'),('effects','none')])
+                or policy['network']['type'] not in {None,'false'}
+                or policy['execution']['type'] not in {None,'null'}
+                or policy['routine_completion']['type'] not in {None,'null','false'}
+                or policy['effect_authority']['type'] != 'object'
+                or policy['effect_authority.write_roots']['type'] != 'array'
+                or self.one("SELECT json_array_length(task,'$.effect_authority.write_roots') AS n "
+                            'FROM job_resource_policies WHERE job=?', (job,))['n'] != 0):
+            raise Refusal('original frozen read-only nonwriting Work proposer policy required')
+        valid = self.one('SELECT json_valid(scope) AS valid FROM local_jobs WHERE job=?', (job,))
+        if not valid or not valid['valid']:
+            raise Refusal('known anchored read-only local scope required')
+        local = self.one("SELECT policy,json_type(scope) AS type,json_type(scope,'$.lane') AS lane_type,"
+            "CASE WHEN json_type(scope,'$.lane')='text' THEN json_extract(scope,'$.lane') END AS lane,"
+            "json_type(scope,'$.reads') AS reads_type,json_type(scope,'$.writes') AS writes_type,"
+            "json_array_length(scope,'$.reads') AS reads_count,json_array_length(scope,'$.writes') AS writes_count "
+            'FROM local_jobs WHERE job=?', (job,))
+        if (local['type'] != 'object' or local['lane_type'] != 'text' or local['lane'] != 'anchored'
+                or local['reads_type'] != 'array' or local['writes_type'] != 'array'
+                or local['reads_count'] < 1 or local['writes_count'] != 0):
+            raise Refusal('known anchored read-only local scope with zero writes required')
+        reads = self.rows("SELECT r.key,r.type,CASE WHEN r.type='text' THEN r.value END AS point "
+                          "FROM local_jobs l,json_each(l.scope,'$.reads') r WHERE l.job=? ORDER BY r.key", (job,))
+        from .local_integration import point_definitions
+        points = point_definitions(self)
+        if (any(r['type'] != 'text' or not r['point'] or r['point'] not in points
+                or any('native' in b for b in points[r['point']]['bindings']) for r in reads)
+                or len({r['point'] for r in reads}) != len(reads)):
+            raise Refusal('exact known file-only read points required; no native coexistence')
+        controllers = {row['controller'], *[a['controller'] for a in attempts]}
+        if row['recovery_owner'] is not None:
+            controllers.add(row['recovery_owner'])
+        for controller in controllers:
+            required_text(controller, 'actual launch-capable controller', 128)
+        return {'configuration': digest(self.config), 'job': row, 'sources': sources,
+                'policy': policy, 'local_scope': {**local, 'reads': reads},
+                'attempts': attempts, 'controllers': sorted(controllers), 'pending_recovery': False}
+
+    def work_read_metadata_closure_basis(self, job, token, actor, *, operation='work-read-metadata-closure-basis'):
+        from . import windows
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            if self.processing is not None or actor != self.config['roles']['Work']['owner']:
+                raise Refusal('metadata read fence requires genuine current Work owner; no processing substitution')
+            management = getattr(self, 'integration_management', None)
+            if management and (management.actor != actor or management.selection['operation'] != operation
+                    or management.selection['target'] != {'job':job, 'token':token}):
+                raise Refusal('metadata read fence outside exact operation/job/token management authority')
+            row = self._work_read_metadata_identity(job, token)
+            if any(self.one('SELECT job FROM '+table+' WHERE job=?', (job,)) for table in
+                   ('work_read_fences','integration_retirements','integration_prestart_dispositions')):
+                raise Refusal('execution retired; original duties remain held, no callback/recovery/replay')
+            sources = self.integration_metadata_sources(job, phase='proposer')
+            enrollments = []
+            for role in sorted({'Work'} | {s['role'] for s in sources}):
+                if role not in self.config['roles']:
+                    raise Refusal('exact configured source roles required')
+                enrollment = management.enrollment(role) if management else self.one(
+                    'SELECT role,owner,profile,grant_id,cutover,intake FROM enrollments WHERE role=? AND intake=1', (role,))
+                if not enrollment or enrollment['owner'] != self.config['roles'][role]['owner']:
+                    raise Refusal('actual current source role owner enrollment required')
+                enrollments.append(enrollment)
+            stable = self._work_read_metadata_stable(job, row=row, sources=sources)
+            return self._integration_bounded({'schema':METADATA_READ_FENCE, 'stable':stable,
+                'controllers':stable['controllers'], 'enrollments':enrollments,
+                'journal_revision':windows.revision(self)})
+
+    def fence_work_proposer_metadata(self, job, token, actor, receipt):
+        from .selected_source import custody_budget
+        operation = 'fence-work-proposer-metadata'
+        with (nullcontext() if self.db.in_transaction else self.tx()):
+            basis = self.work_read_metadata_closure_basis(job, token, actor, operation=operation)
+            self._integration_controller_closures(basis, receipt)
+            self._integration_bounded(receipt)
+            custody_budget(self, len(encode(basis).encode()) + len(encode(receipt).encode()))
+            if self.work_read_metadata_closure_basis(job, token, actor, operation=operation) != basis:
+                raise Refusal('metadata read fence revision changed; fresh owner selection required')
+            self.db.execute('INSERT INTO work_read_fences VALUES(?,?,?,?,?)',
+                            (job,actor,encode(basis),encode(receipt),self.clock()))
+        return self.one('SELECT job,actor,basis,receipt,created FROM work_read_fences WHERE job=?', (job,))
 
     def _integration_controller_closures(self, basis, receipt):
         if not isinstance(receipt, dict) or set(receipt) != {'basis', 'controllers', 'reason'}:
@@ -444,7 +597,7 @@ class IntegrationJournal:
             'enrollments': enrollments, 'attempts': attempts, 'controllers': sorted(controllers),
             'pending_recovery': False, 'journal_revision': windows.revision(self)})
 
-    def integration_metadata_sources(self, job):
+    def integration_metadata_sources(self, job, *, phase='integrator'):
         """Only frozen relationship identities; never transport member hashes."""
         sources = self.rows("SELECT json_extract(m.value,'$.queue') AS queue,"
             "json_extract(m.value,'$.event') AS event,e.role AS role,q.event AS queue_event,"
@@ -456,7 +609,7 @@ class IntegrationJournal:
                 or len({s['queue'] for s in sources}) != len(sources)
                 or any(not s['event'] or not s['queue'] or not s['role'] or s['queue_event'] != s['event']
                        or s['queue_job'] != job or s['queue_role'] != 'Work'
-                       or s['queue_task'] != header['task'] or s['queue_phase'] != 'integrator' for s in sources)):
+                       or s['queue_task'] != header['task'] or s['queue_phase'] != phase for s in sources)):
             raise Refusal('exact frozen source/queue/job relationships required')
         return [{k: s[k] for k in ('queue','event','role')} for s in sources]
 
