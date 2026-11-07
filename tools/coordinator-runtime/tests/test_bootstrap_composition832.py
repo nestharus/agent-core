@@ -1,0 +1,49 @@
+"""Composite production paths; identities, model answers and native wire are fiction."""
+import asyncio
+import json
+from unittest.mock import patch
+from test_native_return820 import NativeReturn
+from test_source_amendment822 import OutsideReview
+from coordinator_runtime import local_integration as local, report_repair
+
+
+class NativeToWork(NativeReturn):
+    def configure_fixture(self):
+        super().configure_fixture()
+        self.config['local_integration']['tasks']['work-proposer'].update(points=['a'], lookup_scopes=[])
+
+    def test_native_whole_integrator_return_maps_real_work_point(self):
+        self.test_whole_native_return_and_real_integrator_transport()
+        job = self.store.one("SELECT * FROM jobs WHERE task='reviews-integrator'")
+        event = self.store.event(job['response'])
+        original = {t:self.store.rows('SELECT * FROM '+t) for t in
+                    ('events','attempts','results','processing_source_positions','review_calls')}
+        with self.store.tx():
+            observed = local.observe_input(self.store, event, dict(mode='route', task='work-proposer',
+                package='pkg', integration=dict(state='known',reads=['a'],writes=[]),
+                reason='Independent fictional Work reads the known status point'))
+        self.assertEqual(observed['packet']['reads'], ['a'])
+        for table, rows in original.items():
+            self.assertEqual(rows, self.store.rows('SELECT * FROM '+table), table)
+        # Continue through the real delegated mapping and Work task collection.
+        self.mapping_readonly = True
+        self.initial[event['id']] = 'work-proposer'
+        asyncio.run(self.until(lambda:self.store.one("SELECT j.id FROM jobs j JOIN attempts a "
+            "ON a.id=j.active_attempt WHERE j.task='work-proposer' AND a.collected IS NOT NULL"), n=22))
+        work = self.store.one("SELECT * FROM jobs WHERE task='work-proposer'")
+        call = next(c for c in self.models.calls if c['attempt']==work['active_attempt'])
+        self.assertIn('QA472-FULL-NATIVE-REPORT', call['prompt'])
+        self.assertEqual(len(self.transport.calls), 2)
+
+
+class CompositeAmendment(OutsideReview):
+    def setUp(self):
+        super().setUp()
+        self.delta = sorted(k for k in self.original_impl.keys() | self.candidate_impl.keys()
+                            if self.original_impl.get(k) != self.candidate_impl.get(k))
+
+    def test_actual_composite_cli_all_changed_modules(self):
+        self.assertIn('resource_scopes.py', self.delta)
+        self.assertTrue({'plain_control.py','native_review_scope.py'} <= set(self.delta))
+        self.assertTrue(set(self.delta) <= report_repair.AMEND_MODULES)
+        self.test_real_cli_basis_external_safe5_work_collection_and_selection()

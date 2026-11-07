@@ -67,7 +67,7 @@ class Continuity(Fixture):
         for n in self.modules:
             self.new_release['files'][module_root+n] = self.new_impl[n]
         selected = json.loads(self.store.one('SELECT selection FROM processing_capabilities WHERE id=?',(self.cap,))['selection'])
-        transition = dict(basis=dict(release=self.old_release,
+        transition = dict(basis=dict(release=self.old_release, tasks=self.config['tasks'],
             processing=dict(roles={r:dict(original=dict(binding=s['original']['binding']))
                                    for r,s in selected['basis']['roles'].items()})), event_boundary=0,
             jobs=[], outboxes=[], alert_boundary=0)
