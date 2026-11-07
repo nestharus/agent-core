@@ -104,7 +104,7 @@ for label in (sys.argv[1:] or list(groups)):
     for k,v in dict(PATH='/usr/bin:/bin',HOME='/fixtures',TMPDIR='/fixtures/tmp',
                     PYTHONDONTWRITEBYTECODE='1',QA629_FIXTURES='/fixtures',
                     COORDINATOR_TEST_BOARD_LIBRARY='/src/tools/message-board',
-                    PYTHONPATH='/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():
+                    PYTHONPATH='/sdk:/src/tools/coordinator-runtime:/src/tools/coordinator-runtime/tests').items():
         command += ['--setenv',k,v]
     command += ['--chdir','/fixtures','/usr/bin/python3','-B','-m','unittest','-v',*ids]
     child=None
