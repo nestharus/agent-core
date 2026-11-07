@@ -93,6 +93,7 @@ groups['reacquire'] = ['test_native_reacquisition836.Reacquisition836.'+n for n 
 groups['final836'] = groups['composite'] + groups['reacquire'] + ['test_control_marker831.Marker831.'+n for n in ['test_marker_api_fresh_classifier_completion_replay','test_marker_existing_return_cli_terminal_once','test_marker_metadata_before_body','test_marker_source_reservation_and_external_guards']]
 groups['final836'] += ['test_collected_stop835.CollectedStop.'+n for n in ['test_public_release_oneoff_and_failed_service_cli_preserves_history','test_bad_collection_foreign_uncollected_and_live_refuse_before_bodies','test_release_contradiction_and_wrong_actor_refuse']] + ['test_lease_effect805.'+c+'.test_expired_effect_refuses_before_body_with_framework_current' for c in ['EffectLease','AdmittedLease']]
 groups['baseline836'] = groups['reacquire'][:2]
+groups['expiry838'] = ['test_lease_effect805.'+c+'.test_expired_effect_refuses_before_body_with_framework_current' for c in ['EffectLease','AdmittedLease']]
 for label in (sys.argv[1:] or list(groups)):
     if usage() >= 128*1024**2:
         print('stop-new128MiB',flush=True)

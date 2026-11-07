@@ -34,11 +34,9 @@ class EffectLease(OwnerLease):
                 p[key] = dict(argv=[str(self.script)],
                     executable_sha256=hashlib.sha256(self.script.read_bytes()).hexdigest(),stdout='owned check\n')
 
-    def select(self, service=None):
-        # Update the same object used by797's release seam before selection.
-        self.old_impl.clear()
-        self.old_impl.update(HISTORICAL_IMPLEMENTATION)
-        return super().select(service)
+    # Use OwnerLease's current inventory with only its exact LEASE_MODULES
+    # synthetic old pins. The legacy805 whole inventory predates added helpers
+    # and fails source compatibility before either raw native expiry guard.
 
     def setUp(self):
         select = prospective.select
