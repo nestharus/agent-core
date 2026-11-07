@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS service_runs(
 
 def validate(runtime, selection):
     policy = selection['service']
-    if (not isinstance(policy, dict) or set(policy) - {'report_tasks', 'admission', 'allocations'} != {'max_inflight', 'reviews', 'legacy_resources'}
+    if (not isinstance(policy, dict) or set(policy) - {'report_tasks', 'admission', 'allocations', 'wake'} != {'max_inflight', 'reviews', 'legacy_resources'}
             or type(policy['max_inflight']) is not int or not 1 <= policy['max_inflight'] <= runtime.config['limits']['max_attempts']
             or not isinstance(policy['reviews'], dict) or not isinstance(policy['legacy_resources'], dict)
             or not selection['future_intake']):
@@ -46,6 +46,8 @@ def validate(runtime, selection):
                    or runtime.config['tasks'][t].get('execution') == 'owner' for t in report_tasks)):
         raise Refusal('attributed reports need the selected sole software Reviews integrator')
     validate_admission(runtime, policy.get('admission'))
+    from .service_wake import validate as validate_wake
+    validate_wake(runtime, selection)
     windows.validate_delegation(runtime, selection)
     resource_scopes.validate(runtime, policy['legacy_resources'], selection)
     reviews.validate(runtime, policy['reviews'])
@@ -140,6 +142,12 @@ class Dispatcher(ProcessingDispatcher):
     def __init__(self, runtime, boards, models=None, review_transport=None):
         super().__init__(runtime, models=models, boards=boards)
         self.reviews = reviews.Executor(runtime, review_transport)
+        self.wake = None
+
+    def intake(self):
+        if self.wake is not None:
+            self.wake.check()
+        super().intake()
 
     def schedule_job(self):
         candidates = self.store.rows("SELECT * FROM jobs WHERE controller=? AND state='reserved' AND active_attempt IS NULL ORDER BY created,id",
@@ -420,11 +428,16 @@ async def serve_owned(runtime, boards, key, emit, models=None, review_transport=
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, dispatcher.stopping.set)
-        emit({'controller': runtime.controller, 'capability': key, 'endpoint': 'abstract:' + path[1:],
-              'state': 'serving', 'process_END': None})
         try:
+            from .service_wake import ServiceWake
+            dispatcher.wake = ServiceWake(runtime, boards, dispatcher)
+            dispatcher.wake.start()
+            emit({'controller': runtime.controller, 'capability': key, 'endpoint': 'abstract:' + path[1:],
+                  'state': 'serving', 'process_END': None, 'wake': dispatcher.wake.status()})
             await dispatcher.run(emit)
         finally:
+            if dispatcher.wake is not None:
+                dispatcher.wake.close()
             server.close()
             await server.wait_closed()
             # Live contexts remain owned and explicitly reported if close fails.
@@ -518,6 +531,7 @@ def status(runtime, key, dispatcher):
             'contexts': contexts[:64], 'uncollected': attempts[:64],
             'contexts_more': len(contexts) > 64, 'uncollected_more': len(attempts) > 64,
             'phase_errors': dict(dispatcher.phase_errors),
+            'wake': dispatcher.wake.status() if dispatcher.wake is not None else {'state': 'disabled'},
             'phase_error_scope': 'current owning process; failures until that phase succeeds; no historical import',
             'processing_complete': False,
             'meaning': 'bounded current custody/phase facts; empty errors are not processing, acceptance or a liveness inference'}
