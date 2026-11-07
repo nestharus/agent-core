@@ -10,6 +10,10 @@ class Reacquisition836(NativeReturn):
     def frozen(self):
         self.source()
         asyncio.run(self.phase('schedule_classifications'))
+        for _ in range(3):
+            asyncio.run(self.phase('schedule_input_mappings'))
+        from coordinator_runtime import resource_scopes
+        self.assertFalse(resource_scopes.blocked(self.store,self.row))
         job = self.store.reserve()
         self.assertEqual(job['task'], 'reviews-integrator')
         with patch.object(self.store.execution_pool, 'allocate', side_effect=Refusal('fictional pool allocation unavailable')):
