@@ -416,6 +416,8 @@ class Store(IntegrationJournal, DeliveryJournal, RecoveryJournal, InputJournal):
             if not row:
                 raise Refusal('attempt not owned by this journal')
             if row['job']:
+                from .native_review_scope import admit
+                admit(self, self.job(row['job']))
                 local_integration.current_sources(self, self.job(row['job']))
             elif row['kind'] in {'classifier', 'diagnosis'}:
                 self._classification_current(row)
