@@ -511,22 +511,28 @@ class Access:
             raise Refusal('original attempt has no current processing delegation; retain its actual collector')
 
     def control_proof(self, event, attempt, receipt):
-        row = self.runtime.attempt(attempt)
         _, selection = self.current()
+        state = self.runtime.one('SELECT hold FROM events WHERE id=?', (event,))
+        if not state or state['hold']:
+            raise Refusal('control disposition requires its exact unheld current source')
+        row = self.runtime.attempt(attempt)
         original_cap = json.loads(row['detail']).get('processing_capability')
         if original_cap != self.key and selection['recover_controls'].get(event) != attempt:
             raise Refusal('exact original control requires explicit current recovery selection, never authority rebinding')
         record = self.runtime.one('SELECT * FROM processing_controls WHERE event=?', (event,))
         result = json.loads(row['result']) if row['result'] else {}
         tools = json.loads(row['detail']).get('tool_completion', {})
+        self.current()
+        source = self.runtime.event(event)
+        if not self.event(source):
+            raise Refusal('control disposition outside exact current source selection')
         if (not record or record['attempt'] != attempt or record['capability'] != original_cap
-                or record['source_hash'] != digest(self.runtime.event(event))
+                or record['source_hash'] != digest(source)
                 or row['kind'] != 'input-control' or row['event'] != event
                 or row['begin'] is None or row['ended'] is None or row['collected'] is None
                 or row['exit'] != 0 or row['error'] or row['capture'] != 'complete'
                 or json.loads(row['binding']) != SOL or not tools.get('complete')
-                or tools.get('nonzero_completions') or tools.get('items') or tools.get('unknown_types')
-                or parse_json(result.get('decision_json', 'null')) != receipt):
+                or tools.get('nonzero_completions') or tools.get('items') or tools.get('unknown_types')):
             raise Refusal('control disposition requires its meaningful actual worker return and original numeric END')
         validate_control_result(result, receipt)
         recognition = selection.get('control_recognitions', {}).get(event)
@@ -536,10 +542,15 @@ class Access:
             validate_recognition(self.runtime, event, attempt, recognition)
         canonical_uuid(row['session'])  # Actual observed worker, never the native role owner.
         required_text(result.get('summary'), 'actual control handling summary')
+        original = parse_json(result.get('decision_json', 'null'))
+        derived, derivation = control_receipt(self.runtime, event, row, result, original)
+        if receipt != original and receipt != derived:
+            raise Refusal('control receipt differs from its original or exact software syntax derivation')
         return {'capability': self.key, 'original_capability': original_cap, 'attempt': attempt, 'worker': row['session'],
                 'controller': row['controller'], 'actual_END': row['exit'], 'source_hash': record['source_hash'],
                 'result_hash': digest(result), 'native_owner_receipt': False,
-                'legacy_semantic_recognition': recognition}
+                'legacy_semantic_recognition': recognition,
+                **({'syntax_derivation': derivation} if derivation and receipt == derived else {})}
 
 
 class ProcessingBoard(RetainedBoard):
@@ -1055,6 +1066,44 @@ def validate_control_result(result, receipt):
     required_text(result['summary'], 'actual control handling summary')
 
 
+def control_receipt(runtime, event, row, result, receipt):
+    """Versioned software syntax only; the collected model return is immutable.
+
+    Callers must also verify control_proof. Its exact derivation is recorded in
+    input_resolutions.prior.software_processing, never attributed to the model.
+    """
+    keys = {'source_hash', 'mode', 'task', 'package', 'related_event', 'related_job',
+            'reason', 'evidence', 'remaining_obligations'}
+    if (not isinstance(receipt, dict) or set(receipt) != keys
+            or receipt['mode'] != 'control' or receipt['task'] != '@control'
+            or any(receipt[k] is not None for k in ('package', 'related_event', 'related_job'))):
+        return receipt, None
+    runtime.processing.current()  # Before each current source/binding read group.
+    state = runtime.one('SELECT hash,hold,processed_at FROM events WHERE id=?', (event,))
+    queue = runtime.one('SELECT * FROM queue WHERE event=?', (event,))
+    if (not state or state['hold'] or state['processed_at'] is not None
+            or not queue or queue['task'] != '@control' or queue['phase'] != 'control'
+            or queue['state'] != 'awaiting-owner' or queue['job'] is not None
+            or queue['package'] is not None or row['controller'] != runtime.controller
+            or json.loads(row['detail']).get('processing_capability') != runtime.processing.key
+            or result['semantic'] != 'DONE' or receipt['source_hash'] != state['hash']):
+        raise Refusal('control marker syntax requires exact current unheld source/controller/responsibility and DONE')
+    runtime.processing.current()
+    source = runtime.event(event)
+    if (source['kind'] != 'board' or source['role'] != queue['role'] or digest(source) != state['hash']
+            or not runtime.processing.event(source)):
+        raise Refusal('control marker syntax requires the exact selected current board source')
+    derived = {**receipt, 'task': None}
+    return derived, {'version': 'software-control-queue-marker-v1',
+                     'meaning': 'SOFTWARE-DERIVED SYNTAX; no model rewrite, native receipt or underlying settlement',
+                     'attempt': row['id'], 'source_hash': state['hash'],
+                     'capability': runtime.processing.key, 'controller': row['controller'],
+                     'binding': json.loads(row['binding']),
+                     'raw_result_sha256': hashlib.sha256(row['result'].encode()).hexdigest(),
+                     'result_hash': digest(result), 'original_receipt_hash': digest(receipt),
+                     'derived_receipt_hash': digest(derived), 'from_task': '@control', 'to_task': None}
+
+
 def validate_recognition(runtime, event, attempt, recognition):
     """Work can interpret an old free-text status without rewriting its return.
 
@@ -1177,6 +1226,9 @@ class ProcessingDispatcher(Dispatcher):
                   'decision_json (a serialized input-resolution object with EXACT keys source_hash,mode,task,package,'
                   'related_event,related_job,reason,evidence,remaining_obligations). Never invent consent or processing. '
                   'mode=control processes a board control only; mode=route selects an original allowed task; '
+                  'responsibility.task=@control is a queue sentinel, never an actual task. For mode=control, '
+                  'receipt.task MUST be null, and package/related_event/related_job MUST also be null. '
+                  'Only mode=route selects an actual task. '
                   'mode=coalesce needs actual same-role related_event/job proof. Evidence must cite actual supplied '
                   'source. Scope corrections go to Root, scope/blockers to Work; Reviews/QA/Branch duties stay '
                   'with actual holders. Retain every unresolved authority/effect/selected-procedure dependency in '
@@ -1210,9 +1262,12 @@ fabricate reading, consent or a native owner's receipt.\n''' +
 
 def apply_control(runtime, event, attempt):
     """Recover an exact collected disposition, never relaunch its original."""
-    result = json.loads(runtime.attempt(attempt)['result'] or 'null') or {}
+    runtime.processing.current()
+    row = runtime.attempt(attempt)
+    result = json.loads(row['result'] or 'null') or {}
     receipt = parse_json(result.get('decision_json', 'null'))
     runtime.processing.control_proof(event, attempt, receipt)
+    receipt, _ = control_receipt(runtime, event, row, result, receipt)
     with runtime.tx():
         resolution = runtime.resolve_input(event, runtime.config['actor'], receipt, processing_attempt=attempt)
         if receipt['mode'] != 'notification':
